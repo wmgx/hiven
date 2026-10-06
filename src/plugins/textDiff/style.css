@@ -103,3 +103,9 @@
 .td-nav-b:disabled { opacity: 0.35; cursor: default; }
 .td-nav-b svg { width: 11px; height: 11px; flex-shrink: 0; }
 .td-nav-p { font: 600 11px/1 var(--hiven-font-ui); color: var(--hiven-color-text-secondary); font-variant-numeric: tabular-nums; padding: 0 4px; min-width: 32px; text-align: center; }
+
+.td-pane-label { display: flex; align-items: center; justify-content: space-between; min-width: 0; padding: 4px 10px; gap: 8px; }
+.td-pane-label + .td-pane-label { border-left: 1px solid var(--td-border); }
+.td-pane-label > span { padding: 0; }
+.td-source { border: 0; border-radius: 4px; background: transparent; color: var(--hiven-color-text-secondary); font: 12px var(--hiven-font-ui); padding: 4px 6px; cursor: pointer; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.td-source:hover { background: var(--td-bg-tertiary); }

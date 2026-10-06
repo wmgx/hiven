@@ -1,15 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { getPluginHostSdk, type PanelPropsV2, type PluginSurfaceProps } from '@hiven/plugin'
 import { IconButton } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
+import { evaluateRegex, type MatchResult } from './regexCore'
 
-type MatchResult = {
-  index: number
-  text: string
-  groups: string[]
-  line: number
-  col: number
-}
+const COMMON_FLAGS = ['g', 'i', 'm', 's', 'u'] as const
 
 export function RegexTesterPluginPanel({ host, paneId }: PanelPropsV2<unknown>) {
   const { hooks, react: React } = getPluginHostSdk()
@@ -106,7 +101,31 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
   const [pattern, setPattern] = useState('[a-z]+')
   const [flags, setFlags] = useState('g')
   const [sourceText, setSourceText] = useState(props.initialText ?? 'hello 123\nworld 456')
+  const [activeMatch, setActiveMatch] = useState(-1)
+  const sourceRef = useRef<HTMLTextAreaElement>(null)
   const result = useMemo(() => evaluateRegex(pattern, flags, sourceText), [flags, pattern, sourceText])
+  const sourceLines = sourceText ? sourceText.split('\n').length : 0
+
+  useEffect(() => setActiveMatch(-1), [flags, pattern, sourceText])
+
+  const toggleFlag = (flag: string) => {
+    setFlags((current) => {
+      const values = new Set(current.split(''))
+      if (values.has(flag)) values.delete(flag)
+      else values.add(flag)
+      return [...values].join('')
+    })
+  }
+
+  const revealMatch = (match: MatchResult, index: number) => {
+    setActiveMatch(index)
+    requestAnimationFrame(() => {
+      const textarea = sourceRef.current
+      if (!textarea) return
+      textarea.focus()
+      textarea.setSelectionRange(match.index, match.index + match.text.length)
+    })
+  }
 
   return (
     <section className="regex-tester-surface" aria-label={t('surface.title')}>
@@ -122,49 +141,107 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
         </IconButton>
       </header>
 
-      <div className="regex-tester-surface__pattern">
-        <span>/</span>
-        <input
-          value={pattern}
-          onChange={(event) => setPattern(event.target.value)}
-          placeholder={t('panel.regex.pattern')}
-          spellCheck={false}
-          autoFocus
-        />
-        <span>/</span>
-        <input
-          className="regex-tester-surface__flags"
-          value={flags}
-          onChange={(event) => setFlags(event.target.value)}
-          placeholder="g"
-          spellCheck={false}
-        />
+      <div className="regex-tester-surface__controls">
+        <label className="regex-tester-surface__expression">
+          <span>{t('surface.expression')}</span>
+          <div className="regex-tester-surface__pattern">
+            <i aria-hidden="true">/</i>
+            <input
+              value={pattern}
+              onChange={(event) => setPattern(event.target.value)}
+              placeholder={t('panel.regex.pattern')}
+              aria-label={t('panel.regex.pattern')}
+              spellCheck={false}
+              autoFocus
+            />
+            <i aria-hidden="true">/</i>
+            <input
+              className="regex-tester-surface__flags"
+              value={flags}
+              onChange={(event) => setFlags(event.target.value)}
+              placeholder="g"
+              aria-label={t('panel.regex.flags')}
+              spellCheck={false}
+            />
+          </div>
+        </label>
+        <fieldset className="regex-tester-surface__flag-list">
+          <legend>{t('surface.quickFlags')}</legend>
+          {COMMON_FLAGS.map((flag) => (
+            <button
+              key={flag}
+              type="button"
+              className={flags.includes(flag) ? 'is-active' : undefined}
+              aria-pressed={flags.includes(flag)}
+              title={t(`surface.flag.${flag}`)}
+              onClick={() => toggleFlag(flag)}
+            >
+              {flag}
+            </button>
+          ))}
+        </fieldset>
       </div>
 
       <div className="regex-tester-surface__body">
-        <label className="regex-tester-surface__pane">
-          <span>{t('surface.sampleText')}</span>
-          <textarea value={sourceText} onChange={(event) => setSourceText(event.target.value)} spellCheck={false} />
+        <label className="regex-tester-surface__pane regex-tester-surface__pane--source">
+          <span className="regex-tester-surface__pane-header">
+            <strong>{t('surface.sampleText')}</strong>
+            <small>{t('surface.sourceStats', { lines: sourceLines, chars: sourceText.length })}</small>
+          </span>
+          <textarea
+            ref={sourceRef}
+            value={sourceText}
+            onChange={(event) => setSourceText(event.target.value)}
+            placeholder={t('surface.samplePlaceholder')}
+            spellCheck={false}
+          />
         </label>
         <div className="regex-tester-surface__pane">
-          <span>{t('surface.matches')}</span>
+          <span className="regex-tester-surface__pane-header">
+            <strong>{t('surface.matches')}</strong>
+            {!result.error && pattern ? (
+              <small>{t(result.matches.length === 1 ? 'panel.regex.match' : 'panel.regex.matches', { count: result.matches.length })}</small>
+            ) : null}
+          </span>
           <div className="regex-tester-surface__matches">
-            {result.error && <div role="alert" className="regex-tester-surface__error">{t('error.invalid')}</div>}
+            {result.error && (
+              <div role="alert" className="regex-tester-surface__error">
+                <strong>{t('error.invalid')}</strong>
+                <code>{result.error}</code>
+              </div>
+            )}
             {!result.error && result.matches.length === 0 && (
-              <div className="regex-tester-surface__empty">{pattern ? t('panel.regex.noMatches') : t('surface.enterPattern')}</div>
+              <div className="regex-tester-surface__empty">
+                <span aria-hidden="true">.*</span>
+                <strong>{pattern ? t('panel.regex.noMatches') : t('surface.enterPattern')}</strong>
+                <p>{pattern ? t('surface.noMatchesHint') : t('surface.enterPatternHint')}</p>
+              </div>
             )}
             {!result.error && result.matches.length > 0 && (
               <>
-                <div className="regex-tester-surface__summary">
-                  {t(result.matches.length === 1 ? 'panel.regex.match' : 'panel.regex.matches', { count: result.matches.length })}
-                </div>
                 {result.matches.slice(0, 100).map((match, index) => (
-                  <div key={`${match.index}:${index}`} className="regex-tester-surface__match">
-                    <span>{match.line}:{match.col}</span>
-                    <code>{match.text}</code>
-                    {match.groups.length > 0 && <em>{match.groups.map((group) => group || t('surface.emptyGroup')).join(', ')}</em>}
-                  </div>
+                  <button
+                    key={`${match.index}:${index}`}
+                    type="button"
+                    className={activeMatch === index ? 'regex-tester-surface__match is-active' : 'regex-tester-surface__match'}
+                    aria-label={t('surface.revealMatch', { line: match.line, col: match.col })}
+                    onClick={() => revealMatch(match, index)}
+                  >
+                    <span className="regex-tester-surface__location">{match.line}:{match.col}</span>
+                    <code>{match.text || t('surface.emptyGroup')}</code>
+                    {match.groups.length > 0 ? (
+                      <em>
+                        <b>{t('surface.groups')}</b>
+                        {match.groups.map((group) => group || t('surface.emptyGroup')).join(', ')}
+                      </em>
+                    ) : <em />}
+                  </button>
                 ))}
+                {result.matches.length > 100 ? (
+                  <div className="regex-tester-surface__more">
+                    {t('panel.regex.more', { count: result.matches.length - 100 })}
+                  </div>
+                ) : null}
               </>
             )}
           </div>
@@ -172,45 +249,4 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
       </div>
     </section>
   )
-}
-
-function evaluateRegex(pattern: string, flags: string, paneText: string): { error: string | null; matches: MatchResult[] } {
-  if (!pattern) return { error: null, matches: [] }
-  let regex: RegExp
-  try {
-    regex = new RegExp(pattern, flags)
-  } catch (error) {
-    return { error: error instanceof Error ? error.message : String(error), matches: [] }
-  }
-
-  const matches: MatchResult[] = []
-  if (flags.includes('g')) {
-    let match: RegExpExecArray | null
-    regex.lastIndex = 0
-    while ((match = regex.exec(paneText)) !== null) {
-      if (match[0].length === 0) {
-        regex.lastIndex++
-        continue
-      }
-      matches.push(toMatchResult(paneText, match))
-      if (matches.length > 1000) break
-    }
-  } else {
-    const match = regex.exec(paneText)
-    if (match) matches.push(toMatchResult(paneText, match))
-  }
-  return { error: null, matches }
-}
-
-function toMatchResult(paneText: string, match: RegExpExecArray): MatchResult {
-  const beforeMatch = paneText.slice(0, match.index)
-  const line = beforeMatch.split('\n').length
-  const lastNewline = beforeMatch.lastIndexOf('\n')
-  return {
-    index: match.index,
-    text: match[0],
-    groups: match.slice(1),
-    line,
-    col: match.index - lastNewline,
-  }
 }

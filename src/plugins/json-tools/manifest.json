@@ -1,7 +1,8 @@
 {
   "pluginId": "json-tools",
-  "displayName": "JSON Tools",
-  "displayNameI18n": { "zh": "JSON 工具" },
-  "version": "2.2.3",
-  "capabilities": ["command", "surface"]
+  "displayName": "JSON / YAML Tools",
+  "displayNameI18n": { "zh": "JSON / YAML 工具" },
+  "version": "2.5.4",
+  "capabilities": ["command", "surface"],
+  "permissions": ["clipboard.write"]
 }

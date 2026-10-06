@@ -27,10 +27,16 @@ async function writeTextToClipboard(text: string): Promise<void> {
 // its JS timers, so a JS-side setTimeout between hide and simulate is unreliable
 // (see history: a hidden WKWebView may throttle JS execution). Doing the wait for
 // foreground focus handoff and the Cmd/Ctrl+V simulation natively in Rust avoids that.
-async function pasteAfterClipboardWrite(fallbackMessage: string): Promise<PluginPasteResult> {
+async function pasteAfterClipboardWrite(fallbackMessage: string, keepOpen: boolean): Promise<PluginPasteResult> {
   try {
     const { invoke } = await import('@tauri-apps/api/core')
-    await invoke('hide_launcher_and_paste')
+    // End the Launcher session before native hide throttles its WebView.
+    // Selection capture uses a separate command and intentionally resumes its session.
+    if (!keepOpen && typeof window !== 'undefined'
+      && new URLSearchParams(window.location.search).get('window') === 'launcher') {
+      useAppStore.getState().setGlobalLauncherOpen(false)
+    }
+    await invoke('hide_launcher_and_paste', { keepOpen })
     return { ok: true }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -44,6 +50,7 @@ async function pasteAfterClipboardWrite(fallbackMessage: string): Promise<Plugin
 export function createPluginPaste(
   permissions?: PluginPermissionSnapshot,
   storage?: PluginPrivateStorageApi,
+  options?: { keepOpen?: boolean },
 ): PluginPasteApi {
   const requirePermissions = (required: PluginPermission[]) => {
     if (permissions) requirePluginPermissions(permissions, required)
@@ -58,7 +65,7 @@ export function createPluginPaste(
         return { ok: false, fallback: 'none', message: pasteMessage('paste.clipboardWriteFailed') }
       }
 
-      return pasteAfterClipboardWrite(pasteMessage('paste.copied'))
+      return pasteAfterClipboardWrite(pasteMessage('paste.copied'), options?.keepOpen === true)
     },
 
     async pasteImage(blobId: string): Promise<PluginPasteResult> {
@@ -76,7 +83,7 @@ export function createPluginPaste(
         return { ok: false, fallback: 'none', message: pasteMessage('paste.imageWriteFailed') }
       }
 
-      return pasteAfterClipboardWrite(pasteMessage('paste.imageCopied'))
+      return pasteAfterClipboardWrite(pasteMessage('paste.imageCopied'), options?.keepOpen === true)
     },
 
     async pasteFiles(paths: string[]): Promise<PluginPasteResult> {
@@ -87,7 +94,7 @@ export function createPluginPaste(
         return { ok: false, fallback: 'none', message: pasteMessage('paste.filesWriteFailed') }
       }
 
-      return pasteAfterClipboardWrite(pasteMessage('paste.filesCopied'))
+      return pasteAfterClipboardWrite(pasteMessage('paste.filesCopied'), options?.keepOpen === true)
     },
   }
 }

@@ -39,7 +39,7 @@ type TextDiffLauncherContext = LauncherExecutionContext
 function paneLabel(ctx: TextDiffLauncherContext, snapshot: PaneSnapshot, paneId: string): string {
   const index = snapshot.paneIds.indexOf(paneId)
   const pane = snapshot.panes[paneId]
-  const base = pane?.title || 'Pane ' + (index >= 0 ? index + 1 : paneId)
+  const base = pane?.title || ctx.t('source.paneTitle', { index: index >= 0 ? index + 1 : paneId })
   if (pane?.origin === 'quick-editor') {
     return ctx.t('choice.quickEditorPane', { title: base })
   }
@@ -61,7 +61,10 @@ function resolvePaneBinding(
 }
 
 function buildSourceList(ctx: TextDiffLauncherContext, snapshot: PaneSnapshot): DiffSource[] {
-  const paneSources: DiffSource[] = snapshot.paneIds.map((snapshotPaneId) => {
+  // Only the active editor pane has a text snapshot; quick-editor panes all do.
+  const paneSources: DiffSource[] = snapshot.paneIds.filter((id) =>
+    snapshot.panes[id]?.origin !== 'editor' || id === snapshot.activePaneId,
+  ).map((snapshotPaneId) => {
     const pane = snapshot.panes[snapshotPaneId]
     const binding = resolvePaneBinding(snapshotPaneId, pane?.origin)
     return {
@@ -71,30 +74,21 @@ function buildSourceList(ctx: TextDiffLauncherContext, snapshot: PaneSnapshot): 
       origin: binding.origin,
       title: paneLabel(ctx, snapshot, snapshotPaneId),
       language: pane?.language,
-      // Capture text at choice-build time so openDiffPage receives content
-      // even when the host snapshot is later gone (cross-window).
+      // Keep the source snapshot available after leaving the launcher.
       text: pane?.text ?? '',
     }
   })
   return [
     ...paneSources,
     { sourceId: 'clipboard', kind: 'clipboard' as const, title: ctx.t('choice.clipboard') },
-    { sourceId: 'empty', kind: 'empty' as const, title: ctx.t('choice.createEmptyPane') },
+    { sourceId: 'empty', kind: 'empty' as const, title: ctx.t('source.empty') },
   ]
-}
-
-function materializeSourceText(source: DiffSource): string {
-  if (source.kind === 'clipboard') return source.text ?? ''
-  if (source.kind === 'empty') return ''
-  if (source.kind === 'editor-pane') return source.text ?? ''
-  return source.text ?? ''
 }
 
 export const textDiffPlugin = definePlugin({
   ui: {
-    surfaces: [
-      {
-        id: 'main',
+    surfaces: ['main', 'json'].map((id) => ({
+        id,
         kind: 'custom-view',
         title: 'Text Compare',
         titleI18n: { zh: '文本对比' },
@@ -111,71 +105,31 @@ export const textDiffPlugin = definePlugin({
           resizable: true,
           rendersTitlebar: true,
         },
-      },
-    ],
+      })),
   },
   launcher: {
-    items: [
-      {
-        id: 'text-diff.compare',
-        display: {
-          title: 'command.compare.title',
-          subtitle: 'command.compare.description',
-          icon: 'GitCompare',
-          aliases: ['diff', 'compare', 'text diff', 'text-diff', 'duibi', 'wenben duibi'],
-        },
-        surfaces: ['command-palette', 'global-launcher', 'quick-editor-command'],
-        execute(ctx) {
-          const snapshot = ctx.api.getPaneSnapshot() as PaneSnapshot
-          const sources = buildSourceList(ctx, snapshot)
-
-          if (sources.length < 2) {
-            return { ok: false as const, message: ctx.t('choice.needTwoSources') }
-          }
-
-          const sourceById = new Map(sources.map((s) => [s.sourceId, s]))
-
-          return {
-            ok: true as const,
-            output: {
-              choices: sources.map((s) => ({
-                id: s.sourceId,
-                title: s.title,
-                primaryAction: () => undefined,
-              })),
-              selection: {
-                type: 'multi' as const,
-                min: 2,
-                max: 2,
-                submitTitle: ctx.t('choice.compareSelected'),
-                async submit(choices) {
-                  const selected = choices
-                    .map((c) => sourceById.get(c.id))
-                    .filter((s): s is DiffSource => Boolean(s))
-                  if (selected.length !== 2) {
-                    return { ok: false as const, message: ctx.t('choice.needTwoSources') }
-                  }
-
-                  for (const source of selected) {
-                    if (source.kind === 'clipboard') {
-                      source.text = await ctx.api.getClipboardText()
-                    }
-                  }
-
-                  const payload = {
-                    original: { ...selected[0], text: materializeSourceText(selected[0]) },
-                    modified: { ...selected[1], text: materializeSourceText(selected[1]) },
-                  }
-
-                  ctx.api.openDiffPage(payload as any)
-                  return { ok: true as const, keepOpen: true }
-                },
-              },
-            },
-          }
-        },
+    items: ['main', 'json'].map((mode) => ({
+      id: mode === 'main' ? 'text-diff.compare' : 'text-diff.json',
+      display: {
+        title: mode === 'main' ? 'command.compare.title' : 'command.json.title',
+        subtitle: 'command.compare.description',
+        icon: 'GitCompare',
+        aliases: mode === 'main'
+          ? ['diff', 'compare', 'text diff', 'text-diff', '文本对比', 'duibi', 'wenbenduibi']
+          : ['json diff', 'json compare', 'compare json', 'json对比', 'json差异'],
       },
-    ],
+      behavior: { type: 'perform' as const },
+      surfaces: ['command-palette', 'global-launcher', 'editor-command-bar', 'quick-editor-command'],
+      execute(ctx) {
+        const sources = buildSourceList(ctx, ctx.api.getPaneSnapshot() as PaneSnapshot)
+        ctx.api.openSurface(mode, { initialText: JSON.stringify({
+          original: { sourceId: 'original', kind: 'empty', text: ctx.input?.text ?? '' },
+          modified: { sourceId: 'modified', kind: 'empty', text: '' },
+          sources,
+        }) })
+        return { ok: true as const, keepOpen: true }
+      },
+    })),
   },
 })
 

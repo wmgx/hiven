@@ -156,7 +156,6 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
   const initialText = props.initialText?.trim()
   const [inputText, setInputText] = useState(initialText ?? '')
   const [outputText, setOutputText] = useState('')
-  const [inputFocused, setInputFocused] = useState(false)
   const [status, setStatus] = useState<TranslateStatus>({ kind: 'idle' })
   const [usageByProfile, setUsageByProfile] = useState(() => new Map(settings.profiles.map((profile) => [profile.id, profile.usedChars])))
   const usageRef = useRef(usageByProfile)
@@ -279,6 +278,7 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
     try {
       await host.clipboard.writeText(outputText)
       host.showMessage(localizedText(t, 'toast.copied', 'Copied'), 'success')
+      host.complete()
     } catch {
       host.showMessage(localizedText(t, 'toast.copyFailed', 'Copy failed'), 'error')
     }
@@ -322,7 +322,7 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
       </div>
 
       <div className="translate-surface__body">
-        <div className={`translate-pane translate-pane--source ${inputFocused ? 'is-focused' : ''}`}>
+        <div className="translate-pane translate-pane--source">
           <div className="translate-pane__eyebrow">
             {localizedText(t, 'pane.original', 'Original')}
             <span className="detected">· {sourceLang === 'auto' ? optionLabel(sourceOptions, sourceLang) : optionLabel(sourceOptions, sourceLang)}</span>
@@ -332,8 +332,6 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
             className="translate-input"
             value={inputText}
             onChange={(event) => setInputText(event.target.value)}
-            onFocus={() => setInputFocused(true)}
-            onBlur={() => setInputFocused(false)}
             placeholder={localizedText(t, 'input.placeholder', 'Type or paste text to translate...')}
             spellCheck={false}
           />

@@ -29,7 +29,7 @@ export const hashPlugin = definePlugin({
           return ctx.output.error(ctx.t('error.hash', { message: e.message }))
         }
       },
-      surfaces: { launcher: true, panel: true },
+      surfaces: { launcher: { surfaces: ['global-launcher', 'editor-command-bar', 'quick-editor-command'] }, panel: true },
     },
     {
       id: 'hash.sha1',
@@ -45,7 +45,7 @@ export const hashPlugin = definePlugin({
           return ctx.output.error(ctx.t('error.hash', { message: e.message }))
         }
       },
-      surfaces: { launcher: true, panel: true },
+      surfaces: { launcher: { surfaces: ['global-launcher', 'editor-command-bar', 'quick-editor-command'] }, panel: true },
     },
     {
       id: 'hash.sha512',
@@ -61,7 +61,7 @@ export const hashPlugin = definePlugin({
           return ctx.output.error(ctx.t('error.hash', { message: e.message }))
         }
       },
-      surfaces: { launcher: true, panel: true },
+      surfaces: { launcher: { surfaces: ['global-launcher', 'editor-command-bar', 'quick-editor-command'] }, panel: true },
     },
   ],
 })

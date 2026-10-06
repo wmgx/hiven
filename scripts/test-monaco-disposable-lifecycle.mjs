@@ -25,7 +25,6 @@ function assertTracksAll(source, label, snippets) {
 
 const helper = read('src/utils/monacoDisposables.ts')
 const textEditorCore = read('src/kits/editor/TextEditorCore.tsx')
-const jsFilter = read('src/plugins/jsFilter/index.tsx')
 
 assert(/createMonacoDisposableBucket/.test(helper), 'shared Monaco disposable bucket helper should exist')
 assert(/disposeAllMonacoDisposables/.test(helper), 'shared Monaco disposable helper should expose safe bulk disposal')
@@ -49,13 +48,5 @@ const editorSurface = read('src/components/editor/EditorSurface.tsx')
 assert(/window\.removeEventListener\('paste', handlePasteCapture, true\)/.test(editorSurface), 'EditorSurface should release paste capture listener')
 assert(/window\.removeEventListener\('keydown', handlePasteKeydownCapture, true\)/.test(editorSurface), 'EditorSurface should release paste keydown listener')
 assert(/pasteSubscription\.dispose\(\)/.test(editorSurface), 'EditorSurface should dispose the onDidPaste subscription via onReady cleanup')
-
-assert(/editorDisposablesRef/.test(jsFilter), 'jsFilter panel should keep an editor disposable bucket')
-assertTracksAll(jsFilter, 'jsFilter panel', [
-  'editor.onKeyDown',
-  'editor.onDidContentSizeChange',
-])
-assert(/(?:disposeAllMonacoDisposables|kits\.monacoDisposables\.disposeAll)\(editorDisposablesRef\.current\)/.test(jsFilter), 'jsFilter panel should dispose editor subscriptions on unmount')
-assert(/editorRef\.current\s*=\s*null/.test(jsFilter), 'jsFilter panel should clear the Monaco editor ref during disposal')
 
 console.log('Monaco disposable lifecycle checks passed')

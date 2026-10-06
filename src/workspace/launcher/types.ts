@@ -186,7 +186,7 @@ export type ResolvedTextInput = {
   kind: 'text'
   text: string
   mode: TextInputMode
-  source: 'selection' | 'all' | 'manual' | 'empty'
+  source: 'selection' | 'all' | 'manual' | 'empty' | 'foreground-app'
   range?: TextRange
   paneId?: string
   panelId?: string
@@ -292,6 +292,7 @@ export type OutputIntent =
   | 'insert'
   | 'return-to-launcher'
   | 'open-quick-editor'
+  | 'paste-to-foreground-app'
 
 export type WorkflowObjectItemMetadata = {
   kind: 'workflow-object'
@@ -389,11 +390,15 @@ export type PluginLauncherApi = {
    * Editor command bar) fall back to the same behavior as insertText.
    */
   returnToLauncher(text: string): Promise<void>
-  copyText(text: string): Promise<void>
+  copyText(text: string, options?: { sensitive?: boolean }): Promise<void>
+  /** Write text to the clipboard, then simulate paste into whatever app was foreground before the launcher took focus. */
+  pasteToForegroundApp(text: string): Promise<void>
   openUrl(url: string): Promise<void>
   showEditorWindow(): Promise<string | undefined>
   showPluginsPage(): Promise<void>
   showSettingsPage(): Promise<void>
+  /** Open one UI surface owned by the current plugin inside Global Launcher. */
+  openSurface(surfaceId: string, options?: { initialText?: string }): void
   createPane(options?: { text?: string; title?: string; language?: string; focus?: boolean; direction?: 'left' | 'right' | 'top' | 'bottom' }): Promise<string | undefined>
   dispatchEffects(effects: FluxEffect[]): EffectRunnerResult
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
@@ -423,8 +428,12 @@ export type PluginAppsApi = {
 
 export type LauncherExecutionContext<TSettings = unknown> = {
   surfaceId: LauncherSurfaceId
-  /** Present only for `collect-input` behaviors. */
-  input?: { text: string }
+  /**
+   * Present for collected input or an attached Object Block. `source:
+   * 'foreground-app'` tells the tool adapter to prefer pasting the result
+   * back into that same app over the default copy-first output.
+   */
+  input?: { text: string; source?: 'foreground-app' }
   settings: TSettings
   locale: Locale
   api: PluginLauncherApi
@@ -569,6 +578,8 @@ export type LauncherItemContributionKind = 'plugin' | 'host' | 'dynamic'
 export type LauncherItem = {
   systemKey: SystemLauncherItemKey
   kind: LauncherItemContributionKind
+  /** Host-owned text supplied when the user selected this item from a text recommendation. */
+  initialInputText?: string
   pluginId?: string
   /** Product-level provider name, e.g. JSON Tools, not the raw plugin id. */
   productProvider?: string

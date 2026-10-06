@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
 import { makePluginT } from '../../i18n/pluginI18nRegistry'
+import { translate } from '../../i18n'
 import { detectContent } from '../../kits/content'
 import { useAppStore } from '../../store'
 import { pluginRegistry, usePluginRegistryVersion } from '../pluginRegistry'
@@ -9,6 +10,8 @@ import { LauncherController, type LauncherControllerState } from './controller'
 import { createPluginLauncherApi, createPluginLauncherStorage } from './pluginApi'
 import { createPluginNetwork } from '../pluginNetwork'
 import { createPluginAi } from '../ai/runtime'
+import { chooseJevCandidate, validJevSettings } from '../ai/jev'
+import { resolveDisplaySubtitle, resolveDisplayTitle } from './display'
 import { createPluginShell } from '../pluginShell'
 import { getPluginPermissionSnapshot } from '../pluginPermissions'
 import { resolvePluginSettingsSource } from './pluginSource'
@@ -55,6 +58,7 @@ const HOST_EMPTY_OPEN_DELAY_MS = 120
  * (Perf log showed 10–19s pile-ups when 3×CLI fired per partial query.)
  */
 const DOCUMENT_DYNAMIC_DEBOUNCE_MS = 520
+const JEV_DEBOUNCE_MS = 250
 
 type UseLauncherSessionOptions = {
   hostId: LauncherSurfaceId
@@ -103,36 +107,45 @@ function mergePartials(
   return entries.flatMap(([, items]) => items)
 }
 
+function launcherInputIdentity(query: string, objectBlockText?: string): string {
+  return JSON.stringify([query.trim(), objectBlockText?.trim() ?? ''])
+}
+
 function useFrameBatchedLauncherItems() {
-  const [items, setItemsState] = useState<LauncherItem[]>([])
-  const pendingRef = useRef<LauncherItem[] | null>(null)
+  const [state, setState] = useState<{ inputIdentity: string | null; items: LauncherItem[] }>({
+    inputIdentity: null,
+    items: [],
+  })
+  const pendingRef = useRef<{ inputIdentity: string | null; items: LauncherItem[] } | null>(null)
   const frameRef = useRef<number | null>(null)
 
-  const apply = useCallback((next: LauncherItem[]) => {
-    setItemsState((current) => (
-      current.length === next.length && current.every((item, index) => item === next[index])
+  const apply = useCallback((items: LauncherItem[], inputIdentity: string | null) => {
+    setState((current) => (
+      current.inputIdentity === inputIdentity &&
+      current.items.length === items.length &&
+      current.items.every((item, index) => item === items[index])
         ? current
-        : next
+        : { inputIdentity, items }
     ))
   }, [])
 
-  const setItems = useCallback((next: LauncherItem[]) => {
+  const setItems = useCallback((items: LauncherItem[], inputIdentity: string | null = null) => {
     pendingRef.current = null
     if (frameRef.current !== null) {
       cancelAnimationFrame(frameRef.current)
       frameRef.current = null
     }
-    apply(next)
+    apply(items, inputIdentity)
   }, [apply])
 
-  const setItemsNextFrame = useCallback((next: LauncherItem[]) => {
-    pendingRef.current = next
+  const setItemsNextFrame = useCallback((items: LauncherItem[], inputIdentity: string) => {
+    pendingRef.current = { inputIdentity, items }
     if (frameRef.current !== null) return
     frameRef.current = requestAnimationFrame(() => {
       frameRef.current = null
       const pending = pendingRef.current
       pendingRef.current = null
-      if (pending) apply(pending)
+      if (pending) apply(pending.items, pending.inputIdentity)
     })
   }, [apply])
 
@@ -140,7 +153,7 @@ function useFrameBatchedLauncherItems() {
     if (frameRef.current !== null) cancelAnimationFrame(frameRef.current)
   }, [])
 
-  return [items, setItems, setItemsNextFrame] as const
+  return [state.items, state.inputIdentity, setItems, setItemsNextFrame] as const
 }
 
 export function useLauncherSession({
@@ -156,6 +169,7 @@ export function useLauncherSession({
 }: UseLauncherSessionOptions): LauncherSession {
   const normalizedHostId = normalizeLauncherSurfaceId(hostId)
   const locale = useAppStore((s) => s.locale)
+  const jevSettings = useAppStore((s) => s.settings.jevCommandSuggestion)
   const launcherUsageBySurface = useAppStore((s) => s.launcherUsageBySurface)
   const recordLauncherSelection = useAppStore((s) => s.recordLauncherSelection)
   const launcherFavoriteKeys = useAppStore((s) => s.launcherFavoriteKeys)
@@ -170,15 +184,20 @@ export function useLauncherSession({
   const [selectedIndex, setSelectedIndexState] = useState(0)
   const [controllerState, setControllerState] = useState<LauncherControllerState | null>(null)
   const [controller, setController] = useState<LauncherController | null>(null)
+  const [jevSuggestion, setJevSuggestion] = useState<{ query: string; item: LauncherItem; settings: typeof jevSettings; candidates: LauncherItem[] } | null>(null)
+  const [jevSettledTick, setJevSettledTick] = useState(0)
+  const jevGenerationRef = useRef(0)
+  const jevInFlightRef = useRef(false)
+  const jevPendingRef = useRef(false)
   /** Plugin dynamicItems (calc, timestamp, web-open, …) — progressive. */
-  const [pluginDynamicItems, setPluginDynamicItems, setPluginDynamicItemsNextFrame] = useFrameBatchedLauncherItems()
+  const [pluginDynamicItems, pluginInputIdentity, setPluginDynamicItems, setPluginDynamicItemsNextFrame] = useFrameBatchedLauncherItems()
   /** Host dynamic items (apps / workflow / bridge tabs) — isolated from plugin path. */
-  const [hostDynamicItems, setHostDynamicItems, setHostDynamicItemsNextFrame] = useFrameBatchedLauncherItems()
+  const [hostDynamicItems, hostInputIdentity, setHostDynamicItems, setHostDynamicItemsNextFrame] = useFrameBatchedLauncherItems()
   /**
    * Slow remote document Desktop Targets (e.g. feishu.docs).
    * Progressive + long debounce; never blocks host apps/windows path.
    */
-  const [documentDynamicItems, setDocumentDynamicItems, setDocumentDynamicItemsNextFrame] = useFrameBatchedLauncherItems()
+  const [documentDynamicItems, documentInputIdentity, setDocumentDynamicItems, setDocumentDynamicItemsNextFrame] = useFrameBatchedLauncherItems()
   const controllerRef = useRef<LauncherController | null>(null)
   const pluginQueryRef = useRef('')
   const hostQueryRef = useRef('')
@@ -381,6 +400,7 @@ export function useLauncherSession({
     if (!open) return
     const q = query.trim()
     const inputText = q || objectBlockText?.trim() || ''
+    const inputIdentity = launcherInputIdentity(q, objectBlockText)
     if (!inputText && !collectDynamicWhenEmpty) {
       setPluginDynamicItems([])
       pluginQueryRef.current = ''
@@ -408,7 +428,7 @@ export function useLauncherSession({
           if (update.kind !== 'plugin' || !update.pluginId) return
           pluginPartialsRef.current.set(update.pluginId, update.items)
           const merged = filterDynamicForSurface(mergePartials(pluginPartialsRef.current), normalizedHostId)
-          setPluginDynamicItemsNextFrame(merged)
+          setPluginDynamicItemsNextFrame(merged, inputIdentity)
         },
       }).then((items) => {
         if (abortController.signal.aborted) return
@@ -422,7 +442,7 @@ export function useLauncherSession({
         const merged = pluginPartialsRef.current.size > 0
           ? mergePartials(pluginPartialsRef.current)
           : items
-        setPluginDynamicItems(filterDynamicForSurface(merged, normalizedHostId))
+        setPluginDynamicItems(filterDynamicForSurface(merged, normalizedHostId), inputIdentity)
       }).catch(() => { /* aborted or failed — ignore */ })
     }, q || inputText ? PLUGIN_DYNAMIC_DEBOUNCE_MS : 0)
 
@@ -437,6 +457,7 @@ export function useLauncherSession({
     if (!open) return
     const q = query.trim()
     const inputText = q || objectBlockText?.trim() || ''
+    const inputIdentity = launcherInputIdentity(q, objectBlockText)
     if (!inputText && !collectDynamicWhenEmpty) {
       setHostDynamicItems([])
       hostQueryRef.current = ''
@@ -473,7 +494,7 @@ export function useLauncherSession({
           if (hostQueryRef.current !== q) return
           if (update.kind !== 'host') return
           const applyStartedAt = launcherPerfNow()
-          setHostDynamicItemsNextFrame(filterDynamicForSurface(update.items, normalizedHostId))
+          setHostDynamicItemsNextFrame(filterDynamicForSurface(update.items, normalizedHostId), inputIdentity)
           logLauncherPerfDuration('session:host-dynamic-partial-apply', applyStartedAt, {
             itemCount: update.items.length,
           })
@@ -486,7 +507,7 @@ export function useLauncherSession({
           itemCount: items.length,
         })
         if (hostQueryRef.current !== q) return
-        setHostDynamicItems(filterDynamicForSurface(items, normalizedHostId))
+        setHostDynamicItems(filterDynamicForSurface(items, normalizedHostId), inputIdentity)
       }).catch(() => { /* aborted or failed — ignore */ })
     }, delayMs)
 
@@ -546,7 +567,7 @@ export function useLauncherSession({
             const mergeStartedAt = launcherPerfNow()
             documentPartialsRef.current.set(update.sourceId, update.items)
             const merged = filterDynamicForSurface(mergePartials(documentPartialsRef.current, true), normalizedHostId)
-            setDocumentDynamicItemsNextFrame(merged)
+            setDocumentDynamicItemsNextFrame(merged, q)
             logLauncherPerfDuration('session:document-dynamic-partial-apply', mergeStartedAt, {
               sourceId: update.sourceId,
               itemCount: update.items.length,
@@ -566,7 +587,7 @@ export function useLauncherSession({
           const merged = documentPartialsRef.current.size > 0
             ? mergePartials(documentPartialsRef.current, true)
             : items
-          setDocumentDynamicItems(filterDynamicForSurface(merged, normalizedHostId))
+          setDocumentDynamicItems(filterDynamicForSurface(merged, normalizedHostId), q)
         })
         .catch(() => { /* aborted or failed */ })
     }, DOCUMENT_DYNAMIC_DEBOUNCE_MS)
@@ -583,6 +604,7 @@ export function useLauncherSession({
     return subscribeDesktopWindowsUpdated(() => {
       const q = hostQueryRef.current
       const inputText = q || objectBlockText?.trim() || ''
+      const inputIdentity = launcherInputIdentity(q, objectBlockText)
       if (!inputText && !collectDynamicWhenEmpty) return
       hostAbortRef.current?.abort()
       const abortController = new AbortController()
@@ -594,7 +616,7 @@ export function useLauncherSession({
       }).then((items) => {
         if (abortController.signal.aborted) return
         if (hostQueryRef.current !== q) return
-        setHostDynamicItems(filterDynamicForSurface(items, normalizedHostId))
+        setHostDynamicItems(filterDynamicForSurface(items, normalizedHostId), inputIdentity)
       }).catch(() => { /* ignore */ })
     })
   }, [collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open])
@@ -623,15 +645,19 @@ export function useLauncherSession({
   // Keep open-path warm-cache decision off the render dependency list.
   hostDynamicItemsRef.current = hostDynamicItems
 
-  const rankedItems = useMemo<LauncherItem[]>(() => {
+  const localRankedItems = useMemo<LauncherItem[]>(() => {
     // contentText for textMatch: Object Block takes precedence (it IS the text to process);
     // only fall back to query when no Object Block is present.
     const rankQuery = query.trim()
     const contentText = objectBlockText ?? (rankQuery || undefined)
     const detections = contentText ? detectContent(contentText) : []
+    const inputIdentity = launcherInputIdentity(rankQuery, objectBlockText)
+    const visiblePluginDynamicItems = pluginInputIdentity === inputIdentity ? pluginDynamicItems : []
+    const visibleHostDynamicItems = hostInputIdentity === inputIdentity ? hostDynamicItems : []
+    const visibleDocumentDynamicItems = documentInputIdentity === rankQuery ? documentDynamicItems : []
     // Any live result wins over its rehydrated recent snapshot. Keeping both
     // also creates duplicate React keys, which corrupts visible quick-run indices.
-    const liveKeys = new Set([...staticCandidates, ...pluginDynamicItems, ...hostDynamicItems, ...documentDynamicItems].map((item) => item.systemKey))
+    const liveKeys = new Set([...staticCandidates, ...visiblePluginDynamicItems, ...visibleHostDynamicItems, ...visibleDocumentDynamicItems].map((item) => item.systemKey))
     const recentsDeduped = persistableRecentItems.filter((item) => !liveKeys.has(item.systemKey))
     return measureLauncherPerfSync('session:rank-items', () => rankLauncherItems(
       {
@@ -647,10 +673,10 @@ export function useLauncherSession({
       },
       [
         ...staticCandidates,
-        ...pluginDynamicItems,
-        ...hostDynamicItems,
+        ...visiblePluginDynamicItems,
+        ...visibleHostDynamicItems,
         ...recentsDeduped,
-        ...documentDynamicItems,
+        ...visibleDocumentDynamicItems,
       ],
     ), (items) => ({
       surfaceId: normalizedHostId,
@@ -658,16 +684,18 @@ export function useLauncherSession({
       hasObjectBlockText: Boolean(objectBlockText),
       inputCount:
         staticCandidates.length +
-        pluginDynamicItems.length +
-        hostDynamicItems.length +
+        visiblePluginDynamicItems.length +
+        visibleHostDynamicItems.length +
         recentsDeduped.length +
-        documentDynamicItems.length,
+        visibleDocumentDynamicItems.length,
       resultCount: items.length,
     }))
   }, [
     documentDynamicItems,
+    documentInputIdentity,
     foregroundApp,
     hostDynamicItems,
+    hostInputIdentity,
     launcherFavoriteKeys,
     launcherUsageBySurface,
     locale,
@@ -675,10 +703,67 @@ export function useLauncherSession({
     objectBlockText,
     persistableRecentItems,
     pluginDynamicItems,
+    pluginInputIdentity,
     query,
     rankingNow,
     staticCandidates,
   ])
+  const hasLocalMatches = localRankedItems.length > 0
+  const jevFrameKind = controllerState?.frames.at(-1)?.kind
+  useEffect(() => {
+    const generation = ++jevGenerationRef.current
+    jevPendingRef.current = false
+    const q = query.trim()
+    if (hasLocalMatches || !open || jevFrameKind !== 'list' || !jevSettings?.enabled || !validJevSettings(jevSettings) || q.length < 2 || query.length > 500) {
+      setJevSuggestion(null)
+      return
+    }
+    // Static plugin actions only: never send clipboard, editor, history, or dynamic result content.
+    const candidates = staticCandidates.filter((item) => item.kind === 'plugin' && !item.disabledReason &&
+      !item.savedActionArtifactId && !item.systemKey.startsWith('plugin-settings:')).slice(0, 254)
+    if (!candidates.length) return
+    const timer = window.setTimeout(() => {
+      if (jevInFlightRef.current) {
+        jevPendingRef.current = true
+        return
+      }
+      jevInFlightRef.current = true
+      void chooseJevCandidate(jevSettings, query, candidates.map((item) => ({
+        id: item.systemKey,
+        description: [
+          resolveDisplayTitle(item.display, locale),
+          resolveDisplaySubtitle(item.display, locale),
+          ...(item.display.aliases ?? []).slice(0, 5),
+        ].filter(Boolean).join(' · '),
+      }))).then((suggestion) => {
+        if (generation !== jevGenerationRef.current || !suggestion) return
+        const candidate = candidates.find((item) => item.systemKey === suggestion.id)
+        if (candidate) setJevSuggestion({
+          query,
+          item: suggestion.useInput ? { ...candidate, initialInputText: query } : candidate,
+          settings: jevSettings,
+          candidates: staticCandidates,
+        })
+      }).catch(() => { /* Network/model failures leave local search intact. */ }).finally(() => {
+        jevInFlightRef.current = false
+        if (jevPendingRef.current) {
+          jevPendingRef.current = false
+          setJevSettledTick((tick) => tick + 1)
+        }
+      })
+    }, JEV_DEBOUNCE_MS)
+    return () => { window.clearTimeout(timer); ++jevGenerationRef.current }
+  }, [hasLocalMatches, jevFrameKind, jevSettings, jevSettledTick, locale, open, query, staticCandidates])
+
+  const rankedItems = useMemo<LauncherItem[]>(() => {
+    const suggestion = jevSuggestion
+    if (hasLocalMatches || !open || jevFrameKind !== 'list' || !suggestion || suggestion.query !== query ||
+      suggestion.settings !== jevSettings || suggestion.candidates !== staticCandidates) return localRankedItems
+    const label = translate(locale, 'settings', 'jevBadge')
+    const item = { ...suggestion.item, display: { ...suggestion.item.display, kindLabel: label,
+      kindLabelI18n: { en: translate('en', 'settings', 'jevBadge'), zh: translate('zh', 'settings', 'jevBadge') } } }
+    return [item, ...localRankedItems.filter((candidate) => candidate.systemKey !== item.systemKey)]
+  }, [hasLocalMatches, jevFrameKind, jevSettings, jevSuggestion, localRankedItems, locale, open, query, staticCandidates])
   // After progressive partials / re-rank:
   // - user-pinned key → follow that row
   // - default (no pin) → stay on ranking top (index 0)

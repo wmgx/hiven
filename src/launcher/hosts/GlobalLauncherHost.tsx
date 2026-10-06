@@ -20,6 +20,7 @@ import { GlobalLauncherPanel } from '../../components/launcher/GlobalLauncherPan
 import { useGlobalLauncherSelectionController } from '../../components/launcher/useGlobalLauncherSelectionController'
 import { useClipboardObjectBlock } from '../clipboard/useClipboardObjectBlock'
 import { getObjectBlockRecommendationText } from '../clipboard/objectBlock'
+import { subscribePendingObjectBlock } from '../clipboard/pendingObjectBlock'
 import { executeRecommendedAction } from '../clipboard/actionExecutor'
 import { recommendActionsForBlock, type RecommendedAction, type RecommendedOutputTarget } from '../clipboard/actionRecommendation'
 import { createPluginClipboard, writeClipboardText } from '../../workspace/pluginClipboard'
@@ -43,14 +44,6 @@ import {
 import type { LauncherItem } from '../../workspace/launcher/types'
 import { getPluginPermissionSnapshot } from '../../workspace/pluginPermissions'
 import { showToast } from '../../workspace/toast'
-import {
-  clearStickyLauncherQuery,
-  releaseStickyRestore,
-  saveStickyLauncherQuery,
-  shouldSuppressClipboardForSticky,
-} from '../querySticky'
-
-const GLOBAL_LAUNCHER_STICKY_SURFACE = 'global-launcher'
 
 export function GlobalLauncherHost() {
   const {
@@ -80,8 +73,6 @@ export function GlobalLauncherHost() {
   const panelRef = useRef<HTMLDivElement>(null)
   const visibleSelectionItemsRef = useRef<readonly LauncherItem[]>([])
   const [selectedObjectActionIndex, setSelectedObjectActionIndex] = useState(0)
-  const [hostSurfaceExiting, setHostSurfaceExiting] = useState(false)
-  const hostSurfaceExitTimerRef = useRef<number | null>(null)
   const objectActionControllerRef = useRef<{ expand: () => void; execute: (keepOpen?: boolean) => void } | null>(null)
   const { isImeComposingRef, handleCompositionStart, handleCompositionEnd } = useGlobalLauncherImeComposition()
   const standaloneLauncher = isStandaloneLauncherWindow()
@@ -90,28 +81,14 @@ export function GlobalLauncherHost() {
     : null
   const hostSurfaceTarget = launcherHostSurfaceTarget
 
-  const scheduleHostSurfaceExit = useCallback((finish: () => void) => {
-    if (hostSurfaceExitTimerRef.current !== null) return
-    setHostSurfaceExiting(true)
-    hostSurfaceExitTimerRef.current = window.setTimeout(() => {
-      hostSurfaceExitTimerRef.current = null
-      finish()
-      setHostSurfaceExiting(false)
-    }, 90)
-  }, [])
-
-  useEffect(() => () => {
-    if (hostSurfaceExitTimerRef.current !== null) window.clearTimeout(hostSurfaceExitTimerRef.current)
-  }, [])
   // Live query for suppress gate (session is declared below; ref stays current each render).
   const liveQueryRef = useRef('')
   const clipboardBlock = useClipboardObjectBlock({
     open,
     readClipboard: readLauncherClipboard,
-    // Sticky draft (stored or restore-hold) / non-empty typing → no clipboard block.
+    // Do not replace an in-progress query with clipboard suggestions.
     suppressAutoAttach: () => (
-      shouldSuppressClipboardForSticky(GLOBAL_LAUNCHER_STICKY_SURFACE)
-      || Boolean(liveQueryRef.current.trim())
+      Boolean(liveQueryRef.current.trim())
       || Boolean(inputRef.current?.value?.trim())
     ),
   })
@@ -130,6 +107,7 @@ export function GlobalLauncherHost() {
     controllerState,
     rankedItems: rankedLauncherItems,
     syncSelection,
+    reset: resetSession,
   } = useLauncherSession({
     hostId: 'global-launcher',
     open,
@@ -141,23 +119,18 @@ export function GlobalLauncherHost() {
     visibleSelectionItemsRef,
   })
   liveQueryRef.current = query
-  // Only when the user clears a non-empty draft — never on every empty render.
-  // Open-path holdStickyRestore must survive until startTransition applies sticky,
-  // otherwise clipboard auto-attach races the restore and extra re-ranks fire.
-  const prevQueryForStickyRef = useRef(query)
+  // An explicit content handoff starts a new command search; ordinary Back keeps it.
+  useEffect(() => subscribePendingObjectBlock(() => setQuery('')), [setQuery])
   const trackQueryChangeRef = useRef(
     createDebouncedTracker(TelemetryEvents.launcherQueryChange, 280),
   )
   useEffect(() => {
-    const prev = prevQueryForStickyRef.current
-    prevQueryForStickyRef.current = query
-    if (prev.trim() && !query.trim()) {
-      releaseStickyRestore(GLOBAL_LAUNCHER_STICKY_SURFACE)
+    if (!open) {
+      trackQueryChangeRef.current.cancel()
+      return
     }
     // Debounced typing signal for behavior funnel (not every keystroke).
-    if (open) {
-      trackQueryChangeRef.current(queryTelemetryProps(query))
-    }
+    trackQueryChangeRef.current(queryTelemetryProps(query))
   }, [open, query])
 
   const objectActions = useMemo(() => {
@@ -180,9 +153,12 @@ export function GlobalLauncherHost() {
       return
     }
     trackBehavior(TelemetryEvents.launcherOpen, { host: 'global-launcher' })
-    // Total open-event → first painted frame (double rAF ≈ paint).
+    // Measure in the next task after the first render opportunity. Avoid a
+    // second rAF: hidden-to-visible WKWebViews can throttle it for ~500ms even
+    // after the launcher is accepting input. This is not a pixel-present probe.
+    let paintTimer = 0
     const raf = requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
+      paintTimer = window.setTimeout(() => {
         const t0 = (window as unknown as { __hivenLauncherOpenT0?: number }).__hivenLauncherOpenT0
         if (typeof t0 !== 'number') return
         ;(window as unknown as { __hivenLauncherOpenT0?: number }).__hivenLauncherOpenT0 = undefined
@@ -192,9 +168,12 @@ export function GlobalLauncherHost() {
           durationMs,
         })
         trackLatencyFrom(TelemetryEvents.launcherFirstPaint, t0)
-      })
+      }, 0)
     })
-    return () => cancelAnimationFrame(raf)
+    return () => {
+      cancelAnimationFrame(raf)
+      window.clearTimeout(paintTimer)
+    }
   }, [open])
 
   useEffect(() => {
@@ -248,7 +227,6 @@ export function GlobalLauncherHost() {
     setSurfaceFrame,
     activeSurfaceFrame,
     surfaceFocusVersion,
-    surfaceExiting,
     openPluginSurface,
     leaveSurface,
     requestSurfaceBack,
@@ -419,21 +397,11 @@ export function GlobalLauncherHost() {
     return `${controllerState.busy ? 1 : 0}:${controllerState.frames.length}:${topKind}:${controllerState.error ?? ''}${previewSignal}`
   }, [controllerState])
 
-  /**
-   * Guard double blur/Esc: first close saves sticky + setQuery(''); a second
-   * close must not run with empty query and wipe (or re-hide) again.
-   */
+  // Guard duplicate dismissals while the native window is hiding.
   const closingRef = useRef(false)
 
-  useEffect(() => {
-    if (open) closingRef.current = false
-  }, [open])
-
-  /**
-   * @param discardQuery When true (after successful action), drop sticky query.
-   *   When false (Esc / blur leave-to-copy), keep typed input for a few minutes.
-   */
-  const resetLauncherSession = useCallback((options?: { discardQuery?: boolean }) => {
+  const resetLauncherSession = useCallback(() => {
+    clipboardBlock.markBlockConsumed()
     clearPluginSurfaceTool()
     clearLauncherHostSurface()
     // Drop any suspended host (e.g. quick-editor under Diff) when fully closing.
@@ -443,87 +411,43 @@ export function GlobalLauncherHost() {
     if (usePluginSettingsStore.getState().settingsDialogTarget?.presentation === 'global-launcher') {
       closeSettingsDialog()
     }
-    // Prefer live input value: blur can race React state by a frame.
-    const liveQuery = inputRef.current?.value ?? query
-    if (options?.discardQuery) {
-      clearStickyLauncherQuery(GLOBAL_LAUNCHER_STICKY_SURFACE)
-    } else if (liveQuery.trim()) {
-      saveStickyLauncherQuery(GLOBAL_LAUNCHER_STICKY_SURFACE, liveQuery)
-    } else {
-      // Closed with empty box — start fresh next open.
-      clearStickyLauncherQuery(GLOBAL_LAUNCHER_STICKY_SURFACE)
-    }
-    setQuery('')
-    setSelectedIndex(0, { pin: false })
-    controllerRef.current?.reset()
-  }, [clearLauncherHostSurface, clearPluginSurfaceTool, closeSettingsDialog, query, setQuery, setSelectedIndex, controllerRef])
+    setSelectedObjectActionIndex(0)
+    isImeComposingRef.current = false
+    resetSession()
+  }, [clipboardBlock.markBlockConsumed, clearLauncherHostSurface, clearPluginSurfaceTool, closeSettingsDialog, isImeComposingRef, resetSession])
 
-  // Esc / overlay click / surface close: smart restore (skip if user already left).
-  const closeLauncher = useCallback(() => {
+  const closeSession = useCallback((reason: 'esc-or-overlay' | 'blur' | 'after-action') => {
+    const completed = reason === 'after-action'
     if (closingRef.current) return
     closingRef.current = true
     trackBehavior(TelemetryEvents.launcherClose, {
-      reason: 'esc-or-overlay',
+      reason,
       ...queryTelemetryProps(inputRef.current?.value ?? query),
     })
     resetLauncherSession()
     void closeGlobalLauncherWindow({
       standaloneLauncher,
       overlay,
-      hideOverlayWindow: true,
+      hideOverlayWindow: !completed,
       restoreFocus,
       setOpen,
-      restoreForeground: 'auto',
+      restoreForeground: reason === 'blur' ? 'never' : 'auto',
+    }).finally(() => {
+      // Validation stays visible, so there is no false→true open edge to reset this guard.
+      if (window.__HIVEN_WEB_NATIVE_BRIDGE__) closingRef.current = false
     })
-  }, [overlay, query, resetLauncherSession, setOpen, standaloneLauncher, restoreFocus])
+  }, [overlay, query, resetLauncherSession, restoreFocus, setOpen, standaloneLauncher])
 
-  // Blur-dismiss (clicked another app/window): never steal focus back.
-  // Sticky query is saved so leave-to-copy formula resume works.
-  const closeLauncherOnBlur = useCallback(() => {
-    if (closingRef.current) return
-    closingRef.current = true
-    trackBehavior(TelemetryEvents.launcherClose, {
-      reason: 'blur',
-      ...queryTelemetryProps(inputRef.current?.value ?? query),
-    })
-    resetLauncherSession()
-    void closeGlobalLauncherWindow({
-      standaloneLauncher,
-      overlay,
-      hideOverlayWindow: true,
-      restoreFocus,
-      setOpen,
-      restoreForeground: 'never',
-    })
-  }, [overlay, query, resetLauncherSession, setOpen, standaloneLauncher, restoreFocus])
+  const closeLauncher = useCallback(() => closeSession('esc-or-overlay'), [closeSession])
+  const closeLauncherOnBlur = useCallback(() => closeSession('blur'), [closeSession])
+  const closeLauncherAfterAction = useCallback(() => closeSession('after-action'), [closeSession])
 
-  const leaveHostSurface = useCallback(() => scheduleHostSurfaceExit(() => {
+  const leaveHostSurface = useCallback(() => {
     clearLauncherHostSurface()
     focusSearchInputAfterBack()
-  }), [clearLauncherHostSurface, focusSearchInputAfterBack, scheduleHostSurfaceExit])
+  }, [clearLauncherHostSurface, focusSearchInputAfterBack])
 
-  const closeHostSurface = useCallback(() => scheduleHostSurfaceExit(closeLauncher), [closeLauncher, scheduleHostSurfaceExit])
-
-  // Close launcher after a command has been executed (don't hide the main window)
-  const closeLauncherAfterAction = useCallback(() => {
-    if (closingRef.current) return
-    closingRef.current = true
-    trackBehavior(TelemetryEvents.launcherClose, {
-      reason: 'after-action',
-      ...queryTelemetryProps(inputRef.current?.value ?? query),
-    })
-    resetLauncherSession({ discardQuery: true })
-    void closeGlobalLauncherWindow({
-      standaloneLauncher,
-      overlay,
-      hideOverlayWindow: false,
-      restoreFocus,
-      setOpen,
-      // Intentionally switched targets already clear_previous_foreground_app;
-      // auto still restores when the action only wrote clipboard / stayed put.
-      restoreForeground: 'auto',
-    })
-  }, [overlay, query, resetLauncherSession, setOpen, standaloneLauncher, restoreFocus])
+  const closeHostSurface = closeLauncher
 
   useEffect(() => {
     closeAfterActionRef.current = closeLauncherAfterAction
@@ -613,6 +537,16 @@ export function GlobalLauncherHost() {
     objectBlockText: clipboardBlock.block?.payloadText ?? undefined,
     locale,
   })
+
+  // Reset synchronously on external closes, before the hidden WebView can throttle React.
+  useEffect(() => useAppStore.subscribe((state, previous) => {
+    if (!previous.globalLauncherOpen && state.globalLauncherOpen) {
+      closingRef.current = false
+    } else if (previous.globalLauncherOpen && !state.globalLauncherOpen && !closingRef.current) {
+      closingRef.current = true
+      resetLauncherSession()
+    }
+  }), [resetLauncherSession])
 
   useGlobalLauncherHostEscape({
     open,
@@ -735,14 +669,15 @@ export function GlobalLauncherHost() {
     }
 
     if (result.ok && target !== 'copy-and-keep-open') {
-      // Acting on the block (paste / open-editor / …) is "done with it" — mark
-      // the underlying clipboard content consumed so the next open doesn't
-      // silently re-attach the same block (the OS clipboard is unchanged by
-      // most actions, so without this it looked like the launcher never reset).
-      clipboardBlock.markBlockConsumed()
-      closeLauncherAfterAction()
+      // Navigation into another Launcher surface is continuation, not completion.
+      if (target === 'open-plugin-surface' || useAppStore.getState().launcherHostSurfaceTarget) {
+        clipboardBlock.markBlockConsumed()
+        setQuery('')
+      } else {
+        closeLauncherAfterAction()
+      }
     }
-  }, [clipboardBlock.block, clipboardBlock.markBlockConsumed, closeLauncherAfterAction, locale, openPluginSurface])
+  }, [clipboardBlock.block, clipboardBlock.markBlockConsumed, closeLauncherAfterAction, locale, openPluginSurface, setQuery])
 
   const selectItemWithObjectActions = useCallback((item: GlobalLauncherItem) => {
     // Support both current prefix and the retired history-only prefix.
@@ -778,8 +713,8 @@ export function GlobalLauncherHost() {
         via: 'result-preview',
       })
       if (!result.ok) {
-        showToast(result.message || t(locale, 'palette.quickEntryError'), 'error')
-        return
+        showToast(result.message || t(locale, 'palette.quickEntryError'), result.fallback === 'copied' ? 'info' : 'error')
+        if (result.fallback !== 'copied') return
       }
       closeLauncherAfterAction()
     } catch (error) {
@@ -840,7 +775,6 @@ export function GlobalLauncherHost() {
         focusSearchInputAfterBack={focusSearchInputAfterBack}
         surfaceFrame={surfaceFrame}
         activeSurfaceFrame={activeSurfaceFrame}
-        surfaceExiting={surfaceExiting}
         leaveSurface={leaveSurface}
         itemPermissionFrame={itemPermissionFrame}
         cancelItemPermissionPrompt={cancelItemPermissionPrompt}
@@ -861,7 +795,6 @@ export function GlobalLauncherHost() {
         isWorkflowObjectLauncherItem={isWorkflowObjectLauncherItem}
         selectItem={selectItemWithObjectActions as never}
         hostSurfaceTarget={hostSurfaceTarget}
-        hostSurfaceExiting={hostSurfaceExiting}
         clearLauncherHostSurface={clearLauncherHostSurface}
         query={query}
         setQuery={setQuery}

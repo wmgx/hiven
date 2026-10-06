@@ -138,6 +138,8 @@ assert.equal(typeof LauncherController, 'function', 'controller.ts must export L
 // to Node's real require.
 const nodeRequire = createRequire(import.meta.url)
 function sandboxRequire(specifier) {
+  if (specifier === './CalculatorSurface') return { CalculatorSurface: () => null }
+  if (specifier === './style.css') return {}
   if (specifier === '@hiven/plugin') {
     return {
       getPluginHostSdk: () => { throw new Error('not needed') },

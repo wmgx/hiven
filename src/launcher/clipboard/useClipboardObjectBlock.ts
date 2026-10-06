@@ -14,6 +14,7 @@ import type { LauncherObjectBlock, RecentClipboardHint } from './objectBlock'
 import {
   buildRecentClipboardHint,
   createClipboardObjectBlock,
+  createQueryObjectBlock,
 } from './objectBlock'
 import {
   clearPendingObjectBlock,
@@ -49,11 +50,12 @@ export type ClipboardObjectBlockState = {
   selectBlockForDelete: () => void
   handleBackspace: (queryEmpty: boolean) => boolean
   attachHintAsBlock: () => void
+  attachQueryAsBlock: (text: string) => void
   markBlockConsumed: () => void
 }
 
 /** Blocks handed in from history / tools — re-stash on hide so ⌘↵ is not lost mid-transition. */
-const HANDOFF_BLOCK_SOURCES = new Set(['history-item', 'tool-result'])
+const HANDOFF_BLOCK_SOURCES = new Set(['history-item', 'tool-result', 'query'])
 
 function isHandoffBlock(block: LauncherObjectBlock | null | undefined): boolean {
   return Boolean(block && HANDOFF_BLOCK_SOURCES.has(block.source))
@@ -63,7 +65,7 @@ export function useClipboardObjectBlock(params: {
   open: boolean
   readClipboard: () => Promise<string>
   /**
-   * When true at open-read time, skip auto Object Block (sticky query / non-empty input).
+   * When true at open-read time, skip auto Object Block while input is in progress.
    * forceAttach / history pending still work.
    */
   suppressAutoAttach?: () => boolean
@@ -128,82 +130,87 @@ export function useClipboardObjectBlock(params: {
     didReadRef.current = true
 
     let cancelled = false
-    const timer = window.setTimeout(() => {
-      void (async () => {
-        const startedAt = launcherPerfNow()
-        try {
-          const text = await readClipboard()
-          if (cancelled) return
-          // Never clobber a history handoff that landed while we were reading.
-          if (isHandoffBlock(blockRef.current)) return
-          logLauncherPerfDuration('clipboard-object-block:read', startedAt, {
-            kind: 'latency',
-            hasText: Boolean(text),
-            textLength: text.length,
-          })
-          if (!text) {
-            setBlock(null)
-            setIsExiting(false)
-            setHint(null)
-            return
-          }
-
-          // Clock rules (must not treat "first read at open" as copy time):
-          // - No prior observation → unknown age (no auto-attach).
-          // - Same content as tracker/open baseline → preserve changedAt / ageConfidence.
-          // - Content changed since last observation → known age at observation time
-          //   (race with background tracker; user likely just copied).
-          const lastSnapshot = getLastClipboardSnapshot()
-          let snapshot: ClipboardSnapshot
-          if (!lastSnapshot) {
-            snapshot = createClipboardSnapshotFromUnknownAge(text)
-          } else if (lastSnapshot.hash === hashClipboardText(text) || lastSnapshot.text === text) {
-            snapshot = updateClipboardSnapshot(text)
-          } else {
-            // Prefer observe path so first-ever change after unknown baseline is known.
-            snapshot = observeClipboardText(text) ?? updateClipboardSnapshot(text)
-          }
-
-          if (cancelled) return
-          if (isHandoffBlock(blockRef.current)) return
-          const suppress = suppressAutoAttachRef.current?.() === true
-          const newBlock = isClipboardDismissed(snapshot)
-            ? null
-            : createClipboardObjectBlock(snapshot, Date.now(), { suppressAutoAttach: suppress })
-          clearExitTimer()
-          setIsExiting(false)
-          setBlock(newBlock)
-          // Hint only when not suppressed and content would qualify (policy inside builder).
-          setHint(newBlock || suppress ? null : buildRecentClipboardHint(snapshot))
-          if (newBlock) {
-            trackBehavior(TelemetryEvents.clipboardBlockAttach, {
-              kind: newBlock.kind,
-              source: newBlock.source,
-              auto: true,
-              suppressed: false,
-            })
-          } else if (suppress) {
-            trackBehavior(TelemetryEvents.clipboardBlockAttach, {
-              auto: false,
-              suppressed: true,
-            })
-          }
-        } catch {
-          if (cancelled) return
-          if (isHandoffBlock(blockRef.current)) return
-          logLauncherPerfDuration('clipboard-object-block:read', startedAt, {
-            kind: 'latency',
-            failed: true,
-          })
+    const readAfterFirstPaint = async () => {
+      const startedAt = launcherPerfNow()
+      try {
+        const text = await readClipboard()
+        if (cancelled || userDismissedRef.current) return
+        // Never clobber a history handoff that landed while we were reading.
+        if (isHandoffBlock(blockRef.current)) return
+        logLauncherPerfDuration('clipboard-object-block:read', startedAt, {
+          kind: 'latency',
+          hasText: Boolean(text),
+          textLength: text.length,
+        })
+        if (!text) {
           setBlock(null)
           setIsExiting(false)
           setHint(null)
+          return
         }
-      })()
-    }, 180)
+
+        // Clock rules (must not treat "first read at open" as copy time):
+        // - No prior observation → unknown age (no auto-attach).
+        // - Same content as tracker/open baseline → preserve changedAt / ageConfidence.
+        // - Content changed since last observation → known age at observation time
+        //   (race with background tracker; user likely just copied).
+        const lastSnapshot = getLastClipboardSnapshot()
+        let snapshot: ClipboardSnapshot
+        if (!lastSnapshot) {
+          snapshot = createClipboardSnapshotFromUnknownAge(text)
+        } else if (lastSnapshot.hash === hashClipboardText(text) || lastSnapshot.text === text) {
+          snapshot = updateClipboardSnapshot(text)
+        } else {
+          // Prefer observe path so first-ever change after unknown baseline is known.
+          snapshot = observeClipboardText(text) ?? updateClipboardSnapshot(text)
+        }
+
+        if (cancelled) return
+        if (isHandoffBlock(blockRef.current)) return
+        const suppress = suppressAutoAttachRef.current?.() === true
+        const newBlock = isClipboardDismissed(snapshot)
+          ? null
+          : createClipboardObjectBlock(snapshot, Date.now(), { suppressAutoAttach: suppress })
+        clearExitTimer()
+        setIsExiting(false)
+        setBlock(newBlock)
+        // Hint only when not suppressed and content would qualify (policy inside builder).
+        setHint(newBlock || suppress ? null : buildRecentClipboardHint(snapshot))
+        if (newBlock) {
+          trackBehavior(TelemetryEvents.clipboardBlockAttach, {
+            kind: newBlock.kind,
+            source: newBlock.source,
+            auto: true,
+            suppressed: false,
+          })
+        } else if (suppress) {
+          trackBehavior(TelemetryEvents.clipboardBlockAttach, {
+            auto: false,
+            suppressed: true,
+          })
+        }
+      } catch {
+        if (cancelled) return
+        if (isHandoffBlock(blockRef.current)) return
+        logLauncherPerfDuration('clipboard-object-block:read', startedAt, {
+          kind: 'latency',
+          failed: true,
+        })
+        setBlock(null)
+        setIsExiting(false)
+        setHint(null)
+      }
+    }
+    let timer = 0
+    const raf1 = requestAnimationFrame(() => {
+      timer = window.setTimeout(() => {
+        void readAfterFirstPaint()
+      }, 0)
+    })
 
     return () => {
       cancelled = true
+      cancelAnimationFrame(raf1)
       window.clearTimeout(timer)
     }
   }, [open, readClipboard, clearExitTimer, applyHandoffBlock])
@@ -266,10 +273,17 @@ export function useClipboardObjectBlock(params: {
    * the same block — reproducing the "still has my old input" complaint.
    */
   const markBlockConsumed = useCallback(() => {
-    if (!block) return
+    // Completion must also cancel history/tool handoff recovery after a native hide.
+    userDismissedRef.current = true
+    blockRef.current = null
+    clearPendingObjectBlock()
+    clearExitTimer()
+    setBlock(null)
+    setHint(null)
+    setIsExiting(false)
     const snapshot = getLastClipboardSnapshot()
     if (snapshot) dismissClipboardBlock(snapshot)
-  }, [block])
+  }, [clearExitTimer])
 
   /**
    * Handle Backspace when query is empty: remove the object block in one press
@@ -302,6 +316,11 @@ export function useClipboardObjectBlock(params: {
     }
   }, [hint, clearExitTimer])
 
+  const attachQueryAsBlock = useCallback((text: string) => {
+    if (text.length === 0) return
+    setPendingObjectBlock(createQueryObjectBlock({ query: text }))
+  }, [])
+
   // Keep object-action until unmount so ranking/list do not re-render mid-exit (jank source).
   const mode: ClipboardObjectBlockMode = block ? 'object-action' : 'search-only'
 
@@ -314,6 +333,7 @@ export function useClipboardObjectBlock(params: {
     selectBlockForDelete,
     handleBackspace,
     attachHintAsBlock,
+    attachQueryAsBlock,
     markBlockConsumed,
   }
 }

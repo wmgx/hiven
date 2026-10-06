@@ -2,134 +2,102 @@
  * First-party Encode/Decode plugin.
  *
  * Groups: Base64, URL, HTML entities, Slashes (escape), JWT decode.
- * Each operation is an independent tool — no sub-selection needed.
+ * Direct tools plus a shared conversion workspace.
  */
 
-import { definePlugin } from '@hiven/plugin'
+import { definePlugin, type PluginToolSurfaces } from '@hiven/plugin'
+import { EncodeDecodeSurface } from './EncodeDecodeSurface'
+import {
+  base64Decode,
+  base64Encode,
+  decodeJwt,
+  escapeSlashes,
+  hasEscapeSequences,
+  hasHtmlEntities,
+  htmlDecode,
+  htmlEncode,
+  isBase64,
+  isJwt,
+  isUrlEncoded,
+  unescapeSlashes,
+  urlDecode,
+  urlEncode,
+} from './core'
+import './style.css'
 
 const LEARNABLE_PURE = { effect: 'pure', learnable: true } as const
-
-// ─── Base64 ───────────────────────────────────────────────────────────────────
-
-function base64Encode(text: string): string {
-  return btoa(unescape(encodeURIComponent(text)))
+const EDITOR_TOOL_SURFACES: PluginToolSurfaces = {
+  launcher: { surfaces: ['editor-command-bar', 'quick-editor-command'] },
+  panel: true,
 }
-
-function base64Decode(text: string): string {
-  return decodeURIComponent(escape(atob(text.trim())))
+const WORKSPACE_SHELL = {
+  defaultWidth: 860,
+  defaultHeight: 640,
+  minWidth: 640,
+  minHeight: 420,
+  closeOnBlur: false,
+  resizable: true,
 }
-
-// ─── URL ──────────────────────────────────────────────────────────────────────
-
-function urlEncode(text: string): string {
-  return encodeURIComponent(text)
-}
-
-function urlDecode(text: string): string {
-  return decodeURIComponent(text.trim())
-}
-
-// ─── HTML Entities ────────────────────────────────────────────────────────────
-
-function htmlEncode(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-}
-
-function htmlDecode(text: string): string {
-  return text
-    .replace(/&#39;/g, "'")
-    .replace(/&quot;/g, '"')
-    .replace(/&gt;/g, '>')
-    .replace(/&lt;/g, '<')
-    .replace(/&amp;/g, '&')
-}
-
-// ─── Slashes ──────────────────────────────────────────────────────────────────
-
-function escapeSlashes(text: string): string {
-  return text
-    .replace(/\\/g, '\\\\')
-    .replace(/'/g, "\\'")
-    .replace(/"/g, '\\"')
-    .replace(/\n/g, '\\n')
-    .replace(/\r/g, '\\r')
-    .replace(/\t/g, '\\t')
-}
-
-function unescapeSlashes(text: string): string {
-  return text
-    .replace(/\\t/g, '\t')
-    .replace(/\\r/g, '\r')
-    .replace(/\\n/g, '\n')
-    .replace(/\\"/g, '"')
-    .replace(/\\'/g, "'")
-    .replace(/\\\\/g, '\\')
-}
-
-// ─── JWT ──────────────────────────────────────────────────────────────────────
-
-function decodeJwt(text: string): string {
-  const parts = text.trim().split('.')
-  if (parts.length !== 3) throw new Error('Invalid JWT (expected 3 parts)')
-  const decode = (s: string) => {
-    const pad = s + '='.repeat((4 - s.length % 4) % 4)
-    return JSON.parse(decodeURIComponent(escape(atob(pad.replace(/-/g, '+').replace(/_/g, '/')))))
-  }
-  const header = decode(parts[0])
-  const payload = decode(parts[1])
-  return `// Header\n${JSON.stringify(header, null, 2)}\n\n// Payload\n${JSON.stringify(payload, null, 2)}`
-}
-
-// ─── Content Matchers ─────────────────────────────────────────────────────────
-
-function isBase64(text: string): boolean {
-  const t = text.trim()
-  if (t.length < 4) return false
-  return /^[A-Za-z0-9+/\n\r]+=*$/.test(t) && t.length % 4 <= 1
-}
-
-function isUrlEncoded(text: string): boolean {
-  return /%[0-9A-Fa-f]{2}/.test(text)
-}
-
-function hasHtmlEntities(text: string): boolean {
-  return /&(?:amp|lt|gt|quot|#39|#\d+|#x[0-9a-f]+);/i.test(text)
-}
-
-function hasEscapeSequences(text: string): boolean {
-  return /\\[nrt"'\\]/.test(text)
-}
-
-function isJwt(text: string): boolean {
-  const t = text.trim()
-  if (!/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(t)) return false
-  // Strong check: header must decode to JSON with `alg` (reject `ipb.xxx.yyy`).
-  try {
-    const headerSeg = t.split('.')[0] ?? ''
-    if (headerSeg.length < 4) return false
-    const padded = headerSeg + '='.repeat((4 - (headerSeg.length % 4)) % 4)
-    const b64 = padded.replace(/-/g, '+').replace(/_/g, '/')
-    const json =
-      typeof Buffer !== 'undefined'
-        ? Buffer.from(b64, 'base64').toString('utf8')
-        : typeof atob === 'function'
-          ? atob(b64)
-          : ''
-    const header = JSON.parse(json) as { alg?: unknown }
-    return Boolean(header && typeof header === 'object' && typeof header.alg === 'string' && header.alg)
-  } catch {
-    return false
-  }
-}
+const OPERATION_ROUTES = [
+  { id: 'base64-encode', title: 'base64.encode.title', aliases: ['base64 encode', 'encode base64', 'b64 encode', 'base64编码', 'base64 编码'] },
+  { id: 'base64-decode', title: 'base64.decode.title', aliases: ['base64 decode', 'decode base64', 'b64 decode', 'base64解码', 'base64 解码'] },
+  { id: 'url-encode', title: 'url.encode.title', aliases: ['url encode', 'encode url', 'urlencode', 'url编码', 'url 编码'] },
+  { id: 'url-decode', title: 'url.decode.title', aliases: ['url decode', 'decode url', 'urldecode', 'url解码', 'url 解码'] },
+  { id: 'html-encode', title: 'html.encode.title', aliases: ['html encode', 'encode html', 'html escape', 'html编码', 'html 编码'] },
+  { id: 'html-decode', title: 'html.decode.title', aliases: ['html decode', 'decode html', 'html unescape', 'html解码', 'html 解码'] },
+  { id: 'slashes-encode', title: 'slashes.escape.title', aliases: ['escape text', 'add slashes', 'text escape', '文本转义', '添加转义'] },
+  { id: 'slashes-decode', title: 'slashes.unescape.title', aliases: ['unescape text', 'remove slashes', 'text unescape', '文本反转义', '去除转义'] },
+  { id: 'jwt-decode', title: 'jwt.decode.title', aliases: ['jwt decode', 'decode jwt', 'jwt-decode', 'jwt解码', 'jwt 解码'] },
+] as const
 
 // ─── Plugin Definition ────────────────────────────────────────────────────────
 
 export const encodeDecodePlugin = definePlugin({
+  ui: {
+    surfaces: [
+      {
+        id: 'main',
+        kind: 'custom-view',
+        title: 'Encode / Decode',
+        titleI18n: { zh: '编解码' },
+        icon: 'Binary',
+        aliases: ['encode', 'decode', 'encode decode', 'encoder', 'decoder', '编码', '解码', '编解码', 'bianma', 'jiema'],
+        textMatch: (text) => isBase64(text) || isUrlEncoded(text) || hasHtmlEntities(text) || hasEscapeSequences(text) || isJwt(text),
+        component: EncodeDecodeSurface,
+        entry: {
+          launcher: { surfaces: ['global-launcher', 'editor-command-bar', 'quick-editor-command'] },
+          shortcutBindable: true,
+        },
+        shell: WORKSPACE_SHELL,
+      },
+      ...OPERATION_ROUTES.map((route) => ({
+        id: route.id,
+        kind: 'custom-view' as const,
+        title: 'Encode / Decode',
+        titleI18n: { zh: '编解码' },
+        component: EncodeDecodeSurface,
+        entry: { launcher: false },
+        shell: WORKSPACE_SHELL,
+      })),
+    ],
+  },
+  launcher: {
+    items: OPERATION_ROUTES.map((route) => ({
+      id: `open-${route.id}`,
+      display: {
+        title: route.title,
+        subtitle: 'route.open',
+        icon: 'Binary',
+        aliases: [...route.aliases],
+      },
+      behavior: { type: 'perform' as const },
+      surfaces: ['global-launcher' as const],
+      execute(execution) {
+        execution.api.openSurface(route.id, { initialText: execution.input?.text })
+        return { ok: true as const, keepOpen: true }
+      },
+    })),
+  },
   tools: [
     {
       id: 'base64.encode',
@@ -144,7 +112,7 @@ export const encodeDecodePlugin = definePlugin({
         try { return ctx.output.text(base64Encode(ctx.input.text)) }
         catch (e: any) { return ctx.output.error(ctx.t('error.convert', { message: e.message })) }
       },
-      surfaces: { launcher: true, panel: true },
+      surfaces: EDITOR_TOOL_SURFACES,
     },
     {
       id: 'base64.decode',
@@ -160,7 +128,7 @@ export const encodeDecodePlugin = definePlugin({
         try { return ctx.output.text(base64Decode(ctx.input.text)) }
         catch (e: any) { return ctx.output.error(ctx.t('error.convert', { message: e.message })) }
       },
-      surfaces: { launcher: true, panel: true },
+      surfaces: EDITOR_TOOL_SURFACES,
     },
     {
       id: 'url.encode',
@@ -173,7 +141,7 @@ export const encodeDecodePlugin = definePlugin({
         try { return ctx.output.text(urlEncode(ctx.input.text)) }
         catch (e: any) { return ctx.output.error(ctx.t('error.convert', { message: e.message })) }
       },
-      surfaces: { launcher: true, panel: true },
+      surfaces: EDITOR_TOOL_SURFACES,
     },
     {
       id: 'url.decode',
@@ -188,7 +156,7 @@ export const encodeDecodePlugin = definePlugin({
         try { return ctx.output.text(urlDecode(ctx.input.text)) }
         catch (e: any) { return ctx.output.error(ctx.t('error.convert', { message: e.message })) }
       },
-      surfaces: { launcher: true, panel: true },
+      surfaces: EDITOR_TOOL_SURFACES,
     },
     {
       id: 'html.encode',
@@ -198,7 +166,7 @@ export const encodeDecodePlugin = definePlugin({
       aliases: ['html-entities encode', 'html-escape', 'html编码', 'html encode', 'encode html', 'html escape', '编码'],
       inputPolicy: { mode: 'auto' },
       run(ctx) { return ctx.output.text(htmlEncode(ctx.input.text)) },
-      surfaces: { launcher: true, panel: true },
+      surfaces: EDITOR_TOOL_SURFACES,
     },
     {
       id: 'html.decode',
@@ -209,7 +177,7 @@ export const encodeDecodePlugin = definePlugin({
       inputPolicy: { mode: 'auto' },
       textMatch: hasHtmlEntities,
       run(ctx) { return ctx.output.text(htmlDecode(ctx.input.text)) },
-      surfaces: { launcher: true, panel: true },
+      surfaces: EDITOR_TOOL_SURFACES,
     },
     {
       id: 'slashes.escape',
@@ -219,7 +187,7 @@ export const encodeDecodePlugin = definePlugin({
       aliases: ['escape', 'addslashes', '转义', 'add slashes', '添加转义'],
       inputPolicy: { mode: 'auto' },
       run(ctx) { return ctx.output.text(escapeSlashes(ctx.input.text)) },
-      surfaces: { launcher: true, panel: true },
+      surfaces: EDITOR_TOOL_SURFACES,
     },
     {
       id: 'slashes.unescape',
@@ -230,7 +198,7 @@ export const encodeDecodePlugin = definePlugin({
       inputPolicy: { mode: 'auto' },
       textMatch: hasEscapeSequences,
       run(ctx) { return ctx.output.text(unescapeSlashes(ctx.input.text)) },
-      surfaces: { launcher: true, panel: true },
+      surfaces: EDITOR_TOOL_SURFACES,
     },
     {
       id: 'jwt.decode',
@@ -245,7 +213,7 @@ export const encodeDecodePlugin = definePlugin({
         try { return ctx.output.text(decodeJwt(ctx.input.text)) }
         catch (e: any) { return ctx.output.error(ctx.t('error.convert', { message: e.message })) }
       },
-      surfaces: { launcher: true, panel: true },
+      surfaces: EDITOR_TOOL_SURFACES,
     },
   ],
 })

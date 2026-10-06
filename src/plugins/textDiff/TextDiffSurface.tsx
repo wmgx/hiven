@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
+import { Menu } from '@hiven/plugin-ui'
 import { getPluginDiffHost, type DiffSource } from '@hiven/plugin-diff'
 import { canUseSemanticJsonDiff } from './autoDiffMode'
 import { useDiffSourceText } from './useDiffSourceText'
@@ -9,6 +10,7 @@ type DiffMode = 'text' | 'json'
 type DiffPayload = {
   original: DiffSource
   modified: DiffSource
+  sources?: DiffSource[]
 }
 
 function asDiffSource(side: Partial<DiffSource> | undefined, fallbackId: string): DiffSource {
@@ -35,8 +37,9 @@ function parsePayload(initialText?: string): DiffPayload {
     }
   }
   try {
-    const parsed = JSON.parse(initialText) as { original?: Partial<DiffSource>; modified?: Partial<DiffSource> }
+    const parsed = JSON.parse(initialText) as { original?: Partial<DiffSource>; modified?: Partial<DiffSource>; sources?: Partial<DiffSource>[] }
     return {
+      sources: Array.isArray(parsed.sources) ? parsed.sources.map((source, i) => asDiffSource(source, String(i))) : [],
       original: asDiffSource(parsed.original, 'original'),
       modified: asDiffSource(parsed.modified, 'modified'),
     }
@@ -103,7 +106,7 @@ const IconDown = () => (
   </svg>
 )
 
-export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurfaceProps) {
+export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }: PluginSurfaceProps) {
   // Diff kits are first-party only (@hiven/plugin-diff), not public PluginHostSdk.
   const { kits: diffKits } = getPluginDiffHost()
   const {
@@ -115,9 +118,25 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
   } = diffKits
 
   const payload = useMemo(() => parsePayload(initialText), [initialText])
-  const [originalText, setOriginalText] = useDiffSourceText(payload.original)
-  const [modifiedText, setModifiedText] = useDiffSourceText(payload.modified)
-  const [diffMode, setDiffMode] = useState<DiffMode>('text')
+  const [originalSource, setOriginalSource] = useState(payload.original)
+  const [modifiedSource, setModifiedSource] = useState(payload.modified)
+  const [originalText, setOriginalText] = useDiffSourceText(originalSource)
+  const [modifiedText, setModifiedText] = useDiffSourceText(modifiedSource)
+  const [diffMode, setDiffMode] = useState<DiffMode>(surfaceId === 'json' ? 'json' : 'text')
+
+  const sourceOptions = payload.sources?.length ? payload.sources : [
+    asDiffSource({ sourceId: 'clipboard', kind: 'clipboard', title: t('choice.clipboard') }, 'clipboard'),
+    asDiffSource({ sourceId: 'empty', kind: 'empty', title: t('source.empty') }, 'empty'),
+  ]
+  const selectSource = async (source: DiffSource, setSource: (source: DiffSource) => void) => {
+    try {
+      const text = source.kind === 'clipboard' ? await host.clipboard.readText() : source.text ?? ''
+      // Source picks import a snapshot into this comparison, like pasting text.
+      setSource({ sourceId: source.sourceId, kind: 'empty', title: source.title, text })
+    } catch {
+      host.showToast(t('source.readFailed'), 'error')
+    }
+  }
   const [currentHunkIndex, setCurrentHunkIndex] = useState(0)
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -272,9 +291,24 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
         </div>
       </div>
 
-      <div className="td-pane-labels" aria-hidden="true">
-        <span>{t('surface.original')}</span>
-        <span>{t('surface.modified')}</span>
+      <div className="td-pane-labels">
+        {([
+          ['original', originalSource, setOriginalSource],
+          ['modified', modifiedSource, setModifiedSource],
+        ] as const).map(([side, source, setSource]) => (
+          <div className="td-pane-label" key={side}>
+            <span>{t(`surface.${side}`)}</span>
+            <Menu
+              header={t('source.snapshotHint')}
+              trigger={<button type="button" className="td-source" aria-label={t('source.choose', { side: t(`surface.${side}`) })}>{source.title || t('source.chooseShort')} ▾</button>}
+              items={sourceOptions.map((option) => ({
+                key: option.sourceId,
+                label: option.kind === 'empty' ? t('source.empty') : option.title,
+                onSelect: () => { void selectSource(option, setSource) },
+              }))}
+            />
+          </div>
+        ))}
       </div>
 
       {/* Editor body */}

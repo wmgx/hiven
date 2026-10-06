@@ -13,10 +13,10 @@ const refactorSuite = readFileSync('scripts/test-refactor-suite.mjs', 'utf8')
 const pluginHostSdk = readFileSync('src/pluginHostSdk.ts', 'utf8')
 const editorBridge = readFileSync('src/workspace/editorBridge.ts', 'utf8')
 const pluginSdk = readFileSync('src/plugin-sdk.ts', 'utf8')
-const jsFilter =
-  readFileSync('src/plugins/jsFilter/index.tsx', 'utf8') +
+const jsonTools =
+  readFileSync('src/plugins/json-tools/index.ts', 'utf8') +
   '\n' +
-  readFileSync('src/plugins/jsFilter/JsFilterPanel.tsx', 'utf8')
+  readFileSync('src/plugins/json-tools/JsonSurface.tsx', 'utf8')
 const regexTester =
   readFileSync('src/plugins/regex-tester/index.tsx', 'utf8') +
   '\n' +
@@ -76,20 +76,10 @@ assert.match(
   'editor bridge must notify mirrored editor state subscribers when snapshots change',
 )
 
-assert.match(
-  jsFilter,
-  /kits\.monacoDisposables\.disposeAll\(editorDisposablesRef\.current\)[\s\S]*kits\.monacoDisposables\.createBucket\(\)/,
-  'js-filter must use host SDK Monaco disposable helpers',
-)
 assert.doesNotMatch(
-  jsFilter,
+  jsonTools,
   /useWorkspaceStore|workspaceStore|runtimeRegistry|\.\.\/\.\.\//,
-  'js-filter plugin must not import editor workspace internals directly',
-)
-assert.match(
-  jsFilter,
-  /function JsFilterPanel\(\{ host, paneId \}: PanelPropsV2\)[\s\S]*hooks\.usePaneText\(paneId \?\? ['"]['"]\) \?\? ['"]['"]/,
-  'js-filter panel must read pane text through host SDK hooks and pane-scoped props',
+  'JSON tools and its merged expression UI must not import editor workspace internals directly',
 )
 
 // Retired multi-pane hosts must stay gone (do not resurrect as plugin deep imports).

@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { markSurfaceInstanceState, upsertSurfaceInstance } from '../../surfaces/registry'
+import { LAUNCHER_PROGRAMMATIC_MOVE_EVENT } from '../launcherWindowEvents'
 import { LAUNCHER_WINDOW_LABEL } from './windowLabels'
 import { isNativeDesktopRuntime } from '../webNativeBridge'
 
@@ -68,10 +69,32 @@ export async function onCurrentLauncherWindowMoved(
   })
 }
 
+let latestLauncherResize = 0
+
 export async function resizeCurrentLauncherWindow(size: { width: number; height: number }): Promise<void> {
   if (!isNativeDesktopRuntime()) return
-  const { getCurrentWindow, LogicalSize } = await import('@tauri-apps/api/window')
-  await getCurrentWindow().setSize(new LogicalSize(size.width, size.height))
+  const resize = ++latestLauncherResize
+  const { getCurrentWindow, LogicalPosition, LogicalSize } = await import('@tauri-apps/api/window')
+  const win = getCurrentWindow()
+  const scaleFactor = await win.scaleFactor()
+  const [physicalPosition, physicalSize] = await Promise.all([win.outerPosition(), win.outerSize()])
+  if (resize !== latestLauncherResize) return
+
+  const position = physicalPosition.toLogical(scaleFactor)
+  const currentSize = physicalSize.toLogical(scaleFactor)
+  const sameWidth = Math.abs(currentSize.width - size.width) < 0.5
+  if (sameWidth && Math.abs(currentSize.height - size.height) < 0.5) return
+
+  window.dispatchEvent(new CustomEvent(LAUNCHER_PROGRAMMATIC_MOVE_EVENT))
+  if (sameWidth) {
+    await win.setSize(new LogicalSize(size.width, size.height))
+    return
+  }
+
+  await Promise.all([
+    win.setSize(new LogicalSize(size.width, size.height)),
+    win.setPosition(new LogicalPosition(position.x + (currentSize.width - size.width) / 2, position.y)),
+  ])
 }
 
 /**

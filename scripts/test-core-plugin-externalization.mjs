@@ -39,8 +39,8 @@ assert.doesNotMatch(corePlugin, /core\.regex-tester/, 'regex tester command shou
 assert.doesNotMatch(corePlugin, /CoreRegexPanel/, 'regex tester panel should not be registered by internal corePlugin')
 assert.match(regexPlugin, /id:\s*['"]regex-tester\.open['"]/, 'regex tester plugin should provide open command')
 assert.match(regexPlugin, /id:\s*['"]regex-tester\.panel['"]/, 'regex tester plugin should provide panel contribution')
-assert.equal(regexManifest.version, '1.0.1', 'regex tester plugin should be bumped after launcher migration')
-assert.equal(regexEntry?.version, '1.0.1', 'builtin index should publish regex tester plugin')
+assert.ok(regexManifest.version, 'regex tester plugin should declare a version')
+assert.equal(regexEntry?.version, regexManifest.version, 'builtin index should publish the current regex tester version')
 
 // --- Final Guardrails ---
 assert.doesNotMatch(corePlugin, /definePlugin\(\{\s*commands:/, 'internal corePlugin should not register user-facing commands')

@@ -47,6 +47,11 @@ function loadPluginModule(pluginDir) {
     module,
     exports: module.exports,
     require(specifier) {
+      if (specifier === './RandomSurface') return { RandomSurface: () => null }
+      if (specifier === './TextToolsSurface') return { TextToolsSurface: () => null }
+      if (specifier === './core') return textCore
+      if (specifier === './routes') return textRoutes
+      if (specifier === './style.css') return {}
       if (specifier === '@hiven/plugin') {
         return { definePlugin: (definition) => definition }
       }
@@ -57,9 +62,30 @@ function loadPluginModule(pluginDir) {
   return module.exports
 }
 
+function loadTextToolsModule(fileName) {
+  const entryPath = join(ROOT, 'src/plugins/line-tools', fileName)
+  const source = readFileSync(entryPath, 'utf8')
+  const transpiled = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023 },
+  }).outputText
+  const module = { exports: {} }
+  const context = vm.createContext({
+    Set, Array, Object, String, RegExp, module, exports: module.exports,
+    require(specifier) {
+      if (specifier === './core') return textCore
+      throw new Error(`Unexpected require: ${specifier}`)
+    },
+  })
+  vm.runInContext(transpiled, context, { filename: entryPath })
+  return module.exports
+}
+
+const textCore = loadTextToolsModule('core.ts')
+const textRoutes = loadTextToolsModule('routes.ts')
+
 // ─── Package shape ────────────────────────────────────────────────────────────
 
-for (const dir of ['random', 'variable-case']) {
+for (const dir of ['random', 'line-tools']) {
   const base = join(ROOT, 'src/plugins', dir)
   assert.ok(existsSync(join(base, 'manifest.json')), `${dir}/manifest.json missing`)
   assert.ok(existsSync(join(base, 'index.ts')), `${dir}/index.ts missing`)
@@ -82,10 +108,13 @@ for (const dir of ['random', 'variable-case']) {
   }
 }
 
-// ─── variable-case pure logic ─────────────────────────────────────────────────
+// ─── naming conversion logic, now consolidated in line-tools ─────────────────
 
-const vc = loadPluginModule('variable-case')
-assert.ok(vc.splitWords && vc.joinWords && vc.convertText && vc.variableCasePlugin)
+const vc = textCore
+const textTools = loadPluginModule('line-tools')
+assert.ok(vc.splitWords && vc.joinWords && vc.convertText && textTools.lineToolsPlugin)
+assert.equal(textTools.lineToolsPlugin.launcher.items.length, textRoutes.textToolRoutes.length)
+assert.equal(textTools.lineToolsPlugin.ui.surfaces.length, textRoutes.textToolRoutes.length + 1)
 
 function assertWords(input, expected) {
   // VM-realm arrays are not deepStrictEqual-compatible with host arrays
@@ -118,7 +147,7 @@ assert.equal(
   'user_name\norder_id\n',
 )
 
-const vcTools = vc.variableCasePlugin.tools
+const vcTools = textTools.lineToolsPlugin.tools
 assert.ok(Array.isArray(vcTools) && vcTools.length >= 11)
 const vcIds = new Set(vcTools.map((t) => t.id))
 for (const id of [
@@ -134,7 +163,7 @@ for (const id of [
   'case.upper-words',
   'case.title-words',
 ]) {
-  assert.ok(vcIds.has(id), `variable-case missing tool ${id}`)
+  assert.ok(vcIds.has(id), `line-tools missing consolidated tool ${id}`)
 }
 
 // ─── random pure logic ────────────────────────────────────────────────────────
@@ -200,11 +229,11 @@ for (const tool of rndTools) {
   assert.notEqual(tool.requireParamSelection, true, `${tool.id} should allow default-run`)
 }
 
-for (const dir of ['random', 'variable-case']) {
+for (const dir of ['random', 'line-tools']) {
   const src = readFileSync(join(ROOT, 'src/plugins', dir, 'index.ts'), 'utf8')
   assert.match(src, /from '@hiven\/plugin'/)
   assert.doesNotMatch(src, /from ['"]\.\.\/\.\.\/workspace/)
   assert.doesNotMatch(src, /from ['"]\.\.\/\.\.\/store/)
 }
 
-console.log('random + variable-case plugin checks passed')
+console.log('random + consolidated text-tools plugin checks passed')

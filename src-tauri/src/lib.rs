@@ -23,7 +23,9 @@ pub mod ai_codex;
 pub mod ai_xai;
 mod clipboard_privacy;
 pub mod desktop_bridge;
+pub mod desktop_capture;
 pub mod hotkeys;
+pub mod keyboard_observation;
 
 const LAUNCHER_COMPACT_WIDTH: f64 = 660.0;
 const LAUNCHER_COMPACT_HEIGHT: f64 = 318.0;
@@ -51,9 +53,6 @@ static PREVIOUS_FOREGROUND_PROCESS_ID: OnceLock<Mutex<Option<u32>>> = OnceLock::
 static PREVIOUS_KEY_WINDOW_LABEL: OnceLock<Mutex<Option<String>>> = OnceLock::new();
 #[cfg(target_os = "macos")]
 static PREVIOUS_LAUNCHER_INPUT_SOURCE_ID: OnceLock<Mutex<Option<String>>> = OnceLock::new();
-#[allow(dead_code)]
-static LAST_FOREGROUND_SELECTION_TEXT: OnceLock<Mutex<Option<ForegroundSelectionText>>> =
-    OnceLock::new();
 static INSTALLED_APP_TARGETS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
 static PLUGIN_KV_DB: OnceLock<Result<Mutex<PluginKvDb>, String>> = OnceLock::new();
 static LAST_SAVEABLE_RUN: OnceLock<Mutex<Option<serde_json::Value>>> = OnceLock::new();
@@ -63,17 +62,8 @@ static PLUGIN_SURFACE_PAYLOADS: OnceLock<Mutex<HashMap<String, PluginSurfacePayl
 static SURFACE_REGISTRY: OnceLock<SurfaceRegistryState> = OnceLock::new();
 const SURFACE_REGISTRY_EVENT: &str = "hiven://surface-registry-sync";
 const MAX_APP_ICON_CACHE_WARM_COUNT: usize = 20;
-#[allow(dead_code)]
-const FOREGROUND_SELECTION_CACHE_TTL: Duration = Duration::from_secs(30);
 const LAUNCHER_PERF_ENV: &str = "HIVEN_LAUNCHER_PERF";
 const LAST_SAVEABLE_RUN_TTL_MS: i64 = 30 * 60 * 1000;
-
-#[derive(Clone)]
-#[allow(dead_code)]
-struct ForegroundSelectionText {
-    text: String,
-    captured_at: Instant,
-}
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -723,7 +713,24 @@ fn perform_system_power_action(action: SystemPowerAction) -> Result<(), String> 
 }
 
 #[tauri::command]
-async fn show_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
+async fn show_launcher_window(app: tauri::AppHandle, resume: Option<bool>) -> Result<(), String> {
+    if resume == Some(true) {
+        use tauri::Manager;
+        let app_clone = app.clone();
+        return app
+            .run_on_main_thread(move || {
+                if let Some(window) = app_clone.get_webview_window("launcher") {
+                    // Resume the current command at its existing size and position.
+                    // Capture consumed the remembered target; retain it for a later paste.
+                    remember_previous_foreground_app();
+                    remember_previous_key_window_label(None);
+                    if let Err(error) = show_launcher_window_without_app_activation(&window) {
+                        eprintln!("[hiven] Failed to resume launcher window: {}", error);
+                    }
+                }
+            })
+            .map_err(|error| error.to_string());
+    }
     show_launcher_window_for_hotkey(app)
 }
 
@@ -756,10 +763,6 @@ fn show_launcher_window_for_hotkey_with_event(
             // into this launcher-driven paste.
             remember_previous_key_window_label(None);
             log_launcher_perf("native:remember-foreground-app", started_at, "");
-            // [DISABLED] External selection capture — logic preserved, entry point disabled.
-            // let started_at = Instant::now();
-            // capture_foreground_selection_text(&app_clone);
-            // log_launcher_perf("native:capture-selection-dispatch", started_at, "");
         }
 
         let started_at = Instant::now();
@@ -1062,23 +1065,18 @@ async fn hide_launcher_window(
     .map_err(|error| error.to_string())
 }
 
-// Combines hide_launcher_window + simulate_paste into a single native command.
-// Once the launcher WebView is hidden, macOS throttles its JS timers, so a JS-side
-// setTimeout between hiding the launcher and simulating the paste is unreliable
-// (a hidden WKWebView may throttle JS execution). Running the wait for foreground
-// focus handoff and the synthetic Cmd/Ctrl+V natively in Rust avoids that entirely.
-#[tauri::command]
-async fn hide_launcher_and_paste(
+// Shared phase 1 for hide_launcher_and_paste / hide_launcher_and_capture_selection:
+// restore input source and hide whichever window actually invoked the command,
+// then resolve where the foreground interaction (paste or selection capture)
+// should target. Both the launcher's non-activating panel and an activating
+// plugin surface window (e.g. the clipboard history panel opened via
+// Cmd+Shift+V) call this same path. Independent surfaces may stay visible,
+// but must still hand keyboard focus back to the paste target.
+fn hide_window_and_resolve_foreground_target(
     window: tauri::WebviewWindow,
     app: tauri::AppHandle,
-) -> Result<(), String> {
-    // Phase 1 (main thread): restore input source and hide whichever window
-    // actually invoked this command. Both the launcher's non-activating panel
-    // and an activating plugin surface window (e.g. the clipboard history panel
-    // opened via Cmd+Shift+V) call this same command, so each must hide itself —
-    // the previous code hardcoded `get_webview_window("launcher")`, which
-    // silently no-op'd for any other caller and left it as the frontmost key
-    // window, breaking the focus handoff below.
+    keep_open: bool,
+) -> Result<(Option<u32>, bool), String> {
     let (tx, rx) = std::sync::mpsc::channel();
     let app_for_main_thread = app.clone();
     app.run_on_main_thread(move || {
@@ -1090,22 +1088,24 @@ async fn hide_launcher_and_paste(
                 eprintln!("[hiven] Failed to restore launcher input source: {}", error);
             }
         }
-        if let Err(error) = window.hide() {
-            eprintln!("[hiven] Failed to hide {} window: {}", window.label(), error);
+        if !keep_open {
+            if let Err(error) = window.hide() {
+                eprintln!("[hiven] Failed to hide {} window: {}", window.label(), error);
+            }
         }
         let target_pid = previous_foreground_process_id()
             .lock()
             .ok()
-            .and_then(|mut stored| stored.take());
+            .and_then(|mut stored| if keep_open { *stored } else { stored.take() });
         let key_label = previous_key_window_label()
             .lock()
             .ok()
-            .and_then(|mut stored| stored.take());
+            .and_then(|mut stored| if keep_open { stored.clone() } else { stored.take() });
         // If hiven itself held keyboard focus (a non-activating panel like
         // the launcher/quick editor, or a detached window such as a
         // standalone quick editor) when the surface window was opened, the
-        // real paste target is that hiven window — not the "remembered pid"
-        // above, which only tracks the OS-level frontmost app and can be a
+        // real target is that hiven window — not the "remembered pid" above,
+        // which only tracks the OS-level frontmost app and can be a
         // completely unrelated external app (e.g. an IDE) in that case.
         // Activating that remembered app here would incorrectly steal focus
         // back away from hiven's own window.
@@ -1145,7 +1145,7 @@ async fn hide_launcher_and_paste(
         // IS an activating window (`.focused(true)` in
         // show_plugin_surface_window), so opening it deactivated the target
         // app; here we must hand activation back explicitly, or the
-        // synthetic Cmd+V below lands on hiven itself.
+        // synthetic keystroke below lands on hiven itself.
         if !target_is_self {
             if let Some(pid) = target_pid {
                 if current_foreground_process_id() != Some(pid) {
@@ -1156,7 +1156,22 @@ async fn hide_launcher_and_paste(
         let _ = tx.send((target_pid, target_is_self));
     })
     .map_err(|error| error.to_string())?;
-    let (target_pid, target_is_self) = rx.recv().map_err(|error| error.to_string())?;
+    rx.recv().map_err(|error| error.to_string())
+}
+
+// Combines hide_launcher_window + simulate_paste into a single native command.
+// Once the launcher WebView is hidden, macOS throttles its JS timers, so a JS-side
+// setTimeout between hiding the launcher and simulating the paste is unreliable
+// (a hidden WKWebView may throttle JS execution). Running the wait for foreground
+// focus handoff and the synthetic Cmd/Ctrl+V natively in Rust avoids that entirely.
+#[tauri::command]
+async fn hide_launcher_and_paste(
+    window: tauri::WebviewWindow,
+    app: tauri::AppHandle,
+    keep_open: Option<bool>,
+) -> Result<(), String> {
+    let (target_pid, target_is_self) =
+        hide_window_and_resolve_foreground_target(window, app, keep_open.unwrap_or(false))?;
 
     // Phase 2 (blocking thread): the launcher WebView is throttled once hidden, so
     // the focus-handoff wait and the synthetic Cmd/Ctrl+V must run natively.
@@ -1214,6 +1229,73 @@ fn wait_for_foreground_handoff_then_paste(
     // polling for a focus handoff would be meaningless; fall back to a fixed delay.
     std::thread::sleep(Duration::from_millis(200));
     simulate_paste_impl()
+}
+
+// Mirror of hide_launcher_and_paste for the read direction: hide the launcher,
+// wait for OS focus to hand back to whatever app was previously in the
+// foreground, then simulate Cmd/Ctrl+C and read the result back off the
+// clipboard (restoring whatever was there before). Used as an on-demand,
+// last-resort text source for a Global Launcher tool run — never fired
+// automatically on launcher open, only when a matched tool actually executes
+// with no other input available (see resolveTextInputWithForegroundFallback
+// in src/workspace/launcher/toolAdapter.ts).
+#[tauri::command]
+async fn hide_launcher_and_capture_selection(
+    window: tauri::WebviewWindow,
+    app: tauri::AppHandle,
+) -> Result<Option<String>, String> {
+    let (target_pid, target_is_self) = hide_window_and_resolve_foreground_target(window, app.clone(), false)?;
+
+    tokio::task::spawn_blocking(move || {
+        wait_for_foreground_handoff_then_capture(app, target_pid, target_is_self)
+    })
+    .await
+    .map_err(|e| format!("spawn_blocking failed: {}", e))?
+}
+
+#[cfg(target_os = "macos")]
+fn wait_for_foreground_handoff_then_capture(
+    app: tauri::AppHandle,
+    target_pid: Option<u32>,
+    target_is_self: bool,
+) -> Result<Option<String>, String> {
+    const POLL_INTERVAL_MS: u64 = 20;
+    const MAX_WAIT_MS: u64 = 1000;
+    const SETTLE_DELAY_MS: u64 = 120;
+
+    if target_is_self {
+        // Nothing meaningful to capture from one of hiven's own windows.
+        return Ok(None);
+    }
+
+    let own_pid = std::process::id();
+    let started_at = Instant::now();
+    let deadline = started_at + Duration::from_millis(MAX_WAIT_MS);
+    loop {
+        let handed_off = match target_pid {
+            Some(pid) => current_foreground_process_id() == Some(pid),
+            None => current_foreground_process_id() != Some(own_pid),
+        };
+        if handed_off || Instant::now() >= deadline {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(POLL_INTERVAL_MS));
+    }
+    std::thread::sleep(Duration::from_millis(SETTLE_DELAY_MS));
+    capture_foreground_selection_text_impl(&app)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn wait_for_foreground_handoff_then_capture(
+    app: tauri::AppHandle,
+    _target_pid: Option<u32>,
+    target_is_self: bool,
+) -> Result<Option<String>, String> {
+    if target_is_self {
+        return Ok(None);
+    }
+    std::thread::sleep(Duration::from_millis(200));
+    capture_foreground_selection_text_impl(&app)
 }
 
 #[tauri::command]
@@ -1665,92 +1747,62 @@ fn remember_previous_key_window_label(label: Option<String>) {
     }
 }
 
-#[allow(dead_code)]
-fn last_foreground_selection_state() -> &'static Mutex<Option<ForegroundSelectionText>> {
-    LAST_FOREGROUND_SELECTION_TEXT.get_or_init(|| Mutex::new(None))
-}
+/// Read whatever text is currently selected in the foreground app by
+/// simulating Cmd/Ctrl+C and diffing the clipboard change count, then
+/// restoring whatever was on the clipboard beforehand. Caller is responsible
+/// for ensuring the target app actually holds OS-level keyboard focus first
+/// (see `wait_for_foreground_handoff_then_capture`) — otherwise this simply
+/// copies from whatever hiven window still has focus.
+fn capture_foreground_selection_text_impl(app: &tauri::AppHandle) -> Result<Option<String>, String> {
+    const POLL_INTERVAL_MS: u64 = 20;
+    const MAX_WAIT_MS: u64 = 400;
 
-#[tauri::command]
-#[allow(dead_code)]
-async fn last_foreground_selection_text() -> Option<String> {
-    let mut stored = last_foreground_selection_state().lock().ok()?;
-    let selection = stored.as_ref()?;
-    if selection.captured_at.elapsed() > FOREGROUND_SELECTION_CACHE_TTL {
-        *stored = None;
-        return None;
-    }
-    Some(selection.text.clone())
-}
-
-#[allow(dead_code)]
-fn clear_foreground_selection_text() {
-    if let Ok(mut stored) = last_foreground_selection_state().lock() {
-        *stored = None;
-    }
-}
-
-// [DISABLED] External selection capture — all functions below are preserved but currently unused.
-#[allow(dead_code)]
-fn capture_foreground_selection_text(app: &tauri::AppHandle) {
-    let app = app.clone();
-    std::thread::spawn(move || {
-        let started_at = Instant::now();
-        if let Some(text) = capture_foreground_selection_text_impl(&app) {
-            let text_len = text.len();
-            if let Ok(mut stored) = last_foreground_selection_state().lock() {
-                *stored = Some(ForegroundSelectionText {
-                    text,
-                    captured_at: Instant::now(),
-                });
-            }
-            log_launcher_perf(
-                "native:capture-selection-worker",
-                started_at,
-                format!("hasText=true textLength={}", text_len),
-            );
-        } else {
-            clear_foreground_selection_text();
-            log_launcher_perf(
-                "native:capture-selection-worker",
-                started_at,
-                "hasText=false",
-            );
-        }
-    });
-}
-
-#[allow(dead_code)]
-fn capture_foreground_selection_text_impl(app: &tauri::AppHandle) -> Option<String> {
     let before = clipboard_privacy::with_clipboard(app, |app| {
         app.clipboard().read_text().map_err(|error| error.to_string())
-    }).ok();
-    let before_change_count = read_clipboard_change_count(&app);
-    simulate_copy_selection_impl().ok()?;
-    std::thread::sleep(Duration::from_millis(80));
-    let after_change_count = read_clipboard_change_count(&app);
-    if before_change_count.is_some()
-        && after_change_count.is_some()
-        && before_change_count == after_change_count
-    {
-        return None;
+    })
+    .ok();
+    let before_change_count = read_clipboard_change_count(app);
+    simulate_copy_selection_impl()?;
+
+    // Poll for the clipboard to actually change instead of a single fixed
+    // sleep: a synthetic Cmd/Ctrl+C needs the target app to notice the key
+    // event, run its own copy handling, and write the system pasteboard —
+    // JVM/Electron-backed apps (e.g. JetBrains IDEs) can take noticeably
+    // longer than native Cocoa apps to do that, and a too-short fixed wait
+    // reads a stale pasteboard and misreports "nothing selected".
+    let deadline = Instant::now() + Duration::from_millis(MAX_WAIT_MS);
+    let mut changed = false;
+    loop {
+        let after_change_count = read_clipboard_change_count(app);
+        if before_change_count.is_none() || after_change_count != before_change_count {
+            changed = true;
+            break;
+        }
+        if Instant::now() >= deadline {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(POLL_INTERVAL_MS));
     }
+    if !changed {
+        return Ok(None);
+    }
+
     let selected = clipboard_privacy::with_clipboard(app, |app| {
         app.clipboard().read_text().map_err(|error| error.to_string())
-    }).ok()?.trim().to_string();
+    })?
+    .trim()
+    .to_string();
     if let Some(previous) = before {
         let _ = clipboard_privacy::with_clipboard(app, move |app| {
-            app.clipboard().write_text(previous).map_err(|error| error.to_string())
+            app.clipboard()
+                .write_text(previous)
+                .map_err(|error| error.to_string())
         });
     }
-    if selected.is_empty() {
-        None
-    } else {
-        Some(selected)
-    }
+    Ok(if selected.is_empty() { None } else { Some(selected) })
 }
 
 #[cfg(target_os = "macos")]
-#[allow(dead_code)]
 fn read_clipboard_change_count(app: &tauri::AppHandle) -> Option<i64> {
     clipboard_privacy::with_clipboard(app, |_| unsafe {
         let pasteboard_cls = objc2::runtime::AnyClass::get(c"NSPasteboard")
@@ -1767,7 +1819,6 @@ fn read_clipboard_change_count(app: &tauri::AppHandle) -> Option<i64> {
 }
 
 #[cfg(not(target_os = "macos"))]
-#[allow(dead_code)]
 fn read_clipboard_change_count(_app: &tauri::AppHandle) -> Option<i64> {
     None
 }
@@ -1917,7 +1968,6 @@ fn urlencoding_decode(input: &str) -> String {
 }
 
 #[cfg(target_os = "macos")]
-#[allow(dead_code)]
 fn simulate_copy_selection_impl() -> Result<(), String> {
     use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation};
     use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
@@ -1941,7 +1991,6 @@ fn simulate_copy_selection_impl() -> Result<(), String> {
 }
 
 #[cfg(target_os = "windows")]
-#[allow(dead_code)]
 fn simulate_copy_selection_impl() -> Result<(), String> {
     use windows::Win32::UI::Input::KeyboardAndMouse::{
         SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
@@ -1980,7 +2029,6 @@ fn simulate_copy_selection_impl() -> Result<(), String> {
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-#[allow(dead_code)]
 fn simulate_copy_selection_impl() -> Result<(), String> {
     Err("Selection copy simulation is not supported on this platform".to_string())
 }
@@ -4546,6 +4594,8 @@ struct ProxyHttpRequest {
     /// "text" (default) or "binary" — binary returns bodyBytes (no UTF-8 corruption for images).
     #[serde(rename = "responseType")]
     response_type: Option<String>,
+    #[serde(rename = "timeoutMs")]
+    timeout_ms: Option<u64>,
 }
 
 #[derive(serde::Serialize)]
@@ -4826,7 +4876,13 @@ async fn plugin_http_request(request: ProxyHttpRequest) -> Result<ProxyHttpRespo
     let method_text = request.method.unwrap_or_else(|| "GET".to_string());
     let method = reqwest::Method::from_bytes(method_text.as_bytes())
         .map_err(|e| format!("Invalid HTTP method: {}", e))?;
-    let client = reqwest::Client::new();
+    let mut client_builder = reqwest::Client::builder();
+    if let Some(timeout_ms) = request.timeout_ms {
+        client_builder = client_builder
+            .timeout(std::time::Duration::from_millis(timeout_ms.clamp(100, 30_000)))
+            .redirect(reqwest::redirect::Policy::none());
+    }
+    let client = client_builder.build().map_err(|e| e.to_string())?;
     let mut builder = client.request(method, parsed);
 
     if let Some(headers) = request.headers {
@@ -7271,6 +7327,7 @@ pub fn run() {
             open_system_url,
             hide_launcher_window,
             hide_launcher_and_paste,
+            hide_launcher_and_capture_selection,
             show_quick_editor_window,
             close_quick_editor_window,
             show_plugin_surface_window,
@@ -7280,8 +7337,9 @@ pub fn run() {
             simulate_paste,
             current_foreground_app_name,
             current_foreground_app_context,
-            // [DISABLED] External selection capture — command preserved, entry point disabled.
-            // last_foreground_selection_text,
+            desktop_capture::capture_desktop_snapshot,
+            keyboard_observation::poll_keyboard_observation,
+            keyboard_observation::stop_keyboard_observation,
             discover_installed_apps,
             read_installed_app_icon_url,
             read_installed_app_icon_png,
@@ -7298,6 +7356,8 @@ pub fn run() {
             desktop_bridge::list_desktop_bridge_targets,
             desktop_bridge::focus_desktop_bridge_target,
             desktop_bridge::list_desktop_bridge_history,
+            desktop_bridge::begin_desktop_bridge_history_import,
+            desktop_bridge::desktop_bridge_history_import_status,
             desktop_bridge::list_desktop_bridge_events,
             desktop_bridge::open_desktop_bridge_url,
             desktop_bridge::set_desktop_bridge_source_config,

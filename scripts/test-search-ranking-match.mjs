@@ -188,4 +188,11 @@ for (const candidate of [
   }
 }
 
+const encodedRoute = fields({ title: 'Base64 解码' })
+assert.ok(searchableFieldsMatch(encodedRoute, 'base64 jiema', 'zh'))
+assert.ok(searchableFieldsMatch(encodedRoute, 'base64 jm', 'zh'))
+assert.ok(searchableFieldsMatch(fields({ title: 'JSON 格式化' }), 'json gsh', 'zh'))
+assert.ok(scoreSearchableFields(encodedRoute, 'base64 jiema', 'zh') > 0)
+assert.equal(computeTitleMatchRanges(encodedRoute.title, 'base64 jiema', 'zh').type, 'pinyin')
+
 console.log('search ranking match checks passed')

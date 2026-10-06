@@ -6,7 +6,7 @@ Hiven Host 向插件提供统一的 `ctx.ai`：插件可以发现当前可用的
 
 当前注册 `openai-chatgpt` 与 `xai-grok` Provider。前者通过 Codex App Server 完成 ChatGPT OAuth、模型发现、流式调用、取消、账户额度读取和 token 用量读取；后者通过 xAI 官方 device-code OAuth 使用 SuperGrok / X Premium 订阅，并通过订阅 CLI proxy 的 Responses API 完成文本/图片理解、Web Search、模型发现、流式调用、取消、订阅额度窗口和 token 用量读取。Provider 框架不包含供应商协议字段，后续 Provider 通过同一 Host registry 接入。
 
-Codex App Server 使用 Hiven 独立的 `CODEX_HOME`，不会读取、覆盖或退出用户在 Codex CLI/桌面应用中的登录。桌面包需要携带或安装可执行的 `codex`；也可以通过 `HIVEN_CODEX_BIN` 指定路径。
+Codex App Server 使用 Hiven 独立的 `CODEX_HOME`，不会读取、覆盖或退出用户在 Codex CLI/桌面应用中的登录。macOS 优先使用 ChatGPT 桌面应用内的 Codex 可执行文件，再回退到 PATH 中的 CLI；也可以通过 `HIVEN_CODEX_BIN` 指定路径。
 
 ## 2. 插件契约
 

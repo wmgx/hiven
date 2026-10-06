@@ -173,8 +173,8 @@ assert.match(surfaceContent, /host\.paste\.pasteText/, 'Surface must use host.pa
 assert.match(surfaceContent, /host\.paste\.pasteImage/, 'Surface must use host.paste.pasteImage')
 assert.match(surfaceContent, /host\.paste\.pasteFiles/, 'Surface must use host.paste.pasteFiles')
 
-// Uses host.close() after paste
-assert.match(surfaceContent, /host\.close\(\)/, 'Surface must call host.close() after paste')
+// Completes the temporary launcher action after successful delivery.
+assert.match(surfaceContent, /host\.complete\(\)/, 'Surface must complete after paste')
 
 // Uses host.clipboard for copy action
 assert.match(surfaceContent, /host\.clipboard\.writeText/, 'Surface must use host.clipboard.writeText for copy')

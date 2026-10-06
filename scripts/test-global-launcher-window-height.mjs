@@ -11,6 +11,8 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import vm from 'node:vm'
+import ts from 'typescript'
 
 const root = process.cwd()
 
@@ -23,6 +25,7 @@ const files = {
   globalLauncherGeometry: read('src/components/launcher/GlobalLauncherGeometry.ts'),
   globalLauncherLayout: read('src/components/launcher/GlobalLauncherLayout.ts'),
   globalLauncherWindowLifecycle: read('src/components/launcher/GlobalLauncherWindowLifecycle.ts'),
+  launcherWindow: read('src/workspace/windowManager/launcherWindow.ts'),
   indexCss: read('src/index.css'),
   tauriLib: read('src-tauri/src/lib.rs'),
 }
@@ -131,6 +134,62 @@ assert.match(
   files.globalLauncherWindowLifecycle,
   /computeStandaloneLauncherGeometry[\s\S]*applyStandaloneLauncherGeometry[\s\S]*resizeCurrentLauncherWindow/,
   'standalone launcher resize lifecycle should use a single geometry calculation for CSS and native size',
+)
+
+const launcherWindowModule = { exports: {} }
+const nativeCalls = []
+const nativeBounds = { x: 100, y: 80, width: 600, height: 400 }
+const nativeWindow = {
+  scaleFactor: async () => 2,
+  outerPosition: async () => ({ toLogical: () => ({ x: nativeBounds.x, y: nativeBounds.y }) }),
+  outerSize: async () => ({ toLogical: () => ({ width: nativeBounds.width, height: nativeBounds.height }) }),
+  setSize: async (size) => {
+    nativeCalls.push(['size', size.width, size.height])
+    nativeBounds.width = size.width
+    nativeBounds.height = size.height
+  },
+  setPosition: async (position) => {
+    nativeCalls.push(['position', position.x, position.y])
+    nativeBounds.x = position.x
+    nativeBounds.y = position.y
+  },
+}
+const transpiledLauncherWindow = ts.transpileModule(files.launcherWindow, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+}).outputText
+vm.runInNewContext(transpiledLauncherWindow, {
+  module: launcherWindowModule,
+  exports: launcherWindowModule.exports,
+  require(specifier) {
+    if (specifier === '@tauri-apps/api/window') {
+      return {
+        getCurrentWindow: () => nativeWindow,
+        LogicalPosition: class { constructor(x, y) { this.x = x; this.y = y } },
+        LogicalSize: class { constructor(width, height) { this.width = width; this.height = height } },
+      }
+    }
+    if (specifier.endsWith('webNativeBridge')) return { isNativeDesktopRuntime: () => true }
+    return new Proxy({}, { get: () => () => {} })
+  },
+  window: { dispatchEvent: () => nativeCalls.push(['programmatic-move']) },
+  CustomEvent: class {},
+  console,
+})
+
+await launcherWindowModule.exports.resizeCurrentLauncherWindow({ width: 900, height: 600 })
+assert.deepEqual(
+  nativeCalls,
+  [['programmatic-move'], ['size', 900, 600], ['position', -50, 80]],
+  'native resize should preserve the launcher top center while widening',
+)
+nativeCalls.length = 0
+await launcherWindowModule.exports.resizeCurrentLauncherWindow({ width: 900, height: 600 })
+assert.deepEqual(nativeCalls, [], 'an unchanged native launcher size should not resize or move again')
+
+assert.match(
+  files.globalLauncherWindowLifecycle,
+  /const\s+initialWindowWidth\s*=\s*initialWindowWidthRef\.current\s*\?\?\s*window\.innerWidth[\s\S]*currentWindowWidth:\s*initialWindowWidth/,
+  'ordinary launcher frames should restore the width captured for the current open session',
 )
 
 assert.match(

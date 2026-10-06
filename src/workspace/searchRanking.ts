@@ -50,12 +50,14 @@ const mixedAcronymCache = new Map<string, string>()
 
 export function pinyinMatch(text: string, query: string): boolean {
   if (!text || !query) return false
-  if (!/^[a-z]+$/.test(query)) return false
+  if (!/^[a-z0-9\s]+$/.test(query) || !/[\u4e00-\u9fff]/.test(text)) return false
+  query = query.replace(/\s+/g, '')
+  if (!query) return false
 
   let cached = pinyinCache.get(text)
   if (!cached) {
-    const full = pinyin(text, { toneType: 'none', separator: '' }).toLowerCase()
-    const initials = pinyin(text, { pattern: 'initial', toneType: 'none', separator: '' }).toLowerCase()
+    const full = pinyin(text, { toneType: 'none', separator: '' }).toLowerCase().replace(/\s+/g, '')
+    const initials = pinyin(text, { pattern: 'first', toneType: 'none', separator: '' }).toLowerCase().replace(/\s+/g, '')
     cached = { full, initials }
     pinyinCache.set(text, cached)
   }
@@ -79,7 +81,7 @@ export function mixedAcronymMatch(text: string, query: string): boolean {
     const words = text.split(/[-_\s.]+/).filter(Boolean)
     cached = words.map((word) => {
       if (/[一-鿿]/.test(word[0])) {
-        return pinyin(word, { pattern: 'initial', toneType: 'none', separator: '' }).toLowerCase()
+        return pinyin(word, { pattern: 'first', toneType: 'none', separator: '' }).toLowerCase()
       }
       return word[0].toLowerCase()
     }).join('')
@@ -110,14 +112,17 @@ function fieldTextMatchTier(text: string, query: string, prefixTier: number): nu
 function searchableFieldsMatchTier(fields: SearchableFields, query: string, locale: Locale): number {
   const title = localizedText(fields.title || '', fields.titleI18n, locale)
   let tier = fieldTextMatchTier(title, query, 4)
+  if (tier === 6) return tier
 
   for (const alias of fields.aliases ?? []) {
     tier = Math.max(tier, fieldTextMatchTier(alias, query, 5))
+    if (tier === 6) return tier
   }
 
   // Pinyin for Chinese catalog name when UI locale shows a different title.
   const zhTitle = fields.titleI18n?.zh ?? ''
   if (
+    tier < 2 &&
     zhTitle &&
     zhTitle !== title &&
     (pinyinMatch(zhTitle, query) || mixedAcronymMatch(zhTitle, query))
@@ -189,7 +194,7 @@ export function computeTitleMatchRanges(title: string, q: string, locale: Locale
   }
 
   // Pinyin / acronym indicators (no character ranges)
-  if (/^[a-z]+$/.test(lowerQ)) {
+  if (/^[a-z0-9\s]+$/.test(lowerQ)) {
     if (pinyinMatch(title, lowerQ)) {
       return { ranges: [], type: 'pinyin' }
     }

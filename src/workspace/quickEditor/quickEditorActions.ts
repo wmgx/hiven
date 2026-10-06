@@ -102,19 +102,6 @@ export function applyEffectsToQuickEditor(effects: FluxEffect[]) {
   return { applied, errors }
 }
 
-async function writeClipboard(text: string): Promise<void> {
-  try {
-    const { writeText } = await import('@tauri-apps/plugin-clipboard-manager')
-    await writeText(text)
-  } catch {
-    try {
-      await navigator.clipboard.writeText(text)
-    } catch (error) {
-      console.warn('[quick-editor] clipboard write failed:', error)
-    }
-  }
-}
-
 async function readClipboard(): Promise<string> {
   return readNativeClipboardText()
 }
@@ -158,7 +145,6 @@ export function createQuickEditorLauncherApi(baseApi: PluginLauncherApi): Plugin
       const offset = offsetAt(current, state.cursorPosition)
       state.setText(`${current.slice(0, offset)}${text}${current.slice(offset)}`)
     },
-    copyText: writeClipboard,
     openUrl: async (url: string) => {
       await openExternalUrl(url)
     },

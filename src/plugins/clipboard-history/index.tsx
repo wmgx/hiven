@@ -15,6 +15,57 @@ import { getCachedIndex } from './storage/clipboardHistoryCache'
 
 const MB = 1024 * 1024
 
+const FILTER_ROUTES = [
+  {
+    id: 'favorite',
+    title: 'Clipboard Favorites',
+    titleZh: '剪贴板收藏',
+    titleKey: 'route.favorite',
+    aliases: ['clipboard favorites', 'clipboard favorite', 'favorite clipboard', '剪贴板收藏', '收藏剪贴板'],
+  },
+  {
+    id: 'frequent',
+    title: 'Frequently Used Clipboard',
+    titleZh: '常用剪贴板',
+    titleKey: 'route.frequent',
+    aliases: ['clipboard frequent', 'frequent clipboard', 'frequently used clipboard', '常用剪贴板', '剪贴板常用'],
+  },
+  {
+    id: 'text',
+    title: 'Clipboard Text',
+    titleZh: '剪贴板文本',
+    titleKey: 'route.text',
+    aliases: ['clipboard text', 'text clipboard', '剪贴板文本', '文本剪贴板'],
+  },
+  {
+    id: 'image',
+    title: 'Clipboard Images',
+    titleZh: '剪贴板图片',
+    titleKey: 'route.image',
+    aliases: ['clipboard images', 'clipboard image', 'image clipboard', '剪贴板图片', '图片剪贴板'],
+  },
+  {
+    id: 'files',
+    title: 'Clipboard Files',
+    titleZh: '剪贴板文件',
+    titleKey: 'route.files',
+    aliases: ['clipboard files', 'clipboard file', 'file clipboard', '剪贴板文件', '文件剪贴板'],
+  },
+] as const
+
+const CLIPBOARD_HISTORY_SHELL = {
+  defaultWidth: 900,
+  defaultHeight: 640,
+  minWidth: 760,
+  minHeight: 360,
+  closeOnBlur: true,
+  resizable: false,
+  rendersTitlebar: true,
+  // 默认 2 分钟销毁对高频剪贴板场景太短，冷启动会反复加载 webview。
+  // 30 分钟内热开：原生 show() 复用已存活 webview，接近瞬时。
+  destroyTimeout: 30 * 60 * 1000,
+}
+
 export default definePlugin<ClipboardHistorySettings>({
   settings: {
     title: 'Clipboard History',
@@ -162,25 +213,41 @@ export default definePlugin<ClipboardHistorySettings>({
           void createClipboardHistoryRepository(ctx.storage).getFreshListItems()
         },
         entry: {
-          launcher: true,
+          launcher: { surfaces: ['global-launcher'] },
           shortcutBindable: true,
           recommendedShortcut: 'CmdOrCtrl+Shift+V',
           shortcutPresentation: 'window',
         },
-        shell: {
-          defaultWidth: 900,
-          defaultHeight: 640,
-          minWidth: 760,
-          minHeight: 360,
-          closeOnBlur: true,
-          resizable: false,
-          rendersTitlebar: true,
-          // 默认 2 分钟销毁对高频剪贴板场景太短，冷启动会反复加载 webview。
-          // 30 分钟内热开：原生 show() 复用已存活 webview，接近瞬时。
-          destroyTimeout: 30 * 60 * 1000,
-        },
+        shell: CLIPBOARD_HISTORY_SHELL,
       },
+      ...FILTER_ROUTES.map((route) => ({
+        id: route.id,
+        kind: 'custom-view' as const,
+        title: route.title,
+        titleI18n: { zh: route.titleZh },
+        component: ClipboardHistorySurface,
+        entry: { launcher: false },
+        shell: CLIPBOARD_HISTORY_SHELL,
+      })),
     ],
+  },
+
+  launcher: {
+    items: FILTER_ROUTES.map((route) => ({
+      id: `open-${route.id}`,
+      display: {
+        title: route.titleKey,
+        subtitle: 'route.open',
+        icon: 'Clipboard',
+        aliases: [...route.aliases],
+      },
+      behavior: { type: 'perform' as const },
+      surfaces: ['global-launcher' as const],
+      execute(execution) {
+        execution.api.openSurface(route.id)
+        return { ok: true as const, keepOpen: true }
+      },
+    })),
   },
 
   background: clipboardHistoryBackground,

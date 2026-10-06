@@ -3,6 +3,8 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import vm from 'node:vm'
+import ts from 'typescript'
 
 const root = process.cwd()
 const read = (path) => readFileSync(join(root, path), 'utf8')
@@ -42,9 +44,31 @@ assert.match(
 )
 const blurGuard = read('src/workspace/launcherBlurGuard.ts')
 assert.match(blurGuard, /isHivenCompanionWindowActive|shouldKeepLauncherOpenOnBlur/, 'blur guard must keep launcher open for companion windows')
+// An independent tool left on screen must not block dismissal into another app.
+let companionFocused = false
+const guardApi = {}
+vm.runInNewContext(ts.transpileModule(blurGuard, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+}).outputText, {
+  exports: guardApi,
+  window: { __TAURI_INTERNALS__: {} },
+  require: () => ({
+    getCurrentWindow: () => ({ isFocused: async () => false }),
+    getAllWebviewWindows: async () => [{
+      label: 'plugin-surface:builtin:clipboard-history:main',
+      isVisible: async () => true,
+      isFocused: async () => companionFocused,
+    }],
+  }),
+})
+assert.equal(await guardApi.shouldKeepLauncherOpenOnBlur({ handoffDelayMs: 0 }), false,
+  'a visible, unfocused clipboard window must allow Launcher to close')
+companionFocused = true
+assert.equal(await guardApi.shouldKeepLauncherOpenOnBlur({ handoffDelayMs: 0 }), true,
+  'focus handed to an independent tool must still preserve Launcher')
 const lifecycle = read('src/components/launcher/GlobalLauncherWindowLifecycle.ts')
 assert.match(lifecycle, /shouldKeepLauncherOpenOnBlur/, 'blur dismiss must use smart companion keep-open')
-assert.match(openRequest, /if \(!isTauriRuntime\(\)\) \{[\s\S]*openLauncherHostedPluginSurface\(target\)/, 'non-Tauri launcher-presentation shortcuts must use the bridge instead of duplicating store writes')
+assert.match(openRequest, /if \(!isNativeDesktopRuntime\(\)\) \{[\s\S]*openLauncherHostedPluginSurface\(target\)/, 'non-Tauri launcher-presentation shortcuts must use the bridge instead of duplicating store writes')
 assert.match(globalLauncher, /pluginSurfaceToolTarget/, 'global launcher must keep a separate tool-shell target')
 assert.match(globalLauncher, /samePluginSurfaceTarget/, 'global launcher must distinguish current launcher surface from shortcut tool target')
 assert.match(globalLauncher, /clearPluginSurfaceTool\(\)[\s\S]*openPluginSurface/, 'launcher-list surface opens must not be confused with shortcut tool requests')

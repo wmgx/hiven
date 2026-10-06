@@ -33,7 +33,6 @@ type GlobalLauncherPanelProps = {
   focusSearchInputAfterBack: () => void
   surfaceFrame: PluginSurfaceOpenTarget | null
   activeSurfaceFrame: GlobalLauncherActiveSurfaceFrame | null
-  surfaceExiting: boolean
   leaveSurface: () => void
   itemPermissionFrame: GlobalLauncherPermissionFrameState | null
   cancelItemPermissionPrompt: () => void
@@ -59,7 +58,6 @@ type GlobalLauncherPanelProps = {
   isWorkflowObjectLauncherItem: (item: GlobalLauncherItem | undefined) => boolean
   selectItem: (item: GlobalLauncherItem | undefined, customizeParams?: boolean) => void
   hostSurfaceTarget: LauncherHostSurfaceTarget | null
-  hostSurfaceExiting: boolean
   clearLauncherHostSurface: () => void
   query: string
   setQuery: (value: string) => void
@@ -95,7 +93,6 @@ export function GlobalLauncherPanel({
   focusSearchInputAfterBack,
   surfaceFrame,
   activeSurfaceFrame,
-  surfaceExiting,
   leaveSurface: _omit_leaveSurface,
   itemPermissionFrame,
   cancelItemPermissionPrompt,
@@ -116,7 +113,6 @@ export function GlobalLauncherPanel({
   isWorkflowObjectLauncherItem,
   selectItem,
   hostSurfaceTarget,
-  hostSurfaceExiting,
   clearLauncherHostSurface: _omit_clearLauncherHostSurface,
   query,
   setQuery,
@@ -269,13 +265,11 @@ export function GlobalLauncherPanel({
     >
       <GlobalLauncherFrameSwitch
         hostSurfaceTarget={hostSurfaceTarget}
-        hostSurfaceExiting={hostSurfaceExiting}
         hostSurfaceHeight={STANDALONE_SURFACE_MAX_HEIGHT}
         launcherSettingsTarget={launcherSettingsTarget}
         settingsHeight={GLOBAL_LAUNCHER_SETTINGS_HEIGHT}
         surfaceFrame={surfaceFrame}
         activeSurfaceFrame={activeSurfaceFrame}
-        surfaceExiting={surfaceExiting}
         itemPermissionFrame={itemPermissionFrame}
         controllerState={controllerState}
         inputRef={inputRef}
@@ -318,6 +312,7 @@ export function GlobalLauncherPanel({
         onSecondaryAction={activateSecondaryAction}
         onPastePreviewText={pastePreviewText}
         onSubmitCollectInput={() => { void controllerRef.current?.submitInput?.() }}
+        onCaptureSelection={() => { void controllerRef.current?.captureInput() }}
         onHoverResultChoice={setResultSelectedIndex}
         onToggleResultChoice={toggleResultChoice}
         onSearchQueryChange={(value) => { setQuery(value); setSelectedIndex(0, { pin: false }) }}

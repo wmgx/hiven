@@ -1,7 +1,15 @@
 {
   "pluginId": "text-diff",
   "displayName": "Text Diff",
-  "displayNameI18n": { "zh": "文本对比" },
-  "version": "3.2.3",
-  "capabilities": ["command", "surface"]
+  "displayNameI18n": {
+    "zh": "文本对比"
+  },
+  "version": "3.3.0",
+  "capabilities": [
+    "command",
+    "surface"
+  ],
+  "permissions": [
+    "clipboard.read"
+  ]
 }

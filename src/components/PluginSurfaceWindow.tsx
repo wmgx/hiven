@@ -75,6 +75,7 @@ export function PluginSurfaceWindow() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
+      if (document.querySelector('[role="tooltip"][data-open]')) return
       if (isImeComposingRef.current || event.isComposing || (event as unknown as { keyCode: number }).keyCode === 229) return
       event.preventDefault()
       event.stopPropagation()

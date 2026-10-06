@@ -115,6 +115,7 @@ export function GlobalLauncherCollectInputFrame({
   onSecondaryAction,
   onPastePreviewText,
   onSubmitPrimary,
+  onCaptureSelection,
 }: {
   inputRef: RefObject<HTMLInputElement | null>
   bindSearchInputRef?: (node: HTMLInputElement | null) => void
@@ -135,6 +136,7 @@ export function GlobalLauncherCollectInputFrame({
   onPastePreviewText?: (text: string) => void | Promise<void>
   /** Enter when no destination chrome — default submit path. */
   onSubmitPrimary?: () => void
+  onCaptureSelection?: () => void
 }) {
   const placeholder = frame.input.placeholder ?? ''
   const previewChoices = frame.previewOutput?.choices ?? []
@@ -351,6 +353,20 @@ export function GlobalLauncherCollectInputFrame({
         />
       )}
       <div className="global-launcher-footer l-foot">
+        {onCaptureSelection && !frame.inputText && frame.item.behavior.type === 'perform' && frame.item.inputPolicy && frame.item.inputPolicy.mode !== 'all' && (
+          <button
+            type="button"
+            className="launcher-footer-back-btn"
+            disabled={busy}
+            onMouseDown={(event) => event.preventDefault()}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') event.stopPropagation()
+            }}
+            onClick={onCaptureSelection}
+          >
+            {t(locale, 'palette.captureSelection')}
+          </button>
+        )}
         {showLivePreview && displayPreviewText && !showLiveEmpty ? (
           <LauncherOutputTargetsFooter destinations={destinations} locale={locale} />
         ) : isSuggestMode && hasSuggestions ? (

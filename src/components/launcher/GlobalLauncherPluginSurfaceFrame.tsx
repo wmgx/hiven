@@ -13,7 +13,6 @@ export function GlobalLauncherPluginSurfaceFrame({
   shellHeight,
   autoHeight,
   breadcrumbTitle,
-  exiting,
   onBack,
   onClose,
 }: {
@@ -22,7 +21,6 @@ export function GlobalLauncherPluginSurfaceFrame({
   shellHeight: number
   autoHeight?: boolean
   breadcrumbTitle?: string
-  exiting: boolean
   onBack: () => void
   onClose: () => void
 }) {
@@ -30,6 +28,8 @@ export function GlobalLauncherPluginSurfaceFrame({
 
   const escapeHandler = useCallback((event: KeyboardEvent): boolean => {
     if (event.key !== 'Escape') return false
+    // Let the editor close its find widget before navigating out of the surface.
+    if (event.target instanceof Element && event.target.closest('.monaco-editor')?.querySelector('.find-widget.visible')) return true
     event.preventDefault()
     event.stopPropagation()
     onBack()
@@ -39,7 +39,7 @@ export function GlobalLauncherPluginSurfaceFrame({
 
   return (
     <div
-      className={`global-launcher-surface-shell flex flex-col min-h-0 outline-none${exiting ? ' is-exiting' : ''}`}
+      className="global-launcher-surface-shell flex flex-col min-h-0 outline-none"
       tabIndex={-1}
       style={autoHeight ? { maxHeight: shellHeight } : { height: shellHeight }}
     >

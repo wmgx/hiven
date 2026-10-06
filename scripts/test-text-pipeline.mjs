@@ -124,25 +124,12 @@ assert.equal(multiOut, '[HELLO WORLD]', 'multi-step pipeline output must chain c
 // ── builtins ────────────────────────────────────────────────────────────────
 pipeline.registerBuiltinTextPipelines()
 const afterBuiltins = pipeline.listTextPipelines()
-assert.ok(afterBuiltins.length >= 2, 'builtins must register at least 2 pipelines')
 assert.ok(afterBuiltins.some((p) => p.id === 'trim-uppercase'), 'trim-uppercase builtin required')
-assert.ok(afterBuiltins.some((p) => p.id === 'json-minify'), 'json-minify builtin required')
+assert.ok(!afterBuiltins.some((p) => p.id === 'json-minify'), 'JSON conversion should be offered by the JSON plugin, without a duplicate global pipeline')
 
 const trimUpper = afterBuiltins.find((p) => p.id === 'trim-uppercase')
 const builtOut = await pipeline.runTextPipeline(trimUpper, '  ab cd  ')
 assert.equal(builtOut, 'AB CD', 'trim-uppercase builtin must work')
-
-const jsonMin = afterBuiltins.find((p) => p.id === 'json-minify')
-const minOut = await pipeline.runTextPipeline(jsonMin, '{\n  "a": 1\n}')
-assert.equal(minOut, '{"a":1}', 'json-minify builtin must compact JSON')
-
-let threw = false
-try {
-  await pipeline.runTextPipeline(jsonMin, 'not-json')
-} catch {
-  threw = true
-}
-assert.ok(threw, 'json-minify must reject invalid JSON')
 
 // Idempotent builtins
 pipeline.registerBuiltinTextPipelines()
@@ -161,7 +148,7 @@ const pipelineLauncher = readFileSync(path.join(ROOT, 'src/workflow/pipelineLaun
 assert.match(pipelineLauncher, /host:pipeline:/, 'pipeline systemKey must use host:pipeline: prefix')
 assert.match(pipelineLauncher, /global-launcher/, 'pipeline items must surface on global-launcher')
 assert.match(pipelineLauncher, /editor-command-bar/, 'pipeline items must surface on editor-command-bar')
-assert.match(pipelineLauncher, /textResult|copyText/, 'pipeline execute must produce text output path')
+assert.match(pipelineLauncher, /surfaceTextResult/, 'pipeline execute must route text output through the current surface')
 
 const workflowIndex = readFileSync(path.join(ROOT, 'src/workflow/index.ts'), 'utf8')
 assert.match(workflowIndex, /runTextPipeline/, 'workflow index must export runTextPipeline')

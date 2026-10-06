@@ -19,6 +19,8 @@ static APP_HANDLE: OnceLock<tauri::AppHandle> = OnceLock::new();
 
 /// Cap retained history items per source (extension already trims before POST).
 const HISTORY_CAP: usize = 300;
+const HISTORY_IMPORT_CAP: usize = 5_000;
+const HISTORY_IMPORT_BATCH_SIZE: usize = 500;
 /// Cap retained page events per source (ring buffer, newest last).
 const EVENT_CAP: usize = 256;
 
@@ -107,6 +109,13 @@ pub struct BridgeEvent {
 }
 
 #[derive(Debug, Default)]
+struct HistoryImportState {
+    batches: VecDeque<Vec<BridgeHistoryItem>>,
+    received: usize,
+    done: bool,
+}
+
+#[derive(Debug, Default)]
 struct SourceState {
     targets: Vec<BridgeTarget>,
     history: Vec<BridgeHistoryItem>,
@@ -114,6 +123,8 @@ struct SourceState {
     last_seen: Option<Instant>,
     pending_focus: Option<BridgeFocusCommand>,
     pending_open: Option<BridgeOpenCommand>,
+    pending_history_import: Option<String>,
+    history_imports: HashMap<String, HistoryImportState>,
     config: Option<BridgeSourceConfig>,
     app_name: Option<String>,
 }
@@ -128,6 +139,9 @@ struct BridgeState {
 #[serde(rename_all = "camelCase")]
 struct ValidationRequest {
     id: String,
+    /// Browser tab that queued the request; its events and native listeners are scoped to it.
+    #[serde(default)]
+    client_id: String,
     command: String,
     #[serde(default)]
     args: serde_json::Value,
@@ -146,16 +160,93 @@ struct ValidationResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ValidationEvent {
+    #[serde(default)]
+    client_id: String,
     callback_id: u32,
     payload: serde_json::Value,
+}
+
+/// A tab that stopped polling for this long is treated as closed. Chrome throttles hidden
+/// tabs to about one timer wake-up per minute, so this must outlast that.
+const VALIDATION_CLIENT_TTL: Duration = Duration::from_secs(90);
+/// Browser invokes give up after 30s; results nobody collected by then are dropped.
+const VALIDATION_RESULT_TTL: Duration = Duration::from_secs(60);
+/// Per-tab event backlog, so a stalled tab cannot pin unbounded payloads.
+const VALIDATION_EVENT_CAP: usize = 512;
+
+#[derive(Debug)]
+struct ValidationClient {
+    last_seen: Instant,
+    events: VecDeque<ValidationEvent>,
 }
 
 #[derive(Debug)]
 struct ValidationState {
     token: String,
     requests: VecDeque<ValidationRequest>,
-    results: HashMap<String, ValidationResult>,
-    events: VecDeque<ValidationEvent>,
+    results: HashMap<String, (Instant, ValidationResult)>,
+    clients: HashMap<String, ValidationClient>,
+}
+
+impl ValidationState {
+    fn new(token: String) -> Self {
+        Self {
+            token,
+            requests: VecDeque::new(),
+            results: HashMap::new(),
+            clients: HashMap::new(),
+        }
+    }
+
+    fn touch_client(&mut self, client_id: &str, now: Instant) {
+        if client_id.is_empty() {
+            return;
+        }
+        self.clients
+            .entry(client_id.to_string())
+            .or_insert_with(|| ValidationClient {
+                last_seen: now,
+                events: VecDeque::new(),
+            })
+            .last_seen = now;
+    }
+
+    /// Events for a tab that is not attached are dropped: nothing would ever drain them.
+    fn push_event(&mut self, event: ValidationEvent) {
+        let Some(client) = self.clients.get_mut(&event.client_id) else {
+            return;
+        };
+        client.events.push_back(event);
+        while client.events.len() > VALIDATION_EVENT_CAP {
+            client.events.pop_front();
+        }
+    }
+
+    fn drain_events(&mut self, client_id: &str, now: Instant) -> Vec<ValidationEvent> {
+        self.touch_client(client_id, now);
+        self.clients
+            .get_mut(client_id)
+            .map(|client| client.events.drain(..).collect())
+            .unwrap_or_default()
+    }
+
+    fn prune(&mut self, now: Instant) {
+        self.clients.retain(|_, client| {
+            now.saturating_duration_since(client.last_seen) <= VALIDATION_CLIENT_TTL
+        });
+        self.results.retain(|_, (stored_at, _)| {
+            now.saturating_duration_since(*stored_at) <= VALIDATION_RESULT_TTL
+        });
+        let clients = &self.clients;
+        self.requests
+            .retain(|request| clients.contains_key(&request.client_id));
+    }
+
+    fn client_ids(&self) -> Vec<String> {
+        let mut ids: Vec<String> = self.clients.keys().cloned().collect();
+        ids.sort();
+        ids
+    }
 }
 
 fn validation_state() -> &'static Mutex<ValidationState> {
@@ -165,12 +256,11 @@ fn validation_state() -> &'static Mutex<ValidationState> {
             .duration_since(UNIX_EPOCH)
             .map(|duration| duration.as_nanos())
             .unwrap_or(0);
-        Mutex::new(ValidationState {
-            token: format!("{:x}-{:x}", seed, std::process::id()),
-            requests: VecDeque::new(),
-            results: HashMap::new(),
-            events: VecDeque::new(),
-        })
+        Mutex::new(ValidationState::new(format!(
+            "{:x}-{:x}",
+            seed,
+            std::process::id()
+        )))
     })
 }
 
@@ -462,24 +552,21 @@ fn route_validation_request(
         return Ok(Some((400, r#"{"error":"origin not allowed"}"#.to_string())));
     }
 
-    if method == "GET" && pathname == "/v1/validation/session" {
-        let guard = validation_state()
-            .lock()
-            .map_err(|_| "validation bridge lock poisoned".to_string())?;
-        return Ok(Some((
-            200,
-            serde_json::json!({ "ok": true, "token": guard.token }).to_string(),
-        )));
-    }
-
-    let token = query
-        .split('&')
-        .find_map(|part| part.strip_prefix("token="))
-        .unwrap_or("");
+    let now = Instant::now();
     let mut guard = validation_state()
         .lock()
         .map_err(|_| "validation bridge lock poisoned".to_string())?;
-    if token != guard.token {
+    guard.prune(now);
+
+    if method == "GET" && pathname == "/v1/validation/session" {
+        return Ok(Some((
+            200,
+            serde_json::json!({ "ok": true, "token": guard.token, "clients": guard.clients.len() })
+                .to_string(),
+        )));
+    }
+
+    if query_param(query, "token") != guard.token {
         return Ok(Some((
             400,
             r#"{"error":"invalid validation token"}"#.to_string(),
@@ -496,43 +583,50 @@ fn route_validation_request(
                     r#"{"error":"id and command are required"}"#.to_string(),
                 )
             } else {
+                guard.touch_client(&request.client_id, now);
                 guard.requests.push_back(request);
                 (200, r#"{"ok":true}"#.to_string())
             }
         }
         ("GET", "/v1/validation/requests") => {
             let requests: Vec<_> = guard.requests.drain(..).collect();
-            (200, serde_json::json!({ "requests": requests }).to_string())
+            // The desktop relay drops native listeners of tabs missing from `clients`.
+            (
+                200,
+                serde_json::json!({ "requests": requests, "clients": guard.client_ids() })
+                    .to_string(),
+            )
         }
         ("POST", "/v1/validation/result") => {
             let result: ValidationResult = serde_json::from_str(body)
                 .map_err(|error| format!("invalid validation result: {}", error))?;
-            guard.results.insert(result.id.clone(), result);
+            guard.results.insert(result.id.clone(), (now, result));
             (200, r#"{"ok":true}"#.to_string())
         }
-        ("GET", "/v1/validation/result") => {
-            let id = query
-                .split('&')
-                .find_map(|part| part.strip_prefix("id="))
-                .unwrap_or("");
-            match guard.results.remove(id) {
-                Some(result) => (200, serde_json::to_string(&result).unwrap_or_default()),
-                None => (204, String::new()),
-            }
-        }
+        ("GET", "/v1/validation/result") => match guard.results.remove(query_param(query, "id")) {
+            Some((_, result)) => (200, serde_json::to_string(&result).unwrap_or_default()),
+            None => (204, String::new()),
+        },
         ("POST", "/v1/validation/event") => {
             let event: ValidationEvent = serde_json::from_str(body)
                 .map_err(|error| format!("invalid validation event: {}", error))?;
-            guard.events.push_back(event);
+            guard.push_event(event);
             (200, r#"{"ok":true}"#.to_string())
         }
         ("GET", "/v1/validation/events") => {
-            let events: Vec<_> = guard.events.drain(..).collect();
+            let events = guard.drain_events(query_param(query, "client"), now);
             (200, serde_json::json!({ "events": events }).to_string())
         }
         _ => (404, r#"{"error":"not found"}"#.to_string()),
     };
     Ok(Some(response))
+}
+
+fn query_param<'a>(query: &'a str, name: &str) -> &'a str {
+    query
+        .split('&')
+        .find_map(|part| part.strip_prefix(name)?.strip_prefix('='))
+        .unwrap_or("")
 }
 
 #[derive(Debug, Deserialize)]
@@ -609,6 +703,14 @@ fn take_commands(source_id: &str) -> Result<(u16, String), String> {
             "enqueuedAtMs": cmd.enqueued_at_ms,
         }));
     }
+    if let Some(request_id) = entry.pending_history_import.take() {
+        commands.push(serde_json::json!({
+            "type": "history.import",
+            "requestId": request_id,
+            "maxResults": HISTORY_IMPORT_CAP,
+            "batchSize": HISTORY_IMPORT_BATCH_SIZE,
+        }));
+    }
     // Config is sticky: re-sent every poll so a sleeping worker still converges.
     if let Some(cfg) = &entry.config {
         commands.push(serde_json::json!({
@@ -627,6 +729,8 @@ struct HistoryBody {
     items: Option<Vec<BridgeHistoryItem>>,
     history: Option<Vec<BridgeHistoryItem>>,
     app_name: Option<String>,
+    request_id: Option<String>,
+    done: Option<bool>,
 }
 
 fn apply_history(source_id: &str, body: &str) -> Result<(u16, String), String> {
@@ -645,8 +749,13 @@ fn apply_history(source_id: &str, body: &str) -> Result<(u16, String), String> {
         }
     };
     let mut items = parsed.items.or(parsed.history).unwrap_or_default();
-    if items.len() > HISTORY_CAP {
-        items.truncate(HISTORY_CAP);
+    let cap = if parsed.request_id.is_some() {
+        HISTORY_IMPORT_CAP
+    } else {
+        HISTORY_CAP
+    };
+    if items.len() > cap {
+        items.truncate(cap);
     }
     for item in &mut items {
         if item.app_name.is_none() {
@@ -657,6 +766,20 @@ fn apply_history(source_id: &str, body: &str) -> Result<(u16, String), String> {
         .lock()
         .map_err(|_| "bridge lock poisoned".to_string())?;
     let entry = guard.sources.entry(source_id.to_string()).or_default();
+    if let Some(request_id) = parsed.request_id {
+        let count = items.len();
+        let import = entry.history_imports.entry(request_id).or_default();
+        import.received += count;
+        if count > 0 {
+            import.batches.push_back(items);
+        }
+        import.done = parsed.done.unwrap_or(true);
+        return Ok((
+            200,
+            serde_json::json!({ "ok": true, "count": count, "received": import.received })
+                .to_string(),
+        ));
+    }
     entry.history = items;
     if parsed.app_name.is_some() {
         entry.app_name = parsed.app_name;
@@ -950,6 +1073,78 @@ pub fn list_desktop_bridge_history(
     Ok(out)
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopBridgeHistoryImportStatus {
+    pub items: Vec<DesktopBridgeHistoryDto>,
+    pub received: usize,
+    pub done: bool,
+}
+
+#[tauri::command]
+pub fn begin_desktop_bridge_history_import(source_id: String) -> Result<String, String> {
+    let request_id = format!("history-import-{}", now_ms());
+    let mut guard = bridge_state()
+        .lock()
+        .map_err(|_| "bridge lock poisoned".to_string())?;
+    let entry = guard
+        .sources
+        .get_mut(&source_id)
+        .ok_or_else(|| format!("source not connected: {}", source_id))?;
+    entry.pending_history_import = Some(request_id.clone());
+    entry
+        .history_imports
+        .insert(request_id.clone(), HistoryImportState::default());
+    Ok(request_id)
+}
+
+#[tauri::command]
+pub fn desktop_bridge_history_import_status(
+    source_id: String,
+    request_id: String,
+) -> Result<DesktopBridgeHistoryImportStatus, String> {
+    let mut guard = bridge_state()
+        .lock()
+        .map_err(|_| "bridge lock poisoned".to_string())?;
+    let entry = guard
+        .sources
+        .get_mut(&source_id)
+        .ok_or_else(|| format!("source not connected: {}", source_id))?;
+    let import = entry
+        .history_imports
+        .get_mut(&request_id)
+        .ok_or_else(|| "browser history import not found".to_string())?;
+    let batch = import.batches.pop_front().unwrap_or_default();
+    let done = import.done && import.batches.is_empty();
+    let received = import.received;
+    let items = batch
+        .into_iter()
+        .map(|item| DesktopBridgeHistoryDto {
+            id: item.id,
+            source_id: source_id.clone(),
+            title: if item.title.trim().is_empty() {
+                item.url.clone()
+            } else {
+                item.title
+            },
+            url: item.url,
+            last_visit_time: item.last_visit_time,
+            visit_count: item.visit_count,
+            typed_count: item.typed_count,
+            favicon_url: item.favicon_url,
+            app_name: item.app_name,
+        })
+        .collect();
+    if done {
+        entry.history_imports.remove(&request_id);
+    }
+    Ok(DesktopBridgeHistoryImportStatus {
+        items,
+        received,
+        done,
+    })
+}
+
 #[tauri::command]
 pub fn list_desktop_bridge_events(
     source_id: Option<String>,
@@ -1069,6 +1264,34 @@ mod tests {
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].url, "https://example.com/docs");
 
+        {
+            let mut guard = bridge_state().lock().unwrap();
+            guard
+                .sources
+                .get_mut(source)
+                .unwrap()
+                .pending_history_import = Some("import-1".into());
+        }
+        let (_, commands) = take_commands(source).unwrap();
+        assert!(commands.contains("\"type\":\"history.import\""));
+        assert!(commands.contains("\"batchSize\":500"));
+        let imported = r#"{"requestId":"import-1","items":[{"id":"h2","title":"Old","url":"https://example.com/old"}]}"#;
+        apply_history(source, imported).unwrap();
+        let guard = bridge_state().lock().unwrap();
+        let state = guard.sources.get(source).unwrap();
+        assert_eq!(
+            state.history.len(),
+            1,
+            "full import must not replace the live snapshot"
+        );
+        assert_eq!(state.history_imports["import-1"].received, 1);
+        assert!(state.history_imports["import-1"].done);
+        drop(guard);
+        let status =
+            desktop_bridge_history_import_status(source.into(), "import-1".into()).unwrap();
+        assert_eq!(status.items.len(), 1);
+        assert!(status.done);
+
         let events = r#"{"events":[{"type":"tab.opened","ts":100,"tabId":"2","url":"https://example.com/new","title":"New"},{"type":"tab.activated","ts":101,"tabId":"2","url":"https://example.com/new"}]}"#;
         let (status, _) = apply_events(source, events).unwrap();
         assert_eq!(status, 200);
@@ -1091,5 +1314,119 @@ mod tests {
         let (st, json) = take_commands(source).unwrap();
         assert_eq!(st, 200);
         assert!(json.contains("\"idleTimeoutMinutes\":10080"));
+    }
+
+    fn validation_request(id: &str, client_id: &str) -> ValidationRequest {
+        ValidationRequest {
+            id: id.into(),
+            client_id: client_id.into(),
+            command: "noop".into(),
+            args: serde_json::Value::Null,
+        }
+    }
+
+    fn validation_event(client_id: &str, callback_id: u32) -> ValidationEvent {
+        ValidationEvent {
+            client_id: client_id.into(),
+            callback_id,
+            payload: serde_json::Value::Null,
+        }
+    }
+
+    fn validation_result(id: &str) -> ValidationResult {
+        ValidationResult {
+            id: id.into(),
+            ok: true,
+            value: serde_json::Value::Null,
+            error: None,
+        }
+    }
+
+    #[test]
+    fn validation_events_are_scoped_to_attached_tabs() {
+        let now = Instant::now();
+        let mut state = ValidationState::new("token".into());
+        state.touch_client("tab-a", now);
+        state.touch_client("tab-b", now);
+        state.push_event(validation_event("tab-a", 1));
+        state.push_event(validation_event("tab-b", 2));
+        state.push_event(validation_event("closed-tab", 3));
+
+        let tab_a = state.drain_events("tab-a", now);
+        assert_eq!(
+            tab_a
+                .iter()
+                .map(|event| event.callback_id)
+                .collect::<Vec<_>>(),
+            vec![1]
+        );
+        assert!(
+            state.drain_events("tab-a", now).is_empty(),
+            "draining must not replay events"
+        );
+        assert_eq!(
+            state.drain_events("tab-b", now).len(),
+            1,
+            "a sibling tab keeps its own events"
+        );
+        assert!(
+            !state.clients.contains_key("closed-tab"),
+            "events for a detached tab must not create a backlog"
+        );
+    }
+
+    #[test]
+    fn validation_event_backlog_is_capped() {
+        let now = Instant::now();
+        let mut state = ValidationState::new("token".into());
+        state.touch_client("stalled-tab", now);
+        for callback_id in 0..(VALIDATION_EVENT_CAP as u32 + 10) {
+            state.push_event(validation_event("stalled-tab", callback_id));
+        }
+        let events = state.drain_events("stalled-tab", now);
+        assert_eq!(events.len(), VALIDATION_EVENT_CAP);
+        assert_eq!(
+            events[0].callback_id, 10,
+            "the oldest events are dropped first"
+        );
+    }
+
+    #[test]
+    fn validation_prune_releases_detached_tabs_and_uncollected_results() {
+        let start = Instant::now();
+        let later = start + VALIDATION_CLIENT_TTL + Duration::from_secs(1);
+        let mut state = ValidationState::new("token".into());
+        state.touch_client("closed-tab", start);
+        state.push_event(validation_event("closed-tab", 1));
+        state
+            .requests
+            .push_back(validation_request("r-closed", "closed-tab"));
+        state
+            .results
+            .insert("r-old".into(), (start, validation_result("r-old")));
+        state.touch_client("open-tab", later);
+        state
+            .requests
+            .push_back(validation_request("r-open", "open-tab"));
+        state
+            .results
+            .insert("r-new".into(), (later, validation_result("r-new")));
+
+        state.prune(later);
+
+        assert_eq!(state.client_ids(), vec!["open-tab".to_string()]);
+        assert_eq!(
+            state
+                .requests
+                .iter()
+                .map(|request| request.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["r-open"]
+        );
+        assert!(
+            !state.results.contains_key("r-old"),
+            "results nobody collected expire"
+        );
+        assert!(state.results.contains_key("r-new"));
     }
 }

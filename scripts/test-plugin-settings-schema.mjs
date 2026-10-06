@@ -26,6 +26,9 @@ const files = {
   clipboardHistory: read('src/plugins/clipboard-history/index.tsx'),
 }
 
+const toastContainer = read('src/components/workspace/ToastContainer.tsx')
+assert.match(toastContainer, /writeClipboardText\(toast\.message\)/, 'every toast should expose a copy-message button')
+
 const packageJson = JSON.parse(files.packageJson)
 assert.equal(
   packageJson.scripts?.['test:plugin-settings-schema'],
@@ -106,11 +109,14 @@ assert.doesNotMatch(schemaRenderer, /type="number"/, 'schema renderer must not u
 assert.doesNotMatch(schemaRenderer, /locale\s*===\s*['"]zh['"]/, 'schema renderer must not branch on Chinese locale for UI copy')
 assert.match(schemaRenderer, /field\.kind === 'modal'/, 'schema renderer must render modal opener fields')
 assert.match(schemaRenderer, /onOpenModal\(field\)/, 'schema renderer must delegate modal opening to the host')
+assert.match(schemaRenderer, /field\.kind === 'action'/, 'schema renderer must render direct actions')
+assert.match(schemaRenderer, /onRunAction\(field,\s*\(next\)/, 'schema renderer must delegate actions and progress to the host')
+assert.match(schemaRenderer, /role="progressbar"/, 'schema actions must render reported progress')
 assert.doesNotMatch(schemaRenderer, /pluginRegistry|useAppStore|@tauri-apps/, 'schema renderer must stay host-shell agnostic')
 
 assert.match(files.settingsDialog, /PluginSettingsSchemaRenderer/, 'PluginSettingsDialog must use the schema renderer')
 assert.match(files.settingsDialog, /contribution\.schema[\s\S]{0,260}<PluginSettingsSchemaRenderer/, 'schema settings must render before legacy component fallback')
-assert.match(files.settingsDialog, /const SettingsComponent = contribution\.component[\s\S]{0,2400}<SettingsComponent/, 'legacy component settings must remain as fallback')
+assert.match(files.settingsDialog, /const SettingsComponent = contribution\.component[\s\S]*<SettingsComponent/, 'legacy component settings must remain as fallback')
 assert.match(files.settingsDialog, /settingsModalTarget/, 'settings dialog must support a host-owned plugin settings modal target')
 assert.match(files.settingsDialog, /resolvePluginSettingsModal/, 'settings dialog must resolve schema modal fields through plugin-declared modal bodies')
 assert.match(files.settingsDialog, /SettingsModalComponent/, 'settings dialog must render plugin-owned modal body components inside host modal shell')

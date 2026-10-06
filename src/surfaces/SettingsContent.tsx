@@ -12,6 +12,7 @@ import { ShortcutRecorder } from '../components/ShortcutRecorder'
 import { AppHotkeysSettings } from '../components/AppHotkeysSettings'
 import { listAiProviders, loginAiProvider, logoutAiProvider, refreshAiProvider } from '../workspace/ai/runtime'
 import type { AiProviderDescriptor, AiReasoningEffort } from '../workspace/ai/types'
+import { JEV_PRESETS, JevRequestError, testJevConnection, validJevEndpoint, validJevSettings, type JevSettings } from '../workspace/ai/jev'
 import { openExternalUrl } from '../workspace/effectRunner'
 import { showToast } from '../workspace/toast'
 import { Combobox, NumberField, Select, Switch } from '../plugin-ui'
@@ -323,7 +324,80 @@ export function AiSubscriptionsContent() {
           />
         </SettingsListRow>
       </SettingGroup>
+      <JevCommandSettings />
     </div>
+  )
+}
+
+function JevCommandSettings() {
+  const t = useT('settings')
+  const { settings, updateSetting } = useAppStore()
+  const [draft, setDraft] = useState<JevSettings>(() => settings.jevCommandSuggestion ?? { enabled: false, apiKey: '', ...JEV_PRESETS.tencent })
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState('')
+  const configured = validJevSettings(draft)
+  const preset = Object.entries(JEV_PRESETS).find(([, value]) => value.endpoint === draft.endpoint && value.model === draft.model)?.[0] ?? 'custom'
+  const changed = JSON.stringify(draft) !== JSON.stringify(settings.jevCommandSuggestion)
+  const inputStyle = { width: 'min(220px, 36vw)', boxSizing: 'border-box' as const }
+  const editDraft = (next: JevSettings) => {
+    setDraft(next)
+    setTestResult('')
+  }
+  const testConnection = async () => {
+    if (!configured) return
+    setTesting(true)
+    setTestResult('')
+    try {
+      await testJevConnection(draft)
+      setTestResult(t('jevTestSuccess'))
+    } catch (error) {
+      const status = error instanceof JevRequestError ? error.status : 0
+      setTestResult(t(status === 401 || status === 403 ? 'jevTestAuthError' : status === 429 ? 'jevTestRateLimit' : 'jevTestError'))
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  return (
+    <SettingGroup title={t('jevTitle')}>
+      <SettingsListRow icon={<BrainCircuit size={15} />} name={t('jevEnabled')} desc={t('jevInfo')}>
+        <Switch checked={draft.enabled} disabled={!configured || testing} onCheckedChange={(enabled) => editDraft({ ...draft, enabled })} aria-label={t('jevEnabled')} />
+      </SettingsListRow>
+      <SettingsListRow icon={<BrainCircuit size={15} />} name={t('jevPreset')} desc={t('jevPresetInfo')}>
+        <Select
+          className="settings-select-wrap is-wide"
+          value={preset}
+          disabled={testing}
+          aria-label={t('jevPreset')}
+          options={[
+            { value: 'tencent', label: t('jevTencent') },
+            { value: 'official', label: t('jevOfficial') },
+            { value: 'custom', label: t('jevCustom') },
+          ]}
+          onChange={(event) => {
+            const value = event.currentTarget.value
+            if (value === preset) return
+            const next = value === 'tencent' ? JEV_PRESETS.tencent : value === 'official' ? JEV_PRESETS.official : { endpoint: '', model: '' }
+            editDraft({ enabled: false, apiKey: '', ...next })
+          }}
+        />
+      </SettingsListRow>
+      <SettingsListRow icon={<BrainCircuit size={15} />} name={t('jevEndpoint')} desc={t('jevEndpointInfo')}>
+        <input className="hiven-ui-input" style={inputStyle} value={draft.endpoint} disabled={testing} onChange={(event) => editDraft({ ...draft, enabled: false, apiKey: '', endpoint: event.target.value })} aria-label={t('jevEndpoint')} spellCheck={false} />
+      </SettingsListRow>
+      <SettingsListRow icon={<BrainCircuit size={15} />} name={t('jevApiKey')} desc={t('jevKeyInfo')}>
+        <input className="hiven-ui-input" style={inputStyle} type="password" autoComplete="off" value={draft.apiKey} disabled={testing} onChange={(event) => editDraft({ ...draft, enabled: false, apiKey: event.target.value })} aria-label={t('jevApiKey')} />
+      </SettingsListRow>
+      <SettingsListRow icon={<BrainCircuit size={15} />} name={t('jevModel')}>
+        <input className="hiven-ui-input" style={inputStyle} value={draft.model} disabled={testing} onChange={(event) => editDraft({ ...draft, enabled: false, model: event.target.value })} aria-label={t('jevModel')} spellCheck={false} />
+      </SettingsListRow>
+      <SettingsListRow icon={<BrainCircuit size={15} />} name={t('jevActions')} desc={!validJevEndpoint(draft.endpoint) && draft.endpoint ? t('jevInvalidEndpoint') : testResult || undefined}>
+        <div className="flex items-center gap-2">
+          <button type="button" className="scripts-btn" disabled={!configured || testing} onClick={() => void testConnection()}>{testing ? t('jevTesting') : t('jevTest')}</button>
+          <button type="button" className="scripts-btn scripts-btn-primary" disabled={testing || !changed || (draft.enabled && !configured) || (Boolean(draft.endpoint) && !validJevEndpoint(draft.endpoint))} onClick={() => { updateSetting('jevCommandSuggestion', draft); setTestResult(t('jevSaved')) }}>{t('jevSave')}</button>
+        </div>
+      </SettingsListRow>
+    </SettingGroup>
   )
 }
 

@@ -23,13 +23,11 @@ export type GlobalLauncherActiveSurfaceFrame = {
 
 export function GlobalLauncherFrameSwitch({
   hostSurfaceTarget,
-  hostSurfaceExiting,
   hostSurfaceHeight,
   launcherSettingsTarget,
   settingsHeight,
   surfaceFrame,
   activeSurfaceFrame,
-  surfaceExiting,
   itemPermissionFrame,
   controllerState,
   inputRef,
@@ -61,6 +59,7 @@ export function GlobalLauncherFrameSwitch({
   onSecondaryAction,
   onPastePreviewText,
   onSubmitCollectInput,
+  onCaptureSelection,
   onHoverResultChoice,
   onToggleResultChoice,
   onSearchQueryChange,
@@ -76,13 +75,11 @@ export function GlobalLauncherFrameSwitch({
   onObjectActionController,
 }: {
   hostSurfaceTarget: LauncherHostSurfaceTarget | null
-  hostSurfaceExiting: boolean
   hostSurfaceHeight: number
   launcherSettingsTarget: { pluginId: string; source: PluginSettingsSource } | null
   settingsHeight: number
   surfaceFrame: PluginSurfaceOpenTarget | null
   activeSurfaceFrame: GlobalLauncherActiveSurfaceFrame | null
-  surfaceExiting: boolean
   itemPermissionFrame: GlobalLauncherPermissionFrameState | null
   controllerState: { frames: Array<CollectInputFrame | ParamInputFrame | ResultFrame | { kind: string }>; error?: string | null; busy: boolean } | null | undefined
   inputRef: RefObject<HTMLInputElement | null>
@@ -119,6 +116,7 @@ export function GlobalLauncherFrameSwitch({
   onPastePreviewText?: (text: string) => void | Promise<void>
   /** Package 4: default collect-input submit when no destination chrome. */
   onSubmitCollectInput?: () => void
+  onCaptureSelection?: () => void
   onHoverResultChoice: (index: number) => void
   onToggleResultChoice: (choice: LauncherResultChoice, frame: ResultFrame) => void
   onSearchQueryChange: (value: string) => void
@@ -138,7 +136,6 @@ export function GlobalLauncherFrameSwitch({
     return (
       <GlobalLauncherSystemSurfaceFrame
         target={hostSurfaceTarget}
-        exiting={hostSurfaceExiting}
         height={hostSurfaceHeight}
         onBack={onSurfaceBack}
         onClose={onSurfaceClose}
@@ -173,7 +170,6 @@ export function GlobalLauncherFrameSwitch({
         shellHeight={shell?.defaultHeight ?? 480}
         autoHeight={shell?.autoHeight}
         breadcrumbTitle={breadcrumbTitle}
-        exiting={surfaceExiting}
         onBack={onSurfaceBack}
         onClose={onSurfaceClose}
       />
@@ -248,6 +244,7 @@ export function GlobalLauncherFrameSwitch({
           onSecondaryAction={onSecondaryAction}
           onPastePreviewText={onPastePreviewText}
           onSubmitPrimary={onSubmitCollectInput}
+          onCaptureSelection={onCaptureSelection}
         />
       </LauncherFlowFrame>
     )

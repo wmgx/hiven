@@ -124,7 +124,6 @@ const defaultRunPlugins = [
   'crypto',
   'json-tools',
   'csv',
-  'yaml',
   'random',
   'variable-case',
 ]
@@ -146,7 +145,6 @@ const allPlugins = [
   'crypto',
   'line-tools',
   'json-tools',
-  'yaml',
   'random',
   'variable-case',
 ]

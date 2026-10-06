@@ -33,6 +33,7 @@ import { startNavigationSensor } from './workspace/learning/navigationSensor'
 import { installLearningDebugHook, purgeStaleUrlTemplateLearning, startAutoLearnLoop } from './workspace/learning/learningController'
 import { refreshLearnedUrlRules } from './workspace/learning/fire'
 import { startNativeValidationRelay } from './workspace/webNativeBridge'
+import { startBehaviorObservation } from './observation/observer'
 
 // Register built-in panels
 import './panels/register'
@@ -85,6 +86,7 @@ function LauncherRuntimeApp() {
     let cleanupSettingsWatcher: (() => void) | undefined
     let cleanupPermissionWatcher: (() => void) | undefined
     let cleanupStartupPermissionWatcher: (() => void) | undefined
+    let cleanupObservation: (() => void) | undefined
 
     initConfigDir().then(async (dir) => {
       if (dir) {
@@ -107,6 +109,7 @@ function LauncherRuntimeApp() {
       }
 
       if (disposed) return
+      cleanupObservation = startBehaviorObservation()
       refreshHostApplicationIndexOnStartup()
       // Warm on-screen window list in idle time so first Global Launcher open is snappy.
       prefetchDesktopWindowsOnStartup()
@@ -126,6 +129,7 @@ function LauncherRuntimeApp() {
       cleanupSettingsWatcher?.()
       cleanupPermissionWatcher?.()
       cleanupStartupPermissionWatcher?.()
+      cleanupObservation?.()
       void stopAllPluginBackgrounds()
     }
   }, [])
@@ -470,9 +474,9 @@ const REHYDRATE_MIN_INTERVAL_MS = 3_000
 let lastPersistedRehydrateAt = 0
 
 function runAfterLauncherFirstPaint(run: () => void): void {
-  // The second rAF observes the first painted frame; the timer keeps rehydrate
-  // out of that frame's callback queue as well.
-  requestAnimationFrame(() => requestAnimationFrame(() => window.setTimeout(run, 0)))
+  // Run in the next task after the first render opportunity. A second rAF can
+  // be throttled for ~500ms while a hidden WKWebView becomes visible.
+  requestAnimationFrame(() => window.setTimeout(run, 0))
 }
 
 /** @returns true when rehydrate actually ran */

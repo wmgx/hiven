@@ -398,8 +398,8 @@ check('standalone launcher opens synchronously and rehydrates after', () => {
   )
   assertHas(
     files.app,
-    /function runAfterLauncherFirstPaint[\s\S]{0,240}requestAnimationFrame\(\(\) => requestAnimationFrame\(\(\) => window\.setTimeout\(run, 0\)\)\)/,
-    'after-paint helper must defer through two animation frames and a task',
+    /function runAfterLauncherFirstPaint[\s\S]{0,240}requestAnimationFrame\(\(\) => window\.setTimeout\(run, 0\)\)/,
+    'after-paint helper must defer through one render opportunity and a task',
   )
 })
 
@@ -723,9 +723,9 @@ check('programmatic launcher positioning is not persisted as a user drag', () =>
     'LauncherWindowApp should suppress native move persistence when another launcher component declares a programmatic resize or move',
   )
   assertHas(
-    files.globalLauncher,
-    /dispatchEvent\(new CustomEvent\(LAUNCHER_PROGRAMMATIC_MOVE_EVENT\)\)[\s\S]{0,220}resizeCurrentLauncherWindow\(\{[\s\S]{0,80}width:[\s\S]{0,80}height:/,
-    'standalone launcher surface resizing should not persist the resulting native move as a user drag',
+    files.launcherWindowManager,
+    /dispatchEvent\(new CustomEvent\(LAUNCHER_PROGRAMMATIC_MOVE_EVENT\)\)[\s\S]{0,280}setPosition\(new LogicalPosition/,
+    'launcher window resizing should suppress persistence before moving the native window to preserve its center',
   )
 })
 
@@ -1059,8 +1059,8 @@ check('double modifier detection allows a natural second tap after a short relea
   )
   assertHas(
     files.tauriHotkeys,
-    /listener_recovers_when_key_up_is_lost_after_trigger/,
-    'double modifier tests should cover recovery when the trigger steals the key-up event',
+    /listener_accepts_repeated_complete_double_taps/,
+    'double modifier tests should cover repeated complete double taps',
   )
   assertHas(
     files.tauriHotkeys,

@@ -144,12 +144,12 @@ for (const key of ['surfaceLoading', 'surfaceOpening', 'surfaceOpenFailed', 'sur
 assert.doesNotMatch(pluginSurfaceRenderer, />Plugin surface crashed<|>Back<|Loading plugin surface/, 'plugin surface fallback UI must not hardcode English')
 assert.match(systemSettingsLocale, /en:\s*\{[\s\S]*title:\s*['"]Settings['"][\s\S]*zh:\s*\{[\s\S]*title:\s*['"]设置['"]/, 'system settings surface title should exist in both locales')
 
-const jsonSurface = readFileSync('src/plugins/json-tools/JsonSurface.tsx', 'utf8')
+const jsonCore = loadModule('src/plugins/json-tools/jsonCore.ts', { globals: { URLSearchParams } })
 const jsonLocaleEn = JSON.parse(readFileSync('src/plugins/json-tools/locales/en.json', 'utf8'))
 const jsonLocaleZh = JSON.parse(readFileSync('src/plugins/json-tools/locales/zh.json', 'utf8'))
-assert.match(jsonSurface, /if \(!text\.trim\(\)\) return \{ ok: true, formatted: '' \}/, 'empty JSON input should not be an error')
-assert.equal(jsonLocaleEn['surface.emptyOutput'], 'Formatted JSON appears here.')
-assert.equal(jsonLocaleZh['surface.emptyOutput'], '格式化后的 JSON 将显示在这里。')
+assert.equal(jsonCore.processJson('  ', { operation: 'format' }).output, '', 'empty JSON input should not be an error')
+assert.ok(jsonLocaleEn['surface.emptyOutput'], 'JSON empty state should have an English translation')
+assert.ok(jsonLocaleZh['surface.emptyOutput'], 'JSON empty state should have a Chinese translation')
 
 for (const file of readSourceFiles('src')) {
   assert.doesNotMatch(

@@ -255,7 +255,9 @@ export function collectStaticPluginItems(): LauncherItem[] {
           aliases: surface.aliases,
         },
         behavior: { type: 'perform' },
-        surfaces: ['global-launcher'],
+        surfaces: typeof surface.entry?.launcher === 'object'
+          ? surface.entry.launcher.surfaces ?? ['global-launcher']
+          : ['global-launcher'],
         requiredCapabilities: ['plugin-surfaces'],
         // Clipboard / Object Block content boost (e.g. CSV path → CSV Tools)
         textMatch: typeof surface.textMatch === 'function' ? surface.textMatch : undefined,

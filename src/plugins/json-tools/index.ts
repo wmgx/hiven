@@ -1,78 +1,51 @@
 /**
  * First-party JSON Tools plugin.
  *
- * Groups: JSON prettify/compact, Sort JSON Keys, Query String ↔ JSON.
- * Each operation is an independent tool — no sub-selection needed.
- * Surface UI preserved as Cmd+Enter target for JSON editing.
+ * One global workspace for JSON conversions and expressions.
+ * Direct conversion tools remain available in editor command entries.
  */
 
-import { definePlugin } from '@hiven/plugin'
+import { definePlugin, type PluginToolSurfaces } from '@hiven/plugin'
 import { JsonSurface } from './JsonSurface'
+import { operationRoutes } from './routes'
+import {
+  isJson,
+  isQueryString,
+  escapeJsonString,
+  jsonCompact,
+  jsonPrettify,
+  jsonToQueryString,
+  jsonToYaml,
+  JsonCoreError,
+  queryStringToJson,
+  sortJsonKeys,
+  unescapeJsonString,
+  yamlToJson,
+} from './jsonCore'
+import './style.css'
 
 const LEARNABLE_PURE = { effect: 'pure', learnable: true } as const
 
-// ─── JSON ─────────────────────────────────────────────────────────────────────
-
-function jsonPrettify(text: string, indent: number, shouldSort: boolean): string {
-  const value = JSON.parse(text)
-  return JSON.stringify(shouldSort ? sortKeys(value) : value, null, indent)
-}
-
-function jsonCompact(text: string): string {
-  return JSON.stringify(JSON.parse(text))
-}
-
-// ─── Sort JSON Keys ───────────────────────────────────────────────────────────
-
-function sortKeys(obj: any): any {
-  if (Array.isArray(obj)) return obj.map(sortKeys)
-  if (obj && typeof obj === 'object') {
-    return Object.keys(obj).sort().reduce((acc: any, key: string) => {
-      acc[key] = sortKeys(obj[key])
-      return acc
-    }, {})
-  }
-  return obj
-}
-
-function sortJsonKeys(text: string): string {
-  return JSON.stringify(sortKeys(JSON.parse(text)), null, 2)
-}
-
-// ─── Query String ─────────────────────────────────────────────────────────────
-
-function queryStringToJson(text: string): string {
-  let qs = text.trim()
-  if (qs.startsWith('?')) qs = qs.slice(1)
-  const params = new URLSearchParams(qs)
-  const obj: Record<string, string> = {}
-  params.forEach((v, k) => { obj[k] = v })
-  return JSON.stringify(obj, null, 2)
-}
-
-function jsonToQueryString(text: string): string {
-  const obj = JSON.parse(text)
-  const params = new URLSearchParams()
-  for (const [k, v] of Object.entries(obj)) {
-    params.set(k, String(v))
-  }
-  return params.toString()
-}
-
-// ─── Content Matchers ─────────────────────────────────────────────────────────
-
-function isJson(text: string): boolean {
-  const t = text.trim()
-  if (!(t.startsWith('{') || t.startsWith('['))) return false
-  try { JSON.parse(t); return true } catch { return false }
-}
-
-function isQueryString(text: string): boolean {
-  const t = text.trim().startsWith('?') ? text.trim().slice(1) : text.trim()
-  return /^[\w%+.-]+=[\w%+.*-]*(?:&[\w%+.-]+=[\w%+.*-]*)+$/.test(t)
-}
-
 // ─── Plugin Definition ────────────────────────────────────────────────────────
+
+const EDITOR_TOOL_SURFACES: PluginToolSurfaces = {
+  launcher: { surfaces: ['editor-command-bar', 'quick-editor-command'] },
+  panel: true,
+}
+
+const WORKSPACE_SHELL = {
+  defaultWidth: 860,
+  defaultHeight: 660,
+  minWidth: 640,
+  minHeight: 420,
+  closeOnBlur: false,
+  resizable: true,
+}
+
+function toolError(error: unknown, t: (key: string, vars?: Record<string, string | number>) => string): string {
+  if (error instanceof JsonCoreError) return t(`error.${error.code}`)
+  return t('error.convert', { message: error instanceof Error ? error.message : String(error) })
+}
 
 export const jsonToolsPlugin = definePlugin({
   ui: {
@@ -80,24 +53,77 @@ export const jsonToolsPlugin = definePlugin({
       {
         id: 'main',
         kind: 'custom-view',
-        title: 'JSON',
-        titleI18n: { zh: 'JSON' },
+        title: 'JSON / YAML',
+        titleI18n: { zh: 'JSON / YAML' },
         icon: 'Braces',
-        aliases: ['json', 'json-format', 'pretty-json'],
+        aliases: ['json', 'json tools', 'json工作台'],
+        textMatch: (text) => isJson(text) || isQueryString(text),
         component: JsonSurface,
-        entry: { launcher: true, shortcutBindable: true },
-        shell: {
-          defaultWidth: 860,
-          defaultHeight: 620,
-          minWidth: 640,
-          minHeight: 420,
-          closeOnBlur: false,
-          resizable: true,
+        entry: {
+          launcher: { surfaces: ['global-launcher', 'editor-command-bar', 'quick-editor-command'] },
+          shortcutBindable: true,
         },
+        shell: WORKSPACE_SHELL,
       },
+      ...operationRoutes.map((route) => ({
+        id: route.id,
+        kind: 'custom-view' as const,
+        title: 'JSON / YAML',
+        titleI18n: { zh: 'JSON / YAML' },
+        component: JsonSurface,
+        entry: { launcher: false },
+        shell: WORKSPACE_SHELL,
+      })),
     ],
   },
+  launcher: {
+    items: operationRoutes.map((route) => ({
+      id: `open-${route.id}`,
+      display: {
+        title: route.titleKey,
+        subtitle: 'route.open',
+        icon: 'Braces',
+        aliases: route.aliases,
+      },
+      behavior: { type: 'perform' as const },
+      surfaces: ['global-launcher' as const],
+      execute(execution) {
+        execution.api.openSurface(route.id, { initialText: execution.input?.text })
+        return { ok: true as const, keepOpen: true }
+      },
+    })),
+  },
   tools: [
+    {
+      id: 'yaml.toJson',
+      title: 'yaml.toJson.title',
+      subtitle: 'yaml.toJson.description',
+      icon: 'FileCode',
+      aliases: ['yaml to json', 'yaml2json', 'yaml转json'],
+      inputPolicy: { mode: 'auto' },
+      policy: LEARNABLE_PURE,
+      accepts: { kinds: ['yaml'], aliases: ['yaml', '转json'] },
+      run(ctx) {
+        try { return ctx.output.text(yamlToJson(ctx.input.text)) }
+        catch (error) { return ctx.output.error(toolError(error, ctx.t)) }
+      },
+      surfaces: EDITOR_TOOL_SURFACES,
+    },
+    {
+      id: 'yaml.fromJson',
+      title: 'yaml.fromJson.title',
+      subtitle: 'yaml.fromJson.description',
+      icon: 'FileCode',
+      aliases: ['json to yaml', 'json2yaml', 'json转yaml'],
+      inputPolicy: { mode: 'auto' },
+      policy: LEARNABLE_PURE,
+      accepts: { kinds: ['json'], aliases: ['转yaml', 'json to yaml', 'json2yaml'] },
+      run(ctx) {
+        try { return ctx.output.text(jsonToYaml(ctx.input.text)) }
+        catch (error) { return ctx.output.error(toolError(error, ctx.t)) }
+      },
+      surfaces: EDITOR_TOOL_SURFACES,
+    },
     {
       id: 'json.prettify',
       title: 'json.prettify.title',
@@ -114,9 +140,9 @@ export const jsonToolsPlugin = definePlugin({
       textMatch: isJson,
       run(ctx) {
         try { return ctx.output.text(jsonPrettify(ctx.input.text, Number(ctx.params.indent ?? 2), Boolean(ctx.params.sortKeys))) }
-        catch (e: any) { return ctx.output.error(ctx.t('error.convert', { message: e.message })) }
+        catch (error) { return ctx.output.error(toolError(error, ctx.t)) }
       },
-      surfaces: { launcher: true, panel: true },
+      surfaces: EDITOR_TOOL_SURFACES,
     },
     {
       id: 'json.compact',
@@ -130,9 +156,9 @@ export const jsonToolsPlugin = definePlugin({
       textMatch: isJson,
       run(ctx) {
         try { return ctx.output.text(jsonCompact(ctx.input.text)) }
-        catch (e: any) { return ctx.output.error(ctx.t('error.convert', { message: e.message })) }
+        catch (error) { return ctx.output.error(toolError(error, ctx.t)) }
       },
-      surfaces: { launcher: true, panel: true },
+      surfaces: EDITOR_TOOL_SURFACES,
     },
     {
       id: 'sort-json.run',
@@ -146,9 +172,9 @@ export const jsonToolsPlugin = definePlugin({
       textMatch: isJson,
       run(ctx) {
         try { return ctx.output.text(sortJsonKeys(ctx.input.text)) }
-        catch (e: any) { return ctx.output.error(ctx.t('error.convert', { message: e.message })) }
+        catch (error) { return ctx.output.error(toolError(error, ctx.t)) }
       },
-      surfaces: { launcher: true, panel: true },
+      surfaces: EDITOR_TOOL_SURFACES,
     },
     {
       id: 'query-string.toJson',
@@ -161,9 +187,9 @@ export const jsonToolsPlugin = definePlugin({
       textMatch: isQueryString,
       run(ctx) {
         try { return ctx.output.text(queryStringToJson(ctx.input.text)) }
-        catch (e: any) { return ctx.output.error(ctx.t('error.convert', { message: e.message })) }
+        catch (error) { return ctx.output.error(toolError(error, ctx.t)) }
       },
-      surfaces: { launcher: true, panel: true },
+      surfaces: EDITOR_TOOL_SURFACES,
     },
     {
       id: 'query-string.fromJson',
@@ -177,9 +203,37 @@ export const jsonToolsPlugin = definePlugin({
       textMatch: isJson,
       run(ctx) {
         try { return ctx.output.text(jsonToQueryString(ctx.input.text)) }
-        catch (e: any) { return ctx.output.error(ctx.t('error.convert', { message: e.message })) }
+        catch (error) { return ctx.output.error(toolError(error, ctx.t)) }
       },
-      surfaces: { launcher: true, panel: true },
+      surfaces: EDITOR_TOOL_SURFACES,
+    },
+    {
+      id: 'json.escape-string',
+      title: 'json.escape.title',
+      subtitle: 'json.escape.description',
+      icon: 'Quote',
+      aliases: ['json escape', 'escape string', '字符串转义', '转义'],
+      inputPolicy: { mode: 'auto' },
+      policy: LEARNABLE_PURE,
+      run(ctx) {
+        try { return ctx.output.text(escapeJsonString(ctx.input.text)) }
+        catch (error) { return ctx.output.error(toolError(error, ctx.t)) }
+      },
+      surfaces: EDITOR_TOOL_SURFACES,
+    },
+    {
+      id: 'json.unescape-string',
+      title: 'json.unescape.title',
+      subtitle: 'json.unescape.description',
+      icon: 'Quote',
+      aliases: ['json unescape', 'unescape string', '字符串反转义', '反转义'],
+      inputPolicy: { mode: 'auto' },
+      policy: LEARNABLE_PURE,
+      run(ctx) {
+        try { return ctx.output.text(unescapeJsonString(ctx.input.text)) }
+        catch (error) { return ctx.output.error(toolError(error, ctx.t)) }
+      },
+      surfaces: EDITOR_TOOL_SURFACES,
     },
   ],
 })

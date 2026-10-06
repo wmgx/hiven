@@ -220,17 +220,7 @@
 }
 
 .translate-pane--source {
-  position: relative;
   background: var(--panel);
-}
-
-.translate-pane--source.is-focused::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  box-shadow: inset 0 0 0 1.5px var(--accent);
-  opacity: 0.9;
 }
 
 .translate-pane--target {

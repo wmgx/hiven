@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { JEV_PRESETS } from './workspace/ai/jev'
 import type { Locale } from './i18n'
+import type { ScreenshotObserverSettings, KeyboardObserverSettings } from './observation/observer'
 import { migrateLocalStorageKey } from './utils/persistMigration'
 import type {
   LauncherSurfaceId,
@@ -153,6 +155,8 @@ interface AppState {
 
   // Settings
   settings: {
+    behaviorObservation?: ScreenshotObserverSettings
+    keyboardObservation?: KeyboardObserverSettings
     watchDirectory: string
     fontSize: number
     wordWrap: boolean
@@ -172,6 +176,7 @@ interface AppState {
     aiDefaultProviderId?: string
     aiDefaultAgentId?: string
     aiDefaultEffort: 'low' | 'medium' | 'high' | 'xhigh'
+    jevCommandSuggestion?: import('./workspace/ai/jev').JevSettings
   }
   updateSetting: (key: string, value: any) => void
   setAppHotkey: (binding: AppHotkeyBinding) => void
@@ -295,6 +300,7 @@ export const useAppStore = create<AppState>()(persist((set) => ({
     aiDefaultProviderId: 'openai-chatgpt',
     aiDefaultAgentId: undefined,
     aiDefaultEffort: 'medium',
+    jevCommandSuggestion: { enabled: false, apiKey: '', ...JEV_PRESETS.tencent },
   },
   updateSetting: (key, value) =>
     set((state) => {

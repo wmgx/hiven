@@ -440,15 +440,17 @@ export function createHistoryItemObjectBlock(params: CreateHistoryItemObjectBloc
 
 export function createQueryObjectBlock(params: {
   query: string
-  kind: ObjectBlockKind
+  kind?: ObjectBlockKind
 }): LauncherObjectBlock {
+  const kind = normalizeSecretKind(params.kind ?? detectClipboardType(params.query))
   return createGenericObjectBlock({
     source: 'query',
-    kind: params.kind,
-    title: params.query,
+    kind,
+    title: getSourceLabel('query'),
     text: params.query,
-    removable: false,
+    removable: true,
     validity: 'unknown',
+    meta: { charCount: params.query.length, lineCount: params.query.split(/\r\n|\r|\n/).length },
   })
 }
 

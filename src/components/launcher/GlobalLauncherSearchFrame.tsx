@@ -17,8 +17,8 @@ function primaryActionLabel(item: LauncherMixedItem | undefined, locale: Locale)
   if (key.startsWith('host:app-launcher:app:') || key.startsWith('host.app:')) {
     return t(locale, 'palette.actionOpen')
   }
-  if (item.domainItem.kind === 'dynamic') {
-    // Calculator / instant results default to copy
+  if (item.domainItem.kind === 'dynamic' && item.domainItem.directAnswer) {
+    // Computed answers default to copy; dynamic commands still execute.
     return t(locale, 'palette.actionCopy')
   }
   return t(locale, 'palette.actionRun')
@@ -76,7 +76,7 @@ export function GlobalLauncherSearchFrame({
   const hint = clipboardBlock?.hint ?? null
   // Keep placeholder stable during exit to avoid input layout shift mid-animation.
   const resolvedPlaceholder = block
-    ? t(locale, 'palette.objectActionPlaceholder', { source: block.title })
+    ? t(locale, 'palette.contentActionPlaceholder')
     : placeholder
 
   return (
@@ -108,8 +108,35 @@ export function GlobalLauncherSearchFrame({
           lang="en"
           autoFocus
           onChange={(event) => onQueryChange(event.target.value)}
+          onPaste={(event) => {
+            if (block || !clipboardBlock) return
+            const pasted = event.clipboardData.getData('text/plain')
+            if (!/[\r\n]/.test(pasted)) return
+            event.preventDefault()
+            const input = event.currentTarget
+            clipboardBlock.attachQueryAsBlock(
+              query.slice(0, input.selectionStart ?? query.length) + pasted +
+              query.slice(input.selectionEnd ?? query.length),
+            )
+          }}
           placeholder={resolvedPlaceholder}
         />
+        {!block && clipboardBlock && query.length > 0 && (
+          <button
+            type="button"
+            className="launcher-query-content-action"
+            onMouseDown={(event) => event.preventDefault()}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') event.stopPropagation()
+            }}
+            onClick={() => {
+              clipboardBlock.attachQueryAsBlock(query)
+              inputRef.current?.focus()
+            }}
+          >
+            {t(locale, 'palette.useQueryAsContent')}
+          </button>
+        )}
       </div>
       {error && (
         <div className="px-3.5 py-1.5 text-[12px]" style={{ color: 'var(--color-error)', borderBottom: 'var(--hairline) solid var(--color-border-tertiary)' }}>

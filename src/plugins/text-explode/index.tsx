@@ -15,7 +15,7 @@ export default definePlugin({
         textMatch: (text) => text.trim().length > 1,
         component: TextExplodeSurface,
         entry: {
-          launcher: true,
+          launcher: { surfaces: ['global-launcher'] },
         },
         // No defaultWidth: inline 'launcher' presentation, panel should keep
         // the launcher's own natural width. autoHeight makes defaultHeight a

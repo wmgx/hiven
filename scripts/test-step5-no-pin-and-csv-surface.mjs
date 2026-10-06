@@ -96,7 +96,7 @@ assert.match(encodeIndex, /url\.encode|URL/, 'Encode / Decode should include URL
 
 const regexIndex = readFileSync('src/plugins/regex-tester/index.tsx', 'utf8')
 const regexViews = readFileSync('src/plugins/regex-tester/RegexTesterViews.tsx', 'utf8')
-assert.match(regexIndex, /title:\s*['"]Regex Tester['"][\s\S]*entry:\s*{\s*launcher:\s*true/, 'Regex Tester should expose a global launcher surface')
+assert.match(regexIndex, /title:\s*['"]Regex Tester['"][\s\S]*entry:\s*{\s*launcher:\s*{\s*surfaces:\s*\[['"]global-launcher['"]\]/, 'Regex Tester should expose a global launcher surface')
 assert.match(regexViews, /panel\.regex\.pattern[\s\S]*flags[\s\S]*surface\.sampleText/, 'Regex Tester surface should expose localized pattern, flags, and sample text')
 
 console.log('step5 no-pin, CSV, Encode / Decode, and Regex surface checks passed')

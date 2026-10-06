@@ -104,11 +104,6 @@ body,
   display: flex;
   flex-direction: column;
   min-height: 0;
-  animation: launcher-flow-frame-in 120ms ease-out both;
-}
-
-@keyframes launcher-flow-frame-in {
-  from { opacity: 0; }
 }
 
 @keyframes launcher-frame-in {
@@ -116,12 +111,6 @@ body,
     opacity: 0;
     transform: translateY(3px);
   }
-}
-
-.global-launcher-surface-shell.is-exiting,
-.global-launcher-host-surface-shell.is-exiting {
-  animation: plugin-settings-dialog-out 90ms ease-in both;
-  pointer-events: none;
 }
 
 .plugin-surface-panel-titlebar {
@@ -1197,6 +1186,14 @@ html[data-window='launcher'] .global-launcher-panel :is(
 html[data-window='launcher'] .global-launcher-surface-shell .global-launcher-body,
 html[data-window='launcher'] .global-launcher-surface-shell .global-launcher-body * {
   -webkit-app-region: no-drag;
+}
+
+/* Keep the desktop visible behind the rounded standalone surface frame. */
+html[data-window='plugin-surface'],
+html[data-window='plugin-surface'] body,
+html[data-window='plugin-surface'] #root,
+html[data-window='plugin-surface'] .plugin-surface-window-shell {
+  background: transparent;
 }
 
 html[data-window='quick-editor'],
@@ -3879,7 +3876,7 @@ body[data-theme='dark'] .schema-object-list.d-rules .wr-in:focus {
 /* hiven-styled Monaco native find/replace widget. Keep Monaco behavior; only replace chrome. */
 .monaco-editor .find-widget {
   height: 48px !important;
-  min-width: 520px !important;
+  min-width: 0 !important;
   padding: 8px 42px 8px 30px !important;
   border: 1px solid var(--border) !important;
   border-radius: 14px !important;
@@ -5441,6 +5438,8 @@ body[data-theme='dark'] .quick-editor-command-panel {
 html[data-window='launcher'] .global-launcher-panel.palette-panel {
   --launcher-panel-width: calc(100vw - 24px);
   --launcher-panel-max-height: calc(100vh - 24px);
+  width: min(var(--launcher-panel-width), calc(100vw - 24px)) !important;
+  max-width: calc(100vw - 24px);
 }
 
 .global-launcher-header.l-search,
@@ -5449,7 +5448,7 @@ html[data-window='launcher'] .global-launcher-panel.palette-panel {
   align-items: center;
   gap: 9px;
   min-height: 52px;
-  padding: 14px 16px;
+  padding: 12px 16px;
   /* V4/V5: slightly recessed face via color only — inset box-shadow read as a second layer */
   background: var(--surface);
   box-shadow: none;
@@ -5494,6 +5493,25 @@ body[data-theme='dark'] .l-search {
 .l-search input::placeholder {
   color: var(--text-3);
   font-family: var(--font);
+}
+
+.launcher-query-content-action {
+  flex: none;
+  border: 0;
+  border-radius: 6px;
+  padding: 5px 8px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.launcher-query-content-action:hover,
+.launcher-query-content-action:focus-visible {
+  background: var(--surface);
+  color: var(--text);
 }
 
 .l-search .back {
@@ -6001,7 +6019,7 @@ body[data-theme='dark'] .launcher-preview-well {
   padding: 0 14px;
   border-radius: 10px;
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition: none;
   color: var(--text);
   background: transparent;
   box-shadow: none;
@@ -11205,4 +11223,33 @@ html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .recent-clip
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
   }
+}
+.schema-action-control {
+  display: flex;
+  min-width: 168px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.schema-action-progress {
+  width: 100%;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: right;
+}
+
+.schema-action-progress-track {
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--border-subtle);
+}
+
+.schema-action-progress-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 160ms ease;
 }

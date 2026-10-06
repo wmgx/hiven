@@ -48,9 +48,18 @@ const journalModule = {
   currentExperienceSessionId: (fallback) => fallback,
   newExperienceId: (prefix) => `${prefix}_test-${++id}`,
 }
+let captureCalls = 0
+let captureSelection = async () => 'foreground text'
 const controllerModule = loadModule('src/workspace/launcher/controller.ts', {
   '../usageJournal': { appendUsageJournal: async () => {} },
   './output': output,
+  './foregroundSelectionCapture': {
+    captureForegroundSelectionText: async (_api, _locale, options) => {
+      captureCalls += 1
+      assert.equal(options.restoreLauncher, true, 'input import resumes the same launcher')
+      return captureSelection()
+    },
+  },
   '../../i18n': { translate },
   '../telemetry': {
     TelemetryEvents: new Proxy({}, { get: (_target, prop) => String(prop) }),
@@ -61,6 +70,10 @@ const controllerModule = loadModule('src/workspace/launcher/controller.ts', {
   },
   '../experience/journal': journalModule,
   '../experience/errorType': errorType,
+  '../experience/saveableParams': { extractSaveableParams: () => ({ ok: true, params: {} }) },
+  '../experience/miningFingerprint': {
+    createMiningFingerprints: async (inputText) => ({ inputFingerprint: inputText, paramSignature: '', safeParamsJson: '{}' }),
+  },
   '../contentBoundary': contentBoundary,
 })
 const { LauncherController } = controllerModule
@@ -113,6 +126,77 @@ function assertPair(events, via = 'execute') {
 const allEvents = []
 {
   const h = createHarness()
+  let receivedInput
+  await h.controller.selectItem(item({
+    execute: async (ctx) => { receivedInput = ctx.input?.text; return { ok: true, keepOpen: true } },
+  }), { objectBlockText: '  result from previous tool\n' })
+  assert.equal(receivedInput, '  result from previous tool\n', 'opening a tool receives the previous result verbatim')
+}
+{
+  const h = createHarness()
+  let directInput
+  let collectedInput
+  let executions = 0
+  const directItem = item({
+    initialInputText: 'raw prompt',
+    actionPolicy: { effect: 'pure', learnable: true },
+    contractFingerprint: 'test-contract',
+    execute: async (ctx) => { directInput = ctx.input?.text; executions += 1; return { ok: true } },
+  })
+  await h.controller.selectItem(directItem, { objectBlockText: 'clipboard content' })
+  assert.equal(directInput, 'raw prompt', 'explicit recommendation input is passed to direct surface execution')
+  assert.equal(h.events[0].inputBinding, 'prompt', 'direct recommendation input is journaled as a prompt')
+
+  h.controller.reset()
+  const collectItem = item({
+    inputPolicy: { mode: 'auto' },
+    initialInputText: 'collected prompt',
+    params: [{ key: 'mode', label: 'Mode', type: 'single-select', options: ['a', 'b'], required: true }],
+    executeWithParams: async (ctx) => { collectedInput = ctx.input?.text; executions += 1; return { ok: true } },
+  })
+  await h.controller.selectItem(collectItem, { customizeParams: true, objectBlockText: 'clipboard content' })
+  await h.controller.commitCurrentParam('b')
+  assert.equal(h.controller.getState().frames.at(-1).inputText, 'collected prompt', 'collect-input is prefilled from recommendation text')
+  assert.equal(executions, 1, 'selecting a collect-input command does not execute it')
+  await h.controller.submitInput()
+  assert.equal(collectedInput, 'collected prompt', 'explicit recommendation input takes precedence over Object Block text')
+  assert.equal(executions, 2)
+}
+{
+  const h = createHarness()
+  const textItem = item({ inputPolicy: { mode: 'auto' } })
+  await h.controller.selectItem(textItem)
+  assert.equal(h.controller.getState().frames.at(-1).kind, 'collect-input')
+  assert.equal(captureCalls, 0, 'command entry never hides the launcher to capture input')
+  h.controller.back()
+  await h.controller.selectItem(item({
+    inputPolicy: { mode: 'auto' },
+    params: [{ key: 'mode', label: 'Mode', type: 'single-select', options: ['a', 'b'] }],
+    executeWithParams: async () => ({ ok: true }),
+  }), { customizeParams: true })
+  await h.controller.commitCurrentParam('b')
+  assert.equal(h.controller.getState().frames.at(-1).kind, 'collect-input')
+  assert.equal(captureCalls, 0, 'finishing params does not capture automatically either')
+  await h.controller.captureInput()
+  assert.equal(captureCalls, 1)
+  assert.equal(h.controller.getState().frames.at(-1).inputText, 'foreground text')
+  assert.equal(h.controller.getState().frames.at(-1).params.mode, 'b')
+  assert.equal(h.usage.length, 0, 'reading input does not execute the command')
+}
+{
+  const h = createHarness()
+  let finishCapture
+  captureSelection = () => new Promise((resolve) => { finishCapture = resolve })
+  await h.controller.selectItem(item({ inputPolicy: { mode: 'auto' } }))
+  const pending = h.controller.captureInput()
+  h.controller.setInputText('newer draft')
+  finishCapture('late selection')
+  await pending
+  assert.equal(h.controller.getState().frames.at(-1).inputText, 'newer draft', 'late capture cannot overwrite typing')
+  assert.equal(h.controller.getState().busy, false)
+}
+{
+  const h = createHarness()
   let executions = 0
   await h.controller.selectItem(item({ execute: async () => { executions += 1; return { ok: true } } }))
   assert.equal(executions, 1)
@@ -123,15 +207,18 @@ const allEvents = []
 {
   const h = createHarness()
   let executions = 0
+  let receivedInput
   const paramItem = item({
+    inputPolicy: { mode: 'auto' },
     params: [{ key: 'mode', label: 'Mode', type: 'single-select', options: ['a', 'b'], default: 'a' }],
-    executeWithParams: async () => { executions += 1; return { ok: true } },
+    executeWithParams: async (ctx) => { receivedInput = ctx.input.text; executions += 1; return { ok: true } },
   })
-  await h.controller.selectItem(paramItem, { customizeParams: true })
+  await h.controller.selectItem(paramItem, { customizeParams: true, objectBlockText: 'parameter block input' })
   assert.equal(h.events.length, 0)
   assert.equal(h.usage.length, 0, 'entering parameter input does not record usage')
   await h.controller.commitCurrentParam('b')
   assert.equal(executions, 1)
+  assert.equal(receivedInput, 'parameter block input', 'final param commit preserves Object Block input')
   assert.equal(h.usage.length, 1, 'successful parameter commit records usage')
   assertPair(h.events)
   allEvents.push(...h.events)

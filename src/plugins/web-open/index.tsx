@@ -22,7 +22,6 @@ import {
   type WebQuickOpenSettings,
 } from './settings/model'
 import { FaviconCacheModal } from './settings/FaviconCacheModal'
-import { QueryHistoryModal } from './settings/QueryHistoryModal'
 import {
   extractDomain,
   getFaviconIconSync,
@@ -34,8 +33,8 @@ import { replaceMatchPatternCache, testMatchPattern } from './matchPatternCache'
 import {
   clampMaxQueryHistory,
   filterQueryHistory,
-  loadQueryHistory,
   importBrowserQueryHistory,
+  loadQueryHistory,
   recordQueryHistory,
   removeQueryHistoryEntry,
 } from './queryHistory'
@@ -181,6 +180,7 @@ function buildEntryLauncherItem(
   const aliases = Array.isArray(entry.aliases) ? entry.aliases : []
   return {
     id: entry.id,
+    surfaces: ['global-launcher'],
     // Stable site/action id — safe to learn frequency when used as dynamic.
     recordUsage: true,
     display: {
@@ -286,6 +286,7 @@ async function buildDynamicLauncherItems(ctx: LauncherDynamicContext): Promise<L
 
     results.push({
       id: entry.id + '-quick',
+      surfaces: ['global-launcher'],
       // Pattern-matched site templates are stable intents (e.g. google-quick).
       recordUsage: true,
       display: {
@@ -312,6 +313,7 @@ async function buildDynamicLauncherItems(ctx: LauncherDynamicContext): Promise<L
 
     results.push({
       id: 'direct-url-open',
+      surfaces: ['global-launcher'],
       // Single stable action for "open this as URL", not the URL itself.
       recordUsage: true,
       // Participate in content intent ranking when detections include url.
@@ -472,12 +474,6 @@ export default definePlugin<WebQuickOpenSettings>({
         component: FaviconCacheModal,
       },
       {
-        id: 'query-history',
-        title: 'Query History',
-        titleI18n: { zh: '参数历史' },
-        component: QueryHistoryModal,
-      },
-      {
         id: 'browser-connection',
         title: 'Browser Connection',
         titleI18n: { zh: '浏览器连接' },
@@ -533,6 +529,43 @@ export default definePlugin<WebQuickOpenSettings>({
             zh: '可选：连接实时 Chromium 浏览器，搜索标签 / 历史，并对已打开的页面直接聚焦而非重复打开。需配套扩展；上面的快开规则无需扩展。',
           },
           fields: [
+            {
+              kind: 'action',
+              id: 'browser-history-learning',
+              icon: 'History',
+              label: 'Browser history learning',
+              labelI18n: { zh: '浏览器历史学习' },
+              description: 'Import matching parameters from existing browser history into all quick-open rules.',
+              descriptionI18n: { zh: '从已有浏览器历史中，为全部快开规则导入匹配的参数。' },
+              buttonLabel: 'Learn now',
+              buttonLabelI18n: { zh: '主动学习' },
+              requires: ['storage.private'],
+              async run({ value, host, t, reportProgress }) {
+                try {
+                  let count = 0
+                  reportProgress({ current: 0, total: 5_000, label: t('queryHistory.learningProgress', { read: 0, learned: 0 }) })
+                  await getPluginHostSdk().desktopTargets.bridge.importHistory(
+                    CHROMIUM_SOURCE_ID,
+                    async (history, received) => {
+                      count += await importBrowserQueryHistory(host.storage, value.entries ?? [], history)
+                      reportProgress({
+                        current: received,
+                        total: 5_000,
+                        label: t('queryHistory.learningProgress', { read: received, learned: count }),
+                      })
+                    },
+                  )
+                  host.showMessage(
+                    count > 0 ? t('queryHistory.learned', { count }) : t('queryHistory.noneLearned'),
+                    count > 0 ? 'success' : 'info',
+                  )
+                } catch (error) {
+                  host.showMessage(t('queryHistory.learnFailedDetail', {
+                    error: error instanceof Error ? error.message : String(error),
+                  }), 'error')
+                }
+              },
+            },
             {
               kind: 'modal',
               id: 'browser-connection',
@@ -672,21 +705,6 @@ export default definePlugin<WebQuickOpenSettings>({
                   min: 1,
                   step: 1,
                   visibleWhen: { key: 'recordQueryHistory', equals: true },
-                  group: 'History',
-                  groupI18n: { zh: '历史' },
-                },
-                {
-                  kind: 'modal',
-                  key: 'browserLearning',
-                  modalId: 'query-history',
-                  label: 'Browser learning',
-                  labelI18n: { zh: '浏览器学习' },
-                  description: 'Learn only parameters matching this rule template.',
-                  descriptionI18n: { zh: '只学习与当前规则模板匹配的参数。' },
-                  buttonLabel: 'Learn from browser',
-                  buttonLabelI18n: { zh: '从浏览器中学习' },
-                  visibleWhen: { key: 'recordQueryHistory', equals: true },
-                  requires: ['storage.private'],
                   group: 'History',
                   groupI18n: { zh: '历史' },
                 },

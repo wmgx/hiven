@@ -18,20 +18,18 @@ const QuickEditorPanel = lazy(async () => {
 
 export function GlobalLauncherSystemSurfaceFrame({
   target,
-  exiting,
   height,
   onBack,
   onClose,
 }: {
   target: LauncherHostSurfaceTarget
-  exiting: boolean
   height: number
   onBack: () => void
   onClose: () => void
 }) {
   const locale = useAppStore((s) => s.locale)
   const bodyHeight = height - BREADCRUMB_HEIGHT
-  const shellClassName = `global-launcher-host-surface-shell flex flex-col min-h-0 outline-none${exiting ? ' is-exiting' : ''}`
+  const shellClassName = 'global-launcher-host-surface-shell flex flex-col min-h-0 outline-none'
 
   const settingsEscapeHandler = useCallback((event: KeyboardEvent): boolean => {
     if (event.key !== 'Escape') return false

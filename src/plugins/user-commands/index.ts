@@ -99,7 +99,7 @@ function buildCommandTools(settings: UserCommandsSettings): PluginToolContributi
         },
       ])
     },
-    surfaces: { launcher: true, panel: false },
+    surfaces: { launcher: { surfaces: ['global-launcher'] }, panel: false },
   }))
 }
 

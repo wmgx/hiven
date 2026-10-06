@@ -1,4 +1,4 @@
-import { Component, useEffect, useMemo, useState, type ErrorInfo, type ReactNode } from 'react'
+import { Component, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { localized, useAppStore, type PluginSurfaceOpenTarget } from '../../store'
 import { t, pickLocale, type Locale } from '../../i18n'
@@ -64,6 +64,13 @@ export function PluginSurfaceRenderer({
   const grantPluginPermissions = usePluginPermissionStore((s) => s.grantPermissions)
   const openSettingsDialog = usePluginSettingsStore((s) => s.openSettingsDialog)
   const [surfaceState, setSurfaceState] = useState<PluginSurfaceRendererState>({ status: 'loading-runtime' })
+  const activeTargetRef = useRef(target)
+  activeTargetRef.current = target
+  const mountedRef = useRef(false)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
 
   useEffect(() => {
     let disposed = false
@@ -72,7 +79,7 @@ export function PluginSurfaceRenderer({
       setSurfaceState({ status: 'loading-runtime' })
 
       try {
-        await ensurePluginRuntimeReady()
+        await ensurePluginRuntimeReady(target.source)
         if (disposed) return
 
         const definition = pluginRegistry.getPluginDefinition(target.pluginId, target.source) as PluginDefinition<unknown> | undefined
@@ -184,6 +191,9 @@ export function PluginSurfaceRenderer({
           initialText={target.initialText}
           host={{
             close: onClose,
+            complete: () => {
+              if (presentation === 'global-launcher' && mountedRef.current && activeTargetRef.current === target) onClose()
+            },
             requestBack: onBack,
             openSettings: () => {
               openSettingsDialog({
@@ -248,7 +258,9 @@ export function PluginSurfaceRenderer({
             },
             storage: hostStorage,
             clipboard: createPluginClipboard(target.pluginId, surfaceState.permissions, hostStorage),
-            paste: createPluginPaste(surfaceState.permissions, hostStorage),
+            paste: createPluginPaste(surfaceState.permissions, hostStorage, {
+              keepOpen: presentation !== 'global-launcher' && target.pluginId !== 'clipboard-history',
+            }),
             network: createPluginNetwork(surfaceState.permissions),
             shell: createPluginShell(surfaceState.permissions),
             ai: createPluginAi(target.pluginId, target.source, surfaceState.permissions),
@@ -271,7 +283,7 @@ export function PluginSurfacePermissionGate({
   onGrant: () => void
 }) {
   return (
-    <div className="h-full flex flex-col items-center justify-center gap-3 p-6 text-center" style={{ color: 'var(--color-text-secondary)' }}>
+    <div className="min-h-full flex flex-col items-center justify-center gap-3 p-6 text-center" style={{ color: 'var(--color-text-secondary)' }}>
       <div className="text-[13px] font-medium" style={{ color: 'var(--color-text-primary)' }}>{t(locale, 'palette.pluginPermissionTitle')}</div>
       <div className="max-w-[420px] text-[12px]" style={{ color: 'var(--color-text-tertiary)' }}>
         {t(locale, 'palette.pluginPermissionDescription')}

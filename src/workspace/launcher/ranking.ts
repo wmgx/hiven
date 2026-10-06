@@ -459,6 +459,10 @@ export function rankLauncherItems(ctx: RankContext, items: LauncherItem[]): Laun
   // Initialize per-call cache
   searchableFieldsCache = new WeakMap()
   searchableFieldsCacheLocale = ctx.locale
+  const favoriteKeys = favoriteKeySet(ctx)
+  if (favoriteKeys !== ctx.favoriteKeys) {
+    ctx = { ...ctx, favoriteKeys: favoriteKeys ?? undefined }
+  }
 
   const q = ctx.query.trim().toLowerCase()
   // When query is present, filter by name/keyword match for static/host rows.

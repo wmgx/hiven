@@ -255,7 +255,7 @@ export default definePlugin<TranslateSettings>({
         aliases: ['translate', 'translation', '翻译', 'fanyi'],
         component: TranslateSurface,
         entry: {
-          launcher: true,
+          launcher: { surfaces: ['global-launcher'] },
           shortcutBindable: true,
           recommendedShortcut: 'CmdOrCtrl+Shift+T',
         },

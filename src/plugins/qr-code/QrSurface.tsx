@@ -139,6 +139,7 @@ export function QrSurface(props: PluginSurfaceProps) {
     try {
       await host.clipboard.writeText(value)
       host.showMessage(t(toastKey), 'success')
+      host.complete()
     } catch {
       host.showMessage(t('toast.copyFailed'), 'error')
     }
@@ -156,6 +157,7 @@ export function QrSurface(props: PluginSurfaceProps) {
       const ref = await host.storage.blob.put({ bytes, contentType: 'image/png', extension: 'png' })
       await host.clipboard.writeImage(ref.blobId)
       host.showMessage(t('toast.copiedImage'), 'success')
+      host.complete()
       return
     } catch {
       // Browser / webview path: put a real PNG on the clipboard.
@@ -163,6 +165,7 @@ export function QrSurface(props: PluginSurfaceProps) {
     try {
       await copyPngBlobToClipboard(dataUrlToPngBlob(dataUrl))
       host.showMessage(t('toast.copiedImage'), 'success')
+      host.complete()
     } catch {
       host.showMessage(t('toast.copyFailed'), 'error')
     }

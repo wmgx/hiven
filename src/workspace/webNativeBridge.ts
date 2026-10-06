@@ -1,4 +1,7 @@
 const BRIDGE_BASE = 'http://127.0.0.1:19246/v1/validation'
+const ACTIVE_RELAY_POLL_MS = 20
+// Idle desktop polling must stay well under the browser's 1s storage-snapshot timeout.
+const IDLE_RELAY_POLL_MS = 250
 
 type BridgeInternals = {
   invoke: <T>(command: string, args?: Record<string, unknown>) => Promise<T>
@@ -13,6 +16,8 @@ type BridgeInternals = {
   plugins: { path: { sep: string; delimiter: string } }
 }
 
+type RelayRequest = { id: string; clientId: string; command: string; args?: Record<string, unknown> }
+
 declare global {
   interface Window {
     __HIVEN_WEB_NATIVE_BRIDGE__?: boolean
@@ -22,6 +27,8 @@ declare global {
 
 let token = ''
 let callbackId = 0
+// Scopes events and native listeners to this browser tab; the bridge expires tabs that stop polling.
+const clientId = crypto.randomUUID()
 const callbacks = new Map<number, { callback: (payload: unknown) => void; once: boolean }>()
 const nativeStorageCommands = {
   snapshot: '__hiven_validation_storage_snapshot',
@@ -47,7 +54,7 @@ async function post(path: string, body: unknown): Promise<Response> {
 
 async function invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
   const id = crypto.randomUUID()
-  const queued = await post('invoke', { id, command, args })
+  const queued = await post('invoke', { id, clientId, command, args })
   if (!queued.ok) throw new Error(`Native validation bridge rejected ${command}`)
 
   const deadline = Date.now() + 30_000
@@ -74,7 +81,7 @@ function runCallback(id: number, payload: unknown): void {
 async function pollEvents(): Promise<void> {
   while (window.__HIVEN_WEB_NATIVE_BRIDGE__) {
     try {
-      const response = await fetch(url('events'))
+      const response = await fetch(url('events', { client: clientId }))
       const data = await response.json() as { events?: Array<{ callbackId: number; payload: unknown }> }
       for (const event of data.events ?? []) runCallback(event.callbackId, event.payload)
     } catch {
@@ -139,14 +146,18 @@ export async function installWebNativeBridge(): Promise<boolean> {
   return true
 }
 
-function mapChannels(value: unknown, Channel: new (handler: (payload: unknown) => void) => unknown): unknown {
+function mapChannels(
+  value: unknown,
+  Channel: new (handler: (payload: unknown) => void) => unknown,
+  targetClientId: string,
+): unknown {
   if (typeof value === 'string' && value.startsWith('__CHANNEL__:')) {
     const id = Number(value.slice('__CHANNEL__:'.length))
-    return new Channel((payload) => void post('event', { callbackId: id, payload }))
+    return new Channel((payload) => void post('event', { clientId: targetClientId, callbackId: id, payload }))
   }
-  if (Array.isArray(value)) return value.map((item) => mapChannels(item, Channel))
+  if (Array.isArray(value)) return value.map((item) => mapChannels(item, Channel, targetClientId))
   if (value && typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, mapChannels(item, Channel)]))
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, mapChannels(item, Channel, targetClientId)]))
   }
   return value
 }
@@ -156,8 +167,17 @@ export function startNativeValidationRelay(): () => void {
     return () => undefined
   }
   let stopped = false
-  const eventUnlisteners = new Map<number, () => void>()
+  const eventListeners = new Map<number, { clientId: string; unlisten: () => void }>()
   let remoteEventId = 0
+
+  // A closed or reloaded tab never sends unlisten; drop its native listeners once the bridge expires it.
+  const releaseDetachedListeners = (attachedClients: Set<string>) => {
+    for (const [id, listener] of eventListeners) {
+      if (attachedClients.has(listener.clientId)) continue
+      listener.unlisten()
+      eventListeners.delete(id)
+    }
+  }
 
   void (async () => {
     const [{ invoke: nativeInvoke, Channel }, { listen }] = await Promise.all([
@@ -165,14 +185,23 @@ export function startNativeValidationRelay(): () => void {
       import('@tauri-apps/api/event'),
     ])
     while (!stopped) {
+      let attached = false
       try {
-        const session = await fetch(`${BRIDGE_BASE}/session`).then((response) => response.json()) as { token: string }
-        token = session.token
-        const data = await fetch(url('requests')).then((response) => response.json()) as {
-          requests?: Array<{ id: string; command: string; args?: Record<string, unknown> }>
+        if (!token) {
+          const session = await fetch(`${BRIDGE_BASE}/session`).then((response) => response.json()) as { token: string }
+          token = session.token
         }
+        const response = await fetch(url('requests'))
+        if (!response.ok) throw new Error(`Native validation relay poll failed: ${response.status}`)
+        const data = await response.json() as { requests?: RelayRequest[]; clients?: string[] }
+        const attachedClients = new Set(data.clients ?? [])
+        attached = attachedClients.size > 0
+        releaseDetachedListeners(attachedClients)
         for (const request of data.requests ?? []) {
           try {
+            if (['capture_desktop_snapshot', 'poll_keyboard_observation', 'stop_keyboard_observation'].includes(request.command)) {
+              throw new Error('desktop-required')
+            }
             let value: unknown
             if (request.command === nativeStorageCommands.snapshot) {
               value = Object.fromEntries(Array.from({ length: localStorage.length }, (_, index) => {
@@ -183,16 +212,16 @@ export function startNativeValidationRelay(): () => void {
               const callback = Number(request.args?.handler)
               const id = ++remoteEventId
               const unlisten = await listen(String(request.args?.event ?? ''), (event) => {
-                void post('event', { callbackId: callback, payload: event })
+                void post('event', { clientId: request.clientId, callbackId: callback, payload: event })
               })
-              eventUnlisteners.set(id, unlisten)
+              eventListeners.set(id, { clientId: request.clientId, unlisten })
               value = id
             } else if (request.command === 'plugin:event|unlisten') {
               const id = Number(request.args?.eventId)
-              eventUnlisteners.get(id)?.()
-              eventUnlisteners.delete(id)
+              eventListeners.get(id)?.unlisten()
+              eventListeners.delete(id)
             } else {
-              value = await nativeInvoke(request.command, mapChannels(request.args ?? {}, Channel) as Record<string, unknown>)
+              value = await nativeInvoke(request.command, mapChannels(request.args ?? {}, Channel, request.clientId) as Record<string, unknown>)
             }
             await post('result', { id: request.id, ok: true, value: value ?? null })
           } catch (error) {
@@ -204,15 +233,17 @@ export function startNativeValidationRelay(): () => void {
           }
         }
       } catch {
-        // Bridge starts with the native app and can briefly disappear during rebuilds.
+        // Bridge starts with the native app and can briefly disappear during rebuilds; a restarted
+        // bridge issues a new token, so re-read the session on the next poll.
+        token = ''
       }
-      await new Promise((resolve) => setTimeout(resolve, 20))
+      await new Promise((resolve) => setTimeout(resolve, attached ? ACTIVE_RELAY_POLL_MS : IDLE_RELAY_POLL_MS))
     }
   })()
 
   return () => {
     stopped = true
-    for (const unlisten of eventUnlisteners.values()) unlisten()
-    eventUnlisteners.clear()
+    for (const listener of eventListeners.values()) listener.unlisten()
+    eventListeners.clear()
   }
 }

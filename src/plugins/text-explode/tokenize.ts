@@ -107,8 +107,8 @@ export function tokenize(text: string): ExplodeToken[] {
 /**
  * Reassembles selected token indices (original document order) into text.
  * Directly-adjacent tokens concatenate with no gap; tokens separated only by
- * a single original whitespace run keep that whitespace; anything else
- * (a skipped chip in between) gets one plain space so the result stays readable.
+ * original whitespace keep that whitespace (including blank lines); anything
+ * else (a skipped chip in between) gets one plain space so the result stays readable.
  */
 export function assembleFromSelection(tokens: ExplodeToken[], selected: ReadonlySet<number>): string {
   const selectedIndexes = [...selected].sort((a, b) => a - b)
@@ -118,13 +118,10 @@ export function assembleFromSelection(tokens: ExplodeToken[], selected: Readonly
     const idx = selectedIndexes[i]
     if (i > 0) {
       const prev = selectedIndexes[i - 1]
-      if (idx === prev + 1) {
-        // originally adjacent — no separator
-      } else if (idx === prev + 2 && tokens[prev + 1]?.type === 'space') {
-        out += tokens[prev + 1].text
-      } else {
-        out += ' '
-      }
+      const between = tokens.slice(prev + 1, idx)
+      out += between.every((token) => token.type === 'space' || token.type === 'break')
+        ? between.map((token) => token.text).join('')
+        : ' '
     }
     out += tokens[idx].text
   }

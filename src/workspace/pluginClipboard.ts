@@ -36,7 +36,13 @@ async function readClipboardText(): Promise<string> {
   return readNativeClipboardText()
 }
 
-export async function writeClipboardText(text: string): Promise<void> {
+export async function writeClipboardText(text: string, options?: { sensitive?: boolean }): Promise<void> {
+  if (options?.sensitive) {
+    // Fail closed: never fall back to an ordinary clipboard write for secrets.
+    const { invoke } = await import('@tauri-apps/api/core')
+    await invoke('clipboard_write_sensitive_text', { text })
+    return
+  }
   try {
     const { writeText } = await import('./nativeClipboard')
     await writeText(text)
@@ -45,6 +51,7 @@ export async function writeClipboardText(text: string): Promise<void> {
       await navigator.clipboard.writeText(text)
     } catch (error) {
       console.warn('[plugin-clipboard] write failed:', error)
+      throw error
     }
   }
 }
@@ -76,19 +83,35 @@ async function writeClipboardImageViaClipboardItem(bytes: Uint8Array): Promise<v
   await navigator.clipboard.write([new ClipboardItemCtor({ 'image/png': blob })])
 }
 
+/**
+ * Tauri Image handles pin their RGBA buffer in the webview ResourceTable until close().
+ * Clipboard polling opens one every few seconds, so a forgotten handle is a native leak.
+ */
+async function withImageHandle<H extends { close(): Promise<void> }, T>(
+  handle: H,
+  use: (handle: H) => Promise<T>,
+): Promise<T> {
+  try {
+    return await use(handle)
+  } finally {
+    await handle.close().catch(() => undefined)
+  }
+}
+
 /** Write PNG (or other image) bytes to the system clipboard as an image, not as text. */
 export async function writeClipboardImageBytes(bytes: Uint8Array): Promise<void> {
   try {
     const { writeImage } = await import('./nativeClipboard')
     const { Image } = await import('@tauri-apps/api/image')
     try {
-      const image = await Image.fromBytes(bytes)
-      await writeImage(image)
+      await withImageHandle(await Image.fromBytes(bytes), writeImage)
       return
     } catch {
       const decoded = await decodeImageBytesToRgba(bytes)
-      const image = await Image.new(new Uint8Array(decoded.rgba), decoded.width, decoded.height)
-      await writeImage(image)
+      await withImageHandle(
+        await Image.new(new Uint8Array(decoded.rgba), decoded.width, decoded.height),
+        writeImage,
+      )
       return
     }
   } catch {
@@ -111,8 +134,9 @@ async function readClipboardSourceApp(): Promise<string | undefined> {
 async function readClipboardImageSnapshot(): Promise<ClipboardImageSnapshot | null> {
   try {
     const { readImage } = await import('./nativeClipboard')
-    const image = await readImage()
-    const [rgba, size] = await Promise.all([image.rgba(), image.size()])
+    // rgba() copies the pixels into JS, so the native handle can be released right away.
+    const [rgba, size] = await withImageHandle(await readImage(), (image) =>
+      Promise.all([image.rgba(), image.size()]))
     return {
       hashBytes: rgba,
       contentType: 'image/png',
@@ -235,9 +259,9 @@ export function createPluginClipboard(
       return readClipboardText()
     },
 
-    async writeText(text: string): Promise<void> {
+    async writeText(text: string, options?: { sensitive?: boolean }): Promise<void> {
       requirePermissions(['clipboard.write'])
-      await writeClipboardText(text)
+      await writeClipboardText(text, options)
     },
 
     async writeImage(blobId: string): Promise<void> {

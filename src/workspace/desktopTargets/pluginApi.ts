@@ -10,6 +10,7 @@ import {
   invalidateDesktopBridgeListCache,
   listDesktopBridgeEvents,
   listDesktopBridgeHistory,
+  importDesktopBridgeHistory,
   listDesktopBridgeTargets,
   openDesktopBridgeUrl,
   setDesktopBridgeSourceConfig,
@@ -42,6 +43,10 @@ export type DesktopTargetsHostApi = {
     status: () => Promise<DesktopBridgeStatus | null>
     listTargets: (sourceId?: string) => Promise<DesktopBridgeTargetDto[]>
     listHistory: (sourceId?: string) => Promise<DesktopBridgeHistoryDto[]>
+    importHistory: (
+      sourceId: string,
+      onBatch?: (items: DesktopBridgeHistoryDto[], received: number) => void | Promise<void>,
+    ) => Promise<number>
     listEvents: (sourceId?: string, sinceTs?: number) => Promise<DesktopBridgeEventDto[]>
     focusTarget: (sourceId: string, id: string, windowId?: string | null) => Promise<void>
     openUrl: (sourceId: string, url: string) => Promise<void>
@@ -70,6 +75,7 @@ export function createDesktopTargetsHostApi(): DesktopTargetsHostApi {
       status: () => desktopBridgeStatus(),
       listTargets: (sourceId) => listDesktopBridgeTargets(sourceId),
       listHistory: (sourceId) => listDesktopBridgeHistory(sourceId),
+      importHistory: (sourceId, onBatch) => importDesktopBridgeHistory(sourceId, onBatch),
       listEvents: (sourceId, sinceTs) => listDesktopBridgeEvents(sourceId, sinceTs),
       focusTarget: (sourceId, id, windowId) => focusDesktopBridgeTarget(sourceId, id, windowId),
       openUrl: (sourceId, url) => openDesktopBridgeUrl(sourceId, url),

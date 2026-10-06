@@ -7,6 +7,16 @@
 
 import { definePlugin, type PaneInput } from '@hiven/plugin'
 import { RegexTesterPluginPanel, RegexTesterSurface } from './RegexTesterViews'
+import './style.css'
+
+const WORKSPACE_SHELL = {
+  defaultWidth: 900,
+  defaultHeight: 620,
+  minWidth: 680,
+  minHeight: 440,
+  closeOnBlur: false,
+  resizable: true,
+}
 
 export const regexTesterPlugin = definePlugin({
   ui: {
@@ -17,17 +27,10 @@ export const regexTesterPlugin = definePlugin({
         title: 'Regex Tester',
         titleI18n: { zh: '正则测试器' },
         icon: 'Regex',
-        aliases: ['regex', 'regexp', 'regular expression', '正则', '正则表达式'],
+        aliases: ['regex', 'regexp', 'regular expression', '正则', '正则表达式', 'regex test', 'regex match', 'test regex', 'regular expression tester', '正则测试', '正则匹配'],
         component: RegexTesterSurface,
-        entry: { launcher: true, shortcutBindable: true },
-        shell: {
-          defaultWidth: 900,
-          defaultHeight: 620,
-          minWidth: 680,
-          minHeight: 440,
-          closeOnBlur: false,
-          resizable: true,
-        },
+        entry: { launcher: { surfaces: ['global-launcher'] }, shortcutBindable: true },
+        shell: WORKSPACE_SHELL,
       },
     ],
   },

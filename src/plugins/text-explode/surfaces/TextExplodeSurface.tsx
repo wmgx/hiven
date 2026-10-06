@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, IconButton, useImeKeyboard } from '@hiven/plugin-ui'
+import { Button, IconButton, ToolbarButton, useImeKeyboard } from '@hiven/plugin-ui'
 import { CloseIcon } from '@hiven/plugin-ui/icons'
 import { Bomb } from 'lucide-react'
 import { assembleFromSelection, isSelectableToken, tokenize, type ExplodeToken } from '../tokenize'
@@ -91,6 +91,10 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
   const [dragShiftMode, setDragShiftMode] = useState(false)
 
   const assembled = useMemo(() => assembleFromSelection(tokens, selected), [tokens, selected])
+  const selectableIndexes = useMemo(
+    () => tokens.flatMap((token, idx) => (isSelectableToken(token.type) ? [idx] : [])),
+    [tokens],
+  )
 
   const toggleChip = useCallback((idx: number) => {
     setSelected((prev) => {
@@ -112,8 +116,18 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
     })
   }, [groups])
 
+  const selectAll = useCallback(() => {
+    setSelected(new Set(selectableIndexes))
+  }, [selectableIndexes])
+
+  const invertSelection = useCallback(() => {
+    setSelected((prev) => new Set(selectableIndexes.filter((idx) => !prev.has(idx))))
+  }, [selectableIndexes])
+
   const handlePointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 || !canvasRef.current) return
+    // Keep marquee drags from starting native text selection outside the canvas.
+    event.preventDefault()
     const canvas = canvasRef.current
     const rect = canvas.getBoundingClientRect()
     const chipEl = (event.target as HTMLElement).closest<HTMLElement>('[data-chip-idx]')
@@ -196,8 +210,12 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
     if (!assembled) return
     try {
       const result = await host.paste.pasteText(assembled)
-      if (!result.ok) host.showMessage(result.message, 'info')
-      host.close()
+      if (!result.ok) {
+        host.showMessage(result.message, result.fallback === 'copied' ? 'info' : 'error')
+        if (result.fallback === 'copied') host.complete()
+        return
+      }
+      host.complete()
     } catch {
       host.showMessage(t('error.pasteFailed'), 'error')
     }
@@ -208,6 +226,7 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
     try {
       await host.clipboard.writeText(assembled)
       setCopyFeedback({ text: assembled, error: false })
+      host.complete()
     } catch {
       setCopyFeedback({ text: assembled, error: true })
     }
@@ -277,34 +296,50 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
       </div>
 
       {hasTokens ? (
-        <div
-          ref={canvasRef}
-          data-no-select
-          role="group"
-          aria-label={t('canvas.label')}
-          className={`tx-canvas${exploded ? ' is-exploded' : ''}`}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-        >
-          {rubberBox && (
-            <div
-              className="tx-rubber"
-              style={{ left: rubberBox.x, top: rubberBox.y, width: rubberBox.w, height: rubberBox.h }}
-            />
-          )}
-          {renderTokens({
-            tokens,
-            anims,
-            selected,
-            rubberPreview,
-            dragShiftMode,
-            groups,
-            chipRefs,
-            groupRefs,
-            toggleChip,
-            groupLabel: t('canvas.linkGroup'),
-          })}
-        </div>
+        <section className="tx-workbench" aria-label={t('canvas.label')}>
+          <div className="tx-selection-bar">
+            <span className="tx-selection-summary" aria-live="polite">
+              {t('selection.summary', { selected: selected.size, total: selectableIndexes.length })}
+            </span>
+            <div className="tx-selection-actions" role="toolbar" aria-label={t('selection.toolbar')}>
+              <ToolbarButton disabled={selected.size === selectableIndexes.length} onClick={selectAll}>
+                {t('action.selectAll')}
+              </ToolbarButton>
+              <ToolbarButton onClick={invertSelection}>{t('action.invert')}</ToolbarButton>
+              <ToolbarButton disabled={!selected.size} onClick={() => setSelected(new Set())}>
+                {t('action.clear')}
+              </ToolbarButton>
+            </div>
+          </div>
+          <div
+            ref={canvasRef}
+            data-no-select
+            role="group"
+            aria-label={t('canvas.label')}
+            className={`tx-canvas${exploded ? ' is-exploded' : ''}`}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+          >
+            {rubberBox && (
+              <div
+                className="tx-rubber"
+                style={{ left: rubberBox.x, top: rubberBox.y, width: rubberBox.w, height: rubberBox.h }}
+              />
+            )}
+            {renderTokens({
+              tokens,
+              anims,
+              selected,
+              rubberPreview,
+              dragShiftMode,
+              groups,
+              chipRefs,
+              groupRefs,
+              toggleChip,
+              groupLabel: t('canvas.linkGroup'),
+            })}
+          </div>
+        </section>
       ) : (
         <div className="tx-empty">
           <Bomb size={22} aria-hidden="true" />
@@ -315,7 +350,7 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
       <div className="tx-preview">
         <div className="tx-preview-head">
           <span>{t('preview.title')}</span>
-          <span>{t('preview.count', { count: selected.size })}</span>
+          <span>{t('preview.characters', { count: assembled.length })}</span>
         </div>
         <div className="tx-preview-body">
           {assembled || <span className="tx-preview-empty">{t('preview.empty')}</span>}
@@ -323,9 +358,6 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
       </div>
 
       <div className="tx-footer">
-        <Button variant="ghost" disabled={!selected.size} onClick={() => setSelected(new Set())}>
-          {t('action.clear')}
-        </Button>
         <span className="tx-footer-hint">{t('footer.hint')}</span>
         <Button disabled={!assembled} onClick={() => void copySelection()}>
           {copyFeedback?.text === assembled

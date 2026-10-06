@@ -53,6 +53,13 @@ const rankingOut = ts.transpileModule(rankingSrc, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023, esModuleInterop: true },
 }).outputText
 const moduleExports = {}
+let setConstructionCount = 0
+class CountingSet extends Set {
+  constructor(values) {
+    super(values)
+    setConstructionCount += 1
+  }
+}
 const sandbox = {
   exports: moduleExports,
   module: { exports: moduleExports },
@@ -61,6 +68,7 @@ const sandbox = {
   searchableFieldsMatch: searchRanking.searchableFieldsMatch,
   getUsageRecord: usage.getUsageRecord,
   localizedDisplay: display.localizedDisplay,
+  Set: CountingSet,
   // Soft nav demotion optional in ranking; stub for harness.
   navNearDuplicateDemotion: () => 0,
 }
@@ -88,6 +96,7 @@ try {
 }
 vm.runInNewContext(rankingOut, sandbox)
 const ranking = sandbox.module.exports
+setConstructionCount = 0
 
 function item(systemKey, title, opts = {}) {
   return {
@@ -315,6 +324,7 @@ const cold = item('plugin:p:launcher:cold-fav', 'Cold Fav')
 const hot = item('plugin:p:launcher:hot-nofav', 'Hot NoFav')
 let uFav = usage.emptyUsageBySurface()
 for (let i = 0; i < 20; i++) uFav = usage.recordSelection(uFav, 'global-launcher', hot.systemKey, now)
+setConstructionCount = 0
 const rankedFav = ranking.rankLauncherItems(
   {
     query: '',
@@ -327,6 +337,16 @@ const rankedFav = ranking.rankLauncherItems(
   [hot, cold],
 )
 assert.equal(rankedFav[0].systemKey, cold.systemKey, 'favorite boosts cold pin above heavy usage on empty open')
+assert.equal(setConstructionCount, 1, 'favorite array is converted to a Set once per ranking pass')
+const rankedFavSet = ranking.rankLauncherItems(
+  { query: '', locale: 'en', surfaceId: 'global-launcher', usage: uFav, now, favoriteKeys: new Set([cold.systemKey]) },
+  [hot, cold],
+)
+assert.deepEqual(
+  rankedFav.map((candidate) => candidate.systemKey),
+  rankedFavSet.map((candidate) => candidate.systemKey),
+  'array and Set favorites rank identically',
+)
 assert.ok(
   ranking.favoriteBoost(
     { query: '', locale: 'en', surfaceId: 'global-launcher', usage: uFav, now, favoriteKeys: [cold.systemKey] },

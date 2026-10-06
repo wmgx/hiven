@@ -1,15 +1,20 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { basename, dirname, resolve } from 'node:path'
 import vm from 'node:vm'
 import ts from 'typescript'
 
 const require = createRequire(import.meta.url)
 
-function loadPlugin(path) {
-  const source = readFileSync(path, 'utf8')
+const moduleCache = new Map()
+
+function loadModule(path) {
+  const absolutePath = resolve(path)
+  if (moduleCache.has(absolutePath)) return moduleCache.get(absolutePath).exports
+  const source = readFileSync(absolutePath, 'utf8')
   const transpiled = ts.transpileModule(source, {
     compilerOptions: {
       module: ts.ModuleKind.CommonJS,
@@ -18,6 +23,7 @@ function loadPlugin(path) {
     },
   }).outputText
   const module = { exports: {} }
+  moduleCache.set(absolutePath, module)
   const context = vm.createContext({
     BigInt,
     Number,
@@ -25,18 +31,33 @@ function loadPlugin(path) {
     String,
     console,
     require(id) {
+      if (id === './style.css') return {}
+      if (/^\.\/[A-Za-z0-9]+Surface$/.test(id)) {
+        const exportName = basename(id)
+        return { [exportName]: () => null }
+      }
       if (id === '@hiven/plugin') return {
         definePlugin: (definition) => definition,
         textOutput: (text) => ({ output: { kind: 'text', text } }),
         textError: (text) => ({ output: { kind: 'error', text } }),
+      }
+      if (id.startsWith('./')) {
+        const candidate = resolve(dirname(absolutePath), id)
+        for (const file of [candidate, `${candidate}.ts`, `${candidate}.tsx`]) {
+          if (existsSync(file)) return loadModule(file)
+        }
       }
       return require(id)
     },
     module,
     exports: module.exports,
   })
-  vm.runInContext(transpiled, context, { filename: path })
-  return module.exports.default
+  vm.runInContext(transpiled, context, { filename: absolutePath })
+  return module.exports
+}
+
+function loadPlugin(path) {
+  return loadModule(path).default
 }
 
 async function runTextCommand(plugin, id, text, params = {}) {

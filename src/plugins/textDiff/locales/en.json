@@ -1,6 +1,6 @@
 {
   "command.compare.title": "Text Diff",
-  "command.compare.description": "Compare two text panes",
+  "command.compare.description": "Enter text or choose sources in the side-by-side editor",
   "input.original.label": "Pane A",
   "input.modified.label": "Pane B",
   "renderer.title": "Text Diff Renderer",
@@ -31,5 +31,12 @@
   "diff.semanticUnavailable": "JSON diff is available when both sides are valid JSON",
   "diff.fallbackToText": "Content is not valid JSON — fell back to text diff",
   "diff.changeCount": "{count} changes",
-  "diff.exit": "Exit diff"
+  "diff.exit": "Exit diff",
+  "command.json.title": "JSON Compare",
+  "source.empty": "Blank text",
+  "source.choose": "Choose {side} source",
+  "source.chooseShort": "Choose source",
+  "source.readFailed": "Could not read source",
+  "source.paneTitle": "Pane {index}",
+  "source.snapshotHint": "Load a copy of the text"
 }

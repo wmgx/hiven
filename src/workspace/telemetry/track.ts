@@ -115,10 +115,10 @@ export function createDebouncedTracker(
   name: string,
   debounceMs: number,
   kind: TelemetryKind = 'behavior',
-): (props?: TrackProps) => void {
+): ((props?: TrackProps) => void) & { cancel: () => void } {
   let timer: number | null = null
   let lastProps: TrackProps | undefined
-  return (props?: TrackProps) => {
+  const track = (props?: TrackProps) => {
     lastProps = props
     if (timer != null) window.clearTimeout(timer)
     timer = window.setTimeout(() => {
@@ -126,4 +126,10 @@ export function createDebouncedTracker(
       logLauncherPerf(name, withKind(kind, lastProps))
     }, debounceMs)
   }
+  track.cancel = () => {
+    if (timer != null) window.clearTimeout(timer)
+    timer = null
+    lastProps = undefined
+  }
+  return track
 }

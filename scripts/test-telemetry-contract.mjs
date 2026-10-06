@@ -46,7 +46,19 @@ assert.match(host, /TelemetryEvents\.pasteText/, 'paste behavior')
 
 assert.match(clipboard, /TelemetryEvents\.clipboardBlockAttach/, 'clipboard attach')
 assert.match(clipboard, /TelemetryEvents\.clipboardBlockRemove/, 'clipboard remove')
+assert.match(
+  clipboard,
+  /const raf1 = requestAnimationFrame\(\(\) => \{\s*timer = window\.setTimeout\(\(\) => \{\s*void readAfterFirstPaint\(\)/,
+  'clipboard read must start in a task after the first render opportunity',
+)
+assert.match(
+  host,
+  /const raf = requestAnimationFrame\(\(\) => \{\s*paintTimer = window\.setTimeout\(/,
+  'first-paint telemetry must not wait for a throttled second animation frame',
+)
 assert.match(selection, /TelemetryEvents\.surfaceOpen/, 'surface open behavior')
+assert.match(track, /track\.cancel/, 'debounced behavior must be cancellable on close')
+assert.match(host, /trackQueryChangeRef\.current\.cancel\(\)/, 'close must cancel pending query telemetry')
 
 assert.equal(pkg.scripts?.telemetry, 'node scripts/launcher-perf-report.mjs')
 assert.equal(pkg.scripts?.['test:telemetry'], 'node scripts/test-telemetry-contract.mjs')

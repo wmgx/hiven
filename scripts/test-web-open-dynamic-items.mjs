@@ -79,6 +79,7 @@ const webOpen = loadModule('src/plugins/web-open/index.tsx', {
       }
     },
     resolveFaviconIconForLauncher: () => 'Globe',
+    getFaviconIconSync: () => 'Globe',
     FALLBACK_ICON: 'Globe',
     replaceMatchPatternCache: matchPatternCache.replaceMatchPatternCache,
     testMatchPattern: matchPatternCache.testMatchPattern,
@@ -138,6 +139,16 @@ assert.match(
   launcherSessionSource,
   /const inputText = q \|\| objectBlockText\?\.trim\(\) \|\| ''[\s\S]*collectDynamicItems\(q,\s*normalizedHostId,\s*locale,\s*getPluginSettings,\s*inputText/,
   'launcher session should resolve query vs Object Block before invoking dynamic providers',
+)
+assert.match(
+  launcherSessionSource,
+  /launcherInputIdentity\(query[\s\S]*query\.trim\(\), objectBlockText\?\.trim\(\)[\s\S]*inputIdentity:\s*string \| null; items:\s*LauncherItem\[\]/,
+  'dynamic result batches must retain the query and Object Block identity that produced them',
+)
+assert.match(
+  launcherSessionSource,
+  /visiblePluginDynamicItems = pluginInputIdentity === inputIdentity[\s\S]*visibleHostDynamicItems = hostInputIdentity === inputIdentity[\s\S]*visibleDocumentDynamicItems = documentInputIdentity === rankQuery[\s\S]*\.\.\.visiblePluginDynamicItems[\s\S]*\.\.\.visibleHostDynamicItems[\s\S]*\.\.\.visibleDocumentDynamicItems/,
+  'ranking and execution must exclude dynamic rows produced for stale inputs',
 )
 
 // Non-blocking favicon path
@@ -210,6 +221,8 @@ const settings = {
 const items = await definition.launcher.dynamicItems({ query: 'gh', locale: 'en', settings })
 assert.equal(items.length, 1, 'custom settings entry should be searchable by alias')
 assert.equal(items[0].id, 'github-issues')
+assert.equal(JSON.stringify(items[0].surfaces), JSON.stringify(['global-launcher']))
+assert.ok(definition.launcher.items.every((item) => JSON.stringify(item.surfaces) === JSON.stringify(['global-launcher'])))
 assert.equal(items[0].display.title, 'GitHub Issues')
 assert.equal(items[0].behavior.type, 'collect-input')
 assert.equal(items[0].behavior.input.placeholder, 'Issue id')
@@ -240,6 +253,7 @@ const logMatches = await definition.launcher.dynamicItems({
 })
 assert.equal(logMatches.length, 1, 'host-provided input text should trigger regex-backed one-step web-open entries')
 assert.equal(logMatches[0].id, 'log-detail-quick')
+assert.equal(JSON.stringify(logMatches[0].surfaces), JSON.stringify(['global-launcher']))
 assert.equal(logMatches[0].behavior.type, 'perform')
 
 // Pattern replacement: updating matchPattern should stop matching old ids

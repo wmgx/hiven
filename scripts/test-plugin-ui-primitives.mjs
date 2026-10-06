@@ -51,6 +51,7 @@ for (const exported of [
   'TextInput',
   'SearchField',
   'TextArea',
+  'TextEditor',
   'Select',
   'Combobox',
   'Checkbox',
@@ -70,12 +71,13 @@ for (const exported of [
   assert.match(files.pluginUi, new RegExp(`export (?:const|function) ${exported}\\b`), `plugin-ui must export ${exported}`)
 }
 
-assert.doesNotMatch(files.pluginUi, /useAppStore|pluginRegistry|@tauri-apps|workspaceStore|Monaco/, 'plugin-ui primitives must not expose host internals')
+assert.doesNotMatch(files.pluginUi, /useAppStore|pluginRegistry|@tauri-apps|workspaceStore/, 'plugin-ui primitives must not expose host internals')
+assert.doesNotMatch(files.pluginUi, /from ['"](?:monaco-editor|@monaco-editor\/react|\.\/kits\/editor\/TextEditorCore)['"]/, 'shared UI must not eagerly load the editor runtime')
 assert.match(files.pluginUiIcons, /ClipboardIcon/, 'plugin-ui icons must expose stable clipboard icon names')
 assert.match(files.pluginTypes, /appearance:\s*PluginSurfaceAppearance/, 'plugin surfaces should receive host appearance separately from plugin settings')
 assert.match(files.pluginSurfaceRenderer, /appearance=\{appearance\}/, 'plugin surface renderer should inject host appearance')
 assert.match(files.textDiffSurface, /monacoTheme=\{appearance\.theme === ['"]dark['"]/, 'text diff should follow host theme through the public appearance context')
-assert.match(files.textDiffSurface, /td-pane-labels[\s\S]{0,180}surface\.original[\s\S]{0,180}surface\.modified/, 'text diff should label both sides in the normal desktop workspace')
+assert.match(files.textDiffSurface, /td-pane-labels[\s\S]{0,180}\x27original\x27[\s\S]{0,180}\x27modified\x27/, 'text diff should label both sides in the normal desktop workspace')
 assert.match(files.textDiffSurface, /leftAriaLabel=\{t\(['"]surface\.original['"]\)\}[\s\S]{0,100}rightAriaLabel=\{t\(['"]surface\.modified['"]\)\}/, 'text diff editors should expose distinct localized labels')
 assert.doesNotMatch(files.textDiffSurface, /hostSettings|settings as \{[^}]*theme/, 'text diff must not mistake plugin settings for host appearance')
 assert.match(files.textExplodeIndex, /closeOnBlur:\s*false/, 'text explode should remain open when focus moves away')
@@ -92,7 +94,7 @@ assert.match(files.css, /\.plugin-settings-dialog-panel,[\s\S]{0,160}plugin-sett
 assert.match(files.pluginSettingsSchema, /rawValue \/ scale\)\.toFixed\(6\)/, 'scaled settings numbers should not leak floating-point noise into the UI')
 assert.match(files.pluginSettingsSchema, /step=\{field\.step\}/, 'number settings should preserve each plugin field step')
 assert.match(files.launcherFrames, /LauncherFlowFrame[\s\S]*param:[\s\S]*collect:[\s\S]*result:/, 'shared launcher parameter, input, and result frames should use one transition shell')
-assert.match(files.css, /\.global-launcher-flow-frame\s*\{[\s\S]{0,180}animation:\s*launcher-flow-frame-in 120ms/, 'launcher flow transitions should animate opacity without resizing')
+assert.doesNotMatch(files.css, /\.global-launcher-flow-frame\s*\{[^}]*animation:/, 'entering a command should not hide its content behind a full-frame fade')
 assert.match(files.pluginsContent, /className="plugins-search-input"[\s\S]{0,100}type="text"/, 'plugin search must remain a native tabbable input')
 assert.match(files.pluginsContent, /className="plugins-row"[\s\S]{0,120}role="button"[\s\S]{0,80}tabIndex=\{0\}/, 'plugin rows must remain in the keyboard tab order')
 assert.match(files.pluginsContent, /event\.key === 'Enter' \|\| event\.key === ' '/, 'plugin rows must support Enter and Space')
@@ -171,7 +173,7 @@ for (const surface of [files.jsonSurface, files.regexSurface]) {
   assert.match(surface, /<CloseIcon/, 'simple plugin surfaces should expose a consistent close action')
 }
 assert.match(files.jsonSurface, /await host\.clipboard\.writeText\(outputText\)[\s\S]{0,180}host\.showMessage\(t\(['"]toast\.copied['"]\), ['"]success['"]\)/, 'JSON copy must confirm success through the host')
-assert.match(files.jsonSurface, /role=\{result\.ok \? undefined : ['"]alert['"]\}/, 'JSON parse errors should be announced to assistive technology')
+assert.match(files.jsonSurface, /!result\.ok[\s\S]{0,120}role="alert"/, 'JSON parse errors should be announced to assistive technology')
 assert.equal(files.regexSurface.match(/role="alert"/g)?.length, 2, 'Regex errors should be announced in both panel and surface views')
 assert.match(files.clipboardStyle, /\.clipboard-history-item\s*\{[\s\S]{0,180}padding:\s*0\s+36px\s+0\s+9px/, 'clipboard-history rows should reserve room for the delete control')
 assert.match(files.clipboardStyle, /\.clipboard-history-main::after[\s\S]{0,260}left:\s*var\(--clipboard-history-list-width\)[\s\S]{0,180}width:\s*1px/, 'clipboard-history left and right panes should match the UX divider position')

@@ -1,0 +1,112 @@
+.date-time-surface {
+  --date-time-line: var(--color-border-tertiary, var(--hiven-color-border));
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--color-text-primary, var(--hiven-color-text-primary));
+  background: var(--color-background-primary, var(--hiven-color-bg-primary));
+  font-family: var(--font, var(--hiven-font-ui));
+}
+
+.date-time-surface__header {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--date-time-line);
+}
+
+.date-time-surface__header strong { font-size: 13px; font-weight: 650; }
+.date-time-surface__header > span { flex: 1; }
+.date-time-surface__loading {
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-tertiary, var(--hiven-color-text-tertiary));
+  font-size: 12px;
+}
+
+.date-time-surface__body {
+  flex: 1;
+  min-height: 0;
+  padding: 26px 30px 30px;
+  overflow: auto;
+}
+
+.date-time-surface__intro { display: grid; gap: 5px; }
+.date-time-surface__intro strong { font-size: 16px; font-weight: 650; }
+.date-time-surface__intro span,
+.date-time-surface__hint,
+.date-time-surface__examples {
+  color: var(--color-text-tertiary, var(--hiven-color-text-tertiary));
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.date-time-surface__inputs {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px auto;
+  align-items: end;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.date-time-surface__input,
+.date-time-surface__offset { min-width: 0; display: grid; gap: 6px; }
+.date-time-surface__input > span,
+.date-time-surface__offset > span {
+  color: var(--color-text-secondary, var(--hiven-color-text-secondary));
+  font-size: 11px;
+  font-weight: 600;
+}
+.date-time-surface__inputs .hiven-ui-input { height: 34px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.date-time-surface__inputs .hiven-ui-button { height: 34px; }
+.date-time-surface__hint { margin: 7px 0 0; }
+
+.date-time-surface__results {
+  margin-top: 22px;
+  border-top: 1px solid var(--date-time-line);
+  border-bottom: 1px solid var(--date-time-line);
+}
+
+.date-time-surface__result {
+  min-height: 70px;
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 2px;
+}
+.date-time-surface__result + .date-time-surface__result { border-top: 1px solid var(--date-time-line); }
+.date-time-surface__result > div { min-width: 0; display: grid; gap: 4px; }
+.date-time-surface__result strong { font-size: 12px; font-weight: 600; }
+.date-time-surface__result span { color: var(--color-text-tertiary); font: 10px/1.2 var(--font-mono); }
+.date-time-surface__result output {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font: 500 15px/1.5 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.date-time-surface__result .hiven-ui-button { min-height: 28px; padding: 0 9px; font-size: 11px; }
+
+.date-time-surface__error {
+  min-height: 114px;
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--hiven-color-danger);
+}
+.date-time-surface__error strong { font-size: 12px; }
+.date-time-surface__error span { color: var(--color-text-secondary); font-size: 11px; }
+.date-time-surface__examples { margin: 12px 0 0; font-family: var(--font-mono); }
+
+@media (max-width: 720px) {
+  .date-time-surface__header { gap: 6px; padding: 0 8px; }
+  .date-time-surface__body { padding: 20px; }
+  .date-time-surface__inputs { grid-template-columns: minmax(0, 1fr) 160px; }
+  .date-time-surface__inputs > .hiven-ui-button { grid-column: 1 / -1; justify-self: start; }
+  .date-time-surface__result { grid-template-columns: 120px minmax(0, 1fr) auto; gap: 10px; }
+}

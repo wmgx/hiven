@@ -14,6 +14,7 @@ import type {
   PluginToolContribution,
   PanelActionContribution,
   PluginLauncherApi,
+  ToolLauncherOptions,
 } from './launcher/types'
 
 // ─── Input Types ─────────────────────────────────────────────────────────────
@@ -242,6 +243,16 @@ export type PluginSettingsBodyProps<TSettings = unknown> = {
   host: PluginSettingsHostApi
 }
 
+export type PluginSettingsActionProgress = {
+  current: number
+  total?: number
+  label: string
+}
+
+export type PluginSettingsActionProps<TSettings = unknown> = PluginSettingsBodyProps<TSettings> & {
+  reportProgress: (progress: PluginSettingsActionProgress) => void
+}
+
 export type PluginSettingsModalBodyProps<TSettings = unknown> = PluginSettingsBodyProps<TSettings> & {
   modalId: string
   context?: Record<string, unknown>
@@ -384,6 +395,14 @@ export type PluginSettingsObjectListField<TSettings = unknown> = PluginSettingsF
   fields: PluginSettingsObjectListItemField[]
 }
 
+export type PluginSettingsActionField<TSettings = unknown> = Omit<PluginSettingsFieldBase<TSettings>, 'key'> & {
+  kind: 'action'
+  id: string
+  buttonLabel: string
+  buttonLabelI18n?: Partial<Record<Locale, string>>
+  run: (props: PluginSettingsActionProps<TSettings>) => void | Promise<void>
+}
+
 export type PluginSettingsModalContribution<TSettings = unknown> = {
   id: string
   title: string
@@ -412,6 +431,7 @@ export type PluginSettingsField<TSettings = unknown> =
   | PluginSettingsTextareaField<TSettings>
   | PluginSettingsListField<TSettings>
   | PluginSettingsObjectListField<TSettings>
+  | PluginSettingsActionField<TSettings>
   | PluginSettingsModalField<TSettings>
 
 export type PluginSettingsSection<TSettings = unknown> = {
@@ -564,7 +584,7 @@ export type ClipboardWatchOptions = {
 
 export type PluginClipboardApi = {
   readText(): Promise<string>
-  writeText(text: string): Promise<void>
+  writeText(text: string, options?: { sensitive?: boolean }): Promise<void>
   writeImage(blobId: string): Promise<void>
   writeFiles(paths: string[]): Promise<void>
   watch(
@@ -688,6 +708,8 @@ export type PluginObjectBlockInput =
 
 export type PluginSurfaceHostApi = {
   close(): void
+  /** Finish a successful output action; closes Launcher tools, keeps independent surfaces open. */
+  complete(): void
   requestBack(): void
   openSettings(): void
   detachToWindow(initialText?: string): void
@@ -759,7 +781,7 @@ export type PluginUiSurfaceContribution<TSettings = unknown> = {
   beforeOpen?(ctx: PluginSurfaceOpenContext<TSettings>): Promise<void> | void
   instancePolicy?: PluginSurfaceInstancePolicy
   entry?: {
-    launcher?: boolean
+    launcher?: boolean | ToolLauncherOptions
     shortcutBindable?: boolean
     recommendedShortcut?: string
     shortcutPresentation?: PluginSurfaceShortcutPresentation
@@ -786,6 +808,7 @@ export type PluginBackgroundContext<TSettings = unknown> = {
   network: PluginNetworkApi
   shell: PluginShellApi
   ai: PluginAiApi
+  t: (key: string, vars?: Record<string, string | number>) => string
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
 }
 

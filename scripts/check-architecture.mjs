@@ -174,7 +174,7 @@ function checkPluginIndexBoundaries() {
       if (jsxReturns > 2) {
         addFailure(`plugin index must only assemble contributions: ${rel(indexFile)} has ${jsxReturns} JSX return blocks`)
       }
-      if (/`[^`]{240,}`/.test(text)) {
+      if ([...text.matchAll(/`(?:\\[\s\S]|[^`\\])*`/g)].some(([literal]) => literal.length >= 242)) {
         addFailure(`plugin index must not contain large CSS/HTML template strings: ${rel(indexFile)}`)
       }
     }

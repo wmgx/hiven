@@ -13,6 +13,9 @@ const IDLE_ALARM = 'hiven-idle-close'
 const HISTORY_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000
 const MIN_IDLE_TIMEOUT_MINUTES = 5
 const HISTORY_MAX = 200
+const HISTORY_IMPORT_MAX = 5_000
+const HISTORY_IMPORT_BATCH_SIZE = 500
+const POLL_ALARM_MINUTES = 0.5
 /** Pages enriched with per-visit timestamps (one getVisits call each). */
 const VISITS_DETAIL_MAX_URLS = 60
 /** Timestamps kept per page — enough to establish span without bloating the POST. */
@@ -162,15 +165,17 @@ async function collectVisitTimestamps(items) {
   return byUrl
 }
 
-async function collectHistory() {
+async function collectHistory({ maxResults = HISTORY_MAX, startTime = Date.now() - HISTORY_LOOKBACK_MS, endTime, includeVisits = true } = {}) {
   if (!chrome.history?.search) return []
-  const items = await chrome.history.search({
+  const query = {
     text: '',
-    maxResults: HISTORY_MAX,
-    startTime: Date.now() - HISTORY_LOOKBACK_MS,
-  })
+    maxResults,
+    startTime,
+  }
+  if (typeof endTime === 'number') query.endTime = endTime
+  const items = await chrome.history.search(query)
   const httpItems = items.filter((item) => isHttpUrl(item.url))
-  const visitsByUrl = await collectVisitTimestamps(httpItems)
+  const visitsByUrl = includeVisits ? await collectVisitTimestamps(httpItems) : new Map()
   return httpItems.map((item) => ({
     id: String(item.id ?? item.url),
     title: item.title || item.url,
@@ -195,6 +200,31 @@ async function pushHistory() {
     })
   } catch {
     // Hiven not running / history permission missing — silent
+  }
+}
+
+async function pushHistoryImport(cmd) {
+  const maxResults = Math.min(HISTORY_IMPORT_MAX, Math.max(HISTORY_MAX, Number(cmd.maxResults) || HISTORY_IMPORT_MAX))
+  const batchSize = Math.min(HISTORY_IMPORT_BATCH_SIZE, Math.max(1, Number(cmd.batchSize) || HISTORY_IMPORT_BATCH_SIZE))
+  let received = 0
+  let endTime
+  while (received < maxResults) {
+    const items = await collectHistory({
+      maxResults: Math.min(batchSize, maxResults - received),
+      startTime: 0,
+      endTime,
+      includeVisits: false,
+    })
+    received += items.length
+    const done = items.length < batchSize || received >= maxResults
+    await fetch(`${BRIDGE}/v1/sources/${SOURCE_ID}/history`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ appName: browserLabel(), requestId: cmd.requestId, items, done }),
+    })
+    if (done) break
+    const oldest = Math.min(...items.map((item) => item.lastVisitTime || Date.now()))
+    endTime = oldest - 1
   }
 }
 
@@ -329,6 +359,10 @@ async function pollCommands() {
     const data = await res.json()
     const commands = Array.isArray(data.commands) ? data.commands : []
     for (const cmd of commands) {
+      if (cmd.type === 'history.import' && typeof cmd.requestId === 'string') {
+        await pushHistoryImport(cmd)
+        continue
+      }
       if (cmd.type === 'config') {
         await applyConfig(cmd)
         continue
@@ -358,7 +392,7 @@ async function pollCommands() {
 
 function ensureAlarms() {
   chrome.alarms.create(PUSH_ALARM, { periodInMinutes: 1 / 60 })
-  chrome.alarms.create(POLL_ALARM, { periodInMinutes: 1 / 120 })
+  chrome.alarms.create(POLL_ALARM, { periodInMinutes: POLL_ALARM_MINUTES })
   chrome.alarms.create(HISTORY_ALARM, { periodInMinutes: 2 })
   chrome.alarms.create(IDLE_ALARM, { periodInMinutes: 1 })
 }

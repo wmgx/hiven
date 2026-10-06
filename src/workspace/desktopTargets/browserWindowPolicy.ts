@@ -19,6 +19,9 @@ const NAV_SURFACE_TIER: Partial<Record<LauncherHostCapability, number>> = {
   'desktop-windows': 20,
   'app-search': 10,
 }
+const MAX_NAV_SURFACE_TIER = Math.max(
+  ...Object.values(NAV_SURFACE_TIER).map((tier) => tier ?? 0),
+)
 
 /** Score penalty applied to the lower-tier item in a near-title pair (soft, not hard drop). */
 export const NAV_NEAR_DUP_DEMOTION = 700
@@ -71,13 +74,18 @@ export function normalizeNavTitle(title: string): string {
     .trim()
 }
 
-/**
- * True when titles are "about the same page" — enough to soft-demote, not hard-hide.
- * Uses inclusion / prefix after normalize (browser window titles often wrap tab titles).
- */
-export function navTitlesNearDuplicate(a: string, b: string): boolean {
-  const na = normalizeNavTitle(a)
-  const nb = normalizeNavTitle(b)
+const normalizedNavTitleCache = new WeakMap<LauncherItem, { title: string; normalized: string }>()
+
+function normalizedNavTitle(item: LauncherItem): string {
+  const title = item.display.title ?? ''
+  const cached = normalizedNavTitleCache.get(item)
+  if (cached?.title === title) return cached.normalized
+  const normalized = normalizeNavTitle(title)
+  normalizedNavTitleCache.set(item, { title, normalized })
+  return normalized
+}
+
+function normalizedNavTitlesNearDuplicate(na: string, nb: string): boolean {
   if (!na || !nb) return false
   if (na === nb) return true
   // One contains the other with enough length to avoid short false positives.
@@ -92,6 +100,14 @@ export function navTitlesNearDuplicate(a: string, b: string): boolean {
 }
 
 /**
+ * True when titles are "about the same page" — enough to soft-demote, not hard-hide.
+ * Uses inclusion / prefix after normalize (browser window titles often wrap tab titles).
+ */
+export function navTitlesNearDuplicate(a: string, b: string): boolean {
+  return normalizedNavTitlesNearDuplicate(normalizeNavTitle(a), normalizeNavTitle(b))
+}
+
+/**
  * Soft demotion amount for `item` given the full candidate list.
  * If a higher-tier nav item shares a near-duplicate title, demote this item.
  * Returns 0 when no conflict — never removes items.
@@ -99,15 +115,17 @@ export function navTitlesNearDuplicate(a: string, b: string): boolean {
 export function navNearDuplicateDemotion(item: LauncherItem, peers: LauncherItem[]): number {
   const tier = navigationSurfaceTier(item)
   if (tier <= 0) return 0
+  if (tier >= MAX_NAV_SURFACE_TIER) return 0
   const title = item.display.title ?? ''
   if (!title.trim()) return 0
+  const normalizedTitle = normalizedNavTitle(item)
 
+  // ponytail: 近似标题比较仍为 O(n²)；更大列表实测变慢时再按层级缩小候选。
   for (const peer of peers) {
     if (peer === item || peer.systemKey === item.systemKey) continue
     const peerTier = navigationSurfaceTier(peer)
     if (peerTier <= tier) continue
-    const peerTitle = peer.display.title ?? ''
-    if (!navTitlesNearDuplicate(title, peerTitle)) continue
+    if (!normalizedNavTitlesNearDuplicate(normalizedTitle, normalizedNavTitle(peer))) continue
     return NAV_NEAR_DUP_DEMOTION
   }
   return 0

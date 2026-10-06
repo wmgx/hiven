@@ -24,6 +24,7 @@ import { translate, type Locale } from '../../i18n'
 
 export const TEXT_OUTPUT_CHOICE_ID = 'launcher.text-output'
 export const REPLACE_ACTIVE_TEXT_OUTPUT_CHOICE_ID = 'launcher.replace-active-text-output'
+export const FOREGROUND_PASTE_OUTPUT_CHOICE_ID = 'launcher.foreground-paste-output'
 
 type HostOutputActionNode = LauncherResultChoice | LauncherResultAction
 const hostOutputIntentByAction = new WeakMap<object, OutputIntent>()
@@ -73,8 +74,46 @@ export function textResult(text: string, api: PluginLauncherApi, locale: Locale 
           await api.replaceActiveText(text)
         },
       }, 'open-quick-editor'),
+      markHostOutputAction({
+        id: 'paste-to-foreground-app',
+        title: palette(locale, 'pasteToForegroundApp'),
+        icon: 'ClipboardPaste',
+        run: async () => {
+          await api.pasteToForegroundApp(text)
+        },
+      }, 'paste-to-foreground-app'),
     ],
   }, 'copy')
+  return { ok: true, output: { choices: [choice] } }
+}
+
+/**
+ * Text output whose primary (Enter) action pastes straight into whatever app
+ * was foreground before the launcher took focus, instead of copying. Used
+ * when the input itself came from that same foreground app (an on-demand
+ * selection capture, not a typed query or attached clipboard object) — there
+ * is no other sensible destination for the result, so paste-back is the
+ * primary action rather than a buried secondary one.
+ */
+export function foregroundPasteResult(text: string, api: PluginLauncherApi, locale: Locale = 'en'): LauncherExecuteResult {
+  const choice: LauncherResultChoice = markHostOutputAction({
+    id: FOREGROUND_PASTE_OUTPUT_CHOICE_ID,
+    title: text,
+    preview: text,
+    primaryAction: async () => {
+      await api.pasteToForegroundApp(text)
+    },
+    secondaryActions: [
+      markHostOutputAction({
+        id: 'copy',
+        title: palette(locale, 'copy'),
+        icon: 'Copy',
+        run: async () => {
+          await api.copyText(text)
+        },
+      }, 'copy'),
+    ],
+  }, 'paste-to-foreground-app')
   return { ok: true, output: { choices: [choice] } }
 }
 

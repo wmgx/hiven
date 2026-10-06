@@ -36,6 +36,7 @@ export function ObjectBlockToken({
   const storeLocale = useAppStore((s) => s.locale)
   const locale = localeProp ?? storeLocale
   const selected = block.selectedForDelete
+  const lineCount = block.meta?.lineCount ?? 1
   return (
     <span
       className={[
@@ -51,7 +52,12 @@ export function ObjectBlockToken({
       data-state={selected ? 'selected-for-deletion' : block.state}
       aria-hidden={exiting ? true : undefined}
     >
-      {!block.secretMasked && block.preview ? (
+      {!block.secretMasked && block.source === 'query' ? (
+        <span className="object-block-content">{t(locale,
+          lineCount > 1 ? 'palette.inputContentLines' : 'palette.inputContentChars',
+          { count: lineCount > 1 ? lineCount : block.meta?.charCount ?? 0 },
+        )}</span>
+      ) : !block.secretMasked && block.preview ? (
         <span className="object-block-content">{truncatePreview(block.preview, 30)}</span>
       ) : block.secretMasked ? (
         <span className="object-block-masked">{t(locale, 'palette.objectBlockMasked')}</span>

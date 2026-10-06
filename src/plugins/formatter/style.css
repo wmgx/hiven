@@ -1,0 +1,123 @@
+.formatter-surface {
+  --formatter-border: var(--color-border-tertiary, var(--hiven-color-border));
+  --formatter-panel: var(--color-background-primary, var(--hiven-color-bg-primary));
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--color-text-primary, var(--hiven-color-text-primary));
+  background: var(--formatter-panel);
+  font-family: var(--font, var(--hiven-font-ui));
+}
+
+.formatter-header {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--formatter-border);
+}
+
+.formatter-title { flex: 1; font-size: 13px; font-weight: 650; }
+
+.formatter-languages,
+.formatter-operations {
+  flex: none;
+  display: flex;
+  align-items: stretch;
+  gap: 0 4px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--formatter-border);
+}
+
+.formatter-operations { gap: 6px; padding: 6px 18px; }
+
+.formatter-languages button,
+.formatter-operations button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 0;
+  color: var(--color-text-secondary);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.formatter-operations button { min-height: 28px; border-radius: 5px; padding: 0 10px; }
+.formatter-languages button:hover,
+.formatter-operations button:hover { color: var(--color-text-primary); background: color-mix(in srgb, var(--color-text-primary) 3%, transparent); }
+.formatter-languages button:focus-visible,
+.formatter-operations button:focus-visible { outline: 2px solid var(--hiven-color-accent); outline-offset: -4px; border-radius: 5px; }
+.formatter-languages button.is-active,
+.formatter-operations button.is-active { color: var(--hiven-color-accent); font-weight: 600; }
+.formatter-languages button.is-active::after { content: ''; position: absolute; bottom: -1px; left: 12px; right: 12px; height: 2px; background: var(--hiven-color-accent); }
+.formatter-operations button.is-active { background: var(--accent-soft); }
+
+.formatter-editors { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.formatter-pane { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.formatter-pane + .formatter-pane { border-left: 1px solid var(--formatter-border); }
+.formatter-pane-output { background: color-mix(in srgb, var(--color-background-secondary) 45%, var(--formatter-panel)); }
+.formatter-pane-header {
+  flex: none;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 18px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+.formatter-pane-header strong { font-weight: 500; }
+.formatter-pane-actions { display: flex; align-items: center; gap: 8px; }
+.formatter-pane-header .hiven-ui-button { min-height: 25px; padding: 0 8px; font-size: 11px; }
+.formatter-editor { flex: 1; position: relative; width: 100%; min-height: 0; overflow: hidden; }
+.formatter-editor-loading { padding: 12px 20px; color: var(--color-text-tertiary); font-size: 12px; }
+.formatter-error {
+  position: absolute;
+  inset: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  overflow: auto;
+  border: 1px solid color-mix(in srgb, var(--hiven-color-danger) 32%, var(--formatter-border));
+  border-radius: 8px;
+  color: var(--hiven-color-danger);
+  background: color-mix(in srgb, var(--hiven-color-danger) 5%, var(--formatter-panel));
+}
+.formatter-error strong { font-size: 12px; font-weight: 600; }
+.formatter-error span { color: var(--color-text-secondary); font: 12px/1.6 var(--font-mono); overflow-wrap: anywhere; }
+
+.formatter-status {
+  min-height: 36px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid var(--formatter-border);
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+}
+.formatter-status > div,
+.formatter-status > span { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 18px; }
+.formatter-status > span { justify-content: flex-end; border-left: 1px solid var(--formatter-border); }
+.formatter-status .is-error { color: var(--hiven-color-danger); }
+
+@media (max-width: 720px) {
+  .formatter-header { gap: 6px; padding: 0 8px; }
+  .formatter-title { font-size: 12px; }
+  .formatter-languages { padding: 0 8px; gap: 0; }
+  .formatter-operations { padding: 6px 12px; gap: 4px; }
+  .formatter-languages button,
+  .formatter-operations button { padding: 0 8px; font-size: 11px; }
+  .formatter-pane-header { padding: 0 12px; }
+  .formatter-status > div,
+  .formatter-status > span { padding: 4px 10px; }
+}

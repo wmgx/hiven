@@ -65,6 +65,8 @@ fn spawn_codex(app: &AppHandle) -> Result<CodexProcess, String> {
     std::fs::create_dir_all(&workspace).map_err(|error| error.to_string())?;
     let configured = std::env::var("HIVEN_CODEX_BIN").ok();
     let mut candidates = configured.into_iter().collect::<Vec<_>>();
+    #[cfg(target_os = "macos")]
+    candidates.push("/Applications/ChatGPT.app/Contents/Resources/codex".to_string());
     candidates.extend([
         "codex".to_string(),
         "/opt/homebrew/bin/codex".to_string(),

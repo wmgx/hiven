@@ -393,6 +393,9 @@ function SettingsDialogBody({
               value={value}
               updateValue={updateValue}
               onOpenModal={(field) => setSettingsModalTarget(resolvePluginSettingsModal(contribution, field))}
+              onRunAction={async (field, reportProgress) => {
+                await field.run({ ...settingsBodyProps, reportProgress })
+              }}
               permissions={permissions}
             />
           ) : (

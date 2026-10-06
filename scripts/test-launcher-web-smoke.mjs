@@ -69,10 +69,13 @@ assert.match(launcherLayout, /validationBrowser[\s\S]*704px/, 'browser launcher 
 assert.match(indexCss, /data-web-native-bridge='true'[\s\S]*min-width: 944px/, 'DevTools must not compress browser validation surfaces')
 assert.match(selectionController, /isNativeDesktopRuntime\(\)[\s\S]*showPluginSurfaceWindow/, 'window-presented plugins must stay in the validation browser')
 assert.match(launcherClose, /__HIVEN_WEB_NATIVE_BRIDGE__[\s\S]*setOpen\(true\)/, 'validation launcher must remain visible after actions and dismissals')
-assert.match(launcherSurfaceFrame, /scheduleSurfaceExit[\s\S]*setTimeout[\s\S]*90/, 'plugin surfaces should finish their short exit before navigation')
-assert.match(launcherPluginSurfaceFrame, /global-launcher-surface-shell[\s\S]{0,100}is-exiting/, 'plugin surface shells should expose the shared exit state')
-assert.match(host, /scheduleHostSurfaceExit[\s\S]*setTimeout[\s\S]*90/, 'system surfaces should finish their short exit before navigation')
-assert.match(launcherSystemSurfaceFrame, /global-launcher-host-surface-shell[\s\S]{0,140}is-exiting/, 'settings, learned, and quick editor should share the host exit state')
+assert.doesNotMatch(launcherSurfaceFrame, /scheduleSurfaceExit|surfaceExitTimerRef|surfaceExiting/, 'plugin surface back and close should navigate immediately')
+assert.match(launcherSurfaceFrame, /const leaveSurface = useCallback\(\(\) => \{[\s\S]*setSurfaceFrame\(null\)[\s\S]*restorePreviousLauncherHostSurface/, 'plugin surface back should still restore its parent surface immediately')
+assert.doesNotMatch(launcherPluginSurfaceFrame, /\bexiting\b|is-exiting/, 'plugin surface shells should not carry delayed exit state')
+assert.doesNotMatch(host, /scheduleHostSurfaceExit|hostSurfaceExitTimerRef|hostSurfaceExiting/, 'system surface back and close should navigate immediately')
+assert.doesNotMatch(launcherSystemSurfaceFrame, /\bexiting\b|is-exiting/, 'system surface shells should not carry delayed exit state')
+assert.doesNotMatch(indexCss, /\.global-launcher-(?:surface|host-surface)-shell\.is-exiting/, 'launcher surfaces should not keep delayed exit animation CSS')
+assert.match(indexCss.match(/^\.l-row\s*\{[\s\S]*?\}/m)?.[0] ?? '', /transition:\s*none/, 'launcher row selection must override the shared command item transition')
 
 // --- optional live vite smoke (best-effort; skip if vite fails to bind) ---
 async function getFreePort() {

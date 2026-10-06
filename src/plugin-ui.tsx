@@ -1,5 +1,6 @@
 import {
   forwardRef,
+  lazy,
   useRef,
   useState,
   type ButtonHTMLAttributes,
@@ -19,6 +20,17 @@ import { ScrollArea as BaseScrollArea } from '@base-ui/react/scroll-area'
 import { Select as BaseSelect } from '@base-ui/react/select'
 import { Switch as BaseSwitch } from '@base-ui/react/switch'
 import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from './utils/imeKeyboard'
+
+export { getFluxMonacoTheme as getEditorTheme } from './utils/monacoTheme'
+export { Tooltip } from '@base-ui/react/tooltip'
+
+// Load the existing editor only when a plugin mounts it; keep Launcher startup light.
+export const TextEditor = lazy(async () => {
+  const { loadMonacoNls } = await import('./kits/editor/monacoNls')
+  await loadMonacoNls()
+  const { TextEditorCore } = await import('./kits/editor/TextEditorCore')
+  return { default: TextEditorCore }
+})
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger'

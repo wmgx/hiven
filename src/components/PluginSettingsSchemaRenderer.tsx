@@ -23,6 +23,8 @@ import {
 } from 'lucide-react'
 import type {
   PluginSettingsField,
+  PluginSettingsActionField,
+  PluginSettingsActionProgress,
   PluginSettingsModalField,
   PluginSettingsObjectListItemField,
   PluginSettingsSchema,
@@ -40,6 +42,7 @@ type PluginSettingsSchemaRendererProps<TSettings = unknown> = {
   value: TSettings
   updateValue: (patch: Partial<TSettings>) => void
   onOpenModal: (field: PluginSettingsModalField<TSettings>) => void
+  onRunAction: (field: PluginSettingsActionField<TSettings>, reportProgress: (progress: PluginSettingsActionProgress) => void) => Promise<void>
   permissions?: PluginPermissionSnapshot
 }
 
@@ -222,6 +225,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
   value,
   updateValue,
   onOpenModal,
+  onRunAction,
   permissions,
 }: PluginSettingsSchemaRendererProps<TSettings>) {
   const localizeText = (text: string | undefined, textI18n?: Partial<Record<Locale, string>>) =>
@@ -231,6 +235,8 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
   const [numberDrafts, setNumberDrafts] = useState<Record<string, string>>({})
   const [visibleSensitiveKeys, setVisibleSensitiveKeys] = useState<Set<string>>(new Set())
   const [touchedKeys, setTouchedKeys] = useState<Set<string>>(() => new Set())
+  const [runningAction, setRunningAction] = useState<string | null>(null)
+  const [actionProgress, setActionProgress] = useState<(PluginSettingsActionProgress & { id: string }) | null>(null)
   function setFieldValue(key: string, next: unknown) {
     updateValue({ [key]: next } as Partial<TSettings>)
   }
@@ -482,6 +488,48 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
     const disabled = Boolean(field.disabled || reason)
     const commonLabel = renderFieldTitle(label, description, reason)
     const Icon = fieldIconComponent(field.kind, field.icon)
+
+    if (field.kind === 'action') {
+      const progress = actionProgress?.id === field.id ? actionProgress : null
+      return (
+        <div className={`schema-row ${disabled ? 'is-disabled' : ''}`}>
+          <span className="schema-row-icon"><Icon size={14} strokeWidth={1.8} /></span>
+          {commonLabel}
+          <div className="schema-action-control">
+            <button
+              type="button"
+              className="scripts-btn"
+              disabled={disabled || runningAction === field.id}
+              onClick={() => {
+                setRunningAction(field.id)
+                setActionProgress({ id: field.id, current: 0, label: '' })
+                void onRunAction(field, (next) => setActionProgress({ id: field.id, ...next }))
+                  .finally(() => {
+                    setRunningAction(null)
+                    setActionProgress(null)
+                  })
+              }}
+            >
+              {localizeText(field.buttonLabel, field.buttonLabelI18n)}
+            </button>
+            {progress && (
+              <div className="schema-action-progress">
+                <div
+                  className="schema-action-progress-track"
+                  role="progressbar"
+                  aria-valuenow={progress.current}
+                  aria-valuemin={0}
+                  aria-valuemax={progress.total}
+                >
+                  <span style={{ width: progress.total ? `${Math.min(100, progress.current / progress.total * 100)}%` : '18%' }} />
+                </div>
+                {progress.label && <small>{progress.label}</small>}
+              </div>
+            )}
+          </div>
+        </div>
+      )
+    }
 
     if (field.kind === 'switch') {
       return (
@@ -854,7 +902,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
             )}
             <div className="schema-section-body">
               {fields.map((field) => (
-                <div key={field.kind === 'modal' ? field.id : field.key} className={`schema-field schema-field-${field.kind}`}>
+                <div key={field.kind === 'modal' || field.kind === 'action' ? field.id : field.key} className={`schema-field schema-field-${field.kind}`}>
                   {renderField(field)}
                 </div>
               ))}

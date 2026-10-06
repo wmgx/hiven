@@ -35,6 +35,7 @@ import type { PluginNetworkApi, PluginPrivateStorageApi, PluginShellApi } from '
 import type { PluginAiApi } from '../ai/types'
 import { appendUsageJournal } from '../usageJournal'
 import { getHostOutputIntent, isOutputResult } from './output'
+import { captureForegroundSelectionText } from './foregroundSelectionCapture'
 import { translate, type Locale } from '../../i18n'
 import {
   TelemetryEvents,
@@ -237,10 +238,11 @@ export class LauncherController {
   /**
    * Build the execution context for an item, given optional collected input.
    */
-  private buildExecutionContext(item: LauncherItem, inputText?: string) {
+  private buildExecutionContext(item: LauncherItem, inputText?: string, inputSource?: 'foreground-app') {
+    const resolvedInputText = inputText !== undefined ? inputText : item.initialInputText
     return {
       surfaceId: this.deps.surfaceId,
-      input: inputText !== undefined ? { text: inputText } : undefined,
+      input: resolvedInputText !== undefined ? { text: resolvedInputText, source: inputSource } : undefined,
       settings: this.deps.getSettings(item),
       locale: this.deps.locale as never,
       api: this.deps.makeApi?.(item) ?? this.deps.api,
@@ -344,6 +346,37 @@ export class LauncherController {
       !hasBoundSelection
   }
 
+  /**
+   * Whether this item's collect-input flow may use an on-demand foreground-app
+   * capture as a text source at all. 'all' mode means "whole document", which
+   * a foreign app's selection can't stand in for. This governs eligibility
+   * only — callers decide *when* to actually trigger a capture.
+   */
+  private isForegroundCaptureEligible(item: LauncherItem): boolean {
+    const mode = item.inputPolicy?.mode ?? 'auto'
+    return this.deps.surfaceId === 'global-launcher' &&
+      item.behavior.type === 'perform' &&
+      item.inputPolicy != null &&
+      mode !== 'all'
+  }
+
+  /** Explicitly import the foreground selection into an empty input step. */
+  async captureInput(): Promise<void> {
+    const top = this.topFrame()
+    if (top.kind !== 'collect-input' || top.inputText || this.state.busy || !this.isForegroundCaptureEligible(top.item)) return
+    const api = this.deps.makeApi?.(top.item) ?? this.deps.api
+    this.setState({ busy: true, error: null })
+    try {
+      const text = await captureForegroundSelectionText(api, this.deps.locale as Locale, { restoreLauncher: true })
+      // Navigation or typing while capture is pending must not overwrite a newer draft.
+      if (this.topFrame() === top && text !== undefined) this.setInputText(text)
+    } catch (error) {
+      if (this.topFrame() === top) this.setState({ error: error instanceof Error ? error.message : String(error) })
+    } finally {
+      this.setState({ busy: false })
+    }
+  }
+
   private hasObjectBlockText(text: string | undefined): text is string {
     return text !== undefined
   }
@@ -366,7 +399,7 @@ export class LauncherController {
     return {
       kind: 'collect-input',
       item,
-      inputText: '',
+      inputText: item.initialInputText ?? '',
       input,
       params,
       recordUsage,
@@ -403,7 +436,7 @@ export class LauncherController {
     }
 
     if (item.behavior.type === 'collect-input') {
-      if (this.hasObjectBlockText(options.objectBlockText)) {
+      if (item.initialInputText === undefined && this.hasObjectBlockText(options.objectBlockText)) {
         await this.commitResolvedAction({
           item,
           via: item.commitVia ?? 'execute',
@@ -426,7 +459,7 @@ export class LauncherController {
 
     if (this.shouldCollectTextInput(item)) {
       // If Object Block text is available, skip collect-input and execute directly.
-      if (this.hasObjectBlockText(options.objectBlockText)) {
+      if (item.initialInputText === undefined && this.hasObjectBlockText(options.objectBlockText)) {
         await this.commitResolvedAction({
           item,
           via: item.commitVia ?? 'execute',
@@ -447,14 +480,16 @@ export class LauncherController {
       return
     }
 
+    const inputText = item.initialInputText ?? options.objectBlockText
     await this.commitResolvedAction({
       item,
       via: item.commitVia ?? 'execute',
       params: this.defaultParamsFor(item),
-      inputBinding: this.inputBindingFor(item),
       sourceTitle: this.itemTitle(item),
       recordUsage,
-      execute: () => Promise.resolve(item.execute(this.buildExecutionContext(item))),
+      inputBinding: inputText !== undefined ? 'prompt' : this.inputBindingFor(item),
+      inputText,
+      execute: () => Promise.resolve(item.execute(this.buildExecutionContext(item, inputText))),
     })
   }
 
@@ -565,7 +600,7 @@ export class LauncherController {
     }
 
     const frames = this.state.frames.slice(0, -1)
-    frames.push(this.paramFrameFor(top.item, params, top.paramIndex, undefined, top.recordUsage))
+    frames.push(this.paramFrameFor(top.item, params, top.paramIndex, top.objectBlockText, top.recordUsage))
     this.setState({ frames, error: null })
     await this.submitParams()
   }
@@ -583,7 +618,7 @@ export class LauncherController {
 
     if (this.shouldCollectTextInput(top.item)) {
       // If Object Block text is available, skip collect-input and execute directly with params.
-      if (this.hasObjectBlockText(top.objectBlockText)) {
+      if (top.item.initialInputText === undefined && this.hasObjectBlockText(top.objectBlockText)) {
         await this.commitResolvedAction({
           item: top.item,
           via: top.item.commitVia ?? 'execute',
@@ -602,14 +637,16 @@ export class LauncherController {
       return
     }
 
+    const inputText = top.item.initialInputText ?? top.objectBlockText
     await this.commitResolvedAction({
       item: top.item,
       via: top.item.commitVia ?? 'execute',
       params: top.params,
-      inputBinding: this.inputBindingFor(top.item),
+      inputBinding: inputText !== undefined ? 'prompt' : this.inputBindingFor(top.item),
+      inputText,
       sourceTitle: this.itemTitle(top.item),
       recordUsage: top.recordUsage,
-      execute: () => Promise.resolve(top.item.executeWithParams?.(this.buildExecutionContext(top.item), top.params) ?? top.item.execute(this.buildExecutionContext(top.item))),
+      execute: () => Promise.resolve(top.item.executeWithParams?.(this.buildExecutionContext(top.item, inputText), top.params) ?? top.item.execute(this.buildExecutionContext(top.item, inputText))),
     })
   }
 

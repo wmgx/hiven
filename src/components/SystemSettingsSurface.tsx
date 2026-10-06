@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { flushSync } from 'react-dom'
-import { BrainCircuit, Settings, Puzzle, Sparkles } from 'lucide-react'
+import { BrainCircuit, Eye, Settings, Puzzle, Sparkles } from 'lucide-react'
 import { useT } from '../i18n'
+import { ObservationSettings } from '../observation/ObservationSettings'
 import { AiSubscriptionsContent, SettingsContent } from '../surfaces/SettingsContent'
 import { PluginsContent } from '../surfaces/PluginsContent'
 import { LearnedRulesContent } from '../surfaces/LearnedRulesContent'
 import './SystemSettingsSurface.css'
 
-type TabId = 'settings' | 'ai' | 'plugins' | 'learning'
+type TabId = 'settings' | 'ai' | 'plugins' | 'learning' | 'observation'
 
 export function SystemSettingsSurface({ initialTab = 'settings' }: { initialTab?: TabId }) {
   const [activeTab, setActiveTab] = useState<TabId>(initialTab)
@@ -18,6 +19,7 @@ export function SystemSettingsSurface({ initialTab = 'settings' }: { initialTab?
     { id: 'ai', icon: <BrainCircuit size={16} />, label: t('aiSubscriptions') },
     { id: 'plugins', icon: <Puzzle size={16} />, label: t('pluginManagement') },
     { id: 'learning', icon: <Sparkles size={16} />, label: t('learnedRules') },
+    { id: 'observation', icon: <Eye size={16} />, label: t('behaviorObservation') },
   ]
 
   const selectTab = (tabId: TabId) => {
@@ -55,6 +57,7 @@ export function SystemSettingsSurface({ initialTab = 'settings' }: { initialTab?
           {activeTab === 'ai' && <AiSubscriptionsContent />}
           {activeTab === 'plugins' && <PluginsContent />}
           {activeTab === 'learning' && <LearnedRulesContent />}
+          {activeTab === 'observation' && <ObservationSettings />}
         </div>
       </div>
     </div>

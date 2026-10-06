@@ -32,9 +32,15 @@ import type { ClipboardHistorySettings } from '../settings/model'
 import type { ClipboardHistoryItem } from '../storage/clipboardHistoryTypes'
 import { subscribeCachedIndex } from '../storage/clipboardHistoryCache'
 import { createClipboardHistoryRepository, indexToListItems } from '../storage/clipboardHistoryRepository'
+import { getTextSearchCandidateIds, matchesClipboardHistorySearch } from '../storage/clipboardHistorySearch'
 
 type FilterKind = 'all' | 'text' | 'image' | 'files' | 'frequent' | 'favorite'
 type SurfaceStorage = PluginSurfaceProps<ClipboardHistorySettings>['host']['storage']
+
+function initialFilter(surfaceId: string): FilterKind {
+  if (surfaceId === 'text' || surfaceId === 'image' || surfaceId === 'files' || surfaceId === 'frequent' || surfaceId === 'favorite') return surfaceId
+  return 'all'
+}
 type ImageHistoryItem = Extract<ClipboardHistoryItem, { kind: 'image' }>
 
 type MetaRow = {
@@ -63,14 +69,16 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const [items, setItems] = useState<ClipboardHistoryItem[]>(initialItems)
   const [selectedId, setSelectedId] = useState<string | null>(initialItems[0]?.id ?? null)
   const [query, setQuery] = useState('')
-  const [filter, setFilter] = useState<FilterKind>('all')
+  const [filter, setFilter] = useState<FilterKind>(() => initialFilter(props.surfaceId))
   const [loading, setLoading] = useState(!hasInitialCache)
+  const [fullTextSearchState, setFullTextSearchState] = useState<'idle' | 'loading' | 'error'>('idle')
   const [titleDialog, setTitleDialog] = useState<FavoriteTitleDialogState | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
   const imeKeyDown = useImeKeyboard()
   const pendingDeleteRef = useRef<{ timerId: ReturnType<typeof setTimeout>; id: string; toastId: string } | null>(null)
+  const unreadableTextIdsRef = useRef(new Set<string>())
   const frequentThreshold = settings.frequentPasteThreshold ?? 3
 
   const applyListItems = useCallback((listItems: ClipboardHistoryItem[]) => {
@@ -100,6 +108,52 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     const timer = window.setTimeout(() => { void loadItems() }, 0)
     return () => window.clearTimeout(timer)
   }, [loadItems, hasInitialCache])
+
+  useEffect(() => {
+    const candidateIds = getTextSearchCandidateIds(items, query)
+      .filter((id) => !unreadableTextIdsRef.current.has(id))
+    if (candidateIds.length === 0) {
+      setFullTextSearchState('idle')
+      return
+    }
+
+    let cancelled = false
+    setFullTextSearchState('loading')
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const textById = new Map<string, string>()
+        for (let offset = 0; offset < candidateIds.length && !cancelled; offset += 8) {
+          const batchIds = candidateIds.slice(offset, offset + 8)
+          const loadedItems = await Promise.all(
+            batchIds.map((id) => repository.getItem(id)),
+          )
+          for (let index = 0; index < loadedItems.length; index++) {
+            const item = loadedItems[index]
+            if (item?.kind === 'text' && item.text) textById.set(item.id, item.text)
+            else unreadableTextIdsRef.current.add(batchIds[index])
+          }
+        }
+        if (cancelled) return
+        if (textById.size > 0) {
+          setItems((current) => current.map((item) => {
+            const text = textById.get(item.id)
+            return item.kind === 'text' && text !== undefined ? { ...item, text } : item
+          }))
+        }
+        setFullTextSearchState('idle')
+      })()
+        .catch(() => {
+          if (cancelled) return
+          setFullTextSearchState('error')
+          host.showMessage(t('error.loadFailed'), 'error')
+        })
+    }, 120)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [items, query, repository, host, t])
 
   useEffect(() => {
     return subscribeCachedIndex((index) => {
@@ -148,9 +202,9 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         .filter((item) => (item.pasteCount ?? 0) >= frequentThreshold)
         .slice()
         .sort((a, b) => {
-          const pasteDiff = (b.pasteCount ?? 0) - (a.pasteCount ?? 0)
-          if (pasteDiff !== 0) return pasteDiff
-          return (b.lastPastedAt ?? 0) - (a.lastPastedAt ?? 0)
+          const recentDiff = (b.lastPastedAt ?? 0) - (a.lastPastedAt ?? 0)
+          if (recentDiff !== 0) return recentDiff
+          return (b.pasteCount ?? 0) - (a.pasteCount ?? 0)
         })
     } else if (filter === 'favorite') {
       result = result
@@ -161,14 +215,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       result = result.filter((item) => item.kind === filter)
     }
     if (query.trim()) {
-      const q = query.toLowerCase()
-      result = result.filter((item) => {
-        if (item.favoriteTitle?.toLowerCase().includes(q)) return true
-        if (item.kind === 'text') return item.preview.toLowerCase().includes(q)
-        if (item.kind === 'image') return `${item.contentType} ${item.width ?? ''} ${item.height ?? ''}`.toLowerCase().includes(q)
-        if (item.kind === 'files') return item.fileNames.some((f) => f.toLowerCase().includes(q))
-        return false
-      })
+      result = result.filter((item) => matchesClipboardHistorySearch(item, query))
     }
     return result
   }, [items, filter, query, frequentThreshold])
@@ -231,6 +278,14 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
 
   const listRef = useRef<HTMLDivElement>(null)
 
+  const resetBrowser = useCallback(() => {
+    setQuery('')
+    setFilter('all')
+    setSelectedId(items[0]?.id ?? null)
+    if (listRef.current) listRef.current.scrollTop = 0
+    window.getSelection()?.removeAllRanges()
+  }, [items])
+
   const virtualizer = useVirtualizer({
     count: flatRows.length,
     getScrollElement: () => listRef.current,
@@ -259,18 +314,24 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       } else if (fullItem.kind === 'files') {
         result = await host.paste.pasteFiles(fullItem.paths)
       }
-      if (result && !result.ok && result.fallback === 'copied') {
-        host.showMessage(result.message, 'info')
+      if (!result?.ok) {
+        if (result?.fallback === 'copied') {
+          host.showMessage(result.message, 'info')
+          resetBrowser()
+          host.complete()
+        } else {
+          host.showMessage(result?.message ?? t('error.pasteFailed'), 'error')
+        }
+        return
       }
       // Persist paste count for Frequent tab (window closes; next open reads storage/cache).
       void repository.recordPaste(fullItem.id).catch(() => {})
-      // 上屏成功后清空搜索，热开窗口时不会残留上次筛选词
-      setQuery('')
-      host.close()
+      resetBrowser()
+      host.complete()
     } catch {
       host.showMessage(t('error.pasteFailed'), 'error')
     }
-  }, [host, t, repository])
+  }, [host, t, repository, resetBrowser])
 
   const resolveFullItem = useCallback(async (item: ClipboardHistoryItem) => {
     if ((item.kind === 'text' && !item.text) || (item.kind === 'image' && !item.blobId) || (item.kind === 'files' && item.paths.length === 0)) {
@@ -294,10 +355,12 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         await host.clipboard.writeFiles(fullItem.paths)
       }
       host.showMessage(t('message.copied'), 'success')
+      resetBrowser()
+      host.complete()
     } catch {
       host.showMessage(t('error.copyFailed'), 'error')
     }
-  }, [host, resolveFullItem, t])
+  }, [host, resetBrowser, resolveFullItem, t])
 
   const applyItemUpdate = useCallback((updated: ClipboardHistoryItem) => {
     setItems((current) =>
@@ -511,7 +574,8 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       e.preventDefault()
       if (selectedText) {
         void host.clipboard.writeText(selectedText)
-        host.showMessage(t('message.copied'), 'success')
+          .then(() => host.showMessage(t('message.copied'), 'success'))
+          .catch(() => host.showMessage(t('error.copyFailed'), 'error'))
         return
       }
       void handleCopy(selectedItem)
@@ -590,11 +654,15 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                 ]}
               />
             </div>
-            <div ref={listRef} className="clipboard-history-list" data-launcher-scrollable style={{ overflow: 'auto', flex: 1 }}>
+            <div ref={listRef} className="clipboard-history-list" data-launcher-scrollable aria-busy={fullTextSearchState === 'loading'} style={{ overflow: 'auto', flex: 1 }}>
               <SurfaceList aria-label={t('surface.main.title')} data-launcher-scrollable>
                 {filteredItems.length === 0 ? (
                   <SurfaceEmptyState>
-                    {filter === 'frequent'
+                    {fullTextSearchState === 'loading'
+                      ? t('state.loading')
+                      : fullTextSearchState === 'error'
+                        ? t('error.loadFailed')
+                      : filter === 'frequent'
                       ? t('state.emptyFrequent')
                       : filter === 'favorite'
                         ? t('state.emptyFavorite')
@@ -723,7 +791,10 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         <IconButton
           type="button"
           label={t('action.back')}
-          onClick={() => host.requestBack()}
+          onClick={() => {
+            setQuery('')
+            host.requestBack()
+          }}
         >
           <BackIcon size={18} />
         </IconButton>
@@ -755,7 +826,10 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         <IconButton
           type="button"
           label={t('action.close')}
-          onClick={() => host.close()}
+          onClick={() => {
+            setQuery('')
+            host.close()
+          }}
         >
           <CloseIcon size={18} />
         </IconButton>
@@ -1050,8 +1124,9 @@ function getContentTypeLabel(item: ClipboardHistoryItem, t: (key: string) => str
 
 function groupItemsByDay(items: ClipboardHistoryItem[], locale: string, t: (key: string) => string) {
   const groups: Array<{ label: string; items: ClipboardHistoryItem[] }> = []
+  const dateFormat = new Intl.DateTimeFormat(resolveIntlLocale(locale), { month: 'short', day: 'numeric' })
   for (const item of items) {
-    const label = formatGroupLabel(item.lastCopiedAt, locale, t)
+    const label = formatGroupLabel(item.lastCopiedAt, dateFormat, t)
     const group = groups.find((entry) => entry.label === label)
     if (group) {
       group.items.push(item)
@@ -1062,14 +1137,14 @@ function groupItemsByDay(items: ClipboardHistoryItem[], locale: string, t: (key:
   return groups
 }
 
-function formatGroupLabel(timestamp: number, locale: string, t: (key: string) => string) {
+function formatGroupLabel(timestamp: number, dateFormat: Intl.DateTimeFormat, t: (key: string) => string) {
   const date = new Date(timestamp)
   const today = new Date()
   const yesterday = new Date()
   yesterday.setDate(today.getDate() - 1)
   if (isSameDay(date, today)) return t('group.today')
   if (isSameDay(date, yesterday)) return t('group.yesterday')
-  return new Intl.DateTimeFormat(resolveIntlLocale(locale), { month: 'short', day: 'numeric' }).format(date)
+  return dateFormat.format(date)
 }
 
 function isSameDay(left: Date, right: Date) {
