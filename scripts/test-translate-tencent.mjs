@@ -128,6 +128,7 @@ const migrated = model.migrateTranslateSettings({
   profiles: [{ id: 'baidu-default', name: '百度中文', provider: 'baidu', enabled: true, defaultSourceLang: 'auto', defaultTargetLang: 'smart', monthlyLimitChars: 1, usedCharsMonth: '', usedChars: 0 }],
 }, 3)
 assert.equal(migrated.profiles.some((profile) => profile.provider === 'tencent'), true)
+assert.equal(migrated.profiles.some((profile) => profile.provider === 'ai'), true)
 assert.equal(migrated.profiles[0].id, 'baidu-default')
 
 const already = model.migrateTranslateSettings({
@@ -135,6 +136,7 @@ const already = model.migrateTranslateSettings({
   defaultTargetLang: 'smart',
   profiles: [{ id: 'mine', name: 'mine', provider: 'tencent', enabled: true, defaultSourceLang: 'auto', defaultTargetLang: 'smart', monthlyLimitChars: 1, usedCharsMonth: '', usedChars: 0 }],
 }, 3)
-assert.equal(already.profiles.length, 1)
+assert.equal(already.profiles.length, 2)
+assert.equal(already.profiles.some((profile) => profile.provider === 'ai'), true)
 
 console.log('translate tencent adapter checks passed')

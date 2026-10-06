@@ -1,124 +1,83 @@
 #!/usr/bin/env node
-/**
- * Launcher sticky query — blur leave-to-copy resume
- */
+/** Hiding the Launcher ends its session; the previous query must never be restored. */
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import ts from 'typescript'
 
-function createSessionStorage() {
-  const map = new Map()
-  return {
-    getItem: (k) => (map.has(k) ? map.get(k) : null),
-    setItem: (k, v) => { map.set(String(k), String(v)) },
-    removeItem: (k) => { map.delete(k) },
-    clear: () => { map.clear() },
-    get length() { return map.size },
-    key: (i) => [...map.keys()][i] ?? null,
-  }
-}
-
-function transpileAndRun(path, globals = {}) {
-  let src = readFileSync(path, 'utf8')
-  src = src.replace(/import[\s\S]*?from\s*['"][^'"]+['"];?\n/g, '')
-  const out = ts.transpileModule(src, {
-    compilerOptions: {
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2023,
-      esModuleInterop: true,
-    },
-  }).outputText
-  const moduleExports = {}
-  const sandbox = {
-    exports: moduleExports,
-    module: { exports: moduleExports },
-    console,
-    Date,
-    JSON,
-    Map,
-    sessionStorage: createSessionStorage(),
-    ...globals,
-  }
-  vm.runInNewContext(out, sandbox)
-  return sandbox.module.exports
-}
-
-const sticky = transpileAndRun('src/launcher/querySticky.ts')
-const surface = 'global-launcher'
-
-sticky.clearAllStickyLauncherQueries()
-
-// Empty query does not sticky and does not wipe
-sticky.saveStickyLauncherQuery(surface, 'keep-me')
-sticky.saveStickyLauncherQuery(surface, '   ')
-assert.equal(sticky.peekStickyLauncherQuery(surface), 'keep-me', 'empty save must not wipe sticky')
-
-// Save + peek restores without consuming
-sticky.clearAllStickyLauncherQueries()
-sticky.saveStickyLauncherQuery(surface, '42 * 1.0')
-assert.equal(sticky.peekStickyLauncherQuery(surface), '42 * 1.0')
-assert.equal(sticky.peekStickyLauncherQuery(surface), '42 * 1.0', 'peek is non-destructive')
-
-// consume is one-shot
-assert.equal(sticky.consumeStickyLauncherQuery(surface), '42 * 1.0')
-assert.equal(sticky.consumeStickyLauncherQuery(surface), null, 'consume is one-shot')
-
-// TTL expiry
-const now = Date.now()
-sticky.saveStickyLauncherQuery(surface, '100 + 20', now)
-assert.equal(
-  sticky.peekStickyLauncherQuery(surface, now + sticky.LAUNCHER_QUERY_STICKY_TTL_MS + 1),
-  null,
-  'expired sticky should drop',
-)
-
-// discard path
-sticky.saveStickyLauncherQuery(surface, 'still here')
-sticky.clearStickyLauncherQuery(surface)
-assert.equal(sticky.peekStickyLauncherQuery(surface), null, 'clear drops sticky')
-
-// max chars guard
-const long = 'x'.repeat(sticky.LAUNCHER_QUERY_STICKY_MAX_CHARS + 50)
-sticky.saveStickyLauncherQuery(surface, long)
-const restored = sticky.peekStickyLauncherQuery(surface)
-assert.equal(restored.length, sticky.LAUNCHER_QUERY_STICKY_MAX_CHARS, 'sticky query is capped')
-
-// sessionStorage survives memory clear (simulates remount reading storage)
-sticky.clearAllStickyLauncherQueries()
-const sticky2 = transpileAndRun('src/launcher/querySticky.ts')
-// share: write via sticky2, wipe its memory map by loading fresh module with same storage
-const storage = createSessionStorage()
-const stickyA = transpileAndRun('src/launcher/querySticky.ts', { sessionStorage: storage })
-stickyA.saveStickyLauncherQuery(surface, 'from-storage')
-// new module instance, same storage — memory empty, storage has record
-const stickyB = transpileAndRun('src/launcher/querySticky.ts', { sessionStorage: storage })
-assert.equal(stickyB.peekStickyLauncherQuery(surface), 'from-storage', 'sessionStorage backs sticky across remount')
-
-// Restore-hold suppresses clipboard during startTransition delay
-sticky.clearAllStickyLauncherQueries()
-sticky.saveStickyLauncherQuery(surface, 'draft')
-sticky.holdStickyRestore(surface, 'draft')
-assert.equal(sticky.shouldSuppressClipboardForSticky(surface), true, 'hold suppresses clipboard attach')
-sticky.consumeStickyLauncherQuery(surface)
-assert.equal(sticky.shouldSuppressClipboardForSticky(surface), true, 'hold still suppresses after consume')
-sticky.releaseStickyRestore(surface)
-assert.equal(sticky.shouldSuppressClipboardForSticky(surface), false, 'release ends suppress')
-
-// Wiring: open edge holds + deferred consume; after-action discards
-const lifecycle = readFileSync('src/components/launcher/GlobalLauncherHostLifecycle.ts', 'utf8')
-assert.match(lifecycle, /holdStickyRestore/, 'open edge holds sticky for clipboard suppress')
-assert.match(lifecycle, /consumeStickyLauncherQuery/, 'open edge consumes sticky on apply')
-assert.match(lifecycle, /global-launcher/, 'sticky surface is global-launcher')
-assert.match(lifecycle, /startTransition/, 'sticky restore is non-urgent')
-assert.match(lifecycle, /requestAnimationFrame/, 'sticky restore deferred past first paint')
-
 const host = readFileSync('src/launcher/hosts/GlobalLauncherHost.tsx', 'utf8')
-assert.match(host, /saveStickyLauncherQuery/, 'blur/esc close saves sticky query')
-assert.match(host, /discardQuery:\s*true/, 'after-action discards sticky query')
-assert.match(host, /clearStickyLauncherQuery/, 'discard path clears sticky')
-assert.match(host, /closingRef/, 'double-close guard present')
-assert.match(host, /shouldSuppressClipboardForSticky/, 'clipboard suppress uses sticky hold')
-assert.match(host, /inputRef\.current\?\.value/, 'prefer live input value when saving')
+const lifecycle = readFileSync('src/components/launcher/GlobalLauncherHostLifecycle.ts', 'utf8')
+assert.doesNotMatch(host + lifecycle, /querySticky|saveStickyLauncherQuery|consumeStickyLauncherQuery/)
+assert.match(lifecycle, /setQuery\(''\)/, 'new sessions start empty')
+const callback = (name) => {
+  const body = host.match(new RegExp(`const ${name} = useCallback\\(([\\s\\S]*?)\\n  }, \\[`))?.[1]
+  assert.ok(body, `${name} callback exists`)
+  return `${body}\n}`
+}
+const externalClose = host.match(/useEffect\(\(\) => useAppStore\.subscribe\(([\s\S]*?)\n  }\), \[resetLauncherSession\]\)/)?.[1]
+assert.ok(externalClose, 'external window closes must reset synchronously')
+let resets = 0
+let hides = 0
+let consumed = 0
+const state = { query: 'unfinished input', surface: 'calculator', permission: true, selected: 3, host: true, tool: true, settings: true }
+const sandbox = {
+  clipboardBlock: { markBlockConsumed: () => consumed++ },
+  clearPluginSurfaceTool: () => { state.tool = false },
+  clearLauncherHostSurface: () => { state.host = false },
+  useAppStore: { setState: (next) => Object.assign(state, next) },
+  setSurfaceFrame: (next) => { state.surface = next },
+  setItemPermissionFrame: (next) => { state.permission = next },
+  usePluginSettingsStore: { getState: () => ({ settingsDialogTarget: { presentation: 'global-launcher' } }) },
+  closeSettingsDialog: () => { state.settings = false },
+  setSelectedObjectActionIndex: (next) => { state.selected = next },
+  isImeComposingRef: { current: true },
+  resetSession: () => { resets++; state.query = '' },
+  closingRef: { current: false },
+  trackBehavior: () => {}, TelemetryEvents: {}, queryTelemetryProps: () => ({}),
+  inputRef: { current: null }, query: state.query, standaloneLauncher: true, overlay: false,
+  restoreFocus: () => {}, setOpen: () => {}, window: {},
+  closeGlobalLauncherWindow: async () => { hides++ },
+}
+vm.runInNewContext(ts.transpileModule(`
+const resetLauncherSession = ${callback('resetLauncherSession')};
+globalThis.close = ${callback('closeSession')};
+globalThis.externalClose = ${externalClose}\n};
+`, { compilerOptions: { target: ts.ScriptTarget.ES2023 } }).outputText, sandbox)
 
-console.log('test-launcher-query-sticky: ok')
+sandbox.close('esc-or-overlay')
+assert.equal(state.query, '')
+assert.equal(state.surface, null)
+assert.equal(state.permission, null)
+assert.equal(state.selected, 0)
+assert.equal(state.host || state.tool || state.settings, false)
+assert.equal(consumed, 1)
+assert.equal(hides, 1)
+
+// Native paste closes the store first; its late completion must not hide again.
+sandbox.closingRef.current = false
+state.query = 'another input'
+sandbox.externalClose({ globalLauncherOpen: false }, { globalLauncherOpen: true })
+sandbox.close('after-action')
+assert.equal(state.query, '')
+assert.equal(resets, 2)
+assert.equal(consumed, 2)
+assert.equal(hides, 1, 'external hide must not trigger a second native hide')
+
+// A completed copy belongs to the surface that started it, not its replacement.
+const renderer = readFileSync('src/components/pluginSurface/PluginSurfaceRenderer.tsx', 'utf8')
+const completeBody = renderer.match(/complete: \(\) => \{([\s\S]*?)\n\s*\},/)?.[1]
+assert.ok(completeBody)
+let completed = 0
+const target = { pluginId: 'qr-code' }
+const activeTargetRef = { current: target }
+const complete = vm.runInNewContext(`() => {${completeBody}}`, {
+  presentation: 'global-launcher', mountedRef: { current: true },
+  target, activeTargetRef, onClose: () => completed++,
+})
+activeTargetRef.current = { pluginId: 'csv' }
+complete()
+assert.equal(completed, 0, 'old copy must not close the new tool')
+activeTargetRef.current = target
+complete()
+assert.equal(completed, 1, 'current tool must still complete normally')
+console.log('launcher hide/reset behavior checks passed')

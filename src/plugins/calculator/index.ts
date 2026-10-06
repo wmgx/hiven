@@ -1,12 +1,27 @@
 import BigNumber from 'bignumber.js'
-import { getPluginHostSdk, textOutput, textError, type PanelPropsV2, type PluginDefinition, type TextInput, type LauncherDynamicContext, type LauncherItemContribution } from '@hiven/plugin'
+import { getPluginHostSdk, textOutput, textError, type PanelPropsV2, type PluginDefinition, type PluginSurfaceProps, type TextInput, type LauncherDynamicContext, type LauncherItemContribution } from '@hiven/plugin'
+import { CalculatorSurface } from './CalculatorSurface'
+import './style.css'
 
 // ─── Safe Math Parser ────────────────────────────────────────────────────────
-// A simple recursive descent parser for arithmetic expressions.
-// Supports: numbers, decimals, parentheses, +, -, *, /, unary +/-, %
+// A small recursive descent parser for arithmetic expressions.
+// Supports decimals, variables, common one-argument functions and integer powers.
+
+const MAX_EXPRESSION_LENGTH = 1000
+const MAX_ABS_EXPONENT = 1000
+const MAX_RESULT_DIGITS = 10_000
+const MAX_SERIALIZED_VALUE_LENGTH = MAX_RESULT_DIGITS + 3
+
+function isManageable(value: BigNumber): boolean {
+  const digits = value.precision() ?? 0
+  const exponent = value.e ?? 0
+  return value.isFinite()
+    && Math.max(digits, digits - exponent, exponent + 1) <= MAX_RESULT_DIGITS
+}
 
 type Token =
   | { type: 'number'; value: BigNumber }
+  | { type: 'identifier'; value: string }
   | { type: 'op'; value: string }
   | { type: 'paren'; value: '(' | ')' }
   | { type: 'percent' }
@@ -25,7 +40,12 @@ function tokenize(expr: string): Token[] | null {
       i++
       continue
     }
-    if (ch === '+' || ch === '-' || ch === '*' || ch === '/') {
+    if (ch === '*' && expr[i + 1] === '*') {
+      tokens.push({ type: 'op', value: '^' })
+      i += 2
+      continue
+    }
+    if (ch === '+' || ch === '-' || ch === '*' || ch === '/' || ch === '^') {
       tokens.push({ type: 'op', value: ch })
       i++
       continue
@@ -45,6 +65,13 @@ function tokenize(expr: string): Token[] | null {
       tokens.push({ type: 'number', value: num })
       continue
     }
+    if (/[A-Za-z_]/.test(ch)) {
+      const match = expr.slice(i).match(/^[A-Za-z_][A-Za-z0-9_]*/)
+      if (!match) return null
+      tokens.push({ type: 'identifier', value: match[0] })
+      i += match[0].length
+      continue
+    }
     // Unknown character
     return null
   }
@@ -53,10 +80,11 @@ function tokenize(expr: string): Token[] | null {
 
 // Recursive descent parser: expr → term ((+|-) term)*
 // term → unary ((*|/) unary)*
-// unary → (+|-) unary | factor
-// factor → NUMBER %? | '(' expr ')' %?
+// unary → (+|-) unary | power
+// power → factor (^ unary)?
+// factor → (NUMBER | VARIABLE | FUNCTION(expr) | '(' expr ')') %?
 
-function parse(tokens: Token[]): BigNumber | null {
+function parse(tokens: Token[], variables: ReadonlyMap<string, string>): BigNumber | null {
   let pos = 0
 
   function peek(): Token | undefined {
@@ -78,6 +106,7 @@ function parse(tokens: Token[]): BigNumber | null {
       const right = parseTerm()
       if (right === null) return null
       left = op.value === '+' ? left.plus(right) : left.minus(right)
+      if (!isManageable(left)) return null
     }
     return left
   }
@@ -98,6 +127,7 @@ function parse(tokens: Token[]): BigNumber | null {
       } else {
         left = left.times(right)
       }
+      if (!isManageable(left)) return null
     }
     return left
   }
@@ -110,41 +140,80 @@ function parse(tokens: Token[]): BigNumber | null {
       if (val === null) return null
       return t.value === '-' ? val.negated() : val
     }
-    return parseFactor()
+    return parsePower()
+  }
+
+  function parsePower(): BigNumber | null {
+    const base = parseFactor()
+    if (base === null) return null
+    const token = peek()
+    if (token?.type !== 'op' || token.value !== '^') return base
+    consume()
+    const exponent = parseUnary()
+    if (exponent === null || !exponent.isInteger() || exponent.abs().gt(MAX_ABS_EXPONENT)) return null
+    const exponentNumber = exponent.toNumber()
+    const powerCost = Math.max(Math.abs(base.e ?? 0) + 1, base.precision() ?? 0) * Math.abs(exponentNumber)
+    if (powerCost > MAX_RESULT_DIGITS) return null
+    const result = base.pow(exponentNumber)
+    return isManageable(result) ? result : null
+  }
+
+  function applyFunction(name: string, value: BigNumber): BigNumber | null {
+    switch (name) {
+      case 'sqrt': return value.isNegative() ? null : value.sqrt()
+      case 'abs': return value.abs()
+      case 'round': return value.integerValue(BigNumber.ROUND_HALF_UP)
+      case 'floor': return value.integerValue(BigNumber.ROUND_FLOOR)
+      case 'ceil': return value.integerValue(BigNumber.ROUND_CEIL)
+      default: return null
+    }
   }
 
   function parseFactor(): BigNumber | null {
     const t = peek()
     if (!t) return null
 
+    let value: BigNumber | null = null
+
     if (t.type === 'number') {
       consume()
-      let value = t.value
-      // Check for trailing percent
-      if (peek()?.type === 'percent') {
+      value = t.value
+    }
+
+    if (t.type === 'identifier') {
+      consume()
+      const next = peek()
+      if (next?.type === 'paren' && next.value === '(') {
         consume()
-        value = value.div(100)
+        const argument = parseExpr()
+        const closing = peek()
+        if (argument === null || closing?.type !== 'paren' || closing.value !== ')') return null
+        consume()
+        value = applyFunction(t.value, argument)
+      } else {
+        const raw = variables.get(t.value)
+        if (raw === undefined || raw.length > MAX_SERIALIZED_VALUE_LENGTH) return null
+        const resolved = new BigNumber(raw)
+        if (!isManageable(resolved)) return null
+        value = resolved
       }
-      return value
     }
 
     if (t.type === 'paren' && t.value === '(') {
       consume() // consume '('
-      const val = parseExpr()
-      if (val === null) return null
+      value = parseExpr()
+      if (value === null) return null
       const closing = peek()
       if (!closing || closing.type !== 'paren' || closing.value !== ')') return null
       consume() // consume ')'
-      // Check for trailing percent
-      let result = val
-      if (peek()?.type === 'percent') {
-        consume()
-        result = result.div(100)
-      }
-      return result
     }
 
-    return null
+    if (value === null) return null
+    if (peek()?.type === 'percent') {
+      consume()
+      value = value.div(100)
+    }
+    return isManageable(value) ? value : null
   }
 
   const result = parseExpr()
@@ -161,24 +230,33 @@ function formatBigNumber(value: BigNumber): string {
     .replace(/\.$/, '')
 }
 
-function safeCalculate(expr: string): string | null {
+function evaluateExpression(expr: string, variables: ReadonlyMap<string, string>): BigNumber | null {
   const trimmed = expr.trim()
-  if (!trimmed) return null
-
-  // Must contain at least one operator or percent to be a calculation
-  if (!/[+\-*/%(]/.test(trimmed)) return null
-
-  // Avoid matching things that look like timestamps or dates
-  if (/^\d{10,13}$/.test(trimmed)) return null
-
+  if (!trimmed || trimmed.length > MAX_EXPRESSION_LENGTH) return null
   const tokens = tokenize(trimmed)
   if (!tokens) return null
+  try {
+    const result = parse(tokens, variables)
+    return result !== null && isManageable(result) ? result : null
+  } catch {
+    return null
+  }
+}
 
-  const result = parse(tokens)
-  if (result === null || !result.isFinite()) return null
+function calculateValue(expr: string, variables: ReadonlyMap<string, string> = new Map()): string | null {
+  return evaluateExpression(expr, variables)?.toFixed() ?? null
+}
 
-  // Format: remove trailing zeros from decimals, max 10 decimal places
-  return formatBigNumber(result)
+function calculateExpression(expr: string, variables: ReadonlyMap<string, string> = new Map()): string | null {
+  const result = evaluateExpression(expr, variables)
+  return result === null ? null : formatBigNumber(result)
+}
+
+function safeCalculate(expr: string): string | null {
+  const trimmed = expr.trim()
+  // Launcher suggestions only activate for formulas and avoid timestamp-like text.
+  if (!/[+\-*/%^()]/.test(trimmed) || /^\d{10,13}$/.test(trimmed)) return null
+  return calculateExpression(trimmed)
 }
 
 function calculateFormulaLines(text: string): string {
@@ -225,25 +303,31 @@ function sumNumericTokens(text: string): string {
 
 type BaseConversionMode = 'dec2hex' | 'hex2dec' | 'dec2bin' | 'bin2dec'
 
+class BaseConversionError extends Error {
+  constructor(readonly kind: 'missing' | 'decimal' | 'hex' | 'binary', readonly value: string) {
+    super(`${kind}: ${value}`)
+  }
+}
+
 function parseSignedBaseInteger(raw: string, radix: 2 | 10 | 16): bigint {
   const trimmed = raw.trim()
   const sign = trimmed.startsWith('-') ? -1n : 1n
   const unsigned = trimmed.replace(/^[+-]/, '')
-  if (!unsigned) throw new Error('Missing number')
+  if (!unsigned) throw new BaseConversionError('missing', raw)
 
   if (radix === 10) {
-    if (!/^\d+$/.test(unsigned)) throw new Error(`Invalid decimal number: ${raw}`)
+    if (!/^\d+$/.test(unsigned)) throw new BaseConversionError('decimal', raw)
     return sign * BigInt(unsigned)
   }
 
   if (radix === 16) {
     const digits = unsigned.replace(/^0x/i, '')
-    if (!/^[0-9a-f]+$/i.test(digits)) throw new Error(`Invalid hex number: ${raw}`)
+    if (!/^[0-9a-f]+$/i.test(digits)) throw new BaseConversionError('hex', raw)
     return sign * BigInt(`0x${digits}`)
   }
 
   const digits = unsigned.replace(/^0b/i, '')
-  if (!/^[01]+$/i.test(digits)) throw new Error(`Invalid binary number: ${raw}`)
+  if (!/^[01]+$/i.test(digits)) throw new BaseConversionError('binary', raw)
   return sign * BigInt(`0b${digits}`)
 }
 
@@ -275,6 +359,7 @@ type CalculationResultPanelInputs = {
 function CalculationResultPanel({ inputs, host }: PanelPropsV2<CalculationResultPanelInputs>) {
   const { hooks, effects, react: React } = getPluginHostSdk()
   const t = hooks.useT('calculator')
+  const [copyStatus, setCopyStatus] = React.useState<'idle' | 'copied' | 'failed'>('idle')
   const sourceText = inputs?.sourceText ?? ''
   const resultText = inputs?.resultText ?? calculateFormulaLines(sourceText)
   const e = React.createElement
@@ -285,7 +370,12 @@ function CalculationResultPanel({ inputs, host }: PanelPropsV2<CalculationResult
         e('div', { className: 'calculator-result-panel__title' }, t('panel.result.title')),
         e('div', { className: 'calculator-result-panel__subtitle' }, t('panel.result.subtitle')),
       ),
-      e('button', { type: 'button', className: 'calculator-result-panel__ghost', onClick: () => host.close() }, '×'),
+      e('button', {
+        type: 'button',
+        className: 'calculator-result-panel__ghost',
+        'aria-label': t('panel.result.close'),
+        onClick: () => host.close(),
+      }, '×'),
     ),
     e('div', { className: 'calculator-result-panel__grid' },
       e('section', null,
@@ -298,7 +388,22 @@ function CalculationResultPanel({ inputs, host }: PanelPropsV2<CalculationResult
       ),
     ),
     e('div', { className: 'calculator-result-panel__footer' },
-      e('button', { type: 'button', onClick: () => navigator.clipboard?.writeText(resultText) }, t('panel.result.copy')),
+      copyStatus !== 'idle' && e('span', {
+        role: copyStatus === 'failed' ? 'alert' : 'status',
+        className: `calculator-result-panel__copy-status is-${copyStatus}`,
+      }, t(copyStatus === 'copied' ? 'panel.result.copied' : 'panel.result.copyFailed')),
+      e('button', {
+        type: 'button',
+        onClick: async () => {
+          try {
+            if (!navigator.clipboard) throw new Error('clipboard unavailable')
+            await navigator.clipboard.writeText(resultText)
+            setCopyStatus('copied')
+          } catch {
+            setCopyStatus('failed')
+          }
+        },
+      }, t('panel.result.copy')),
       e('button', { type: 'button', onClick: () => host.dispatch([effects.replaceActiveText(resultText)]) }, t('panel.result.replace')),
       e('button', {
         type: 'button',
@@ -308,9 +413,36 @@ function CalculationResultPanel({ inputs, host }: PanelPropsV2<CalculationResult
   )
 }
 
+function CalculatorWorkspace(props: PluginSurfaceProps) {
+  const { react: React } = getPluginHostSdk()
+  return React.createElement(CalculatorSurface, { ...props, calculate: calculateExpression, calculateValue })
+}
+
 // ─── Plugin Definition ───────────────────────────────────────────────────────
 
 const definition: PluginDefinition = {
+  ui: {
+    surfaces: [
+      {
+        id: 'main',
+        kind: 'custom-view',
+        title: 'Calculator',
+        titleI18n: { zh: '计算器', en: 'Calculator' },
+        icon: 'Calculator',
+        aliases: ['calculator', 'calc', '计算器', '计算'],
+        component: CalculatorWorkspace,
+        entry: { launcher: { surfaces: ['global-launcher'] }, shortcutBindable: true },
+        shell: {
+          defaultWidth: 680,
+          defaultHeight: 640,
+          minWidth: 500,
+          minHeight: 360,
+          closeOnBlur: false,
+          resizable: true,
+        },
+      },
+    ],
+  },
   tools: [
     {
       id: 'calculator.run',
@@ -331,7 +463,7 @@ const definition: PluginDefinition = {
         if (opened.errors.length > 0) return ctx.output.text(resultText)
         return { ok: true }
       },
-      surfaces: { launcher: true, panel: true },
+      surfaces: { launcher: { surfaces: ['editor-command-bar', 'quick-editor-command'] }, panel: true },
     },
     {
       id: 'calculator.sum',
@@ -343,7 +475,7 @@ const definition: PluginDefinition = {
       run(ctx) {
         return ctx.output.replaceActiveText(sumNumericTokens(ctx.input.text))
       },
-      surfaces: { launcher: true, panel: true },
+      surfaces: { launcher: { surfaces: ['editor-command-bar', 'quick-editor-command'] }, panel: true },
     },
     {
       id: 'calculator.base',
@@ -374,10 +506,13 @@ const definition: PluginDefinition = {
             (ctx.params.mode ?? 'dec2hex') as BaseConversionMode,
           ))
         } catch (error: any) {
-          return ctx.output.error(`Error: ${error.message}`)
+          if (error instanceof BaseConversionError) {
+            return ctx.output.error(ctx.t(`error.base.${error.kind}`, { value: error.value }))
+          }
+          return ctx.output.error(ctx.t('error.convert', { message: error.message }))
         }
       },
-      surfaces: { launcher: true, panel: true },
+      surfaces: { launcher: { surfaces: ['editor-command-bar', 'quick-editor-command'] }, panel: true },
     },
   ],
   commands: [
@@ -469,6 +604,7 @@ const definition: PluginDefinition = {
         id: 'calc-result',
         display: { title: `${input.trim()} = ${result}`, subtitle: input, icon: 'Calculator' },
         behavior: { type: 'perform' },
+        surfaces: ['global-launcher'],
         directAnswer: true,
         async execute(ctx2) {
           await ctx2.api.copyText(result)

@@ -4,8 +4,8 @@
  * Two layers:
  * 1. Timed suppress — open companion windows (clipboard history, quick editor)
  *    steal focus for a few hundred ms; ignore blur during that handoff.
- * 2. Companion focus/visibility — while another hiven webview holds focus
- *    (or a plugin-surface window is still visible), do not dismiss the launcher.
+ * 2. Companion focus — while another hiven webview holds focus, do not dismiss
+ *    the launcher. A visible but unfocused tool must not prevent dismissal.
  */
 
 let suppressStandaloneLauncherBlurUntil = 0
@@ -49,7 +49,7 @@ function isTauriRuntime(): boolean {
 }
 
 /**
- * True when focus (or a visible plugin-surface window) is still inside hiven,
+ * True when focus is still inside a companion hiven window,
  * so launcher blur should not mean "user left for another app".
  */
 export async function isHivenCompanionWindowActive(): Promise<boolean> {
@@ -66,16 +66,6 @@ export async function isHivenCompanionWindowActive(): Promise<boolean> {
         if (await webview.isFocused()) return true
       } catch {
         // ignore per-window errors
-      }
-
-      // Plugin surfaces (clipboard history, …): stay open while the surface
-      // window is still on screen, even across brief focus gaps.
-      if (label.startsWith('plugin-surface:')) {
-        try {
-          if (await webview.isVisible()) return true
-        } catch {
-          // ignore
-        }
       }
     }
   } catch {

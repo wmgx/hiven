@@ -1,0 +1,1020 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="light" />
+<title>hiven · 剪贴板大爆炸 交互 Demo</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+  :root {
+    --ink: #1a1c1e;
+    --ink-2: #686d71;
+    --ink-3: #999fa4;
+    --line: #e7e8e9;
+    --line-soft: #f0f1f2;
+    --well: #f7f8f8;
+    --well-deep: #fafbfb;
+    --blue: #2563eb;
+    --blue-deep: #1d56d8;
+    --blue-tint: #eef2ff;
+    --blue-line: rgba(37, 99, 235, 0.28);
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+    --mono: 'JetBrains Mono', 'SF Mono', ui-monospace, Menlo, monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #ffffff;
+    color: var(--ink);
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    padding: 64px 24px 96px;
+  }
+
+  main { max-width: 680px; margin: 0 auto; }
+
+  .eyebrow {
+    font: 600 10.5px var(--mono);
+    letter-spacing: 0.14em;
+    color: var(--ink-3);
+    text-transform: uppercase;
+  }
+  h1 {
+    margin-top: 10px;
+    font-size: 21px;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+  }
+  .lede {
+    margin-top: 10px;
+    max-width: 600px;
+    font-size: 13.5px;
+    color: var(--ink-2);
+  }
+
+  section { margin-top: 48px; }
+  .stage-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+    font: 600 11px var(--mono);
+    letter-spacing: 0.08em;
+    color: var(--ink-3);
+    text-transform: uppercase;
+  }
+  .stage-label .reset {
+    margin-left: auto;
+    text-transform: none;
+    font: 500 12px var(--font);
+    letter-spacing: 0;
+    color: var(--blue);
+    text-decoration: none;
+    border-bottom: 1px solid var(--blue-line);
+    cursor: pointer;
+  }
+
+  /* ─── Panel（立体白：白面板 + 发丝线 + 分层阴影） ─── */
+  .panel {
+    width: 100%;
+    border-radius: 14px;
+    background: #ffffff;
+    box-shadow:
+      0 0 0 1px rgba(26, 28, 30, 0.065),
+      0 1px 2px rgba(26, 28, 30, 0.05),
+      0 10px 28px rgba(26, 28, 30, 0.07),
+      0 28px 72px rgba(26, 28, 30, 0.06);
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* ─── Screen 1: Object Block ─── */
+  .screen1 { padding: 22px 20px 24px; }
+  .ob-caption {
+    font-size: 12px;
+    color: var(--ink-3);
+    margin-bottom: 12px;
+  }
+  .ob-token {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: var(--well-deep);
+    border: 1px solid var(--line-soft);
+    box-shadow: inset 0 1px 3px rgba(26, 28, 30, 0.04);
+  }
+  .ob-icon {
+    flex: none;
+    width: 30px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    border-radius: 8px;
+    background: linear-gradient(180deg, #ffffff, var(--well));
+    border: 1px solid #e2e3e5;
+    box-shadow: 0 1px 0 rgba(26,28,30,0.06), inset 0 1px 0 #fff;
+    font-size: 14px;
+  }
+  .ob-main { flex: 1; min-width: 0; }
+  .ob-title { font-size: 12.5px; font-weight: 600; color: var(--ink); }
+  .ob-sub { margin-top: 2px; font-size: 12px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ob-age { flex: none; font: 500 11px var(--mono); color: var(--ink-3); }
+
+  .actions-row { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+  .action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 32px;
+    padding: 0 13px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    font-weight: 550;
+    cursor: pointer;
+    background: linear-gradient(180deg, #ffffff, var(--well));
+    border: 1px solid #e2e3e5;
+    border-bottom-color: #d5d7d9;
+    box-shadow: 0 1px 0 rgba(26, 28, 30, 0.06), inset 0 1px 0 #fff;
+    color: var(--ink);
+    transition: transform 0.12s, box-shadow 0.12s, background 0.14s, color 0.14s, border-color 0.14s;
+  }
+  .action-btn:hover { transform: translateY(-1px); box-shadow: 0 2px 5px rgba(26,28,30,0.09), inset 0 1px 0 #fff; }
+  .action-btn:active { transform: translateY(0); }
+  .action-btn.primary {
+    color: var(--blue-deep);
+    background: linear-gradient(180deg, #f4f7ff, #e9efff);
+    border-color: var(--blue-line);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.75);
+  }
+  .action-btn.ghost { background: transparent; border-color: transparent; box-shadow: none; color: var(--ink-2); }
+  .action-btn.ghost:hover { background: var(--well); box-shadow: none; }
+  .action-btn:disabled { opacity: 0.4; cursor: default; pointer-events: none; }
+  .action-btn[disabled]:hover { transform: none; }
+
+  /* ─── Screen 2: 大爆炸画布 ─── */
+  .screen2 { display: none; }
+  .screen2.active { display: block; }
+  .screen1.hidden { display: none; }
+
+  .bar2 {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    height: 50px;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .back {
+    flex: none;
+    width: 26px;
+    height: 26px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--ink-2);
+    font-size: 17px;
+    cursor: pointer;
+  }
+  .back:hover { background: var(--well); }
+  .bar2 .btitle { font-size: 13.5px; font-weight: 650; }
+  .bar2 .bsub { margin-left: 2px; font-size: 11.5px; color: var(--ink-3); }
+  .bar2 .meta { margin-left: auto; font: 500 11px var(--mono); color: var(--ink-3); }
+
+  .canvas {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 7px 6px;
+    padding: 20px 18px;
+    min-height: 96px;
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: default;
+  }
+
+  .rubber {
+    position: absolute;
+    display: none;
+    border-radius: 4px;
+    border: 1px solid var(--blue-line);
+    background: rgba(37, 99, 235, 0.07);
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    height: 30px;
+    padding: 0 10px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink);
+    background: linear-gradient(180deg, #ffffff, var(--well));
+    border: 1px solid #e2e3e5;
+    border-bottom-color: #d5d7d9;
+    box-shadow: 0 1px 0 rgba(26, 28, 30, 0.06), inset 0 1px 0 #fff;
+    cursor: pointer;
+    white-space: nowrap;
+    transform-origin: center;
+    transition: transform 0.55s cubic-bezier(.34,1.56,.64,1), opacity 0.4s ease,
+                box-shadow 0.12s, background 0.14s, color 0.14s, border-color 0.14s;
+  }
+  .chip:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(26,28,30,0.1), inset 0 1px 0 #fff; }
+  .chip.chip-punct { height: 24px; padding: 0 7px; font-size: 12px; color: var(--ink-3); background: var(--well); border-color: var(--line); box-shadow: none; }
+  .chip.chip-punct:hover { transform: translateY(-1px); box-shadow: 0 1px 3px rgba(26,28,30,0.08); }
+  .chip.chip-url { color: var(--blue-deep); background: linear-gradient(180deg, #f4f7ff, #e9efff); border-color: var(--blue-line); box-shadow: inset 0 1px 0 rgba(255,255,255,0.75); font-family: var(--mono); font-size: 12px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+
+  /* URL 展开后的碎片：origin 保留蓝 tint 身份，path/query 片段可选中但轻量归组 */
+  .url-group {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    padding: 4px;
+    border-radius: 11px;
+    border: 1px dashed var(--blue-line);
+    background: rgba(37, 99, 235, 0.035);
+    cursor: pointer;
+    transition: border-color 0.14s, background 0.14s;
+  }
+  .url-group:hover { border-color: var(--blue); background: rgba(37, 99, 235, 0.055); }
+  .url-group.all-selected { border-style: solid; border-color: var(--blue); background: rgba(37, 99, 235, 0.07); }
+  .chip.chip-url-origin { color: var(--blue-deep); background: linear-gradient(180deg, #f4f7ff, #e9efff); border-color: var(--blue-line); box-shadow: inset 0 1px 0 rgba(255,255,255,0.75); font-family: var(--mono); font-size: 12px; }
+  .chip.chip-url-seg, .chip.chip-url-key, .chip.chip-url-val { border-color: var(--blue-line); background: linear-gradient(180deg,#fbfcff,#f3f6ff); font-family: var(--mono); font-size: 12px; }
+  .chip.chip-url-seg.is-selected, .chip.chip-url-key.is-selected, .chip.chip-url-val.is-selected { background: linear-gradient(180deg,#eaf0ff,#dfe8ff); }
+  .chip.chip-url-punct { height: 24px; padding: 0 4px; font-size: 12px; color: var(--blue); opacity: 0.55; background: transparent; border-color: transparent; box-shadow: none; }
+  .chip.chip-url-punct:hover { transform: none; box-shadow: none; }
+  .chip.chip-url-punct.is-selected { opacity: 1; color: var(--blue-deep); background: var(--blue-tint); border-radius: 5px; }
+
+  .chip.is-selected {
+    color: var(--blue-deep);
+    background: linear-gradient(180deg, #eaf0ff, #dfe8ff);
+    border-color: var(--blue);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 0 0 2px var(--blue-tint);
+  }
+  .chip.chip-punct.is-selected { color: var(--blue-deep); background: var(--blue-tint); }
+
+  .canvas:not(.exploded) .chip {
+    opacity: 0;
+    transform: translate(var(--dx, 0px), var(--dy, 0px)) rotate(var(--rot, 0deg)) scale(0.42);
+  }
+  .canvas.exploded .chip {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0deg) scale(1);
+  }
+
+  .gap { flex: none; width: 9px; }
+  .brk { flex-basis: 100%; height: 0; }
+
+  /* ─── 拼接预览井（内凹，立体白语言） ─── */
+  .well-box {
+    margin: 4px 14px 0;
+    border-radius: 10px;
+    background: var(--well-deep);
+    border: 1px solid var(--line-soft);
+    box-shadow: inset 0 1px 3px rgba(26, 28, 30, 0.045);
+    overflow: hidden;
+  }
+  .well-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 14px 0;
+    font: 500 10.5px var(--mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .well-out {
+    padding: 8px 14px 13px;
+    font: 400 13.5px/1.6 var(--mono);
+    color: var(--ink);
+    word-break: break-all;
+    min-height: 24px;
+  }
+  .well-out .empty { color: var(--ink-3); font-family: var(--font); font-size: 12.5px; }
+  .well-out .flash { animation: flashbg 0.9s ease; border-radius: 4px; }
+  @keyframes flashbg {
+    0% { background: var(--blue-tint); }
+    100% { background: transparent; }
+  }
+
+  .dest-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px 14px;
+  }
+  .dest-hint { font-size: 11.5px; color: var(--ink-2); }
+  .confirm-btn {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    color: #fff;
+    background: linear-gradient(180deg, #3b74f3, var(--blue));
+    border: 1px solid var(--blue-deep);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.25) inset, 0 2px 6px rgba(37,99,235,0.28);
+    transition: transform 0.12s, box-shadow 0.12s, opacity 0.14s;
+  }
+  .confirm-btn:hover { transform: translateY(-1px); }
+  .confirm-btn:disabled { opacity: 0.38; cursor: default; pointer-events: none; box-shadow: none; }
+  .confirm-btn .kbd { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.3); color: #fff; box-shadow: none; }
+
+  .foot {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 9px 14px;
+    border-top: 1px solid var(--line-soft);
+    background: linear-gradient(180deg, #fcfcfd, var(--well));
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--ink-2);
+  }
+  .grp { display: inline-flex; align-items: center; gap: 5px; }
+  .kbd {
+    display: inline-grid;
+    place-items: center;
+    min-width: 19px;
+    height: 19px;
+    padding: 0 5px;
+    border-radius: 5px;
+    background: linear-gradient(180deg, #ffffff, var(--well));
+    border: 1px solid #e2e3e5;
+    border-bottom-color: #d0d2d5;
+    box-shadow: 0 1px 0 rgba(26, 28, 30, 0.07);
+    font: 500 10.5px var(--mono);
+    color: var(--ink-2);
+  }
+
+  /* ─── 模拟目标 App ─── */
+  .mock-target {
+    margin-top: 20px;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: var(--well-deep);
+    overflow: hidden;
+  }
+  .mock-target-head {
+    padding: 9px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-2);
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .mock-target-input {
+    min-height: 60px;
+    padding: 12px 14px;
+    font-size: 13.5px;
+    color: var(--ink);
+    background: #ffffff;
+  }
+  .mock-target-input .ph { color: var(--ink-3); }
+
+  /* ─── 说明 callout ─── */
+  .callout {
+    margin-top: 14px;
+    padding: 14px 16px;
+    border-radius: 10px;
+    background: var(--well-deep);
+    border-left: 3px solid var(--blue);
+  }
+  .callout h3 { font-size: 13px; font-weight: 650; margin-bottom: 6px; }
+  .callout p { font-size: 12.5px; color: var(--ink-2); }
+  .callout p + p { margin-top: 8px; }
+  .callout code { font-family: var(--mono); font-size: 11.5px; background: var(--well); padding: 1px 5px; border-radius: 4px; }
+
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: 36px;
+    transform: translateX(-50%) translateY(12px);
+    padding: 9px 16px;
+    border-radius: 999px;
+    background: var(--ink);
+    color: #fff;
+    font-size: 12.5px;
+    font-weight: 500;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.22);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.22s ease, transform 0.22s ease;
+    z-index: 20;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  footer { margin-top: 56px; font-size: 12px; color: var(--ink-3); }
+
+  /* ─── 入口 B：Launcher 搜索命令（手动触发） ─── */
+  .entries {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .entry-label {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--ink-3);
+  }
+  .entry-label .badge {
+    font: 600 10px var(--mono);
+    color: var(--blue-deep);
+    background: var(--blue-tint);
+    padding: 1px 6px;
+    border-radius: 999px;
+  }
+  .entry-label .note { font-weight: 400; color: var(--ink-3); }
+  .mini-panel {
+    border-radius: 10px;
+    background: var(--well-deep);
+    border: 1px solid var(--line-soft);
+    box-shadow: inset 0 1px 3px rgba(26, 28, 30, 0.04);
+    padding: 6px;
+  }
+  .mini-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 42px;
+    padding: 0 9px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.14s;
+  }
+  .mini-row:hover { background: #ffffff; box-shadow: 0 1px 2px rgba(26,28,30,0.06); }
+  .mini-row .mi { flex: none; font-size: 14px; }
+  .mini-main { flex: 1; min-width: 0; }
+  .mini-title { font-size: 12.5px; font-weight: 600; color: var(--ink); }
+  .mini-sub { font-size: 11px; color: var(--ink-2); }
+  .mini-row .mk { flex: none; font-size: 12px; color: var(--blue); }
+  .mini-row.dim { opacity: 0.42; cursor: default; }
+  .mini-row.dim:hover { background: transparent; box-shadow: none; }
+
+  .mini-input-row {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    height: 42px;
+    padding: 0 9px;
+  }
+  .tok-cmd-mini {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    height: 26px;
+    padding: 0 9px;
+    border-radius: 7px;
+    font-size: 12px;
+    font-weight: 550;
+    color: var(--blue-deep);
+    background: linear-gradient(180deg, #f4f7ff, #e9efff);
+    border: 1px solid var(--blue-line);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.75);
+    white-space: nowrap;
+  }
+  .mini-input-row input {
+    flex: 1;
+    min-width: 0;
+    height: 26px;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    font: 400 13px var(--mono);
+    color: var(--ink);
+  }
+  .mini-input-row input::placeholder { color: var(--ink-3); font-family: var(--font); }
+  .mini-input-row .mk { flex: none; font-size: 12px; color: var(--blue); }
+</style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">hiven · interaction demo</div>
+  <h1>剪贴板大爆炸</h1>
+  <p class="lede">
+    文本按词 / 字 / 符号炸开成可选片段，拖拽框选或点选，确认后把选中片段拼接上屏。
+    两种入口都会落到同一个爆炸画布——下面是可交互 demo（真实数据在本页本地生成，不上传）。
+  </p>
+
+  <section>
+    <div class="stage-label">交互演示 <a class="reset" onclick="location.reload()">复位演示</a></div>
+
+    <div class="entries">
+      <div class="entry-label"><span class="badge">入口 B</span>Global Launcher 搜索命令 <span class="note">· 手动输入 / 粘贴文本，不依赖剪贴板</span></div>
+      <div class="mini-panel">
+        <div class="mini-row" id="manualTrigger">
+          <span class="mi">💥</span>
+          <div class="mini-main">
+            <div class="mini-title">大爆炸</div>
+            <div class="mini-sub">手动输入或粘贴一段文本来炸开</div>
+          </div>
+          <span class="mk">↵</span>
+        </div>
+        <div class="mini-input-row" id="manualInputRow">
+          <span class="tok-cmd-mini">💥 大爆炸</span>
+          <input type="text" id="manualInput" placeholder="粘贴或输入文本…" />
+          <span class="mk">↵</span>
+        </div>
+        <div class="mini-row dim">
+          <span class="mi">🧮</span>
+          <div class="mini-main">
+            <div class="mini-title">计算器</div>
+            <div class="mini-sub">1 + 2 * 3 → 7</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <!-- Screen 1: Object Block -->
+      <div class="screen1" id="screen1">
+        <div class="ob-caption">入口 A · 剪贴板 Object Block <span style="color:var(--ink-3);font-weight:400">（仅强类型内容自动挂载才会看到）</span></div>
+        <div class="ob-token">
+          <div class="ob-icon">📋</div>
+          <div class="ob-main">
+            <div class="ob-title">剪贴板</div>
+            <div class="ob-sub" id="obPreview"></div>
+          </div>
+          <div class="ob-age">刚刚</div>
+        </div>
+        <div class="actions-row">
+          <button class="action-btn primary" id="triggerBtn">💥 大爆炸</button>
+          <button class="action-btn" disabled>复制</button>
+          <button class="action-btn" disabled>格式化</button>
+        </div>
+      </div>
+
+      <!-- Screen 2: 爆炸画布 -->
+      <div class="screen2" id="screen2">
+        <div class="bar2">
+          <button class="back" id="backBtn">←</button>
+          <span class="btitle">大爆炸</span>
+          <span class="bsub">· 选择你要的部分</span>
+          <span class="meta" id="canvasMeta"></span>
+        </div>
+
+        <div class="canvas" id="canvas">
+          <div class="rubber" id="rubber"></div>
+        </div>
+
+        <div class="well-box">
+          <div class="well-head"><span>拼接预览</span><span id="selCount">0 个片段</span></div>
+          <div class="well-out" id="wellOut"><span class="empty">拖拽或点击上方碎片进行选择…</span></div>
+        </div>
+
+        <div class="dest-row">
+          <button class="action-btn ghost" id="clearBtn">清除选择</button>
+          <span class="dest-hint">确认后写入当前聚焦的输入框</span>
+          <button class="confirm-btn" id="confirmBtn" disabled>确认 · 上屏 <span class="kbd">↵</span></button>
+        </div>
+
+        <div class="foot">
+          <span class="grp"><span class="kbd">拖拽</span>框选（可多段累加）</span>
+          <span class="grp"><span class="kbd">点击</span>单选 / 取消</span>
+          <span class="grp"><span class="kbd">点击虚线框</span>整条链接全选 / 取消</span>
+          <span class="grp"><span class="kbd">↵</span>确认上屏</span>
+          <span class="grp"><span class="kbd">esc</span>返回</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="mock-target">
+      <div class="mock-target-head">🗒️ 模拟目标 App · 备忘录（聚焦中）</div>
+      <div class="mock-target-input" id="mockInput"><span class="ph">上屏结果会出现在这里…</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="stage-label">待你拍板</div>
+    <div class="callout">
+      <h3>剪贴板专属能力，还是通用能力？</h3>
+      <p>
+        代码里 <code>LauncherObjectBlock</code> 的 <code>source</code> 已经统一了
+        <code>clipboard</code> / <code>editor-selection</code> / <code>history-item</code> /
+        <code>tool-result</code> 等多种来源，全部落到同一个 <code>payloadText</code> 字段。
+        「大爆炸」如果只吃 <code>payloadText</code>，天然就是一个<b>不挑来源的通用动作</b>——
+        剪贴板只是触发最频繁的入口，不代表它该被焊死在剪贴板里。
+      </p>
+      <p>
+        建议：把它做成任意「文本形态 Object Block」在 kind 为 text / plain-text / markdown /
+        query-string 等时的<b>推荐动作</b>，剪贴板 Object Block 是当前唯一会挂它的地方，
+        但编辑器选区、历史项、工具结果这些入口不需要额外改造就能直接复用。
+      </p>
+    </div>
+
+    <div class="callout" style="border-left-color:var(--ink-3)">
+      <h3>为什么还需要「手动触发」入口</h3>
+      <p>
+        查了 <code>attachPolicy.ts</code>：剪贴板 Object Block 的自动挂载有意收紧到
+        <code>STRONG_ATTACH_CONTENT_KINDS</code>（json / url / jwt / csv / secret 等），
+        <b>纯文本 / 长段落被显式排除</b>——注释原话是「generic text … is intentionally not a gate」。
+        「recent clipboard hint」（30s–2min 的兜底提示）同样复用这条门槛，所以纯文本目前<b>完全没有</b>
+        自动进入 Object Block 的路径。
+      </p>
+      <p>
+        而「大爆炸」最典型的输入恰恰是这类纯文本段落（一句话、一段话里挑几个词）——
+        如果只挂在入口 A，产品上线后大概率永远看不到它。入口 B（上图，Global Launcher 里可搜索的独立命令）
+        选中后<b>不读剪贴板</b>，而是塌缩成蓝色命令 token，后面接一个真实文本框让你手动输入或粘贴——
+        跟现有「命令 token + 参数」的输入行范式一致（沿用 <code>launcher-token-interaction-direction</code>
+        已拍板的 token 输入行样式），两个入口共享同一套拆分 / 选择 / 上屏逻辑。
+      </p>
+    </div>
+
+    <div class="callout" style="border-left-color:var(--ink-3)">
+      <h3>链接要不要也炸开</h3>
+      <p>
+        建议炸，而且默认直接炸，不做「先折叠成一个链接 chip、再点开」的二段式。demo 里的 URL 已经改成
+        按结构拆：origin（<code>https://code.byted.org</code>）一整块，path 每一段（<code>repo</code> /
+        <code>merge_requests</code> / <code>128</code>）各自成独立碎片，query 的 key/value 也拆开——同时用
+        一圈浅蓝虚线把同一条链接的碎片框在一起，保留「这些碎片来自同一个链接」的可读性，同时每一段仍然可以单独拖选。
+      </p>
+      <p>
+        这样做的直接价值：复制一条 GitLab MR 链接，只想要 <code>128</code> 这个号码，或者只想要 <code>repo</code>
+        仓库名——不用手动数斜杠，拖一下就选中了。跟已经在做的 URL 模板自学习（<code>urlTemplate.ts</code> 的
+        <code>templatizeUrl</code>/变量槽归纳）也是同一挂钩点：大爆炸选出来的 <code>128</code> 就是那个「变量槽」，
+        后续两边可以互相印证。权衡是链接一多，画布会更碎——如果实测觉得吵，可以退回「origin 保持整块 chip、
+        点一下才展开 path/query」的折中方案。
+      </p>
+    </div>
+  </section>
+
+  <footer>本页为纯前端交互原型，用于确定手感与拆分/选择/上屏的产品规则，不代表最终视觉。</footer>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const SAMPLE = '帮我把 order_id=88213 和 status: shipped 发给张伟，附上链接 https://code.byted.org/repo/merge_requests/128?tab=diff，谢谢！'
+  const MINI_DICT = new Set(['帮我', '发给', '张伟', '附上', '链接', '谢谢'])
+
+  function segmentCjkRun(run) {
+    const out = []
+    let i = 0
+    while (i < run.length) {
+      let matched = null
+      for (let len = Math.min(4, run.length - i); len >= 2; len--) {
+        const candidate = run.slice(i, i + len)
+        if (MINI_DICT.has(candidate)) { matched = candidate; break }
+      }
+      if (matched) { out.push(matched); i += matched.length }
+      else { out.push(run[i]); i += 1 }
+    }
+    return out
+  }
+
+  /** 链接不再当一整块——按 origin / path 段 / query key-value 拆成同组碎片。 */
+  function urlToTokens(urlText, groupId) {
+    let u
+    try { u = new URL(urlText) } catch { return [{ text: urlText, type: 'url', group: groupId }] }
+    const out = [{ text: u.protocol + '//' + u.host, type: 'url-origin', group: groupId }]
+    u.pathname.split('/').filter(Boolean).forEach((seg) => {
+      out.push({ text: '/', type: 'url-punct', group: groupId })
+      out.push({ text: decodeURIComponent(seg), type: 'url-seg', group: groupId })
+    })
+    if (u.search) {
+      out.push({ text: '?', type: 'url-punct', group: groupId })
+      const params = [...u.searchParams.entries()]
+      params.forEach(([k, v], i) => {
+        if (i > 0) out.push({ text: '&', type: 'url-punct', group: groupId })
+        out.push({ text: k, type: 'url-key', group: groupId })
+        if (v !== '') {
+          out.push({ text: '=', type: 'url-punct', group: groupId })
+          out.push({ text: v, type: 'url-val', group: groupId })
+        }
+      })
+    }
+    if (u.hash) {
+      out.push({ text: '#', type: 'url-punct', group: groupId })
+      out.push({ text: u.hash.slice(1), type: 'url-seg', group: groupId })
+    }
+    return out
+  }
+
+  function tokenize(text) {
+    const re = /(https?:\/\/[^\s，。！？、；："'"'」』]+)|([A-Za-z0-9_]+(?:[.@:/-][A-Za-z0-9_]+)*)|([一-鿿]+)|(\n)|(\s+)|([^\sA-Za-z0-9_一-鿿])/g
+    const tokens = []
+    let urlGroupCounter = 0
+    let m
+    while ((m = re.exec(text))) {
+      if (m[1]) {
+        urlGroupCounter += 1
+        urlToTokens(m[1], 'url-' + urlGroupCounter).forEach((t) => tokens.push(t))
+      }
+      else if (m[2]) tokens.push({ text: m[2], type: 'word' })
+      else if (m[3]) segmentCjkRun(m[3]).forEach((w) => tokens.push({ text: w, type: 'cjk' }))
+      else if (m[4]) tokens.push({ text: m[4], type: 'break' })
+      else if (m[5]) tokens.push({ text: m[5], type: 'space' })
+      else if (m[6]) tokens.push({ text: m[6], type: 'punct' })
+    }
+    return tokens
+  }
+
+  let tokens = []
+  let selected = new Set()
+  let rubberPreview = new Set()
+
+  const canvas = document.getElementById('canvas')
+  const rubber = document.getElementById('rubber')
+
+  function chipEl(idx) { return canvas.querySelector('.chip[data-idx="' + idx + '"]') }
+
+  /** (Re)builds the explosion canvas for arbitrary text — shared by both entries. */
+  function buildCanvas(text) {
+    tokens = tokenize(text)
+    selected = new Set()
+    rubberPreview = new Set()
+    canvas.classList.remove('exploded')
+    canvas.innerHTML = ''
+    canvas.appendChild(rubber)
+
+    let groupEl = null
+    let groupId = null
+
+    tokens.forEach((tok, idx) => {
+      if (tok.type === 'space' || tok.type === 'break') {
+        groupEl = null
+        groupId = null
+        const el = document.createElement('span')
+        el.className = tok.type === 'space' ? 'gap' : 'brk'
+        canvas.appendChild(el)
+        return
+      }
+
+      const el = document.createElement('span')
+      el.className = 'chip chip-' + tok.type
+      el.textContent = tok.text
+      el.dataset.idx = String(idx)
+      const angle = Math.random() * Math.PI * 2
+      const radius = 55 + Math.random() * 95
+      el.style.setProperty('--dx', (Math.cos(angle) * radius).toFixed(1) + 'px')
+      el.style.setProperty('--dy', (Math.sin(angle) * radius).toFixed(1) + 'px')
+      el.style.setProperty('--rot', (Math.random() * 70 - 35).toFixed(1) + 'deg')
+      el.style.transitionDelay = (Math.min(idx * 6, 260) + Math.random() * 40).toFixed(0) + 'ms'
+
+      if (tok.group) {
+        if (tok.group !== groupId) {
+          groupEl = document.createElement('span')
+          groupEl.className = 'url-group'
+          groupEl.dataset.group = tok.group
+          canvas.appendChild(groupEl)
+          groupId = tok.group
+        }
+        groupEl.appendChild(el)
+      } else {
+        groupEl = null
+        groupId = null
+        canvas.appendChild(el)
+      }
+    })
+
+    const fragCount = tokens.filter((t) => t.type !== 'space' && t.type !== 'break').length
+    document.getElementById('canvasMeta').textContent = text.length + ' 字 · ' + fragCount + ' 个片段'
+    render()
+  }
+
+  document.getElementById('obPreview').textContent = SAMPLE
+  buildCanvas(SAMPLE)
+
+  function assembleText() {
+    const selIdx = [...selected].sort((a, b) => a - b)
+    let out = ''
+    for (let k = 0; k < selIdx.length; k++) {
+      const idx = selIdx[k]
+      if (k > 0) {
+        const prev = selIdx[k - 1]
+        if (idx === prev + 1) {
+          // 原文相邻，无缝拼接
+        } else if (idx === prev + 2 && tokens[prev + 1] && tokens[prev + 1].type === 'space') {
+          out += tokens[prev + 1].text
+        } else {
+          out += ' '
+        }
+      }
+      out += tokens[idx].text
+    }
+    return out
+  }
+
+  function render() {
+    tokens.forEach((tok, idx) => {
+      if (tok.type === 'space' || tok.type === 'break') return
+      const el = chipEl(idx)
+      if (!el) return
+      el.classList.toggle('is-selected', selected.has(idx) || rubberPreview.has(idx))
+    })
+    canvas.querySelectorAll('.url-group').forEach((g) => {
+      const idxs = [...g.querySelectorAll('.chip[data-idx]')].map((c) => Number(c.dataset.idx))
+      g.classList.toggle('all-selected', idxs.length > 0 && idxs.every((i) => selected.has(i)))
+    })
+    const text = assembleText()
+    const wellOut = document.getElementById('wellOut')
+    const confirmBtn = document.getElementById('confirmBtn')
+    if (text) {
+      wellOut.textContent = text
+      confirmBtn.disabled = false
+    } else {
+      wellOut.innerHTML = '<span class="empty">拖拽或点击上方碎片进行选择…</span>'
+      confirmBtn.disabled = true
+    }
+    document.getElementById('selCount').textContent = selected.size + ' 个片段'
+  }
+
+  function toggleChip(idx) {
+    if (selected.has(idx)) selected.delete(idx)
+    else selected.add(idx)
+    render()
+  }
+
+  /** 点整条链接虚线框的空白处（不落在具体碎片上）＝ 整条一起选中/取消。 */
+  function toggleGroup(groupId) {
+    const groupEl = canvas.querySelector('.url-group[data-group="' + groupId + '"]')
+    if (!groupEl) return
+    const idxs = [...groupEl.querySelectorAll('.chip[data-idx]')].map((c) => Number(c.dataset.idx))
+    if (!idxs.length) return
+    const allSelected = idxs.every((i) => selected.has(i))
+    idxs.forEach((i) => (allSelected ? selected.delete(i) : selected.add(i)))
+    render()
+  }
+
+  // ─── 拖拽框选 ───
+  let dragState = null
+
+  canvas.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return
+    const rect = canvas.getBoundingClientRect()
+    const onChip = e.target.closest('.chip')
+    const onGroup = !onChip ? e.target.closest('.url-group') : null
+    dragState = {
+      startX: e.clientX,
+      startY: e.clientY,
+      originLeft: e.clientX - rect.left,
+      originTop: e.clientY - rect.top,
+      moved: false,
+      downIdx: onChip ? Number(onChip.dataset.idx) : null,
+      downGroupId: onGroup ? onGroup.dataset.group : null,
+    }
+    canvas.setPointerCapture(e.pointerId)
+  })
+
+  canvas.addEventListener('pointermove', (e) => {
+    if (!dragState) return
+    const dx = e.clientX - dragState.startX
+    const dy = e.clientY - dragState.startY
+    if (!dragState.moved && Math.hypot(dx, dy) > 4) dragState.moved = true
+    if (!dragState.moved) return
+
+    const rect = canvas.getBoundingClientRect()
+    const curLeft = e.clientX - rect.left
+    const curTop = e.clientY - rect.top
+    const x = Math.min(dragState.originLeft, curLeft)
+    const y = Math.min(dragState.originTop, curTop)
+    const w = Math.abs(curLeft - dragState.originLeft)
+    const h = Math.abs(curTop - dragState.originTop)
+
+    rubber.style.display = 'block'
+    rubber.style.left = x + 'px'
+    rubber.style.top = y + 'px'
+    rubber.style.width = w + 'px'
+    rubber.style.height = h + 'px'
+
+    rubberPreview = new Set()
+    tokens.forEach((tok, idx) => {
+      if (tok.type === 'space' || tok.type === 'break') return
+      const el = chipEl(idx)
+      if (!el) return
+      const r = el.getBoundingClientRect()
+      const left = r.left - rect.left
+      const top = r.top - rect.top
+      const intersects = left < x + w && left + r.width > x && top < y + h && top + r.height > y
+      if (intersects) rubberPreview.add(idx)
+    })
+    render()
+  })
+
+  window.addEventListener('pointerup', () => {
+    if (!dragState) return
+    if (dragState.moved) {
+      rubberPreview.forEach((idx) => selected.add(idx))
+      rubberPreview = new Set()
+    } else if (dragState.downIdx !== null) {
+      toggleChip(dragState.downIdx)
+    } else if (dragState.downGroupId) {
+      toggleGroup(dragState.downGroupId)
+    }
+    rubber.style.display = 'none'
+    dragState = null
+    render()
+  })
+
+  document.getElementById('clearBtn').addEventListener('click', () => {
+    selected.clear()
+    render()
+  })
+
+  // ─── 屏幕切换 ───
+  const screen1 = document.getElementById('screen1')
+  const screen2 = document.getElementById('screen2')
+  const manualTrigger = document.getElementById('manualTrigger')
+  const manualInputRow = document.getElementById('manualInputRow')
+  const manualInput = document.getElementById('manualInput')
+
+  function openExplode() {
+    screen1.classList.add('hidden')
+    screen2.classList.add('active')
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => canvas.classList.add('exploded'))
+    })
+  }
+
+  function resetManualEntry() {
+    manualInputRow.style.display = 'none'
+    manualTrigger.style.display = 'flex'
+    manualInput.value = ''
+  }
+
+  function backToBlock() {
+    screen2.classList.remove('active')
+    screen1.classList.remove('hidden')
+    resetManualEntry()
+  }
+
+  document.getElementById('triggerBtn').addEventListener('click', () => {
+    buildCanvas(SAMPLE)
+    openExplode()
+  })
+
+  // 入口 B：塌缩成命令 token + 一个真实输入框，手动输入/粘贴，不读系统剪贴板。
+  manualTrigger.addEventListener('click', () => {
+    manualTrigger.style.display = 'none'
+    manualInputRow.style.display = 'flex'
+    manualInput.focus()
+  })
+
+  manualInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      e.stopPropagation()
+      const val = manualInput.value.trim()
+      if (!val) return
+      buildCanvas(val)
+      openExplode()
+    } else if (e.key === 'Escape') {
+      e.stopPropagation()
+      resetManualEntry()
+    }
+  })
+
+  document.getElementById('backBtn').addEventListener('click', backToBlock)
+
+  function showToast(msg) {
+    const toast = document.getElementById('toast')
+    toast.textContent = msg
+    toast.classList.add('show')
+    clearTimeout(showToast._t)
+    showToast._t = setTimeout(() => toast.classList.remove('show'), 1600)
+  }
+
+  function confirmUpscreen() {
+    const text = assembleText()
+    if (!text) return
+    const mockInput = document.getElementById('mockInput')
+    mockInput.innerHTML = ''
+    const span = document.createElement('span')
+    span.className = 'flash'
+    span.textContent = text
+    mockInput.appendChild(span)
+    showToast('已上屏 ' + text.length + ' 个字符')
+  }
+
+  document.getElementById('confirmBtn').addEventListener('click', confirmUpscreen)
+
+  document.addEventListener('keydown', (e) => {
+    if (!screen2.classList.contains('active')) return
+    if (e.key === 'Escape') { backToBlock(); return }
+    if (e.key === 'Enter') { confirmUpscreen() }
+  })
+</script>
+</body>
+</html>

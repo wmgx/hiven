@@ -246,6 +246,16 @@ const secretBlock = objectBlock.createClipboardObjectBlock(secretSnap, Date.now(
 assert.ok(secretBlock, 'secret force-attach should create block')
 assert.equal(secretBlock.secretMasked, true)
 assert.equal(secretBlock.preview, undefined, 'secret preview should be hidden')
+assert.equal(
+  objectBlock.getObjectBlockRecommendationText(secretBlock),
+  undefined,
+  'secret payload must not enter the generic recommendation pipeline',
+)
+assert.equal(
+  objectBlock.getObjectBlockRecommendationText(block),
+  block.payloadText,
+  'non-secret payload remains available to content recommendations',
+)
 
 // Recent clipboard hint only for strong content
 const recentJson = {

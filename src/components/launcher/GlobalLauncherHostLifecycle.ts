@@ -1,21 +1,13 @@
-import { startTransition, useCallback, useEffect, useLayoutEffect, useRef, type MutableRefObject, type RefObject } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, type MutableRefObject, type RefObject } from 'react'
 import type { LauncherControllerState } from '../../workspace/launcher/controller'
 import { finishImeComposition, startImeComposition } from '../../utils/imeKeyboard'
 import { runLauncherEscapeInterceptor } from './launcherEscapeInterceptor'
 import { usePluginSettingsStore } from '../../workspace/pluginSettingsStore'
 import { focusLauncherWebview } from '../../workspace/windowManager/launcherWindow'
-import {
-  consumeStickyLauncherQuery,
-  holdStickyRestore,
-  peekStickyLauncherQuery,
-  releaseStickyRestore,
-} from '../../launcher/querySticky'
-import { TelemetryEvents, queryTelemetryProps, trackBehavior } from '../../workspace/telemetry'
-
-const GLOBAL_LAUNCHER_STICKY_SURFACE = 'global-launcher'
 
 export function isStandaloneLauncherWindow() {
-  return new URLSearchParams(window.location.search).get('window') === 'launcher'
+  return !window.__HIVEN_WEB_NATIVE_BRIDGE__
+    && new URLSearchParams(window.location.search).get('window') === 'launcher'
 }
 
 /**
@@ -99,11 +91,7 @@ export function useGlobalLauncherFocusSession({
     }
   }, [inputRef])
 
-  // Open edge: empty + focus first (fast empty-open path), then restore sticky.
-  // Restoring sticky synchronously used to set a non-empty query before first
-  // paint → ranking/dynamic/document paths all ran on the open frame (felt like
-  // a freeze). Double-rAF ≈ after first paint; startTransition keeps restore off
-  // the urgent path.
+  // A new open starts with an empty query and first-row selection.
   useLayoutEffect(() => {
     if (!open) {
       wasOpenRef.current = false
@@ -117,37 +105,12 @@ export function useGlobalLauncherFocusSession({
       setQuery('')
       setSelectedIndex(0, { pin: false })
     }
-    // Hold early so clipboard auto-attach (≈180ms) sees the draft even before
-    // startTransition applies setQuery.
-    const stickyPreview = peekStickyLauncherQuery(GLOBAL_LAUNCHER_STICKY_SURFACE)
-    if (stickyPreview) holdStickyRestore(GLOBAL_LAUNCHER_STICKY_SURFACE, stickyPreview)
-    else releaseStickyRestore(GLOBAL_LAUNCHER_STICKY_SURFACE)
-
-    let cancelled = false
-    let raf2 = 0
     const raf1 = requestAnimationFrame(() => {
       if (!openRef.current) return
       if (retainRef.current) focusLauncherInput()
-      if (cancelled) return
-      raf2 = requestAnimationFrame(() => {
-        if (cancelled || !openRef.current) return
-        const sticky = consumeStickyLauncherQuery(GLOBAL_LAUNCHER_STICKY_SURFACE)
-        if (!sticky) {
-          releaseStickyRestore(GLOBAL_LAUNCHER_STICKY_SURFACE)
-          return
-        }
-        holdStickyRestore(GLOBAL_LAUNCHER_STICKY_SURFACE, sticky)
-        trackBehavior(TelemetryEvents.launcherStickyRestore, queryTelemetryProps(sticky))
-        startTransition(() => {
-          if (cancelled || !openRef.current) return
-          setQuery(sticky)
-        })
-      })
     })
     return () => {
-      cancelled = true
       cancelAnimationFrame(raf1)
-      if (raf2) cancelAnimationFrame(raf2)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- open-edge only
   }, [open])
@@ -249,6 +212,9 @@ export function useGlobalLauncherHostEscape({
 }) {
   const handleHostEscape = useCallback((event: KeyboardEvent) => {
     if (event.key !== 'Escape') return
+    if (event.target instanceof Element && event.target.closest('[role="dialog"][data-open]')) return
+    // Let an open tooltip consume Escape before the host leaves its page.
+    if (document.querySelector('[role="tooltip"][data-open]')) return
 
     // Clear any stuck IME composition flag so Esc can never be permanently dead.
     // (compositionend can be missed after remount / webview rekey / focus thrash.)

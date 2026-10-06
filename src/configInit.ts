@@ -24,7 +24,7 @@ const REMOTE_BUILTIN_PLUGIN_FILE_LIST_URLS = [
   'https://data.jsdelivr.com/v1/package/gh/wmgx/hiven@main/flat',
   'https://api.github.com/repos/wmgx/hiven/git/trees/main?recursive=1',
 ]
-const DOWNLOADABLE_PLUGIN_FILE_PATTERN = /\.(?:ts|tsx|js|jsx|mjs|json|md)$/i
+const DOWNLOADABLE_PLUGIN_FILE_PATTERN = /\.(?:ts|tsx|js|jsx|mjs|json|css|md)$/i
 
 // ─── First-party plugin package discovery ─────────────────────────────────────
 // First-party plugin packages live under `src/plugins/<id>/`. They are
@@ -75,7 +75,7 @@ const BUILTIN_PLUGIN_INDEX_MODULES = import.meta.glob('./builtin-plugins/index.j
   import: 'default',
 }) as Record<string, string>
 
-const PLUGIN_FILE_MODULES = import.meta.glob('./plugins/*/**/*.{ts,tsx,js,jsx,mjs,json,md}', {
+const PLUGIN_FILE_MODULES = import.meta.glob('./plugins/*/**/*.{ts,tsx,js,jsx,mjs,json,css,md}', {
   eager: true,
   query: '?raw',
   import: 'default',

@@ -21,6 +21,7 @@ export const ALL_PLUGIN_PERMISSIONS: readonly PluginPermission[] = [
   'desktop.windows',
   'desktop.processes',
   'shell.run',
+  'ai.use',
 ]
 
 export type PluginPermissionStore = Record<PluginSettingsSource, Record<string, Partial<Record<PluginPermission, PluginPermissionGrant>>>>
@@ -185,6 +186,7 @@ const permissionLabels: Record<PluginPermission, Record<Locale, string>> = {
   'desktop.windows': { en: 'List and control desktop windows', zh: '列出并控制桌面窗口' },
   'desktop.processes': { en: 'List and terminate desktop processes', zh: '列出并结束桌面进程' },
   'shell.run': { en: 'Run shell commands', zh: '运行 Shell 命令' },
+  'ai.use': { en: 'Use system AI subscriptions', zh: '使用系统 AI 订阅' },
 }
 
 export function describePluginPermission(permission: PluginPermission, locale: Locale): string {

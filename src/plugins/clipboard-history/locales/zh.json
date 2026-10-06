@@ -32,6 +32,12 @@
   "permission.globalShortcut.register": "注册全局快捷键",
   "permission.accessibility.paste": "粘贴到前台应用",
   "surface.main.title": "剪贴板历史",
+  "route.open": "在剪贴板历史中打开",
+  "route.favorite": "剪贴板收藏",
+  "route.frequent": "常用剪贴板",
+  "route.text": "剪贴板文本",
+  "route.image": "剪贴板图片",
+  "route.files": "剪贴板文件",
   "search.placeholder": "搜索剪贴板历史...",
   "filter.all": "全部",
   "filter.frequent": "常用",
@@ -94,5 +100,7 @@
   "error.loadFailed": "加载剪贴板历史失败",
   "error.pasteFailed": "粘贴失败",
   "error.copyFailed": "复制失败",
-  "error.favoriteFailed": "更新收藏失败"
+  "error.favoriteFailed": "更新收藏失败",
+  "error.background": "剪贴板历史记录失败：{message}",
+  "error.watcherStart": "无法启动剪贴板监听：{message}"
 }

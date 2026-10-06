@@ -7,6 +7,7 @@ import { createPluginClipboard } from './pluginClipboard'
 import { createPluginPaste } from './pluginPaste'
 import { createPluginNetwork } from './pluginNetwork'
 import { createPluginShell } from './pluginShell'
+import { createPluginAi } from './ai/runtime'
 import { useAppStore } from '../store'
 import { showToast } from './toast'
 import { getPluginPermissionSnapshot, missingPluginPermissions, usePluginPermissionStore } from './pluginPermissions'
@@ -48,6 +49,7 @@ function buildStartupHookContext(
     paste: createPluginPaste(permissions, storage),
     network: createPluginNetwork(permissions),
     shell: createPluginShell(permissions),
+    ai: createPluginAi(pluginId, source, permissions),
     api: createPluginLauncherApi({ pluginId, source, requestedPermissions }),
     t: makePluginT(pluginId, locale),
     showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error') {

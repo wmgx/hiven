@@ -158,6 +158,13 @@ function assertDetectionShape(results, label) {
   assert.ok(hit, `unix millis should detect timestamp; got kinds=${JSON.stringify(kindsOf(results))}`)
 }
 
+{
+  for (const input of ['12345678901', '123456789012', '0000000000', '9999999999', '9999999999999']) {
+    const hit = findKind(detectContent(input), 'timestamp')
+    assert.equal(hit, undefined, `${input} must not be treated as a reasonable 10/13-digit timestamp`)
+  }
+}
+
 // ─── 3. 标准 JWT 三段 → jwt；假三段不得高置信 ───────────────────────────────
 {
   const input = 'eyJhbGciOiJub25lIn0.eyJzdWIiOiIxIn0.sig'

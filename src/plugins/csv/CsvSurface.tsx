@@ -198,6 +198,19 @@ function resolveInitialSource(text: string | undefined): { source: string; fileL
   return { source: text }
 }
 
+function initialOutput(surfaceId: string): OutputMode {
+  if (surfaceId === 'to-json') return 'objects'
+  if (surfaceId === 'to-array') return 'array'
+  if (surfaceId === 'to-columns') return 'columns'
+  if (surfaceId === 'to-keyed') return 'keyed'
+  if (surfaceId === 'to-ndjson') return 'ndjson'
+  if (surfaceId === 'to-csv') return 'csv'
+  if (surfaceId === 'to-tsv') return 'tsv'
+  if (surfaceId === 'to-markdown') return 'markdown'
+  if (surfaceId === 'to-sql') return 'sql'
+  return 'objects'
+}
+
 export function CsvSurface(props: PluginSurfaceProps) {
   const { host, t } = props
   const initial = resolveInitialSource(props.initialText)
@@ -206,7 +219,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
   const [fileError, setFileError] = useState<string | null>(null)
   const [delimiter, setDelimiter] = useState<DelimiterMode>('auto')
   const [header, setHeader] = useState<HeaderMode>('auto')
-  const [output, setOutput] = useState<OutputMode>('objects')
+  const [output, setOutput] = useState<OutputMode>(() => initialOutput(props.surfaceId))
   const [minify, setMinify] = useState(false)
   const [indent, setIndent] = useState<2 | 4>(2)
   const [tableName, setTableName] = useState('table')
@@ -223,7 +236,9 @@ export function CsvSurface(props: PluginSurfaceProps) {
   const [sqlCursor, setSqlCursor] = useState(0)
   const [sqlSuggestOpen, setSqlSuggestOpen] = useState(false)
   const [sqlSuggestIndex, setSqlSuggestIndex] = useState(0)
-  const [mainView, setMainView] = useState<MainView>('table')
+  const [mainView, setMainView] = useState<MainView>(() => props.surfaceId === 'main'
+    ? 'table'
+    : initial.source ? 'output' : 'source')
   const sqlInputRef = useRef<HTMLInputElement>(null)
   const dragSelectRef = useRef<{
     active: boolean
@@ -362,8 +377,6 @@ export function CsvSurface(props: PluginSurfaceProps) {
       return ''
     }
   }, [indent, isLargeSource, mainView, minify, output, outputPreviewTable, tableFull, tableName])
-
-    Boolean(tableFull) && tableFull!.rows.length > OUTPUT_PREVIEW_MAX_ROWS && mainView === 'output'
 
   /** True when preview parse did not cover the whole source — needs async full pipeline. */
   const needsFullProcess = Boolean(parseTruncated)
@@ -715,19 +728,23 @@ export function CsvSurface(props: PluginSurfaceProps) {
   ]
 
   const writeClipboard = useCallback(
-    async (text: string) => {
+    async (text: string, complete = false) => {
       if (!text) return
       try {
         await host.clipboard.writeText(text)
+        host.showMessage(localizedText(t, 'toast.copied', 'Copied'), 'success')
+        if (complete) host.complete()
       } catch {
         try {
           await navigator.clipboard.writeText(text)
+          host.showMessage(localizedText(t, 'toast.copied', 'Copied'), 'success')
+          if (complete) host.complete()
         } catch {
-          // ignore
+          host.showMessage(localizedText(t, 'toast.copyFailed', 'Copy failed'), 'error')
         }
       }
     },
-    [host.clipboard],
+    [host, t],
   )
 
   const copySelection = useCallback(async () => {
@@ -846,13 +863,13 @@ export function CsvSurface(props: PluginSurfaceProps) {
     }
     // Prefer completed full-file result
     if (fullJobReady && fullOutputRef.current) {
-      void writeClipboard(fullOutputRef.current)
+      void writeClipboard(fullOutputRef.current, true)
       return
     }
     // Whole table already in memory (preview parse not truncated) → serialize full output
     if (!needsFullProcess && tableFull) {
       try {
-        void writeClipboard(toOutput(tableFull, output, { minify, indent }, { tableName }))
+        void writeClipboard(toOutput(tableFull, output, { minify, indent }, { tableName }), true)
       } catch {
         // ignore
       }
@@ -860,7 +877,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
     }
     // Preview-only: copy what we have (or prompt full process via banner)
     if (outputText) {
-      void writeClipboard(outputText)
+      void writeClipboard(outputText, true)
     }
   }, [
     cellBlock,
@@ -912,7 +929,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
   return (
     <section
       className="csv-tools-surface"
-      aria-label="CSV Tools"
+      aria-label={localizedText(t, 'surface.title', 'CSV Tools')}
       data-no-drag
       data-launcher-scrollable
     >
@@ -994,13 +1011,14 @@ export function CsvSurface(props: PluginSurfaceProps) {
       </header>
 
       {fileError ? (
-        <div className="csv-tools-surface__banner is-error">
+        <div className="csv-tools-surface__banner is-error" role="alert">
           {localizedText(t, 'error.file', 'File error: {message}', { message: fileError })}
         </div>
       ) : null}
 
       {showTruncationBanner || fullJob.status === 'running' || fullJob.status === 'done' || fullJob.status === 'error' ? (
         <div
+          role={fullJob.status === 'error' ? 'alert' : 'status'}
           className={
             fullJob.status === 'error'
               ? 'csv-tools-surface__banner is-error'
@@ -1062,7 +1080,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
                   <button
                     type="button"
                     className="csv-tools-surface__file-btn csv-tools-surface__file-btn--primary"
-                    onClick={() => void writeClipboard(fullOutputRef.current ?? '')}
+                    onClick={() => void writeClipboard(fullOutputRef.current ?? '', true)}
                   >
                     {localizedText(t, 'job.copyFull', 'Copy full')}
                   </button>
@@ -1086,55 +1104,69 @@ export function CsvSurface(props: PluginSurfaceProps) {
         </div>
       ) : null}
 
-      <div className="csv-tools-surface__toolbar" aria-label="CSV parameters">
-        <div className="csv-tools-surface__toolbar-group">
-          <label className="csv-tools-surface__field">
-            <span>{localizedText(t, 'param.delimiter', 'Delimiter')}</span>
-            <Select
-              className="csv-tools-surface__native-select"
-              value={delimiter}
-              disabled={isJsonInput}
-              options={delimiterOptions}
-              aria-label={localizedText(t, 'param.delimiter', 'Delimiter')}
-              onChange={(event) => setDelimiter(event.target.value as DelimiterMode)}
-            />
-          </label>
+      <div
+        className="csv-tools-surface__toolbar"
+        aria-label={localizedText(t, 'toolbar.parameters', 'CSV parameters')}
+      >
+        <div className="csv-tools-surface__control-group">
+          <span className="csv-tools-surface__control-title">
+            {localizedText(t, 'toolbar.read', 'Read')}
+          </span>
+          <div className="csv-tools-surface__toolbar-group">
+            <label className="csv-tools-surface__field">
+              <span>{localizedText(t, 'param.delimiter', 'Delimiter')}</span>
+              <Select
+                className="csv-tools-surface__native-select"
+                value={delimiter}
+                disabled={isJsonInput}
+                options={delimiterOptions}
+                aria-label={localizedText(t, 'param.delimiter', 'Delimiter')}
+                onChange={(event) => setDelimiter(event.target.value as DelimiterMode)}
+              />
+            </label>
 
-          <label className="csv-tools-surface__field">
-            <span>{localizedText(t, 'param.header', 'Header')}</span>
-            <Select
-              className="csv-tools-surface__native-select"
-              value={header}
-              disabled={isJsonInput}
-              options={headerOptions}
-              aria-label={localizedText(t, 'param.header', 'Header')}
-              onChange={(event) => setHeader(event.target.value as HeaderMode)}
-            />
-          </label>
+            <label className="csv-tools-surface__field">
+              <span>{localizedText(t, 'param.header', 'Header')}</span>
+              <Select
+                className="csv-tools-surface__native-select"
+                value={header}
+                disabled={isJsonInput}
+                options={headerOptions}
+                aria-label={localizedText(t, 'param.header', 'Header')}
+                onChange={(event) => setHeader(event.target.value as HeaderMode)}
+              />
+            </label>
+          </div>
+        </div>
 
-          <label className="csv-tools-surface__field">
-            <span>{localizedText(t, 'param.output', 'Output')}</span>
-            <Select
-              className="csv-tools-surface__native-select"
-              value={output}
-              options={outputOptions}
-              aria-label={localizedText(t, 'param.output', 'Output')}
-              onChange={(event) => {
-                setOutput(event.target.value as OutputMode)
-                setMainView('output')
-              }}
-            />
-          </label>
+        <div className="csv-tools-surface__control-group">
+          <span className="csv-tools-surface__control-title">
+            {localizedText(t, 'toolbar.convert', 'Convert')}
+          </span>
+          <div className="csv-tools-surface__toolbar-group">
+            <label className="csv-tools-surface__field">
+              <span>{localizedText(t, 'param.output', 'Output')}</span>
+              <Select
+                className="csv-tools-surface__native-select"
+                value={output}
+                options={outputOptions}
+                aria-label={localizedText(t, 'param.output', 'Output')}
+                onChange={(event) => {
+                  setOutput(event.target.value as OutputMode)
+                  setMainView('output')
+                }}
+              />
+            </label>
 
-          {showJsonStyle && mainView === 'output' && (
-            <>
+            {showJsonStyle && mainView === 'output' && (
               <Checkbox
                 checked={minify}
                 onChange={(event) => setMinify((event.target as HTMLInputElement).checked)}
               >
                 {localizedText(t, 'param.minify', 'Minify')}
               </Checkbox>
-              {!minify && (
+            )}
+            {showJsonStyle && mainView === 'output' && !minify && (
                 <label className="csv-tools-surface__field">
                   <span>{localizedText(t, 'param.indent', 'Indent')}</span>
                   <Select
@@ -1148,34 +1180,38 @@ export function CsvSurface(props: PluginSurfaceProps) {
                     onChange={(event) => setIndent(event.target.value === '4' ? 4 : 2)}
                   />
                 </label>
-              )}
-            </>
-          )}
+            )}
 
-          {output === 'sql' && mainView === 'output' && (
-            <label className="csv-tools-surface__field">
-              <span>{localizedText(t, 'param.tableName', 'Table name')}</span>
-              <input
-                type="text"
-                className="csv-tools-surface__text"
-                value={tableName}
-                onChange={(event) => setTableName(event.target.value)}
-                spellCheck={false}
-              />
-            </label>
-          )}
+            {output === 'sql' && mainView === 'output' && (
+              <label className="csv-tools-surface__field">
+                <span>{localizedText(t, 'param.tableName', 'Table name')}</span>
+                <input
+                  type="text"
+                  className="csv-tools-surface__text"
+                  value={tableName}
+                  onChange={(event) => setTableName(event.target.value)}
+                  spellCheck={false}
+                />
+              </label>
+            )}
+          </div>
         </div>
 
-        <div className="csv-tools-surface__transform-checks">
-          <Checkbox checked={dropEmpty} onChange={(event) => setDropEmpty((event.target as HTMLInputElement).checked)}>
-            {localizedText(t, 'transform.dropEmpty', 'Drop empty rows')}
-          </Checkbox>
-          <Checkbox checked={dedupe} onChange={(event) => setDedupe((event.target as HTMLInputElement).checked)}>
-            {localizedText(t, 'transform.dedupe', 'Deduplicate')}
-          </Checkbox>
-          <Checkbox checked={transpose} onChange={(event) => setTranspose((event.target as HTMLInputElement).checked)}>
-            {localizedText(t, 'transform.transpose', 'Transpose')}
-          </Checkbox>
+        <div className="csv-tools-surface__control-group csv-tools-surface__control-group--transform">
+          <span className="csv-tools-surface__control-title">
+            {localizedText(t, 'toolbar.clean', 'Shape')}
+          </span>
+          <div className="csv-tools-surface__transform-checks">
+            <Checkbox checked={dropEmpty} onChange={(event) => setDropEmpty((event.target as HTMLInputElement).checked)}>
+              {localizedText(t, 'transform.dropEmpty', 'Drop empty rows')}
+            </Checkbox>
+            <Checkbox checked={dedupe} onChange={(event) => setDedupe((event.target as HTMLInputElement).checked)}>
+              {localizedText(t, 'transform.dedupe', 'Deduplicate')}
+            </Checkbox>
+            <Checkbox checked={transpose} onChange={(event) => setTranspose((event.target as HTMLInputElement).checked)}>
+              {localizedText(t, 'transform.transpose', 'Transpose')}
+            </Checkbox>
+          </div>
         </div>
       </div>
 
@@ -1205,7 +1241,11 @@ export function CsvSurface(props: PluginSurfaceProps) {
         ) : (
           <span className="csv-tools-surface__tab-hint mono">
             {formatBytes(sourceText.length)}
-            {estimatedLines > 0 ? ` · ~${estimatedLines.toLocaleString()} lines` : ''}
+            {estimatedLines > 0
+              ? ` · ${localizedText(t, 'meta.estimatedLines', '~{count} lines', {
+                  count: estimatedLines.toLocaleString(),
+                })}`
+              : ''}
             {mainView === 'table' && (globalFilter.trim() || sqlFilter.trim())
               ? ` · ${displayGridRows.length}/${gridRows.length}`
               : ''}
@@ -1217,7 +1257,9 @@ export function CsvSurface(props: PluginSurfaceProps) {
         {mainView === 'table' ? (
           <div className="csv-tools-surface__grid-wrap" data-no-drag data-launcher-scrollable>
             {errorMessage ? (
-              <div className="csv-tools-surface__empty is-error">{errorMessage}</div>
+              <div className="csv-tools-surface__empty is-error" role="alert">
+                {errorMessage}
+              </div>
             ) : table && table.headers.length > 0 ? (
               <>
                 <div className="csv-tools-surface__table-tools" data-no-drag>
@@ -1398,8 +1440,27 @@ export function CsvSurface(props: PluginSurfaceProps) {
                 </div>
               </>
             ) : (
-              <div className="csv-tools-surface__empty">
-                {localizedText(t, 'empty.source', 'Paste CSV, TSV, or a JSON array of objects')}
+              <div className="csv-tools-surface__empty csv-tools-surface__empty--start">
+                <span className="csv-tools-surface__empty-mark" aria-hidden="true">CSV</span>
+                <strong>{localizedText(t, 'empty.title', 'Start with table data')}</strong>
+                <p>{localizedText(t, 'empty.source', 'Paste CSV, TSV, or a JSON array of objects')}</p>
+                <div className="csv-tools-surface__empty-actions">
+                  <button
+                    type="button"
+                    className="csv-tools-surface__file-btn csv-tools-surface__file-btn--primary"
+                    onClick={() => setMainView('source')}
+                  >
+                    {localizedText(t, 'empty.enterSource', 'Enter source')}
+                  </button>
+                  <button
+                    type="button"
+                    className="csv-tools-surface__file-btn"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <IconFolder />
+                    <span>{localizedText(t, 'action.openFile', 'Open file')}</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -1407,6 +1468,9 @@ export function CsvSurface(props: PluginSurfaceProps) {
 
         {mainView === 'output' ? (
           <div className="csv-tools-surface__output-wrap">
+            {(filterMode === 'text' ? globalFilter : sqlFilter).trim() ? (
+              <div className="csv-tools-surface__output-hint">{t('table.filterScope')}</div>
+            ) : null}
             {fullJobReady ? (
               <div className="csv-tools-surface__output-hint">
                 {localizedText(

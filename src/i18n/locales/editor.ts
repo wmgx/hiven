@@ -17,6 +17,7 @@ export default {
     'line': 'Ln',
     'column': 'Col',
     'autoLanguage': 'Auto',
+    'loading': 'Loading editor…',
   },
   zh: {
     'ready': '就绪',
@@ -36,5 +37,6 @@ export default {
     'line': '行',
     'column': '列',
     'autoLanguage': '自动',
+    'loading': '正在加载编辑器…',
   },
 }

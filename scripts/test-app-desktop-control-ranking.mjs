@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Package ③ desktop-control ranking:
- *  - empty query: hostAppLauncher returns at most 5 apps (installedAt desc, then name)
+ *  - app source returns all matches so shared ranking can apply usage/favorites
  *  - strong jwt content detection: host app score < jwt tool score
  *  - buildWebQuickOpenUrl supports {clipboard} (falls back to query)
  */
@@ -150,7 +150,7 @@ const JWT_SAMPLE =
   )
 }
 
-// ── hostAppLauncher empty-query limit ────────────────────────────────────────
+// ── hostAppLauncher candidate recall ─────────────────────────────────────────
 const hostAppIndex = loadTs('src/workspace/appLauncher/hostAppIndex.ts', [
   [/import\s+type\s*\{[^}]*\}\s*from\s*'[^']*'\s*;?\s*\n?/g, ''],
 ])
@@ -216,10 +216,11 @@ const hostApp = hostAppSandbox.module.exports
     surfaceId: 'global-launcher',
     locale: 'en',
   })
-  assert.equal(emptyItems.length, 5, `empty query must return at most 5 apps, got ${emptyItems.length}`)
-  // Newest installedAt first: App0 (10000), App1 (9900), …
-  assert.equal(emptyItems[0].display.title, 'AppL') // name for i=0 is AppL (65+11)
-  assert.equal(emptyItems[1].display.title, 'AppK')
+  assert.equal(emptyItems.length, apps.length, 'empty query must preserve every app for shared ranking')
+  assert.ok(
+    emptyItems.some((it) => it.display.title === 'AppA'),
+    'an older app outside the former top five must remain eligible for favorites/usage ranking',
+  )
   assert.ok(
     emptyItems.every((it) => String(it.systemKey).startsWith('host:app-launcher:app:')),
     'empty-query rows must be host app launcher items',
@@ -231,7 +232,6 @@ const hostApp = hostAppSandbox.module.exports
     locale: 'en',
   })
   assert.ok(withQuery.length >= 1, 'query path still filters by name')
-  assert.ok(withQuery.length <= 50, 'query path stays within QUERY_APP_LIMIT')
   assert.ok(
     withQuery.every((it) => String(it.display.title).toLowerCase().includes('appa') || String(it.display.title) === 'AppA'),
     'query path should prefer matching titles',

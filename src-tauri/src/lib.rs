@@ -19,8 +19,13 @@ use tauri::Manager;
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use zip::ZipArchive;
 
+pub mod ai_codex;
+pub mod ai_xai;
+mod clipboard_privacy;
 pub mod desktop_bridge;
+pub mod desktop_capture;
 pub mod hotkeys;
+pub mod keyboard_observation;
 
 const LAUNCHER_COMPACT_WIDTH: f64 = 660.0;
 const LAUNCHER_COMPACT_HEIGHT: f64 = 318.0;
@@ -48,9 +53,6 @@ static PREVIOUS_FOREGROUND_PROCESS_ID: OnceLock<Mutex<Option<u32>>> = OnceLock::
 static PREVIOUS_KEY_WINDOW_LABEL: OnceLock<Mutex<Option<String>>> = OnceLock::new();
 #[cfg(target_os = "macos")]
 static PREVIOUS_LAUNCHER_INPUT_SOURCE_ID: OnceLock<Mutex<Option<String>>> = OnceLock::new();
-#[allow(dead_code)]
-static LAST_FOREGROUND_SELECTION_TEXT: OnceLock<Mutex<Option<ForegroundSelectionText>>> =
-    OnceLock::new();
 static INSTALLED_APP_TARGETS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
 static PLUGIN_KV_DB: OnceLock<Result<Mutex<PluginKvDb>, String>> = OnceLock::new();
 static LAST_SAVEABLE_RUN: OnceLock<Mutex<Option<serde_json::Value>>> = OnceLock::new();
@@ -60,17 +62,8 @@ static PLUGIN_SURFACE_PAYLOADS: OnceLock<Mutex<HashMap<String, PluginSurfacePayl
 static SURFACE_REGISTRY: OnceLock<SurfaceRegistryState> = OnceLock::new();
 const SURFACE_REGISTRY_EVENT: &str = "hiven://surface-registry-sync";
 const MAX_APP_ICON_CACHE_WARM_COUNT: usize = 20;
-#[allow(dead_code)]
-const FOREGROUND_SELECTION_CACHE_TTL: Duration = Duration::from_secs(30);
 const LAUNCHER_PERF_ENV: &str = "HIVEN_LAUNCHER_PERF";
 const LAST_SAVEABLE_RUN_TTL_MS: i64 = 30 * 60 * 1000;
-
-#[derive(Clone)]
-#[allow(dead_code)]
-struct ForegroundSelectionText {
-    text: String,
-    captured_at: Instant,
-}
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -720,7 +713,24 @@ fn perform_system_power_action(action: SystemPowerAction) -> Result<(), String> 
 }
 
 #[tauri::command]
-async fn show_launcher_window(app: tauri::AppHandle) -> Result<(), String> {
+async fn show_launcher_window(app: tauri::AppHandle, resume: Option<bool>) -> Result<(), String> {
+    if resume == Some(true) {
+        use tauri::Manager;
+        let app_clone = app.clone();
+        return app
+            .run_on_main_thread(move || {
+                if let Some(window) = app_clone.get_webview_window("launcher") {
+                    // Resume the current command at its existing size and position.
+                    // Capture consumed the remembered target; retain it for a later paste.
+                    remember_previous_foreground_app();
+                    remember_previous_key_window_label(None);
+                    if let Err(error) = show_launcher_window_without_app_activation(&window) {
+                        eprintln!("[hiven] Failed to resume launcher window: {}", error);
+                    }
+                }
+            })
+            .map_err(|error| error.to_string());
+    }
     show_launcher_window_for_hotkey(app)
 }
 
@@ -753,10 +763,6 @@ fn show_launcher_window_for_hotkey_with_event(
             // into this launcher-driven paste.
             remember_previous_key_window_label(None);
             log_launcher_perf("native:remember-foreground-app", started_at, "");
-            // [DISABLED] External selection capture — logic preserved, entry point disabled.
-            // let started_at = Instant::now();
-            // capture_foreground_selection_text(&app_clone);
-            // log_launcher_perf("native:capture-selection-dispatch", started_at, "");
         }
 
         let started_at = Instant::now();
@@ -1059,23 +1065,18 @@ async fn hide_launcher_window(
     .map_err(|error| error.to_string())
 }
 
-// Combines hide_launcher_window + simulate_paste into a single native command.
-// Once the launcher WebView is hidden, macOS throttles its JS timers, so a JS-side
-// setTimeout between hiding the launcher and simulating the paste is unreliable
-// (a hidden WKWebView may throttle JS execution). Running the wait for foreground
-// focus handoff and the synthetic Cmd/Ctrl+V natively in Rust avoids that entirely.
-#[tauri::command]
-async fn hide_launcher_and_paste(
+// Shared phase 1 for hide_launcher_and_paste / hide_launcher_and_capture_selection:
+// restore input source and hide whichever window actually invoked the command,
+// then resolve where the foreground interaction (paste or selection capture)
+// should target. Both the launcher's non-activating panel and an activating
+// plugin surface window (e.g. the clipboard history panel opened via
+// Cmd+Shift+V) call this same path. Independent surfaces may stay visible,
+// but must still hand keyboard focus back to the paste target.
+fn hide_window_and_resolve_foreground_target(
     window: tauri::WebviewWindow,
     app: tauri::AppHandle,
-) -> Result<(), String> {
-    // Phase 1 (main thread): restore input source and hide whichever window
-    // actually invoked this command. Both the launcher's non-activating panel
-    // and an activating plugin surface window (e.g. the clipboard history panel
-    // opened via Cmd+Shift+V) call this same command, so each must hide itself —
-    // the previous code hardcoded `get_webview_window("launcher")`, which
-    // silently no-op'd for any other caller and left it as the frontmost key
-    // window, breaking the focus handoff below.
+    keep_open: bool,
+) -> Result<(Option<u32>, bool), String> {
     let (tx, rx) = std::sync::mpsc::channel();
     let app_for_main_thread = app.clone();
     app.run_on_main_thread(move || {
@@ -1087,22 +1088,24 @@ async fn hide_launcher_and_paste(
                 eprintln!("[hiven] Failed to restore launcher input source: {}", error);
             }
         }
-        if let Err(error) = window.hide() {
-            eprintln!("[hiven] Failed to hide {} window: {}", window.label(), error);
+        if !keep_open {
+            if let Err(error) = window.hide() {
+                eprintln!("[hiven] Failed to hide {} window: {}", window.label(), error);
+            }
         }
         let target_pid = previous_foreground_process_id()
             .lock()
             .ok()
-            .and_then(|mut stored| stored.take());
+            .and_then(|mut stored| if keep_open { *stored } else { stored.take() });
         let key_label = previous_key_window_label()
             .lock()
             .ok()
-            .and_then(|mut stored| stored.take());
+            .and_then(|mut stored| if keep_open { stored.clone() } else { stored.take() });
         // If hiven itself held keyboard focus (a non-activating panel like
         // the launcher/quick editor, or a detached window such as a
         // standalone quick editor) when the surface window was opened, the
-        // real paste target is that hiven window — not the "remembered pid"
-        // above, which only tracks the OS-level frontmost app and can be a
+        // real target is that hiven window — not the "remembered pid" above,
+        // which only tracks the OS-level frontmost app and can be a
         // completely unrelated external app (e.g. an IDE) in that case.
         // Activating that remembered app here would incorrectly steal focus
         // back away from hiven's own window.
@@ -1142,7 +1145,7 @@ async fn hide_launcher_and_paste(
         // IS an activating window (`.focused(true)` in
         // show_plugin_surface_window), so opening it deactivated the target
         // app; here we must hand activation back explicitly, or the
-        // synthetic Cmd+V below lands on hiven itself.
+        // synthetic keystroke below lands on hiven itself.
         if !target_is_self {
             if let Some(pid) = target_pid {
                 if current_foreground_process_id() != Some(pid) {
@@ -1153,7 +1156,22 @@ async fn hide_launcher_and_paste(
         let _ = tx.send((target_pid, target_is_self));
     })
     .map_err(|error| error.to_string())?;
-    let (target_pid, target_is_self) = rx.recv().map_err(|error| error.to_string())?;
+    rx.recv().map_err(|error| error.to_string())
+}
+
+// Combines hide_launcher_window + simulate_paste into a single native command.
+// Once the launcher WebView is hidden, macOS throttles its JS timers, so a JS-side
+// setTimeout between hiding the launcher and simulating the paste is unreliable
+// (a hidden WKWebView may throttle JS execution). Running the wait for foreground
+// focus handoff and the synthetic Cmd/Ctrl+V natively in Rust avoids that entirely.
+#[tauri::command]
+async fn hide_launcher_and_paste(
+    window: tauri::WebviewWindow,
+    app: tauri::AppHandle,
+    keep_open: Option<bool>,
+) -> Result<(), String> {
+    let (target_pid, target_is_self) =
+        hide_window_and_resolve_foreground_target(window, app, keep_open.unwrap_or(false))?;
 
     // Phase 2 (blocking thread): the launcher WebView is throttled once hidden, so
     // the focus-handoff wait and the synthetic Cmd/Ctrl+V must run natively.
@@ -1211,6 +1229,73 @@ fn wait_for_foreground_handoff_then_paste(
     // polling for a focus handoff would be meaningless; fall back to a fixed delay.
     std::thread::sleep(Duration::from_millis(200));
     simulate_paste_impl()
+}
+
+// Mirror of hide_launcher_and_paste for the read direction: hide the launcher,
+// wait for OS focus to hand back to whatever app was previously in the
+// foreground, then simulate Cmd/Ctrl+C and read the result back off the
+// clipboard (restoring whatever was there before). Used as an on-demand,
+// last-resort text source for a Global Launcher tool run — never fired
+// automatically on launcher open, only when a matched tool actually executes
+// with no other input available (see resolveTextInputWithForegroundFallback
+// in src/workspace/launcher/toolAdapter.ts).
+#[tauri::command]
+async fn hide_launcher_and_capture_selection(
+    window: tauri::WebviewWindow,
+    app: tauri::AppHandle,
+) -> Result<Option<String>, String> {
+    let (target_pid, target_is_self) = hide_window_and_resolve_foreground_target(window, app.clone(), false)?;
+
+    tokio::task::spawn_blocking(move || {
+        wait_for_foreground_handoff_then_capture(app, target_pid, target_is_self)
+    })
+    .await
+    .map_err(|e| format!("spawn_blocking failed: {}", e))?
+}
+
+#[cfg(target_os = "macos")]
+fn wait_for_foreground_handoff_then_capture(
+    app: tauri::AppHandle,
+    target_pid: Option<u32>,
+    target_is_self: bool,
+) -> Result<Option<String>, String> {
+    const POLL_INTERVAL_MS: u64 = 20;
+    const MAX_WAIT_MS: u64 = 1000;
+    const SETTLE_DELAY_MS: u64 = 120;
+
+    if target_is_self {
+        // Nothing meaningful to capture from one of hiven's own windows.
+        return Ok(None);
+    }
+
+    let own_pid = std::process::id();
+    let started_at = Instant::now();
+    let deadline = started_at + Duration::from_millis(MAX_WAIT_MS);
+    loop {
+        let handed_off = match target_pid {
+            Some(pid) => current_foreground_process_id() == Some(pid),
+            None => current_foreground_process_id() != Some(own_pid),
+        };
+        if handed_off || Instant::now() >= deadline {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(POLL_INTERVAL_MS));
+    }
+    std::thread::sleep(Duration::from_millis(SETTLE_DELAY_MS));
+    capture_foreground_selection_text_impl(&app)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn wait_for_foreground_handoff_then_capture(
+    app: tauri::AppHandle,
+    _target_pid: Option<u32>,
+    target_is_self: bool,
+) -> Result<Option<String>, String> {
+    if target_is_self {
+        return Ok(None);
+    }
+    std::thread::sleep(Duration::from_millis(200));
+    capture_foreground_selection_text_impl(&app)
 }
 
 #[tauri::command]
@@ -1662,101 +1747,78 @@ fn remember_previous_key_window_label(label: Option<String>) {
     }
 }
 
-#[allow(dead_code)]
-fn last_foreground_selection_state() -> &'static Mutex<Option<ForegroundSelectionText>> {
-    LAST_FOREGROUND_SELECTION_TEXT.get_or_init(|| Mutex::new(None))
-}
+/// Read whatever text is currently selected in the foreground app by
+/// simulating Cmd/Ctrl+C and diffing the clipboard change count, then
+/// restoring whatever was on the clipboard beforehand. Caller is responsible
+/// for ensuring the target app actually holds OS-level keyboard focus first
+/// (see `wait_for_foreground_handoff_then_capture`) — otherwise this simply
+/// copies from whatever hiven window still has focus.
+fn capture_foreground_selection_text_impl(app: &tauri::AppHandle) -> Result<Option<String>, String> {
+    const POLL_INTERVAL_MS: u64 = 20;
+    const MAX_WAIT_MS: u64 = 400;
 
-#[tauri::command]
-#[allow(dead_code)]
-async fn last_foreground_selection_text() -> Option<String> {
-    let mut stored = last_foreground_selection_state().lock().ok()?;
-    let selection = stored.as_ref()?;
-    if selection.captured_at.elapsed() > FOREGROUND_SELECTION_CACHE_TTL {
-        *stored = None;
-        return None;
-    }
-    Some(selection.text.clone())
-}
+    let before = clipboard_privacy::with_clipboard(app, |app| {
+        app.clipboard().read_text().map_err(|error| error.to_string())
+    })
+    .ok();
+    let before_change_count = read_clipboard_change_count(app);
+    simulate_copy_selection_impl()?;
 
-#[allow(dead_code)]
-fn clear_foreground_selection_text() {
-    if let Ok(mut stored) = last_foreground_selection_state().lock() {
-        *stored = None;
-    }
-}
-
-// [DISABLED] External selection capture — all functions below are preserved but currently unused.
-#[allow(dead_code)]
-fn capture_foreground_selection_text(app: &tauri::AppHandle) {
-    let app = app.clone();
-    std::thread::spawn(move || {
-        let started_at = Instant::now();
-        if let Some(text) = capture_foreground_selection_text_impl(&app) {
-            let text_len = text.len();
-            if let Ok(mut stored) = last_foreground_selection_state().lock() {
-                *stored = Some(ForegroundSelectionText {
-                    text,
-                    captured_at: Instant::now(),
-                });
-            }
-            log_launcher_perf(
-                "native:capture-selection-worker",
-                started_at,
-                format!("hasText=true textLength={}", text_len),
-            );
-        } else {
-            clear_foreground_selection_text();
-            log_launcher_perf(
-                "native:capture-selection-worker",
-                started_at,
-                "hasText=false",
-            );
+    // Poll for the clipboard to actually change instead of a single fixed
+    // sleep: a synthetic Cmd/Ctrl+C needs the target app to notice the key
+    // event, run its own copy handling, and write the system pasteboard —
+    // JVM/Electron-backed apps (e.g. JetBrains IDEs) can take noticeably
+    // longer than native Cocoa apps to do that, and a too-short fixed wait
+    // reads a stale pasteboard and misreports "nothing selected".
+    let deadline = Instant::now() + Duration::from_millis(MAX_WAIT_MS);
+    let mut changed = false;
+    loop {
+        let after_change_count = read_clipboard_change_count(app);
+        if before_change_count.is_none() || after_change_count != before_change_count {
+            changed = true;
+            break;
         }
-    });
-}
+        if Instant::now() >= deadline {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(POLL_INTERVAL_MS));
+    }
+    if !changed {
+        return Ok(None);
+    }
 
-#[allow(dead_code)]
-fn capture_foreground_selection_text_impl(app: &tauri::AppHandle) -> Option<String> {
-    let before = app.clipboard().read_text().ok();
-    let before_change_count = read_clipboard_change_count(&app);
-    simulate_copy_selection_impl().ok()?;
-    std::thread::sleep(Duration::from_millis(80));
-    let after_change_count = read_clipboard_change_count(&app);
-    if before_change_count.is_some()
-        && after_change_count.is_some()
-        && before_change_count == after_change_count
-    {
-        return None;
-    }
-    let selected = app.clipboard().read_text().ok()?.trim().to_string();
+    let selected = clipboard_privacy::with_clipboard(app, |app| {
+        app.clipboard().read_text().map_err(|error| error.to_string())
+    })?
+    .trim()
+    .to_string();
     if let Some(previous) = before {
-        let _ = app.clipboard().write_text(previous);
+        let _ = clipboard_privacy::with_clipboard(app, move |app| {
+            app.clipboard()
+                .write_text(previous)
+                .map_err(|error| error.to_string())
+        });
     }
-    if selected.is_empty() {
-        None
-    } else {
-        Some(selected)
-    }
+    Ok(if selected.is_empty() { None } else { Some(selected) })
 }
 
 #[cfg(target_os = "macos")]
-#[allow(dead_code)]
-fn read_clipboard_change_count(_app: &tauri::AppHandle) -> Option<i64> {
-    unsafe {
-        let pasteboard_cls = objc2::runtime::AnyClass::get(c"NSPasteboard")?;
+fn read_clipboard_change_count(app: &tauri::AppHandle) -> Option<i64> {
+    clipboard_privacy::with_clipboard(app, |_| unsafe {
+        let pasteboard_cls = objc2::runtime::AnyClass::get(c"NSPasteboard")
+            .ok_or_else(|| "NSPasteboard unavailable".to_string())?;
         let pasteboard: *mut objc2::runtime::AnyObject =
             objc2::msg_send![pasteboard_cls, generalPasteboard];
         if pasteboard.is_null() {
-            return None;
+            return Err("Clipboard unavailable".into());
         }
         let change_count: i64 = objc2::msg_send![pasteboard, changeCount];
-        Some(change_count)
-    }
+        Ok(change_count)
+    })
+    .ok()
 }
 
 #[cfg(not(target_os = "macos"))]
-#[allow(dead_code)]
 fn read_clipboard_change_count(_app: &tauri::AppHandle) -> Option<i64> {
     None
 }
@@ -1764,10 +1826,10 @@ fn read_clipboard_change_count(_app: &tauri::AppHandle) -> Option<i64> {
 /// Read local file paths from the system clipboard (Finder / file manager copy).
 /// Prefer this over plain text: macOS often puts only the bare filename in the text flavor.
 #[tauri::command]
-fn read_clipboard_file_paths() -> Result<Vec<String>, String> {
+fn read_clipboard_file_paths(_app: tauri::AppHandle) -> Result<Vec<String>, String> {
     #[cfg(target_os = "macos")]
     {
-        read_macos_clipboard_file_paths()
+        clipboard_privacy::with_clipboard(&_app, |_| read_macos_clipboard_file_paths())
     }
     #[cfg(not(target_os = "macos"))]
     {
@@ -1906,7 +1968,6 @@ fn urlencoding_decode(input: &str) -> String {
 }
 
 #[cfg(target_os = "macos")]
-#[allow(dead_code)]
 fn simulate_copy_selection_impl() -> Result<(), String> {
     use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation};
     use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
@@ -1930,7 +1991,6 @@ fn simulate_copy_selection_impl() -> Result<(), String> {
 }
 
 #[cfg(target_os = "windows")]
-#[allow(dead_code)]
 fn simulate_copy_selection_impl() -> Result<(), String> {
     use windows::Win32::UI::Input::KeyboardAndMouse::{
         SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
@@ -1969,7 +2029,6 @@ fn simulate_copy_selection_impl() -> Result<(), String> {
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-#[allow(dead_code)]
 fn simulate_copy_selection_impl() -> Result<(), String> {
     Err("Selection copy simulation is not supported on this platform".to_string())
 }
@@ -2269,8 +2328,7 @@ fn get_or_register_keyable_panel_class() -> *const objc2::runtime::AnyClass {
 fn current_foreground_process_id() -> Option<u32> {
     unsafe {
         let workspace_cls = objc2::runtime::AnyClass::get(c"NSWorkspace")?;
-        let workspace: *mut objc2::runtime::AnyObject =
-            objc2::msg_send![workspace_cls, sharedWorkspace];
+        let workspace: *mut objc2::runtime::AnyObject = objc2::msg_send![workspace_cls, sharedWorkspace];
         if workspace.is_null() {
             return None;
         }
@@ -2528,6 +2586,12 @@ fn read_installed_app_icon_url(app: tauri::AppHandle, app_id: String) -> Option<
         return None;
     }
     Some(cache_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn read_installed_app_icon_png(app: tauri::AppHandle, app_id: String) -> Option<Vec<u8>> {
+    let path = read_installed_app_icon_url(app, app_id)?;
+    fs::read(path).ok()
 }
 
 #[tauri::command]
@@ -3329,7 +3393,8 @@ fn macos_bundle_id_from_app_id(app_id: &str) -> Option<String> {
 fn macos_frontmost_bundle_id() -> Option<String> {
     unsafe {
         let workspace_cls = objc2::runtime::AnyClass::get(c"NSWorkspace")?;
-        let workspace: *mut objc2::runtime::AnyObject = objc2::msg_send![workspace_cls, sharedWorkspace];
+        let workspace: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![workspace_cls, sharedWorkspace];
         if workspace.is_null() {
             return None;
         }
@@ -4529,6 +4594,8 @@ struct ProxyHttpRequest {
     /// "text" (default) or "binary" — binary returns bodyBytes (no UTF-8 corruption for images).
     #[serde(rename = "responseType")]
     response_type: Option<String>,
+    #[serde(rename = "timeoutMs")]
+    timeout_ms: Option<u64>,
 }
 
 #[derive(serde::Serialize)]
@@ -4809,7 +4876,13 @@ async fn plugin_http_request(request: ProxyHttpRequest) -> Result<ProxyHttpRespo
     let method_text = request.method.unwrap_or_else(|| "GET".to_string());
     let method = reqwest::Method::from_bytes(method_text.as_bytes())
         .map_err(|e| format!("Invalid HTTP method: {}", e))?;
-    let client = reqwest::Client::new();
+    let mut client_builder = reqwest::Client::builder();
+    if let Some(timeout_ms) = request.timeout_ms {
+        client_builder = client_builder
+            .timeout(std::time::Duration::from_millis(timeout_ms.clamp(100, 30_000)))
+            .redirect(reqwest::redirect::Policy::none());
+    }
+    let client = client_builder.build().map_err(|e| e.to_string())?;
     let mut builder = client.request(method, parsed);
 
     if let Some(headers) = request.headers {
@@ -5075,6 +5148,20 @@ fn open_plugin_kv_db(path: PathBuf) -> Result<PluginKvDb, String> {
                 );
                 CREATE INDEX IF NOT EXISTS idx_usage_journal_executed_at
                   ON usage_journal (executed_at);
+                CREATE TABLE IF NOT EXISTS ai_usage_records (
+                  run_id TEXT PRIMARY KEY,
+                  plugin_id TEXT NOT NULL,
+                  plugin_source TEXT NOT NULL,
+                  provider_id TEXT NOT NULL,
+                  agent_id TEXT NOT NULL,
+                  effort TEXT,
+                  status TEXT NOT NULL,
+                  started_at INTEGER NOT NULL,
+                  finished_at INTEGER,
+                  metrics_json TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_ai_usage_plugin_started
+                  ON ai_usage_records (plugin_source, plugin_id, started_at DESC);
                 "#,
         )
         .map_err(|e| e.to_string())?;
@@ -5525,6 +5612,118 @@ fn usage_journal_prune(
     }
 
     Ok(())
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AiUsageRecord {
+    run_id: String,
+    plugin_id: String,
+    plugin_source: String,
+    provider_id: String,
+    agent_id: String,
+    effort: Option<String>,
+    status: String,
+    started_at: i64,
+    finished_at: Option<i64>,
+    metrics: Vec<serde_json::Value>,
+}
+
+#[tauri::command]
+fn ai_usage_record_upsert(record: AiUsageRecord) -> Result<(), String> {
+    validate_plugin_kv_namespace(&record.plugin_source, &record.plugin_id)?;
+    validate_experience_identifier(&record.run_id, "run_id")?;
+    validate_experience_identifier(&record.provider_id, "provider_id")?;
+    validate_experience_identifier(&record.agent_id, "agent_id")?;
+    if !matches!(
+        record.status.as_str(),
+        "running" | "completed" | "failed" | "cancelled"
+    ) {
+        return Err("invalid AI usage status".to_string());
+    }
+    let metrics_json = serde_json::to_string(&record.metrics).map_err(|error| error.to_string())?;
+    let db = get_plugin_kv_db()?
+        .lock()
+        .map_err(|error| error.to_string())?;
+    db.connection
+        .execute(
+            r#"
+              INSERT INTO ai_usage_records (
+                run_id, plugin_id, plugin_source, provider_id, agent_id, effort,
+                status, started_at, finished_at, metrics_json
+              ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+              ON CONFLICT(run_id) DO UPDATE SET
+                status = excluded.status,
+                finished_at = excluded.finished_at,
+                metrics_json = excluded.metrics_json
+            "#,
+            params![
+                record.run_id,
+                record.plugin_id,
+                record.plugin_source,
+                record.provider_id,
+                record.agent_id,
+                record.effort,
+                record.status,
+                record.started_at,
+                record.finished_at,
+                metrics_json,
+            ],
+        )
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn ai_usage_record_list(
+    plugin_id: String,
+    plugin_source: String,
+    provider_id: Option<String>,
+    since: Option<i64>,
+    limit: Option<i64>,
+) -> Result<Vec<AiUsageRecord>, String> {
+    validate_plugin_kv_namespace(&plugin_source, &plugin_id)?;
+    let limit = limit.unwrap_or(100).clamp(1, 1000);
+    let db = get_plugin_kv_db()?
+        .lock()
+        .map_err(|error| error.to_string())?;
+    let mut statement = db
+        .connection
+        .prepare(
+            r#"
+          SELECT run_id, plugin_id, plugin_source, provider_id, agent_id, effort,
+                 status, started_at, finished_at, metrics_json
+          FROM ai_usage_records
+          WHERE plugin_id = ?1 AND plugin_source = ?2
+            AND (?3 IS NULL OR provider_id = ?3)
+            AND (?4 IS NULL OR started_at >= ?4)
+          ORDER BY started_at DESC
+          LIMIT ?5
+        "#,
+        )
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map(
+            params![plugin_id, plugin_source, provider_id, since, limit],
+            |row| {
+                let metrics_json: String = row.get(9)?;
+                Ok(AiUsageRecord {
+                    run_id: row.get(0)?,
+                    plugin_id: row.get(1)?,
+                    plugin_source: row.get(2)?,
+                    provider_id: row.get(3)?,
+                    agent_id: row.get(4)?,
+                    effort: row.get(5)?,
+                    status: row.get(6)?,
+                    started_at: row.get(7)?,
+                    finished_at: row.get(8)?,
+                    metrics: serde_json::from_str(&metrics_json).unwrap_or_default(),
+                })
+            },
+        )
+        .map_err(|error| error.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())
 }
 
 fn validate_experience_identifier(value: &str, label: &str) -> Result<(), String> {
@@ -7057,7 +7256,7 @@ pub fn run() {
             }
 
             // D3/D4: localhost bridge for Chromium tabs + editor documents.
-            desktop_bridge::start_desktop_bridge_server();
+            desktop_bridge::start_desktop_bridge_server(app.handle().clone());
 
             Ok(())
         })
@@ -7070,6 +7269,11 @@ pub fn run() {
             fetch_url,
             plugin_http_request,
             plugin_shell_run,
+            clipboard_privacy::clipboard_read_public_text,
+            clipboard_privacy::clipboard_write_sensitive_text,
+            clipboard_privacy::clipboard_write_text,
+            clipboard_privacy::clipboard_read_image,
+            clipboard_privacy::clipboard_write_image,
             list_plugin_dirs,
             remove_plugin_dir,
             replace_plugin_dir,
@@ -7086,8 +7290,17 @@ pub fn run() {
             plugin_kv_usage,
             plugin_kv_prune,
             plugin_kv_clear,
+            ai_codex::ai_codex_rpc,
+            ai_codex::ai_codex_notify,
+            ai_xai::ai_xai_login_start,
+            ai_xai::ai_xai_describe,
+            ai_xai::ai_xai_response_stream,
+            ai_xai::ai_xai_cancel,
+            ai_xai::ai_xai_logout,
             usage_journal_append,
             usage_journal_prune,
+            ai_usage_record_upsert,
+            ai_usage_record_list,
             experience_journal_append,
             experience_journal_export,
             experience_journal_clear_since,
@@ -7114,6 +7327,7 @@ pub fn run() {
             open_system_url,
             hide_launcher_window,
             hide_launcher_and_paste,
+            hide_launcher_and_capture_selection,
             show_quick_editor_window,
             close_quick_editor_window,
             show_plugin_surface_window,
@@ -7123,10 +7337,12 @@ pub fn run() {
             simulate_paste,
             current_foreground_app_name,
             current_foreground_app_context,
-            // [DISABLED] External selection capture — command preserved, entry point disabled.
-            // last_foreground_selection_text,
+            desktop_capture::capture_desktop_snapshot,
+            keyboard_observation::poll_keyboard_observation,
+            keyboard_observation::stop_keyboard_observation,
             discover_installed_apps,
             read_installed_app_icon_url,
+            read_installed_app_icon_png,
             cache_installed_app_icons,
             launch_installed_app,
             toggle_installed_app,
@@ -7140,6 +7356,8 @@ pub fn run() {
             desktop_bridge::list_desktop_bridge_targets,
             desktop_bridge::focus_desktop_bridge_target,
             desktop_bridge::list_desktop_bridge_history,
+            desktop_bridge::begin_desktop_bridge_history_import,
+            desktop_bridge::desktop_bridge_history_import_status,
             desktop_bridge::list_desktop_bridge_events,
             desktop_bridge::open_desktop_bridge_url,
             desktop_bridge::set_desktop_bridge_source_config,

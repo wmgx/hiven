@@ -218,6 +218,14 @@ function hasShortAlias(aliasList, shortForms) {
   )
 }
 
+// Common delete intent must discover line deduplication in either UI locale.
+{
+  const dedup = loadPluginDefinition('line-tools').tools.find((tool) => tool.id === 'line-tools.dedup')
+  assert.ok(dedup.aliases.includes('remove duplicate lines'))
+  assert.ok(dedup.aliases.includes('删除重复行'))
+  assert.ok(dedup.aliases.includes('去重'))
+}
+
 // ─── json-tools ──────────────────────────────────────────────────────────────
 
 {

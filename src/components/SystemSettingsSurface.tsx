@@ -1,12 +1,14 @@
 import { useState } from 'react'
-import { Settings, Puzzle, Sparkles } from 'lucide-react'
+import { flushSync } from 'react-dom'
+import { BrainCircuit, Eye, Settings, Puzzle, Sparkles } from 'lucide-react'
 import { useT } from '../i18n'
-import { SettingsContent } from '../surfaces/SettingsContent'
+import { ObservationSettings } from '../observation/ObservationSettings'
+import { AiSubscriptionsContent, SettingsContent } from '../surfaces/SettingsContent'
 import { PluginsContent } from '../surfaces/PluginsContent'
 import { LearnedRulesContent } from '../surfaces/LearnedRulesContent'
 import './SystemSettingsSurface.css'
 
-type TabId = 'settings' | 'plugins' | 'learning'
+type TabId = 'settings' | 'ai' | 'plugins' | 'learning' | 'observation'
 
 export function SystemSettingsSurface({ initialTab = 'settings' }: { initialTab?: TabId }) {
   const [activeTab, setActiveTab] = useState<TabId>(initialTab)
@@ -14,19 +16,35 @@ export function SystemSettingsSurface({ initialTab = 'settings' }: { initialTab?
 
   const tabs: { id: TabId; icon: React.ReactNode; label: string }[] = [
     { id: 'settings', icon: <Settings size={16} />, label: t('basicSettings') },
+    { id: 'ai', icon: <BrainCircuit size={16} />, label: t('aiSubscriptions') },
     { id: 'plugins', icon: <Puzzle size={16} />, label: t('pluginManagement') },
     { id: 'learning', icon: <Sparkles size={16} />, label: t('learnedRules') },
+    { id: 'observation', icon: <Eye size={16} />, label: t('behaviorObservation') },
   ]
 
+  const selectTab = (tabId: TabId) => {
+    if (tabId === activeTab) return
+    const startViewTransition = (document as Document & {
+      startViewTransition?: (update: () => void) => void
+    }).startViewTransition
+    if (!startViewTransition) {
+      setActiveTab(tabId)
+      return
+    }
+    startViewTransition.call(document, () => flushSync(() => setActiveTab(tabId)))
+  }
+
   return (
-    <div className="system-settings-surface">
+    <div className={`system-settings-surface ${typeof document.startViewTransition === 'function' ? 'supports-view-transitions' : ''}`}>
       <div className="system-settings-sidebar" data-launcher-scrollable>
         {tabs.map((tab) => (
           <button
             key={tab.id}
             type="button"
             className={`system-settings-tab ${activeTab === tab.id ? 'active' : ''}`}
-            onClick={() => setActiveTab(tab.id)}
+            aria-label={tab.label}
+            title={tab.label}
+            onClick={() => selectTab(tab.id)}
           >
             <span className="system-settings-tab-icon">{tab.icon}</span>
             <span className="system-settings-tab-label">{tab.label}</span>
@@ -34,9 +52,13 @@ export function SystemSettingsSurface({ initialTab = 'settings' }: { initialTab?
         ))}
       </div>
       <div className="system-settings-content" data-launcher-scrollable>
-        {activeTab === 'settings' && <SettingsContent />}
-        {activeTab === 'plugins' && <PluginsContent />}
-        {activeTab === 'learning' && <LearnedRulesContent />}
+        <div key={activeTab} className="system-settings-page">
+          {activeTab === 'settings' && <SettingsContent />}
+          {activeTab === 'ai' && <AiSubscriptionsContent />}
+          {activeTab === 'plugins' && <PluginsContent />}
+          {activeTab === 'learning' && <LearnedRulesContent />}
+          {activeTab === 'observation' && <ObservationSettings />}
+        </div>
       </div>
     </div>
   )

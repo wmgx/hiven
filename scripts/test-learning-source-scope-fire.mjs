@@ -39,6 +39,8 @@ function loadModule(path, { stripImports = [], globals = {} } = {}) {
 
 let clipboardTokens = [] // Array<{ token, sourceHost }>
 let storedRules = [] // LearnedRule[]
+let learnedChainCalls = []
+let feedbackCalls = 0
 
 const fire = loadModule('src/workspace/learning/fire.ts', {
   // One pattern per import path — a shared catch-all here would let one
@@ -66,17 +68,21 @@ const fire = loadModule('src/workspace/learning/fire.ts', {
     trackBehavior: () => {},
     findHistoryRecall: () => [],
     extractFeatures: () => ({}),
-    featureSignature: () => '',
+    featureSignature: () => 'sig:tool',
     isPlausibleToken: (s) => typeof s === 'string' && s.trim().length >= 3 && !/\s/.test(s.trim()),
     normalizeToken: (s) => (s ?? '').trim(),
     FIRE_STRENGTH_BONUS: 1,
     firePriority: () => 50,
+    isForgettable: (rule) => Boolean(rule.forgotten),
     getCurrentActiveHost: () => null,
     getRecentHistoryForRecall: () => [],
     getRecentClipboardTokensWithSource: () => clipboardTokens,
     isNewlyLearned: () => false,
-    runLearnedChain: () => null,
-    bumpRuleStrength: async () => {},
+    runLearnedChain: (toolIds, text) => {
+      learnedChainCalls.push({ toolIds: [...toolIds], text })
+      return toolIds[0] === 'demo:uppercase' ? text.toUpperCase() : null
+    },
+    bumpRuleStrength: async () => { feedbackCalls += 1 },
     pruneForgottenRules: async () => {},
     queryAllRules: async () => storedRules,
     fillTemplate: (template, value) => template.replace(/\{[^}]+\}/, value),
@@ -159,6 +165,19 @@ storedRules = [
     sampleCount: 3,
     fireCount: 10,
   },
+  {
+    clusterKey: 'sig:tool#tool:demo:stale',
+    matcherSig: 'sig:tool',
+    matcher: { kind: 'feature-sig', sig: 'sig:tool' },
+    transform: { kind: 'tool', toolId: 'demo:stale' },
+    descriptor: { charset: 'mixed', lenBucket: 'm', flags: [], transform: { kind: 'tool', toolId: 'demo:stale' } },
+    strength: 0,
+    origin: 'learned',
+    createdAt: 0,
+    sampleCount: 3,
+    fireCount: 0,
+    forgotten: true,
+  },
 ]
 clipboardTokens = [] // no source context at all — must not matter for an unscoped rule
 await fire.refreshLearnedUrlRules()
@@ -166,6 +185,34 @@ await fire.refreshLearnedUrlRules()
   const items = fire.learnedLauncherItems('123456', 'en')
   assert.equal(items.length, 1, 'unscoped (plain scenario D) rule fires regardless of clipboard source context')
   assert.equal(items[0].display.subtitle, 'https://x.org/mr/123456')
+}
+
+// ─── persisted one-step tool rules use the same runner path as chains ─────────
+storedRules = [
+  {
+    clusterKey: 'sig:tool#tool:demo:uppercase',
+    matcherSig: 'sig:tool',
+    matcher: { kind: 'feature-sig', sig: 'sig:tool' },
+    transform: { kind: 'tool', toolId: 'demo:uppercase' },
+    descriptor: { charset: 'mixed', lenBucket: 'm', flags: [], transform: { kind: 'tool', toolId: 'demo:uppercase' } },
+    strength: 5,
+    origin: 'learned',
+    createdAt: 0,
+    sampleCount: 3,
+    fireCount: 10,
+  },
+]
+learnedChainCalls = []
+feedbackCalls = 0
+await fire.refreshLearnedUrlRules()
+{
+  const items = fire.learnedLauncherItems('hello', 'en')
+  assert.equal(items.length, 1, 'persisted one-step tool rule is cached while forgotten rules stay hidden')
+  assert.deepEqual(learnedChainCalls, [{ toolIds: ['demo:uppercase'], text: 'hello' }], 'tool reuses the learned-chain runner')
+  assert.equal(items[0].systemKey, 'learned-tool:sig:tool#tool:demo:uppercase')
+  assert.equal(items[0].display.title, 'HELLO')
+  assert.equal((await items[0].execute()).ok, true, 'matched tool result remains executable')
+  assert.equal(feedbackCalls, 1, 'successful execution feeds the learned rule once')
 }
 
 console.log('test-learning-source-scope-fire: ok')

@@ -1,13 +1,14 @@
 /**
  * Settings UI for per-app global hotkeys (focus / hide toggle).
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { AppWindow, Plus, Trash2 } from 'lucide-react'
 import { useAppStore } from '../store'
 import { t } from '../i18n'
 import { ShortcutRecorder } from './ShortcutRecorder'
 import type { AppHotkeyBinding } from '../workspace/appHotkeys'
 import type { DiscoveredApp } from '../workspace/launcher/types'
+import { Combobox } from '../plugin-ui'
 
 type ListedApp = { appId: string; name: string }
 
@@ -18,7 +19,6 @@ export function AppHotkeysSettings() {
   const removeAppHotkey = useAppStore((s) => s.removeAppHotkey)
 
   const [apps, setApps] = useState<ListedApp[]>([])
-  const [filter, setFilter] = useState('')
   const [selectedAppId, setSelectedAppId] = useState('')
   const [draftAccel, setDraftAccel] = useState('')
   const [loadError, setLoadError] = useState('')
@@ -51,12 +51,6 @@ export function AppHotkeysSettings() {
     }
   }, [])
 
-  const filteredApps = useMemo(() => {
-    const q = filter.trim().toLowerCase()
-    if (!q) return apps.slice(0, 80)
-    return apps.filter((a) => a.name.toLowerCase().includes(q) || a.appId.toLowerCase().includes(q)).slice(0, 80)
-  }, [apps, filter])
-
   const selectedName = apps.find((a) => a.appId === selectedAppId)?.name ?? selectedAppId
 
   const handleAdd = useCallback(() => {
@@ -73,8 +67,6 @@ export function AppHotkeysSettings() {
 
   return (
     <div className="app-hotkeys-settings">
-      <p className="app-hotkeys-help">{t(locale, 'settings.appHotkeysInfo')}</p>
-
       {bindings.length === 0 ? (
         <p className="app-hotkeys-empty">{t(locale, 'settings.appHotkeysEmpty')}</p>
       ) : (
@@ -100,23 +92,15 @@ export function AppHotkeysSettings() {
       <div className="app-hotkeys-add">
         <label className="app-hotkeys-field">
           <span>{t(locale, 'settings.appHotkeysPickApp')}</span>
-          <input
-            type="search"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            placeholder={t(locale, 'settings.appHotkeysFilter')}
-          />
-          <select
+          <Combobox
+            className="app-hotkeys-app-select"
             value={selectedAppId}
-            onChange={(e) => setSelectedAppId(e.target.value)}
-          >
-            <option value="">{t(locale, 'settings.appHotkeysSelect')}</option>
-            {filteredApps.map((a) => (
-              <option key={a.appId} value={a.appId}>
-                {a.name}
-              </option>
-            ))}
-          </select>
+            options={apps.map((app) => ({ value: app.appId, label: app.name }))}
+            placeholder={t(locale, 'settings.appHotkeysFilter')}
+            emptyLabel={t(locale, 'settings.appHotkeysSelect')}
+            aria-label={t(locale, 'settings.appHotkeysPickApp')}
+            onChange={setSelectedAppId}
+          />
         </label>
 
         <div className="app-hotkeys-field">

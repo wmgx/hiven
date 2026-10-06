@@ -1,4 +1,5 @@
-import { definePlugin, textOutput, type TextInput, type LauncherDynamicContext, type LauncherItemContribution } from '@hiven/plugin'
+import { definePlugin, getPluginHostSdk, textError, textOutput, type TextInput, type LauncherDynamicContext, type LauncherItemContribution, type PluginSurfaceProps, type PluginToolSurfaces } from '@hiven/plugin'
+import type { DateTimeConversionResult } from './DateTimeSurface'
 
 function pad(n: number, width = 2): string {
   return String(n).padStart(width, '0')
@@ -21,6 +22,12 @@ function formatOffsetDateTime(date: Date, offsetMinutes?: number): string {
   const h = String(Math.floor(absOff / 60)).padStart(2, '0')
   const m = String(absOff % 60).padStart(2, '0')
   return `${iso.replace('T', ' ')}${sign}${h}:${m}`
+}
+
+function formatOffsetLabel(offsetMinutes: number): string {
+  const sign = offsetMinutes >= 0 ? '+' : '-'
+  const absolute = Math.abs(offsetMinutes)
+  return `UTC${sign}${pad(Math.floor(absolute / 60))}:${pad(absolute % 60)}`
 }
 
 function parseTzSuffix(str: string): { body: string; offsetMinutes: number | undefined } {
@@ -101,6 +108,12 @@ type ParsedResult = {
   display: string
   value: string
   actionLabelKey: string
+}
+
+class TimestampConversionError extends Error {
+  constructor(readonly value: string) {
+    super(`Invalid date "${value}"`)
+  }
 }
 
 function resultKindLabel(kind: ParsedResult['kind'], locale: LauncherDynamicContext['locale']): string {
@@ -293,7 +306,7 @@ function convertTimestampText(text: string, params: Record<string, unknown>, inP
 
       let date = new Date(body)
       if (Number.isNaN(date.getTime())) date = new Date(trimmed)
-      if (Number.isNaN(date.getTime())) return `Error: Invalid date "${trimmed}"`
+      if (Number.isNaN(date.getTime())) throw new TimestampConversionError(trimmed)
       if (offsetMinutes !== undefined) {
         const localOffsetMinutes = -date.getTimezoneOffset()
         const utcMs = date.getTime() + (localOffsetMinutes - offsetMinutes) * 60000
@@ -302,9 +315,128 @@ function convertTimestampText(text: string, params: Record<string, unknown>, inP
       const result = formatTimestamp(date, unit)
       return showOriginal ? `${trimmed} -> ${result}` : result
     } catch (error: unknown) {
-      return `Error: ${error instanceof Error ? error.message : String(error)}`
+      if (error instanceof TimestampConversionError) throw error
+      throw new TimestampConversionError(trimmed)
     }
   }).join('\n')
+}
+
+export function convertForSurface(input: string, offsetToken: string): DateTimeConversionResult {
+  const trimmed = input.trim()
+  const selectedOffset = parseTimezoneToken(offsetToken)
+  if (!trimmed || selectedOffset === null) return { ok: false }
+
+  const nowParsed = parseNowExpression(trimmed, new Date())
+  if (nowParsed) {
+    const separatorIndex = nowParsed.value.indexOf(' | ')
+    const date = new Date(Number(separatorIndex >= 0 ? nowParsed.value.slice(0, separatorIndex) : nowParsed.value))
+    if (Number.isNaN(date.getTime())) return { ok: false }
+    const formatted = separatorIndex >= 0 ? nowParsed.value.slice(separatorIndex + 3) : ''
+    const explicitOffset = formatted.match(/([+-]\d{2}:\d{2})$/)?.[1]
+    const offsetMinutes = explicitOffset ? parseTimezoneToken(explicitOffset) ?? selectedOffset : selectedOffset
+    return {
+      ok: true,
+      value: {
+        dateTime: formatOffsetDateTime(date, offsetMinutes),
+        unixSeconds: formatTimestamp(date, 's'),
+        unixMilliseconds: formatTimestamp(date, 'ms'),
+        offsetLabel: formatOffsetLabel(offsetMinutes),
+      },
+    }
+  }
+
+  if (/T.*Z$/i.test(trimmed)) {
+    const date = new Date(trimmed)
+    if (Number.isNaN(date.getTime())) return { ok: false }
+    return {
+      ok: true,
+      value: {
+        dateTime: formatOffsetDateTime(date, 0),
+        unixSeconds: formatTimestamp(date, 's'),
+        unixMilliseconds: formatTimestamp(date, 'ms'),
+        offsetLabel: formatOffsetLabel(0),
+      },
+    }
+  }
+
+  const parsedInput = parseTzSuffix(trimmed)
+  if (parsedInput.body !== trimmed && parsedInput.offsetMinutes === undefined) return { ok: false }
+  const offsetMinutes = parsedInput.offsetMinutes ?? selectedOffset
+  const timestamp = tryParseTimestamp(parsedInput.body)
+  let date: Date
+
+  if (!Number.isNaN(timestamp)) {
+    date = new Date(timestamp)
+  } else {
+    const dateSource = /^\d{4}-\d{1,2}-\d{1,2}$/.test(parsedInput.body)
+      ? `${parsedInput.body}T00:00:00`
+      : parsedInput.body
+    date = new Date(dateSource)
+    if (Number.isNaN(date.getTime())) return { ok: false }
+    const localOffsetMinutes = -date.getTimezoneOffset()
+    date = new Date(date.getTime() + (localOffsetMinutes - offsetMinutes) * 60000)
+  }
+  if (Number.isNaN(date.getTime())) return { ok: false }
+
+  return {
+    ok: true,
+    value: {
+      dateTime: formatOffsetDateTime(date, offsetMinutes),
+      unixSeconds: formatTimestamp(date, 's'),
+      unixMilliseconds: formatTimestamp(date, 'ms'),
+      offsetLabel: formatOffsetLabel(offsetMinutes),
+    },
+  }
+}
+
+function DateTimeWorkspace(props: PluginSurfaceProps) {
+  const { react: React } = getPluginHostSdk()
+  const Surface = React.useMemo(() => React.lazy(async () => {
+    const module = await import('./DateTimeSurface')
+    return { default: module.DateTimeSurface }
+  }), [React])
+  return React.createElement(
+    React.Suspense,
+    {
+      fallback: React.createElement(
+        'section',
+        { className: 'date-time-surface date-time-surface__loading', role: 'status' },
+        props.t('surface.loading'),
+      ),
+    },
+    React.createElement(Surface, {
+      ...props,
+      defaultOffset: formatOffsetLabel(-new Date().getTimezoneOffset()),
+      convert: convertForSurface,
+    }),
+  )
+}
+
+const WORKSPACE_SHELL = {
+  defaultWidth: 760,
+  defaultHeight: 540,
+  minWidth: 600,
+  minHeight: 400,
+  closeOnBlur: false,
+  resizable: true,
+}
+
+const WORKSPACE_ROUTES: { id: string; title: string; aliases: string[] }[] = [
+  {
+    id: 'timestamp-to-datetime',
+    title: 'route.timestampToDate',
+    aliases: ['timestamp to date', 'timestamp to datetime', 'unix to date', '时间戳转日期', '时间戳转日期时间'],
+  },
+  {
+    id: 'datetime-to-timestamp',
+    title: 'route.dateToTimestamp',
+    aliases: ['date to timestamp', 'datetime to timestamp', 'date to unix', '日期转时间戳', '日期时间转时间戳'],
+  },
+]
+
+const EDITOR_TOOL_SURFACES: PluginToolSurfaces = {
+  launcher: { surfaces: ['editor-command-bar', 'quick-editor-command'] },
+  panel: true,
 }
 
 const TIMESTAMP_PARAMS = [
@@ -331,6 +463,34 @@ const TIMESTAMP_PARAMS = [
 ]
 
 export const dateTimeAssistantPlugin = definePlugin({
+  ui: {
+    surfaces: [
+      {
+        id: 'main',
+        kind: 'custom-view',
+        title: 'Date & Time Converter',
+        titleI18n: { zh: '日期时间换算' },
+        icon: 'Clock',
+        aliases: ['date time', 'datetime', 'timestamp', 'unix time', '日期时间', '时间戳', '日期换算'],
+        textMatch: (text) => /^\s*(?:\d{10}|\d{13}|\d{4}-\d{1,2}-\d{1,2})/.test(text),
+        component: DateTimeWorkspace,
+        entry: {
+          launcher: { surfaces: ['global-launcher'] },
+          shortcutBindable: true,
+        },
+        shell: WORKSPACE_SHELL,
+      },
+      ...WORKSPACE_ROUTES.map((route) => ({
+        id: route.id,
+        kind: 'custom-view' as const,
+        title: 'Date & Time Converter',
+        titleI18n: { zh: '日期时间换算' },
+        component: DateTimeWorkspace,
+        entry: { launcher: false },
+        shell: WORKSPACE_SHELL,
+      })),
+    ],
+  },
   tools: [
     {
       id: 'timestamp.run',
@@ -342,9 +502,14 @@ export const dateTimeAssistantPlugin = definePlugin({
       accepts: { kinds: ['timestamp'], aliases: ['ts', '时间戳'] },
       params: TIMESTAMP_PARAMS,
       run(ctx) {
-        return ctx.output.replaceActiveText(convertTimestampText(ctx.input.text, ctx.params, ctx.input.source === 'all'))
+        try {
+          return ctx.output.replaceActiveText(convertTimestampText(ctx.input.text, ctx.params, ctx.input.source === 'all'))
+        } catch (error) {
+          const value = error instanceof TimestampConversionError ? error.value : ctx.input.text.trim()
+          return ctx.output.error(ctx.t('error.invalidDate', { value }))
+        }
       },
-      surfaces: { launcher: true, panel: true },
+      surfaces: EDITOR_TOOL_SURFACES,
     },
   ],
   commands: [
@@ -364,11 +529,30 @@ export const dateTimeAssistantPlugin = definePlugin({
         const input = ctx.inputs.input as TextInput
         const text = input?.kind === 'text' ? input.text : ''
         const inPlace = !!input?.paneId
-        return textOutput(convertTimestampText(text, ctx.params, inPlace))
+        try {
+          return textOutput(convertTimestampText(text, ctx.params, inPlace))
+        } catch (error) {
+          return textError(error instanceof Error ? error.message : String(error))
+        }
       },
     },
   ],
   launcher: {
+    items: WORKSPACE_ROUTES.map((route) => ({
+      id: `open-${route.id}`,
+      display: {
+        title: route.title,
+        subtitle: 'route.open',
+        icon: 'Clock',
+        aliases: route.aliases,
+      },
+      behavior: { type: 'perform' as const },
+      surfaces: ['global-launcher' as const],
+      execute(execution) {
+        execution.api.openSurface(route.id, { initialText: execution.input?.text })
+        return { ok: true as const, keepOpen: true }
+      },
+    })),
     dynamicItems(ctx: LauncherDynamicContext): LauncherItemContribution[] {
       const input = ctx.query
       if (!input) return []
@@ -390,6 +574,7 @@ export const dateTimeAssistantPlugin = definePlugin({
               id: 'dt-now-timestamp',
               display: { title: `${trimmed} -> ${timestampValue}`, subtitle: resultKindLabel('timestamp', ctx.locale), icon: 'Clock' },
               behavior: { type: 'perform' },
+              surfaces: ['global-launcher'],
               directAnswer: true,
               async execute(ctx2) {
                 await ctx2.api.copyText(timestampValue)
@@ -400,6 +585,7 @@ export const dateTimeAssistantPlugin = definePlugin({
               id: 'dt-now-datetime',
               display: { title: `${trimmed} -> ${dateTimeValue}`, subtitle: resultKindLabel('datetime', ctx.locale), icon: 'Clock' },
               behavior: { type: 'perform' },
+              surfaces: ['global-launcher'],
               directAnswer: true,
               async execute(ctx2) {
                 await ctx2.api.copyText(dateTimeValue)
@@ -416,6 +602,7 @@ export const dateTimeAssistantPlugin = definePlugin({
           id: `dt-date-timestamp-${index}`,
           display: { title: `${trimmed} -> ${result.display}`, subtitle: resultKindLabel(result.kind, ctx.locale), icon: 'Clock' },
           behavior: { type: 'perform' },
+          surfaces: ['global-launcher'],
           directAnswer: true,
           async execute(ctx2) {
             await ctx2.api.copyText(result.value)
@@ -431,6 +618,7 @@ export const dateTimeAssistantPlugin = definePlugin({
         id: 'dt-result',
         display: { title: `${trimmed} -> ${parsed.display}`, subtitle: resultKindLabel(parsed.kind, ctx.locale), icon: 'Clock' },
         behavior: { type: 'perform' },
+        surfaces: ['global-launcher'],
         directAnswer: true,
         async execute(ctx2) {
           await ctx2.api.copyText(parsed.value)

@@ -20,6 +20,12 @@ assert.match(src, /resolvePreservedSelection/, 'selectionPreserve must export re
 const session = readFileSync(join(root, 'src/workspace/launcher/useLauncherSession.ts'), 'utf8')
 assert.match(session, /resolvePreservedSelection|selectedKeyRef/, 'session must preserve selection by systemKey')
 assert.match(session, /pin:\s*false|options\?\.pin/, 'session must support pin:false for default selection')
+assert.match(
+  session,
+  /visibleSelectionItemsRef\?\.current\s*\?\?\s*rankedItemsRef\.current/,
+  'selection identity must come from the rendered list when the host prepends rows',
+)
+assert.doesNotMatch(session, /useDeferredValue/, 'ranking and Enter must use the live query snapshot')
 assert.doesNotMatch(
   session,
   /First paint with items: pin identity/,
@@ -28,6 +34,8 @@ assert.doesNotMatch(
 
 const panel = readFileSync(join(root, 'src/components/launcher/GlobalLauncherPanel.tsx'), 'utf8')
 assert.match(panel, /setSelectedIndex\(0,\s*\{\s*pin:\s*false\s*\}\)/, 'query change must not pin default selection')
+const globalHost = readFileSync(join(root, 'src/launcher/hosts/GlobalLauncherHost.tsx'), 'utf8')
+assert.match(globalHost, /visibleSelectionItemsRef/, 'global host must bind selection to its composed visible list')
 
 const tmp = mkdtempSync(join(tmpdir(), 'sel-preserve-'))
 const out = join(tmp, 'selectionPreserve.mjs')
@@ -91,6 +99,22 @@ const { resolvePreservedSelection } = await import(pathToFileURL(out).href)
   })
   assert.equal(r.index, 0)
   assert.equal(r.key, null)
+}
+
+// 3b) Host-pinned rows and ranked rows share one identity/index space
+{
+  const r = resolvePreservedSelection({
+    selectedKey: 'a',
+    selectedIndex: 1,
+    items: [
+      { systemKey: 'object-action:open-in-quick-editor' },
+      { systemKey: 'new-top' },
+      { systemKey: 'a' },
+      { systemKey: 'b' },
+    ],
+  })
+  assert.equal(r.index, 2, 'pinned prefix must not change the selected item identity')
+  assert.equal(r.key, 'a')
 }
 
 // 4) Empty list

@@ -5,7 +5,8 @@
  * The plugin provides the body content via its settings.component.
  */
 
-import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from 'react'
+import { Component, useCallback, useEffect, useMemo, useState, type ErrorInfo, type ReactNode } from 'react'
+import { Dialog } from '@base-ui/react/dialog'
 import { X } from 'lucide-react'
 import { t } from '../i18n'
 import { makePluginT } from '../i18n/pluginI18nRegistry'
@@ -20,19 +21,11 @@ import { openExternalUrl } from '../workspace/effectRunner'
 import type { PluginSettingsContribution } from '../workspace/pluginTypes'
 import { createPluginPrivateStorage } from '../workspace/pluginStorage'
 import { createPluginNetwork } from '../workspace/pluginNetwork'
+import { createPluginAi } from '../workspace/ai/runtime'
 import { createPluginShell } from '../workspace/pluginShell'
 import { getPluginPermissionSnapshot, usePluginPermissionStore } from '../workspace/pluginPermissions'
 import { PluginSettingsSchemaRenderer } from './PluginSettingsSchemaRenderer'
 import { resolvePluginSettingsModal, type ResolvedPluginSettingsModal } from './pluginSettingsModalResolution'
-
-const FOCUSABLE_SELECTOR =
-  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
-
-function getFocusableElements(container: HTMLElement): HTMLElement[] {
-  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
-    (el) => !el.hasAttribute('disabled') && el.tabIndex !== -1 && el.offsetParent !== null,
-  )
-}
 
 // ─── Error Boundary ──────────────────────────────────────────────────────────
 
@@ -68,103 +61,59 @@ export function PluginSettingsDialog() {
   const locale = useAppStore((s) => s.locale)
   const target = usePluginSettingsStore((s) => s.settingsDialogTarget)
   const closeSettingsDialog = usePluginSettingsStore((s) => s.closeSettingsDialog)
-  const panelRef = useRef<HTMLDivElement>(null)
-  const previouslyFocusedRef = useRef<HTMLElement | null>(null)
+  const [renderedTarget, setRenderedTarget] = useState(target)
+  const [isClosing, setIsClosing] = useState(false)
   const titleId = 'plugin-settings-dialog-title'
 
   useEffect(() => {
-    if (!target || target.presentation === 'global-launcher') return
-    previouslyFocusedRef.current = document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : null
-
-    const frame = requestAnimationFrame(() => {
-      const panel = panelRef.current
-      if (!panel) return
-      const focusables = getFocusableElements(panel)
-      const preferred = panel.querySelector<HTMLElement>('[data-settings-dialog-close]')
-      ;(preferred ?? focusables[0] ?? panel).focus()
-    })
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        event.preventDefault()
-        event.stopPropagation()
-        event.stopImmediatePropagation()
-        closeSettingsDialog()
-        return
-      }
-      if (event.key !== 'Tab') return
-      const panel = panelRef.current
-      if (!panel) return
-      const focusables = getFocusableElements(panel)
-      if (focusables.length === 0) {
-        event.preventDefault()
-        panel.focus()
-        return
-      }
-      const first = focusables[0]
-      const last = focusables[focusables.length - 1]
-      const active = document.activeElement as HTMLElement | null
-      if (event.shiftKey) {
-        if (!active || active === first || !panel.contains(active)) {
-          event.preventDefault()
-          last.focus()
-        }
-      } else if (!active || active === last || !panel.contains(active)) {
-        event.preventDefault()
-        first.focus()
-      }
+    if (target) {
+      setRenderedTarget(target)
+      setIsClosing(false)
+      return
     }
+    if (!renderedTarget) return
+    setIsClosing(true)
+    const timer = window.setTimeout(() => {
+      setRenderedTarget(null)
+      setIsClosing(false)
+    }, 90)
+    return () => window.clearTimeout(timer)
+  }, [renderedTarget, target])
 
-    window.addEventListener('keydown', handleKeyDown, true)
-    return () => {
-      cancelAnimationFrame(frame)
-      window.removeEventListener('keydown', handleKeyDown, true)
-      const restore = previouslyFocusedRef.current
-      if (restore && typeof restore.focus === 'function') {
-        restore.focus()
-      }
-    }
-  }, [closeSettingsDialog, target])
-
-  if (!target) return null
-  if (target.presentation === 'global-launcher') return null
+  const activeTarget = target ?? renderedTarget
+  if (!activeTarget) return null
+  if (activeTarget.presentation === 'global-launcher') return null
+  const fillsPluginWindow = activeTarget.presentation === 'plugin-surface-window'
 
   return (
-    <div
-      className="fixed inset-0"
-      style={{ pointerEvents: 'auto', zIndex: 1200, background: 'rgba(0, 0, 0, 0.4)' }}
-      onClick={(e) => { if (e.target === e.currentTarget) closeSettingsDialog() }}
-    >
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        tabIndex={-1}
-        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col overflow-hidden plugin-settings-dialog-panel anim-dropdown"
-        style={{
-          width: 'min(780px, calc(100vw - 40px))',
-          height: 'min(680px, calc(100vh - 48px))',
-          maxHeight: 'min(680px, calc(100vh - 48px))',
-          background: 'var(--panel, var(--bg-surface, #ffffff))',
-          border: '1px solid var(--border, var(--color-border-secondary))',
-          borderRadius: '14px',
-          boxShadow: 'var(--shadow-panel, 0 20px 50px -12px rgba(18, 22, 28, 0.22), 0 0 0 1px rgba(18, 22, 28, 0.06))',
-          outline: 'none',
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <PluginSettingsContent
-          pluginId={target.pluginId}
-          source={target.source}
-          locale={locale}
-          onClose={closeSettingsDialog}
-          titleId={titleId}
-        />
-      </div>
-    </div>
+    <Dialog.Root open onOpenChange={(open) => { if (!open && !isClosing) closeSettingsDialog() }}>
+      <Dialog.Portal>
+        <Dialog.Backdrop className={`plugin-settings-dialog-backdrop fixed inset-0 bg-black/40 z-[1200]${isClosing ? ' is-closing' : ''}`} />
+        <Dialog.Popup
+          aria-labelledby={titleId}
+          initialFocus={() => document.querySelector<HTMLElement>('[data-settings-dialog-close]')}
+          className={`fixed left-1/2 top-1/2 z-[1201] -translate-x-1/2 -translate-y-1/2 flex flex-col overflow-hidden plugin-settings-dialog-panel${isClosing ? ' is-closing' : ''}`}
+          style={{
+            width: fillsPluginWindow ? '100vw' : 'min(780px, calc(100vw - 40px))',
+            height: fillsPluginWindow ? '100vh' : 'min(680px, calc(100vh - 48px))',
+            maxHeight: fillsPluginWindow ? '100vh' : 'min(680px, calc(100vh - 48px))',
+            background: 'var(--panel, var(--bg-surface, #ffffff))',
+            border: '1px solid var(--border, var(--color-border-secondary))',
+            borderRadius: fillsPluginWindow ? 0 : '14px',
+            boxShadow: 'var(--shadow-panel, 0 20px 50px -12px rgba(18, 22, 28, 0.22), 0 0 0 1px rgba(18, 22, 28, 0.06))',
+            outline: 'none',
+          }}
+        >
+          <PluginSettingsContent
+            pluginId={activeTarget.pluginId}
+            source={activeTarget.source}
+            locale={locale}
+            onClose={closeSettingsDialog}
+            titleId={titleId}
+          />
+        </Dialog.Popup>
+      </Dialog.Portal>
+    </Dialog.Root>
   )
 }
 
@@ -250,6 +199,8 @@ function SettingsDialogBody({
   const storedRecord = usePluginSettingsStore((s) => s.pluginSettings[source][pluginId])
   const pluginPermissionVersion = usePluginPermissionStore((s) => s.version)
   const [settingsModalTarget, setSettingsModalTarget] = useState<ResolvedPluginSettingsModal<unknown> | null>(null)
+  const [renderedSettingsModalTarget, setRenderedSettingsModalTarget] = useState<ResolvedPluginSettingsModal<unknown> | null>(null)
+  const [isSettingsModalClosing, setIsSettingsModalClosing] = useState(false)
   void pluginPermissionVersion
 
   const currentVersion = contribution.version ?? 1
@@ -286,6 +237,7 @@ function SettingsDialogBody({
   const settingsHost = useMemo(() => ({
     permissions,
     storage: createPluginPrivateStorage(source, pluginId, permissions),
+    ai: createPluginAi(pluginId, source, permissions),
     showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error') {
       showToast(message, level ?? 'info')
     },
@@ -310,11 +262,12 @@ function SettingsDialogBody({
         storage: settingsHost.storage,
         network: settingsNetwork,
         shell: settingsShell,
+        ai: settingsHost.ai,
       }),
     ).catch((error) => {
       console.warn(`[hiven] Plugin settings onChange failed for "${pluginId}":`, error)
     })
-  }, [contribution, pluginId, source, settingsHost.storage, settingsNetwork, settingsShell])
+  }, [contribution, pluginId, source, settingsHost.ai, settingsHost.storage, settingsNetwork, settingsShell])
 
   const setValue = useCallback(
     (next: unknown) => {
@@ -345,10 +298,27 @@ function SettingsDialogBody({
   }, [])
 
   const SettingsComponent = contribution.component
-  const SettingsModalComponent = settingsModalTarget?.modal.component
-  const settingsModalTitle = settingsModalTarget
-    ? settingsModalTarget.modal.titleI18n?.[locale] ?? settingsModalTarget.modal.title
+  useEffect(() => {
+    if (settingsModalTarget) {
+      setRenderedSettingsModalTarget(settingsModalTarget)
+      setIsSettingsModalClosing(false)
+      return
+    }
+    if (!renderedSettingsModalTarget) return
+    setIsSettingsModalClosing(true)
+    const timer = window.setTimeout(() => {
+      setRenderedSettingsModalTarget(null)
+      setIsSettingsModalClosing(false)
+    }, 90)
+    return () => window.clearTimeout(timer)
+  }, [renderedSettingsModalTarget, settingsModalTarget])
+
+  const activeSettingsModalTarget = settingsModalTarget ?? renderedSettingsModalTarget
+  const SettingsModalComponent = activeSettingsModalTarget?.modal.component
+  const settingsModalTitle = activeSettingsModalTarget
+    ? activeSettingsModalTarget.modal.titleI18n?.[locale] ?? activeSettingsModalTarget.modal.title
     : ''
+  const settingsModalTitleId = 'plugin-settings-modal-title'
 
   const errorFallback = (
     <div className="p-4 text-[13px]" style={{ color: 'var(--color-error)' }}>
@@ -419,9 +389,13 @@ function SettingsDialogBody({
             <PluginSettingsSchemaRenderer
               schema={contribution.schema}
               locale={locale}
+              translateText={pluginT}
               value={value}
               updateValue={updateValue}
               onOpenModal={(field) => setSettingsModalTarget(resolvePluginSettingsModal(contribution, field))}
+              onRunAction={async (field, reportProgress) => {
+                await field.run({ ...settingsBodyProps, reportProgress })
+              }}
               permissions={permissions}
             />
           ) : (
@@ -432,51 +406,51 @@ function SettingsDialogBody({
         </SettingsErrorBoundary>
       </div>
 
-      {settingsModalTarget && SettingsModalComponent && (
-        <div
-          className="absolute inset-0 flex items-center justify-center"
-          style={{ background: 'rgba(0, 0, 0, 0.28)' }}
-          onClick={() => setSettingsModalTarget(null)}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label={settingsModalTitle}
-            className="flex max-h-[calc(100%-48px)] w-[min(520px,calc(100%-48px))] flex-col overflow-hidden rounded-lg"
-            style={{
-              background: 'var(--panel, var(--bg-surface, #ffffff))',
-              border: 'var(--hairline) solid var(--color-border-secondary)',
-              boxShadow: 'var(--shadow-panel, 0 20px 44px rgba(0, 0, 0, 0.22))',
-            }}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div
-              className="flex items-center justify-between px-4 py-3"
-              style={{ borderBottom: 'var(--hairline) solid var(--color-border-tertiary)' }}
+      {activeSettingsModalTarget && SettingsModalComponent && (
+        <Dialog.Root open onOpenChange={(open) => { if (!open && !isSettingsModalClosing) setSettingsModalTarget(null) }}>
+          <Dialog.Portal>
+            <Dialog.Backdrop className={`plugin-settings-modal-backdrop fixed inset-0 bg-black/40 z-[1210]${isSettingsModalClosing ? ' is-closing' : ''}`} />
+            <Dialog.Popup
+              aria-labelledby={settingsModalTitleId}
+              initialFocus={() => document.querySelector<HTMLElement>('[data-settings-modal-close]')}
+              className={`plugin-settings-modal-panel fixed left-1/2 top-1/2 z-[1211] -translate-x-1/2 -translate-y-1/2 flex max-h-[calc(100%-48px)] w-[min(520px,calc(100%-48px))] flex-col overflow-hidden rounded-lg${isSettingsModalClosing ? ' is-closing' : ''}`}
+              style={{
+                background: 'var(--panel, var(--bg-surface, #ffffff))',
+                border: 'var(--hairline) solid var(--color-border-secondary)',
+                boxShadow: 'var(--shadow-panel, 0 20px 44px rgba(0, 0, 0, 0.22))',
+                outline: 'none',
+              }}
             >
-              <h3 className="m-0 text-[14px] font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                {settingsModalTitle}
-              </h3>
-              <button
-                className="flex h-7 w-7 items-center justify-center rounded-md"
-                style={{ color: 'var(--color-text-tertiary)', background: 'transparent' }}
-                onClick={() => setSettingsModalTarget(null)}
-                title={t(locale, 'scripts.settingsClose')}
+              <div
+                className="flex items-center justify-between px-4 py-3"
+                style={{ borderBottom: 'var(--hairline) solid var(--color-border-tertiary)' }}
               >
-                <X size={16} />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4">
-              <SettingsErrorBoundary fallback={errorFallback}>
-                <SettingsModalComponent
-                  {...settingsBodyProps}
-                  modalId={settingsModalTarget.modal.id}
-                  close={() => setSettingsModalTarget(null)}
-                />
-              </SettingsErrorBoundary>
-            </div>
-          </div>
-        </div>
+                <h3 id={settingsModalTitleId} className="m-0 text-[14px] font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                  {settingsModalTitle}
+                </h3>
+                <button
+                  className="flex h-7 w-7 items-center justify-center rounded-md"
+                  style={{ color: 'var(--color-text-tertiary)', background: 'transparent' }}
+                  onClick={() => setSettingsModalTarget(null)}
+                  title={t(locale, 'scripts.settingsClose')}
+                  data-settings-modal-close
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4">
+                <SettingsErrorBoundary fallback={errorFallback}>
+                  <SettingsModalComponent
+                    {...settingsBodyProps}
+                    modalId={activeSettingsModalTarget.modal.id}
+                    context={activeSettingsModalTarget.field.context}
+                    close={() => setSettingsModalTarget(null)}
+                  />
+                </SettingsErrorBoundary>
+              </div>
+            </Dialog.Popup>
+          </Dialog.Portal>
+        </Dialog.Root>
       )}
     </>
   )

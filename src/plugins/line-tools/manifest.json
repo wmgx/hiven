@@ -1,7 +1,16 @@
 {
   "pluginId": "line-tools",
-  "displayName": "Line Tools",
-  "displayNameI18n": { "zh": "行工具" },
-  "version": "2.1.0",
-  "capabilities": ["command"]
+  "displayName": "Text Tools",
+  "displayNameI18n": {
+    "zh": "文本整理"
+  },
+  "version": "3.0.3",
+  "capabilities": [
+    "command",
+    "surface"
+  ],
+  "permissions": [
+    "clipboard.write",
+    "accessibility.paste"
+  ]
 }

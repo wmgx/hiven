@@ -1,6 +1,7 @@
 import type { Locale } from '../../i18n'
 import { resolveInstalledAppIdByName } from '../appLauncher/hostAppLauncher'
 import type { LauncherExecuteResult, LauncherItem, LauncherSurfaceId } from '../launcher/types'
+import { scheduleIdleWork } from '../scheduleIdleWork'
 import { searchableFieldsMatch } from '../searchRanking'
 import { auditL2Action } from './audit'
 
@@ -309,16 +310,9 @@ export async function listDesktopWindowsCached(
 export function prefetchDesktopWindowsOnStartup(): void {
   if (!isTauriRuntime()) return
   // Idle after boot — do not compete with plugin load / app index.
-  const schedule =
-    typeof window !== 'undefined' && 'requestIdleCallback' in window
-      ? (cb: () => void) => {
-          ;(window as unknown as { requestIdleCallback: (fn: () => void, opts?: { timeout: number }) => void })
-            .requestIdleCallback(cb, { timeout: 4000 })
-        }
-      : (cb: () => void) => window.setTimeout(cb, 2000)
-  schedule(() => {
+  scheduleIdleWork(() => {
     void listDesktopWindowsCached({ immediate: true })
-  })
+  }, 4000)
 }
 
 /** Test helper: reset in-memory TTL cache. */

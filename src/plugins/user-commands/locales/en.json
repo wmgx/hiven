@@ -24,5 +24,8 @@
   "error.shell": "Shell failed: {message}",
   "error.permission": "Grant shell.run permission for this plugin first",
   "result.ok": "exit {code}\n{stdout}",
-  "result.fail": "exit {code}\n{stderr}"
+  "result.fail": "exit {code}\n{stderr}",
+  "result.noOutput": "(no output)",
+  "result.timedOut": "Timed out",
+  "result.failedFallback": "Command failed"
 }

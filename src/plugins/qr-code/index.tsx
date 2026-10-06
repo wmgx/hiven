@@ -33,7 +33,7 @@ const qrCodePlugin = definePlugin({
         aliases: ['qr', 'qrcode', 'qr code', 'generate qr', '二维码', '生成二维码'],
         textMatch: (text) => isHttpUrl(text) && !isImageDataUrl(text),
         component: QrSurface,
-        entry: { launcher: true, shortcutBindable: true },
+        entry: { launcher: { surfaces: ['global-launcher'] }, shortcutBindable: true },
         shell: QR_SHELL,
       },
       {
@@ -45,7 +45,7 @@ const qrCodePlugin = definePlugin({
         aliases: ['qr decode', 'scan qr', '识别二维码', '扫码'],
         textMatch: isImageDataUrl,
         component: QrSurface,
-        entry: { launcher: true, shortcutBindable: true },
+        entry: { launcher: { surfaces: ['global-launcher'] }, shortcutBindable: true },
         shell: QR_SHELL,
       },
     ],

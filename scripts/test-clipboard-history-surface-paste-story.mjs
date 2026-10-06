@@ -11,6 +11,7 @@ const read = (path) => readFileSync(join(root, path), 'utf8')
 
 const packageJson = JSON.parse(read('package.json'))
 const surface = read('src/plugins/clipboard-history/surfaces/ClipboardHistorySurface.tsx')
+const surfaceRenderer = read('src/components/pluginSurface/PluginSurfaceRenderer.tsx')
 
 assert.equal(
   packageJson.scripts?.['test:clipboard-history-surface-paste-story'],
@@ -18,8 +19,14 @@ assert.equal(
   'package.json must expose clipboard history surface paste story coverage',
 )
 
+assert.match(
+  surfaceRenderer,
+  /keepOpen:\s*presentation !== 'global-launcher' && target\.pluginId !== 'clipboard-history'/,
+  'clipboard history must hide after paste so its next open captures the current foreground app',
+)
+
 const handlePasteBlock =
-  surface.match(/const handlePaste = useCallback\(async \(item: ClipboardHistoryItem\) => \{[\s\S]*?\n  \}, \[host, t, repository\]\)/)?.[0] ?? ''
+  surface.match(/const handlePaste = useCallback\(async \(item: ClipboardHistoryItem\) => \{[\s\S]*?\n  \}, \[host, t, repository, resetBrowser\]\)/)?.[0] ?? ''
 assert.ok(handlePasteBlock, 'ClipboardHistorySurface must define handlePaste')
 assert.match(
   handlePasteBlock,
@@ -43,7 +50,7 @@ assert.match(
 )
 assert.match(
   handlePasteBlock,
-  /result && !result\.ok && result\.fallback === 'copied'[\s\S]*host\.showMessage\(result\.message, 'info'\)/,
+  /result\?\.fallback === 'copied'[\s\S]*host\.showMessage\(result\.message, 'info'\)[\s\S]*host\.complete\(\)/,
   'paste fallback copied results must be surfaced to the user as info',
 )
 assert.match(
@@ -53,13 +60,18 @@ assert.match(
 )
 assert.match(
   handlePasteBlock,
-  /setQuery\(['"]['"]\)[\s\S]*host\.close\(\)/,
-  'successful paste must clear the search query before closing so warm reopen has a clean list',
+  /resetBrowser\(\)[\s\S]*host\.complete\(\)/,
+  'successful paste must reset browsing state before completing the launcher action',
+)
+assert.match(
+  surface,
+  /const resetBrowser = useCallback\([\s\S]*setQuery\(['"]['"]\)[\s\S]*setFilter\('all'\)[\s\S]*setSelectedId\(items\[0\]\?\.id \?\? null\)[\s\S]*listRef\.current\.scrollTop = 0[\s\S]*removeAllRanges\(\)/,
+  'successful paste must restore the initial filter, selection and scroll position',
 )
 assert.match(
   handlePasteBlock,
-  /host\.close\(\)/,
-  'successful paste flow must close the clipboard history surface',
+  /host\.complete\(\)/,
+  'successful paste flow must complete the launcher action',
 )
 assert.match(
   handlePasteBlock,

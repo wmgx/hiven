@@ -114,7 +114,7 @@ export interface Suppression {
 }
 
 const DB_NAME = 'hiven-learning'
-const DB_VERSION = 4
+const DB_VERSION = 5
 const STORE_EVENTS = 'events'
 const STORE_PAIRS = 'pairs'
 const STORE_RULES = 'rules'
@@ -124,6 +124,7 @@ const STORE_PATHS = 'paths'
 const SALT_KEY = 'hiven:learning:salt'
 const EVENT_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
 const NAV_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
+const PAIR_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
 
 function hasIndexedDb(): boolean {
   return typeof indexedDB !== 'undefined'
@@ -148,6 +149,16 @@ function openDb(): Promise<IDBDatabase | null> {
           const store = db.createObjectStore(STORE_PAIRS, { keyPath: 'id', autoIncrement: true })
           store.createIndex('inSig', 'inSig', { unique: false })
           store.createIndex('kind', 'kind', { unique: false })
+          store.createIndex('ts', 'ts', { unique: false })
+        } else if (request.transaction) {
+          // v5: pairs never had a TTL — the set only ever grew, so periodic
+          // clustering re-scanned an unbounded table. Add the `ts` index (data
+          // already has the field) so pruneOldPairs can sweep it like the
+          // other timelines.
+          const store = request.transaction.objectStore(STORE_PAIRS)
+          if (!store.indexNames.contains('ts')) {
+            store.createIndex('ts', 'ts', { unique: false })
+          }
         }
         // v2: user-confirmed rules + rejected-cluster suppressions.
         if (!db.objectStoreNames.contains(STORE_RULES)) {
@@ -554,4 +565,96 @@ export async function pruneOldNavigations(now: number = Date.now()): Promise<voi
   const cutoff = now - NAV_TTL_MS
   await pruneStoreByTs(STORE_NAV, cutoff)
   await pruneStoreByTs(STORE_PATHS, cutoff)
+}
+
+/**
+ * Bound the verified-pairs timeline. Without this, `queryAllPairs` (read by
+ * every periodic auto-learn pass) grows for as long as the app is installed —
+ * the full-table scan and clustering over it get slower release over release.
+ */
+export async function pruneOldPairs(now: number = Date.now()): Promise<void> {
+  const cutoff = now - PAIR_TTL_MS
+  await pruneStoreByTs(STORE_PAIRS, cutoff)
+}
+
+// ─── one-time cleanup: stale number-slot ("n") learning history ───────────────
+
+/**
+ * Pure digits are no longer classified as an identifier slot (see
+ * urlTemplate.classifyPathSegment) — a page number, a quantity and an MR
+ * number are indistinguishable strings, and in practice this was the noisiest
+ * matcher. This purges what was already learned under the old, more permissive
+ * classifier: url-template rules and navigation evidence keyed on slot kind
+ * `'n'`. Runs once (localStorage-gated); string-shaped rules (hex/uuid/id/slug)
+ * are untouched.
+ */
+const NUMBER_SLOT_PURGE_FLAG = 'hiven:learning:purged-number-slot-v1'
+
+function isNumberSlotRule(rule: LearnedRule): boolean {
+  if (rule.matcher.kind === 'token' && rule.matcher.tokenKind === 'n') return true
+  if (rule.transform.kind === 'url-template' && rule.transform.slotKind === 'n') return true
+  return false
+}
+
+async function purgeMatchingCursor<T>(
+  db: IDBDatabase,
+  storeName: string,
+  isStale: (value: T) => boolean,
+): Promise<void> {
+  try {
+    const store = objectStore(db, storeName, 'readwrite')
+    await new Promise<void>((resolve) => {
+      const request = store.openCursor()
+      request.onsuccess = () => {
+        const cursor = request.result
+        if (cursor) {
+          if (isStale(cursor.value as T)) cursor.delete()
+          cursor.continue()
+        } else {
+          resolve()
+        }
+      }
+      request.onerror = () => resolve()
+    })
+  } catch {
+    // fail-soft
+  }
+}
+
+export async function purgeNumberSlotHistoryOnce(): Promise<void> {
+  try {
+    if (localStorage.getItem(NUMBER_SLOT_PURGE_FLAG)) return
+  } catch {
+    return
+  }
+  const db = await openDb()
+  if (!db) return
+  await purgeMatchingCursor<LearnedRule>(db, STORE_RULES, isNumberSlotRule)
+  await purgeMatchingCursor<NavigationRecord>(db, STORE_NAV, (nav) => (nav.slotKind as string | undefined) === 'n')
+  try {
+    localStorage.setItem(NUMBER_SLOT_PURGE_FLAG, String(Date.now()))
+  } catch {
+    // fail-soft
+  }
+}
+
+const URL_TEMPLATE_PURGE_FLAG = 'hiven:learning:purged-url-templates-v1'
+
+/** URL shape is not sufficient evidence of user intent; remove rules and source evidence. */
+export async function purgeUrlTemplateLearningOnce(): Promise<void> {
+  try {
+    if (localStorage.getItem(URL_TEMPLATE_PURGE_FLAG)) return
+  } catch {
+    return
+  }
+  const db = await openDb()
+  if (!db) return
+  await purgeMatchingCursor<LearnedRule>(db, STORE_RULES, (rule) => rule.transform.kind === 'url-template')
+  await purgeMatchingCursor<unknown>(db, STORE_NAV, () => true)
+  await purgeMatchingCursor<unknown>(db, STORE_PATHS, () => true)
+  try {
+    localStorage.setItem(URL_TEMPLATE_PURGE_FLAG, String(Date.now()))
+  } catch {
+    // fail-soft
+  }
 }

@@ -13,7 +13,6 @@ import {
   type LauncherOutput,
   type LauncherSuggestContext,
 } from '@hiven/plugin'
-import { learnedOfferToEntry, mergeLearnedEntry } from './learnedRules'
 import {
   AUTO_CREATED_TAG,
   buildWebQuickOpenUrl,
@@ -23,11 +22,8 @@ import {
   type WebQuickOpenSettings,
 } from './settings/model'
 import { FaviconCacheModal } from './settings/FaviconCacheModal'
-import { QueryHistoryModal } from './settings/QueryHistoryModal'
 import {
   extractDomain,
-  getCachedFaviconIcon,
-  getFaviconIcon,
   getFaviconIconSync,
   resolveFaviconIconForLauncher,
   warmFaviconDomains,
@@ -37,12 +33,15 @@ import { replaceMatchPatternCache, testMatchPattern } from './matchPatternCache'
 import {
   clampMaxQueryHistory,
   filterQueryHistory,
+  importBrowserQueryHistory,
   loadQueryHistory,
   recordQueryHistory,
   removeQueryHistoryEntry,
 } from './queryHistory'
 import {
+  CHROMIUM_SOURCE_ID,
   pushChromiumBridgeConfig,
+  refreshChromiumBrowserIndex,
   registerChromiumTabsProvider,
   unregisterChromiumTabsProvider,
 } from './browserProvider'
@@ -87,35 +86,12 @@ async function openAndMaybeRecord(
   return { ok: true }
 }
 
-/**
- * Resolve entry favicon as plugin-blob only (or Globe fallback).
- * Host never receives raw site URLs — multi-source fetch stays inside the plugin cache.
- */
-async function resolveEntryFavicon(
-  entry: WebQuickOpenEntry,
-  ctx: Pick<LauncherSuggestContext<WebQuickOpenSettings>, 'storage' | 'network' | 'pluginId' | 'source'>,
-): Promise<string> {
-  const domain = extractDomain(entry.urlTemplate)
-  if (!domain) return FALLBACK_ICON
-
-  const source = ctx.source ?? 'builtin'
-  const pluginId = ctx.pluginId ?? 'web-open'
-
-  try {
-    const cached = await getCachedFaviconIcon(domain, ctx.storage, source, pluginId)
-    if (cached) return cached
-    return await getFaviconIcon(domain, ctx.storage, source, pluginId, ctx.network)
-  } catch {
-    return resolveFaviconIconForLauncher(domain, ctx.storage, source, pluginId, ctx.network)
-  }
-}
-
-async function buildHistoryOutput(
+function buildHistoryOutput(
   entry: WebQuickOpenEntry,
   items: Awaited<ReturnType<typeof loadQueryHistory>>,
   ctx: Pick<LauncherSuggestContext<WebQuickOpenSettings>, 'api' | 'storage' | 'network' | 't' | 'pluginId' | 'source'>,
-): Promise<LauncherOutput> {
-  const icon = await resolveEntryFavicon(entry, ctx)
+): LauncherOutput {
+  const icon = entrySiteIcon(entry)
   return {
     choices: items.map((item) => {
       const url = buildWebQuickOpenUrl(entry.urlTemplate, item.text, entry.encodeQuery)
@@ -158,7 +134,7 @@ async function suggestHistoryForEntry(
   const all = await loadQueryHistory(ctx.storage, runtimeEntry.id)
   const filtered = filterQueryHistory(all, ctx.inputText)
   if (filtered.length === 0) return null
-  return await buildHistoryOutput(runtimeEntry, filtered, ctx)
+  return buildHistoryOutput(runtimeEntry, filtered, ctx)
 }
 
 /**
@@ -204,6 +180,7 @@ function buildEntryLauncherItem(
   const aliases = Array.isArray(entry.aliases) ? entry.aliases : []
   return {
     id: entry.id,
+    surfaces: ['global-launcher'],
     // Stable site/action id — safe to learn frequency when used as dynamic.
     recordUsage: true,
     display: {
@@ -309,6 +286,7 @@ async function buildDynamicLauncherItems(ctx: LauncherDynamicContext): Promise<L
 
     results.push({
       id: entry.id + '-quick',
+      surfaces: ['global-launcher'],
       // Pattern-matched site templates are stable intents (e.g. google-quick).
       recordUsage: true,
       display: {
@@ -335,6 +313,7 @@ async function buildDynamicLauncherItems(ctx: LauncherDynamicContext): Promise<L
 
     results.push({
       id: 'direct-url-open',
+      surfaces: ['global-launcher'],
       // Single stable action for "open this as URL", not the URL itself.
       recordUsage: true,
       // Participate in content intent ranking when detections include url.
@@ -368,6 +347,10 @@ async function buildDynamicLauncherItems(ctx: LauncherDynamicContext): Promise<L
   return results
 }
 
+function isAutoLearnedEntry(entry: Pick<WebQuickOpenEntry, 'tags' | 'learnedFrom'>): boolean {
+  return Boolean(entry.learnedFrom) || Boolean(entry.tags?.includes(AUTO_CREATED_TAG))
+}
+
 function migrateWebQuickOpenSettings(stored: unknown): WebQuickOpenSettings {
   const value = stored && typeof stored === 'object' && !Array.isArray(stored)
     ? stored as Partial<WebQuickOpenSettings>
@@ -375,29 +358,33 @@ function migrateWebQuickOpenSettings(stored: unknown): WebQuickOpenSettings {
   const entries = Array.isArray(value.entries) ? value.entries : DEFAULT_WEB_QUICK_OPEN_SETTINGS.entries
   const migrated: WebQuickOpenSettings = {
     enabled: typeof value.enabled === 'boolean' ? value.enabled : DEFAULT_WEB_QUICK_OPEN_SETTINGS.enabled,
-    entries: entries.map((entry, index) => {
-      const source = entry && typeof entry === 'object' && !Array.isArray(entry)
-        ? entry as Partial<WebQuickOpenSettings['entries'][number]>
-        : {}
-      return {
-        id: String(source.id || 'web-' + (index + 1)),
-        title: String(source.title || ''),
-        aliases: Array.isArray(source.aliases) ? source.aliases.map(String) : [],
-        placeholder: String(source.placeholder || ''),
-        urlTemplate: String(source.urlTemplate || 'https://example.com/search?q={query}'),
-        encodeQuery: typeof source.encodeQuery === 'boolean' ? source.encodeQuery : true,
-        emptyQueryBehavior: source.emptyQueryBehavior === 'open' ? 'open' : 'block',
-        matchPattern: typeof source.matchPattern === 'string' ? source.matchPattern : undefined,
-        recordQueryHistory: source.recordQueryHistory === true,
-        maxQueryHistory: clampMaxQueryHistory(
-          typeof source.maxQueryHistory === 'number' ? source.maxQueryHistory : DEFAULT_MAX_QUERY_HISTORY,
-        ),
-        // Preserved through migration: dropping it would let the learner claim
-        // the same cluster again on the next pass, duplicating the rule.
-        learnedFrom: typeof source.learnedFrom === 'string' ? source.learnedFrom : undefined,
-        tags: Array.isArray(source.tags) ? source.tags.map(String).filter(Boolean) : undefined,
-      }
-    }),
+    entries: entries
+      .map((entry, index) => {
+        const source = entry && typeof entry === 'object' && !Array.isArray(entry)
+          ? entry as Partial<WebQuickOpenSettings['entries'][number]>
+          : {}
+        return {
+          id: String(source.id || 'web-' + (index + 1)),
+          title: String(source.title || ''),
+          aliases: Array.isArray(source.aliases) ? source.aliases.map(String) : [],
+          placeholder: String(source.placeholder || ''),
+          urlTemplate: String(source.urlTemplate || 'https://example.com/search?q={query}'),
+          encodeQuery: typeof source.encodeQuery === 'boolean' ? source.encodeQuery : true,
+          emptyQueryBehavior: source.emptyQueryBehavior === 'open' ? 'open' : 'block',
+          matchPattern: typeof source.matchPattern === 'string' ? source.matchPattern : undefined,
+          recordQueryHistory: source.recordQueryHistory === true,
+          maxQueryHistory: clampMaxQueryHistory(
+            typeof source.maxQueryHistory === 'number' ? source.maxQueryHistory : DEFAULT_MAX_QUERY_HISTORY,
+          ),
+          // Preserved through migration: dropping it would let the learner claim
+          // the same cluster again on the next pass, duplicating the rule.
+          learnedFrom: typeof source.learnedFrom === 'string' ? source.learnedFrom : undefined,
+          tags: Array.isArray(source.tags) ? source.tags.map(String).filter(Boolean) : undefined,
+        }
+      })
+      // Generic URL-shape learning produced unrelated hard matches (for example
+      // a log ID substituted into a ChatGPT checkout URL). Keep manual rules.
+      .filter((entry) => !isAutoLearnedEntry(entry)),
   }
   // Keep regex cache in sync when settings are loaded/migrated (replace semantics).
   replaceMatchPatternCache(
@@ -429,44 +416,38 @@ function registerWebOpenCoverage(settings: WebQuickOpenSettings): void {
   )
 }
 
-/**
- * Claim learned url-templates from the self-learning layer.
- *
- * The learner discovers "type this shape → open that page"; that is precisely
- * what a quick-open rule IS, so it belongs in the same list the user already
- * manages — where it can be renamed, retargeted, or corrected. Left in the
- * learner's private store it could only ever be deleted.
- *
- * The counterpart of registerWebOpenCoverage: coverage stops the learner from
- * re-learning what we already do, this takes ownership of what it does learn.
- */
-function registerLearnedRuleClaim(pluginId: string, source: 'builtin' | 'installed' | 'dev'): void {
-  getPluginHostSdk().learning.registerSink('web-open', (offer) => {
-    const learned = learnedOfferToEntry(offer)
-    if (!learned) return false
-
-    let claimed = false
-    getPluginHostSdk().settings.update<WebQuickOpenSettings>(pluginId, source, (current) => {
-      const settings = current ?? DEFAULT_WEB_QUICK_OPEN_SETTINGS
-      const merged = mergeLearnedEntry(settings.entries ?? [], learned)
-      // Same array back = already present (or user-edited); nothing to write,
-      // but we still claim it so the host doesn't keep a duplicate copy.
-      claimed = true
-      if (merged === settings.entries) return settings
-      return { ...settings, entries: merged as WebQuickOpenEntry[] }
-    })
-    return claimed
-  })
-}
-
 export default definePlugin<WebQuickOpenSettings>({
+  background: {
+    async start(ctx) {
+      let refreshTimer: ReturnType<typeof setTimeout> | undefined
+      const scheduleRefresh = () => {
+        if (refreshTimer) clearTimeout(refreshTimer)
+        refreshTimer = setTimeout(() => void refreshChromiumBrowserIndex(), 2_000)
+      }
+      const stopOpened = await getPluginHostSdk().events.subscribe('browser.opened', (event) => {
+        if (event.source.channel !== CHROMIUM_SOURCE_ID || !event.payload.url) return
+        void importBrowserQueryHistory(ctx.storage, ctx.settings.entries, [{
+          url: event.payload.url,
+          lastVisitTime: event.payload.ts,
+        }])
+        scheduleRefresh()
+      })
+      const stopActivated = await getPluginHostSdk().events.subscribe('browser.activated', (event) => {
+        if (event.source.channel === CHROMIUM_SOURCE_ID) scheduleRefresh()
+      })
+      return () => {
+        stopOpened()
+        stopActivated()
+        if (refreshTimer) clearTimeout(refreshTimer)
+      }
+    },
+  },
   hooks: {
     // App start: warm favicons for current rules so launcher shows site icons after first session.
     startup(ctx) {
       const settings = (ctx.settings as WebQuickOpenSettings | undefined) ?? DEFAULT_WEB_QUICK_OPEN_SETTINGS
       scheduleWarmFavicons(settings, ctx.storage, ctx.source, ctx.pluginId, ctx.network)
       registerWebOpenCoverage(settings)
-      registerLearnedRuleClaim(ctx.pluginId, ctx.source)
       applyBrowserCapability(settings)
     },
   },
@@ -475,7 +456,7 @@ export default definePlugin<WebQuickOpenSettings>({
     // Matches the plugin's displayName (manifest.json) — one identity, one name.
     title: 'Browser',
     titleI18n: { zh: '浏览器' },
-    version: 6,
+    version: 9,
     defaultValue: DEFAULT_WEB_QUICK_OPEN_SETTINGS,
     migrate: migrateWebQuickOpenSettings,
     // Settings write-through: re-warm domains when rules / URL templates change.
@@ -491,12 +472,6 @@ export default definePlugin<WebQuickOpenSettings>({
         title: 'Favicon Cache',
         titleI18n: { zh: '网站图标缓存' },
         component: FaviconCacheModal,
-      },
-      {
-        id: 'query-history',
-        title: 'Query History',
-        titleI18n: { zh: '参数历史' },
-        component: QueryHistoryModal,
       },
       {
         id: 'browser-connection',
@@ -543,19 +518,6 @@ export default definePlugin<WebQuickOpenSettings>({
               buttonLabelI18n: { zh: '管理' },
               requires: ['storage.private', 'storage.blob'],
             },
-            {
-              kind: 'modal',
-              id: 'query-history',
-              modalId: 'query-history',
-              icon: 'History',
-              label: 'Query history',
-              labelI18n: { zh: '参数历史' },
-              description: 'Clear recorded parameters for rules that keep history.',
-              descriptionI18n: { zh: '清空已开启记录的规则参数历史。' },
-              buttonLabel: 'Manage',
-              buttonLabelI18n: { zh: '管理' },
-              requires: ['storage.private'],
-            },
           ],
         },
         {
@@ -567,6 +529,43 @@ export default definePlugin<WebQuickOpenSettings>({
             zh: '可选：连接实时 Chromium 浏览器，搜索标签 / 历史，并对已打开的页面直接聚焦而非重复打开。需配套扩展；上面的快开规则无需扩展。',
           },
           fields: [
+            {
+              kind: 'action',
+              id: 'browser-history-learning',
+              icon: 'History',
+              label: 'Browser history learning',
+              labelI18n: { zh: '浏览器历史学习' },
+              description: 'Import matching parameters from existing browser history into all quick-open rules.',
+              descriptionI18n: { zh: '从已有浏览器历史中，为全部快开规则导入匹配的参数。' },
+              buttonLabel: 'Learn now',
+              buttonLabelI18n: { zh: '主动学习' },
+              requires: ['storage.private'],
+              async run({ value, host, t, reportProgress }) {
+                try {
+                  let count = 0
+                  reportProgress({ current: 0, total: 5_000, label: t('queryHistory.learningProgress', { read: 0, learned: 0 }) })
+                  await getPluginHostSdk().desktopTargets.bridge.importHistory(
+                    CHROMIUM_SOURCE_ID,
+                    async (history, received) => {
+                      count += await importBrowserQueryHistory(host.storage, value.entries ?? [], history)
+                      reportProgress({
+                        current: received,
+                        total: 5_000,
+                        label: t('queryHistory.learningProgress', { read: received, learned: count }),
+                      })
+                    },
+                  )
+                  host.showMessage(
+                    count > 0 ? t('queryHistory.learned', { count }) : t('queryHistory.noneLearned'),
+                    count > 0 ? 'success' : 'info',
+                  )
+                } catch (error) {
+                  host.showMessage(t('queryHistory.learnFailedDetail', {
+                    error: error instanceof Error ? error.message : String(error),
+                  }), 'error')
+                }
+              },
+            },
             {
               kind: 'modal',
               id: 'browser-connection',

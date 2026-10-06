@@ -3,7 +3,7 @@
  * Clipboard Object Block Integration Test (current product path)
  *
  * RecommendedActionRow was retired; host pins object-action rows (history
- * paste/copy/open + clipboard open-to-quick-editor) above ranking tools.
+ * paste/copy/open + clipboard open-to-quick-editor) near the ranking top.
  */
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -53,6 +53,11 @@ assert.match(
   globalLauncherHost,
   /selectItemWithObjectActions/,
   'Selecting pinned object-action rows must run executeObjectAction',
+)
+assert.match(
+  globalLauncherHost,
+  /rankedVisible\[0\][\s\S]*\.\.\.pinnedObjectActionItems/,
+  'best content-aware recommendation must appear before the generic editor fallback',
 )
 
 // ─── Panel / frames passthrough ────────────────────────────────────────────────

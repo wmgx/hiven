@@ -17,6 +17,7 @@ import { pluginRegistry } from './pluginRegistry'
 import { createPluginNetwork } from './pluginNetwork'
 import { getPluginPermissionSnapshot } from './pluginPermissions'
 import { createPluginShell } from './pluginShell'
+import { createPluginAi } from './ai/runtime'
 import { createPluginLauncherStorage } from './launcher/pluginApi'
 import {
   resolvePluginSettings,
@@ -73,6 +74,7 @@ export function updateOwnPluginSettings<T>(
         }),
         network: createPluginNetwork(snapshot),
         shell: createPluginShell(snapshot),
+        ai: createPluginAi(pluginId, settingsSource, snapshot),
       }),
     ).catch((error) => {
       console.warn(`[hiven] settings onChange failed for "${pluginId}":`, error)

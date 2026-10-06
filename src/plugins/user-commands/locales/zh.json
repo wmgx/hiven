@@ -24,5 +24,8 @@
   "error.shell": "Shell 失败：{message}",
   "error.permission": "请先为本插件授予 shell.run 权限",
   "result.ok": "exit {code}\n{stdout}",
-  "result.fail": "exit {code}\n{stderr}"
+  "result.fail": "exit {code}\n{stderr}",
+  "result.noOutput": "（无输出）",
+  "result.timedOut": "执行超时",
+  "result.failedFallback": "命令执行失败"
 }

@@ -1,6 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
 import type { LauncherHostSurfaceTarget } from '../../store'
-import { LAUNCHER_PROGRAMMATIC_MOVE_EVENT } from '../../workspace/launcherWindowEvents'
 import { onCurrentLauncherWindowFocusChanged, resizeCurrentLauncherWindow, startCurrentLauncherWindowDrag } from '../../workspace/windowManager/launcherWindow'
 import { clearStandaloneLauncherBlurDevtoolsSuppress, shouldKeepLauncherOpenOnBlur } from '../../workspace/launcherBlurGuard'
 import { applyStandaloneLauncherGeometry, computeStandaloneLauncherGeometry } from './GlobalLauncherLayout'
@@ -241,10 +240,13 @@ export function useStandaloneLauncherResize({
   // Must live outside the effect — previously reset to '' on every dep change,
   // so sizeKey === lastSizeKey was always false → native resize every keystroke.
   const lastSizeKeyRef = useRef('')
+  const initialWindowWidthRef = useRef<number | null>(null)
 
   useLayoutEffect(() => {
     if (!open || !standaloneLauncher) return
     if (!isTauriRuntime()) return
+    const initialWindowWidth = initialWindowWidthRef.current ?? window.innerWidth
+    initialWindowWidthRef.current = initialWindowWidth
 
     let disposed = false
     // One rAF is enough after layout: frame switches (e.g. diff → 2 choices)
@@ -258,6 +260,7 @@ export function useStandaloneLauncherResize({
         hostSurfaceTarget,
         launcherSettingsTarget,
         surfaceShell,
+        currentWindowWidth: initialWindowWidth,
       })
       applyStandaloneLauncherGeometry(panel, geometry)
 
@@ -265,7 +268,6 @@ export function useStandaloneLauncherResize({
       if (sizeKey === lastSizeKeyRef.current) return
       lastSizeKeyRef.current = sizeKey
       logLauncherPerf('resize:native-window', { width: geometry.width, height: geometry.height })
-      window.dispatchEvent(new CustomEvent(LAUNCHER_PROGRAMMATIC_MOVE_EVENT))
       void resizeCurrentLauncherWindow({ width: geometry.width, height: geometry.height })
         .catch((error) => {
           console.warn('[hiven] Failed to resize launcher window:', error)
@@ -289,7 +291,10 @@ export function useStandaloneLauncherResize({
 
   // Reset dedupe when launcher closes so next open can compact→expand once.
   useLayoutEffect(() => {
-    if (!open) lastSizeKeyRef.current = ''
+    if (!open) {
+      lastSizeKeyRef.current = ''
+      initialWindowWidthRef.current = null
+    }
   }, [open])
 }
 

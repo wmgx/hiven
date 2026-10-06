@@ -70,23 +70,10 @@ export function useGlobalLauncherSurfaceFrame({
    * 3. Otherwise return to the launcher list
    */
   const leaveSurface = useCallback(() => {
-    const wasToolSurface = Boolean(
-      surfaceFrame &&
-      pluginSurfaceToolTarget &&
-      samePluginSurfaceTarget(surfaceFrame, pluginSurfaceToolTarget),
-    )
-
+    const wasToolSurface = Boolean(surfaceFrame && pluginSurfaceToolTarget && samePluginSurfaceTarget(surfaceFrame, pluginSurfaceToolTarget))
     setSurfaceFrame(null)
-
-    if (wasToolSurface) {
-      useAppStore.getState().clearPluginSurfaceTool()
-    }
-
-    if (useAppStore.getState().restorePreviousLauncherHostSurface()) {
-      return
-    }
-
-    onReturnedToList?.()
+    if (wasToolSurface) useAppStore.getState().clearPluginSurfaceTool()
+    if (!useAppStore.getState().restorePreviousLauncherHostSurface()) onReturnedToList?.()
   }, [onReturnedToList, pluginSurfaceToolTarget, surfaceFrame])
 
   const closeSurface = useCallback(() => {

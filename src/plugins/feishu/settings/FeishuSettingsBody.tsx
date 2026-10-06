@@ -4,10 +4,20 @@
 
 import type { PluginSettingsBodyProps } from '@hiven/plugin'
 import { getPluginHostSdk } from '@hiven/plugin'
+import { Switch } from '@hiven/plugin-ui'
 import { detectLarkCli } from '../cli/detect'
 import { completeLogin, getAuthStatus, startLogin } from '../domains/auth'
 import { getFeishuRuntime } from '../runtime'
 import type { FeishuSettings } from './model'
+
+function ToggleRow({ checked, onCheckedChange, text }: { checked: boolean; onCheckedChange: (checked: boolean) => void; text: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, fontSize: 13 }}>
+      <span>{text}</span>
+      <Switch checked={checked} onCheckedChange={onCheckedChange} aria-label={text} />
+    </div>
+  )
+}
 
 export function FeishuSettingsBody(props: PluginSettingsBodyProps<FeishuSettings>) {
   const { value, setValue, locale, t, openExternal } = props
@@ -41,7 +51,7 @@ export function FeishuSettingsBody(props: PluginSettingsBodyProps<FeishuSettings
     const shell = runtime.shell
     if (!shell) {
       setCliOk(null)
-      setCliSummary(zh ? 'Shell 未就绪（请授予 shell.run 权限）' : 'Shell unavailable (grant shell.run)')
+      setCliSummary(label('error.shellMissing', 'Shell permission required', '需要 shell.run 权限'))
       setAuthSummary(null)
       setLoggedIn(null)
       return
@@ -53,7 +63,13 @@ export function FeishuSettingsBody(props: PluginSettingsBodyProps<FeishuSettings
         binaryPath: value.binaryPath || undefined,
       })
       setCliOk(detect.installed)
-      setCliSummary(detect.summary ?? (detect.installed ? 'ok' : 'not installed'))
+      setCliSummary(
+        detect.summary ?? label(
+          detect.installed ? 'settings.cliReady' : 'error.notInstalled',
+          detect.installed ? 'Ready' : 'lark-cli is not installed',
+          detect.installed ? '已就绪' : '未安装 lark-cli',
+        ),
+      )
 
       if (!detect.installed) {
         setAuthSummary(null)
@@ -117,80 +133,56 @@ export function FeishuSettingsBody(props: PluginSettingsBodyProps<FeishuSettings
         <ui.Text style={{ fontSize: 13, fontWeight: 600 }}>
           {label('settings.enable', 'Enable Feishu', '启用飞书')}
         </ui.Text>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-          <ui.Checkbox
-            checked={value.enabled}
-            onChange={(event: { target: { checked: boolean } }) => {
-              setValue({ ...value, enabled: event.target.checked })
-            }}
-          />
-          {label('settings.enablePlugin', 'Enable Feishu plugin', '启用飞书插件')}
-        </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-          <ui.Checkbox
-            checked={value.docsMixEnabled}
-            onChange={(event: { target: { checked: boolean } }) => {
-              setValue({ ...value, docsMixEnabled: event.target.checked })
-            }}
-          />
-          {label(
+        <ToggleRow
+          checked={value.enabled}
+          onCheckedChange={(checked) => setValue({ ...value, enabled: checked })}
+          text={label('settings.enablePlugin', 'Enable Feishu plugin', '启用飞书插件')}
+        />
+        <ToggleRow
+          checked={value.docsMixEnabled}
+          onCheckedChange={(checked) => setValue({ ...value, docsMixEnabled: checked })}
+          text={label(
             'settings.enableDocsMix',
             'Show Feishu docs in Global Launcher',
             '在 Global Launcher 混排飞书文档',
           )}
-        </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-          <ui.Checkbox
-            checked={value.chatsMixEnabled !== false}
-            onChange={(event: { target: { checked: boolean } }) => {
-              setValue({ ...value, chatsMixEnabled: event.target.checked })
-            }}
-          />
-          {label(
+        />
+        <ToggleRow
+          checked={value.chatsMixEnabled !== false}
+          onCheckedChange={(checked) => setValue({ ...value, chatsMixEnabled: checked })}
+          text={label(
             'settings.enableChatsMix',
             'Show Feishu chats in Global Launcher',
             '在 Global Launcher 混排飞书会话',
           )}
-        </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-          <ui.Checkbox
-            checked={value.contactsMixEnabled !== false}
-            onChange={(event: { target: { checked: boolean } }) => {
-              setValue({ ...value, contactsMixEnabled: event.target.checked })
-            }}
-          />
-          {label(
+        />
+        <ToggleRow
+          checked={value.contactsMixEnabled !== false}
+          onCheckedChange={(checked) => setValue({ ...value, contactsMixEnabled: checked })}
+          text={label(
             'settings.enableContactsMix',
             'Show Feishu people in Global Launcher',
             '在 Global Launcher 混排飞书联系人',
           )}
-        </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-          <ui.Checkbox
-            checked={value.preferWindowFocus !== false}
-            onChange={(event: { target: { checked: boolean } }) => {
-              setValue({ ...value, preferWindowFocus: event.target.checked })
-            }}
-          />
-          {label(
+        />
+        <ToggleRow
+          checked={value.preferWindowFocus !== false}
+          onCheckedChange={(checked) => setValue({ ...value, preferWindowFocus: checked })}
+          text={label(
             'settings.preferWindowFocus',
             'After open, try raising Feishu window (macOS)',
             '打开后尝试聚焦飞书窗口（macOS）',
           )}
-        </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-          <ui.Checkbox
-            checked={value.advancedToolsEnabled === true}
-            onChange={(event: { target: { checked: boolean } }) => {
-              setValue({ ...value, advancedToolsEnabled: event.target.checked })
-            }}
-          />
-          {label(
+        />
+        <ToggleRow
+          checked={value.advancedToolsEnabled === true}
+          onCheckedChange={(checked) => setValue({ ...value, advancedToolsEnabled: checked })}
+          text={label(
             'settings.advancedTools',
             'Show all Feishu commands',
             '显示全部飞书命令',
           )}
-        </label>
+        />
         <ui.Text style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.45 }}>
           {label(
             'settings.advancedToolsHint',
@@ -198,19 +190,15 @@ export function FeishuSettingsBody(props: PluginSettingsBodyProps<FeishuSettings
             '默认保留搜文档 / 搜会话 / 找人 / 看日程 / 建文档 / 建表格。开启后会显示发消息、搜妙记、我的任务等全部命令。',
           )}
         </ui.Text>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-          <ui.Checkbox
-            checked={value.contactSearchOnlyChatted === true}
-            onChange={(event: { target: { checked: boolean } }) => {
-              setValue({ ...value, contactSearchOnlyChatted: event.target.checked })
-            }}
-          />
-          {label(
+        <ToggleRow
+          checked={value.contactSearchOnlyChatted === true}
+          onCheckedChange={(checked) => setValue({ ...value, contactSearchOnlyChatted: checked })}
+          text={label(
             'settings.contactSearchOnlyChatted',
             'Find People: only show contacts I have chatted with',
             '「找人」仅显示已聊过的联系人',
           )}
-        </label>
+        />
         <ui.Text style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.45 }}>
           {label(
             'settings.contactSearchOnlyChattedHint',
@@ -272,7 +260,7 @@ export function FeishuSettingsBody(props: PluginSettingsBodyProps<FeishuSettings
               void startLogin(runtime.shell, value.binaryPath || undefined)
                 .then(async (started) => {
                   if (!started.ok) {
-                    setMessage(started.message ?? 'Login failed')
+                    setMessage(started.message ?? label('login.failed', 'Could not start login', '无法发起登录'))
                     return
                   }
                   if (started.deviceCode) setPendingDeviceCode(started.deviceCode)
@@ -334,7 +322,7 @@ export function FeishuSettingsBody(props: PluginSettingsBodyProps<FeishuSettings
                   setMessage(
                     done.ok
                       ? done.message || label('settings.loginDone', 'Login completed', '登录完成')
-                      : done.message || 'Login incomplete',
+                      : done.message || label('settings.loginIncomplete', 'Login incomplete', '登录尚未完成'),
                   )
                   void refresh()
                 })
@@ -370,7 +358,13 @@ export function FeishuSettingsBody(props: PluginSettingsBodyProps<FeishuSettings
               ])
                 .then(async (started) => {
                   if (!started.ok) {
-                    setMessage(started.message ?? 'Avatar auth failed')
+                    setMessage(
+                      started.message ?? label(
+                        'settings.avatarAuthFailed',
+                        'Could not start avatar authorization',
+                        '无法发起头像授权',
+                      ),
+                    )
                     return
                   }
                   if (started.deviceCode) setPendingDeviceCode(started.deviceCode)
@@ -416,7 +410,9 @@ export function FeishuSettingsBody(props: PluginSettingsBodyProps<FeishuSettings
           )}
         </ui.Text>
         {message && (
-          <ui.Text style={{ fontSize: 12, color: 'var(--text-2)' }}>{message}</ui.Text>
+          <ui.Text role="status" aria-live="polite" style={{ fontSize: 12, color: 'var(--text-2)' }}>
+            {message}
+          </ui.Text>
         )}
       </ui.Stack>
 

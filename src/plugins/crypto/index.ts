@@ -26,10 +26,10 @@ export const hashPlugin = definePlugin({
         try {
           return ctx.output.text(await computeHash(ctx.input.text, 'SHA-256'))
         } catch (e: any) {
-          return ctx.output.error(`Error: ${e.message}`)
+          return ctx.output.error(ctx.t('error.hash', { message: e.message }))
         }
       },
-      surfaces: { launcher: true, panel: true },
+      surfaces: { launcher: { surfaces: ['global-launcher', 'editor-command-bar', 'quick-editor-command'] }, panel: true },
     },
     {
       id: 'hash.sha1',
@@ -42,10 +42,10 @@ export const hashPlugin = definePlugin({
         try {
           return ctx.output.text(await computeHash(ctx.input.text, 'SHA-1'))
         } catch (e: any) {
-          return ctx.output.error(`Error: ${e.message}`)
+          return ctx.output.error(ctx.t('error.hash', { message: e.message }))
         }
       },
-      surfaces: { launcher: true, panel: true },
+      surfaces: { launcher: { surfaces: ['global-launcher', 'editor-command-bar', 'quick-editor-command'] }, panel: true },
     },
     {
       id: 'hash.sha512',
@@ -58,10 +58,10 @@ export const hashPlugin = definePlugin({
         try {
           return ctx.output.text(await computeHash(ctx.input.text, 'SHA-512'))
         } catch (e: any) {
-          return ctx.output.error(`Error: ${e.message}`)
+          return ctx.output.error(ctx.t('error.hash', { message: e.message }))
         }
       },
-      surfaces: { launcher: true, panel: true },
+      surfaces: { launcher: { surfaces: ['global-launcher', 'editor-command-bar', 'quick-editor-command'] }, panel: true },
     },
   ],
 })

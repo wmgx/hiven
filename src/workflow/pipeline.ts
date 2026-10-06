@@ -1,5 +1,4 @@
 import type { Locale } from '../i18n'
-import { minifyJsonText } from './editorTextTransforms'
 
 /**
  * Linear text pipeline: each step receives the previous step's text output.
@@ -83,24 +82,4 @@ export function registerBuiltinTextPipelines(): void {
     ],
   })
 
-  registerTextPipeline({
-    id: 'json-minify',
-    title: 'JSON Minify',
-    titleI18n: { zh: 'JSON 压缩' },
-    aliases: ['minify json', 'json minify', 'compact json', '压缩 json', 'json压缩'],
-    steps: [
-      {
-        id: 'minify',
-        title: 'Minify',
-        titleI18n: { zh: '压缩' },
-        run: (input) => {
-          const minified = minifyJsonText(input)
-          if (minified == null) {
-            throw new Error('Invalid JSON')
-          }
-          return minified
-        },
-      },
-    ],
-  })
 }

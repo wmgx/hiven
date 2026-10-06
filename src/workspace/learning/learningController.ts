@@ -13,7 +13,8 @@
  * See doc/2026-08-12-direct-answer-workbench-design.md §8 (P2).
  */
 
-import { TelemetryEvents, trackBehavior, trackPerf } from '../telemetry'
+import { TelemetryEvents, measureLatency, trackBehavior, trackPerf } from '../telemetry'
+import { scheduleIdleWork } from '../scheduleIdleWork'
 import { selectProposableCandidates, type RuleCandidate } from './cluster'
 import { isShapeCovered, representativeTokens, type CoverageProbe } from './coverage'
 import { extractFeatures, featureSignature } from './features'
@@ -26,6 +27,7 @@ import {
   countEventSigs,
   deleteRule,
   putRule,
+  purgeUrlTemplateLearningOnce,
   queryAllPairs,
   queryAllRules,
   queryAllSuppressions,
@@ -78,6 +80,9 @@ async function collectCandidates(): Promise<{
     ...induceSourceScopedTemplates(navs).map(sourceScopedTemplateToCandidate),
     ...(await positionVarianceCandidates()),
   ]
+    // URL shape alone is not enough intent evidence: the same opaque ID shape
+    // occurs in checkout tokens, auth links, logs, tickets, and many other sites.
+    .filter((candidate) => candidate.transform.kind !== 'url-template')
     .filter(isCandidateNovel)
     .sort((a, b) => {
       if (b.distinctInputs !== a.distinctInputs) return b.distinctInputs - a.distinctInputs
@@ -167,6 +172,8 @@ export async function getPendingProposals(): Promise<RuleCandidate[]> {
  * from the pool permanently, which is what stops the old repeat-forever loop.
  */
 export async function autoLearnNow(now: number = Date.now()): Promise<number> {
+  // The periodic pass also owns persisted-rule pruning, even when nothing new is learnable.
+  await refreshLearnedUrlRules()
   const { candidates, learnedKeys, suppressedKeys } = await collectCandidates()
   const learnable = selectAutoLearnable(candidates, { learnedKeys, suppressedKeys })
   if (learnable.length === 0) return 0
@@ -248,10 +255,26 @@ export async function undoLearnedRule(rule: LearnedRule): Promise<void> {
   })
 }
 
+/** Remove URL-shape rules learned before URL-template auto-learning was retired. */
+export async function purgeStaleUrlTemplateLearning(): Promise<void> {
+  try {
+    await purgeUrlTemplateLearningOnce()
+    await refreshLearnedUrlRules()
+  } catch {
+    // fail-soft: cleanup must never break the app
+  }
+}
+
 /** Delay before the first auto-learn pass, so startup isn't competing with it. */
 const AUTO_LEARN_FIRST_DELAY_MS = 30_000
 /** Interval between later passes. Learning is not urgent; being cheap matters more. */
 const AUTO_LEARN_INTERVAL_MS = 10 * 60_000
+/**
+ * Idle-callback budget: run as soon as the main thread has a natural gap, but
+ * never wait longer than this even under sustained activity (the launcher
+ * being kept open + typed in continuously must not starve learning forever).
+ */
+const AUTO_LEARN_IDLE_TIMEOUT_MS = 5_000
 
 /**
  * Run silent learning in the background, off the launcher hot path.
@@ -259,14 +282,28 @@ const AUTO_LEARN_INTERVAL_MS = 10 * 60_000
  * Deliberately timer-driven rather than triggered on launcher open: opening the
  * launcher is the latency-critical moment (see doc/launcher-perf-telemetry.md),
  * and learning a rule 10 minutes later costs the user nothing.
+ *
+ * The timer only *schedules* — the actual pass runs via `scheduleIdleWork` so
+ * it lands in a gap between keystrokes/renders instead of firing mid-interaction
+ * on whatever main-thread tick the interval happens to land on.
  */
 export function startAutoLearnLoop(): () => void {
   let stopped = false
+  let cancelIdle: (() => void) | null = null
   const run = () => {
     if (stopped) return
-    void autoLearnNow().catch(() => {
-      // fail-soft: learning must never break the app
-    })
+    cancelIdle?.()
+    cancelIdle = scheduleIdleWork(() => {
+      cancelIdle = null
+      if (stopped) return
+      void measureLatency(
+        TelemetryEvents.learningAutoLearnPass,
+        () => autoLearnNow(),
+        (learnedCount) => ({ learnedCount }),
+      ).catch(() => {
+        // fail-soft: learning must never break the app
+      })
+    }, AUTO_LEARN_IDLE_TIMEOUT_MS)
   }
   const first = setTimeout(run, AUTO_LEARN_FIRST_DELAY_MS)
   const timer = setInterval(run, AUTO_LEARN_INTERVAL_MS)
@@ -274,6 +311,7 @@ export function startAutoLearnLoop(): () => void {
     stopped = true
     clearTimeout(first)
     clearInterval(timer)
+    cancelIdle?.()
   }
 }
 

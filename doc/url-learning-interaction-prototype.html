@@ -1,0 +1,604 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hiven URL Learning Prototype</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --ink: #1a1c1e;
+      --muted: #686d71;
+      --line: #e5e7eb;
+      --panel: #ffffff;
+      --paper: #f3f4f6;
+      --accent: #2563eb;
+      --accent-soft: #eff6ff;
+      --blue: #2563eb;
+      --blue-soft: #eff6ff;
+      --green: #397556;
+      --green-soft: #eaf6ef;
+      --shadow: 0 8px 24px rgba(17, 24, 39, .16);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background: var(--paper);
+    }
+    button, input { font: inherit; }
+    button { color: inherit; }
+
+    .prototype-note {
+      position: fixed;
+      top: 18px;
+      left: 20px;
+      z-index: 5;
+      font-size: 12px;
+      letter-spacing: .08em;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+    .stage {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 72px 24px 104px;
+    }
+    .shell {
+      width: min(760px, calc(100vw - 32px));
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      border-radius: 18px;
+      overflow: hidden;
+    }
+    .search {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 12px;
+      min-height: 68px;
+      padding: 0 18px;
+      border-bottom: 1px solid var(--line);
+    }
+    .search-mark {
+      width: 30px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      border-radius: 9px;
+      background: #25231f;
+      color: white;
+      font-weight: 700;
+    }
+    .query {
+      min-width: 0;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      font-size: 19px;
+      color: var(--ink);
+    }
+    .source-pill, .tag {
+      white-space: nowrap;
+      border-radius: 999px;
+      padding: 5px 9px;
+      font-size: 11px;
+      font-weight: 650;
+      letter-spacing: .02em;
+    }
+    .source-pill { background: #eef0f2; color: #4f555a; }
+    .tag.history { background: #eef0f2; color: #555b60; }
+    .tag.custom { background: var(--green-soft); color: var(--green); }
+    .tag.suggestion { background: var(--accent-soft); color: #1d4ed8; }
+    .section-label {
+      padding: 13px 18px 7px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+    }
+    .row {
+      width: 100%;
+      min-height: 60px;
+      display: grid;
+      grid-template-columns: 28px 1fr auto;
+      align-items: center;
+      gap: 11px;
+      padding: 9px 18px;
+      border: 0;
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+    }
+    .row:hover { background: #f5f6f7; }
+    .row.selected { background: #eaf1ff; }
+    .icon {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: #eceff2;
+      color: #444a50;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .copy { min-width: 0; }
+    .title { font-size: 14px; font-weight: 660; }
+    .subtitle {
+      overflow: hidden;
+      margin-top: 3px;
+      color: var(--muted);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .shortcut { color: #918c83; font-size: 12px; }
+    .divider { height: 1px; margin: 3px 18px; background: var(--line); }
+    .scenario-bar {
+      display: flex;
+      gap: 4px;
+      padding: 8px 12px;
+      overflow-x: auto;
+      border-bottom: 1px solid var(--line);
+      background: #f7f8f8;
+    }
+    .scenario-bar button {
+      flex: 0 0 auto;
+      min-height: 28px;
+      padding: 0 9px;
+      border: 0;
+      border-radius: 7px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 620;
+    }
+    .scenario-bar button:hover { background: #e9ebed; color: var(--ink); }
+    .scenario-bar button.active { background: #25231f; color: white; }
+    .footer {
+      min-height: 42px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 8px 18px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 11px;
+    }
+    kbd {
+      padding: 2px 5px;
+      border: 1px solid #d6d2ca;
+      border-bottom-width: 2px;
+      border-radius: 5px;
+      background: white;
+      font-family: inherit;
+      font-size: 10px;
+    }
+
+    .suggestion-card {
+      margin: 8px 14px 14px;
+      border: 1px solid #bfdbfe;
+      border-radius: 13px;
+      background: #f8fbff;
+      overflow: hidden;
+    }
+    .suggestion-head {
+      display: grid;
+      grid-template-columns: 34px 1fr auto;
+      align-items: start;
+      gap: 10px;
+      padding: 13px 14px 10px;
+    }
+    .spark {
+      width: 32px;
+      height: 32px;
+      display: grid;
+      place-items: center;
+      border-radius: 10px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 17px;
+    }
+    .suggestion-title { font-size: 14px; font-weight: 720; }
+    .suggestion-rule {
+      margin-top: 4px;
+      color: #344563;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11px;
+    }
+    .scope {
+      display: flex;
+      gap: 9px;
+      padding: 10px 14px;
+      border-top: 1px solid #dbeafe;
+      background: #eff6ff;
+      color: #344563;
+      font-size: 11px;
+      line-height: 1.45;
+    }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 11px 14px 13px; }
+    .queue-note, .conflict-note {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      margin: 0 14px 14px;
+      padding: 11px 13px;
+      border-radius: 10px;
+      background: #f1f4f6;
+      color: #525b62;
+      font-size: 11px;
+      line-height: 1.5;
+    }
+    .conflict-note { background: #fff4db; color: #6d5321; }
+    .queue-note button, .conflict-note button {
+      flex: 0 0 auto;
+      border: 0;
+      background: transparent;
+      color: var(--blue);
+      cursor: pointer;
+      font-weight: 700;
+    }
+    .item-trailing { display: flex; align-items: center; gap: 7px; }
+    .item-menu {
+      width: 26px;
+      height: 26px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .item-menu:hover, .item-menu:focus-visible { background: #e9ebed; color: var(--ink); outline: none; }
+    .direct-preview {
+      margin: 4px 18px 10px 56px;
+      padding: 9px 11px;
+      border-radius: 8px;
+      background: var(--blue-soft);
+      color: #1e4f92;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11px;
+    }
+    .empty-results {
+      padding: 20px 18px 14px;
+      color: var(--muted);
+      font-size: 12px;
+      text-align: center;
+    }
+    .btn {
+      min-height: 32px;
+      padding: 0 11px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      background: white;
+      font-size: 12px;
+      font-weight: 650;
+      cursor: pointer;
+    }
+    .btn:hover { border-color: #9ca3af; }
+    .btn.primary { border-color: var(--accent); background: var(--accent); color: white; }
+    .btn.danger { color: #ad402a; }
+
+    .toast {
+      position: fixed;
+      top: 24px;
+      left: 50%;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      max-width: calc(100vw - 32px);
+      padding: 11px 14px;
+      border-radius: 11px;
+      background: #25231f;
+      color: white;
+      box-shadow: 0 12px 35px rgba(0,0,0,.22);
+      font-size: 12px;
+      transform: translate(-50%, -120px);
+      transition: transform .22s ease;
+    }
+    .toast.show { transform: translate(-50%, 0); }
+    .toast button { border: 0; background: transparent; color: #93c5fd; cursor: pointer; font-weight: 700; }
+
+    .inline-explain {
+      margin: 0 18px 12px 56px;
+      padding: 12px 14px;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      background: #f8fbff;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+    .inline-explain dl { display: grid; grid-template-columns: 74px 1fr; gap: 6px 10px; margin: 0 0 12px; }
+    .inline-explain dt { color: var(--muted); }
+    .inline-explain dd { margin: 0; }
+
+    .split-shell { width: min(960px, calc(100vw - 32px)); }
+    .split-body { display: grid; grid-template-columns: minmax(0, 1fr) 330px; min-height: 390px; }
+    .inspector { border-left: 1px solid var(--line); background: #f7f8f8; }
+    .inspector-empty { display: grid; height: 100%; place-items: center; padding: 30px; color: var(--muted); text-align: center; font-size: 13px; }
+    .inspector-content { padding: 20px; }
+    .inspector-content h2 { margin: 0 0 5px; font-size: 18px; font-weight: 650; }
+    .inspector-content p { margin: 0 0 18px; color: var(--muted); font-size: 12px; line-height: 1.55; }
+    .fact { padding: 11px 0; border-top: 1px solid var(--line); }
+    .fact-label { margin-bottom: 4px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+    .fact-value { font-size: 12px; line-height: 1.5; word-break: break-word; }
+
+    .state-debug {
+      width: min(760px, calc(100vw - 32px));
+      margin: 14px auto 0;
+      color: var(--muted);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 10px;
+      text-align: center;
+    }
+    .switcher {
+      position: fixed;
+      bottom: 22px;
+      left: 50%;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px;
+      border-radius: 999px;
+      background: #1f1e1b;
+      color: white;
+      box-shadow: 0 12px 36px rgba(0,0,0,.28);
+      transform: translateX(-50%);
+    }
+    .switcher button {
+      height: 30px;
+      min-width: 30px;
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      color: white;
+      cursor: pointer;
+    }
+    .switcher button:hover { background: rgba(255,255,255,.13); }
+    .variant-name { min-width: 176px; font-size: 11px; text-align: center; }
+    .lang-toggle {
+      position: fixed;
+      top: 16px;
+      right: 18px;
+      z-index: 20;
+      border: 1px solid #d6d2ca;
+      border-radius: 999px;
+      background: rgba(255,255,255,.8);
+      padding: 7px 10px;
+      cursor: pointer;
+      font-size: 11px;
+    }
+
+    @media (max-width: 720px) {
+      .stage { padding-inline: 10px; }
+      .split-body { grid-template-columns: 1fr; }
+      .inspector { border-top: 1px solid var(--line); border-left: 0; }
+      .source-pill { display: none; }
+      .variant-name { min-width: 140px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .toast { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <!-- PROTOTYPE: three URL-learning interactions, switchable with ?variant=A|B|C. -->
+  <div class="prototype-note">Throwaway prototype · no persistence</div>
+  <button class="lang-toggle" id="lang-toggle" type="button">EN</button>
+  <main class="stage" id="app"></main>
+  <div class="toast" id="toast"><span id="toast-copy"></span><button id="toast-undo" type="button"></button></div>
+  <nav class="switcher" aria-label="Prototype variants">
+    <button id="prev" type="button" aria-label="Previous variant">←</button>
+    <div class="variant-name" id="variant-name"></div>
+    <button id="next" type="button" aria-label="Next variant">→</button>
+  </nav>
+
+  <script>
+    const variants = ['A', 'B', 'C']
+    const names = {
+      zh: { A: 'A · 独立建议区', B: 'B · 结果内联解释', C: 'C · 规则检查器' },
+      en: { A: 'A · Suggestion section', B: 'B · Inline explanation', C: 'C · Rule inspector' },
+    }
+    const text = {
+      zh: {
+        source: '来源：cloud.bytedance.net', results: '结果', history: '最近访问', suggestion: '学习建议',
+        boe: 'BOE Log', cn: 'Log CN', recent: '上次查看的日志', custom: '手工规则', historyTag: '历史',
+        ask: '要记住这种打开方式吗？', why: '为什么出现', whyValue: '过去 14 天，你在 3 个会话中从 cloud.bytedance.net 复制不同 ID 后打开了同一路径。',
+        scope: '仅当内容来自 cloud.bytedance.net 时建议；试一次不会保存规则。', add: '添加并打开', trial: '试一次', reject: '不是这条', more: '更多',
+        accepted: '已添加规则：以后只在相同来源下出现。', tried: '已试用一次，没有保存规则。', rejected: '已拒绝；这条规则不会再次学习。', undo: '撤销',
+        footer: '↑↓ 选择正常结果', footerTab: 'Tab 进入建议', state: '当前状态', pending: '待确认', active: '已接受', rejectedState: '已拒绝',
+        learned: '系统发现了一个可能的打开方式', target: '目标', evidence: '证据', effect: '接受后', effectValue: '在相同来源下作为正常结果出现', inspect: '选择学习建议，查看它会做什么。',
+        openRule: '打开 cloud.bytedance.net', explanation: '规则尚未保存。先检查范围和目标，再选择试用或添加。',
+        singleCase: '单条建议', multipleCase: '多个候选', conflictCase: '候选冲突', acceptedCase: '已接受', emptyCase: '无结果',
+        queue: '还有 2 条学习候选，没有占用结果列表。', manageQueue: '集中处理',
+        conflict: '发现 3 个相同 ID 形状的目标，但没有足够上下文判断你想去哪。系统不会猜测。', bindKeyword: '绑定关键词',
+        direct: '即时结果', directTitle: '复制标准 Log ID', disabled: '当前不可用', disabledReason: '需要连接浏览器扩展', noNormalResults: '没有匹配的正常结果',
+        suggestionStillSeparate: '学习建议仍保持独立，不会因结果为空自动执行。', edit: '编辑', revoke: '撤销规则', whyMenu: '为何出现',
+      },
+      en: {
+        source: 'Source: cloud.bytedance.net', results: 'Results', history: 'Recently visited', suggestion: 'Learning suggestion',
+        boe: 'BOE Log', cn: 'Log CN', recent: 'Last viewed log', custom: 'Manual rule', historyTag: 'History',
+        ask: 'Remember this way of opening IDs?', why: 'Why it appeared', whyValue: 'In the past 14 days, you copied different IDs from cloud.bytedance.net and opened the same path across 3 sessions.',
+        scope: 'Suggested only for content from cloud.bytedance.net. Trying once does not save a rule.', add: 'Add & open', trial: 'Try once', reject: 'Not relevant', more: 'More',
+        accepted: 'Rule added. It will only appear for the same source.', tried: 'Tried once. No rule was saved.', rejected: 'Rejected. This rule will not be learned again.', undo: 'Undo',
+        footer: '↑↓ select results', footerTab: 'Tab enters suggestion', state: 'Current state', pending: 'Pending', active: 'Accepted', rejectedState: 'Rejected',
+        learned: 'Hiven found a possible opening pattern', target: 'Target', evidence: 'Evidence', effect: 'After accepting', effectValue: 'Appears as a normal result for the same source', inspect: 'Select the suggestion to inspect what it will do.',
+        openRule: 'Open cloud.bytedance.net', explanation: 'This rule is not saved. Check its scope and target before trying or adding it.',
+        singleCase: 'Single suggestion', multipleCase: 'Multiple candidates', conflictCase: 'Conflict', acceptedCase: 'Accepted', emptyCase: 'No results',
+        queue: '2 more learning candidates are queued without taking result slots.', manageQueue: 'Review all',
+        conflict: 'Hiven found 3 destinations with the same ID shape, but lacks enough context to choose. It will not guess.', bindKeyword: 'Bind keyword',
+        direct: 'Instant result', directTitle: 'Copy normalized Log ID', disabled: 'Unavailable', disabledReason: 'Browser extension required', noNormalResults: 'No matching normal results',
+        suggestionStillSeparate: 'The learning suggestion stays separate and will not run automatically.', edit: 'Edit', revoke: 'Revoke rule', whyMenu: 'Why it appeared',
+      }
+    }
+
+    let lang = 'zh'
+    let ruleState = 'pending'
+    let lastState = null
+    let selectedSuggestion = false
+    const query = '735f13a9d6c1415f9f78509cf762db46'
+    const target = `cloud.bytedance.net/log/${query}`
+
+    const t = (key) => text[lang][key]
+    const stateLabel = () => ruleState === 'active' ? t('active') : ruleState === 'rejected' ? t('rejectedState') : t('pending')
+
+    function currentCase() {
+      const value = new URLSearchParams(location.search).get('case')
+      return ['single', 'multiple', 'conflict', 'accepted', 'empty'].includes(value) ? value : 'single'
+    }
+
+    function setCase(value) {
+      const params = new URLSearchParams(location.search)
+      params.set('case', value)
+      history.replaceState(null, '', `${location.pathname}?${params}`)
+      ruleState = value === 'accepted' ? 'active' : 'pending'
+      selectedSuggestion = false
+      render()
+    }
+
+    function currentVariant() {
+      const value = new URLSearchParams(location.search).get('variant')?.toUpperCase()
+      return variants.includes(value) ? value : 'A'
+    }
+
+    function setVariant(variant) {
+      const params = new URLSearchParams(location.search)
+      params.set('variant', variant)
+      history.replaceState(null, '', `${location.pathname}?${params}`)
+      render()
+    }
+
+    function cycle(delta) {
+      const index = variants.indexOf(currentVariant())
+      setVariant(variants[(index + delta + variants.length) % variants.length])
+    }
+
+    function baseRows() {
+      if (currentCase() === 'empty') return `<div class="empty-results"><strong>${t('noNormalResults')}</strong><br />${t('suggestionStillSeparate')}</div>`
+      return `
+        <div class="section-label">${t('results')}</div>
+        <button class="row selected" type="button">
+          <span class="icon">B</span><span class="copy"><span class="title">${t('boe')}</span><span class="subtitle">boe.bytedance.net/log/{ID}</span></span><span><span class="tag custom">${t('custom')}</span> <span class="shortcut">1</span></span>
+        </button>
+        <button class="row" type="button">
+          <span class="icon">L</span><span class="copy"><span class="title">${t('cn')}</span><span class="subtitle">log.bytedance.net/search/{ID}</span></span><span class="shortcut">2</span>
+        </button>
+        <button class="row" type="button">
+          <span class="icon">＝</span><span class="copy"><span class="title">${t('directTitle')}</span><span class="subtitle">${query.toUpperCase()}</span></span><span class="tag history">${t('direct')}</span>
+        </button>
+        <div class="direct-preview">${query.toUpperCase()}</div>
+        <button class="row" type="button" aria-disabled="true" disabled style="opacity:.55;cursor:not-allowed">
+          <span class="icon">T</span><span class="copy"><span class="title">${t('disabled')}</span><span class="subtitle">${t('disabledReason')}</span></span><span class="tag history">—</span>
+        </button>
+        <div class="section-label">${t('history')}</div>
+        <button class="row" type="button">
+          <span class="icon">↺</span><span class="copy"><span class="title">${t('recent')}</span><span class="subtitle">cloud.bytedance.net/log/${query.slice(0, 12)}…</span></span><span class="tag history">${t('historyTag')}</span>
+        </button>`
+    }
+
+    function searchHeader() {
+      return `<header class="search"><span class="search-mark">H</span><input class="query" aria-label="Query" value="${query}" /><span class="source-pill">${t('source')}</span></header>`
+    }
+
+    function scenarioBar() {
+      const cases = [['single', t('singleCase')], ['multiple', t('multipleCase')], ['conflict', t('conflictCase')], ['accepted', t('acceptedCase')], ['empty', t('emptyCase')]]
+      return `<nav class="scenario-bar" aria-label="Launcher states">${cases.map(([value, label]) => `<button type="button" data-case="${value}" class="${currentCase() === value ? 'active' : ''}">${label}</button>`).join('')}</nav>`
+    }
+
+    function actions() {
+      return `<div class="actions"><button class="btn primary" data-action="accept" type="button">${t('add')}</button><button class="btn" data-action="trial" type="button">${t('trial')}</button><button class="btn danger" data-action="reject" type="button">${t('reject')}</button><button class="btn" type="button">${t('more')}</button></div>`
+    }
+
+    function suggestionCard() {
+      if (currentCase() === 'conflict') {
+        return `<div class="section-label">${t('suggestion')}</div><div class="conflict-note"><span>${t('conflict')}</span><button type="button">${t('bindKeyword')}</button></div>`
+      }
+      if (ruleState === 'active') {
+        return `<div class="section-label">${t('results')}</div><button class="row" type="button"><span class="icon">✦</span><span class="copy"><span class="title">${t('openRule')}</span><span class="subtitle">${target}</span></span><span class="item-trailing"><span class="tag custom">${t('custom')}</span><span class="item-menu" aria-label="More actions">•••</span></span></button><div class="actions"><button class="btn" type="button">${t('whyMenu')}</button><button class="btn" type="button">${t('edit')}</button><button class="btn danger" data-action="reject" type="button">${t('revoke')}</button></div>`
+      }
+      if (ruleState === 'rejected') return ''
+      const queue = currentCase() === 'multiple' ? `<div class="queue-note"><span>${t('queue')}</span><button type="button">${t('manageQueue')}</button></div>` : ''
+      return `<div class="section-label">${t('suggestion')}</div><section class="suggestion-card">
+        <div class="suggestion-head"><span class="spark">✦</span><div><div class="suggestion-title">${t('ask')}</div><div class="suggestion-rule">ID → ${target}</div></div><span class="tag suggestion">${stateLabel()}</span></div>
+        <div class="scope"><strong>${t('why')}</strong><span>${t('scope')}</span></div>${actions()}
+      </section>${queue}`
+    }
+
+    function variantA() {
+      return `<div><section class="shell">${searchHeader()}${scenarioBar()}<div>${baseRows()}<div class="divider"></div>${suggestionCard()}</div><footer class="footer"><span><kbd>↑↓</kbd> ${t('footer')}</span><span><kbd>Tab</kbd> ${t('footerTab')}</span></footer></section>${debugState()}</div>`
+    }
+
+    function variantB() {
+      const pendingRow = ruleState === 'pending' ? `
+        <div class="section-label">${t('suggestion')}</div>
+        <button class="row selected" id="inline-suggestion" type="button"><span class="icon">✦</span><span class="copy"><span class="title">${t('openRule')}</span><span class="subtitle">${target}</span></span><span class="tag suggestion">${stateLabel()}</span></button>
+        <div class="inline-explain"><dl><dt>${t('why')}</dt><dd>${t('whyValue')}</dd><dt>${t('target')}</dt><dd>${target}</dd><dt>${t('effect')}</dt><dd>${t('effectValue')}</dd></dl>${actions()}</div>` : suggestionCard()
+      return `<div><section class="shell">${searchHeader()}<div>${baseRows()}${pendingRow}</div><footer class="footer"><span>${t('explanation')}</span></footer></section>${debugState()}</div>`
+    }
+
+    function variantC() {
+      const suggestionRow = ruleState === 'pending' ? `<div class="section-label">${t('suggestion')}</div><button class="row ${selectedSuggestion ? 'selected' : ''}" id="inspect-suggestion" type="button"><span class="icon">✦</span><span class="copy"><span class="title">${t('openRule')}</span><span class="subtitle">${target}</span></span><span class="tag suggestion">${stateLabel()}</span></button>` : suggestionCard()
+      const inspector = selectedSuggestion && ruleState === 'pending' ? `<div class="inspector-content"><span class="tag suggestion">${stateLabel()}</span><h2>${t('learned')}</h2><p>${t('explanation')}</p><div class="fact"><div class="fact-label">${t('target')}</div><div class="fact-value">https://${target}</div></div><div class="fact"><div class="fact-label">${t('evidence')}</div><div class="fact-value">${t('whyValue')}</div></div><div class="fact"><div class="fact-label">${t('effect')}</div><div class="fact-value">${t('effectValue')}</div></div>${actions()}</div>` : `<div class="inspector-empty">${t('inspect')}</div>`
+      return `<div><section class="shell split-shell">${searchHeader()}<div class="split-body"><div>${baseRows()}${suggestionRow}</div><aside class="inspector">${inspector}</aside></div><footer class="footer"><span><kbd>↑↓</kbd> ${t('footer')}</span><span><kbd>Tab</kbd> ${t('footerTab')}</span></footer></section>${debugState()}</div>`
+    }
+
+    function debugState() {
+      return `<div class="state-debug">${t('state')}: { rule: "${ruleState}", persisted: ${ruleState === 'active'}, suppressed: ${ruleState === 'rejected'} }</div>`
+    }
+
+    function showToast(message) {
+      document.getElementById('toast-copy').textContent = message
+      document.getElementById('toast-undo').textContent = t('undo')
+      document.getElementById('toast').classList.add('show')
+      clearTimeout(showToast.timer)
+      showToast.timer = setTimeout(() => document.getElementById('toast').classList.remove('show'), 4500)
+    }
+
+    function act(action) {
+      lastState = ruleState
+      if (action === 'accept') { ruleState = 'active'; showToast(t('accepted')) }
+      if (action === 'trial') { showToast(t('tried')) }
+      if (action === 'reject') { ruleState = 'rejected'; showToast(t('rejected')) }
+      render()
+    }
+
+    function render() {
+      const variant = currentVariant()
+      document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en'
+      document.getElementById('app').innerHTML = variant === 'A' ? variantA() : variant === 'B' ? variantB() : variantC()
+      document.getElementById('variant-name').textContent = names[lang][variant]
+      document.getElementById('lang-toggle').textContent = lang === 'zh' ? 'EN' : '中文'
+      document.querySelectorAll('[data-action]').forEach((button) => button.addEventListener('click', () => act(button.dataset.action)))
+      document.querySelectorAll('[data-case]').forEach((button) => button.addEventListener('click', () => setCase(button.dataset.case)))
+      document.getElementById('inspect-suggestion')?.addEventListener('click', () => { selectedSuggestion = true; render() })
+    }
+
+    document.getElementById('prev').addEventListener('click', () => cycle(-1))
+    document.getElementById('next').addEventListener('click', () => cycle(1))
+    document.getElementById('lang-toggle').addEventListener('click', () => { lang = lang === 'zh' ? 'en' : 'zh'; render() })
+    document.getElementById('toast-undo').addEventListener('click', () => {
+      if (lastState != null) { ruleState = lastState; lastState = null; render() }
+      document.getElementById('toast').classList.remove('show')
+    })
+    window.addEventListener('keydown', (event) => {
+      const tag = document.activeElement?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return
+      if (event.key === 'ArrowLeft') cycle(-1)
+      if (event.key === 'ArrowRight') cycle(1)
+    })
+    window.addEventListener('popstate', render)
+    render()
+  </script>
+</body>
+</html>

@@ -17,6 +17,13 @@ import type { TextEditorCoreHandle, TextEditorCoreProps } from './types'
 
 configureMonacoRuntime()
 
+function openFindReplace(editor: MonacoEditor.ICodeEditor | null) {
+  const action = editor?.getOption(monaco.editor.EditorOption.readOnly)
+    ? 'actions.find'
+    : 'editor.action.startFindReplaceAction'
+  editor?.getAction(action)?.run()
+}
+
 export const TextEditorCore = forwardRef<TextEditorCoreHandle, TextEditorCoreProps>(
   function TextEditorCore(props, ref) {
     const {
@@ -50,7 +57,7 @@ export const TextEditorCore = forwardRef<TextEditorCoreHandle, TextEditorCorePro
       setCursorPosition: (position) => editorRef.current?.setPosition(position),
       setScrollPosition: (position) => editorRef.current?.setScrollPosition(position),
       openFindReplace: () => {
-        editorRef.current?.getAction('editor.action.startFindReplaceAction')?.run()
+        openFindReplace(editorRef.current)
       },
     }), [])
 
@@ -95,6 +102,10 @@ export const TextEditorCore = forwardRef<TextEditorCoreHandle, TextEditorCorePro
         if (model?.getValue() === value) return
       }
       if (model && model.getValue() !== value) {
+        if (editor.getOption(monaco.editor.EditorOption.readOnly)) {
+          model.setValue(value)
+          return
+        }
         const fullRange = model.getFullModelRange()
         editor.executeEdits('external', [{
           range: fullRange,
@@ -148,6 +159,7 @@ export const TextEditorCore = forwardRef<TextEditorCoreHandle, TextEditorCorePro
     return (
       <Editor
         height="100%"
+        loading={null}
         defaultValue={value}
         defaultLanguage={language}
         language={language}
@@ -212,7 +224,7 @@ export const TextEditorCore = forwardRef<TextEditorCoreHandle, TextEditorCorePro
               monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyH,
             ],
             run: (ed) => {
-              ed.getAction('editor.action.startFindReplaceAction')?.run()
+              openFindReplace(ed)
             },
           }))
           // Host actions are registered once at mount; `run` stays fresh via

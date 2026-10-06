@@ -45,8 +45,20 @@ assert.deepEqual(history.upsertQueryHistory([], '  ', 20), [])
   assert.equal(items[0].text, 'qux')
   items = history.upsertQueryHistory(items, 'bar', 3, 5)
   assert.equal(items[0].text, 'bar')
+  assert.equal(items[0].useCount, 2)
   assert.equal(items.length, 3)
   assert.ok(!items.some((i) => i.text === 'baz' && items.findIndex((x) => x.text === 'baz') === 0))
+}
+
+// ranking: repeated use outweighs a single slightly newer hit; old records migrate as count=1
+{
+  const now = 100 * 24 * 60 * 60 * 1000
+  const items = history.normalizeQueryHistory({ queries: [
+    { text: 'frequent', lastUsedAt: now - 2 * 24 * 60 * 60 * 1000, useCount: 8 },
+    { text: 'new', lastUsedAt: now - 1 * 24 * 60 * 60 * 1000 },
+  ] })
+  assert.equal(items[1].useCount, 1)
+  assert.equal(history.filterQueryHistory(items, '', now).map((i) => i.text).join(','), 'frequent,new')
 }
 
 // filter
@@ -57,10 +69,7 @@ assert.deepEqual(history.upsertQueryHistory([], '  ', 20), [])
     { text: 'HEL', lastUsedAt: 1 },
   ]
   assert.equal(history.filterQueryHistory(items, '').length, 3)
-  assert.deepEqual(
-    history.filterQueryHistory(items, 'hel').map((i) => i.text),
-    ['Hello World', 'HEL'],
-  )
+  assert.equal(history.filterQueryHistory(items, 'hel').map((i) => i.text).join(','), 'Hello World,HEL')
 }
 
 // remove

@@ -135,28 +135,21 @@ impl DoubleModifierDetector {
 
         self.current_modifier_press_valid = true;
         self.current_modifier_down = Some(event.timestamp);
-        let Some(last_modifier_up) = self.last_modifier_up else {
-            return false;
-        };
-
-        let within_threshold = event.timestamp >= last_modifier_up
-            && event.timestamp - last_modifier_up <= self.threshold;
-        if within_threshold {
-            self.last_modifier_up = None;
-            self.current_modifier_down = None;
-            true
-        } else {
-            self.last_modifier_up = None;
-            false
-        }
+        false
     }
 
     fn handle_modifier_up(&mut self, event: KeyEvent) -> bool {
+        let mut triggered = false;
         if self.current_modifier_press_valid && !event.modifiers.other {
             if let Some(current_modifier_down) = self.current_modifier_down {
                 let was_short_press = event.timestamp >= current_modifier_down
                     && event.timestamp - current_modifier_down <= self.threshold;
-                self.last_modifier_up = was_short_press.then_some(event.timestamp);
+                triggered = was_short_press
+                    && self.last_modifier_up.is_some_and(|last_up| {
+                        current_modifier_down >= last_up
+                            && current_modifier_down - last_up <= self.threshold
+                    });
+                self.last_modifier_up = (was_short_press && !triggered).then_some(event.timestamp);
             } else {
                 self.last_modifier_up = None;
             }
@@ -165,7 +158,7 @@ impl DoubleModifierDetector {
         }
         self.current_modifier_down = None;
         self.current_modifier_press_valid = false;
-        false
+        triggered
     }
 
     pub fn reset(&mut self) {
@@ -202,33 +195,28 @@ impl DoubleModifierListenerState {
             self.modifier = modifier;
         }
 
-        if !mod_now && !self.was_down && has_other {
+        if has_other {
             self.detector.reset();
+            self.was_down = mod_now;
             return false;
         }
 
-        if mod_now && !self.was_down {
-            let triggered = self.detector.handle_event(KeyEvent {
-                key: Key::Modifier,
-                phase: KeyPhase::Down,
-                timestamp,
-                modifiers: Modifiers { other: has_other },
-            });
-            if triggered {
-                self.detector.reset();
-                self.was_down = false;
-                return true;
-            }
-        } else if !mod_now && self.was_down {
+        let triggered = if mod_now != self.was_down {
             self.detector.handle_event(KeyEvent {
                 key: Key::Modifier,
-                phase: KeyPhase::Up,
+                phase: if mod_now {
+                    KeyPhase::Down
+                } else {
+                    KeyPhase::Up
+                },
                 timestamp,
                 modifiers: Modifiers { other: has_other },
-            });
-        }
+            })
+        } else {
+            false
+        };
         self.was_down = mod_now;
-        false
+        triggered
     }
 
     fn handle_other_key_down(&mut self, timestamp: Duration) {
@@ -756,7 +744,8 @@ mod double_modifier_tests {
 
         assert!(!detector.handle_event(modifier_down(0)));
         assert!(!detector.handle_event(modifier_up(20)));
-        assert!(detector.handle_event(modifier_down(140)));
+        assert!(!detector.handle_event(modifier_down(140)));
+        assert!(detector.handle_event(modifier_up(160)));
     }
 
     #[test]
@@ -765,45 +754,93 @@ mod double_modifier_tests {
 
         assert!(!detector.handle_event(modifier_down(0)));
         assert!(!detector.handle_event(modifier_up(20)));
-        assert!(detector.handle_event(modifier_down(500)));
+        assert!(!detector.handle_event(modifier_down(500)));
+        assert!(detector.handle_event(modifier_up(520)));
     }
 
     #[test]
-    fn listener_recovers_when_key_up_is_lost_after_trigger() {
+    fn listener_accepts_repeated_complete_double_taps() {
         let mut listener =
             DoubleModifierListenerState::new(Duration::from_millis(300), DoubleModifier::Command);
+        for start in [0, 1_000] {
+            for (offset, down, expected) in [
+                (0, true, false),
+                (20, false, false),
+                (140, true, false),
+                (160, false, true),
+            ] {
+                assert_eq!(
+                    listener.handle_flags_changed(
+                        DoubleModifier::Command,
+                        down,
+                        false,
+                        timestamp(start + offset)
+                    ),
+                    expected
+                );
+            }
+        }
+    }
 
-        assert!(!listener.handle_flags_changed(DoubleModifier::Command, true, false, timestamp(0),));
+    #[test]
+    fn listener_rejects_shortcuts_during_either_tap() {
+        let mut listener =
+            DoubleModifierListenerState::new(Duration::from_millis(300), DoubleModifier::Command);
+        assert!(!listener.handle_flags_changed(DoubleModifier::Command, true, false, timestamp(0)));
         assert!(!listener.handle_flags_changed(
             DoubleModifier::Command,
             false,
             false,
-            timestamp(20),
+            timestamp(20)
         ));
-        assert!(listener.handle_flags_changed(
-            DoubleModifier::Command,
-            true,
-            false,
-            timestamp(140),
-        ));
-
         assert!(!listener.handle_flags_changed(
             DoubleModifier::Command,
             true,
             false,
-            timestamp(1_000),
+            timestamp(100)
         ));
+        listener.handle_other_key_down(timestamp(110));
         assert!(!listener.handle_flags_changed(
             DoubleModifier::Command,
             false,
             false,
-            timestamp(1_020),
+            timestamp(120)
         ));
-        assert!(listener.handle_flags_changed(
+        assert!(!listener.handle_flags_changed(
             DoubleModifier::Command,
             true,
             false,
-            timestamp(1_140),
+            timestamp(160)
+        ));
+        assert!(!listener.handle_flags_changed(
+            DoubleModifier::Command,
+            true,
+            true,
+            timestamp(170)
+        ));
+        assert!(!listener.handle_flags_changed(
+            DoubleModifier::Command,
+            true,
+            false,
+            timestamp(180)
+        ));
+        assert!(!listener.handle_flags_changed(
+            DoubleModifier::Command,
+            false,
+            false,
+            timestamp(190)
+        ));
+        assert!(!listener.handle_flags_changed(
+            DoubleModifier::Command,
+            true,
+            false,
+            timestamp(220)
+        ));
+        assert!(!listener.handle_flags_changed(
+            DoubleModifier::Command,
+            false,
+            false,
+            timestamp(240)
         ));
     }
 

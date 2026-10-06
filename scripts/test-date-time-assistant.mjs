@@ -51,10 +51,12 @@ const context = vm.createContext({
 vm.runInContext(transpiled, context, { filename: 'date-time-assistant.js' })
 
 const plugin = module.exports.default
+const convertForSurface = module.exports.convertForSurface
 const provider = plugin.launcher?.dynamicItems
 assert.ok(provider, 'date-time assistant should expose the launcher dynamic item provider')
 const timestampCommand = plugin.commands?.find((item) => item.id === 'timestamp.run')
 assert.ok(timestampCommand, 'date-time assistant should expose the timestamp conversion command')
+assert.equal(typeof convertForSurface, 'function', 'date-time assistant should expose the surface converter')
 
 async function values(query) {
   const translate = (key) => key
@@ -123,6 +125,13 @@ function runTimestampCommand(text) {
   return result.effects?.[0]?.text
 }
 
+function runTimestampCommandOutput(text) {
+  return timestampCommand.run({
+    inputs: { input: { kind: 'text', text, paneId: 'pane-test' } },
+    params: { unit: 'ms', overwrite: 'yes' },
+  }).output
+}
+
 assert.equal(
   runTimestampCommand(['now', 'now+1day', 'now+12h', 'now UTC+8'].join('\n')),
   [
@@ -137,6 +146,34 @@ assert.equal(
   runTimestampCommand('2026-06-10 12:05:06 UTC+8'),
   '1781064306000',
   'timestamp command should parse UTC+8 datetime suffixes',
+)
+assert.equal(runTimestampCommandOutput('not-a-date')?.kind, 'error', 'invalid dates must not become replaceable text output')
+
+assert.equal(
+  JSON.stringify(convertForSurface('2026-06-10 12:05:06 UTC+8', 'UTC')),
+  JSON.stringify({
+    ok: true,
+    value: {
+      dateTime: '2026-06-10 12:05:06+08:00',
+      unixSeconds: '1781064306',
+      unixMilliseconds: '1781064306000',
+      offsetLabel: 'UTC+08:00',
+    },
+  }),
+  'surface conversion should produce date, seconds, and milliseconds together',
+)
+assert.equal(
+  JSON.stringify(convertForSurface('2026-06-10T04:05:06Z', 'UTC+8')),
+  JSON.stringify({
+    ok: true,
+    value: {
+      dateTime: '2026-06-10 04:05:06+00:00',
+      unixSeconds: '1781064306',
+      unixMilliseconds: '1781064306000',
+      offsetLabel: 'UTC+00:00',
+    },
+  }),
+  'surface conversion should not apply the selected offset twice to an ISO UTC value',
 )
 
 console.log('date time assistant checks passed')

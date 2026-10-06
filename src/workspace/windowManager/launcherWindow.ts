@@ -1,9 +1,11 @@
 import { invoke } from '@tauri-apps/api/core'
 import { markSurfaceInstanceState, upsertSurfaceInstance } from '../../surfaces/registry'
+import { LAUNCHER_PROGRAMMATIC_MOVE_EVENT } from '../launcherWindowEvents'
 import { LAUNCHER_WINDOW_LABEL } from './windowLabels'
+import { isNativeDesktopRuntime } from '../webNativeBridge'
 
 export async function showLauncherWindow(): Promise<void> {
-  if (!isTauriRuntime()) return
+  if (!isNativeDesktopRuntime()) return
   await invoke('show_launcher_window')
   upsertSurfaceInstance({
     id: LAUNCHER_WINDOW_LABEL,
@@ -26,7 +28,7 @@ export type RestoreForegroundMode = 'auto' | 'never' | 'force'
 export async function hideLauncherWindow(options?: {
   restoreForeground?: RestoreForegroundMode
 }): Promise<void> {
-  if (!isTauriRuntime()) return
+  if (!isNativeDesktopRuntime()) return
   await invoke('hide_launcher_window', {
     restoreForeground: options?.restoreForeground ?? 'auto',
   })
@@ -34,7 +36,7 @@ export async function hideLauncherWindow(options?: {
 }
 
 export async function restoreLauncherInputSource(): Promise<void> {
-  if (!isTauriRuntime()) return
+  if (!isNativeDesktopRuntime()) return
   await invoke('restore_launcher_input_source')
 }
 
@@ -48,7 +50,7 @@ export type LauncherWindowMovedPosition = {
 }
 
 export async function setCurrentLauncherWindowPosition(position: LauncherWindowPosition): Promise<void> {
-  if (!isTauriRuntime()) return
+  if (!isNativeDesktopRuntime()) return
   const { LogicalPosition } = await import('@tauri-apps/api/dpi')
   const { getCurrentWindow } = await import('@tauri-apps/api/window')
   await getCurrentWindow().setPosition(new LogicalPosition(position.x, position.y))
@@ -57,7 +59,7 @@ export async function setCurrentLauncherWindowPosition(position: LauncherWindowP
 export async function onCurrentLauncherWindowMoved(
   onMoved: (position: LauncherWindowMovedPosition, helpers: { toLogical: (position: LauncherWindowMovedPosition) => Promise<LauncherWindowPosition> }) => void | Promise<void>,
 ): Promise<() => void> {
-  if (!isTauriRuntime()) return () => {}
+  if (!isNativeDesktopRuntime()) return () => {}
   const { getCurrentWindow } = await import('@tauri-apps/api/window')
   const win = getCurrentWindow()
   return win.onMoved(async ({ payload: position }) => {
@@ -67,10 +69,32 @@ export async function onCurrentLauncherWindowMoved(
   })
 }
 
+let latestLauncherResize = 0
+
 export async function resizeCurrentLauncherWindow(size: { width: number; height: number }): Promise<void> {
-  if (!isTauriRuntime()) return
-  const { getCurrentWindow, LogicalSize } = await import('@tauri-apps/api/window')
-  await getCurrentWindow().setSize(new LogicalSize(size.width, size.height))
+  if (!isNativeDesktopRuntime()) return
+  const resize = ++latestLauncherResize
+  const { getCurrentWindow, LogicalPosition, LogicalSize } = await import('@tauri-apps/api/window')
+  const win = getCurrentWindow()
+  const scaleFactor = await win.scaleFactor()
+  const [physicalPosition, physicalSize] = await Promise.all([win.outerPosition(), win.outerSize()])
+  if (resize !== latestLauncherResize) return
+
+  const position = physicalPosition.toLogical(scaleFactor)
+  const currentSize = physicalSize.toLogical(scaleFactor)
+  const sameWidth = Math.abs(currentSize.width - size.width) < 0.5
+  if (sameWidth && Math.abs(currentSize.height - size.height) < 0.5) return
+
+  window.dispatchEvent(new CustomEvent(LAUNCHER_PROGRAMMATIC_MOVE_EVENT))
+  if (sameWidth) {
+    await win.setSize(new LogicalSize(size.width, size.height))
+    return
+  }
+
+  await Promise.all([
+    win.setSize(new LogicalSize(size.width, size.height)),
+    win.setPosition(new LogicalPosition(position.x + (currentSize.width - size.width) / 2, position.y)),
+  ])
 }
 
 /**
@@ -79,32 +103,28 @@ export async function resizeCurrentLauncherWindow(size: { width: number; height:
  * focus alone often yields a caret-less "ghost" focus until the user clicks.
  */
 export async function focusLauncherWebview(): Promise<void> {
-  if (!isTauriRuntime()) return
+  if (!isNativeDesktopRuntime()) return
   await invoke('focus_launcher_webview')
 }
 
 export async function onCurrentLauncherWindowFocusChanged(
   onFocusChanged: (focused: boolean) => void,
 ): Promise<() => void> {
-  if (!isTauriRuntime()) return () => {}
+  if (!isNativeDesktopRuntime()) return () => {}
   const { getCurrentWindow } = await import('@tauri-apps/api/window')
   return getCurrentWindow().onFocusChanged(({ payload: focused }) => onFocusChanged(focused))
 }
 
 export async function startCurrentLauncherWindowDrag(): Promise<void> {
-  if (!isTauriRuntime()) return
+  if (!isNativeDesktopRuntime()) return
   const { getCurrentWindow } = await import('@tauri-apps/api/window')
   await getCurrentWindow().startDragging()
 }
 
 export async function restoreCurrentLauncherOverlayWindow(options: { hide?: boolean } = {}): Promise<void> {
-  if (!isTauriRuntime()) return
+  if (!isNativeDesktopRuntime()) return
   const { getCurrentWindow } = await import('@tauri-apps/api/window')
   const win = getCurrentWindow()
   await win.setDecorations(true)
   if (options.hide) await win.hide()
-}
-
-function isTauriRuntime(): boolean {
-  return Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
 }

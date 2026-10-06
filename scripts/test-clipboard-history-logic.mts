@@ -4,6 +4,10 @@
  */
 
 import assert from 'node:assert/strict'
+import {
+  getTextSearchCandidateIds,
+  matchesClipboardHistorySearch,
+} from '../src/plugins/clipboard-history/storage/clipboardHistorySearch.ts'
 
 // ─── In-memory store mock ────────────────────────────────────────────────────
 
@@ -287,23 +291,33 @@ assert.ok(favPrune.removedCount > 0)
 assert.ok(afterFavPrune.some((item: any) => item.id === fav.id && item.isFavorite), 'favorite must survive prune')
 assert.ok(afterFavPrune.length >= 1)
 
-// Test: Frequent filter threshold sorting (pure list helper)
-const threshold = 3
-const mockList = [
-  { id: 'a', pasteCount: 5, lastPastedAt: 10 },
-  { id: 'b', pasteCount: 2, lastPastedAt: 99 },
-  { id: 'c', pasteCount: 5, lastPastedAt: 20 },
-  { id: 'd', pasteCount: 3, lastPastedAt: 1 },
-]
-const frequent = mockList
-  .filter((item) => (item.pasteCount ?? 0) >= threshold)
-  .slice()
-  .sort((a, b) => {
-    const pasteDiff = (b.pasteCount ?? 0) - (a.pasteCount ?? 0)
-    if (pasteDiff !== 0) return pasteDiff
-    return (b.lastPastedAt ?? 0) - (a.lastPastedAt ?? 0)
-  })
-assert.deepEqual(frequent.map((item) => item.id), ['c', 'a', 'd'])
+// Test: search loads full text only when a non-empty query misses the lightweight preview
+const longText = `${'preview '.repeat(30)}隐藏关键词`
+const indexedTextItem = {
+  id: 'long-text',
+  kind: 'text' as const,
+  hash: 'long-text-hash',
+  firstCopiedAt: 1,
+  lastCopiedAt: 1,
+  copyCount: 1,
+  pasteCount: 0,
+  byteSize: longText.length,
+  text: '',
+  preview: makeTextPreview(longText),
+}
+assert.equal(matchesClipboardHistorySearch(indexedTextItem, '隐藏关键词'), false)
+assert.deepEqual(getTextSearchCandidateIds([indexedTextItem], ''), [], 'empty search must not load full text')
+assert.deepEqual(getTextSearchCandidateIds([indexedTextItem], 'preview'), [], 'preview matches need no full-text read')
+assert.deepEqual(getTextSearchCandidateIds([indexedTextItem], '隐藏关键词'), ['long-text'])
+assert.deepEqual(
+  getTextSearchCandidateIds([{ ...indexedTextItem, preview: 'complete short text' }], 'missing'),
+  [],
+  'complete previews must not trigger a full-text read',
+)
+assert.equal(matchesClipboardHistorySearch({ ...indexedTextItem, text: longText }, '隐藏关键词'), true)
+assert.equal(matchesClipboardHistorySearch({ ...indexedTextItem, favoriteTitle: 'Pinned title' }, 'pinned'), true)
+assert.equal(matchesClipboardHistorySearch({ ...indexedTextItem, kind: 'image', contentType: 'image/png', blobId: '', previewBlobId: '', width: 640, height: 480 }, '640'), true)
+assert.equal(matchesClipboardHistorySearch({ ...indexedTextItem, kind: 'files', paths: [], fileNames: ['project-plan.md'] }, 'plan'), true)
 
 // Test: concurrent addItem must not drop index entries (lost-update race)
 await clearAll()

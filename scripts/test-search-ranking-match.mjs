@@ -34,6 +34,7 @@ function loadSearchRanking() {
 
 const {
   searchableFieldsMatch,
+  scoreSearchableFields,
   tokenPrefixMatch,
   computeTitleMatchRanges,
 } = loadSearchRanking()
@@ -171,5 +172,27 @@ assert.equal(settingsHighlight.type, 'substring', 'se should highlight Settings 
 assert.equal(settingsHighlight.ranges?.length, 1)
 assert.equal(settingsHighlight.ranges[0].start, 7)
 assert.equal(settingsHighlight.ranges[0].end, 9)
+
+// Filtering and scoring must use the same match classification.
+for (const candidate of [
+  fields({ title: 'Settings' }),
+  fields({ title: 'Other', aliases: ['格式化'] }),
+  fields({ title: 'Other', titleI18n: { zh: '设置' } }),
+]) {
+  for (const query of ['set', 'gsh', 'sz', 'missing']) {
+    assert.equal(
+      scoreSearchableFields(candidate, query, 'en') > 0,
+      searchableFieldsMatch(candidate, query, 'en'),
+      `score/filter disagreement for query=${query}`,
+    )
+  }
+}
+
+const encodedRoute = fields({ title: 'Base64 解码' })
+assert.ok(searchableFieldsMatch(encodedRoute, 'base64 jiema', 'zh'))
+assert.ok(searchableFieldsMatch(encodedRoute, 'base64 jm', 'zh'))
+assert.ok(searchableFieldsMatch(fields({ title: 'JSON 格式化' }), 'json gsh', 'zh'))
+assert.ok(scoreSearchableFields(encodedRoute, 'base64 jiema', 'zh') > 0)
+assert.equal(computeTitleMatchRanges(encodedRoute.title, 'base64 jiema', 'zh').type, 'pinyin')
 
 console.log('search ranking match checks passed')

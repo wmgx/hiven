@@ -1,13 +1,13 @@
 /**
  * Launcher Usage Storage Helpers
  *
- * Usage is recorded only at launcher selection time, scoped by surface and by
+ * Usage is recorded only after a successful launcher commit, scoped by surface and by
  * system launcher item key. These are pure helpers; the store owns persistence.
  *
  * Rules (see design doc §4–6):
- *  - Record on first-level launcher selection only.
+ *  - Entering parameter/input frames, cancellations, and failures do not count.
  *  - Dynamic items write usage only when they opt in (`recordUsage: true`).
- *  - Execution success/failure does not change usage; usage measures intent.
+ *  - Failed or cancelled executions do not change usage.
  */
 
 import type {

@@ -7,12 +7,11 @@
  *   - first-level selection
  *   - collect-input flow (two-step items)
  *   - result-choice stack (multi-level output)
- *   - usage recording at first-level selection time
+ *   - usage recording after a successful first-level commit
  *   - Enter (single-result) and Escape (back) semantics
  *
  * Usage rules (design doc §4):
- *   - perform        → record usage BEFORE execution
- *   - collect-input  → record usage when ENTERING input mode (not on submit)
+ *   - perform / collect-input → record only after execution succeeds
  *   - dynamic items  → record only when item.recordUsage === true (stable ids)
  *   - select options recordUsage:false → caller can suppress for ephemeral selections
  */
@@ -33,8 +32,10 @@ import type {
   PluginLauncherApi,
 } from './types'
 import type { PluginNetworkApi, PluginPrivateStorageApi, PluginShellApi } from '../pluginTypes'
+import type { PluginAiApi } from '../ai/types'
 import { appendUsageJournal } from '../usageJournal'
 import { getHostOutputIntent, isOutputResult } from './output'
+import { captureForegroundSelectionText } from './foregroundSelectionCapture'
 import { translate, type Locale } from '../../i18n'
 import {
   TelemetryEvents,
@@ -68,6 +69,7 @@ export type CollectInputFrame = {
   inputText: string
   input: LauncherInputSpec
   params?: Record<string, unknown>
+  recordUsage: boolean
   previewOutput?: LauncherOutput
   previewInputText?: string
   /**
@@ -86,6 +88,7 @@ export type ParamInputFrame = {
   selectedIndex: number
   /** Carried from selectItem options; used to skip collect-input after params. */
   objectBlockText?: string
+  recordUsage: boolean
 }
 
 export type ResultFrame = {
@@ -94,6 +97,8 @@ export type ResultFrame = {
   /** The item or choice that produced this output (for labeling). */
   sourceTitle?: string
   committedRun?: CommittedRunContext
+  /** Delay usage until the user commits one successful output action. */
+  pendingUsage?: { item: LauncherItem; recordUsage: boolean }
 }
 
 export type LauncherFrame = ListFrame | CollectInputFrame | ParamInputFrame | ResultFrame
@@ -116,6 +121,7 @@ export type LauncherControllerDeps = {
   getStorage?: (item: LauncherItem) => PluginPrivateStorageApi
   getNetwork?: (item: LauncherItem) => PluginNetworkApi
   getShell?: (item: LauncherItem) => PluginShellApi
+  getAi?: (item: LauncherItem) => PluginAiApi
   locale: string
   /** Translate function scoped to the item's plugin. */
   makeT: (item: LauncherItem) => (key: string, vars?: Record<string, string | number>) => string
@@ -162,6 +168,15 @@ const emptyShell: PluginShellApi = {
   run: async () => {
     throw new Error('Plugin shell is not available for this launcher item')
   },
+}
+
+const emptyAi: PluginAiApi = {
+  providers: async () => [],
+  stream: async function* () {
+    throw new Error('AI is not available for this launcher item')
+  },
+  cancel: async () => {},
+  usage: async () => [],
 }
 
 export type SelectOptions = {
@@ -223,14 +238,16 @@ export class LauncherController {
   /**
    * Build the execution context for an item, given optional collected input.
    */
-  private buildExecutionContext(item: LauncherItem, inputText?: string) {
+  private buildExecutionContext(item: LauncherItem, inputText?: string, inputSource?: 'foreground-app') {
+    const resolvedInputText = inputText !== undefined ? inputText : item.initialInputText
     return {
       surfaceId: this.deps.surfaceId,
-      input: inputText !== undefined ? { text: inputText } : undefined,
+      input: resolvedInputText !== undefined ? { text: resolvedInputText, source: inputSource } : undefined,
       settings: this.deps.getSettings(item),
       locale: this.deps.locale as never,
       api: this.deps.makeApi?.(item) ?? this.deps.api,
       storage: this.deps.getStorage?.(item) ?? emptyStorage,
+      ai: this.deps.getAi?.(item) ?? emptyAi,
       t: this.deps.makeT(item),
     }
   }
@@ -243,8 +260,8 @@ export class LauncherController {
     return true
   }
 
-  /** Record selection usage + fire-and-forget append-only journal row. */
-  private recordSelectionIfNeeded(item: LauncherItem, options: SelectOptions): void {
+  /** Record a successfully committed selection + fire-and-forget journal row. */
+  recordSuccessfulSelection(item: LauncherItem, options: SelectOptions = {}): void {
     if (!this.shouldRecord(item, options)) return
     this.deps.recordSelection(this.deps.surfaceId, item)
     void appendUsageJournal({
@@ -295,7 +312,13 @@ export class LauncherController {
     return value === undefined || value === null ? '' : String(value)
   }
 
-  private paramFrameFor(item: LauncherItem, params = this.defaultParamsFor(item), paramIndex = 0, objectBlockText?: string): ParamInputFrame {
+  private paramFrameFor(
+    item: LauncherItem,
+    params = this.defaultParamsFor(item),
+    paramIndex = 0,
+    objectBlockText?: string,
+    recordUsage = this.shouldRecord(item, {}),
+  ): ParamInputFrame {
     const param = item.params?.[paramIndex]
     return {
       kind: 'param-input',
@@ -305,6 +328,7 @@ export class LauncherController {
       query: this.queryFor(param, params),
       selectedIndex: this.selectedIndexFor(param, params),
       objectBlockText,
+      recordUsage,
     }
   }
 
@@ -322,6 +346,37 @@ export class LauncherController {
       !hasBoundSelection
   }
 
+  /**
+   * Whether this item's collect-input flow may use an on-demand foreground-app
+   * capture as a text source at all. 'all' mode means "whole document", which
+   * a foreign app's selection can't stand in for. This governs eligibility
+   * only — callers decide *when* to actually trigger a capture.
+   */
+  private isForegroundCaptureEligible(item: LauncherItem): boolean {
+    const mode = item.inputPolicy?.mode ?? 'auto'
+    return this.deps.surfaceId === 'global-launcher' &&
+      item.behavior.type === 'perform' &&
+      item.inputPolicy != null &&
+      mode !== 'all'
+  }
+
+  /** Explicitly import the foreground selection into an empty input step. */
+  async captureInput(): Promise<void> {
+    const top = this.topFrame()
+    if (top.kind !== 'collect-input' || top.inputText || this.state.busy || !this.isForegroundCaptureEligible(top.item)) return
+    const api = this.deps.makeApi?.(top.item) ?? this.deps.api
+    this.setState({ busy: true, error: null })
+    try {
+      const text = await captureForegroundSelectionText(api, this.deps.locale as Locale, { restoreLauncher: true })
+      // Navigation or typing while capture is pending must not overwrite a newer draft.
+      if (this.topFrame() === top && text !== undefined) this.setInputText(text)
+    } catch (error) {
+      if (this.topFrame() === top) this.setState({ error: error instanceof Error ? error.message : String(error) })
+    } finally {
+      this.setState({ busy: false })
+    }
+  }
+
   private hasObjectBlockText(text: string | undefined): text is string {
     return text !== undefined
   }
@@ -330,7 +385,11 @@ export class LauncherController {
     return this.shouldCollectTextInput(frame.item)
   }
 
-  private collectInputFrameFor(item: LauncherItem, params?: Record<string, unknown>): CollectInputFrame {
+  private collectInputFrameFor(
+    item: LauncherItem,
+    params?: Record<string, unknown>,
+    recordUsage = this.shouldRecord(item, {}),
+  ): CollectInputFrame {
     const input = item.behavior.type === 'collect-input'
       ? item.behavior.input
       : {
@@ -340,17 +399,17 @@ export class LauncherController {
     return {
       kind: 'collect-input',
       item,
-      inputText: '',
+      inputText: item.initialInputText ?? '',
       input,
       params,
+      recordUsage,
       selectedSuggestionIndex: -1,
     }
   }
 
   /**
    * Select a first-level launcher item.
-   *  - collect-input: record usage now, enter input frame.
-   *  - perform: record usage now, execute immediately.
+   * Usage is recorded only when the resulting commit succeeds.
    */
   async selectItem(item: LauncherItem, options: SelectOptions = {}): Promise<void> {
     this.setState({ error: null })
@@ -366,19 +425,18 @@ export class LauncherController {
       customizeParams: Boolean(options.customizeParams),
       hasObjectBlock: this.hasObjectBlockText(options.objectBlockText),
     })
+    const recordUsage = this.shouldRecord(item, options)
 
     if (options.customizeParams && this.hasCustomizableParams(item)) {
-      this.recordSelectionIfNeeded(item, options)
       trackBehavior(TelemetryEvents.launcherEnterParamInput, itemTelemetryProps(item))
       this.setState({
-        frames: [...this.state.frames, this.paramFrameFor(item, undefined, 0, options.objectBlockText)],
+        frames: [...this.state.frames, this.paramFrameFor(item, undefined, 0, options.objectBlockText, recordUsage)],
       })
       return
     }
 
     if (item.behavior.type === 'collect-input') {
-      this.recordSelectionIfNeeded(item, options)
-      if (this.hasObjectBlockText(options.objectBlockText)) {
+      if (item.initialInputText === undefined && this.hasObjectBlockText(options.objectBlockText)) {
         await this.commitResolvedAction({
           item,
           via: item.commitVia ?? 'execute',
@@ -386,13 +444,14 @@ export class LauncherController {
           inputBinding: 'prompt',
           inputText: options.objectBlockText,
           sourceTitle: this.itemTitle(item),
+          recordUsage,
           execute: () => Promise.resolve(item.execute(this.buildExecutionContext(item, options.objectBlockText))),
         })
         return
       }
       trackBehavior(TelemetryEvents.launcherEnterCollectInput, itemTelemetryProps(item))
       this.setState({
-        frames: [...this.state.frames, this.collectInputFrameFor(item)],
+        frames: [...this.state.frames, this.collectInputFrameFor(item, undefined, recordUsage)],
       })
       if (item.suggest) void this.refreshSuggestions()
       return
@@ -400,8 +459,7 @@ export class LauncherController {
 
     if (this.shouldCollectTextInput(item)) {
       // If Object Block text is available, skip collect-input and execute directly.
-      if (this.hasObjectBlockText(options.objectBlockText)) {
-        this.recordSelectionIfNeeded(item, options)
+      if (item.initialInputText === undefined && this.hasObjectBlockText(options.objectBlockText)) {
         await this.commitResolvedAction({
           item,
           via: item.commitVia ?? 'execute',
@@ -409,28 +467,29 @@ export class LauncherController {
           inputBinding: 'prompt',
           inputText: options.objectBlockText,
           sourceTitle: this.itemTitle(item),
+          recordUsage,
           execute: () => Promise.resolve(item.execute(this.buildExecutionContext(item, options.objectBlockText))),
         })
         return
       }
-      this.recordSelectionIfNeeded(item, options)
       trackBehavior(TelemetryEvents.launcherEnterCollectInput, itemTelemetryProps(item))
       this.setState({
-        frames: [...this.state.frames, this.collectInputFrameFor(item)],
+        frames: [...this.state.frames, this.collectInputFrameFor(item, undefined, recordUsage)],
       })
       if (item.suggest) void this.refreshSuggestions()
       return
     }
 
-    // perform: record before execution
-    this.recordSelectionIfNeeded(item, options)
+    const inputText = item.initialInputText ?? options.objectBlockText
     await this.commitResolvedAction({
       item,
       via: item.commitVia ?? 'execute',
       params: this.defaultParamsFor(item),
-      inputBinding: this.inputBindingFor(item),
       sourceTitle: this.itemTitle(item),
-      execute: () => Promise.resolve(item.execute(this.buildExecutionContext(item))),
+      recordUsage,
+      inputBinding: inputText !== undefined ? 'prompt' : this.inputBindingFor(item),
+      inputText,
+      execute: () => Promise.resolve(item.execute(this.buildExecutionContext(item, inputText))),
     })
   }
 
@@ -535,13 +594,13 @@ export class LauncherController {
     const nextIndex = top.paramIndex + 1
     if (nextIndex < (top.item.params?.length ?? 0)) {
       const frames = this.state.frames.slice(0, -1)
-      frames.push(this.paramFrameFor(top.item, params, nextIndex, top.objectBlockText))
+      frames.push(this.paramFrameFor(top.item, params, nextIndex, top.objectBlockText, top.recordUsage))
       this.setState({ frames, error: null })
       return
     }
 
     const frames = this.state.frames.slice(0, -1)
-    frames.push(this.paramFrameFor(top.item, params, top.paramIndex))
+    frames.push(this.paramFrameFor(top.item, params, top.paramIndex, top.objectBlockText, top.recordUsage))
     this.setState({ frames, error: null })
     await this.submitParams()
   }
@@ -559,7 +618,7 @@ export class LauncherController {
 
     if (this.shouldCollectTextInput(top.item)) {
       // If Object Block text is available, skip collect-input and execute directly with params.
-      if (this.hasObjectBlockText(top.objectBlockText)) {
+      if (top.item.initialInputText === undefined && this.hasObjectBlockText(top.objectBlockText)) {
         await this.commitResolvedAction({
           item: top.item,
           via: top.item.commitVia ?? 'execute',
@@ -567,23 +626,27 @@ export class LauncherController {
           inputBinding: 'prompt',
           inputText: top.objectBlockText,
           sourceTitle: this.itemTitle(top.item),
+          recordUsage: top.recordUsage,
           execute: () => Promise.resolve(top.item.executeWithParams?.(this.buildExecutionContext(top.item, top.objectBlockText), top.params) ?? top.item.execute(this.buildExecutionContext(top.item, top.objectBlockText))),
         })
         return
       }
       const frames = this.state.frames.slice(0, -1)
-      frames.push(this.collectInputFrameFor(top.item, top.params))
+      frames.push(this.collectInputFrameFor(top.item, top.params, top.recordUsage))
       this.setState({ frames, error: null })
       return
     }
 
+    const inputText = top.item.initialInputText ?? top.objectBlockText
     await this.commitResolvedAction({
       item: top.item,
       via: top.item.commitVia ?? 'execute',
       params: top.params,
-      inputBinding: this.inputBindingFor(top.item),
+      inputBinding: inputText !== undefined ? 'prompt' : this.inputBindingFor(top.item),
+      inputText,
       sourceTitle: this.itemTitle(top.item),
-      execute: () => Promise.resolve(top.item.executeWithParams?.(this.buildExecutionContext(top.item), top.params) ?? top.item.execute(this.buildExecutionContext(top.item))),
+      recordUsage: top.recordUsage,
+      execute: () => Promise.resolve(top.item.executeWithParams?.(this.buildExecutionContext(top.item, inputText), top.params) ?? top.item.execute(this.buildExecutionContext(top.item, inputText))),
     })
   }
 
@@ -682,6 +745,7 @@ export class LauncherController {
           storage: this.deps.getStorage?.(item) ?? emptyStorage,
           network: this.deps.getNetwork?.(item) ?? emptyNetwork,
           shell: this.deps.getShell?.(item) ?? emptyShell,
+          ai: this.deps.getAi?.(item) ?? emptyAi,
           t: this.deps.makeT(item),
           pluginId: item.pluginId,
           source: item.source,
@@ -825,6 +889,7 @@ export class LauncherController {
           inputBinding: 'prompt',
           inputText,
           sourceTitle: highlighted.title,
+          recordUsage: top.recordUsage,
           resolvedChoice: highlighted,
         })
         return
@@ -850,6 +915,7 @@ export class LauncherController {
         inputBinding: 'prompt',
         inputText,
         sourceTitle: firstPreviewChoice.title,
+        recordUsage: top.recordUsage,
         resolvedChoice: firstPreviewChoice,
       })
       return
@@ -862,6 +928,7 @@ export class LauncherController {
       inputBinding: 'prompt',
       inputText,
       sourceTitle: this.itemTitle(item),
+      recordUsage: top.recordUsage,
       execute: () => Promise.resolve(
         top.params && item.executeWithParams
           ? item.executeWithParams(this.buildExecutionContext(item, inputText), top.params)
@@ -877,7 +944,12 @@ export class LauncherController {
     })
     const top = this.topFrame()
     const committedRun = top.kind === 'result' ? top.committedRun : undefined
-    await this.runChoiceAction(() => choice.primaryAction(), choice.title, undefined, committedRun, choice)
+    const pendingUsage = top.kind === 'result'
+      ? top.pendingUsage
+      : top.kind === 'collect-input'
+        ? { item: top.item, recordUsage: top.recordUsage }
+        : undefined
+    await this.runChoiceAction(() => choice.primaryAction(), choice.title, undefined, committedRun, choice, pendingUsage)
   }
 
   /** Activate a result choice's secondary action by id. */
@@ -890,14 +962,26 @@ export class LauncherController {
     })
     const top = this.topFrame()
     const committedRun = top.kind === 'result' ? top.committedRun : undefined
-    await this.runChoiceAction(() => action.run(), action.title, { via: 'secondary', actionId }, committedRun, action)
+    const pendingUsage = top.kind === 'result'
+      ? top.pendingUsage
+      : top.kind === 'collect-input'
+        ? { item: top.item, recordUsage: top.recordUsage }
+        : undefined
+    await this.runChoiceAction(() => action.run(), action.title, { via: 'secondary', actionId }, committedRun, action, pendingUsage)
   }
 
   /** Submit a multi-select result frame. */
   async submitResultSelection(choices: LauncherResultChoice[]): Promise<void> {
     const top = this.topFrame()
     if (top.kind !== 'result' || top.output.selection?.type !== 'multi') return
-    await this.runChoiceAction(() => top.output.selection?.submit(choices), top.sourceTitle ?? '', undefined, top.committedRun)
+    await this.runChoiceAction(
+      () => top.output.selection?.submit(choices),
+      top.sourceTitle ?? '',
+      undefined,
+      top.committedRun,
+      undefined,
+      top.pendingUsage,
+    )
   }
 
   /**
@@ -920,7 +1004,7 @@ export class LauncherController {
       const prevIndex = top.paramIndex - 1
       const nextParams = this.paramsUpToIndex(top.item, top.params, prevIndex)
       const frames = this.state.frames.slice(0, -1)
-      frames.push(this.paramFrameFor(top.item, nextParams, prevIndex, top.objectBlockText))
+      frames.push(this.paramFrameFor(top.item, nextParams, prevIndex, top.objectBlockText, top.recordUsage))
       this.setState({ frames, error: null })
       return true
     }
@@ -929,7 +1013,7 @@ export class LauncherController {
       const lastIndex = top.item.params.length - 1
       const nextParams = this.paramsUpToIndex(top.item, top.params ?? {}, lastIndex)
       const frames = this.state.frames.slice(0, -1)
-      frames.push(this.paramFrameFor(top.item, nextParams, lastIndex))
+      frames.push(this.paramFrameFor(top.item, nextParams, lastIndex, undefined, top.recordUsage))
       this.setState({ frames, error: null })
       return true
     }
@@ -1109,6 +1193,7 @@ export class LauncherController {
     inputBinding?: InputBinding
     inputText?: string
     sourceTitle: string
+    recordUsage: boolean
     execute?: () => Promise<LauncherExecuteResult>
     resolvedChoice?: LauncherResultChoice
   }): Promise<void> {
@@ -1189,8 +1274,12 @@ export class LauncherController {
         failed: !succeeded,
       })
       if (launcherResult) {
-        await this.applyResult(launcherResult, sourceTitle, committedRun)
+        await this.applyResult(launcherResult, sourceTitle, committedRun, {
+          item,
+          recordUsage: input.recordUsage,
+        })
       } else {
+        this.recordSuccessfulSelection(item, { recordUsage: input.recordUsage })
         this.setState({ busy: false })
         this.deps.requestClose()
       }
@@ -1228,7 +1317,10 @@ export class LauncherController {
       keepOpen: 'keepOpen' in result ? Boolean(result.keepOpen) : undefined,
       hasOutput: isOutputResult(result),
     })
-    await this.applyResult(result, sourceTitle, committedRun)
+    await this.applyResult(result, sourceTitle, committedRun, {
+      item,
+      recordUsage: input.recordUsage,
+    })
   }
 
   private async runChoiceAction(
@@ -1237,6 +1329,7 @@ export class LauncherController {
     extra?: Record<string, unknown>,
     committedRun?: CommittedRunContext,
     actionNode?: LauncherResultChoice | LauncherResultAction,
+    pendingUsage?: ResultFrame['pendingUsage'],
   ): Promise<void> {
     this.setState({ busy: true, error: null })
     const startedAt = telemetryNow()
@@ -1258,14 +1351,20 @@ export class LauncherController {
     const launcherResult = result && typeof result === 'object' && 'ok' in result
       ? result as LauncherExecuteResult
       : undefined
+    const usageToCommit = actionNode && 'tone' in actionNode && actionNode.tone === 'muted'
+      ? undefined
+      : pendingUsage
     if (committedRun && actionNode && launcherResult?.ok !== false) {
       this.recordOutputApplied(committedRun, actionNode)
     }
     // Choice actions may return more output (multi-level) or void (terminal).
     if (launcherResult) {
-      await this.applyResult(launcherResult, sourceTitle, committedRun)
+      await this.applyResult(launcherResult, sourceTitle, committedRun, usageToCommit)
     } else {
       // Terminal action with no further output → close.
+      if (usageToCommit) {
+        this.recordSuccessfulSelection(usageToCommit.item, { recordUsage: usageToCommit.recordUsage })
+      }
       this.setState({ busy: false })
       this.deps.requestClose()
     }
@@ -1275,6 +1374,7 @@ export class LauncherController {
     result: LauncherExecuteResult,
     sourceTitle: string,
     committedRun?: CommittedRunContext,
+    pendingUsage?: ResultFrame['pendingUsage'],
   ): Promise<void> {
     if (!result.ok) {
       // Failure: keep launcher open, show error.
@@ -1285,16 +1385,32 @@ export class LauncherController {
       // Single choice: execute directly without entering result frame
       if (result.output.choices.length === 1) {
         const choice = result.output.choices[0]
-        await this.runChoiceAction(() => choice.primaryAction(), choice.title, undefined, committedRun, choice)
+        await this.runChoiceAction(
+          () => choice.primaryAction(),
+          choice.title,
+          undefined,
+          committedRun,
+          choice,
+          pendingUsage,
+        )
         return
       }
       // Success with output: enter result-choice mode (keep open).
       this.setState({
         busy: false,
         error: null,
-        frames: [...this.state.frames, { kind: 'result', output: result.output, sourceTitle, committedRun }],
+        frames: [...this.state.frames, {
+          kind: 'result',
+          output: result.output,
+          sourceTitle,
+          committedRun,
+          pendingUsage,
+        }],
       })
       return
+    }
+    if (pendingUsage) {
+      this.recordSuccessfulSelection(pendingUsage.item, { recordUsage: pendingUsage.recordUsage })
     }
     if (result.keepOpen) {
       // Collect-input with suggest: keep the same frame and refresh suggestions

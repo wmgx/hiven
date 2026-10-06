@@ -28,6 +28,7 @@ export function EditorSurface({
   const coreRef = useRef<TextEditorCoreHandle | null>(null)
   const [cursorInfo, setCursorInfo] = useState({ line: 1, col: 1 })
   const [selectedCharCount, setSelectedCharCount] = useState(0)
+  const [editorReady, setEditorReady] = useState(false)
   const pasteDetectionRef = useRef<{ shouldDetect: boolean } | null>(null)
   const bindingRef = useRef(binding)
   bindingRef.current = binding
@@ -77,6 +78,7 @@ export function EditorSurface({
   }, [rememberPasteDetection])
 
   const handleReady = useCallback((editor: MonacoEditor.IStandaloneCodeEditor) => {
+    setEditorReady(true)
     const initial = bindingRef.current
     if (initial.initialCursor) editor.setPosition(initial.initialCursor)
     if (initial.initialScroll) editor.setScrollPosition(initial.initialScroll)
@@ -104,7 +106,7 @@ export function EditorSurface({
 
   return (
     <div className="relative flex flex-col h-full overflow-hidden">
-      <div className="flex-1 min-h-0">
+      <div className="relative flex-1 min-h-0" aria-busy={!editorReady}>
         <TextEditorCore
           ref={coreRef}
           value={binding.text}
@@ -128,6 +130,12 @@ export function EditorSurface({
           onScrollChange={(position) => bindingRef.current.onScrollChange?.(position)}
           onReady={handleReady}
         />
+        {!editorReady && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center gap-2 text-[12px]" role="status" style={{ background: 'var(--color-background-primary)', color: 'var(--color-text-secondary)' }}>
+            <div className="plugin-surface-window-message__indicator" />
+            {t('loading')}
+          </div>
+        )}
       </div>
       {bottomPanels}
       <EditorStatusBar

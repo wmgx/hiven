@@ -63,7 +63,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
     subtitle: 'tool.status.subtitle',
     icon: 'Activity',
     aliases: ['飞书', 'lark', 'feishu', '状态', 'status', '飞书状态'],
-    surfaces: { launcher: true },
+    surfaces: { launcher: { surfaces: ['global-launcher'] } },
     async run(ctx): Promise<LauncherExecuteResult> {
       const settings = resolveSettings(ctx.settings)
       const shell = getFeishuRuntime().shell
@@ -94,7 +94,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
     subtitle: 'tool.login.subtitle',
     icon: 'LogIn',
     aliases: ['飞书登录', 'lark login', 'feishu login', '登录飞书'],
-    surfaces: { launcher: true },
+    surfaces: { launcher: { surfaces: ['global-launcher'] } },
     async run(ctx): Promise<LauncherExecuteResult> {
       const settings = resolveSettings(ctx.settings)
       const shell = getFeishuRuntime().shell
@@ -144,7 +144,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
         hint: 'param.query.hint',
       },
     ],
-    surfaces: { launcher: true },
+    surfaces: { launcher: { surfaces: ['global-launcher'] } },
     async run(ctx): Promise<LauncherExecuteResult> {
       const settings = resolveSettings(ctx.settings)
       const shell = getFeishuRuntime().shell
@@ -210,7 +210,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
     subtitle: 'tool.agenda.subtitle',
     icon: 'Calendar',
     aliases: ['飞书日程', '今日议程', 'agenda', 'calendar', '日程', '今天日程'],
-    surfaces: { launcher: true },
+    surfaces: { launcher: { surfaces: ['global-launcher'] } },
     async run(ctx): Promise<LauncherExecuteResult> {
       const settings = resolveSettings(ctx.settings)
       const shell = getFeishuRuntime().shell
@@ -280,7 +280,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
         hint: 'param.eventQuery.hint',
       },
     ],
-    surfaces: { launcher: true },
+    surfaces: { launcher: { surfaces: ['global-launcher'] } },
     async run(ctx): Promise<LauncherExecuteResult> {
       const settings = resolveSettings(ctx.settings)
       const shell = getFeishuRuntime().shell
@@ -356,7 +356,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
         hint: 'param.chatQuery.hint',
       },
     ],
-    surfaces: { launcher: true },
+    surfaces: { launcher: { surfaces: ['global-launcher'] } },
     async run(ctx): Promise<LauncherExecuteResult> {
       const settings = resolveSettings(ctx.settings)
       const shell = getFeishuRuntime().shell
@@ -422,7 +422,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
     subtitle: 'tool.chatList.subtitle',
     icon: 'MessageCircle',
     aliases: ['最近会话', '会话列表', 'recent chats', 'chat list', '我的群'],
-    surfaces: { launcher: true },
+    surfaces: { launcher: { surfaces: ['global-launcher'] } },
     async run(ctx): Promise<LauncherExecuteResult> {
       const settings = resolveSettings(ctx.settings)
       const shell = getFeishuRuntime().shell
@@ -492,7 +492,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
         hint: 'param.userQuery.hint',
       },
     ],
-    surfaces: { launcher: true },
+    surfaces: { launcher: { surfaces: ['global-launcher'] } },
     async run(ctx): Promise<LauncherExecuteResult> {
       const settings = resolveSettings(ctx.settings)
       const shell = getFeishuRuntime().shell
@@ -578,7 +578,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
         hint: 'param.messageText.hint',
       },
     ],
-    surfaces: { launcher: true },
+    surfaces: { launcher: { surfaces: ['global-launcher'] } },
     async run(ctx): Promise<LauncherExecuteResult> {
       const settings = resolveSettings(ctx.settings)
       const shell = getFeishuRuntime().shell
@@ -656,7 +656,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
         hint: 'param.eventEnd.hint',
       },
     ],
-    surfaces: { launcher: true },
+    surfaces: { launcher: { surfaces: ['global-launcher'] } },
     async run(ctx): Promise<LauncherExecuteResult> {
       const settings = resolveSettings(ctx.settings)
       const shell = getFeishuRuntime().shell
@@ -712,7 +712,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
     aliases: ['建文档', '创建文档', 'create doc', '飞书建文档', '写文档', '空白文档'],
     // No param form: one-tap confirm creates empty doc (or uses selection/input as body).
     requireParamSelection: false,
-    surfaces: { launcher: true },
+    surfaces: { launcher: { surfaces: ['global-launcher'] } },
     async run(ctx): Promise<LauncherExecuteResult> {
       const settings = resolveSettings(ctx.settings)
       const shell = getFeishuRuntime().shell
@@ -819,7 +819,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
         hint: 'param.sheetTitle.hint',
       },
     ],
-    surfaces: { launcher: true },
+    surfaces: { launcher: { surfaces: ['global-launcher'] } },
     async run(ctx): Promise<LauncherExecuteResult> {
       const settings = resolveSettings(ctx.settings)
       const shell = getFeishuRuntime().shell
@@ -894,7 +894,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
         hint: 'param.docRef.hint',
       },
     ],
-    surfaces: { launcher: true },
+    surfaces: { launcher: { surfaces: ['global-launcher'] } },
     async run(ctx): Promise<LauncherExecuteResult> {
       const settings = resolveSettings(ctx.settings)
       const shell = getFeishuRuntime().shell
@@ -955,7 +955,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
         hint: 'param.messageQuery.hint',
       },
     ],
-    surfaces: { launcher: true },
+    surfaces: { launcher: { surfaces: ['global-launcher'] } },
     async run(ctx): Promise<LauncherExecuteResult> {
       const settings = resolveSettings(ctx.settings)
       const shell = getFeishuRuntime().shell
@@ -1021,7 +1021,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
     subtitle: 'tool.myTasks.subtitle',
     icon: 'ListTodo',
     aliases: ['我的待办', '我的任务', '任务', '待办', 'my tasks', 'todos', 'wode', 'wodedaiban', '飞书待办'],
-    surfaces: { launcher: true },
+    surfaces: { launcher: { surfaces: ['global-launcher'] } },
     async run(ctx): Promise<LauncherExecuteResult> {
       const settings = resolveSettings(ctx.settings)
       const shell = getFeishuRuntime().shell
@@ -1091,7 +1091,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
         hint: 'param.minutesQuery.hint',
       },
     ],
-    surfaces: { launcher: true },
+    surfaces: { launcher: { surfaces: ['global-launcher'] } },
     async run(ctx): Promise<LauncherExecuteResult> {
       const settings = resolveSettings(ctx.settings)
       const shell = getFeishuRuntime().shell
@@ -1175,7 +1175,7 @@ export const feishuTools: PluginToolContribution<FeishuSettings>[] = [
         hint: 'param.debugOpenTarget.hint',
       },
     ],
-    surfaces: { launcher: true },
+    surfaces: { launcher: { surfaces: ['global-launcher'] } },
     async run(ctx): Promise<LauncherExecuteResult> {
       const raw = String(ctx.params.target ?? ctx.input?.text ?? '').trim()
       if (!raw) {

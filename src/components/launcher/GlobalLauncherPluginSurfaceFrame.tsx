@@ -11,6 +11,7 @@ export function GlobalLauncherPluginSurfaceFrame({
   target,
   locale,
   shellHeight,
+  autoHeight,
   breadcrumbTitle,
   onBack,
   onClose,
@@ -18,6 +19,7 @@ export function GlobalLauncherPluginSurfaceFrame({
   target: PluginSurfaceOpenTarget
   locale: Locale
   shellHeight: number
+  autoHeight?: boolean
   breadcrumbTitle?: string
   onBack: () => void
   onClose: () => void
@@ -26,6 +28,8 @@ export function GlobalLauncherPluginSurfaceFrame({
 
   const escapeHandler = useCallback((event: KeyboardEvent): boolean => {
     if (event.key !== 'Escape') return false
+    // Let the editor close its find widget before navigating out of the surface.
+    if (event.target instanceof Element && event.target.closest('.monaco-editor')?.querySelector('.find-widget.visible')) return true
     event.preventDefault()
     event.stopPropagation()
     onBack()
@@ -37,7 +41,7 @@ export function GlobalLauncherPluginSurfaceFrame({
     <div
       className="global-launcher-surface-shell flex flex-col min-h-0 outline-none"
       tabIndex={-1}
-      style={{ height: shellHeight }}
+      style={autoHeight ? { maxHeight: shellHeight } : { height: shellHeight }}
     >
       {breadcrumbTitle && (
         <SurfaceBreadcrumbHeader
@@ -50,7 +54,11 @@ export function GlobalLauncherPluginSurfaceFrame({
         className="global-launcher-body global-launcher-body--surface"
         data-no-drag
         data-launcher-scrollable
-        style={{ maxHeight: bodyHeight, height: bodyHeight, overflow: 'hidden', touchAction: 'auto' }}
+        style={
+          autoHeight
+            ? { maxHeight: bodyHeight, overflow: 'hidden', touchAction: 'auto' }
+            : { maxHeight: bodyHeight, height: bodyHeight, overflow: 'hidden', touchAction: 'auto' }
+        }
       >
         <PluginSurfaceRenderer
           target={target}

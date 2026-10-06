@@ -1,4 +1,4 @@
-import { type MouseEvent as ReactMouseEvent, type MutableRefObject, type RefObject } from 'react'
+import { type MouseEvent as ReactMouseEvent, type MutableRefObject, type ReactNode, type RefObject } from 'react'
 import { t, type Locale } from '../../i18n'
 import { localized, type LauncherHostSurfaceTarget, type PluginSurfaceOpenTarget } from '../../store'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
@@ -59,6 +59,7 @@ export function GlobalLauncherFrameSwitch({
   onSecondaryAction,
   onPastePreviewText,
   onSubmitCollectInput,
+  onCaptureSelection,
   onHoverResultChoice,
   onToggleResultChoice,
   onSearchQueryChange,
@@ -115,6 +116,7 @@ export function GlobalLauncherFrameSwitch({
   onPastePreviewText?: (text: string) => void | Promise<void>
   /** Package 4: default collect-input submit when no destination chrome. */
   onSubmitCollectInput?: () => void
+  onCaptureSelection?: () => void
   onHoverResultChoice: (index: number) => void
   onToggleResultChoice: (choice: LauncherResultChoice, frame: ResultFrame) => void
   onSearchQueryChange: (value: string) => void
@@ -166,6 +168,7 @@ export function GlobalLauncherFrameSwitch({
         target={surfaceFrame}
         locale={locale}
         shellHeight={shell?.defaultHeight ?? 480}
+        autoHeight={shell?.autoHeight}
         breadcrumbTitle={breadcrumbTitle}
         onBack={onSurfaceBack}
         onClose={onSurfaceClose}
@@ -175,12 +178,14 @@ export function GlobalLauncherFrameSwitch({
 
   if (itemPermissionFrame) {
     return (
-      <GlobalLauncherPermissionFrame
-        frame={itemPermissionFrame}
-        locale={locale}
-        onBack={onPermissionBack}
-        onGrant={onPermissionGrant}
-      />
+      <LauncherFlowFrame frameKey={`permission:${itemPermissionFrame.item.systemKey}`}>
+        <GlobalLauncherPermissionFrame
+          frame={itemPermissionFrame}
+          locale={locale}
+          onBack={onPermissionBack}
+          onGrant={onPermissionGrant}
+        />
+      </LauncherFlowFrame>
     )
   }
 
@@ -191,21 +196,23 @@ export function GlobalLauncherFrameSwitch({
   if (topFrame?.kind === 'param-input') {
     const frame = topFrame as ParamInputFrame
     return (
-      <LauncherParamStep
-        frame={frame}
-        error={controllerState?.error ?? null}
-        busy={controllerState?.busy ?? false}
-        locale={locale}
-        headerClassName="global-launcher-header l-search"
-        bodyClassName="global-launcher-body l-list opt"
-        footerClassName="global-launcher-footer l-foot"
-        onQueryChange={onParamQueryChange}
-        onSelectedIndexChange={onParamSelectedIndexChange}
-        onCommit={onParamCommit}
-        onMultiToggle={onParamMultiToggle}
-        onBack={onFrameBack}
-        onExitCommand={onExitCommand}
-      />
+      <LauncherFlowFrame frameKey={`param:${frame.item.systemKey}:${frame.paramIndex}`}>
+        <LauncherParamStep
+          frame={frame}
+          error={controllerState?.error ?? null}
+          busy={controllerState?.busy ?? false}
+          locale={locale}
+          headerClassName="global-launcher-header l-search"
+          bodyClassName="global-launcher-body l-list opt"
+          footerClassName="global-launcher-footer l-foot"
+          onQueryChange={onParamQueryChange}
+          onSelectedIndexChange={onParamSelectedIndexChange}
+          onCommit={onParamCommit}
+          onMultiToggle={onParamMultiToggle}
+          onBack={onFrameBack}
+          onExitCommand={onExitCommand}
+        />
+      </LauncherFlowFrame>
     )
   }
 
@@ -221,40 +228,45 @@ export function GlobalLauncherFrameSwitch({
       }
     }
     return (
-      <GlobalLauncherCollectInputFrame
-        inputRef={inputRef}
-        bindSearchInputRef={bindSearchInputRef}
-        frame={frame}
-        busy={controllerState?.busy ?? false}
-        error={controllerState?.error ?? null}
-        locale={locale}
-        paramChips={paramChips}
-        onInputChange={onCollectInputChange}
-        onBack={onFrameBack}
-        onExitCommand={onExitCommand}
-        onActivateChoice={onActivateResultChoice}
-        onSecondaryAction={onSecondaryAction}
-        onPastePreviewText={onPastePreviewText}
-        onSubmitPrimary={onSubmitCollectInput}
-      />
+      <LauncherFlowFrame frameKey={`collect:${frame.item.systemKey}`}>
+        <GlobalLauncherCollectInputFrame
+          inputRef={inputRef}
+          bindSearchInputRef={bindSearchInputRef}
+          frame={frame}
+          busy={controllerState?.busy ?? false}
+          error={controllerState?.error ?? null}
+          locale={locale}
+          paramChips={paramChips}
+          onInputChange={onCollectInputChange}
+          onBack={onFrameBack}
+          onExitCommand={onExitCommand}
+          onActivateChoice={onActivateResultChoice}
+          onSecondaryAction={onSecondaryAction}
+          onPastePreviewText={onPastePreviewText}
+          onSubmitPrimary={onSubmitCollectInput}
+          onCaptureSelection={onCaptureSelection}
+        />
+      </LauncherFlowFrame>
     )
   }
 
   if (topFrame?.kind === 'result') {
     const frame = topFrame as ResultFrame
     return (
-      <GlobalLauncherResultFrame
-        frame={frame}
-        error={controllerState?.error ?? null}
-        locale={locale}
-        selectedIndex={resultSelectedIndex}
-        selectedChoiceIds={selectedResultChoiceIds}
-        onBack={onFrameBack}
-        onHoverChoice={onHoverResultChoice}
-        onToggleChoice={onToggleResultChoice}
-        onSecondaryAction={onSecondaryAction}
-        onPastePreviewText={onPastePreviewText}
-      />
+      <LauncherFlowFrame frameKey={`result:${frame.committedRun?.runId ?? frame.sourceTitle ?? ''}`}>
+        <GlobalLauncherResultFrame
+          frame={frame}
+          error={controllerState?.error ?? null}
+          locale={locale}
+          selectedIndex={resultSelectedIndex}
+          selectedChoiceIds={selectedResultChoiceIds}
+          onBack={onFrameBack}
+          onHoverChoice={onHoverResultChoice}
+          onToggleChoice={onToggleResultChoice}
+          onSecondaryAction={onSecondaryAction}
+          onPastePreviewText={onPastePreviewText}
+        />
+      </LauncherFlowFrame>
     )
   }
 
@@ -285,6 +297,10 @@ export function GlobalLauncherFrameSwitch({
       onObjectActionController={onObjectActionController}
     />
   )
+}
+
+function LauncherFlowFrame({ frameKey, children }: { frameKey: string; children: ReactNode }) {
+  return <div key={frameKey} className="global-launcher-flow-frame">{children}</div>
 }
 
 function localizedParamLabel(label: string, labelI18n: Record<string, string> | undefined, locale: Locale) {

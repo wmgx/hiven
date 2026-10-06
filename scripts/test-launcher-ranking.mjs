@@ -53,6 +53,13 @@ const rankingOut = ts.transpileModule(rankingSrc, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023, esModuleInterop: true },
 }).outputText
 const moduleExports = {}
+let setConstructionCount = 0
+class CountingSet extends Set {
+  constructor(values) {
+    super(values)
+    setConstructionCount += 1
+  }
+}
 const sandbox = {
   exports: moduleExports,
   module: { exports: moduleExports },
@@ -61,6 +68,7 @@ const sandbox = {
   searchableFieldsMatch: searchRanking.searchableFieldsMatch,
   getUsageRecord: usage.getUsageRecord,
   localizedDisplay: display.localizedDisplay,
+  Set: CountingSet,
   // Soft nav demotion optional in ranking; stub for harness.
   navNearDuplicateDemotion: () => 0,
 }
@@ -88,6 +96,7 @@ try {
 }
 vm.runInNewContext(rankingOut, sandbox)
 const ranking = sandbox.module.exports
+setConstructionCount = 0
 
 function item(systemKey, title, opts = {}) {
   return {
@@ -101,6 +110,8 @@ function item(systemKey, title, opts = {}) {
     },
     behavior: { type: 'perform' },
     staticPriority: opts.staticPriority,
+    directAnswer: opts.directAnswer,
+    accepts: opts.accepts,
     ranking: opts.ranking,
     legacyUsageKeys: opts.legacyUsageKeys,
     execute: () => ({ ok: true }),
@@ -313,6 +324,7 @@ const cold = item('plugin:p:launcher:cold-fav', 'Cold Fav')
 const hot = item('plugin:p:launcher:hot-nofav', 'Hot NoFav')
 let uFav = usage.emptyUsageBySurface()
 for (let i = 0; i < 20; i++) uFav = usage.recordSelection(uFav, 'global-launcher', hot.systemKey, now)
+setConstructionCount = 0
 const rankedFav = ranking.rankLauncherItems(
   {
     query: '',
@@ -325,6 +337,16 @@ const rankedFav = ranking.rankLauncherItems(
   [hot, cold],
 )
 assert.equal(rankedFav[0].systemKey, cold.systemKey, 'favorite boosts cold pin above heavy usage on empty open')
+assert.equal(setConstructionCount, 1, 'favorite array is converted to a Set once per ranking pass')
+const rankedFavSet = ranking.rankLauncherItems(
+  { query: '', locale: 'en', surfaceId: 'global-launcher', usage: uFav, now, favoriteKeys: new Set([cold.systemKey]) },
+  [hot, cold],
+)
+assert.deepEqual(
+  rankedFav.map((candidate) => candidate.systemKey),
+  rankedFavSet.map((candidate) => candidate.systemKey),
+  'array and Set favorites rank identically',
+)
 assert.ok(
   ranking.favoriteBoost(
     { query: '', locale: 'en', surfaceId: 'global-launcher', usage: uFav, now, favoriteKeys: [cold.systemKey] },
@@ -346,5 +368,46 @@ const rankedMany = ranking.rankLauncherItems(
   many,
 )
 assert.ok(rankedMany.length <= 16, 'empty-open ranked list is capped')
+
+// --- 14. Product rank bands beat additive score gaps ---
+const timestampAnswer = item('plugin:date-time:dynamic:answer', '2024-03-10 00:00:00', {
+  kind: 'dynamic',
+  directAnswer: { priority: 30, origin: 'builtin' },
+})
+const timestampTool = item('plugin:date-time:launcher:timestamp', 'Convert Timestamp', {
+  accepts: { kinds: ['timestamp'] },
+})
+const rankedTimestamp = ranking.rankLauncherItems(
+  {
+    query: '',
+    contentText: '1710000000',
+    detections: [{ kind: 'timestamp', confidence: 0.95, normalized: '1710000000' }],
+    locale: 'en',
+    surfaceId: 'global-launcher',
+    usage: usage.emptyUsageBySurface(),
+    now,
+  },
+  [timestampTool, timestampAnswer],
+)
+assert.equal(
+  rankedTimestamp[0].systemKey,
+  timestampAnswer.systemKey,
+  'an automatic direct answer ranks above the stronger-scoring generic tool',
+)
+
+const liveTab = item('browser.chromium:tab:live', 'Docs workspace', { kind: 'host' })
+const historyHit = item('browser.chromium:document:history', 'Docs', {
+  kind: 'host',
+  ranking: { fallback: true },
+})
+const rankedBrowser = ranking.rankLauncherItems(
+  { query: 'docs', locale: 'en', surfaceId: 'global-launcher', usage: usage.emptyUsageBySurface(), now },
+  [historyHit, liveTab],
+)
+assert.equal(
+  rankedBrowser[0].systemKey,
+  liveTab.systemKey,
+  'a live tab ranks above a stronger text match from browser history',
+)
 
 console.log('✓ test-launcher-ranking passed')

@@ -4,5 +4,6 @@
   "command.sha1.title": "SHA-1",
   "command.sha1.description": "Calculate SHA-1 hash",
   "command.sha512.title": "SHA-512",
-  "command.sha512.description": "Calculate SHA-512 hash"
+  "command.sha512.description": "Calculate SHA-512 hash",
+  "error.hash": "Hash failed: {message}"
 }

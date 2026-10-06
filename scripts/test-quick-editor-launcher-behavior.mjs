@@ -68,10 +68,10 @@ assert.match(
 // The condition became early returns rather than one combined boolean, and grew a
 // "smart blur" step in between: focus can move to clipboard history or another
 // hiven window without closing the launcher, checked async via
-// shouldKeepLauncherOpenOnBlur before closeLauncher() runs.
+// shouldKeepLauncherOpenOnBlur before the latest close callback runs.
 assert.match(
   lifecycle,
-  /if \(focused\) return[\s\S]{0,200}if \(closeOnBlurRef\.current === false\) return[\s\S]{0,400}closeLauncher\(\)/,
+  /if \(focused\) return[\s\S]{0,200}if \(closeOnBlurRef\.current === false\) return[\s\S]{0,520}closeLauncherRef\.current\(\)/,
   'standalone launcher focus listener should read closeOnBlur from the ref inside the native callback',
 )
 
@@ -192,6 +192,30 @@ assert.match(
   quickEditorActions,
   /case\s+['"]text\.replace['"][\s\S]*setText/,
   'Quick Editor effect router should apply text.replace to the persisted Quick Editor text',
+)
+
+assert.match(
+  quickEditorActions,
+  /case\s+['"]panel\.openV2['"][\s\S]*resolvePanel[\s\S]*openPanelV2/,
+  'Quick Editor effect router should validate and open plugin pane panels',
+)
+
+assert.match(
+  quickEditorActions,
+  /placement === ['"]pane-bottom['"][\s\S]*type:\s*['"]pane['"][\s\S]*paneId:\s*store\.activePaneId/,
+  'Quick Editor pane-bottom panels should default to the active pane',
+)
+
+assert.match(
+  quickEditorPanel,
+  /bottomPanels=\{paneBottomPanels\.map[\s\S]*PanelComponent[\s\S]*applyEffectsToQuickEditor/,
+  'Quick Editor should render pane-bottom plugin panels through the shared panel contribution contract',
+)
+
+assert.match(
+  quickEditorPanel,
+  /className="quick-editor-pane-panel"/,
+  'Quick Editor pane panels should share the stable entry treatment',
 )
 
 assert.doesNotMatch(

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { getPluginDiffHost, type DiffSource } from '@hiven/plugin-diff'
 
 /**
@@ -10,15 +10,11 @@ export function useDiffSourceText(source: DiffSource): [string, (text: string) =
   const { hooks } = getPluginDiffHost()
   const isBound = source.kind === 'editor-pane' && Boolean(source.paneId)
   const boundText = hooks.useBoundSourceText(source)
-  const [localText, setLocalText] = useState(source.text ?? '')
-  const prevBoundRef = useRef(boundText)
+  const [localText, setLocalText] = useState(boundText)
 
   useEffect(() => {
-    if (!isBound) return
-    if (boundText === prevBoundRef.current) return
-    prevBoundRef.current = boundText
     setLocalText(boundText)
-  }, [isBound, boundText])
+  }, [source, boundText])
 
   const setText = useCallback((newText: string) => {
     setLocalText(newText)

@@ -45,6 +45,17 @@ export function LearnedRulesContent() {
     refresh()
   }, [refresh])
 
+  if (!loaded) {
+    return (
+      <div className="sscroll">
+        <div className="learned-rules-empty" role="status" aria-busy="true">
+          <Sparkles size={24} strokeWidth={1.7} aria-hidden="true" />
+          <strong>{t('learnedRulesLoading')}</strong>
+        </div>
+      </div>
+    )
+  }
+
   const onDelete = (rule: LearnedRule) => {
     if (rule.id == null) return
     void deleteLearnedRule(rule.id).then(refresh)
@@ -56,7 +67,11 @@ export function LearnedRulesContent() {
   if (loaded && rules.length === 0 && suppressions.length === 0) {
     return (
       <div className="sscroll">
-        <div className="learned-rules-empty">{t('learnedRulesEmpty')}</div>
+        <div className="learned-rules-empty">
+          <Sparkles size={24} strokeWidth={1.7} aria-hidden="true" />
+          <strong>{t('learnedRulesEmptyTitle')}</strong>
+          <span>{t('learnedRulesEmpty')}</span>
+        </div>
       </div>
     )
   }

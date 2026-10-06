@@ -17,6 +17,7 @@
 import type { ComponentType } from 'react'
 import type { Locale } from '../../i18n'
 import type { PluginNetworkApi, PluginPrivateStorageApi, PluginShellApi } from '../pluginTypes'
+import type { PluginAiApi } from '../ai/types'
 import type { FluxEffect } from '../types'
 import type { DiffSourcePayload } from '../diffTypes'
 import type { EffectRunnerResult } from '../effectRunner'
@@ -185,7 +186,7 @@ export type ResolvedTextInput = {
   kind: 'text'
   text: string
   mode: TextInputMode
-  source: 'selection' | 'all' | 'manual' | 'empty'
+  source: 'selection' | 'all' | 'manual' | 'empty' | 'foreground-app'
   range?: TextRange
   paneId?: string
   panelId?: string
@@ -291,6 +292,7 @@ export type OutputIntent =
   | 'insert'
   | 'return-to-launcher'
   | 'open-quick-editor'
+  | 'paste-to-foreground-app'
 
 export type WorkflowObjectItemMetadata = {
   kind: 'workflow-object'
@@ -388,11 +390,15 @@ export type PluginLauncherApi = {
    * Editor command bar) fall back to the same behavior as insertText.
    */
   returnToLauncher(text: string): Promise<void>
-  copyText(text: string): Promise<void>
+  copyText(text: string, options?: { sensitive?: boolean }): Promise<void>
+  /** Write text to the clipboard, then simulate paste into whatever app was foreground before the launcher took focus. */
+  pasteToForegroundApp(text: string): Promise<void>
   openUrl(url: string): Promise<void>
   showEditorWindow(): Promise<string | undefined>
   showPluginsPage(): Promise<void>
   showSettingsPage(): Promise<void>
+  /** Open one UI surface owned by the current plugin inside Global Launcher. */
+  openSurface(surfaceId: string, options?: { initialText?: string }): void
   createPane(options?: { text?: string; title?: string; language?: string; focus?: boolean; direction?: 'left' | 'right' | 'top' | 'bottom' }): Promise<string | undefined>
   dispatchEffects(effects: FluxEffect[]): EffectRunnerResult
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
@@ -422,12 +428,17 @@ export type PluginAppsApi = {
 
 export type LauncherExecutionContext<TSettings = unknown> = {
   surfaceId: LauncherSurfaceId
-  /** Present only for `collect-input` behaviors. */
-  input?: { text: string }
+  /**
+   * Present for collected input or an attached Object Block. `source:
+   * 'foreground-app'` tells the tool adapter to prefer pasting the result
+   * back into that same app over the default copy-first output.
+   */
+  input?: { text: string; source?: 'foreground-app' }
   settings: TSettings
   locale: Locale
   api: PluginLauncherApi
   storage: PluginPrivateStorageApi
+  ai: PluginAiApi
   /** Plugin-scoped translate function. */
   t: (key: string, vars?: Record<string, string | number>) => string
 }
@@ -453,6 +464,7 @@ export type LauncherSuggestContext<TSettings = unknown> = {
   locale: Locale
   api: PluginLauncherApi
   storage: PluginPrivateStorageApi
+  ai: PluginAiApi
   network: PluginNetworkApi
   shell: PluginShellApi
   t: (key: string, vars?: Record<string, string | number>) => string
@@ -537,6 +549,7 @@ export type LauncherDynamicContext = {
   settings: unknown
   api: PluginLauncherApi
   storage: PluginPrivateStorageApi
+  ai: PluginAiApi
   network: PluginNetworkApi
   shell: PluginShellApi
   t: (key: string, vars?: Record<string, string | number>) => string
@@ -565,6 +578,8 @@ export type LauncherItemContributionKind = 'plugin' | 'host' | 'dynamic'
 export type LauncherItem = {
   systemKey: SystemLauncherItemKey
   kind: LauncherItemContributionKind
+  /** Host-owned text supplied when the user selected this item from a text recommendation. */
+  initialInputText?: string
   pluginId?: string
   /** Product-level provider name, e.g. JSON Tools, not the raw plugin id. */
   productProvider?: string
@@ -605,6 +620,8 @@ export type LauncherItem = {
      * Product policy lives on the provider; host only applies the clamp.
      */
     scoreBias?: number
+    /** Keep secondary recall rows below live/primary results regardless of text score. */
+    fallback?: boolean
   }
   /**
    * Host-only legacy usage keys (e.g. the backing command id) consulted as a
@@ -637,10 +654,11 @@ export type LauncherItem = {
    * Marks this item as a computed ANSWER for the current input rather than a
    * command to pick — the "input → result, no command step" paradigm.
    *
-   * Ranking treats it as first-class in two ways (see ranking.ts):
+   * Ranking treats it as first-class in three ways (see ranking.ts):
    *  - it is exempt from the query-present text filter, because an answer's
    *    title IS the result ("1,234" for "1000+234") and by construction does
    *    not contain the query;
+   *  - on empty input, an already-computed answer ranks ahead of commands;
    *  - its `priority` is honored regardless of `kind`, unlike `staticPriority`
    *    which is host-only.
    *
@@ -742,6 +760,7 @@ export type PluginToolContext<TSettings = unknown> = {
   locale: Locale
   api: PluginLauncherApi
   storage: PluginPrivateStorageApi
+  ai: PluginAiApi
   /**
    * Shell runtime when the plugin requested `shell.run`.
    * Unauthorized / missing → calls throw a permission error.

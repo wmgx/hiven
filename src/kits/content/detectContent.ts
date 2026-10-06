@@ -13,7 +13,9 @@ import type { ContentDetection, ContentKind } from './types'
 const SECRET_RE = /(?:sk-|token|password|Authorization|Bearer)/i
 const URL_RE = /^https?:\/\//i
 const JWT_RE = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/
-const TIMESTAMP_RE = /^\d{10,13}$/
+const TIMESTAMP_RE = /^(?:\d{10}|\d{13})$/
+const TIMESTAMP_MIN_MS = Date.UTC(2000, 0, 1)
+const TIMESTAMP_MAX_MS = Date.UTC(2101, 0, 1)
 const XML_RE = /^<\?xml|^<[A-Za-z][\s\S]*>$/
 const CSS_RE = /^[.#]?[A-Za-z0-9_-]+\s*\{[\s\S]*\}$/
 const SQL_RE = /\bselect\b[\s\S]+\bfrom\b|\binsert\s+into\b|\bupdate\b[\s\S]+\bset\b/i
@@ -166,9 +168,10 @@ function detectTimestamp(trimmed: string): ContentDetection | null {
   const n = Number(trimmed)
   if (!Number.isFinite(n)) return null
 
-  // 10 digits → seconds, 13 → millis. Reject extreme out-of-range values lightly
-  // but still report high confidence for pure digit length match (test contract).
-  const unit = trimmed.length >= 13 ? 'ms' : 's'
+  const unit = trimmed.length === 13 ? 'ms' : 's'
+  const timestampMs = unit === 'ms' ? n : n * 1000
+  if (timestampMs < TIMESTAMP_MIN_MS || timestampMs >= TIMESTAMP_MAX_MS) return null
+
   return {
     kind: 'timestamp',
     confidence: 0.95,

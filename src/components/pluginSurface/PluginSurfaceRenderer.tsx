@@ -1,4 +1,4 @@
-import { Component, useEffect, useMemo, useState, type ErrorInfo, type ReactNode } from 'react'
+import { Component, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { localized, useAppStore, type PluginSurfaceOpenTarget } from '../../store'
 import { t, pickLocale, type Locale } from '../../i18n'
@@ -12,6 +12,7 @@ import { createPluginClipboard } from '../../workspace/pluginClipboard'
 import { showToast, dismissToast } from '../../workspace/toast'
 import { createPluginPaste } from '../../workspace/pluginPaste'
 import { createPluginNetwork } from '../../workspace/pluginNetwork'
+import { createPluginAi } from '../../workspace/ai/runtime'
 import { createPluginShell } from '../../workspace/pluginShell'
 import { ensurePluginRuntimeReady } from '../../workspace/pluginRuntimeBootstrap'
 import type {
@@ -59,9 +60,17 @@ export function PluginSurfaceRenderer({
 }: PluginSurfaceRendererProps) {
   const pluginRegistryVersion = usePluginRegistryVersion()
   const permissionVersion = usePluginPermissionStore((s) => s.version)
+  const appearance = useAppStore((s) => s.settings)
   const grantPluginPermissions = usePluginPermissionStore((s) => s.grantPermissions)
   const openSettingsDialog = usePluginSettingsStore((s) => s.openSettingsDialog)
   const [surfaceState, setSurfaceState] = useState<PluginSurfaceRendererState>({ status: 'loading-runtime' })
+  const activeTargetRef = useRef(target)
+  activeTargetRef.current = target
+  const mountedRef = useRef(false)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
 
   useEffect(() => {
     let disposed = false
@@ -70,7 +79,7 @@ export function PluginSurfaceRenderer({
       setSurfaceState({ status: 'loading-runtime' })
 
       try {
-        await ensurePluginRuntimeReady()
+        await ensurePluginRuntimeReady(target.source)
         if (disposed) return
 
         const definition = pluginRegistry.getPluginDefinition(target.pluginId, target.source) as PluginDefinition<unknown> | undefined
@@ -116,17 +125,19 @@ export function PluginSurfaceRenderer({
           paste: createPluginPaste(permissions, storage),
           network: createPluginNetwork(permissions),
           shell: createPluginShell(permissions),
+          ai: createPluginAi(target.pluginId, target.source, permissions),
         })
 
         if (!disposed) {
           setSurfaceState({ status: 'ready', ...resolved })
         }
       } catch (error) {
+        console.error(`[hiven] Plugin surface failed to open (${target.pluginId}):`, error)
         if (!disposed) {
           setSurfaceState({
             status: 'error',
-            title: 'Plugin surface failed to open',
-            message: error instanceof Error ? error.message : String(error),
+            title: t(locale, 'palette.surfaceOpenFailed'),
+            message: '',
           })
         }
       }
@@ -138,16 +149,16 @@ export function PluginSurfaceRenderer({
   }, [target, pluginRegistryVersion, permissionVersion, locale])
 
   if (surfaceState.status === 'loading-runtime') {
-    return <PluginSurfaceMessage title="Loading plugin surface..." />
+    return <PluginSurfaceMessage title={t(locale, 'palette.surfaceLoading')} />
   }
   if (surfaceState.status === 'error') {
-    return <PluginSurfaceMessage title={surfaceState.title} message={surfaceState.message} variant="error" />
+    return <PluginSurfaceMessage title={surfaceState.title} message={surfaceState.message} variant="error" onBack={onBack} backLabel={t(locale, 'palette.back')} />
   }
   if (surfaceState.status === 'surface-not-found') {
-    return <PluginSurfaceMessage title="Plugin surface not found" message={surfaceState.message} variant="error" />
+    return <PluginSurfaceMessage title={t(locale, 'palette.surfaceNotFound')} message={surfaceState.message} variant="error" onBack={onBack} backLabel={t(locale, 'palette.back')} />
   }
   if (surfaceState.status === 'before-open') {
-    return <PluginSurfaceMessage title="Opening plugin surface..." />
+    return <PluginSurfaceMessage title={t(locale, 'palette.surfaceOpening')} />
   }
 
   const settingsContribution = surfaceState.definition.settings
@@ -157,7 +168,7 @@ export function PluginSurfaceRenderer({
   const SurfaceComponent = surfaceState.surface.component
 
   return (
-    <PluginSurfaceErrorBoundary pluginId={target.pluginId} onBack={onBack}>
+    <PluginSurfaceErrorBoundary pluginId={target.pluginId} locale={locale} onBack={onBack}>
       {surfaceState.status === 'permission-gate' ? (
         <PluginSurfacePermissionGate
           permissions={surfaceState.missingPermissions}
@@ -175,10 +186,14 @@ export function PluginSurfaceRenderer({
           locale={locale}
           t={pluginT}
           settings={settings}
+          appearance={appearance}
           permissions={surfaceState.permissions}
           initialText={target.initialText}
           host={{
             close: onClose,
+            complete: () => {
+              if (presentation === 'global-launcher' && mountedRef.current && activeTargetRef.current === target) onClose()
+            },
             requestBack: onBack,
             openSettings: () => {
               openSettingsDialog({
@@ -243,9 +258,12 @@ export function PluginSurfaceRenderer({
             },
             storage: hostStorage,
             clipboard: createPluginClipboard(target.pluginId, surfaceState.permissions, hostStorage),
-            paste: createPluginPaste(surfaceState.permissions, hostStorage),
+            paste: createPluginPaste(surfaceState.permissions, hostStorage, {
+              keepOpen: presentation !== 'global-launcher' && target.pluginId !== 'clipboard-history',
+            }),
             network: createPluginNetwork(surfaceState.permissions),
             shell: createPluginShell(surfaceState.permissions),
+            ai: createPluginAi(target.pluginId, target.source, surfaceState.permissions),
           }}
         />
       )}
@@ -265,7 +283,7 @@ export function PluginSurfacePermissionGate({
   onGrant: () => void
 }) {
   return (
-    <div className="h-full flex flex-col items-center justify-center gap-3 p-6 text-center" style={{ color: 'var(--color-text-secondary)' }}>
+    <div className="min-h-full flex flex-col items-center justify-center gap-3 p-6 text-center" style={{ color: 'var(--color-text-secondary)' }}>
       <div className="text-[13px] font-medium" style={{ color: 'var(--color-text-primary)' }}>{t(locale, 'palette.pluginPermissionTitle')}</div>
       <div className="max-w-[420px] text-[12px]" style={{ color: 'var(--color-text-tertiary)' }}>
         {t(locale, 'palette.pluginPermissionDescription')}
@@ -290,7 +308,7 @@ export function PluginSurfacePermissionGate({
   )
 }
 
-function PluginSurfaceMessage({ title, message, variant }: { title: string; message?: string; variant?: 'loading' | 'error' }) {
+function PluginSurfaceMessage({ title, message, variant, onBack, backLabel }: { title: string; message?: string; variant?: 'loading' | 'error'; onBack?: () => void; backLabel?: string }) {
   return (
     <div className="plugin-surface-window-message">
       {variant === 'error' ? (
@@ -300,12 +318,14 @@ function PluginSurfaceMessage({ title, message, variant }: { title: string; mess
       )}
       <div>{title}</div>
       {message && <small>{message}</small>}
+      {onBack && <button type="button" onClick={onBack}>{backLabel}</button>}
     </div>
   )
 }
 
 type SurfaceErrorBoundaryProps = {
   pluginId: string
+  locale: Locale
   onBack: () => void
   children: ReactNode
 }
@@ -330,9 +350,8 @@ class PluginSurfaceErrorBoundary extends Component<SurfaceErrorBoundaryProps, Su
     if (this.state.hasError) {
       return (
         <div className="plugin-surface-window-message">
-          <div>Plugin surface crashed</div>
-          {this.state.error && <small>{this.state.error}</small>}
-          <button type="button" onClick={this.props.onBack}>Back</button>
+          <div>{t(this.props.locale, 'palette.surfaceCrashed')}</div>
+          <button type="button" onClick={this.props.onBack}>{t(this.props.locale, 'palette.back')}</button>
         </div>
       )
     }

@@ -25,6 +25,8 @@ const context = vm.createContext({
   isFinite,
   isNaN,
   require(id) {
+    if (id === './CalculatorSurface') return { CalculatorSurface: () => null }
+    if (id === './style.css') return {}
     if (id === '@hiven/plugin') return {
       definePlugin: (definition) => definition,
       textOutput: (text) => ({ output: { kind: 'text', text } }),
@@ -37,6 +39,9 @@ const context = vm.createContext({
 })
 
 vm.runInContext(transpiled, context, { filename: 'calculator.js' })
+
+const calculateExpression = vm.runInContext('calculateExpression', context)
+const calculateValue = vm.runInContext('calculateValue', context)
 
 const plugin = module.exports.default
 const command = plugin.commands?.find((item) => item.id === 'calculator.run')
@@ -115,6 +120,22 @@ assert.equal(
   await runCalculatorCommand('0.1 + 0.2'),
   '0.1 + 0.2 = 0.3',
   'calculator command should use decimal precision for arithmetic formulas',
+)
+
+const variables = new Map([['a', calculateValue('1 / 3')]])
+assert.equal(calculateExpression('a * a', variables), '0.1111111111')
+assert.equal(calculateExpression('sqrt(81) + abs(-2) + round(1.5) + floor(1.9) + ceil(1.1)', variables), '16')
+assert.equal(calculateExpression('2^3^2'), '512')
+assert.equal(calculateExpression('-2^2'), '-4')
+assert.equal(calculateExpression('2**-2'), '0.25')
+assert.equal(calculateExpression('missing + 1', variables), null)
+assert.equal(calculateExpression('9^999999999'), null)
+assert.equal(calculateExpression(`1.${'9'.repeat(900)}^20`), null)
+assert.equal(calculateExpression('sqrt(-1)'), null)
+assert.equal(
+  await runCalculatorCommand('2^8\nsqrt(81)'),
+  '2^8 = 256\nsqrt(81) = 9',
+  'calculator command and launcher parser should recognize powers and functions',
 )
 
 assert.equal(

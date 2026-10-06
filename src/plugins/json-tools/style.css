@@ -1,0 +1,115 @@
+.jt-surface {
+  --jt-border: var(--color-border-tertiary, var(--hiven-color-border));
+  --jt-panel: var(--color-background-primary, var(--hiven-color-bg-primary));
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--color-text-primary, var(--hiven-color-text-primary));
+  background: var(--jt-panel);
+  font-family: var(--font, var(--hiven-font-ui));
+}
+
+.jt-header {
+  flex: none;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--jt-border);
+}
+.jt-title { flex: 1; min-width: 0; font-size: 13px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jt-groups, .jt-operations { flex: none; display: flex; flex-wrap: wrap; align-items: stretch; gap: 0 4px; padding: 0 14px; border-bottom: 1px solid var(--jt-border); }
+.jt-header .jt-groups { align-self: stretch; flex-wrap: nowrap; padding: 0; border-bottom: 0; }
+.jt-header > .hiven-ui-icon-button { flex-shrink: 0; }
+.jt-operations { gap: 6px; padding: 6px 18px; }
+.jt-operations .jt-operation { min-height: 28px; border-radius: 5px; padding: 0 10px; }
+.jt-operations .jt-operation.is-active { background: var(--accent-soft); }
+.jt-operations .jt-operation.is-active::after { display: none; }
+.jt-operation {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  position: relative;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 0;
+  color: var(--color-text-secondary);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.jt-operation:hover { color: var(--color-text-primary); background: color-mix(in srgb, var(--color-text-primary) 3%, transparent); }
+.jt-operation:focus-visible { outline: 2px solid var(--hiven-color-accent); outline-offset: -4px; border-radius: 5px; }
+.jt-operation.is-active { color: var(--hiven-color-accent); font-weight: 600; }
+.jt-operation.is-active::after { content: ''; position: absolute; bottom: -1px; height: 2px; left: 12px; right: 12px; background: var(--hiven-color-accent); }
+
+.jt-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.jt-expression {
+  min-height: 52px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 18px;
+  border-bottom: 1px solid var(--jt-border);
+}
+.jt-expression-prefix { color: var(--hiven-color-accent); font: 500 13px/1 var(--font-mono); }
+.jt-expression input { font-family: var(--font-mono); font-size: 12px; }
+.jt-expression kbd { color: var(--color-text-tertiary); font: 10px/1 var(--font-mono); }
+
+.jt-editors { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.jt-pane { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.jt-pane + .jt-pane { border-left: 1px solid var(--jt-border); }
+.jt-pane-header {
+  flex: none;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 18px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+.jt-pane-header strong { font-weight: 500; }
+.jt-pane-actions { display: flex; align-items: center; gap: 8px; }
+.jt-pane-header .hiven-ui-button { min-height: 25px; padding: 0 8px; font-size: 11px; }
+.jt-editor {
+  flex: 1;
+  position: relative;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.jt-editor-loading { padding: 12px 20px; color: var(--color-text-tertiary); font-size: 12px; }
+.jt-pane-output { background: color-mix(in srgb, var(--color-background-secondary) 45%, var(--jt-panel)); }
+.jt-error { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 8px; padding: 20px 24px; overflow: auto; border-left: 2px solid var(--hiven-color-danger); color: var(--hiven-color-danger); background: var(--jt-panel); }
+.jt-error strong { font-size: 12px; font-weight: 500; }
+.jt-error span { color: var(--color-text-secondary); font: 12px/1.6 var(--font-mono); overflow-wrap: anywhere; }
+
+.jt-status { min-height: 36px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid var(--jt-border); color: var(--color-text-tertiary); font-size: 10px; }
+.jt-status-input, .jt-status-output { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 18px; }
+.jt-status-output { border-left: 1px solid var(--jt-border); }
+.jt-status-error { color: var(--hiven-color-danger); }
+.jt-format-options { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.jt-format-options .hiven-ui-segmented { padding: 1px; }
+.jt-format-options .hiven-ui-segmented button { min-height: 21px; padding: 0 7px; font-size: 10px; }
+.jt-format-options .hiven-ui-check { margin-left: 6px; gap: 5px; font-size: 10px; }
+.jt-status-count { margin-left: auto; white-space: nowrap; }
+
+@media (max-width: 720px) {
+  .jt-header { gap: 6px; padding: 0 8px; }
+  .jt-title { font-size: 12px; }
+  .jt-groups { padding: 0 8px; gap: 0; }
+  .jt-operations { padding: 6px 12px; gap: 4px; }
+  .jt-operation { padding: 0 8px; font-size: 11px; }
+  .jt-pane-header { padding: 0 12px; }
+  .jt-status-input, .jt-status-output { padding: 4px 10px; }
+  .jt-status-count, .jt-expression kbd { display: none; }
+}

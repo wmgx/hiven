@@ -1,4 +1,4 @@
-export type TranslateProvider = 'baidu' | 'deepl' | 'tencent'
+export type TranslateProvider = 'ai' | 'baidu' | 'deepl' | 'tencent'
 
 export type LanguageCode = 'zh' | 'en' | 'ja' | 'ko' | 'fr' | 'de' | 'es'
 export type SourceLanguageCode = 'auto' | LanguageCode
@@ -17,6 +17,9 @@ export type TranslateProfile = {
   secretId?: string
   secretKey?: string
   region?: string
+  aiProviderId?: string
+  aiAgentId?: string
+  aiEffort?: 'inherit' | 'low' | 'medium' | 'high' | 'xhigh'
   defaultSourceLang: SourceLanguageCode
   defaultTargetLang: TargetLanguageCode
   monthlyLimitChars: number
@@ -42,6 +45,21 @@ export const TENCENT_DEFAULT_PROFILE: TranslateProfile = {
   defaultSourceLang: 'auto',
   defaultTargetLang: 'smart',
   monthlyLimitChars: 5000000,
+  usedCharsMonth: '',
+  usedChars: 0,
+}
+
+export const AI_DEFAULT_PROFILE: TranslateProfile = {
+  id: 'ai-default',
+  name: 'AI',
+  provider: 'ai',
+  enabled: true,
+  aiProviderId: '',
+  aiAgentId: '',
+  aiEffort: 'inherit',
+  defaultSourceLang: 'auto',
+  defaultTargetLang: 'smart',
+  monthlyLimitChars: 0,
   usedCharsMonth: '',
   usedChars: 0,
 }
@@ -78,19 +96,20 @@ export const DEFAULT_TRANSLATE_SETTINGS: TranslateSettings = {
       usedChars: 0,
     },
     TENCENT_DEFAULT_PROFILE,
+    AI_DEFAULT_PROFILE,
   ],
 }
 
 export function migrateTranslateSettings(stored: unknown, _fromVersion: number): TranslateSettings {
   const value = stored && typeof stored === 'object' ? stored as Partial<TranslateSettings> : {}
   const profiles = Array.isArray(value.profiles) ? value.profiles.filter((profile): profile is TranslateProfile => Boolean(profile && typeof profile === 'object')) : []
-  const nextProfiles = profiles.some((profile) => profile.provider === 'tencent')
-    ? profiles
-    : [...profiles, TENCENT_DEFAULT_PROFILE]
+  const nextProfiles = profiles.length > 0 ? [...profiles] : [...DEFAULT_TRANSLATE_SETTINGS.profiles]
+  if (!nextProfiles.some((profile) => profile.provider === 'tencent')) nextProfiles.push(TENCENT_DEFAULT_PROFILE)
+  if (!nextProfiles.some((profile) => profile.provider === 'ai')) nextProfiles.push(AI_DEFAULT_PROFILE)
   return {
     defaultProfileId: value.defaultProfileId || DEFAULT_TRANSLATE_SETTINGS.defaultProfileId,
     defaultTargetLang: value.defaultTargetLang || DEFAULT_TRANSLATE_SETTINGS.defaultTargetLang,
-    profiles: nextProfiles.length > 0 ? nextProfiles : DEFAULT_TRANSLATE_SETTINGS.profiles,
+    profiles: nextProfiles,
   }
 }
 

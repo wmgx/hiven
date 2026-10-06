@@ -14,6 +14,7 @@ import { openExternalUrl } from '../effectRunner'
 import { showToast } from '../toast'
 import { requestOpenLauncherHostSurface } from '../launcherHostSurfaceBridge'
 import { openLauncherHostedPluginSurface } from '../pluginSurfaceOpenRequest'
+import { pluginRegistry } from '../pluginRegistry'
 import { createPluginPrivateStorage } from '../pluginStorage'
 import { getPluginPermissionSnapshot, requirePluginPermissions } from '../pluginPermissions'
 import {
@@ -24,6 +25,8 @@ import { createQuickEditorPane, overwriteQuickEditorText, showQuickEditorSurface
 import { readQuickEditorPaneSnapshot } from '../quickEditor/quickEditorPaneSnapshot'
 import type { PluginPermission } from '../pluginTypes'
 import { readNativeClipboardText } from '../nativeClipboard'
+import { createPluginPaste } from '../pluginPaste'
+import { writeClipboardText } from '../pluginClipboard'
 import type { PluginSettingsSource } from '../pluginSettingsStore'
 import type { DiscoveredApp, PluginAppsApi, PluginLauncherApi } from './types'
 
@@ -108,19 +111,6 @@ async function readClipboard(): Promise<string> {
   return readNativeClipboardText()
 }
 
-async function writeClipboard(text: string): Promise<void> {
-  try {
-    const { writeText } = await import('@tauri-apps/plugin-clipboard-manager')
-    await writeText(text)
-  } catch {
-    try {
-      await navigator.clipboard.writeText(text)
-    } catch (error) {
-      console.warn('[launcher] clipboard write failed:', error)
-    }
-  }
-}
-
 async function openEditorWindow(): Promise<string | undefined> {
   try {
     await showQuickEditorSurface()
@@ -197,8 +187,11 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
     returnToLauncher: async (text: string) => {
       await createQuickEditorPane({ text })
     },
-    copyText: async (text: string) => {
-      await writeClipboard(text)
+    copyText: async (text, writeOptions) => {
+      await writeClipboardText(text, writeOptions)
+    },
+    pasteToForegroundApp: async (text: string) => {
+      await createPluginPaste().pasteText(text)
     },
     openUrl: async (url: string) => {
       await openExternalUrl(url)
@@ -206,6 +199,22 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
     showEditorWindow: openEditorWindow,
     showPluginsPage,
     showSettingsPage,
+    openSurface: (surfaceId, surfaceOptions) => {
+      const { pluginId, source } = options
+      if (!pluginId || !source) {
+        throw new Error('openSurface requires a plugin-scoped launcher API')
+      }
+      const definition = pluginRegistry.getPluginDefinition(pluginId, source)
+      if (!definition?.ui?.surfaces?.some((surface) => surface.id === surfaceId)) {
+        throw new Error(`Plugin surface not found: ${pluginId}/${surfaceId}`)
+      }
+      openLauncherHostedPluginSurface({
+        pluginId,
+        source,
+        surfaceId,
+        initialText: surfaceOptions?.initialText,
+      })
+    },
     createPane: (options) => createQuickEditorPane(options),
     dispatchEffects: () => {
       return { applied: [], errors: ['dispatchEffects is only available in the editor window'] }

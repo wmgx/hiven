@@ -41,15 +41,8 @@
   --launcher-panel-max-height: calc(100vh / 3);
   --launcher-panel-width: calc(100vw / 3);
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
-  --hiven-color-bg-primary: var(--color-background-primary);
-  --hiven-color-bg-secondary: var(--color-background-secondary);
-  --hiven-color-bg-tertiary: var(--color-background-tertiary);
-  --hiven-color-text-primary: var(--color-text-primary);
-  --hiven-color-text-secondary: var(--color-text-secondary);
-  --hiven-color-text-tertiary: var(--color-text-tertiary);
-  --hiven-color-border: var(--color-border-secondary);
-  --hiven-color-accent: var(--color-accent);
-  --hiven-color-danger: var(--color-error);
+  /* Only --hiven-* aliases whose sources also live on :root belong here.
+   * The --hiven-color-* aliases must NOT — see the bridge rule below. */
   --hiven-radius-sm: 4px;
   --hiven-radius-md: 6px;
   --hiven-radius-lg: 8px;
@@ -61,6 +54,37 @@
   --hiven-space-4: 16px;
 }
 
+/* ─── Plugin-facing colour token bridge (--hiven-color-*) ───
+ *
+ * These MUST be declared on the elements that actually carry the theme
+ * (body / .flux-spatial-shell / .quick-editor-detached-window — see the
+ * [data-theme] blocks below), never on :root.
+ *
+ * A custom property's var() references are substituted on the element that
+ * *declares* it, not on the element that reads it. The --color-* theme tokens
+ * only exist from the theme carriers downwards, so declaring
+ * `--hiven-color-accent: var(--color-accent)` on :root made it resolve to the
+ * guaranteed-invalid value, which then inherited — as invalid — into the whole
+ * document. Every consumer without an explicit fallback silently became
+ * "invalid at computed-value time" and fell back to the property's initial
+ * value: `border: 1px solid var(--hiven-color-accent)` computed to
+ * `border-style: none`, i.e. no border painted at all, and
+ * `background: var(--hiven-color-accent)` computed to transparent.
+ */
+body,
+.flux-spatial-shell,
+.quick-editor-detached-window {
+  --hiven-color-bg-primary: var(--color-background-primary);
+  --hiven-color-bg-secondary: var(--color-background-secondary);
+  --hiven-color-bg-tertiary: var(--color-background-tertiary);
+  --hiven-color-text-primary: var(--color-text-primary);
+  --hiven-color-text-secondary: var(--color-text-secondary);
+  --hiven-color-text-tertiary: var(--color-text-tertiary);
+  --hiven-color-border: var(--color-border-secondary);
+  --hiven-color-accent: var(--color-accent);
+  --hiven-color-danger: var(--color-error);
+}
+
 .plugin-surface-panel {
   height: 100%;
   min-height: 0;
@@ -68,6 +92,25 @@
   flex-direction: column;
   background: var(--color-background-primary);
   color: var(--color-text-primary);
+}
+
+.global-launcher-surface-shell,
+.global-launcher-host-surface-shell,
+.global-launcher-settings-shell {
+  animation: launcher-frame-in 140ms ease-out both;
+}
+
+.global-launcher-flow-frame {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+@keyframes launcher-frame-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
 }
 
 .plugin-surface-panel-titlebar {
@@ -425,6 +468,17 @@ html[data-window='launcher'] .global-launcher-overlay.open {
   box-shadow: none !important;
 }
 
+/* Browser validation keeps desktop geometry when DevTools narrows the viewport. */
+html[data-web-native-bridge='true'][data-window='launcher'],
+html[data-web-native-bridge='true'][data-window='launcher'] body,
+html[data-web-native-bridge='true'][data-window='launcher'] #root,
+html[data-web-native-bridge='true'][data-window='launcher'] .flux-spatial-shell,
+html[data-web-native-bridge='true'][data-window='launcher'] .launcher-window-shell,
+html[data-web-native-bridge='true'][data-window='launcher'] .global-launcher-overlay {
+  min-width: 944px;
+  overflow: auto;
+}
+
 #root {
   width: 100vw;
   height: 100vh;
@@ -465,11 +519,16 @@ html[data-window='launcher'] .global-launcher-overlay.open {
   user-select: text;
 }
 
-/* 控件类禁止文本选中（避免误选按钮文字等） */
+/*
+ * 控件类禁止文本选中（避免误选按钮文字等）。
+ * .no-select / [data-no-select] 是插件自定义交互区域（拖拽多选等）的官方逃生口——
+ * 必须显式覆盖子孙节点，否则会被上面 span:not(button span) 直接命中子级 span 抢走
+ * （同优先级下按源码顺序判负），逼着每个插件在自己每个 span 上重复补 data-no-select。
+ */
 .flux-spatial-shell :is(
   button, [role="button"],
-  .drag-handle, [data-no-select],
-  .icon, .no-select
+  .drag-handle, [data-no-select], [data-no-select] *,
+  .icon, .no-select, .no-select *
 ) {
   -webkit-user-select: none;
   user-select: none;
@@ -1019,9 +1078,33 @@ html[data-window='launcher'] .global-launcher-overlay.open {
 }
 
 /* ─── Dropdown enter (P3-6) ─── */
-.plugins-dropdown-menu.anim-dropdown,
-.plugin-settings-dialog-panel.anim-dropdown {
+.plugins-dropdown-menu.anim-dropdown {
   animation: dropdown-in 0.15s var(--ease-out-expo, ease-out);
+}
+
+@keyframes plugin-settings-dialog-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes plugin-settings-dialog-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.plugin-settings-dialog-panel,
+.plugin-settings-dialog-backdrop,
+.plugin-settings-modal-panel,
+.plugin-settings-modal-backdrop {
+  animation: plugin-settings-dialog-in 140ms ease-out both;
+}
+
+.plugin-settings-dialog-panel.is-closing,
+.plugin-settings-dialog-backdrop.is-closing,
+.plugin-settings-modal-panel.is-closing,
+.plugin-settings-modal-backdrop.is-closing {
+  animation: plugin-settings-dialog-out 90ms ease-in both;
+  pointer-events: none;
 }
 
 /* ─── Palette Overlay ─── */
@@ -1103,6 +1186,14 @@ html[data-window='launcher'] .global-launcher-panel :is(
 html[data-window='launcher'] .global-launcher-surface-shell .global-launcher-body,
 html[data-window='launcher'] .global-launcher-surface-shell .global-launcher-body * {
   -webkit-app-region: no-drag;
+}
+
+/* Keep the desktop visible behind the rounded standalone surface frame. */
+html[data-window='plugin-surface'],
+html[data-window='plugin-surface'] body,
+html[data-window='plugin-surface'] #root,
+html[data-window='plugin-surface'] .plugin-surface-window-shell {
+  background: transparent;
 }
 
 html[data-window='quick-editor'],
@@ -2226,7 +2317,7 @@ html[data-window='launcher'] .launcher-empty-well {
   font-size: 10.5px;
 }
 
-/* Number field: plain input + unit (no stepper) */
+/* Number field: Base UI NumberField (stepper) + optional unit label */
 .schema-row-control-number {
   display: inline-flex;
   align-items: center;
@@ -2238,52 +2329,21 @@ html[data-window='launcher'] .launcher-empty-well {
   align-items: center;
 }
 
-.plugin-settings-num-field input,
-.plugin-settings-num-field-row .wr-in {
-  width: 72px;
-  height: 30px;
-  padding: 0 8px;
-  border: 1px solid #d0d4d9;
-  border-radius: 7px;
-  background: #fff;
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: 13px;
-  font-weight: 500;
-  text-align: left;
-  outline: none;
-}
-
-.plugin-settings-num-field input:hover,
-.plugin-settings-num-field-row .wr-in:hover {
-  border-color: #b8bec6;
-}
-
-.plugin-settings-num-field input:focus,
-.plugin-settings-num-field-row .wr-in:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
-}
-
 .plugin-settings-num-field-row {
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
 
+.plugin-settings-num-field .hiven-ui-number-input,
+.plugin-settings-num-field-row .hiven-ui-number-input {
+  width: 56px;
+}
+
 .plugin-settings-num-unit {
   color: var(--text-2);
   font-size: 12px;
   flex: none;
-}
-
-body[data-theme='dark'] .plugin-settings-num-field input,
-.flux-spatial-shell[data-theme='dark'] .plugin-settings-num-field input,
-body[data-theme='dark'] .plugin-settings-num-field-row .wr-in,
-.flux-spatial-shell[data-theme='dark'] .plugin-settings-num-field-row .wr-in {
-  background: var(--panel);
-  border-color: var(--border);
-  color: var(--text);
 }
 
 .schema-select,
@@ -2337,7 +2397,7 @@ body[data-theme='dark'] .plugin-settings-num-field-row .wr-in,
   font-size: 11.5px;
   line-height: 1.35;
 }
-.schema-row.has-error .plugin-settings-num-field input,
+.schema-row.has-error .plugin-settings-num-field .hiven-ui-number-group,
 .schema-field-block.has-error input,
 .schema-field-block.has-error textarea {
   border-color: var(--color-error, #be1100);
@@ -2833,6 +2893,18 @@ body[data-theme='dark'] .schema-field-block textarea:focus {
 
 .plugin-settings-dialog-panel .schema-field-object-list {
   border: 0 !important;
+}
+
+/* The dialog body owns scrolling; nested object-list panes expand naturally. */
+.plugin-settings-dialog-panel .schema-object-list-master-detail {
+  height: auto;
+  overflow: visible;
+}
+
+.plugin-settings-dialog-panel .schema-object-list-master,
+.plugin-settings-dialog-panel .schema-object-list-detail,
+.plugin-settings-dialog-panel .schema-object-list-detail .schema-object-list-grid {
+  overflow: visible;
 }
 
 .wr-sensitive-wrap {
@@ -3628,119 +3700,6 @@ body[data-theme='dark'] .schema-object-list.d-rules .wr-in:focus {
   font-size: 13px;
 }
 
-/* Modal */
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 60;
-  background: rgba(0, 0, 0, 0);
-  backdrop-filter: blur(0px);
-  pointer-events: none;
-  transition:
-    background 0.25s ease,
-    backdrop-filter 0.25s ease;
-}
-.modal-overlay.open {
-  background: rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(6px);
-  pointer-events: auto;
-}
-.modal-panel {
-  width: min(480px, 90vw);
-  background: var(--color-background-primary);
-  border: var(--hairline) solid var(--color-border-secondary);
-  border-radius: var(--radius-xl);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.18);
-  transform: scale(0.92) translateY(10px);
-  opacity: 0;
-  transition:
-    transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
-    opacity 0.2s ease;
-  overflow: hidden;
-}
-.modal-overlay.open .modal-panel {
-  transform: scale(1) translateY(0);
-  opacity: 1;
-}
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px 12px;
-  border-bottom: var(--hairline) solid var(--color-border-tertiary);
-}
-.modal-title {
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--color-text-primary);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.modal-title svg {
-  color: var(--color-accent);
-}
-.modal-close {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-md);
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text-tertiary);
-  transition:
-    background 0.15s,
-    color 0.15s;
-}
-.modal-close:hover {
-  background: var(--color-background-tertiary);
-  color: var(--color-text-primary);
-}
-.modal-body {
-  padding: 20px;
-}
-.modal-desc {
-  font-size: 12px;
-  color: var(--color-text-secondary);
-  margin-bottom: 16px;
-  line-height: 1.6;
-}
-.modal-url-row {
-  display: flex;
-  gap: 8px;
-}
-.modal-url-input {
-  flex: 1;
-  height: 36px;
-  border: var(--hairline) solid var(--color-border-secondary);
-  border-radius: var(--radius-md);
-  padding: 0 12px;
-  font-size: 12px;
-  font-family: var(--font-mono);
-  background: var(--color-background-secondary);
-  color: var(--color-text-primary);
-  outline: none;
-  transition: border-color 0.2s;
-}
-.modal-url-input:focus {
-  border-color: var(--color-accent);
-}
-.modal-url-input::placeholder {
-  color: var(--color-text-tertiary);
-}
-.modal-footer {
-  padding: 12px 20px 16px;
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  border-top: var(--hairline) solid var(--color-border-tertiary);
-}
 
 /* ─── Unified Button System ─── */
 .ft-btn {
@@ -3917,7 +3876,7 @@ body[data-theme='dark'] .schema-object-list.d-rules .wr-in:focus {
 /* hiven-styled Monaco native find/replace widget. Keep Monaco behavior; only replace chrome. */
 .monaco-editor .find-widget {
   height: 48px !important;
-  min-width: 520px !important;
+  min-width: 0 !important;
   padding: 8px 42px 8px 30px !important;
   border: 1px solid var(--border) !important;
   border-radius: 14px !important;
@@ -4197,7 +4156,6 @@ body[data-theme='dark'] .monaco-editor .find-widget {
 }
 
 .scripts-search-bar,
-.modal-url-input,
 .pinned-input,
 .pinned-dropdown-trigger {
   border: 1px solid var(--glass-border);
@@ -4473,6 +4431,12 @@ body[data-theme='dark'] .monaco-editor .find-widget {
   background: var(--hiven-color-danger);
 }
 
+.hiven-ui-button:disabled,
+.hiven-ui-icon-button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
 .hiven-ui-button-ghost,
 .hiven-ui-icon-button {
   border-color: transparent;
@@ -4585,30 +4549,67 @@ body[data-theme='dark'] .monaco-editor .find-widget {
   transform: rotate(180deg);
 }
 
-.hiven-ui-select-menu {
-  position: absolute;
-  z-index: 80;
-  top: calc(100% + 6px);
-  left: 0;
-  right: auto;
-  min-width: 100%;
+.hiven-ui-select-menu,
+.hiven-ui-combobox-menu,
+.hiven-ui-menu {
+  min-width: var(--anchor-width);
   width: max-content;
-  max-width: min(320px, 80vw);
-  max-height: min(280px, 50vh);
-  overflow: auto;
-  padding: 4px;
+  max-width: min(360px, var(--available-width));
+  overflow: hidden;
   border: 1px solid var(--hiven-select-border-2);
   border-radius: 8px;
   background: var(--hiven-select-panel);
   box-shadow: 0 18px 42px -18px rgba(0, 0, 0, 0.32), 0 4px 12px rgba(0, 0, 0, 0.06);
 }
 
+.hiven-ui-menu-scroll-area {
+  position: relative;
+  max-height: min(216px, var(--available-height, 100vh));
+}
+
+.hiven-ui-menu-scroll-viewport {
+  max-height: min(216px, var(--available-height, 100vh));
+  padding: 4px 10px 4px 4px;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
+.hiven-ui-menu-scrollbar {
+  width: 8px;
+  padding: 3px 2px;
+}
+
+.hiven-ui-menu-scroll-thumb {
+  width: 100%;
+  border-radius: 999px;
+  background: var(--scrollbar-thumb, color-mix(in srgb, var(--hiven-select-text) 28%, transparent));
+}
+
+.hiven-ui-select-positioner {
+  --hiven-select-panel: var(--panel, var(--hiven-color-bg-primary, #fff));
+  --hiven-select-border-2: var(--border-2, var(--hiven-color-border, #d8d9db));
+  --hiven-select-text: var(--text, var(--hiven-color-text-primary, #1c1c1e));
+  --hiven-select-accent: var(--accent, var(--hiven-color-accent, #2563eb));
+  --hiven-select-accent-soft: var(--accent-soft, color-mix(in srgb, var(--accent) 14%, transparent));
+  z-index: 1300;
+  max-width: var(--available-width);
+  color: var(--hiven-select-text);
+  font-family: var(--font, var(--hiven-font-ui, inherit));
+  pointer-events: auto;
+  touch-action: pan-y;
+}
+
+html[data-window='launcher'] .hiven-ui-select-positioner {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
 .hiven-ui-select-option {
   width: 100%;
   min-height: 34px;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 16px;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
   padding: 8px 11px;
   border: 0;
@@ -4624,20 +4625,34 @@ body[data-theme='dark'] .monaco-editor .find-widget {
   transition: background 0.1s ease, color 0.1s ease;
 }
 
-/* Hover must win over generic .hiven-ui-* button chrome */
-button.hiven-ui-select-option:hover {
-  background: var(--hiven-select-accent-soft) !important;
-  color: var(--hiven-select-accent) !important;
+.hiven-ui-select-option:hover,
+.hiven-ui-select-option[data-highlighted] {
+  background: var(--hiven-select-accent-soft);
+  color: var(--hiven-select-accent);
 }
 
-button.hiven-ui-select-option.is-selected {
-  background: var(--hiven-select-accent-soft) !important;
-  color: var(--hiven-select-accent) !important;
-  font-weight: 650;
+.hiven-ui-select-option[data-selected] {
+  background: var(--hiven-select-accent-soft);
+  color: var(--hiven-select-accent);
 }
 
-button.hiven-ui-select-option.is-selected:hover {
-  background: color-mix(in srgb, var(--hiven-select-accent) 22%, transparent) !important;
+.hiven-ui-select-option[data-selected]:hover,
+.hiven-ui-select-option[data-selected][data-highlighted] {
+  background: color-mix(in srgb, var(--hiven-select-accent) 22%, transparent);
+}
+
+.hiven-ui-select-option-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hiven-ui-select-option-indicator {
+  grid-column: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .hiven-ui-select-check {
@@ -4645,6 +4660,229 @@ button.hiven-ui-select-option.is-selected:hover {
   width: 13px;
   height: 13px;
   stroke: currentColor;
+}
+
+.hiven-ui-combobox-search {
+  display: block;
+  width: calc(100% - 8px);
+  min-height: 30px;
+  margin: 4px;
+  padding: 6px 10px;
+  border: 1px solid var(--hiven-select-border, var(--hiven-color-border));
+  border-radius: 6px;
+  background: var(--hiven-select-surface, var(--hiven-color-bg-secondary));
+  color: var(--hiven-select-text, var(--hiven-color-text-primary));
+  font: inherit;
+  font-size: 13px;
+  outline: 0;
+}
+
+.hiven-ui-combobox-search::placeholder {
+  color: var(--hiven-select-text-3, var(--hiven-color-text-secondary));
+  opacity: 1;
+}
+
+.hiven-ui-combobox-search:focus {
+  border-color: var(--hiven-select-accent, var(--hiven-color-accent));
+}
+
+.hiven-ui-combobox-list {
+  min-height: 0;
+  outline: 0;
+}
+
+.hiven-ui-combobox-empty {
+  color: var(--hiven-select-text-3, var(--hiven-color-text-secondary));
+  font-size: 12px;
+}
+
+.hiven-ui-combobox-empty:not(:empty) {
+  padding: 14px 11px;
+}
+
+.hiven-ui-switch {
+  width: 38px;
+  height: 22px;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  padding: 2px;
+  border: 0;
+  border-radius: 999px;
+  background: #c5cad0;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.14);
+  cursor: pointer;
+  transition: background 0.14s;
+}
+
+.hiven-ui-switch:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent, var(--hiven-color-accent)) 45%, transparent);
+  outline-offset: 2px;
+}
+
+.hiven-ui-switch[data-checked] {
+  background: var(--accent, var(--hiven-color-accent));
+  box-shadow: none;
+}
+
+.hiven-ui-switch[data-disabled] {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.hiven-ui-switch.is-compact {
+  width: 34px;
+  height: 20px;
+}
+
+.hiven-ui-switch-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+  transition: transform 0.14s;
+}
+
+.hiven-ui-switch[data-checked] .hiven-ui-switch-thumb {
+  transform: translateX(16px);
+}
+
+.hiven-ui-switch.is-compact .hiven-ui-switch-thumb {
+  width: 16px;
+  height: 16px;
+}
+
+.hiven-ui-switch.is-compact[data-checked] .hiven-ui-switch-thumb {
+  transform: translateX(14px);
+}
+
+.flux-spatial-shell[data-theme='dark'] .hiven-ui-switch,
+body[data-theme='dark'] .hiven-ui-switch {
+  background: #54545c;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+}
+
+.flux-spatial-shell[data-theme='dark'] .hiven-ui-switch[data-checked],
+body[data-theme='dark'] .hiven-ui-switch[data-checked] {
+  background: var(--accent, var(--hiven-color-accent));
+  box-shadow: none;
+}
+
+.flux-spatial-shell[data-theme='dark'] .hiven-ui-switch-thumb,
+body[data-theme='dark'] .hiven-ui-switch-thumb {
+  background: var(--text, var(--hiven-color-text-primary));
+}
+
+.hiven-ui-number {
+  display: inline-flex;
+  min-width: 0;
+}
+
+.hiven-ui-number-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border, var(--hiven-color-border));
+  border-radius: 8px;
+  background: linear-gradient(180deg, var(--panel, var(--hiven-color-bg-primary)), var(--surface, var(--hiven-color-bg-secondary)));
+  color: var(--text, var(--hiven-color-text-primary));
+  font-family: var(--mono, var(--hiven-font-mono, inherit));
+  font-size: 12.5px;
+  box-shadow: 0 1px 1px rgba(18, 22, 28, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+
+.flux-spatial-shell[data-theme='dark'] .hiven-ui-number-group,
+body[data-theme='dark'] .hiven-ui-number-group {
+  background: var(--surface, var(--hiven-color-bg-secondary));
+  box-shadow: none;
+}
+
+.hiven-ui-number-step {
+  width: 16px;
+  border: 0;
+  background: transparent;
+  color: var(--text-2, var(--hiven-color-text-secondary));
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.hiven-ui-number-step:hover:not(:disabled) {
+  color: var(--text, var(--hiven-color-text-primary));
+}
+
+.hiven-ui-number-step:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.hiven-ui-number-input {
+  width: 28px;
+  min-width: 20px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 500;
+  text-align: center;
+  outline: 0;
+}
+
+.hiven-ui-menu {
+  max-width: min(280px, var(--available-width, 90vw));
+}
+
+.hiven-ui-menu-header {
+  padding: 8px 12px 4px;
+  color: var(--text-3, var(--hiven-color-text-tertiary));
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.hiven-ui-menu-item {
+  width: 100%;
+  min-height: 34px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px 11px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--hiven-select-text, var(--text, var(--hiven-color-text-primary)));
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hiven-ui-menu-item:hover,
+.hiven-ui-menu-item[data-highlighted] {
+  background: var(--hiven-select-accent-soft, var(--color-bg-hover, rgba(26, 28, 30, 0.05)));
+}
+
+.hiven-ui-menu-item.is-danger {
+  color: #b0402f;
+}
+
+.hiven-ui-menu-item.is-danger:hover,
+.hiven-ui-menu-item.is-danger[data-highlighted] {
+  background: rgba(176, 64, 47, 0.08);
+}
+
+.hiven-ui-menu-item-label {
+  min-width: 0;
+}
+
+.hiven-ui-menu-item-desc {
+  color: var(--text-2, var(--hiven-color-text-secondary));
+  font-size: 11px;
+  line-height: 1.3;
 }
 
 .hiven-ui-textarea {
@@ -4767,18 +5005,51 @@ button.hiven-ui-select-option.is-selected:hover {
   font-size: var(--text-sm);
 }
 
-.hiven-ui-confirm {
-  position: absolute;
+.hiven-ui-dialog {
+  position: fixed;
   inset: 0;
+  z-index: 1300;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.hiven-ui-dialog-panel {
+  position: fixed;
+  z-index: 1301;
+  top: 50%;
+  left: 50%;
+  width: min(360px, calc(100vw - 32px));
+  transform: translate(-50%, -50%);
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
   padding: 16px;
+  border: var(--hairline) solid var(--hiven-color-border);
+  border-radius: var(--hiven-radius-lg);
+  background: var(--hiven-color-bg-primary);
+  box-shadow: 0 12px 40px color-mix(in srgb, #000 18%, transparent);
+  outline: none;
+}
+
+.hiven-ui-dialog-title {
+  color: var(--hiven-color-text-primary);
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+.hiven-ui-confirm {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
   background: rgba(0, 0, 0, 0.28);
 }
 
 .hiven-ui-confirm-panel {
-  width: min(320px, 100%);
+  position: fixed;
+  z-index: 1301;
+  top: 50%;
+  left: 50%;
+  width: min(320px, calc(100vw - 32px));
+  transform: translate(-50%, -50%);
   padding: 14px;
   border: var(--hairline) solid var(--hiven-color-border);
   border-radius: var(--hiven-radius-lg);
@@ -4804,7 +5075,6 @@ button.hiven-ui-select-option.is-selected:hover {
   margin-top: 12px;
 }
 
-.modal-panel,
 .pinned-dropdown-menu {
   border: 1px solid var(--glass-border);
   background: var(--glass-bg-solid);
@@ -5054,6 +5324,12 @@ html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .global-lau
 .quick-editor-loading-skeleton {
   height: 100%;
   background: var(--color-background-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
 }
 
 .quick-editor-command-layer--detached {
@@ -5162,6 +5438,8 @@ body[data-theme='dark'] .quick-editor-command-panel {
 html[data-window='launcher'] .global-launcher-panel.palette-panel {
   --launcher-panel-width: calc(100vw - 24px);
   --launcher-panel-max-height: calc(100vh - 24px);
+  width: min(var(--launcher-panel-width), calc(100vw - 24px)) !important;
+  max-width: calc(100vw - 24px);
 }
 
 .global-launcher-header.l-search,
@@ -5170,7 +5448,7 @@ html[data-window='launcher'] .global-launcher-panel.palette-panel {
   align-items: center;
   gap: 9px;
   min-height: 52px;
-  padding: 14px 16px;
+  padding: 12px 16px;
   /* V4/V5: slightly recessed face via color only — inset box-shadow read as a second layer */
   background: var(--surface);
   box-shadow: none;
@@ -5215,6 +5493,25 @@ body[data-theme='dark'] .l-search {
 .l-search input::placeholder {
   color: var(--text-3);
   font-family: var(--font);
+}
+
+.launcher-query-content-action {
+  flex: none;
+  border: 0;
+  border-radius: 6px;
+  padding: 5px 8px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.launcher-query-content-action:hover,
+.launcher-query-content-action:focus-visible {
+  background: var(--surface);
+  color: var(--text);
 }
 
 .l-search .back {
@@ -5722,7 +6019,7 @@ body[data-theme='dark'] .launcher-preview-well {
   padding: 0 14px;
   border-radius: 10px;
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition: none;
   color: var(--text);
   background: transparent;
   box-shadow: none;
@@ -7146,10 +7443,6 @@ body[data-theme='dark'] .settings-about-right .scripts-btn,
   box-shadow: var(--shadow-sm);
 }
 
-.scard:has(.settings-select-wrap.is-open) {
-  overflow: visible;
-}
-
 .srow {
   min-height: 56px;
   display: flex;
@@ -7212,6 +7505,146 @@ body[data-theme='dark'] .srow .s-ico,
 
 .srow .s-ctl:focus-within {
   /* keep focus ring visible on nested controls */
+}
+
+.srow--stacked {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: start;
+}
+
+.srow--stacked .s-ctl {
+  grid-column: 2;
+  width: 100%;
+  max-width: none;
+}
+
+.ai-subscription-provider + .ai-subscription-provider {
+  border-top: 1px solid var(--border-subtle, var(--border));
+}
+
+@keyframes ai-provider-skeleton-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.9; }
+}
+
+.ai-provider-skeleton .srow + .srow {
+  border-top: 1px solid var(--border-subtle, var(--border));
+}
+
+.ai-provider-skeleton-icon,
+.ai-provider-skeleton-line,
+.ai-provider-skeleton-action {
+  background: color-mix(in srgb, var(--text-2) 14%, transparent);
+  animation: ai-provider-skeleton-pulse 1.2s ease-in-out infinite;
+}
+
+.ai-provider-skeleton-icon {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 9px;
+}
+
+.ai-provider-skeleton-line {
+  height: 10px;
+  border-radius: 5px;
+}
+
+.ai-provider-skeleton-name { width: min(150px, 45%); }
+.ai-provider-skeleton-desc { width: min(260px, 72%); margin-top: 8px; }
+
+.ai-provider-skeleton-action {
+  width: 84px;
+  height: 28px;
+  flex: none;
+  border-radius: 7px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-provider-skeleton-icon,
+  .ai-provider-skeleton-line,
+  .ai-provider-skeleton-action { animation: none; }
+}
+
+.ai-quota-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px 20px;
+  padding: 2px 16px 16px 64px;
+}
+
+.ai-quota-item {
+  min-width: 0;
+}
+
+.ai-quota-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-2);
+  font-size: 11.5px;
+}
+
+.ai-quota-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-quota-meta strong {
+  color: var(--text);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ai-quota-track {
+  height: 6px;
+  margin-top: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface);
+}
+
+.ai-quota-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-accent);
+  transition: width 180ms ease-out, background-color 180ms ease-out;
+}
+
+.ai-quota-fill[data-level='medium'] {
+  background: var(--color-warning);
+}
+
+.ai-quota-fill[data-level='high'] {
+  background: var(--color-danger, #dc2626);
+}
+
+.ai-quota-reset,
+.ai-quota-credits {
+  margin-top: 5px;
+  color: var(--text-3);
+  font-size: 10.5px;
+}
+
+.ai-quota-credits {
+  align-self: end;
+  margin: 0;
+}
+
+@media (max-width: 680px) {
+  .ai-quota-grid {
+    padding-left: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-quota-fill {
+    transition: none;
+  }
 }
 
 .sw {
@@ -7320,112 +7753,9 @@ body[data-theme='dark'] .num,
   min-width: 112px;
 }
 
-.settings-select-wrap.is-open {
-  z-index: 80;
-}
-
-.sel-ctl {
-  width: 100%;
-  min-height: 34px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  box-sizing: border-box;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: linear-gradient(180deg, var(--panel), var(--surface));
-  color: var(--text);
-  cursor: pointer;
-  font-size: 12.5px;
-  font-weight: 500;
-  padding: 0 11px;
-  box-shadow: 0 1px 1px rgba(18, 22, 28, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.85);
-}
-
-body[data-theme='dark'] .sel-ctl,
-.flux-spatial-shell[data-theme='dark'] .sel-ctl {
-  background: var(--surface);
-  box-shadow: none;
-}
-
-.sel-ctl:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
-  outline-offset: 2px;
-}
-
-.sel-ctl.open {
-  border-color: var(--accent);
-  background: var(--panel);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
-}
-
-.flux-spatial-shell[data-theme='dark'] .sel-ctl.open,
-body[data-theme='dark'] .sel-ctl.open {
-  border-color: var(--accent);
-  background: var(--surface-2);
-}
-
-.sel-ctl .chev {
-  color: var(--text-3);
-  font-size: 9px;
-}
-
-.settings-select-menu {
-  position: absolute;
-  z-index: 50;
-  top: calc(100% + 6px);
-  left: 0;
-  right: 0;
-  width: 100%;
-  box-sizing: border-box;
-  overflow: hidden;
-  border: 1px solid var(--border-2);
-  border-radius: var(--radius-sm);
-  background: var(--panel);
-  box-shadow: 0 12px 30px -12px rgba(0, 0, 0, 0.22);
-}
-
-.settings-select-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 8px;
-  color: var(--text);
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.settings-select-item:hover,
-.settings-select-item.is-selected,
-.settings-select-item.is-focused {
-  background: var(--accent-soft);
-}
-
-/* Reset button styles for sel-ctl and settings-select-item when rendered as <button> */
-button.sel-ctl {
-  appearance: none;
-  font-family: inherit;
-  text-align: left;
-}
-
-button.settings-select-item {
-  appearance: none;
-  font-family: inherit;
-  text-align: left;
-  border: none;
-  background: none;
-  width: 100%;
-}
-
-button.sel-ctl:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-button.settings-select-item:focus-visible {
-  outline: none;
-  background: var(--accent-soft);
+.settings-select-wrap.is-wide {
+  width: min(220px, 36vw);
+  min-width: min(220px, 36vw);
 }
 
 /* Plugin settings should read like the UX mock, not like nested admin panels. */
@@ -8340,13 +8670,13 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
 }
 
 .json-surface__header {
-  min-height: 48px;
+  min-height: 50px;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 14px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--color-border-tertiary);
-  background: var(--color-background-secondary);
+  background: var(--color-background-primary);
 }
 
 .json-surface__header strong {
@@ -8356,22 +8686,6 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
 
 .json-surface__spacer {
   flex: 1;
-}
-
-.json-surface button {
-  min-width: 58px;
-  border: 1px solid var(--color-border-secondary);
-  border-radius: 6px;
-  padding: 5px 9px;
-  background: var(--color-background-primary);
-  color: var(--color-text-primary);
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.json-surface button:disabled {
-  cursor: default;
-  opacity: 0.45;
 }
 
 .json-surface__body {
@@ -8594,19 +8908,13 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
 }
 
 .regex-tester-surface__header {
-  min-height: 48px;
+  min-height: 50px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 0 14px;
+  gap: 8px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--color-border-tertiary);
-  background: var(--color-background-secondary);
-}
-
-.regex-tester-surface__header strong,
-.regex-tester-surface__header span {
-  display: block;
+  background: var(--color-background-primary);
 }
 
 .regex-tester-surface__header strong {
@@ -8615,20 +8923,12 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
 }
 
 .regex-tester-surface__header span {
-  margin-top: 2px;
   color: var(--color-text-tertiary);
   font-size: 11px;
 }
 
-.regex-tester-surface button {
-  min-width: 58px;
-  border: 1px solid var(--color-border-secondary);
-  border-radius: 6px;
-  padding: 5px 9px;
-  background: var(--color-background-primary);
-  color: var(--color-text-primary);
-  cursor: pointer;
-  font-size: 12px;
+.regex-tester-surface__header-spacer {
+  flex: 1;
 }
 
 .regex-tester-surface__pattern {
@@ -9732,6 +10032,10 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
 
 
 /* Step 5: Calculator Editor result panel */
+.quick-editor-pane-panel {
+  animation: launcher-frame-in 140ms ease-out both;
+}
+
 .calculator-result-panel {
   display: flex;
   flex-direction: column;
@@ -9797,6 +10101,16 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
 
 .calculator-result-panel__footer {
   justify-content: flex-end;
+}
+
+.calculator-result-panel__copy-status {
+  margin-right: auto;
+  font-size: 11px;
+  color: var(--color-success-text, var(--color-text-secondary));
+}
+
+.calculator-result-panel__copy-status.is-failed {
+  color: var(--color-error-text, var(--color-error));
 }
 
 .calculator-result-panel__footer button,
@@ -9897,6 +10211,52 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
   padding: 2px 0 8px;
 }
 
+.plugins-list-skeleton-row {
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 11px 12px;
+}
+
+.plugins-list-skeleton-icon,
+.plugins-list-skeleton-name,
+.plugins-list-skeleton-desc {
+  display: block;
+  background: color-mix(in srgb, var(--text-2) 14%, transparent);
+  animation: ai-provider-skeleton-pulse 1.2s ease-in-out infinite;
+}
+
+.plugins-list-skeleton-icon {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: 10px;
+}
+
+.plugins-list-skeleton-copy {
+  flex: 1;
+}
+
+.plugins-list-skeleton-name {
+  width: min(150px, 32%);
+  height: 11px;
+  border-radius: 6px;
+}
+
+.plugins-list-skeleton-desc {
+  width: min(320px, 58%);
+  height: 9px;
+  margin-top: 8px;
+  border-radius: 5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plugins-list-skeleton-icon,
+  .plugins-list-skeleton-name,
+  .plugins-list-skeleton-desc { animation: none; }
+}
+
 .plugins-row-wrapper {
   border-radius: 11px;
   transition: background 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
@@ -9914,7 +10274,6 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
   padding: 11px 12px;
   border-radius: 11px;
   cursor: pointer;
-  transition: background 0.12s ease;
 }
 
 .plugins-row:focus-visible {
@@ -10159,9 +10518,24 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
 
 /* Drawer — three summary lines */
 .plugins-drawer {
+  display: grid;
+  grid-template-rows: 1fr;
+  animation: plugins-drawer-in 140ms ease-out both;
+}
+
+.plugins-drawer-inner {
+  min-height: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   padding: 0 14px 14px 62px;
+}
+
+@keyframes plugins-drawer-in {
+  from {
+    grid-template-rows: 0fr;
+    opacity: 0;
+  }
 }
 
 .plugins-drawer-line {
@@ -10349,7 +10723,7 @@ a:focus-visible {
   flex-direction: column;
   gap: 10px;
   min-width: min(360px, 100%);
-  max-width: 420px;
+  width: 100%;
 }
 .app-hotkeys-help,
 .app-hotkeys-empty {
@@ -10418,14 +10792,16 @@ a:focus-visible {
   font-size: 11.5px;
   color: var(--text-2);
 }
-.app-hotkeys-field input,
-.app-hotkeys-field select {
+.app-hotkeys-field input {
   font-size: 12.5px;
   padding: 6px 8px;
   border-radius: 7px;
   border: 1px solid var(--border);
   background: var(--panel, #fff);
   color: var(--text);
+}
+.app-hotkeys-app-select {
+  width: 100%;
 }
 .app-hotkeys-add-btn {
   display: inline-flex;
@@ -10463,9 +10839,7 @@ html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .global-lau
   background: #ffffff !important;
   border: 1px solid rgba(17, 24, 39, 0.12) !important;
   border-radius: 12px !important;
-  box-shadow:
-    0 18px 44px rgba(17, 24, 39, 0.14),
-    0 3px 10px rgba(17, 24, 39, 0.08) !important;
+  box-shadow: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   overflow: hidden;
@@ -10838,4 +11212,44 @@ html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .recent-clip
 .learning-candidate-save-form input {
   min-width: 180px;
   flex: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+.schema-action-control {
+  display: flex;
+  min-width: 168px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.schema-action-progress {
+  width: 100%;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: right;
+}
+
+.schema-action-progress-track {
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--border-subtle);
+}
+
+.schema-action-progress-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 160ms ease;
 }

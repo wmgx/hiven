@@ -25,6 +25,7 @@ const core = read('src/kits/editor/TextEditorCore.tsx')
 const surface = read('src/components/editor/EditorSurface.tsx')
 const statusBar = read('src/components/editor/EditorStatusBar.tsx')
 const quickPanel = read('src/components/quickEditor/QuickEditorPanel.tsx')
+const quickFrame = read('src/components/launcher/GlobalLauncherSystemSurfaceFrame.tsx')
 const dualEditor = read('src/kits/ui/DualEditorView.tsx')
 
 // 1. kit primitive exists and does not depend on framework.
@@ -52,6 +53,7 @@ assert(/startFindReplaceAction/.test(core), 'TextEditorCore should own the find-
 assert(/<TextEditorCore/.test(surface), 'EditorSurface should render TextEditorCore')
 assert(/<EditorStatusBar/.test(surface), 'EditorSurface should render EditorStatusBar')
 assert(/detectEditorLanguage/.test(surface), 'EditorSurface should own shared paste language detection')
+assert(/editorReady[\s\S]*role="status"[\s\S]*t\('loading'\)/.test(surface), 'EditorSurface should expose a visible localized loading state while Monaco initializes')
 assert(/useT\('editor'\)/.test(statusBar), 'EditorStatusBar should use editor i18n namespace')
 
 // 4. Hosts no longer mount Monaco directly.
@@ -65,6 +67,7 @@ for (const [label, text] of [
     `${label} must not re-implement external text sync`)
 }
 assert(/<EditorSurface/.test(quickPanel), 'QuickEditorPanel should render EditorSurface')
+assert(/Suspense fallback=\{<div className="quick-editor-loading-skeleton" role="status">[\s\S]*quickEditor\.loading/.test(quickFrame), 'Quick Editor lazy load must show a localized status instead of a blank page')
 assert(/<TextEditorCore/.test(dualEditor), 'DualEditorView should compose TextEditorCore')
 
 console.log('editor primitive boundary checks passed')

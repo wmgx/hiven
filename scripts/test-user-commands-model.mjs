@@ -42,6 +42,7 @@ const index = readFileSync('src/plugins/user-commands/index.ts', 'utf8')
 assert.match(index, /ctx\.shell\.run/)
 assert.match(index, /tone:\s*'danger'/)
 assert.match(index, /toolsFor/)
+assert.doesNotMatch(index, /inputPolicy/, 'custom commands should enter confirmation without asking for source text')
 
 const manifest = JSON.parse(readFileSync('src/plugins/user-commands/manifest.json', 'utf8'))
 assert.ok(manifest.permissions.includes('shell.run'))

@@ -50,12 +50,14 @@ const mixedAcronymCache = new Map<string, string>()
 
 export function pinyinMatch(text: string, query: string): boolean {
   if (!text || !query) return false
-  if (!/^[a-z]+$/.test(query)) return false
+  if (!/^[a-z0-9\s]+$/.test(query) || !/[\u4e00-\u9fff]/.test(text)) return false
+  query = query.replace(/\s+/g, '')
+  if (!query) return false
 
   let cached = pinyinCache.get(text)
   if (!cached) {
-    const full = pinyin(text, { toneType: 'none', separator: '' }).toLowerCase()
-    const initials = pinyin(text, { pattern: 'initial', toneType: 'none', separator: '' }).toLowerCase()
+    const full = pinyin(text, { toneType: 'none', separator: '' }).toLowerCase().replace(/\s+/g, '')
+    const initials = pinyin(text, { pattern: 'first', toneType: 'none', separator: '' }).toLowerCase().replace(/\s+/g, '')
     cached = { full, initials }
     pinyinCache.set(text, cached)
   }
@@ -79,7 +81,7 @@ export function mixedAcronymMatch(text: string, query: string): boolean {
     const words = text.split(/[-_\s.]+/).filter(Boolean)
     cached = words.map((word) => {
       if (/[一-鿿]/.test(word[0])) {
-        return pinyin(word, { pattern: 'initial', toneType: 'none', separator: '' }).toLowerCase()
+        return pinyin(word, { pattern: 'first', toneType: 'none', separator: '' }).toLowerCase()
       }
       return word[0].toLowerCase()
     }).join('')
@@ -89,20 +91,46 @@ export function mixedAcronymMatch(text: string, query: string): boolean {
   return cached.startsWith(query)
 }
 
-/** Match one human-readable string against the normalized query. */
-function fieldTextMatches(text: string, query: string): boolean {
-  if (!text) return false
+/** Match tier for one human-readable string; 0 means no match. */
+function fieldTextMatchTier(text: string, query: string, prefixTier: number): number {
+  if (!text) return 0
 
-  if (allowMidTokenSubstring(query)) {
-    if (text.toLowerCase().includes(query)) return true
-  } else if (tokenPrefixMatch(text, query)) {
-    return true
+  const lower = text.toLowerCase()
+  if (lower === query) return 6
+  if (lower.startsWith(query)) return prefixTier
+  if (tokenPrefixMatch(lower, query)) return 3
+  if (
+    pinyinMatch(text, query) ||
+    mixedAcronymMatch(text, query) ||
+    getAcronym(lower).startsWith(query)
+  ) return 2
+  if (allowMidTokenSubstring(query) && lower.includes(query)) return 1
+  return 0
+}
+
+/** Single match classification shared by filtering and scoring. */
+function searchableFieldsMatchTier(fields: SearchableFields, query: string, locale: Locale): number {
+  const title = localizedText(fields.title || '', fields.titleI18n, locale)
+  let tier = fieldTextMatchTier(title, query, 4)
+  if (tier === 6) return tier
+
+  for (const alias of fields.aliases ?? []) {
+    tier = Math.max(tier, fieldTextMatchTier(alias, query, 5))
+    if (tier === 6) return tier
   }
 
-  if (pinyinMatch(text, query)) return true
-  if (mixedAcronymMatch(text, query)) return true
-  if (getAcronym(text.toLowerCase()).startsWith(query)) return true
-  return false
+  // Pinyin for Chinese catalog name when UI locale shows a different title.
+  const zhTitle = fields.titleI18n?.zh ?? ''
+  if (
+    tier < 2 &&
+    zhTitle &&
+    zhTitle !== title &&
+    (pinyinMatch(zhTitle, query) || mixedAcronymMatch(zhTitle, query))
+  ) {
+    tier = Math.max(tier, 2)
+  }
+
+  return tier
 }
 
 /**
@@ -116,21 +144,7 @@ function fieldTextMatches(text: string, query: string): boolean {
 export function searchableFieldsMatch(fields: SearchableFields, q: string, locale: Locale): boolean {
   const query = q.trim().toLowerCase()
   if (!query) return true
-
-  const title = localizedText(fields.title || '', fields.titleI18n, locale)
-  if (fieldTextMatches(title, query)) return true
-
-  for (const alias of fields.aliases ?? []) {
-    if (fieldTextMatches(alias, query)) return true
-  }
-
-  // Pinyin for Chinese catalog name when UI locale shows a different title.
-  const zhTitle = fields.titleI18n?.zh ?? ''
-  if (zhTitle && zhTitle !== title) {
-    if (pinyinMatch(zhTitle, query) || mixedAcronymMatch(zhTitle, query)) return true
-  }
-
-  return false
+  return searchableFieldsMatchTier(fields, query, locale) > 0
 }
 
 // ─── Match Ranges (pure data for rendering) ─────────────────────────────────
@@ -180,7 +194,7 @@ export function computeTitleMatchRanges(title: string, q: string, locale: Locale
   }
 
   // Pinyin / acronym indicators (no character ranges)
-  if (/^[a-z]+$/.test(lowerQ)) {
+  if (/^[a-z0-9\s]+$/.test(lowerQ)) {
     if (pinyinMatch(title, lowerQ)) {
       return { ranges: [], type: 'pinyin' }
     }
@@ -203,27 +217,7 @@ export function scoreSearchableFields(
   q: string,
   locale: Locale,
 ): number {
-  if (!q) return 0
-
   const query = q.trim().toLowerCase()
-  const title = localizedText(fields.title || '', fields.titleI18n, locale).toLowerCase()
-  const aliases = (fields.aliases ?? []).map((alias) => alias.toLowerCase())
-
-  let tier = 1
-  if (title === query || aliases.some((alias) => alias === query)) {
-    tier = 6
-  } else if (aliases.some((alias) => alias.startsWith(query))) {
-    tier = 5
-  } else if (title.startsWith(query)) {
-    tier = 4
-  } else {
-    const titleWords = tokenizeSearchText(title)
-    if (titleWords.some((word) => word.startsWith(query)) || aliases.some((alias) => tokenPrefixMatch(alias, query))) {
-      tier = 3
-    } else if (getAcronym(title).startsWith(query) || mixedAcronymMatch(title, query) || pinyinMatch(title, query)) {
-      tier = 2
-    }
-  }
-
-  return tier * 1000
+  if (!query) return 0
+  return searchableFieldsMatchTier(fields, query, locale) * 1000
 }

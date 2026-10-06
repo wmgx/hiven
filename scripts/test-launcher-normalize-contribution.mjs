@@ -76,8 +76,11 @@ assert.equal(staticItem.defaultParams?.indent, 2, 'static must fill param defaul
 assert.equal(staticItem.requireParamSelection, true, 'static must copy requireParamSelection')
 assert.equal(staticItem.executeWithParams, executeWithParams, 'static must copy executeWithParams')
 // Avoid cross-realm deepEqual on arrays created inside vm.
-assert.ok(Array.isArray(staticItem.legacyUsageKeys), 'static gets legacy usage keys array')
-assert.equal(staticItem.legacyUsageKeys[0], 'format-json', 'static legacy usage key is contribution id')
+assert.equal(
+  staticItem.legacyUsageKeys,
+  undefined,
+  'plugin-local ids must not share legacy usage across plugins',
+)
 
 const dynamicItem = normalize.normalizeContribution(
   { ...contribution, recordUsage: true },

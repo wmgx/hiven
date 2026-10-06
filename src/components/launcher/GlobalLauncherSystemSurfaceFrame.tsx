@@ -29,6 +29,7 @@ export function GlobalLauncherSystemSurfaceFrame({
 }) {
   const locale = useAppStore((s) => s.locale)
   const bodyHeight = height - BREADCRUMB_HEIGHT
+  const shellClassName = 'global-launcher-host-surface-shell flex flex-col min-h-0 outline-none'
 
   const settingsEscapeHandler = useCallback((event: KeyboardEvent): boolean => {
     if (event.key !== 'Escape') return false
@@ -42,7 +43,7 @@ export function GlobalLauncherSystemSurfaceFrame({
   if (target === 'quick-editor') {
     return (
       <div
-        className="global-launcher-host-surface-shell flex flex-col min-h-0 outline-none"
+        className={shellClassName}
         tabIndex={-1}
         style={{ height }}
       >
@@ -53,7 +54,7 @@ export function GlobalLauncherSystemSurfaceFrame({
           actions={<QuickEditorBreadcrumbActions />}
         />
         <div className="global-launcher-body" style={{ height: bodyHeight, maxHeight: bodyHeight, overflow: 'hidden' }}>
-          <Suspense fallback={<div className="quick-editor-loading-skeleton" aria-hidden />}>
+          <Suspense fallback={<div className="quick-editor-loading-skeleton" role="status"><div className="plugin-surface-window-message__indicator" />{t(locale, 'quickEditor.loading')}</div>}>
             <QuickEditorPanel onRequestExit={onBack} />
           </Suspense>
         </div>
@@ -63,7 +64,7 @@ export function GlobalLauncherSystemSurfaceFrame({
 
   if (target === 'learning-inbox') {
     return (
-      <div className="global-launcher-host-surface-shell flex flex-col min-h-0 outline-none" tabIndex={-1} style={{ height }}>
+      <div className={shellClassName} tabIndex={-1} style={{ height }}>
         <SurfaceBreadcrumbHeader title={t(locale, 'palette.learningInboxTitle')} onBack={onBack} onClose={onClose} />
         <div className="global-launcher-body" style={{ height: bodyHeight, maxHeight: bodyHeight, overflow: 'auto' }}>
           <LearningInboxSurface />
@@ -74,7 +75,7 @@ export function GlobalLauncherSystemSurfaceFrame({
 
   return (
     <div
-      className="global-launcher-host-surface-shell flex flex-col min-h-0 outline-none"
+      className={shellClassName}
       tabIndex={-1}
       style={{ height }}
     >

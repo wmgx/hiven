@@ -13,6 +13,8 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import {
   Button,
+  ContextMenu,
+  Dialog,
   IconButton,
   SearchField,
   SegmentedControl,
@@ -23,15 +25,22 @@ import {
   SurfacePreview,
   ToolbarButton,
   useImeKeyboard,
+  type MenuItemSpec,
 } from '@hiven/plugin-ui'
 import { BackIcon, ClipboardIcon, CloseIcon, FileTextIcon, ImageIcon, SettingsIcon, StarIcon } from '@hiven/plugin-ui/icons'
 import type { ClipboardHistorySettings } from '../settings/model'
 import type { ClipboardHistoryItem } from '../storage/clipboardHistoryTypes'
 import { subscribeCachedIndex } from '../storage/clipboardHistoryCache'
 import { createClipboardHistoryRepository, indexToListItems } from '../storage/clipboardHistoryRepository'
+import { getTextSearchCandidateIds, matchesClipboardHistorySearch } from '../storage/clipboardHistorySearch'
 
 type FilterKind = 'all' | 'text' | 'image' | 'files' | 'frequent' | 'favorite'
 type SurfaceStorage = PluginSurfaceProps<ClipboardHistorySettings>['host']['storage']
+
+function initialFilter(surfaceId: string): FilterKind {
+  if (surfaceId === 'text' || surfaceId === 'image' || surfaceId === 'files' || surfaceId === 'frequent' || surfaceId === 'favorite') return surfaceId
+  return 'all'
+}
 type ImageHistoryItem = Extract<ClipboardHistoryItem, { kind: 'image' }>
 
 type MetaRow = {
@@ -60,17 +69,16 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const [items, setItems] = useState<ClipboardHistoryItem[]>(initialItems)
   const [selectedId, setSelectedId] = useState<string | null>(initialItems[0]?.id ?? null)
   const [query, setQuery] = useState('')
-  const [filter, setFilter] = useState<FilterKind>('all')
+  const [filter, setFilter] = useState<FilterKind>(() => initialFilter(props.surfaceId))
   const [loading, setLoading] = useState(!hasInitialCache)
+  const [fullTextSearchState, setFullTextSearchState] = useState<'idle' | 'loading' | 'error'>('idle')
   const [titleDialog, setTitleDialog] = useState<FavoriteTitleDialogState | null>(null)
-  const [menu, setMenu] = useState<{ x: number; y: number; item: ClipboardHistoryItem } | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
   const imeKeyDown = useImeKeyboard()
-  const isKeyboardNavRef = useRef(false)
   const pendingDeleteRef = useRef<{ timerId: ReturnType<typeof setTimeout>; id: string; toastId: string } | null>(null)
+  const unreadableTextIdsRef = useRef(new Set<string>())
   const frequentThreshold = settings.frequentPasteThreshold ?? 3
 
   const applyListItems = useCallback((listItems: ClipboardHistoryItem[]) => {
@@ -100,6 +108,52 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     const timer = window.setTimeout(() => { void loadItems() }, 0)
     return () => window.clearTimeout(timer)
   }, [loadItems, hasInitialCache])
+
+  useEffect(() => {
+    const candidateIds = getTextSearchCandidateIds(items, query)
+      .filter((id) => !unreadableTextIdsRef.current.has(id))
+    if (candidateIds.length === 0) {
+      setFullTextSearchState('idle')
+      return
+    }
+
+    let cancelled = false
+    setFullTextSearchState('loading')
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const textById = new Map<string, string>()
+        for (let offset = 0; offset < candidateIds.length && !cancelled; offset += 8) {
+          const batchIds = candidateIds.slice(offset, offset + 8)
+          const loadedItems = await Promise.all(
+            batchIds.map((id) => repository.getItem(id)),
+          )
+          for (let index = 0; index < loadedItems.length; index++) {
+            const item = loadedItems[index]
+            if (item?.kind === 'text' && item.text) textById.set(item.id, item.text)
+            else unreadableTextIdsRef.current.add(batchIds[index])
+          }
+        }
+        if (cancelled) return
+        if (textById.size > 0) {
+          setItems((current) => current.map((item) => {
+            const text = textById.get(item.id)
+            return item.kind === 'text' && text !== undefined ? { ...item, text } : item
+          }))
+        }
+        setFullTextSearchState('idle')
+      })()
+        .catch(() => {
+          if (cancelled) return
+          setFullTextSearchState('error')
+          host.showMessage(t('error.loadFailed'), 'error')
+        })
+    }, 120)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [items, query, repository, host, t])
 
   useEffect(() => {
     return subscribeCachedIndex((index) => {
@@ -148,9 +202,9 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         .filter((item) => (item.pasteCount ?? 0) >= frequentThreshold)
         .slice()
         .sort((a, b) => {
-          const pasteDiff = (b.pasteCount ?? 0) - (a.pasteCount ?? 0)
-          if (pasteDiff !== 0) return pasteDiff
-          return (b.lastPastedAt ?? 0) - (a.lastPastedAt ?? 0)
+          const recentDiff = (b.lastPastedAt ?? 0) - (a.lastPastedAt ?? 0)
+          if (recentDiff !== 0) return recentDiff
+          return (b.pasteCount ?? 0) - (a.pasteCount ?? 0)
         })
     } else if (filter === 'favorite') {
       result = result
@@ -161,14 +215,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       result = result.filter((item) => item.kind === filter)
     }
     if (query.trim()) {
-      const q = query.toLowerCase()
-      result = result.filter((item) => {
-        if (item.favoriteTitle?.toLowerCase().includes(q)) return true
-        if (item.kind === 'text') return item.preview.toLowerCase().includes(q)
-        if (item.kind === 'image') return `${item.contentType} ${item.width ?? ''} ${item.height ?? ''}`.toLowerCase().includes(q)
-        if (item.kind === 'files') return item.fileNames.some((f) => f.toLowerCase().includes(q))
-        return false
-      })
+      result = result.filter((item) => matchesClipboardHistorySearch(item, query))
     }
     return result
   }, [items, filter, query, frequentThreshold])
@@ -196,7 +243,10 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     let cancelled = false
     setSelectedFullItem(null)
     void repository.getItem(selectedId).then((item) => {
-      if (!cancelled && item) setSelectedFullItem(item)
+      if (!cancelled && item) {
+        setSelectedFullItem(item)
+        setItems((current) => current.map((entry) => entry.id === item.id ? item : entry))
+      }
     })
     return () => { cancelled = true }
   }, [selectedId, repository])
@@ -228,6 +278,14 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
 
   const listRef = useRef<HTMLDivElement>(null)
 
+  const resetBrowser = useCallback(() => {
+    setQuery('')
+    setFilter('all')
+    setSelectedId(items[0]?.id ?? null)
+    if (listRef.current) listRef.current.scrollTop = 0
+    window.getSelection()?.removeAllRanges()
+  }, [items])
+
   const virtualizer = useVirtualizer({
     count: flatRows.length,
     getScrollElement: () => listRef.current,
@@ -256,18 +314,24 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       } else if (fullItem.kind === 'files') {
         result = await host.paste.pasteFiles(fullItem.paths)
       }
-      if (result && !result.ok && result.fallback === 'copied') {
-        host.showMessage(result.message, 'info')
+      if (!result?.ok) {
+        if (result?.fallback === 'copied') {
+          host.showMessage(result.message, 'info')
+          resetBrowser()
+          host.complete()
+        } else {
+          host.showMessage(result?.message ?? t('error.pasteFailed'), 'error')
+        }
+        return
       }
       // Persist paste count for Frequent tab (window closes; next open reads storage/cache).
       void repository.recordPaste(fullItem.id).catch(() => {})
-      // 上屏成功后清空搜索，热开窗口时不会残留上次筛选词
-      setQuery('')
-      host.close()
+      resetBrowser()
+      host.complete()
     } catch {
       host.showMessage(t('error.pasteFailed'), 'error')
     }
-  }, [host, t, repository])
+  }, [host, t, repository, resetBrowser])
 
   const resolveFullItem = useCallback(async (item: ClipboardHistoryItem) => {
     if ((item.kind === 'text' && !item.text) || (item.kind === 'image' && !item.blobId) || (item.kind === 'files' && item.paths.length === 0)) {
@@ -291,20 +355,12 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         await host.clipboard.writeFiles(fullItem.paths)
       }
       host.showMessage(t('message.copied'), 'success')
+      resetBrowser()
+      host.complete()
     } catch {
       host.showMessage(t('error.copyFailed'), 'error')
     }
-  }, [host, resolveFullItem, t])
-
-  const openItemMenu = useCallback((event: { clientX: number; clientY: number; preventDefault: () => void; stopPropagation: () => void }, item: ClipboardHistoryItem) => {
-    event.preventDefault()
-    event.stopPropagation()
-    setMenu({
-      x: Math.min(event.clientX, window.innerWidth - 168),
-      y: Math.min(event.clientY, window.innerHeight - 120),
-      item,
-    })
-  }, [])
+  }, [host, resetBrowser, resolveFullItem, t])
 
   const applyItemUpdate = useCallback((updated: ClipboardHistoryItem) => {
     setItems((current) =>
@@ -434,11 +490,11 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     pendingDeleteRef.current = { timerId, id, toastId }
   }, [items, repository, t])
 
-  const handleItemHover = useCallback((id: string) => {
-    if (!isKeyboardNavRef.current) {
-      setSelectedId(id)
-    }
-  }, [])
+  const itemContextMenuItems = useCallback((item: ClipboardHistoryItem): MenuItemSpec[] => [
+    { key: 'paste', label: t('action.paste'), onSelect: () => void handlePaste(item) },
+    { key: 'copy', label: t('action.copy'), onSelect: () => void handleCopy(item) },
+    { key: 'delete', label: t('action.delete'), danger: true, onSelect: () => handleDelete(item.id) },
+  ], [handlePaste, handleCopy, handleDelete, t])
 
   const handleReturnToLauncher = useCallback(async (item: ClipboardHistoryItem) => {
     try {
@@ -518,13 +574,13 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       e.preventDefault()
       if (selectedText) {
         void host.clipboard.writeText(selectedText)
-        host.showMessage(t('message.copied'), 'success')
+          .then(() => host.showMessage(t('message.copied'), 'success'))
+          .catch(() => host.showMessage(t('error.copyFailed'), 'error'))
         return
       }
       void handleCopy(selectedItem)
     } else if (e.key === 'ArrowDown') {
       e.preventDefault()
-      isKeyboardNavRef.current = true
       const idx = filteredItems.findIndex((i) => i.id === selectedId)
       if (idx < filteredItems.length - 1) {
         const nextId = filteredItems[idx + 1].id
@@ -534,7 +590,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       }
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
-      isKeyboardNavRef.current = true
       const idx = filteredItems.findIndex((i) => i.id === selectedId)
       if (idx > 0) {
         const prevId = filteredItems[idx - 1].id
@@ -581,7 +636,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     return (
       <>
         <div className="clipboard-history-main">
-          <div className="clipboard-history-list-pane" onMouseMove={() => { isKeyboardNavRef.current = false }}>
+          <div className="clipboard-history-list-pane">
             <div className="clipboard-history-list-toolbar">
               <SegmentedControl
                 className="clipboard-history-filter"
@@ -599,11 +654,15 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                 ]}
               />
             </div>
-            <div ref={listRef} className="clipboard-history-list" data-launcher-scrollable style={{ overflow: 'auto', flex: 1 }}>
+            <div ref={listRef} className="clipboard-history-list" data-launcher-scrollable aria-busy={fullTextSearchState === 'loading'} style={{ overflow: 'auto', flex: 1 }}>
               <SurfaceList aria-label={t('surface.main.title')} data-launcher-scrollable>
                 {filteredItems.length === 0 ? (
                   <SurfaceEmptyState>
-                    {filter === 'frequent'
+                    {fullTextSearchState === 'loading'
+                      ? t('state.loading')
+                      : fullTextSearchState === 'error'
+                        ? t('error.loadFailed')
+                      : filter === 'frequent'
                       ? t('state.emptyFrequent')
                       : filter === 'favorite'
                         ? t('state.emptyFavorite')
@@ -650,11 +709,10 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                             t={t}
                             storage={host.storage}
                             onSelect={setSelectedId}
-                            onHover={handleItemHover}
                             onPaste={handlePaste}
                             onDelete={handleDelete}
                             onFavorite={handleFavoriteClick}
-                            onContextMenu={(event) => openItemMenu(event, row.item)}
+                            menuItems={itemContextMenuItems(row.item)}
                           />
                         </div>
                       )
@@ -665,47 +723,46 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
             </div>
           </div>
 
-          <SurfacePreview
-            className="clipboard-history-preview"
-            data-launcher-scrollable
-            onContextMenu={(event) => {
-              if (!selectedItem) return
-              openItemMenu(event, selectedFullItem ?? selectedItem)
-            }}
-          >
-            {!selectedItem ? (
-              <SurfaceEmptyState>
-                {t('preview.empty')}
-              </SurfaceEmptyState>
-            ) : (
-              <>
-                <div className="clipboard-history-preview-content" data-launcher-scrollable>
-                  {renderPreview(selectedFullItem ?? selectedItem, t, host.storage)}
-                </div>
-                {(selectedFullItem ?? selectedItem).isFavorite && (
-                  <div className="clipboard-history-favorite-title-bar">
-                    <span className="clipboard-history-favorite-title-label">
-                      {(selectedFullItem ?? selectedItem).favoriteTitle || t('favorite.untitled')}
-                    </span>
-                    <ToolbarButton
-                      type="button"
-                      onClick={() => openFavoriteTitleDialog(selectedFullItem ?? selectedItem, 'edit')}
-                    >
-                      {t('action.editFavoriteTitle')}
-                    </ToolbarButton>
-                  </div>
-                )}
-                <div className="clipboard-history-meta">
-                  {getMetaRows(selectedFullItem ?? selectedItem, locale, t).map((row) => (
-                    <div key={row.label} className="clipboard-history-meta-row">
-                      <span>{row.label}</span>
-                      <strong>{row.value}</strong>
+          <ContextMenu
+            disabled={!selectedItem}
+            items={selectedItem ? itemContextMenuItems(selectedFullItem ?? selectedItem) : []}
+            trigger={
+              <SurfacePreview className="clipboard-history-preview" data-launcher-scrollable>
+                {!selectedItem ? (
+                  <SurfaceEmptyState>
+                    {t('preview.empty')}
+                  </SurfaceEmptyState>
+                ) : (
+                  <>
+                    <div className="clipboard-history-preview-content" data-launcher-scrollable>
+                      {renderPreview(selectedFullItem ?? selectedItem, t, host.storage)}
                     </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </SurfacePreview>
+                    {(selectedFullItem ?? selectedItem).isFavorite && (
+                      <div className="clipboard-history-favorite-title-bar">
+                        <span className="clipboard-history-favorite-title-label">
+                          {(selectedFullItem ?? selectedItem).favoriteTitle || t('favorite.untitled')}
+                        </span>
+                        <ToolbarButton
+                          type="button"
+                          onClick={() => openFavoriteTitleDialog(selectedFullItem ?? selectedItem, 'edit')}
+                        >
+                          {t('action.editFavoriteTitle')}
+                        </ToolbarButton>
+                      </div>
+                    )}
+                    <div className="clipboard-history-meta">
+                      {getMetaRows(selectedFullItem ?? selectedItem, locale, t).map((row) => (
+                        <div key={row.label} className="clipboard-history-meta-row">
+                          <span>{row.label}</span>
+                          <strong>{row.value}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </SurfacePreview>
+            }
+          />
         </div>
 
         <SurfaceFooterHints className="clipboard-history-footer">
@@ -716,23 +773,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       </>
     )
   }
-
-  useEffect(() => {
-    if (!menu) return
-    const onPointerDown = (event: PointerEvent) => {
-      if (menuRef.current?.contains(event.target as Node)) return
-      setMenu(null)
-    }
-    const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') setMenu(null)
-    }
-    window.addEventListener('pointerdown', onPointerDown)
-    window.addEventListener('keydown', onKeyDown)
-    return () => {
-      window.removeEventListener('pointerdown', onPointerDown)
-      window.removeEventListener('keydown', onKeyDown)
-    }
-  }, [menu])
 
   useEffect(() => {
     if (!titleDialog) return
@@ -751,7 +791,10 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         <IconButton
           type="button"
           label={t('action.back')}
-          onClick={() => host.requestBack()}
+          onClick={() => {
+            setQuery('')
+            host.requestBack()
+          }}
         >
           <BackIcon size={18} />
         </IconButton>
@@ -783,7 +826,10 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         <IconButton
           type="button"
           label={t('action.close')}
-          onClick={() => host.close()}
+          onClick={() => {
+            setQuery('')
+            host.close()
+          }}
         >
           <CloseIcon size={18} />
         </IconButton>
@@ -791,44 +837,21 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
 
       {renderContent()}
 
-      {menu ? (
-        <div
-          ref={menuRef}
-          className="clipboard-history-menu"
-          role="menu"
-          style={{ left: menu.x, top: menu.y }}
-        >
-          <button type="button" role="menuitem" onClick={() => { const item = menu.item; setMenu(null); void handlePaste(item) }}>
-            {t('action.paste')}
-          </button>
-          <button type="button" role="menuitem" onClick={() => { const item = menu.item; setMenu(null); void handleCopy(item) }}>
-            {t('action.copy')}
-          </button>
-          <button type="button" role="menuitem" className="clipboard-history-danger-action" onClick={() => { const item = menu.item; setMenu(null); handleDelete(item.id) }}>
-            {t('action.delete')}
-          </button>
-        </div>
-      ) : null}
-
-      {titleDialog && (
-        <div
-          className="clipboard-history-title-dialog"
-          role="dialog"
-          aria-modal="true"
-          aria-label={t('favorite.titleDialog')}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') {
-              event.stopPropagation()
-              setTitleDialog(null)
-            }
-            if (event.key === 'Enter' && !imeKeyDown.shouldIgnoreKeyDown(event as unknown as KeyboardEvent)) {
-              event.preventDefault()
-              confirmFavoriteTitleDialog()
-            }
-          }}
-        >
-          <div className="clipboard-history-title-dialog-panel">
-            <div className="clipboard-history-title-dialog-title">{t('favorite.titleDialog')}</div>
+      <Dialog
+        open={Boolean(titleDialog)}
+        onOpenChange={(open) => { if (!open) setTitleDialog(null) }}
+        title={t('favorite.titleDialog')}
+      >
+        {titleDialog && (
+          <div
+            style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !imeKeyDown.shouldIgnoreKeyDown(event as unknown as KeyboardEvent)) {
+                event.preventDefault()
+                confirmFavoriteTitleDialog()
+              }
+            }}
+          >
             <input
               ref={titleInputRef}
               className="clipboard-history-title-dialog-input"
@@ -848,8 +871,8 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
               </ToolbarButton>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </Dialog>
     </div>
   )
 }
@@ -861,11 +884,10 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
   t,
   storage,
   onSelect,
-  onHover,
   onPaste,
   onDelete,
   onFavorite,
-  onContextMenu,
+  menuItems,
 }: {
   item: ClipboardHistoryItem
   selected: boolean
@@ -873,11 +895,10 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
   t: (key: string) => string
   storage: SurfaceStorage
   onSelect: (id: string) => void
-  onHover?: (id: string) => void
   onPaste: (item: ClipboardHistoryItem) => Promise<void>
   onDelete: (id: string) => void
   onFavorite: (item: ClipboardHistoryItem) => void
-  onContextMenu?: (event: { clientX: number; clientY: number; preventDefault: () => void; stopPropagation: () => void }) => void
+  menuItems: MenuItemSpec[]
 }) {
   const ref = useRef<HTMLDivElement>(null)
 
@@ -890,45 +911,48 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
   const pasteCount = item.pasteCount ?? 0
 
   return (
-    <div
-      ref={ref}
-      className={`clipboard-history-item-row${selected ? ' is-selected' : ''}${item.isFavorite ? ' is-favorite' : ''}`}
-      onContextMenu={onContextMenu}
-    >
-      <SurfaceListItem
-        type="button"
-        selected={selected}
-        className="clipboard-history-item"
-        onClick={() => onSelect(item.id)}
-        onMouseEnter={() => onHover && onHover(item.id)}
-        onDoubleClick={() => void onPaste(item)}
-      >
-        {renderItemMedia(item, storage)}
-        <span className="clipboard-history-item-text">
-          <span className="clipboard-history-item-title">{getItemTitle(item, t)}</span>
-          <span className="clipboard-history-item-subtitle">
-            {getItemSubtitle(item, locale, t)}
-            {pasteCount > 0 ? ` · ×${pasteCount}` : ''}
-          </span>
-        </span>
-      </SurfaceListItem>
-      <IconButton
-        type="button"
-        label={item.isFavorite ? t('action.unfavorite') : t('action.favorite')}
-        className={`clipboard-history-item-favorite${item.isFavorite ? ' is-active' : ''}`}
-        onClick={() => onFavorite(item)}
-      >
-        <StarIcon size={14} fill={item.isFavorite ? 'currentColor' : 'none'} />
-      </IconButton>
-      <IconButton
-        type="button"
-        label={t('action.delete')}
-        className="clipboard-history-item-delete"
-        onClick={() => onDelete(item.id)}
-      >
-        <CloseIcon size={14} />
-      </IconButton>
-    </div>
+    <ContextMenu
+      items={menuItems}
+      trigger={
+        <div
+          ref={ref}
+          className={`clipboard-history-item-row${selected ? ' is-selected' : ''}${item.isFavorite ? ' is-favorite' : ''}`}
+        >
+          <SurfaceListItem
+            type="button"
+            selected={selected}
+            className="clipboard-history-item"
+            onClick={() => onSelect(item.id)}
+            onDoubleClick={() => void onPaste(item)}
+          >
+            {renderItemMedia(item, storage)}
+            <span className="clipboard-history-item-text">
+              <span className="clipboard-history-item-title">{getItemTitle(item, t)}</span>
+              <span className="clipboard-history-item-subtitle">
+                {getItemSubtitle(item, locale, t)}
+                {pasteCount > 0 ? ` · ×${pasteCount}` : ''}
+              </span>
+            </span>
+          </SurfaceListItem>
+          <IconButton
+            type="button"
+            label={item.isFavorite ? t('action.unfavorite') : t('action.favorite')}
+            className={`clipboard-history-item-favorite${item.isFavorite ? ' is-active' : ''}`}
+            onClick={() => onFavorite(item)}
+          >
+            <StarIcon size={14} fill={item.isFavorite ? 'currentColor' : 'none'} />
+          </IconButton>
+          <IconButton
+            type="button"
+            label={t('action.delete')}
+            className="clipboard-history-item-delete"
+            onClick={() => onDelete(item.id)}
+          >
+            <CloseIcon size={14} />
+          </IconButton>
+        </div>
+      }
+    />
   )
 })
 
@@ -1100,8 +1124,9 @@ function getContentTypeLabel(item: ClipboardHistoryItem, t: (key: string) => str
 
 function groupItemsByDay(items: ClipboardHistoryItem[], locale: string, t: (key: string) => string) {
   const groups: Array<{ label: string; items: ClipboardHistoryItem[] }> = []
+  const dateFormat = new Intl.DateTimeFormat(resolveIntlLocale(locale), { month: 'short', day: 'numeric' })
   for (const item of items) {
-    const label = formatGroupLabel(item.lastCopiedAt, locale, t)
+    const label = formatGroupLabel(item.lastCopiedAt, dateFormat, t)
     const group = groups.find((entry) => entry.label === label)
     if (group) {
       group.items.push(item)
@@ -1112,14 +1137,14 @@ function groupItemsByDay(items: ClipboardHistoryItem[], locale: string, t: (key:
   return groups
 }
 
-function formatGroupLabel(timestamp: number, locale: string, t: (key: string) => string) {
+function formatGroupLabel(timestamp: number, dateFormat: Intl.DateTimeFormat, t: (key: string) => string) {
   const date = new Date(timestamp)
   const today = new Date()
   const yesterday = new Date()
   yesterday.setDate(today.getDate() - 1)
   if (isSameDay(date, today)) return t('group.today')
   if (isSameDay(date, yesterday)) return t('group.yesterday')
-  return new Intl.DateTimeFormat(resolveIntlLocale(locale), { month: 'short', day: 'numeric' }).format(date)
+  return dateFormat.format(date)
 }
 
 function isSameDay(left: Date, right: Date) {

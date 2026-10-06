@@ -23,11 +23,14 @@ import {
   Settings,
   Table2,
   Type,
+  X,
   AlignLeft,
   CaseSensitive,
 } from 'lucide-react'
+import { Dialog } from '@base-ui/react/dialog'
 import { t } from '../i18n'
 import type { Locale } from '../i18n'
+import { makePluginT } from '../i18n/pluginI18nRegistry'
 import { localized, useAppStore } from '../store'
 import { getConfigDir } from '../configInit'
 import { listBundledPluginPackageSummaries } from '../workspace/bundledPluginLoader'
@@ -46,6 +49,7 @@ import {
 import { requestOpenPluginSurfaceTool } from '../workspace/pluginSurfaceOpenRequest'
 import { pluginSurfaceShortcutKey, usePluginSurfaceShortcutStore } from '../workspace/pluginSurfaceShortcuts'
 import { ShortcutRecorder } from '../components/ShortcutRecorder'
+import { Menu, Switch, TextInput } from '../plugin-ui'
 import type { PluginPermission } from '../workspace/pluginTypes'
 import {
   checkInstalledPluginUpdate,
@@ -147,6 +151,22 @@ function PluginRowIcon({ pluginId, title, loading }: { pluginId: string; title: 
         : Icon
           ? <Icon size={17} strokeWidth={2} />
           : <span className="plugins-row-icon-char">{pluginIconText(title)}</span>}
+    </div>
+  )
+}
+
+function PluginsListSkeleton({ label }: { label: string }) {
+  return (
+    <div className="plugins-list-skeleton" role="status" aria-label={label} aria-busy="true">
+      {Array.from({ length: 6 }, (_, index) => (
+        <div className="plugins-list-skeleton-row" key={index} aria-hidden="true">
+          <span className="plugins-list-skeleton-icon" />
+          <span className="plugins-list-skeleton-copy">
+            <span className="plugins-list-skeleton-name" />
+            <span className="plugins-list-skeleton-desc" />
+          </span>
+        </div>
+      ))}
     </div>
   )
 }
@@ -259,82 +279,22 @@ export function PluginsContent({}: PluginsContentProps) {
   const [query, setQuery] = useState('')
   const [builtinPlugins, setBuiltinPlugins] = useState<PluginPackageSummary[]>([])
   const [installedPackages, setInstalledPackages] = useState<PluginPackageSummary[]>([])
+  const [directoryLoading, setDirectoryLoading] = useState(true)
   const [busy, setBusy] = useState<BusyMap>({})
   const [errors, setErrors] = useState<ErrorMap>({})
   const [listError, setListError] = useState('')
   const [remoteUrl, setRemoteUrl] = useState('')
   const [remoteOpen, setRemoteOpen] = useState(false)
-  const [addMenuOpen, setAddMenuOpen] = useState(false)
   // Value itself is inert — only used to retrigger the [updateStatus] refetch effect
   // below after an uninstall completes.
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'done'>('idle')
-  const [openMenuKey, setOpenMenuKey] = useState<string | null>(null)
   const [pendingDangerKey, setPendingDangerKey] = useState<string | null>(null)
-  const [menuFocusIndex, setMenuFocusIndex] = useState(0)
   const [expandedKey, setExpandedKey] = useState<string | null>(null)
   const [recordingSurfaceKey, setRecordingSurfaceKey] = useState<string | null>(null)
   const grantPermissions = usePluginPermissionStore((s) => s.grantPermissions)
   const setSurfaceShortcut = usePluginSurfaceShortcutStore((s) => s.setShortcut)
   const clearSurfaceShortcut = usePluginSurfaceShortcutStore((s) => s.clearShortcut)
   const isImeComposingRef = useRef(false)
-  const menuRef = useRef<HTMLDivElement>(null)
-  const menuItemRefs = useRef<(HTMLButtonElement | null)[]>([])
-
-  // Close dropdown menu on outside click; clear two-step danger confirm
-  useEffect(() => {
-    if (!openMenuKey) {
-      setPendingDangerKey(null)
-      setMenuFocusIndex(0)
-      return
-    }
-    setMenuFocusIndex(0)
-    requestAnimationFrame(() => menuItemRefs.current[0]?.focus())
-    function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setOpenMenuKey(null)
-        setPendingDangerKey(null)
-      }
-    }
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        event.preventDefault()
-        setOpenMenuKey(null)
-        setPendingDangerKey(null)
-        return
-      }
-      const items = menuItemRefs.current.filter(Boolean) as HTMLButtonElement[]
-      if (items.length === 0) return
-      if (event.key === 'ArrowDown') {
-        event.preventDefault()
-        setMenuFocusIndex((idx) => {
-          const next = (idx + 1) % items.length
-          items[next]?.focus()
-          return next
-        })
-      } else if (event.key === 'ArrowUp') {
-        event.preventDefault()
-        setMenuFocusIndex((idx) => {
-          const next = (idx - 1 + items.length) % items.length
-          items[next]?.focus()
-          return next
-        })
-      } else if (event.key === 'Home') {
-        event.preventDefault()
-        setMenuFocusIndex(0)
-        items[0]?.focus()
-      } else if (event.key === 'End') {
-        event.preventDefault()
-        setMenuFocusIndex(items.length - 1)
-        items[items.length - 1]?.focus()
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [openMenuKey])
 
   const installedList = useMemo(() => {
     void pluginRegistryVersion
@@ -391,13 +351,18 @@ export function PluginsContent({}: PluginsContentProps) {
   useEffect(() => {
     let cancelled = false
     async function loadDirectoryPlugins() {
+      setDirectoryLoading(true)
       if (!isTauri()) {
         setBuiltinPlugins(listBundledPluginPackageSummaries())
         setInstalledPackages([])
+        setDirectoryLoading(false)
         return
       }
       const configDir = await getConfigDir()
-      if (!configDir || cancelled) return
+      if (!configDir || cancelled) {
+        if (!cancelled) setDirectoryLoading(false)
+        return
+      }
       try {
         setListError('')
         const [builtinSummaries, installedSummaries] = await Promise.all([
@@ -443,6 +408,8 @@ export function PluginsContent({}: PluginsContentProps) {
         if (!cancelled) setBuiltinPlugins([])
         if (!cancelled) setInstalledPackages([])
         if (!cancelled) setListError(error instanceof Error ? error.message : String(error))
+      } finally {
+        if (!cancelled) setDirectoryLoading(false)
       }
     }
     void loadDirectoryPlugins()
@@ -533,6 +500,9 @@ export function PluginsContent({}: PluginsContentProps) {
       return next
     })
 
+  const reloadDirectoryPlugins = () =>
+    setUpdateStatus((status) => status === 'idle' ? 'done' : 'idle')
+
   async function runTask(key: string, task: () => Promise<void>) {
     if (!isTauri()) {
       setItemError(key, t(locale, 'scripts.desktopRequired'))
@@ -543,9 +513,8 @@ export function PluginsContent({}: PluginsContentProps) {
     try {
       await task()
     } catch (error) {
-      const raw = error instanceof Error ? error.message : String(error)
-      const single = raw.replace(/\s+/g, ' ').trim()
-      setItemError(key, single.length > 160 ? `${single.slice(0, 159)}…` : single)
+      console.warn('Plugin action failed', error)
+      setItemError(key, t(locale, 'scripts.pluginActionFailed'))
     } finally {
       setItemBusy(key, false)
     }
@@ -655,10 +624,14 @@ export function PluginsContent({}: PluginsContentProps) {
     if (definition?.settings?.component && (definition.settings.title || definition.settings.titleI18n)) {
       return localized(definition.settings.title ?? '', definition.settings.titleI18n, currentLocale)
     }
-    const surface = definition?.ui?.surfaces?.[0]
-    if (surface) return localized(surface.title, surface.titleI18n, currentLocale)
     const command = definition?.commands?.find((item) => item.description || item.descriptionI18n)
     if (command) return localized(command.description ?? '', command.descriptionI18n, currentLocale)
+    const tool = definition?.tools?.find((item) => item.subtitle || item.subtitleI18n)
+    if (tool) return tool.subtitleI18n
+      ? localized(tool.subtitle ?? '', tool.subtitleI18n, currentLocale)
+      : makePluginT(pluginId, currentLocale)(tool.subtitle ?? '')
+    const surface = definition?.ui?.surfaces?.[0]
+    if (surface) return localized(surface.title, surface.titleI18n, currentLocale)
     return ''
   }
 
@@ -721,7 +694,7 @@ export function PluginsContent({}: PluginsContentProps) {
         confirmLabel: t(locale, 'scripts.actionUninstallConfirm'),
         action: () => void runTask(key, async () => {
           await uninstallPlugin(plugin.pluginId)
-          setUpdateStatus('done')
+          reloadDirectoryPlugins()
         }),
       })
       return items
@@ -754,49 +727,29 @@ export function PluginsContent({}: PluginsContentProps) {
     return items
   }
 
-  function renderDropdownMenu(row: PluginDetailRow) {
-    const items = getDropdownMenuItems(row)
-    if (items.length === 0) return null
-    menuItemRefs.current = []
-    return (
-      <div
-        className="plugins-dropdown-menu anim-dropdown"
-        ref={menuRef}
-        role="menu"
-        aria-label={row.title}
-      >
-        {items.map((item, i) => {
-          const isPending = Boolean(item.confirmKey && pendingDangerKey === item.confirmKey)
-          return (
-            <button
-              key={i}
-              ref={(node) => { menuItemRefs.current[i] = node }}
-              type="button"
-              role="menuitem"
-              tabIndex={menuFocusIndex === i ? 0 : -1}
-              className={`plugins-dropdown-item ${item.danger ? 'plugins-dropdown-item--danger' : ''}`}
-              onClick={() => {
-                if (item.confirmKey) {
-                  if (pendingDangerKey === item.confirmKey) {
-                    setOpenMenuKey(null)
-                    setPendingDangerKey(null)
-                    item.action()
-                  } else {
-                    setPendingDangerKey(item.confirmKey)
-                  }
-                  return
-                }
-                setOpenMenuKey(null)
-                setPendingDangerKey(null)
-                item.action()
-              }}
-            >
-              {isPending ? (item.confirmLabel ?? item.label) : item.label}
-            </button>
-          )
-        })}
-      </div>
-    )
+  function rowMenuItems(row: PluginDetailRow) {
+    return getDropdownMenuItems(row).map((item, index) => {
+      const isPending = Boolean(item.confirmKey && pendingDangerKey === item.confirmKey)
+      return {
+        key: `${row.key}-${index}`,
+        label: isPending ? (item.confirmLabel ?? item.label) : item.label,
+        danger: item.danger,
+        closeOnClick: !item.confirmKey || isPending,
+        onSelect: () => {
+          if (item.confirmKey) {
+            if (pendingDangerKey === item.confirmKey) {
+              setPendingDangerKey(null)
+              item.action()
+            } else {
+              setPendingDangerKey(item.confirmKey)
+            }
+            return
+          }
+          setPendingDangerKey(null)
+          item.action()
+        },
+      }
+    })
   }
 
   function renderDrawer(row: PluginDetailRow) {
@@ -809,7 +762,8 @@ export function PluginsContent({}: PluginsContentProps) {
 
     return (
       <div className="plugins-drawer" onClick={(event) => event.stopPropagation()}>
-        <div className="plugins-drawer-line">
+        <div className="plugins-drawer-inner">
+          <div className="plugins-drawer-line">
           <div className="plugins-drawer-label">{t(locale, 'scripts.drawerPermissions')}</div>
           <div className="plugins-drawer-value">
             {requested.length === 0 ? (
@@ -847,9 +801,9 @@ export function PluginsContent({}: PluginsContentProps) {
               </>
             )}
           </div>
-        </div>
+          </div>
 
-        <div className="plugins-drawer-line">
+          <div className="plugins-drawer-line">
           <div className="plugins-drawer-label">{t(locale, 'scripts.surfaceShortcutTitle')}</div>
           <div className="plugins-drawer-value">
             {surfaces.length === 0 ? (
@@ -911,13 +865,15 @@ export function PluginsContent({}: PluginsContentProps) {
               })
             )}
           </div>
-        </div>
+          </div>
 
-        <div className="plugins-drawer-line">
+          <div className="plugins-drawer-line">
           <div className="plugins-drawer-label">{t(locale, 'scripts.drawerAbout')}</div>
           <div className="plugins-drawer-value">
             {row.error ? (
-              <span className="plugins-drawer-error">{row.error}</span>
+              <span className="plugins-drawer-error" title={row.error}>
+                {errors[row.key] || t(locale, 'scripts.pluginUnavailable')}
+              </span>
             ) : (
               <>
                 <span className={`plugins-drawer-status-dot ${statusKey}`} />
@@ -930,6 +886,7 @@ export function PluginsContent({}: PluginsContentProps) {
                 )}
               </>
             )}
+          </div>
           </div>
         </div>
       </div>
@@ -983,14 +940,14 @@ export function PluginsContent({}: PluginsContentProps) {
             )}
             {shortcutHint && <kbd className="plugins-shortcut-badge">{shortcutHint}</kbd>}
             {showToggle && (
-              <button
-                type="button"
-                className={`plugins-toggle ${isPluginEnabled(row) ? 'is-on' : ''}`}
-                title={isPluginEnabled(row) ? t(locale, 'scripts.actionDisable') : t(locale, 'scripts.actionEnable')}
-                onClick={() => handleToggleEnabled(row)}
-              >
-                <span className="plugins-toggle-knob" />
-              </button>
+              <Switch
+                className="is-compact"
+                checked={isPluginEnabled(row)}
+                aria-label={isPluginEnabled(row) ? t(locale, 'scripts.actionDisable') : t(locale, 'scripts.actionEnable')}
+                onCheckedChange={(checked) => {
+                  if (checked !== isPluginEnabled(row)) handleToggleEnabled(row)
+                }}
+              />
             )}
             {showGear && (
               <button
@@ -1003,17 +960,16 @@ export function PluginsContent({}: PluginsContentProps) {
               </button>
             )}
             {showMenu && (
-              <div className="plugins-menu-anchor">
-                <button
-                  type="button"
-                  className="plugins-icon-btn"
-                  title={t(locale, 'scripts.moreActions')}
-                  onClick={() => setOpenMenuKey((prev) => (prev === row.key ? null : row.key))}
-                >
-                  <MoreHorizontal size={14} />
-                </button>
-                {openMenuKey === row.key && renderDropdownMenu(row)}
-              </div>
+              <Menu
+                align="end"
+                onOpenChange={(open) => { if (!open) setPendingDangerKey(null) }}
+                trigger={
+                  <button type="button" className="plugins-icon-btn" title={t(locale, 'scripts.moreActions')}>
+                    <MoreHorizontal size={14} />
+                  </button>
+                }
+                items={rowMenuItems(row)}
+              />
             )}
           </div>
         </div>
@@ -1036,57 +992,49 @@ export function PluginsContent({}: PluginsContentProps) {
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
-        <div className="menu-wrap">
-          <button
-            data-testid="plugin-new-button"
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation()
-              setAddMenuOpen((value) => !value)
-            }}
-            className="btn primary split"
-          >
-            <span className="bi">＋</span>{t(locale, 'scripts.addPlugin')}<span className="chev">▾</span>
-          </button>
-          {addMenuOpen && (
-            <div className="menu open" onClick={(event) => event.stopPropagation()}>
-              <div className="m-label">{t(locale, 'scripts.installFrom')}</div>
-              <button className="m-item" type="button" onClick={() => { setAddMenuOpen(false); setRemoteOpen(true) }}>
-                <span className="m-ico">⎋</span>
-                <span className="m-main">
-                  <span className="m-name">{t(locale, 'scripts.importGithub')}</span>
-                  <span className="m-desc">{t(locale, 'scripts.importGithubDesc')}</span>
-                </span>
-              </button>
-              <button className="m-item" type="button" onClick={() => { setAddMenuOpen(false); void handleInstallZip() }}>
-                <span className="m-ico">⊟</span>
-                <span className="m-main">
-                  <span className="m-name">{t(locale, 'scripts.importZip')}</span>
-                  <span className="m-desc">.zip</span>
-                </span>
-              </button>
-              <button className="m-item" type="button" onClick={() => { setAddMenuOpen(false); void handleInstallDirectory() }}>
-                <span className="m-ico">▢</span>
-                <span className="m-main">
-                  <span className="m-name">{t(locale, 'scripts.importFolder')}</span>
-                  <span className="m-desc">{t(locale, 'scripts.importFolderDesc')}</span>
-                </span>
-              </button>
-            </div>
-          )}
-        </div>
+        <Menu
+          align="end"
+          trigger={
+            <button data-testid="plugin-new-button" type="button" className="btn primary split">
+              <span className="bi">＋</span>{t(locale, 'scripts.addPlugin')}<span className="chev">▾</span>
+            </button>
+          }
+          items={[
+            {
+              key: 'github',
+              label: t(locale, 'scripts.importGithub'),
+              onSelect: () => setRemoteOpen(true),
+            },
+            {
+              key: 'zip',
+              label: t(locale, 'scripts.importZip'),
+              onSelect: () => { void handleInstallZip() },
+            },
+            {
+              key: 'folder',
+              label: t(locale, 'scripts.importFolder'),
+              onSelect: () => { void handleInstallDirectory() },
+            },
+          ]}
+        />
       </div>
 
       {/* Errors */}
       {listError && (
         <div className="plugins-error-banner">
-          <AlertTriangle size={12} /> {listError}
+          <AlertTriangle size={12} />
+          <span title={listError}>{t(locale, 'scripts.loadPluginsFailed')}</span>
+          <button type="button" className="plugins-drawer-link" onClick={reloadDirectoryPlugins}>
+            {t(locale, 'scripts.retry')}
+          </button>
         </div>
       )}
 
       {/* Plugin list */}
       <div className="plugins-list">
-        {pluginDetailRows.length === 0 ? (
+        {directoryLoading ? (
+          <PluginsListSkeleton label={t(locale, 'scripts.loadingPlugins')} />
+        ) : pluginDetailRows.length === 0 ? (
           <LauncherEmptyWell
             className="plugins-empty"
             testId="plugins-empty-well"
@@ -1108,24 +1056,51 @@ export function PluginsContent({}: PluginsContentProps) {
       )}
 
       {/* Remote import modal */}
-      {remoteOpen && (
-        <div className="modal-overlay open" onClick={() => { if (!busy['_remote']) setRemoteOpen(false) }}>
-          <div className="modal-panel" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-header">
-              <div className="modal-title">
-                <Globe size={16} />
+      <Dialog.Root open={remoteOpen} onOpenChange={(open) => { if (!open && !busy['_remote']) setRemoteOpen(false) }}>
+        <Dialog.Portal>
+          <Dialog.Backdrop className="fixed inset-0 bg-black/40 z-[1200]" />
+          <Dialog.Popup
+            aria-labelledby="plugins-remote-import-title"
+            initialFocus={() => document.querySelector<HTMLElement>('[data-remote-import-url]')}
+            className="fixed left-1/2 top-1/2 z-[1201] w-[min(480px,calc(100vw-40px))] -translate-x-1/2 -translate-y-1/2 flex flex-col overflow-hidden anim-dropdown"
+            style={{
+              background: 'var(--panel, var(--bg-surface, #ffffff))',
+              border: '1px solid var(--border, var(--color-border-secondary))',
+              borderRadius: '14px',
+              boxShadow: 'var(--shadow-panel, 0 20px 50px -12px rgba(18, 22, 28, 0.22), 0 0 0 1px rgba(18, 22, 28, 0.06))',
+              outline: 'none',
+            }}
+          >
+            <div
+              className="flex items-center justify-between px-5 py-3.5"
+              style={{ borderBottom: 'var(--hairline) solid var(--color-border-tertiary)' }}
+            >
+              <div
+                id="plugins-remote-import-title"
+                className="flex items-center gap-2 text-[14px] font-semibold"
+                style={{ color: 'var(--color-text-primary)' }}
+              >
+                <Globe size={16} style={{ color: 'var(--color-accent)' }} />
                 {t(locale, 'scripts.remoteImportDirectoryTitle')}
               </div>
-              <button onClick={() => setRemoteOpen(false)} className="modal-close">x</button>
+              <button
+                type="button"
+                className="flex h-7 w-7 items-center justify-center rounded-md"
+                style={{ color: 'var(--color-text-tertiary)', background: 'transparent' }}
+                onClick={() => setRemoteOpen(false)}
+                aria-label={t(locale, 'scripts.settingsClose')}
+              >
+                <X size={16} />
+              </button>
             </div>
-            <div className="modal-body">
-              <div className="modal-desc">
+            <div className="px-5 py-4">
+              <div className="mb-4 text-[12px] leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
                 {t(locale, 'scripts.remoteImportDirectoryDesc')}
               </div>
-              <div className="modal-url-row">
-                <input
-                  type="text"
-                  className="modal-url-input"
+              <div className="flex gap-2">
+                <TextInput
+                  data-remote-import-url
+                  style={{ fontFamily: 'var(--font-mono)' }}
                   value={remoteUrl}
                   onChange={(event) => {
                     setRemoteUrl(event.target.value)
@@ -1138,7 +1113,6 @@ export function PluginsContent({}: PluginsContentProps) {
                   onCompositionStart={handleCompositionStart}
                   onCompositionEnd={handleCompositionEnd}
                   placeholder={t(locale, 'scripts.remoteImportPlaceholder')}
-                  autoFocus
                   disabled={busy['_remote']}
                 />
                 <button onClick={handleRemoteInstall} disabled={busy['_remote'] || !remoteUrl.trim()} className="scripts-btn scripts-btn-primary">
@@ -1147,13 +1121,14 @@ export function PluginsContent({}: PluginsContentProps) {
               </div>
               {errors['_remote'] && (
                 <div className="plugins-error-banner">
-                  <AlertTriangle size={12} /> {errors['_remote']}
+                  <AlertTriangle size={12} />
+                  {errors['_remote']}
                 </div>
               )}
             </div>
-          </div>
-        </div>
-      )}
+          </Dialog.Popup>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   )
 }

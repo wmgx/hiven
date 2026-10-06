@@ -23,10 +23,12 @@ const styles = readIfExists(`${pluginDir}/style.css`)
 const settings = readIfExists(`${pluginDir}/settings/model.ts`)
 const adapters = readIfExists(`${pluginDir}/providers/adapters.ts`)
 const tencent = readIfExists(`${pluginDir}/providers/tencent.ts`)
+const aiSettings = readIfExists(`${pluginDir}/settings/AiTranslateSettingsModal.tsx`)
 const localeZh = readIfExists(`${pluginDir}/locales/zh.json`)
 const localeEn = readIfExists(`${pluginDir}/locales/en.json`)
 const builtinIndex = read('src/builtin-plugins/index.json')
 const packageJson = read('package.json')
+const settingsDialog = read('src/components/PluginSettingsDialog.tsx')
 
 assert.ok(manifest, 'translate plugin must ship manifest.json')
 assert.ok(index, 'translate plugin must ship an index entry')
@@ -35,6 +37,7 @@ assert.ok(styles, 'translate plugin must ship dedicated style.css')
 assert.ok(settings, 'translate plugin must define settings/model.ts')
 assert.ok(adapters, 'translate plugin must define provider adapters')
 assert.ok(tencent, 'translate plugin must define tencent adapter')
+assert.ok(aiSettings, 'translate plugin must expose AI provider settings')
 
 const manifestJson = JSON.parse(manifest)
 assert.equal(manifestJson.pluginId, 'translate', 'manifest pluginId must be translate')
@@ -45,8 +48,8 @@ assert.deepEqual(
 )
 assert.deepEqual(
   manifestJson.permissions?.sort(),
-  ['clipboard.write', 'network.request', 'storage.private'].sort(),
-  'translate should request storage, network, and clipboard write for copying translation',
+  ['ai.use', 'clipboard.write', 'network.request', 'storage.private'].sort(),
+  'translate should request host AI plus storage, network, and clipboard access',
 )
 
 const builtin = JSON.parse(builtinIndex)
@@ -63,6 +66,12 @@ assert.equal(
 )
 
 assert.match(index, /definePlugin<TranslateSettings>\s*\(/, 'translate plugin should be typed with TranslateSettings')
+assert.match(index, /value:\s*['"]ai['"]/, 'translate settings must offer the host AI provider')
+assert.match(adapters, /ai\.stream\(/, 'AI translation must stream through the host AI API')
+assert.match(surface, /hostRef\.current\.ai/, 'translate surface must pass the host AI API into the adapter')
+assert.match(aiSettings, /host\.ai\.providers\(\)/, 'AI settings must list providers from the host')
+assert.match(aiSettings, /supportedEfforts/, 'AI settings must limit reasoning choices to the selected model')
+assert.match(settingsDialog, /presentation === 'plugin-surface-window'[\s\S]*'100vw'[\s\S]*'100vh'/, 'settings opened from a plugin window must keep that window size')
 assert.match(index, /schema:\s*\{/, 'translate settings must use the generic schema renderer')
 assert.match(index, /kind:\s*['"]object-list['"]/, 'translate settings must expose API profiles through schema object-list')
 assert.doesNotMatch(index, /TranslateSettingsPanel|component:\s*TranslateSettingsPanel/, 'translate settings should not use a custom settings panel')
@@ -92,6 +101,8 @@ assert.doesNotMatch(surface, />\s*翻译\s*<|>\s*Translate\s*<\/[Bb]utton|从剪
 assert.match(surface, /host\.clipboard\.writeText/, 'surface should copy translation via host clipboard write')
 assert.match(surface, /action\.copy/, 'surface should expose a header copy action')
 assert.match(surface, /textarea|TextArea/, 'surface must expose a text input area')
+assert.match(surface, /className=\{`translate-output[\s\S]*readOnly/, 'translation output must use a selectable read-only textarea')
+assert.doesNotMatch(surface, /event\.key\.toLowerCase\(\)\s*!==\s*['"]c['"]/, 'surface must not override native Cmd/Ctrl+C behavior')
 assert.match(surface, /translatedText|translationText|outputText/, 'surface must render translation text')
 assert.match(surface, /smart/i, 'surface must support smart target language')
 assert.match(surface, /quota|usedChars|monthlyLimit/i, 'surface must expose quota status')
@@ -100,7 +111,9 @@ assert.match(surface, /translate-surface__header/, 'surface must follow the desi
 assert.match(surface, /translate-surface__controls/, 'surface must follow the designed controls structure')
 assert.match(surface, /translate-surface__body/, 'surface must follow the designed two-pane body structure')
 assert.match(surface, /translate-surface__status/, 'surface must follow the designed status bar structure')
+assert.match(surface, /role=\{status\.kind === ['"]error['"][\s\S]{0,100}['"]alert['"] : ['"]status['"]\}/, 'translation failures and quota errors must use an assertive live region')
 assert.match(styles, /--panel|--surface|--text-2|--accent-soft/, 'translate styles must define restrained design tokens')
+assert.match(styles, /@media \(max-width: 520px\)[\s\S]*\.translate-surface__controls\s*\{[^}]*flex-wrap:\s*wrap;/, 'translate controls must reflow instead of truncating every selected value')
 assert.doesNotMatch(styles, /translate-surface-ambient|background-size:\s*38px|border-radius:\s*18px/, 'translate UI should remove the old decorative ambient/grid/card styling')
 assert.doesNotMatch(styles, /translate-settings/, 'settings page should use the host schema styling instead of plugin-local settings styles')
 

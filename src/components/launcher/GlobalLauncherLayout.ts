@@ -42,10 +42,13 @@ export function buildGlobalLauncherPanelStyle({
   surfaceShell?: LauncherSurfaceShell
   standaloneLauncher: boolean
 }): GlobalLauncherPanelStyle {
+  const validationBrowser = typeof window !== 'undefined' && window.__HIVEN_WEB_NATIVE_BRIDGE__ === true
   // In standalone window mode, the Tauri window is already sized to 1/3 screen
   // width, so the panel fills the window. In overlay mode, use calc(100vw / 3)
   // to occupy 1/3 of the host window.
-  const defaultPanelWidth = standaloneLauncher
+  const defaultPanelWidth = validationBrowser
+    ? '704px'
+    : standaloneLauncher
     ? 'calc(100vw - 24px)'
     : GLOBAL_LAUNCHER_PANEL_WIDTH
 
@@ -55,24 +58,24 @@ export function buildGlobalLauncherPanelStyle({
     borderRadius: 'var(--radius, 10px)',
     '--launcher-panel-width': hostSurfaceTarget
       ? `${STANDALONE_SURFACE_MAX_WIDTH}px`
-      : launcherSettingsTarget
-      ? `${GLOBAL_LAUNCHER_SETTINGS_WIDTH}px`
       : surfaceShell?.defaultWidth
       ? `${surfaceShell.defaultWidth}px`
+      : launcherSettingsTarget
+      ? `${GLOBAL_LAUNCHER_SETTINGS_WIDTH}px`
       : defaultPanelWidth,
     width: hostSurfaceTarget
-      ? `min(${STANDALONE_SURFACE_MAX_WIDTH}px, calc(100vw - 24px))`
-      : launcherSettingsTarget
-      ? `min(${GLOBAL_LAUNCHER_SETTINGS_WIDTH}px, calc(100vw - 24px))`
+      ? validationBrowser ? `${STANDALONE_SURFACE_MAX_WIDTH}px` : `min(${STANDALONE_SURFACE_MAX_WIDTH}px, calc(100vw - 24px))`
       : surfaceShell?.defaultWidth
-      ? `min(${surfaceShell.defaultWidth}px, calc(100vw - 24px))`
+      ? validationBrowser ? `${surfaceShell.defaultWidth}px` : `min(${surfaceShell.defaultWidth}px, calc(100vw - 24px))`
+      : launcherSettingsTarget
+      ? validationBrowser ? `${GLOBAL_LAUNCHER_SETTINGS_WIDTH}px` : `min(${GLOBAL_LAUNCHER_SETTINGS_WIDTH}px, calc(100vw - 24px))`
       : undefined,
     maxHeight: hostSurfaceTarget
       ? `min(${STANDALONE_SURFACE_MAX_HEIGHT}px, calc(100vh - 24px))`
-      : launcherSettingsTarget
-      ? `min(${GLOBAL_LAUNCHER_SETTINGS_HEIGHT}px, calc(100vh - 24px))`
       : surfaceShell?.defaultHeight
       ? `min(${surfaceShell.defaultHeight}px, calc(100vh - 24px))`
+      : launcherSettingsTarget
+      ? `min(${GLOBAL_LAUNCHER_SETTINGS_HEIGHT}px, calc(100vh - 24px))`
       : undefined,
     left: '50%',
     top: standaloneLauncher ? 12 : 54,

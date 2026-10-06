@@ -3,6 +3,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
+import { Globe2 } from 'lucide-react'
 import type { PluginSettingsModalBodyProps } from '@hiven/plugin'
 import {
   clearFaviconCache,
@@ -135,7 +136,7 @@ export function FaviconCacheModal({
                   style={{ borderRadius: 3, flexShrink: 0, background: 'var(--color-background-tertiary)' }}
                 />
               ) : (
-                <span style={{ width: 16, height: 16, flexShrink: 0, fontSize: 12, opacity: 0.6 }} aria-hidden>🌐</span>
+                <Globe2 size={16} style={{ flexShrink: 0, opacity: 0.55 }} aria-hidden="true" />
               )}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

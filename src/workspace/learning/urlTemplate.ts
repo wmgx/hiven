@@ -15,7 +15,7 @@
  * See doc/2026-08-12-direct-answer-workbench-design.md §11 (D) / §5.
  */
 
-export type UrlSlotKind = 'n' | 'hex' | 'uuid' | 'id' | 'slug'
+export type UrlSlotKind = 'hex' | 'uuid' | 'id' | 'slug'
 
 export interface UrlTemplateResult {
   host: string
@@ -45,7 +45,11 @@ const SEPARATOR_RE = /[-_.]/
  */
 export function classifyPathSegment(seg: string): UrlSlotKind | null {
   if (!seg) return null
-  if (/^\d+$/.test(seg)) return 'n'
+  // Pure digits are deliberately never a slot: unlike hex/uuid/id/slug they
+  // carry no self-evidence of identity — a page number, a quantity, and an MR
+  // number are indistinguishable strings. That ambiguity made this the
+  // noisiest matcher in practice, so digit-only segments stay literal.
+  if (/^\d+$/.test(seg)) return null
   if (UUID_RE.test(seg)) return 'uuid'
   if (/^[0-9a-f]{7,}$/i.test(seg)) return 'hex'
   // Long mixed alphanumeric (has both a letter and a digit) → opaque id.
@@ -349,7 +353,7 @@ export function induceSourceScopedTemplates(
 
 /** Last `{kind}` slot in a template (fallback when a record didn't store slotKind). */
 function inferSlotKindFromTemplate(template: string): UrlSlotKind | null {
-  const matches = template.match(/\{(n|hex|uuid|id|slug)\}/g)
+  const matches = template.match(/\{(hex|uuid|id|slug)\}/g)
   if (!matches || matches.length === 0) return null
   const last = matches[matches.length - 1]
   return last.slice(1, -1) as UrlSlotKind

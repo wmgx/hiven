@@ -17,7 +17,9 @@ import {
   getPluginSurfaceShortcutPresentation,
   showPluginSurfaceWindow,
 } from '../../workspace/windowManager/pluginSurfaceWindows'
+import { isNativeDesktopRuntime } from '../../workspace/webNativeBridge'
 import { showToast } from '../../workspace/toast'
+import { t, type Locale } from '../../i18n'
 import {
   TelemetryEvents,
   measureLatency,
@@ -35,6 +37,7 @@ type UseGlobalLauncherSelectionControllerInput = {
   grantPluginPermissions: (pluginId: string, permissions: string[]) => void
   focusSearchInputAfterBack: () => void
   objectBlockText?: string
+  locale: Locale
 }
 
 /** Resolve Object Block / clipboard text into surface initialText (load file when payload is a path). */
@@ -64,6 +67,7 @@ export function useGlobalLauncherSelectionController({
   grantPluginPermissions,
   focusSearchInputAfterBack,
   objectBlockText,
+  locale,
 }: UseGlobalLauncherSelectionControllerInput) {
   const [itemPermissionFrame, setItemPermissionFrame] = useState<LauncherItemPermissionFrame | null>(null)
 
@@ -99,15 +103,15 @@ export function useGlobalLauncherSelectionController({
           // Window-presentation surfaces (clipboard history) open as independent
           // windows. Suppress + smart blur keep Global Launcher open alongside them.
           if (getPluginSurfaceShortcutPresentation(target) === 'window') {
-            const isTauri = Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
-            if (isTauri) {
+            if (isNativeDesktopRuntime()) {
               trackBehavior(TelemetryEvents.surfaceWindowOpen, {
                 pluginId: target.pluginId,
                 surfaceId: target.surfaceId,
               })
               // Cover focus handoff before the companion window is focused/visible.
               suppressStandaloneLauncherBlur(2_000)
-              void showPluginSurfaceWindow(target)
+              await showPluginSurfaceWindow(target)
+              controllerRef.current?.recordSuccessfulSelection(item.domainItem)
               return
             }
           }
@@ -121,7 +125,12 @@ export function useGlobalLauncherSelectionController({
             pluginId: target.pluginId,
             surfaceId: target.surfaceId,
           })
-        })()
+          controllerRef.current?.recordSuccessfulSelection(item.domainItem)
+        })().catch((error) => {
+          console.error('[hiven] Failed to open plugin surface:', error)
+          showToast(t(locale, 'scripts.pluginUnavailable'), 'error')
+          focusSearchInputAfterBack()
+        })
         return
       }
 
@@ -134,7 +143,7 @@ export function useGlobalLauncherSelectionController({
       executeDomainItem(item.domainItem, customizeParams)
       return
     }
-  }, [clearPluginSurfaceTool, executeDomainItem, objectBlockText, openPluginSurface])
+  }, [clearPluginSurfaceTool, controllerRef, executeDomainItem, focusSearchInputAfterBack, locale, objectBlockText, openPluginSurface])
 
   const grantItemPermissionsAndRun = useCallback(() => {
     if (!itemPermissionFrame) return

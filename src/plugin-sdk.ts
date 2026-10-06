@@ -37,6 +37,8 @@ export type {
   DesktopBridgeEventDto,
   DesktopBridgeHistoryDto,
   DesktopBridgeSourceConfig,
+  HivenEventBusApi,
+  HivenHostEvents,
 } from './pluginHostSdk'
 export type { Locale } from './i18n'
 export type { TranslateFunction } from './i18n'
@@ -79,6 +81,7 @@ export type {
   PluginUiContribution,
   PluginSurfaceOpenContext,
   PluginSurfaceProps,
+  PluginSurfaceAppearance,
   PluginSurfaceHostApi,
   PluginObjectBlockInput,
   // Plugin Background types
@@ -159,3 +162,16 @@ export type {
 // text-diff uses `@hiven/plugin-diff` for DualEditorView / line diff / bound text.
 // Structural compare payload (transport only): DiffSourcePayload.
 export type { DiffSourcePayload } from './workspace/diffTypes'
+export type {
+  AiAgent,
+  AiCapability,
+  AiEvent,
+  AiInput,
+  AiProviderDescriptor,
+  AiReasoningEffort,
+  AiRequest,
+  AiUsageMetric,
+  AiUsageQuery,
+  AiUsageRecord,
+  PluginAiApi,
+} from './workspace/ai/types'

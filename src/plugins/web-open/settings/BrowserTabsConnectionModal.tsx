@@ -4,19 +4,16 @@
  * nested `browser` settings. All copy goes through the plugin locale (t) — no
  * inline locale branches.
  *
- * Sectioned into cards with a custom toggle switch (the shared `ui.Checkbox`
- * primitive is a bare native `<input type="checkbox">` with no styling — this
- * modal builds its own tactile switch locally rather than changing the shared
- * primitive, which would ripple into every other plugin's settings page).
- * Colors/radius/shadow all reference the app's real CSS custom properties
- * (--text-2, --border-subtle, --accent-soft, …) so light/dark both track the
- * app's existing theme automatically — no new palette introduced.
+ * Sectioned into cards. Toggles and selects use the shared plugin-ui primitives
+ * so interaction (keyboard, portal menus, theme) stays with the host adapter.
  */
 
 import type { PluginSettingsModalBodyProps } from '@hiven/plugin'
 import { getPluginHostSdk } from '@hiven/plugin'
+import { Select, Switch } from '@hiven/plugin-ui'
 import type { ReactNode } from 'react'
 import {
+  HISTORY_SEARCH_DAY_OPTIONS,
   IDLE_TIMEOUT_PRESET_MINUTES,
   clampIdleTimeoutMinutes,
   idleTimeoutPresetKey,
@@ -31,46 +28,6 @@ type BridgeLine = {
   targetCount: number
   historyCount: number
   port: number
-}
-
-// ─── local, tactile-styled primitives (scoped to this modal) ──────────────────
-
-function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      onClick={onToggle}
-      style={{
-        flex: 'none',
-        width: 34,
-        height: 20,
-        borderRadius: 999,
-        border: `1px solid ${on ? 'var(--accent)' : 'var(--border)'}`,
-        background: on ? 'var(--accent)' : 'var(--bg-surface-3, var(--text-3))',
-        boxShadow: on ? 'none' : 'inset 0 1px 2px rgba(0,0,0,.05)',
-        cursor: 'pointer',
-        padding: 0,
-        position: 'relative',
-        transition: 'background .18s ease, border-color .18s ease',
-      }}
-    >
-      <span
-        style={{
-          position: 'absolute',
-          top: 1.5,
-          left: on ? 15 : 1.5,
-          width: 15,
-          height: 15,
-          borderRadius: '50%',
-          background: '#fff',
-          boxShadow: '0 1px 2px rgba(0,0,0,.18), 0 0 0 0.5px rgba(0,0,0,.04)',
-          transition: 'left .18s ease',
-        }}
-      />
-    </button>
-  )
 }
 
 function StatusChip({ label, tone }: { label: string; tone: 'on' | 'off' | 'muted' }) {
@@ -200,11 +157,29 @@ export function BrowserTabsConnectionModal(props: PluginSettingsModalBodyProps<W
               {t('settings.historyHelp')}
             </ui.Text>
           </div>
-          <Toggle
-            on={value.historyEnabled !== false}
-            onToggle={() => setValue({ ...value, historyEnabled: !value.historyEnabled })}
+          <Switch
+            className="is-compact"
+            checked={value.historyEnabled !== false}
+            onCheckedChange={(checked) => setValue({ ...value, historyEnabled: checked })}
           />
         </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginTop: 2 }}>
+          <ui.Text style={{ fontSize: 11.5, color: 'var(--text-2)' }}>{t('settings.historySearchRange')}</ui.Text>
+          <Select
+            disabled={value.historyEnabled === false}
+            value={String(value.historySearchDays)}
+            options={HISTORY_SEARCH_DAY_OPTIONS.map((days) => ({
+              value: String(days),
+              label: days === 'all'
+                ? t('settings.historySearchRange.all')
+                : t('settings.historySearchRange.days', { days }),
+            }))}
+            onChange={(event) => {
+              const raw = event.target.value
+              setValue({ ...value, historySearchDays: raw === 'all' ? 'all' : Number(raw) as BrowserTabsSettings['historySearchDays'] })
+            }}
+          />
+        </label>
       </Card>
 
       <Card>
@@ -215,14 +190,15 @@ export function BrowserTabsConnectionModal(props: PluginSettingsModalBodyProps<W
               {t('settings.idleHelp')}
             </ui.Text>
           </div>
-          <Toggle
-            on={value.autoCloseIdleTabs === true}
-            onToggle={() => setValue({ ...value, autoCloseIdleTabs: !value.autoCloseIdleTabs })}
+          <Switch
+            className="is-compact"
+            checked={value.autoCloseIdleTabs === true}
+            onCheckedChange={(checked) => setValue({ ...value, autoCloseIdleTabs: checked })}
           />
         </div>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginTop: 2 }}>
           <ui.Text style={{ fontSize: 11.5, color: 'var(--text-2)' }}>{t('settings.idleTimeout')}</ui.Text>
-          <ui.Select
+          <Select
             disabled={value.autoCloseIdleTabs !== true}
             value={String(clampIdleTimeoutMinutes(value.idleTimeoutMinutes))}
             options={(() => {
@@ -239,7 +215,7 @@ export function BrowserTabsConnectionModal(props: PluginSettingsModalBodyProps<W
               }
               return options
             })()}
-            onChange={(event: { target: { value: string } }) => {
+            onChange={(event) => {
               setValue({ ...value, idleTimeoutMinutes: clampIdleTimeoutMinutes(event.target.value) })
             }}
           />
@@ -254,7 +230,11 @@ export function BrowserTabsConnectionModal(props: PluginSettingsModalBodyProps<W
               {t('settings.enableSearchHelp')}
             </ui.Text>
           </div>
-          <Toggle on={value.enabled} onToggle={() => setValue({ ...value, enabled: !value.enabled })} />
+          <Switch
+            className="is-compact"
+            checked={value.enabled}
+            onCheckedChange={(checked) => setValue({ ...value, enabled: checked })}
+          />
         </div>
       </Card>
 

@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hiven LauncherItem Interaction Prototype</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI", sans-serif;
+      --bg: #f3f4f6; --panel: #fff; --surface: #f7f8f8; --surface-2: #eceff2;
+      --ink: #1a1c1e; --muted: #686d71; --line: #e2e5e8; --accent: #2563eb;
+      --accent-soft: #eaf1ff; --danger: #c24136; --danger-soft: #fff0ee;
+      --shadow: 0 8px 24px rgba(17, 24, 39, .16); --radius: 14px;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--ink); }
+    button, input { font: inherit; }
+    button { color: inherit; }
+    .stage { min-height: 100vh; display: grid; place-items: center; padding: 56px 20px 90px; }
+    .prototype-label { position: fixed; top: 16px; left: 18px; color: var(--muted); font-size: 11px; }
+    .launcher { width: min(720px, calc(100vw - 24px)); overflow: hidden; border-radius: var(--radius); background: var(--panel); box-shadow: var(--shadow); }
+    .search { display: flex; align-items: center; gap: 11px; min-height: 60px; padding: 0 16px; border-bottom: 1px solid var(--line); }
+    .search-icon { color: var(--muted); font-size: 18px; }
+    .search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 16px; }
+    .search input::placeholder { color: #5f656a; }
+    .key { padding: 2px 5px; border: 1px solid #cfd3d7; border-bottom-width: 2px; border-radius: 5px; background: #fff; color: #555b60; font-size: 10px; }
+    .body { max-height: 430px; overflow: auto; }
+    .group { padding: 10px 14px 5px; color: var(--muted); font-size: 11px; font-weight: 650; }
+    .item-wrap { position: relative; }
+    .item { width: 100%; min-height: 54px; display: grid; grid-template-columns: 30px 1fr auto; align-items: center; gap: 11px; padding: 7px 14px; border: 0; background: transparent; text-align: left; cursor: pointer; }
+    .item:hover { background: #f5f6f7; }
+    .item.selected { background: var(--accent-soft); }
+    .item[aria-disabled="true"] { color: #7a7f84; }
+    .ico { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 7px; background: var(--surface-2); color: #444a50; font-size: 12px; font-weight: 700; }
+    .main { min-width: 0; }
+    .title { display: block; overflow: hidden; font-size: 13px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+    .subtitle { display: block; overflow: hidden; margin-top: 3px; color: var(--muted); font-family: "SF Mono", ui-monospace, monospace; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+    .trail { display: flex; align-items: center; gap: 7px; }
+    .tag { padding: 4px 7px; border-radius: 999px; background: var(--surface-2); color: #555b60; font-size: 10px; }
+    .tag.info { background: var(--accent-soft); color: #1d4ed8; }
+    .quick { color: var(--muted); font-size: 10px; }
+    .more { display: none; width: 26px; height: 26px; border: 0; border-radius: 6px; background: transparent; cursor: pointer; }
+    .item-wrap:hover .more, .item.selected + .more, .more:focus-visible { display: grid; place-items: center; }
+    .more { position: absolute; top: 14px; right: 10px; }
+    .more:hover, .more:focus-visible { background: #dce5f8; outline: 2px solid var(--accent); outline-offset: -2px; }
+    .item.has-more .trail { padding-right: 28px; }
+    .footer { min-height: 40px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 12px 7px 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; }
+    .footer-actions { display: flex; align-items: center; gap: 6px; }
+    .footer-primary { min-height: 28px; padding: 0 9px; border: 0; border-radius: 7px; background: var(--ink); color: white; font-size: 11px; font-weight: 650; cursor: pointer; }
+    .footer-secondary { min-height: 28px; padding: 0 8px; border: 1px solid #d4d8dc; border-radius: 7px; background: white; color: var(--ink); font-size: 11px; cursor: pointer; }
+    .menu-head { min-height: 58px; display: flex; align-items: center; gap: 10px; padding: 0 14px; border-bottom: 1px solid var(--line); }
+    .back { width: 28px; height: 28px; border: 0; border-radius: 7px; background: transparent; cursor: pointer; }
+    .back:hover, .back:focus-visible { background: var(--surface-2); outline: 2px solid var(--accent); }
+    .menu-title { min-width: 0; flex: 1; }
+    .menu-title strong, .menu-title span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .menu-title strong { font-size: 13px; }
+    .menu-title span { margin-top: 2px; color: var(--muted); font-size: 10px; }
+    .action { width: 100%; min-height: 48px; display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 10px; padding: 6px 14px; border: 0; background: transparent; text-align: left; cursor: pointer; }
+    .action:hover, .action.selected { background: var(--accent-soft); }
+    .action.danger { color: var(--danger); }
+    .action.danger:hover, .action.danger.selected { background: var(--danger-soft); }
+    .action-main strong, .action-main span { display: block; }
+    .action-main strong { font-size: 12px; }
+    .action-main span { margin-top: 2px; color: var(--muted); font-size: 10px; }
+    .default { color: #1d4ed8; font-size: 10px; }
+    .switch { width: 30px; height: 17px; padding: 2px; border-radius: 999px; background: #c9cdd1; }
+    .switch.on { background: var(--accent); }
+    .switch::after { content: ""; display: block; width: 13px; height: 13px; border-radius: 50%; background: white; transition: transform 120ms ease-out; }
+    .switch.on::after { transform: translateX(13px); }
+    .preview { margin: 8px 14px 14px; padding: 10px 11px; border-radius: 8px; background: var(--surface); color: #41474c; font-family: "SF Mono", ui-monospace, monospace; font-size: 10px; line-height: 1.55; user-select: text; white-space: pre-wrap; }
+    .error { margin: 0 14px 12px; padding: 9px 10px; border-radius: 8px; background: var(--danger-soft); color: #8f3028; font-size: 11px; }
+    .confirm { padding: 18px 16px; }
+    .confirm h2 { margin: 0 0 7px; font-size: 16px; }
+    .confirm p { margin: 0 0 18px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+    .btn { min-height: 32px; padding: 0 11px; border: 1px solid #d1d5db; border-radius: 7px; background: white; cursor: pointer; font-size: 11px; font-weight: 650; }
+    .btn.danger { border-color: var(--danger); background: var(--danger); color: white; }
+    .debug { position: fixed; bottom: 18px; left: 50%; color: var(--muted); font-family: "SF Mono", ui-monospace, monospace; font-size: 10px; transform: translateX(-50%); white-space: nowrap; }
+    .toast { position: fixed; top: 20px; left: 50%; padding: 9px 12px; border-radius: 8px; background: #202326; color: white; font-size: 11px; transform: translate(-50%, -90px); transition: transform 140ms ease-out; }
+    .toast.show { transform: translate(-50%, 0); }
+    @media (max-width: 560px) { .tag, .quick { display: none; } .stage { padding-inline: 8px; } }
+    @media (prefers-reduced-motion: reduce) { .switch::after, .toast { transition: none; } }
+  </style>
+</head>
+<body>
+  <!-- PROTOTYPE: generic LauncherItem behavior, not production code. -->
+  <div class="prototype-label">LauncherItem behavior prototype · Tab opens actions</div>
+  <main class="stage"><section class="launcher" id="launcher" aria-label="Hiven Launcher"></section></main>
+  <div class="toast" id="toast" role="status"></div>
+  <div class="debug" id="debug"></div>
+  <script>
+    const items = [
+      { id: 'tab', icon: 'C', title: 'Production Logs · Chrome', subtitle: 'cloud.bytedance.net/log/735f13…', tag: '已打开标签页', primary: '切换', actions: ['open', 'copy', 'pin', 'close'] },
+      { id: 'format', icon: '{}', title: '格式化 JSON', subtitle: '2 空格缩进 · 替换当前文本', tag: '命令', primary: '运行', actions: ['run', 'customize', 'favorite'] },
+      { id: 'result', icon: '=', title: '格式化后的 JSON', subtitle: '{ "status": "ok", "count": 42 }', tag: '即时结果', primary: '复制', actions: ['copy-result', 'replace', 'editor'] },
+      { id: 'disabled', icon: 'AI', title: '使用 AI 解释文本', subtitle: '需要先配置 AI Provider', tag: '不可用', primary: '不可用', disabled: true, actions: ['setup'] },
+    ]
+    const actionCatalog = {
+      open: { icon: '↗', title: '切换到标签页', subtitle: '执行默认动作', default: true, preview: 'Chrome · Production Logs\ncloud.bytedance.net/log/735f13…' },
+      copy: { icon: '⧉', title: '复制 URL', subtitle: '保持 Launcher 打开', preview: 'https://cloud.bytedance.net/log/735f13a9d6c1415f9f78509cf762db46' },
+      pin: { icon: '●', title: '固定标签页', subtitle: '二态动作', toggle: true, preview: '固定后，该标签页会保留在浏览器标签结果中。' },
+      close: { icon: '×', title: '关闭标签页', subtitle: '需要确认', danger: true, preview: '将关闭 Chrome 中的 Production Logs 标签页。' },
+      run: { icon: '↵', title: '使用默认参数运行', subtitle: '2 空格 · 替换当前文本', default: true, preview: '主动作继续走现有 execute / params / permission 流程。' },
+      customize: { icon: '⚙', title: '定制参数', subtitle: '进入现有 Param Frame', preview: '缩进：2\n排序 Key：关闭\n输出：替换当前文本' },
+      favorite: { icon: '★', title: '固定到常用', subtitle: '保持 Launcher 打开', toggle: true, preview: '固定后，无查询时优先显示。' },
+      'copy-result': { icon: '⧉', title: '复制结果', subtitle: '默认动作', default: true, preview: '{\n  "status": "ok",\n  "count": 42\n}' },
+      replace: { icon: 'R', title: '替换当前文本', subtitle: '写回来源应用', preview: '使用当前结果替换来源应用中的活动文本。' },
+      editor: { icon: 'E', title: '在快速编辑器打开', subtitle: '进入现有 Surface', preview: '在 Quick Editor 中继续编辑该结果。' },
+      setup: { icon: '⚙', title: '配置 AI Provider', subtitle: '恢复此 Item 的可用状态', preview: '打开设置 → AI Provider。' },
+    }
+    let frame = 'search'
+    let selectedItem = 0
+    let selectedAction = 0
+    let pinned = false
+    let favorite = false
+    let error = ''
+    let query = ''
+    let confirmAction = null
+
+    const launcher = document.getElementById('launcher')
+    const debug = document.getElementById('debug')
+    const visibleItems = () => items.filter((item) => `${item.title} ${item.subtitle}`.toLowerCase().includes(query.toLowerCase()))
+    const currentItem = () => visibleItems()[selectedItem] ?? visibleItems()[0]
+    const currentActions = () => currentItem()?.actions.map((id) => ({ id, ...actionCatalog[id] })) ?? []
+
+    function showToast(message) {
+      const toast = document.getElementById('toast')
+      toast.textContent = message
+      toast.classList.add('show')
+      clearTimeout(showToast.timer)
+      showToast.timer = setTimeout(() => toast.classList.remove('show'), 1800)
+    }
+
+    function renderSearch() {
+      const rows = visibleItems().map((item, index) => `
+        <div class="item-wrap">
+          <button type="button" class="item has-more ${index === selectedItem ? 'selected' : ''}" data-item="${index}" aria-disabled="${item.disabled ? 'true' : 'false'}">
+            <span class="ico">${item.icon}</span><span class="main"><span class="title">${item.title}</span><span class="subtitle">${item.subtitle}</span></span>
+            <span class="trail"><span class="tag ${item.id === 'result' ? 'info' : ''}">${item.tag}</span><span class="quick">⌘${index + 1}</span></span>
+          </button>
+          <button type="button" class="more" data-more="${index}" aria-label="更多动作">•••</button>
+        </div>`).join('')
+      launcher.innerHTML = `
+        <header class="search"><span class="search-icon">⌕</span><input id="query" value="${query}" placeholder="搜索命令、结果和对象…" aria-label="搜索" /><span class="key">esc</span></header>
+        <div class="body"><div class="group">结果</div>${rows || '<div class="group">没有匹配结果</div>'}</div>
+        <footer class="footer"><span><span class="key">↑↓</span> 选择 · <span class="key">Tab</span> 更多动作</span><span class="footer-actions"><button class="footer-secondary" id="more-footer">更多</button><button class="footer-primary" id="primary">${currentItem()?.primary ?? '运行'} ↵</button></span></footer>`
+      const input = document.getElementById('query')
+      input.focus(); input.setSelectionRange(query.length, query.length)
+      input.addEventListener('input', (event) => { query = event.target.value; selectedItem = 0; render() })
+      document.querySelectorAll('[data-item]').forEach((row) => {
+        row.addEventListener('mouseenter', () => { selectedItem = Number(row.dataset.item); renderSearchPassive() })
+        row.addEventListener('click', () => runPrimary())
+      })
+      document.querySelectorAll('[data-more]').forEach((button) => button.addEventListener('click', (event) => { event.stopPropagation(); selectedItem = Number(button.dataset.more); openMenu() }))
+      document.getElementById('more-footer')?.addEventListener('click', openMenu)
+      document.getElementById('primary')?.addEventListener('click', runPrimary)
+    }
+
+    function renderSearchPassive() {
+      document.querySelectorAll('[data-item]').forEach((row, index) => row.classList.toggle('selected', index === selectedItem))
+      const primary = document.getElementById('primary')
+      if (primary) primary.textContent = `${currentItem()?.primary ?? '运行'} ↵`
+    }
+
+    function renderMenu() {
+      const item = currentItem()
+      const actions = currentActions()
+      const rows = actions.map((action, index) => {
+        const checked = action.id === 'pin' ? pinned : action.id === 'favorite' ? favorite : false
+        return `<button type="button" class="action ${index === selectedAction ? 'selected' : ''} ${action.danger ? 'danger' : ''}" data-action="${index}">
+          <span class="ico">${action.icon}</span><span class="action-main"><strong>${action.title}</strong><span>${action.subtitle}</span></span>
+          ${action.toggle ? `<span class="switch ${checked ? 'on' : ''}" aria-label="${checked ? '已开启' : '已关闭'}"></span>` : action.default ? '<span class="default">默认</span>' : ''}
+        </button>`
+      }).join('')
+      launcher.innerHTML = `
+        <header class="menu-head"><button type="button" class="back" id="back" aria-label="返回">←</button><span class="ico">${item.icon}</span><span class="menu-title"><strong>${item.title}</strong><span>${item.subtitle}</span></span></header>
+        <div class="body">${rows}<div class="preview">${actions[selectedAction]?.preview ?? ''}</div>${error ? `<div class="error">${error}</div>` : ''}</div>
+        <footer class="footer"><span><span class="key">↑↓</span> 选择 · <span class="key">esc</span> 返回</span><button class="footer-primary" id="run-action">执行 ↵</button></footer>`
+      document.getElementById('back').addEventListener('click', backToSearch)
+      document.querySelectorAll('[data-action]').forEach((row) => {
+        row.addEventListener('mouseenter', () => { selectedAction = Number(row.dataset.action); renderMenu() })
+        row.addEventListener('click', () => runAction())
+      })
+      document.getElementById('run-action').addEventListener('click', runAction)
+    }
+
+    function renderConfirm() {
+      launcher.innerHTML = `<header class="menu-head"><button type="button" class="back" id="back" aria-label="返回">←</button><span class="menu-title"><strong>确认动作</strong><span>${currentItem().title}</span></span></header><div class="confirm"><h2>关闭这个标签页？</h2><p>这是一个有副作用的动作。确认属于现有 Result Frame，不再增加新的菜单层级。</p><div class="confirm-actions"><button class="btn" id="cancel">取消</button><button class="btn danger" id="confirm">关闭标签页</button></div></div>`
+      document.getElementById('back').addEventListener('click', () => { frame = 'menu'; render() })
+      document.getElementById('cancel').addEventListener('click', () => { frame = 'menu'; render() })
+      document.getElementById('confirm').addEventListener('click', () => { showToast('标签页已关闭'); backToSearch() })
+    }
+
+    function openMenu() { if (!currentItem()) return; frame = 'menu'; selectedAction = 0; error = ''; render() }
+    function backToSearch() { frame = 'search'; error = ''; render() }
+    function runPrimary() {
+      const item = currentItem(); if (!item) return
+      if (item.disabled) { openMenu(); return }
+      showToast(`${item.primary}：${item.title}`)
+    }
+    function runAction() {
+      const action = currentActions()[selectedAction]; if (!action) return
+      error = ''
+      if (action.id === 'pin') { pinned = !pinned; showToast(pinned ? '已固定标签页' : '已取消固定'); render(); return }
+      if (action.id === 'favorite') { favorite = !favorite; showToast(favorite ? '已固定到常用' : '已取消固定'); render(); return }
+      if (action.id === 'close') { confirmAction = action.id; frame = 'confirm'; render(); return }
+      if (action.id === 'setup') { showToast('打开 AI Provider 设置'); return }
+      if (action.id === 'customize') { showToast('进入现有 Param Frame'); return }
+      if (action.id === 'editor') { showToast('打开 Quick Editor Surface'); return }
+      showToast(action.title)
+    }
+    function render() {
+      if (frame === 'search') renderSearch()
+      if (frame === 'menu') renderMenu()
+      if (frame === 'confirm') renderConfirm()
+      debug.textContent = `{ frame: "${frame}", item: "${currentItem()?.id ?? ''}", pinned: ${pinned}, favorite: ${favorite} }`
+    }
+
+    window.addEventListener('keydown', (event) => {
+      if (event.isComposing) return
+      if (frame === 'search') {
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); const count = visibleItems().length; if (!count) return; selectedItem = (selectedItem + (event.key === 'ArrowDown' ? 1 : -1) + count) % count; renderSearchPassive() }
+        if (event.key === 'Enter') { event.preventDefault(); runPrimary() }
+        if (event.key === 'Tab') { event.preventDefault(); openMenu() }
+      } else if (frame === 'menu') {
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); const count = currentActions().length; selectedAction = (selectedAction + (event.key === 'ArrowDown' ? 1 : -1) + count) % count; render() }
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); runAction() }
+        if (event.key === 'Escape' || event.key === 'ArrowLeft') { event.preventDefault(); backToSearch() }
+        if (event.key.length === 1 && event.key !== ' ') { query += event.key; backToSearch() }
+      } else if (frame === 'confirm' && event.key === 'Escape') { event.preventDefault(); frame = 'menu'; render() }
+    })
+    render()
+  </script>
+</body>
+</html>

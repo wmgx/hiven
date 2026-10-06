@@ -26,6 +26,7 @@
         "transparent": true,
         "shadow": false,
         "visible": false,
+        "backgroundThrottling": "disabled",
         "skipTaskbar": true,
         "focus": false
       }

@@ -103,16 +103,17 @@ const history = objectBlock.createHistoryItemObjectBlock({
   sizeLabel: '5 B',
 })
 assert.equal(history.source, 'history-item')
-// A history pick is a deliberate user choice, so ⌫ must be able to undo it and
-// return to typing. Only the query block is non-removable — removing that one
-// would mean removing the query itself.
+// Deliberately attached content can be removed to return to ordinary search.
 assert.equal(history.removable, true)
 assert.ok(history.subtitle.includes('3 小时前'))
 
-const query = objectBlock.createQueryObjectBlock({ query: '1,280 * 0.15', kind: 'timestamp' })
+const inputText = '  first line\r\nsecond line\n'
+const query = objectBlock.createQueryObjectBlock({ query: inputText })
 assert.equal(query.source, 'query')
-assert.equal(query.removable, false)
-assert.equal(query.preview, '1,280 * 0.15')
+assert.equal(query.removable, true)
+assert.equal(query.payloadText, inputText, 'attaching input must preserve whitespace and line endings')
+assert.equal(query.meta.lineCount, 3)
+assert.equal(query.meta.charCount, inputText.length)
 
 const secret = objectBlock.createGenericObjectBlock({
   source: 'clipboard',

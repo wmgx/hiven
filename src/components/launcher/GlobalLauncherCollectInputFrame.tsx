@@ -1,4 +1,5 @@
 import { useEffect, useRef, type KeyboardEvent, type RefObject } from 'react'
+import { CornerDownLeft, History } from 'lucide-react'
 // note: lastPreviewRef keeps display text across brief controller gaps
 import type { Locale } from '../../i18n'
 import { t } from '../../i18n'
@@ -114,6 +115,7 @@ export function GlobalLauncherCollectInputFrame({
   onSecondaryAction,
   onPastePreviewText,
   onSubmitPrimary,
+  onCaptureSelection,
 }: {
   inputRef: RefObject<HTMLInputElement | null>
   bindSearchInputRef?: (node: HTMLInputElement | null) => void
@@ -134,6 +136,7 @@ export function GlobalLauncherCollectInputFrame({
   onPastePreviewText?: (text: string) => void | Promise<void>
   /** Enter when no destination chrome — default submit path. */
   onSubmitPrimary?: () => void
+  onCaptureSelection?: () => void
 }) {
   const placeholder = frame.input.placeholder ?? ''
   const previewChoices = frame.previewOutput?.choices ?? []
@@ -244,7 +247,7 @@ export function GlobalLauncherCollectInputFrame({
         )}
       </div>
       {error && (
-        <div className="px-3.5 py-2 text-[12px]" style={{ color: 'var(--color-error)' }}>
+        <div role="alert" className="px-3.5 py-2 text-[12px]" style={{ color: 'var(--color-error)' }}>
           {error}
         </div>
       )}
@@ -327,11 +330,12 @@ export function GlobalLauncherCollectInputFrame({
       )}
       {showEmptyState && (
         <LauncherEmptyWell
-          title={t(locale, 'palette.collectInputEmptyTitle')}
+          title={t(locale, filterText ? 'palette.collectInputEmptyTitle' : 'palette.collectInputSuggestEmptyTitle')}
+          icon={filterText ? <CornerDownLeft size={24} strokeWidth={1.75} /> : <History size={24} strokeWidth={1.75} />}
           hint={
             filterText
               ? t(locale, 'palette.collectInputEmptyFilterHint', { query: filterText })
-              : t(locale, 'palette.collectInputEmptyHint')
+              : t(locale, 'palette.collectInputSuggestEmptyHint')
           }
           action={(
             <button
@@ -349,10 +353,26 @@ export function GlobalLauncherCollectInputFrame({
         />
       )}
       <div className="global-launcher-footer l-foot">
+        {onCaptureSelection && !frame.inputText && frame.item.behavior.type === 'perform' && frame.item.inputPolicy && frame.item.inputPolicy.mode !== 'all' && (
+          <button
+            type="button"
+            className="launcher-footer-back-btn"
+            disabled={busy}
+            onMouseDown={(event) => event.preventDefault()}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') event.stopPropagation()
+            }}
+            onClick={onCaptureSelection}
+          >
+            {t(locale, 'palette.captureSelection')}
+          </button>
+        )}
         {showLivePreview && displayPreviewText && !showLiveEmpty ? (
           <LauncherOutputTargetsFooter destinations={destinations} locale={locale} />
         ) : isSuggestMode && hasSuggestions ? (
           <LauncherHintText label={t(locale, 'palette.collectInputSuggestHint')} />
+        ) : showEmptyState && filterText ? (
+          <LauncherHintKey keys="↵" label={t(locale, 'palette.quickEntryRun')} />
         ) : showEmptyState ? (
           <LauncherHintText label={t(locale, 'palette.collectInputEmptyFooter')} />
         ) : (

@@ -1,5 +1,4 @@
 import { focusSurfaceInstance } from '../surfaces/actions'
-import { getSurfaceInstances } from '../surfaces/registry'
 import { getActiveEditorContextSnapshot } from '../workspace/editorBridge'
 import { launchHostAppObject } from '../workspace/appLauncher/hostAppLauncher'
 import { createQuickEditorPane, showQuickEditorSurface } from '../workspace/quickEditor/quickEditorRequests'
@@ -19,7 +18,6 @@ export function registerDefaultWorkflowProviders(): void {
   registered = true
   registerWorkObjectProvider(currentContextObjectProvider)
   registerWorkObjectProvider(hostAppObjectProvider)
-  registerWorkObjectProvider(surfaceObjectProvider)
   registerWorkActionProvider(jsonClipboardActionProvider)
   registerWorkActionProvider(defaultTextActionProvider)
   registerWorkActionProvider(defaultEditorDocumentActionProvider)
@@ -83,42 +81,6 @@ export const hostAppObjectProvider: WorkObjectProvider = {
   id: 'workflow.host-app-objects',
   collect: () => [],
 }
-
-export const surfaceObjectProvider: WorkObjectProvider = {
-  id: 'workflow.surface-objects',
-  collect: () => getSurfaceInstances()
-    .filter((surface) => surface.state !== 'destroyed')
-    .map((surface): WorkObject => {
-      if (surface.kind === 'plugin-surface' && surface.pluginId && surface.surfaceId) {
-        return {
-          id: surface.id,
-          type: 'plugin-surface',
-          title: surface.title,
-          subtitle: surface.windowLabel,
-          icon: 'PanelTopOpen',
-          source: 'surface-registry',
-          pluginId: surface.pluginId,
-          surfaceId: surface.surfaceId,
-          sourceKind: surface.id.split(':')[1] === 'installed' || surface.id.split(':')[1] === 'dev'
-            ? surface.id.split(':')[1] as 'installed' | 'dev'
-            : 'builtin',
-          windowLabel: surface.windowLabel,
-          updatedAt: surface.lastActiveAt,
-        }
-      }
-      return {
-        id: surface.id,
-        type: 'window',
-        title: surface.title,
-        subtitle: surface.kind,
-        icon: 'PanelTop',
-        source: 'surface-registry',
-        windowTitle: surface.title,
-        updatedAt: surface.lastActiveAt,
-      }
-    }),
-}
-
 
 const jsonClipboardActionProvider = {
   id: 'workflow.json-clipboard-actions',

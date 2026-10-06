@@ -10,6 +10,9 @@ assert.match(calcSrc, /panel\.openV2[\s\S]*pane-bottom/, 'pane-bottom result pan
 assert.doesNotMatch(calcSrc, /id:\s*['"]calculator\.run['"][\s\S]{0,260}return ctx\.output\.replaceActiveText\(calculateFormulaLines/, 'run not primary replace')
 assert.match(calcSrc, /effects\.replaceActiveText\(resultText\)/, 'explicit replace')
 assert.match(calcSrc, /pane\.create[\s\S]*resultText/, 'new pane output')
+assert.match(calcSrc, /aria-label['"]?:\s*t\(['"]panel\.result\.close['"]\)/, 'calculator panel close action should be named')
+assert.match(calcSrc, /panel\.result\.copied[\s\S]*panel\.result\.copyFailed/, 'calculator panel copy should report success and failure')
+assert.match(calcSrc, /role:\s*copyStatus === ['"]failed['"] \? ['"]alert['"] : ['"]status['"]/, 'calculator copy feedback should be announced')
 
 const textDiffSrc = readFileSync('src/plugins/textDiff/index.tsx', 'utf8')
 const textDiffSurfaceSrc = readFileSync('src/plugins/textDiff/TextDiffSurface.tsx', 'utf8')

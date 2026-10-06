@@ -246,12 +246,12 @@ check('global launcher reuses shared search ranking logic', () => {
   )
   assertHas(
     files.searchRanking,
-    /return tier \* 1000/,
+    /return searchableFieldsMatchTier\(fields, query, locale\) \* 1000/,
     'shared search ranking should score pure match quality, leaving usage to the launcher ranker',
   )
   assertHas(
     files.searchRanking,
-    /for \(const alias of fields\.aliases[\s\S]*fieldTextMatches\(alias,\s*query\)/,
+    /for \(const alias of fields\.aliases[\s\S]*fieldTextMatchTier\(alias,\s*query/,
     'shared search ranking should match aliases via the shared field matcher',
   )
   assertHas(
@@ -398,8 +398,8 @@ check('standalone launcher opens synchronously and rehydrates after', () => {
   )
   assertHas(
     files.app,
-    /function runAfterLauncherFirstPaint[\s\S]{0,240}requestAnimationFrame\(\(\) => requestAnimationFrame\(\(\) => window\.setTimeout\(run, 0\)\)\)/,
-    'after-paint helper must defer through two animation frames and a task',
+    /function runAfterLauncherFirstPaint[\s\S]{0,240}requestAnimationFrame\(\(\) => window\.setTimeout\(run, 0\)\)/,
+    'after-paint helper must defer through one render opportunity and a task',
   )
 })
 
@@ -633,13 +633,23 @@ check('standalone launcher locks webview document panning while preserving list 
   )
   assertHas(
     files.app,
-    /function\s+shouldAllowLauncherListWheel[\s\S]{0,900}deltaX[\s\S]{0,900}global-launcher-body[\s\S]{0,900}scrollTop/,
+    /function\s+shouldAllowLauncherListWheel[\s\S]{0,900}deltaX[\s\S]{0,900}global-launcher-body[\s\S]{0,1400}scrollTop/,
     'LauncherWindowApp should only allow wheel scrolling inside the launcher result list',
   )
   assertHas(
     files.app,
     /function\s+shouldAllowLauncherListWheel[\s\S]{0,900}data-launcher-scrollable[\s\S]{0,400}role="grid"|function\s+shouldAllowLauncherListWheel[\s\S]{0,1200}data-launcher-scrollable/,
     'LauncherWindowApp should also allow wheel scrolling inside launcher-owned modal scroll bodies and data grids',
+  )
+  assertHas(
+    files.app,
+    /shouldAllowLauncherListWheel[\s\S]{0,800}hiven-ui-select-positioner/,
+    'Launcher wheel capture must not swallow portaled Select/Combobox menus',
+  )
+  assertHas(
+    files.app,
+    /findLauncherWheelScroller[\s\S]{0,900}hiven-ui-menu-scroll-viewport/,
+    'Launcher wheel helper must treat menu viewports as real overflow containers even when they portal outside .global-launcher-body',
   )
   assertHas(
     files.app,
@@ -713,9 +723,9 @@ check('programmatic launcher positioning is not persisted as a user drag', () =>
     'LauncherWindowApp should suppress native move persistence when another launcher component declares a programmatic resize or move',
   )
   assertHas(
-    files.globalLauncher,
-    /dispatchEvent\(new CustomEvent\(LAUNCHER_PROGRAMMATIC_MOVE_EVENT\)\)[\s\S]{0,220}resizeCurrentLauncherWindow\(\{[\s\S]{0,80}width:[\s\S]{0,80}height:/,
-    'standalone launcher surface resizing should not persist the resulting native move as a user drag',
+    files.launcherWindowManager,
+    /dispatchEvent\(new CustomEvent\(LAUNCHER_PROGRAMMATIC_MOVE_EVENT\)\)[\s\S]{0,280}setPosition\(new LogicalPosition/,
+    'launcher window resizing should suppress persistence before moving the native window to preserve its center',
   )
 })
 
@@ -746,6 +756,10 @@ check('standalone launcher closes on Escape without bubbling to the app', () => 
     assert.ok(body, 'handleHostEscape should exist as the host-level Escape handler')
     const at = (needle) => body.indexOf(needle)
     assert.ok(at("if (event.key !== 'Escape') return") === 0 || at("if (event.key !== 'Escape') return") > 0, 'handleHostEscape should ignore non-Escape keys first')
+    assert.ok(
+      at("closest('[role=\"dialog\"][data-open]')") > 0 && at("closest('[role=\"dialog\"][data-open]')") < at('runLauncherEscapeInterceptor(event)'),
+      'an open modal dialog must own Escape before launcher surfaces or controller frames',
+    )
     assert.ok(
       at('runLauncherEscapeInterceptor(event)') > 0 && at('runLauncherEscapeInterceptor(event)') < at('event.preventDefault()'),
       'layer interceptors must get first refusal before the launcher claims Escape',
@@ -1045,8 +1059,8 @@ check('double modifier detection allows a natural second tap after a short relea
   )
   assertHas(
     files.tauriHotkeys,
-    /listener_recovers_when_key_up_is_lost_after_trigger/,
-    'double modifier tests should cover recovery when the trigger steals the key-up event',
+    /listener_accepts_repeated_complete_double_taps/,
+    'double modifier tests should cover repeated complete double taps',
   )
   assertHas(
     files.tauriHotkeys,

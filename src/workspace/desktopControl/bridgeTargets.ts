@@ -91,7 +91,7 @@ export async function desktopBridgeStatus(): Promise<DesktopBridgeStatus | null>
 }
 
 export async function listDesktopBridgeTargets(sourceId?: string): Promise<DesktopBridgeTargetDto[]> {
-  if (!isTauriRuntime()) return []
+  if (!isTauriRuntime()) return 0
   const key = sourceId ?? null
   const now = Date.now()
   if (listCache && listCache.sourceId === key && now - listCache.fetchedAt < LIST_TTL_MS) {
@@ -131,6 +131,34 @@ export async function listDesktopBridgeHistory(sourceId?: string): Promise<Deskt
     })
   } catch {
     return []
+  }
+}
+
+type DesktopBridgeHistoryImportStatus = {
+  items: DesktopBridgeHistoryDto[]
+  received: number
+  done: boolean
+}
+
+export async function importDesktopBridgeHistory(
+  sourceId: string,
+  onBatch?: (items: DesktopBridgeHistoryDto[], received: number) => void | Promise<void>,
+): Promise<number> {
+  if (!isTauriRuntime()) return 0
+  const requestId = await invoke<string>('begin_desktop_bridge_history_import', { sourceId })
+  let lastProgressAt = Date.now()
+  while (true) {
+    const status = await invoke<DesktopBridgeHistoryImportStatus>('desktop_bridge_history_import_status', {
+      sourceId,
+      requestId,
+    })
+    if (status.items.length > 0) {
+      lastProgressAt = Date.now()
+      await onBatch?.(status.items, status.received)
+    }
+    if (status.done) return status.received
+    if (Date.now() - lastProgressAt > 45_000) throw new Error('browser history import timed out')
+    await new Promise((resolve) => setTimeout(resolve, 250))
   }
 }
 

@@ -38,17 +38,19 @@ export function GlobalLauncherPermissionFrame({
   }, [onGrant])
 
   return (
-    <div className="global-launcher-body" style={{ height: 260 }} onKeyDown={handleKeyDown} tabIndex={-1}>
-      <PluginSurfacePermissionGate
-        permissions={frame.permissions}
-        locale={locale}
-        onBack={onBack}
-        onGrant={onGrant}
-      />
+    <>
+      <div className="global-launcher-body" style={{ height: 260, maxHeight: 260, flex: '0 1 auto' }} onKeyDown={handleKeyDown} tabIndex={-1}>
+        <PluginSurfacePermissionGate
+          permissions={frame.permissions}
+          locale={locale}
+          onBack={onBack}
+          onGrant={onGrant}
+        />
+      </div>
       <div className="global-launcher-footer l-foot">
         <LauncherHintKey keys="↵" label={t(locale, 'palette.pluginPermissionAllow')} />
         <LauncherHintKey keys="esc" label={t(locale, 'palette.pluginPermissionBack')} />
       </div>
-    </div>
+    </>
   )
 }

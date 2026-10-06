@@ -78,11 +78,31 @@ function assertLauncherToolsHaveSubtitles() {
   }
 }
 
+function assertFormatterToolsDeclareContentIntent() {
+  const tools = splitTopLevelObjects(extractToolsArray(read('src/plugins/formatter/index.ts')) ?? '')
+  for (const kind of ['css', 'sql', 'xml']) {
+    const matching = tools.filter((item) => new RegExp(`id:\\s*['"]${kind}\\.`).test(item))
+    assert.equal(matching.length, 2, `formatter should expose two ${kind} tools`)
+    for (const item of matching) {
+      assert.match(item, new RegExp(`accepts:\\s*\\{\\s*kinds:\\s*\\[['"]${kind}['"]\\]`), `${kind} tool must declare accepts`)
+      assert.match(item, /textMatch\s*:/, `${kind} tool must declare textMatch`)
+    }
+  }
+}
+
 function assertBuiltinVersionsMatchManifests() {
   const index = JSON.parse(read('src/builtin-plugins/index.json'))
   assert.equal(typeof index.version, 'number', 'builtin plugin index must have a numeric release version')
   assert.ok(index.version >= 37, 'builtin plugin index version should be bumped after builtin package updates')
   assert.equal(index.packages.some((pkg) => pkg.pluginId === 'core-pane'), false, 'core-pane should no longer ship as a bundled plugin')
+  const manifestPackages = readdirSync('src/plugins')
+    .filter((dir) => existsSync(join('src/plugins', dir, 'manifest.json')))
+    .map((dir) => ({ dir, manifest: JSON.parse(read(`src/plugins/${dir}/manifest.json`)) }))
+  assert.deepEqual(
+    index.packages.map((pkg) => pkg.pluginId).sort(),
+    manifestPackages.map(({ manifest }) => manifest.pluginId).sort(),
+    'builtin plugin index should release every first-party plugin directory',
+  )
   for (const pkg of index.packages) {
     const manifest = JSON.parse(read(`src/plugins/${pkg.dir}/manifest.json`))
     assert.equal(pkg.version, manifest.version, `${pkg.pluginId} builtin index version should match manifest version`)
@@ -91,56 +111,17 @@ function assertBuiltinVersionsMatchManifests() {
 
 function assertTextDiffCanBeFoundAndFailureIsVisible() {
   const textDiff = read('src/plugins/textDiff/index.tsx')
-  assert.match(
-    textDiff,
-    /id:\s*['"]text-diff\.compare['"][\s\S]*aliases:\s*\[[\s\S]*['"]diff['"]/,
-    'text-diff launcher item should be searchable by the English diff query in Chinese locale',
-  )
-  assert.match(
-    textDiff,
-    /sources\.length < 2[\s\S]*ok:\s*false/,
-    'text-diff launcher item should fail gracefully when fewer than two sources exist',
-  )
-  assert.match(
-    textDiff,
-    /selection:\s*\{[\s\S]*type:\s*['"]multi['"][\s\S]*min:\s*2[\s\S]*max:\s*2/,
-    'text-diff source picker should use the launcher multi-select result structure',
-  )
-  assert.match(
-    textDiff,
-    /submit\(choices\)[\s\S]*selected\[0\][\s\S]*selected\[1\]/,
-    'text-diff source picker should compare the two selected sources on submit',
-  )
-  assert.match(
-    textDiff,
-    /kind:\s*['"]clipboard['"][\s\S]*kind:\s*['"]empty['"]/,
-    'text-diff source picker should offer clipboard and empty pane sources',
-  )
-  assert.match(
-    textDiff,
-    /ctx\.api\.getClipboardText\(\)/,
-    'text-diff source picker should read clipboard through the plugin launcher API',
-  )
-  assert.match(
-    textDiff,
-    /ctx\.api\.openDiffPage\(/,
-    'text-diff launcher item should open the diff page through the plugin launcher API',
-  )
-  assert.doesNotMatch(
-    textDiff,
-    /duplicate/i,
-    'text-diff source picker should not include duplicate-current-pane behavior',
-  )
-  assert.doesNotMatch(
-    textDiff,
-    /pairPaneSources|choice\.comparePair|buildFirstSourceOutput|buildSecondSelectionOutput|pickFirst|pickSecond|selectSecondSource|originalSource|useAsOriginal/,
-    'text-diff source picker should not expose pair-combination or two-step source/target oriented flows',
-  )
+  assert.match(textDiff, /text-diff\.compare[\s\S]*aliases:[\s\S]*['"]diff['"]/, 'diff remains searchable in either locale')
+  assert.match(textDiff, /ctx\.api\.openSurface\(mode/, 'diff opens its workspace directly')
+  assert.doesNotMatch(textDiff, /selection:\s*\{[\s\S]*type:\s*['"]multi['"]/, 'opening diff must not require picking two sources first')
+  assert.match(textDiff, /kind:\s*['"]clipboard['"][\s\S]*kind:\s*['"]empty['"]/, 'diff offers clipboard and blank sources')
+  const surface = read('src/plugins/textDiff/TextDiffSurface.tsx')
+  assert.match(surface, /host\.clipboard\.readText\(\)/, 'clipboard is read only when selected in the workspace')
 
   const effectRunner = read('src/workspace/effectRunner.ts')
   assert.match(
     effectRunner,
-    /Renderer "\$\{effect\.renderer\}" not found[\s\S]*return message/,
+    /workspace\.renderer\.notFound['"]\)[\s\S]*effect\.renderer[\s\S]*return message/,
     'missing pane renderers should be returned through EffectRunnerResult.errors',
   )
   assert.match(
@@ -214,6 +195,25 @@ function assertLauncherApiExposesPaneCreation() {
   )
 }
 
+function assertLauncherApiOpensOwnSurface() {
+  assert.match(
+    read('src/workspace/launcher/types.ts'),
+    /openSurface\(surfaceId:\s*string,\s*options\?:\s*\{\s*initialText\?:\s*string\s*\}\):\s*void/,
+    'PluginLauncherApi should expose plugin-scoped surface navigation',
+  )
+  const pluginApi = read('src/workspace/launcher/pluginApi.ts')
+  assert.match(
+    pluginApi,
+    /openSurface:[\s\S]*if \(!pluginId \|\| !source\)[\s\S]*throw new Error\(['"]openSurface requires a plugin-scoped launcher API['"]\)/,
+    'openSurface must reject an unscoped host API',
+  )
+  assert.match(
+    pluginApi,
+    /getPluginDefinition\(pluginId, source\)[\s\S]*surface\.id === surfaceId[\s\S]*openLauncherHostedPluginSurface\(\{[\s\S]*pluginId,[\s\S]*source,[\s\S]*surfaceId/,
+    'openSurface must resolve and open a surface owned by the current plugin',
+  )
+}
+
 function assertLauncherParamsAreLocalized() {
   const i18nRegistry = read('src/i18n/pluginI18nRegistry.ts')
   assert.match(
@@ -255,9 +255,11 @@ function assertLauncherSystemMessagesAreLocalized() {
 }
 
 assertLauncherToolsHaveSubtitles()
+assertFormatterToolsDeclareContentIntent()
 assertBuiltinVersionsMatchManifests()
 assertTextDiffCanBeFoundAndFailureIsVisible()
 assertLauncherApiExposesPaneCreation()
+assertLauncherApiOpensOwnSurface()
 assertLauncherParamsAreLocalized()
 assertLauncherSystemMessagesAreLocalized()
 

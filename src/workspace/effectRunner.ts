@@ -36,6 +36,8 @@ import {
 } from './monacoBridge'
 import { showToast } from './toast'
 import { pluginRegistry } from './pluginRegistry'
+import { t } from '../i18n'
+import { useAppStore } from '../store'
 
 export interface EffectRunnerResult {
   applied: FluxEffect[]
@@ -427,7 +429,7 @@ function applyPaneRendererEffect(effect: PaneRendererEffect): string | null {
     // Validate renderer exists — prefer dev registry if effect was dispatched from a dev command
     const rendererEntry = pluginRegistry.resolveRenderer(effect.renderer, effect._isDev)
     if (!rendererEntry) {
-      const message = `Renderer "${effect.renderer}" not found`
+      const message = `${t(useAppStore.getState().locale, 'workspace.renderer.notFound')}: ${effect.renderer}`
       showToast(message, 'warning')
       return message
     }
@@ -451,7 +453,7 @@ function applyPanelV2Effect(effect: PanelV2Effect) {
   if (effect.type === 'panel.openV2') {
     const panelEntry = pluginRegistry.resolvePanel(effect.panelId, effect._isDev)
     if (!panelEntry) {
-      showToast(`Panel "${effect.panelId}" not found`, 'warning')
+      showToast(`${t(useAppStore.getState().locale, 'workspace.panel.notFound')}: ${effect.panelId}`, 'warning')
       return
     }
 

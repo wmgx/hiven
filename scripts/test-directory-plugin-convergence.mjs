@@ -263,6 +263,8 @@ check('Builtin packages are released purely from auto-discovered first-party plu
   assert.match(files.configInit, /releaseBuiltinPluginManifests/, 'configInit should release builtin plugin package directories')
   assert.match(files.configInit, /pluginBuiltinDir[\s\S]*manifest\.json|BUILTIN_PLUGIN_PACKAGES/, 'builtin packages should be written under plugins/builtin from discovered packages')
   assert.doesNotMatch(files.configInit, /DEMO_PLUGIN_SOURCE|DEMO_PLUGIN_README|demo-text-plugin/, 'configInit should not release a defineAction-based demo plugin')
+  assert.match(files.configInit, /PLUGIN_FILE_MODULES = import\.meta\.glob\([^\n]*\bcss\b/, 'builtin package release must include plugin styles')
+  assert.match(files.configInit, /DOWNLOADABLE_PLUGIN_FILE_PATTERN = [^\n]*\bcss\b/, 'remote package updates must retain plugin styles')
 })
 
 check('Text Diff builtin directory includes the adaptive diff UI source files', () => {
@@ -308,7 +310,7 @@ check('Time utilities ship as one first-party plugin package', () => {
   assert.ok(!files.timestampManifest, 'timestamp should be merged into date-time-assistant instead of shipping as a separate plugin package')
 
   const manifest = JSON.parse(files.dateTimeAssistantManifest)
-  assert.deepEqual(manifest.capabilities?.sort(), ['command', 'instant-suggestion'], 'date-time-assistant should advertise both command and instant-suggestion capabilities')
+  assert.deepEqual(manifest.capabilities?.sort(), ['command', 'instant-suggestion', 'surface'], 'date-time-assistant should advertise command, instant-suggestion, and surface capabilities')
   assert.match(files.dateTimeAssistantPlugin, /\bcommands\s*:/, 'date-time-assistant should include the timestamp conversion command')
   assert.match(files.dateTimeAssistantPlugin, /\blauncher\s*:\s*\{[\s\S]*\bdynamicItems\s*\(/, 'date-time-assistant should keep date/time instant suggestions through launcher dynamic items')
   assert.match(files.dateTimeAssistantPlugin, /tomorrow\s+/, 'date-time-assistant instant suggestions should preserve natural date query support')

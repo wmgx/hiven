@@ -70,8 +70,6 @@ export function isShapeCovered(probes: readonly CoverageProbe[]): boolean {
  */
 export function representativeTokens(slotKind: string): string[] {
   switch (slotKind) {
-    case 'n':
-      return ['42', '12345', '900719925']
     case 'hex':
       return ['a1b2c3d4', 'deadbeef1234', '0f1e2d3c4b5a']
     case 'uuid':

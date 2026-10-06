@@ -186,10 +186,8 @@ async function fetchFaviconImage(
         ? contentType.split(';')[0]!.trim()
         : guessContentType(bytes)
       return { bytes, contentType: resolvedType }
-    } catch (error) {
-      if (import.meta.env.DEV) {
-        console.warn('[web-open] favicon candidate failed:', url, error)
-      }
+    } catch {
+      // Expected for cross-origin candidates in browser-only preview; try the next source.
     }
   }
   return null

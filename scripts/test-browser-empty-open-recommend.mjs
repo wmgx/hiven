@@ -18,6 +18,11 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
 const src = readFileSync(new URL('../src/plugins/web-open/browserProvider.ts', import.meta.url), 'utf8')
+const host = readFileSync(new URL('../src/workspace/launcher/hostProvider.ts', import.meta.url), 'utf8')
+const collect = readFileSync(
+  new URL('../src/workspace/desktopTargets/collectBridgeLauncherItems.ts', import.meta.url),
+  'utf8',
+)
 
 // ─── empty open must produce recommendations, not an empty list ──────────────
 {
@@ -33,7 +38,21 @@ const src = readFileSync(new URL('../src/plugins/web-open/browserProvider.ts', i
   )
 }
 
-// ─── ranking uses visit frecency from the host SDK, not tab order ────────────
+// ─── the real host path must call the provider on empty open ─────────────────
+{
+  assert.doesNotMatch(
+    collect,
+    /if\s*\(!ctx\.query\.trim\(\)\)\s*return\s*\[\]/,
+    'bridge collection must not discard empty queries before the provider sees them',
+  )
+  assert.match(
+    host,
+    /if\s*\(!q\)[\s\S]*Promise\.all\(\[[\s\S]*bridgePromise[\s\S]*\.\.\.bridgeItems/,
+    'empty-open host collection must merge browser recommendations',
+  )
+}
+
+// ─── ranking and admission use visit behavior, not tab order or a quota ──────
 {
   assert.match(
     src,
@@ -44,6 +63,16 @@ const src = readFileSync(new URL('../src/plugins/web-open/browserProvider.ts', i
     src,
     /from '@hiven\/plugin'/,
     'ranking helper comes through the plugin SDK',
+  )
+  assert.match(
+    src,
+    /classifyVisitPattern/,
+    'empty-open admission distinguishes active habits/bursts from stale pages',
+  )
+  assert.match(
+    src,
+    /evidenceCount\s*<\s*EMPTY_OPEN_MIN_VISITS/,
+    'one incidental visit is not enough evidence for a passive recommendation',
   )
   // Boundary: a plugin must never deep-import host internals.
   assert.doesNotMatch(
@@ -70,27 +99,35 @@ const src = readFileSync(new URL('../src/plugins/web-open/browserProvider.ts', i
   )
 }
 
-// ─── bounded output, and never outranking explicit intent ────────────────────
+// ─── behavior-adaptive output, and never outranking explicit intent ─────────
 {
-  const limit = /EMPTY_OPEN_TAB_LIMIT\s*=\s*(\d+)/.exec(src)
-  assert.ok(limit, 'empty-open output is bounded by a named constant')
-  assert.ok(
-    Number(limit[1]) > 0 && Number(limit[1]) <= 10,
-    `empty-open tab count must stay small, got ${limit[1]}`,
+  assert.doesNotMatch(
+    src,
+    /EMPTY_OPEN_TAB_LIMIT|scored\.slice\(/,
+    'empty-open recommendations must not use a fixed tab quota',
   )
 
-  const base = Number(/EMPTY_OPEN_BASE_BIAS\s*=\s*(\d+)/.exec(src)?.[1])
+  const base = Number(/EMPTY_OPEN_MAX_BIAS\s*=\s*(\d+)/.exec(src)?.[1])
   const focus = Number(/OPEN_TAB_FOCUS_BIAS\s*=\s*(\d+)/.exec(src)?.[1])
   assert.ok(Number.isFinite(base) && Number.isFinite(focus), 'both biases are named constants')
   assert.ok(
     base < focus,
     `a passive recommendation must not outrank an explicit copied-link intent: ${base} < ${focus}`,
   )
-
-  const unranked = Number(/EMPTY_OPEN_UNRANKED_BIAS\s*=\s*(\d+)/.exec(src)?.[1])
-  assert.ok(
-    unranked < base,
-    'tabs with no known history rank below tabs with real visit stats',
+  assert.doesNotMatch(
+    src,
+    /EMPTY_OPEN_UNRANKED_BIAS/,
+    'unknown tabs are searchable but must not be promoted as empty-open recommendations',
+  )
+  assert.match(
+    src,
+    /scoreBias:\s*Math\.min\(EMPTY_OPEN_MAX_BIAS, score\)/,
+    'actual browser frecency must affect cross-source ranking',
+  )
+  assert.match(
+    src,
+    /\.slice\(0, QUERY_TAB_LIMIT\)/,
+    'explicit tab search remains bounded independently from empty-open recommendations',
   )
 }
 

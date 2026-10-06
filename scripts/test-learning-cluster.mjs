@@ -282,36 +282,37 @@ const pair = (over) => ({ ts: 1000, kind: 'transform', inSig: HEX, toolId: 'x.de
   const probesFor = (slotKind, host) =>
     coverage.representativeTokens(slotKind).map((token) => ({ token, host, slotKind }))
 
-  assert.ok(coverage.representativeTokens('n').length >= 2, 'several samples per slot kind')
-  assert.equal(coverage.isShapeCovered(probesFor('n', 'x.org')), false, 'no providers → not covered')
+  assert.ok(coverage.representativeTokens('hex').length >= 2, 'several samples per slot kind')
+  assert.equal(coverage.isShapeCovered(probesFor('hex', 'x.org')), false, 'no providers → not covered')
+  assert.equal(coverage.representativeTokens('n').length, 0, 'digits are no longer a probeable slot kind')
 
-  // A web-open-like rule: numbers, but only for logs.byted.org.
+  // A web-open-like rule: hex ids, but only for logs.byted.org.
   coverage.registerCoverageProvider('web-open', (probe) =>
-    /^\d+$/.test(probe.token) && (!probe.host || probe.host === 'logs.byted.org'),
+    /^[0-9a-f]{7,}$/i.test(probe.token) && (!probe.host || probe.host === 'logs.byted.org'),
   )
   assert.equal(
-    coverage.isShapeCovered(probesFor('n', 'logs.byted.org')),
+    coverage.isShapeCovered(probesFor('hex', 'logs.byted.org')),
     true,
-    'number rule covers its own host',
+    'hex rule covers its own host',
   )
   assert.equal(
-    coverage.isShapeCovered(probesFor('n', 'code.byted.org')),
+    coverage.isShapeCovered(probesFor('hex', 'code.byted.org')),
     false,
     'same shape at a DIFFERENT host is still net-new',
   )
   assert.equal(
-    coverage.isShapeCovered(probesFor('hex', 'logs.byted.org')),
+    coverage.isShapeCovered(probesFor('uuid', 'logs.byted.org')),
     false,
-    'hex not covered by a digit rule',
+    'uuid not covered by a hex rule',
   )
 
   // A throwing provider must not break the check.
   coverage.registerCoverageProvider('broken', () => { throw new Error('boom') })
-  assert.equal(coverage.isShapeCovered(probesFor('hex', 'x.org')), false, 'throwing provider isolated')
+  assert.equal(coverage.isShapeCovered(probesFor('uuid', 'x.org')), false, 'throwing provider isolated')
 
   coverage.unregisterCoverageProvider('web-open')
   coverage.unregisterCoverageProvider('broken')
-  assert.equal(coverage.isShapeCovered(probesFor('n', 'logs.byted.org')), false, 'unregister clears coverage')
+  assert.equal(coverage.isShapeCovered(probesFor('hex', 'logs.byted.org')), false, 'unregister clears coverage')
 }
 
 // ─── frecency: decay, forgetting, ranking (P3) ───────────────────────────────

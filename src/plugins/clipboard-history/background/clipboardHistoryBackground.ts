@@ -103,12 +103,12 @@ export function createClipboardHistoryBackground(): PluginBackgroundContribution
             })
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error)
-            ctx.showMessage(`Clipboard history error: ${message}`, 'error')
+            ctx.showMessage(ctx.t('error.background', { message }), 'error')
           }
         })
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
-        ctx.showMessage(`Failed to start clipboard watcher: ${message}`, 'error')
+        ctx.showMessage(ctx.t('error.watcherStart', { message }), 'error')
         return
       }
 

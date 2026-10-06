@@ -1,3 +1,5 @@
+import type { PanelInstanceV2 } from '../types'
+
 export type QuickEditorPaneId = string
 
 export interface QuickEditorPaneState {
@@ -49,6 +51,8 @@ export interface QuickEditorState {
    * Only written by overwriteActiveText — never by setText / setPaneText.
    */
   externalVersionHistory: QuickEditorExternalVersion[]
+  /** Open plugin panels scoped to Quick Editor panes. Runtime-only. */
+  panelInstancesV2: Record<string, PanelInstanceV2>
 }
 
 export type QuickEditorOverwriteOptions = {
@@ -79,6 +83,8 @@ export interface QuickEditorActions {
   /** Load an archived external version into the active pane (no new history entry). */
   restoreExternalVersion: (versionId: string) => boolean
   clearExternalVersionHistory: () => void
+  openPanelV2: (instance: PanelInstanceV2) => void
+  closePanelV2: (panelId: string) => void
   /** Apply a remote overwrite (detached window sync) including history. */
   applyOverwriteFromRemote: (input: {
     paneId: QuickEditorPaneId

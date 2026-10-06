@@ -24,7 +24,7 @@ function plain(value) {
   return JSON.parse(JSON.stringify(value))
 }
 
-function loadPluginPaste({ invokeImpl, writeTextImpl, writeImageImpl, navigatorClipboard } = {}) {
+function loadPluginPaste({ invokeImpl, writeTextImpl, writeImageImpl, navigatorClipboard, windowSearch, locale = 'en' } = {}) {
   let src = readFileSync('src/workspace/pluginPaste.ts', 'utf8')
   src = src.replace(/import\s+type\s*\{[\s\S]*?\}\s*from\s*['"][^'"]*['"]\s*;?\s*\n?/g, '')
   src = src.replace(/import\s*\{[\s\S]*?\}\s*from\s*['"][^'"]*['"]\s*;?\s*\n?/g, '')
@@ -41,6 +41,8 @@ function loadPluginPaste({ invokeImpl, writeTextImpl, writeImageImpl, navigatorC
     exports: moduleExports,
     module: { exports: moduleExports },
     console,
+    URLSearchParams,
+    window: windowSearch === undefined ? undefined : { location: { search: windowSearch } },
     setTimeout: (fn, ms) => { calls.push(['delay', ms]); fn(); return 0 },
     Blob: class Blob {
       constructor(parts, options) {
@@ -56,10 +58,28 @@ function loadPluginPaste({ invokeImpl, writeTextImpl, writeImageImpl, navigatorC
       calls.push(['require', required])
       if (snapshot?.deny) throw new Error(`denied:${required.join(',')}`)
     },
+    writeClipboardImageBytes: async (bytes) => {
+      const image = { kind: 'image', bytes: Array.from(bytes) }
+      if (writeImageImpl) await writeImageImpl(image)
+      else calls.push(['tauri.writeImage', image])
+    },
+    useAppStore: { getState: () => ({ locale, setGlobalLauncherOpen: (open) => calls.push(['setOpen', open]) }) },
+    t: (currentLocale, key) => ({
+      en: {
+        'workspace.paste.clipboardWriteFailed': 'Failed to write to clipboard',
+        'workspace.paste.imageStorageRequired': 'Image paste requires plugin blob storage',
+        'workspace.paste.accessibilityRequired': 'Copied to clipboard. Grant Accessibility access in System Settings → Privacy & Security → Accessibility to enable auto-paste.',
+      },
+      zh: {
+        'workspace.paste.clipboardWriteFailed': '无法写入剪贴板',
+        'workspace.paste.imageStorageRequired': '图片粘贴需要插件存储权限',
+        'workspace.paste.accessibilityRequired': '已复制到剪贴板。请在系统设置 → 隐私与安全性 → 辅助功能中授权，以启用自动粘贴。',
+      },
+    })[currentLocale]?.[key] ?? key,
   }
   sandbox.globalThis = sandbox
   const loadMockModule = (specifier) => {
-    if (specifier === '@tauri-apps/plugin-clipboard-manager') {
+    if (specifier === './nativeClipboard') {
       return {
         writeText: writeTextImpl ?? (async (text) => calls.push(['tauri.writeText', text])),
         writeImage: writeImageImpl ?? (async (image) => calls.push(['tauri.writeImage', image])),
@@ -88,20 +108,25 @@ function loadPluginPaste({ invokeImpl, writeTextImpl, writeImageImpl, navigatorC
 {
   const invoked = []
   const { api, calls } = loadPluginPaste({
-    invokeImpl: async (command) => { invoked.push(command); calls.push(['invoke', command]) },
+    windowSearch: '?window=launcher',
+    invokeImpl: async (command, args) => { invoked.push([command, args]); calls.push(['invoke', command]) },
   })
   const paste = api.createPluginPaste()
   const result = await paste.pasteText('hello foreground')
   assert.deepEqual(plain(result), { ok: true })
   assert.deepEqual(plain(calls), [
     ['tauri.writeText', 'hello foreground'],
+    ['setOpen', false],
     ['invoke', 'hide_launcher_and_paste'],
   ], 'pasteText must write clipboard then invoke the combined hide-and-paste command exactly once')
-  assert.deepEqual(plain(invoked), ['hide_launcher_and_paste'])
+  assert.deepEqual(plain(invoked), [['hide_launcher_and_paste', { keepOpen: false }]])
   assert.ok(
     !calls.some((call) => call[0] === 'delay'),
     'pasteText must not rely on any JS-side delay; a hidden WKWebView throttles timers, so the hide+paste sequence must run entirely inside the Rust command',
   )
+  await api.createPluginPaste(undefined, undefined, { keepOpen: true }).pasteText('standalone output')
+  assert.deepEqual(plain(invoked[1]), ['hide_launcher_and_paste', { keepOpen: true }], 'independent tools must preserve their window when pasting')
+  assert.equal(calls.filter(([kind]) => kind === 'setOpen').length, 1, 'keepOpen paste must not end the session')
 }
 
 {
@@ -158,6 +183,16 @@ function loadPluginPaste({ invokeImpl, writeTextImpl, writeImageImpl, navigatorC
   const { api } = loadPluginPaste({ writeTextImpl: async () => { throw new Error('write failed') }, navigatorClipboard: { writeText: async () => { throw new Error('write failed') } } })
   const result = await api.createPluginPaste().pasteText('cannot copy')
   assert.deepEqual(plain(result), { ok: false, fallback: 'none', message: 'Failed to write to clipboard' })
+}
+
+{
+  const { api } = loadPluginPaste({
+    locale: 'zh',
+    writeTextImpl: async () => { throw new Error('write failed') },
+    navigatorClipboard: { writeText: async () => { throw new Error('write failed') } },
+  })
+  const result = await api.createPluginPaste().pasteText('cannot copy')
+  assert.deepEqual(plain(result), { ok: false, fallback: 'none', message: '无法写入剪贴板' })
 }
 
 console.log('plugin paste behavior checks passed')

@@ -53,6 +53,8 @@ export function DualEditorView({
   monacoTheme = 'flux-vscode-light',
   leftStickyScrollEnabled = false,
   rightStickyScrollEnabled = false,
+  leftAriaLabel,
+  rightAriaLabel,
 }: {
   leftText: string
   rightText: string
@@ -73,6 +75,8 @@ export function DualEditorView({
   monacoTheme?: string
   leftStickyScrollEnabled?: boolean
   rightStickyScrollEnabled?: boolean
+  leftAriaLabel?: string
+  rightAriaLabel?: string
 }) {
   const leftRef = useRef<TextEditorCoreHandle | null>(null)
   const rightRef = useRef<TextEditorCoreHandle | null>(null)
@@ -141,7 +145,7 @@ export function DualEditorView({
       lineNumbers={lineNumbers}
       wordWrap={wordWrap}
       stickyScroll={leftStickyScrollEnabled}
-      optionOverrides={dualOptionOverrides}
+      optionOverrides={{ ...dualOptionOverrides, ariaLabel: leftAriaLabel }}
       lineDecorations={leftDecorations}
       rangeDecorations={leftRangeDecorations}
       onChange={onLeftChange}
@@ -160,7 +164,7 @@ export function DualEditorView({
       lineNumbers={lineNumbers}
       wordWrap={wordWrap}
       stickyScroll={rightStickyScrollEnabled}
-      optionOverrides={dualOptionOverrides}
+      optionOverrides={{ ...dualOptionOverrides, ariaLabel: rightAriaLabel }}
       lineDecorations={rightDecorations}
       rangeDecorations={rightRangeDecorations}
       onChange={onRightChange}

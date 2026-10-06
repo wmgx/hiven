@@ -7,12 +7,14 @@
 import type { ComponentType } from 'react'
 import type { Locale } from '../i18n'
 import type { FluxEffect, PaneId } from './types'
+import type { PluginAiApi } from './ai/types'
 import type {
   LauncherItemContribution,
   LauncherDynamicItemProvider,
   PluginToolContribution,
   PanelActionContribution,
   PluginLauncherApi,
+  ToolLauncherOptions,
 } from './launcher/types'
 
 // ─── Input Types ─────────────────────────────────────────────────────────────
@@ -241,14 +243,27 @@ export type PluginSettingsBodyProps<TSettings = unknown> = {
   host: PluginSettingsHostApi
 }
 
+export type PluginSettingsActionProgress = {
+  current: number
+  total?: number
+  label: string
+}
+
+export type PluginSettingsActionProps<TSettings = unknown> = PluginSettingsBodyProps<TSettings> & {
+  reportProgress: (progress: PluginSettingsActionProgress) => void
+}
+
 export type PluginSettingsModalBodyProps<TSettings = unknown> = PluginSettingsBodyProps<TSettings> & {
   modalId: string
+  context?: Record<string, unknown>
   close: () => void
 }
 
 export type PluginSettingsHostApi = {
   permissions: PluginPermissionSnapshot
   storage: PluginPrivateStorageApi
+  ai: PluginAiApi
+  t: (key: string, vars?: Record<string, string | number>) => string
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
 }
 
@@ -330,11 +345,15 @@ export type PluginSettingsObjectListItemField = {
   labelI18n?: Partial<Record<Locale, string>>
   description?: string
   descriptionI18n?: Partial<Record<Locale, string>>
-  kind: 'text' | 'textarea' | 'switch' | 'select' | 'string-list' | 'number'
+  kind: 'text' | 'textarea' | 'switch' | 'select' | 'string-list' | 'number' | 'modal'
   placeholder?: string
   placeholderI18n?: Partial<Record<Locale, string>>
   rows?: number
   options?: PluginSettingsOption[]
+  modalId?: string
+  buttonLabel?: string
+  buttonLabelI18n?: Partial<Record<Locale, string>>
+  requires?: PluginPermission[]
   mono?: boolean
   group?: string
   groupI18n?: Partial<Record<Locale, string>>
@@ -376,6 +395,14 @@ export type PluginSettingsObjectListField<TSettings = unknown> = PluginSettingsF
   fields: PluginSettingsObjectListItemField[]
 }
 
+export type PluginSettingsActionField<TSettings = unknown> = Omit<PluginSettingsFieldBase<TSettings>, 'key'> & {
+  kind: 'action'
+  id: string
+  buttonLabel: string
+  buttonLabelI18n?: Partial<Record<Locale, string>>
+  run: (props: PluginSettingsActionProps<TSettings>) => void | Promise<void>
+}
+
 export type PluginSettingsModalContribution<TSettings = unknown> = {
   id: string
   title: string
@@ -393,6 +420,7 @@ export type PluginSettingsModalField<TSettings = unknown> = Omit<PluginSettingsF
   buttonLabel?: string
   buttonLabelI18n?: Partial<Record<Locale, string>>
   component?: ComponentType<PluginSettingsModalBodyProps<TSettings>>
+  context?: Record<string, unknown>
 }
 
 export type PluginSettingsField<TSettings = unknown> =
@@ -403,6 +431,7 @@ export type PluginSettingsField<TSettings = unknown> =
   | PluginSettingsTextareaField<TSettings>
   | PluginSettingsListField<TSettings>
   | PluginSettingsObjectListField<TSettings>
+  | PluginSettingsActionField<TSettings>
   | PluginSettingsModalField<TSettings>
 
 export type PluginSettingsSection<TSettings = unknown> = {
@@ -426,6 +455,7 @@ export type PluginSettingsChangeContext<TSettings = unknown> = {
   storage: PluginPrivateStorageApi
   network: PluginNetworkApi
   shell: PluginShellApi
+  ai: PluginAiApi
 }
 
 export type PluginSettingsContribution<TSettings = unknown> = {
@@ -467,6 +497,7 @@ export type PluginPermission =
   | 'desktop.processes'
   /** L3: run arbitrary local shell commands (default denied until user grants). */
   | 'shell.run'
+  | 'ai.use'
 
 export type PluginPermissionGrant = {
   granted: boolean
@@ -553,7 +584,7 @@ export type ClipboardWatchOptions = {
 
 export type PluginClipboardApi = {
   readText(): Promise<string>
-  writeText(text: string): Promise<void>
+  writeText(text: string, options?: { sensitive?: boolean }): Promise<void>
   writeImage(blobId: string): Promise<void>
   writeFiles(paths: string[]): Promise<void>
   watch(
@@ -647,6 +678,14 @@ export type PluginSurfaceShell = {
   rendersTitlebar?: boolean
   breadcrumbTitle?: string
   breadcrumbTitleI18n?: Partial<Record<Locale, string>>
+  /**
+   * Inline 'launcher' presentation only: treat defaultHeight as a max-height
+   * cap and let the surface shrink-wrap its own content, instead of the
+   * default behavior of always rendering a fixed-height box. Off by default
+   * because most existing surfaces rely on a definite ancestor height to
+   * stretch an internal flex:1 list/pane to fill it.
+   */
+  autoHeight?: boolean
 }
 
 /** Neutral input for returning a snapshot object into Global Launcher as Object Block. */
@@ -669,6 +708,8 @@ export type PluginObjectBlockInput =
 
 export type PluginSurfaceHostApi = {
   close(): void
+  /** Finish a successful output action; closes Launcher tools, keeps independent surfaces open. */
+  complete(): void
   requestBack(): void
   openSettings(): void
   detachToWindow(initialText?: string): void
@@ -685,6 +726,14 @@ export type PluginSurfaceHostApi = {
   paste: PluginPasteApi
   network: PluginNetworkApi
   shell: PluginShellApi
+  ai: PluginAiApi
+}
+
+export type PluginSurfaceAppearance = {
+  theme: 'dark' | 'light'
+  fontSize: number
+  lineNumbers: boolean
+  wordWrap: boolean
 }
 
 export type PluginSurfaceProps<TSettings = unknown> = {
@@ -693,6 +742,7 @@ export type PluginSurfaceProps<TSettings = unknown> = {
   locale: Locale
   t: (key: string, vars?: Record<string, string | number>) => string
   settings: TSettings
+  appearance: PluginSurfaceAppearance
   permissions: PluginPermissionSnapshot
   initialText?: string
   host: PluginSurfaceHostApi
@@ -712,6 +762,7 @@ export type PluginSurfaceOpenContext<TSettings = unknown> = {
   paste: PluginPasteApi
   network: PluginNetworkApi
   shell: PluginShellApi
+  ai: PluginAiApi
 }
 
 export type PluginUiSurfaceContribution<TSettings = unknown> = {
@@ -730,7 +781,7 @@ export type PluginUiSurfaceContribution<TSettings = unknown> = {
   beforeOpen?(ctx: PluginSurfaceOpenContext<TSettings>): Promise<void> | void
   instancePolicy?: PluginSurfaceInstancePolicy
   entry?: {
-    launcher?: boolean
+    launcher?: boolean | ToolLauncherOptions
     shortcutBindable?: boolean
     recommendedShortcut?: string
     shortcutPresentation?: PluginSurfaceShortcutPresentation
@@ -756,6 +807,8 @@ export type PluginBackgroundContext<TSettings = unknown> = {
   paste: PluginPasteApi
   network: PluginNetworkApi
   shell: PluginShellApi
+  ai: PluginAiApi
+  t: (key: string, vars?: Record<string, string | number>) => string
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
 }
 
@@ -776,6 +829,7 @@ export type PluginStartupHookContext<TSettings = unknown> = {
   paste: PluginPasteApi
   network: PluginNetworkApi
   shell: PluginShellApi
+  ai: PluginAiApi
   api: PluginLauncherApi
   t: (key: string, vars?: Record<string, string | number>) => string
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void

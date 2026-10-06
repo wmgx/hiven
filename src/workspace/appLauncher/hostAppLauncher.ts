@@ -9,10 +9,6 @@ import { normalizeHostAppEntries } from './hostAppIndex'
 // and avoid matching internal ids/paths in search.
 const HOST_APP_INDEX_CACHE_KEY = 'hiven:host-app-launcher:index:v2'
 const APP_INDEX_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000
-/** Empty query: only surface a few recent apps so they do not flood the mixed list. */
-const EMPTY_QUERY_APP_LIMIT = 5
-/** Query-present: hard cap after filter to keep dynamic provider cheap. */
-const QUERY_APP_LIMIT = 50
 
 type HostAppEntry = DiscoveredApp
 
@@ -75,8 +71,6 @@ function writeCache(apps: HostAppEntry[]): HostAppLauncherCache {
     apps: normalizeHostAppEntries(apps),
   }
   memoryAppIndex = cache
-  emptyQueryTopApps = null
-  emptyQueryTopSourceRefreshedAt = -1
   storage()?.setItem(HOST_APP_INDEX_CACHE_KEY, JSON.stringify(cache))
   return cache
 }
@@ -155,42 +149,6 @@ function appMatchesQuery(app: HostAppEntry, query: string, locale: Locale): bool
   const q = query.trim().toLowerCase()
   if (!q) return true
   return searchableFieldsMatch(appSearchFields(app), q, locale)
-}
-
-/** Empty-query order: newest installedAt first; missing timestamps last; then name. */
-function compareAppsForEmptyQuery(a: HostAppEntry, b: HostAppEntry): number {
-  const aTime = typeof a.installedAt === 'number' ? a.installedAt : 0
-  const bTime = typeof b.installedAt === 'number' ? b.installedAt : 0
-  if (aTime !== bTime) return bTime - aTime
-  return a.name.localeCompare(b.name)
-}
-
-/** Memo empty-query top apps — avoid O(n log n) sort on every launcher open. */
-let emptyQueryTopApps: HostAppEntry[] | null = null
-let emptyQueryTopSourceRefreshedAt = -1
-
-function getEmptyQueryTopApps(apps: HostAppEntry[], refreshedAt: number): HostAppEntry[] {
-  if (emptyQueryTopApps && emptyQueryTopSourceRefreshedAt === refreshedAt) {
-    return emptyQueryTopApps
-  }
-  emptyQueryTopApps = apps.slice().sort(compareAppsForEmptyQuery).slice(0, EMPTY_QUERY_APP_LIMIT)
-  emptyQueryTopSourceRefreshedAt = refreshedAt
-  return emptyQueryTopApps
-}
-
-function limitMatchedApps(apps: HostAppEntry[], query: string, refreshedAt: number): HostAppEntry[] {
-  const q = query.trim()
-  if (!q) {
-    return getEmptyQueryTopApps(apps, refreshedAt)
-  }
-  // Query path: filter then hard-cap (do not sort entire catalog).
-  const matched: HostAppEntry[] = []
-  for (const app of apps) {
-    // Caller already filtered; keep this as a safety cap only when used directly.
-    matched.push(app)
-    if (matched.length >= QUERY_APP_LIMIT) break
-  }
-  return matched
 }
 
 function appIconRef(appId: string): string {
@@ -287,14 +245,10 @@ export async function getHostAppLauncherDynamicItems({
   const startedAt = launcherPerfNow()
   const cache = readCache()
   const q = query.trim()
-  // Empty open: only top-N (memoized). Never filter/sort the whole catalog on open.
-  const apps = !q
-    ? getEmptyQueryTopApps(cache.apps, cache.refreshedAt)
-    : limitMatchedApps(
-      cache.apps.filter((app) => appMatchesQuery(app, query, locale)),
-      query,
-      cache.refreshedAt,
-    )
+  // Source providers return every match; the shared ranker owns ordering and caps.
+  const apps = q
+    ? cache.apps.filter((app) => appMatchesQuery(app, query, locale))
+    : cache.apps
 
   const items = apps.map((app) => ({
     systemKey: `host:app-launcher:app:${app.appId}`,

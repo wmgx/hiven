@@ -4,7 +4,11 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { useToastStore, type ToastItem, type ToastLevel } from '../../workspace/toast'
+import { Copy } from 'lucide-react'
+import { useAppStore } from '../../store'
+import { translate } from '../../i18n'
+import { writeClipboardText } from '../../workspace/pluginClipboard'
+import { showToast, useToastStore, type ToastItem, type ToastLevel } from '../../workspace/toast'
 
 const levelStyles: Record<ToastLevel, { bg: string; color: string }> = {
   info: { bg: 'var(--color-background-tertiary)', color: 'var(--color-text-primary)' },
@@ -23,6 +27,7 @@ type RenderedToast = ToastItem & { phase: 'enter' | 'shown' | 'exit' }
 export function ToastContainer() {
   const storeToasts = useToastStore((s) => s.toasts)
   const removeToast = useToastStore((s) => s.removeToast)
+  const locale = useAppStore((s) => s.settings.locale)
   const [items, setItems] = useState<RenderedToast[]>([])
   const timersRef = useRef<Map<string, number>>(new Map())
 
@@ -117,6 +122,16 @@ export function ToastContainer() {
                 {toast.action.label}
               </button>
             )}
+            <button
+              className="opacity-50 hover:opacity-100 shrink-0"
+              title={translate(locale, 'palette', 'copy')}
+              aria-label={translate(locale, 'palette', 'copy')}
+              onClick={() => void writeClipboardText(toast.message).catch(() => {
+                showToast(translate(locale, 'workspace', 'paste.clipboardWriteFailed'), 'error')
+              })}
+            >
+              <Copy size={13} strokeWidth={1.8} />
+            </button>
             <button
               className="opacity-50 hover:opacity-100 shrink-0"
               onClick={() => requestRemove(toast.id)}

@@ -1,8 +1,6 @@
 import { useState, type ChangeEvent, type KeyboardEvent } from 'react'
 import {
   CalendarDays,
-  Check,
-  ChevronDown,
   Clipboard,
   Database,
   ExternalLink,
@@ -25,6 +23,8 @@ import {
 } from 'lucide-react'
 import type {
   PluginSettingsField,
+  PluginSettingsActionField,
+  PluginSettingsActionProgress,
   PluginSettingsModalField,
   PluginSettingsObjectListItemField,
   PluginSettingsSchema,
@@ -33,13 +33,16 @@ import type {
 } from '../workspace/pluginTypes'
 import { describePluginPermission } from '../workspace/pluginPermissions'
 import { translate, type Locale } from '../i18n'
+import { NumberField, Select, Switch } from '../plugin-ui'
 
 type PluginSettingsSchemaRendererProps<TSettings = unknown> = {
   schema: PluginSettingsSchema<TSettings>
   locale: Locale
+  translateText?: (key: string) => string
   value: TSettings
   updateValue: (patch: Partial<TSettings>) => void
   onOpenModal: (field: PluginSettingsModalField<TSettings>) => void
+  onRunAction: (field: PluginSettingsActionField<TSettings>, reportProgress: (progress: PluginSettingsActionProgress) => void) => Promise<void>
   permissions?: PluginPermissionSnapshot
 }
 
@@ -47,8 +50,9 @@ function localize(
   text: string | undefined,
   textI18n: Partial<Record<Locale, string>> | undefined,
   locale: Locale,
+  translateText?: (key: string) => string,
 ): string {
-  return textI18n?.[locale] ?? text ?? ''
+  return textI18n?.[locale] ?? (text ? translateText?.(text) ?? text : '')
 }
 
 function getSettingsRecord(value: unknown): Record<string, unknown> {
@@ -167,12 +171,6 @@ function clampNumber(value: number, min?: number, max?: number): number {
   return value
 }
 
-function formatNumberInputValue(value: number): string {
-  if (!Number.isFinite(value)) return ''
-  if (Number.isInteger(value)) return String(value)
-  return String(Number(value.toFixed(4)))
-}
-
 function isEmptySettingsValue(value: unknown): boolean {
   if (value == null) return true
   if (typeof value === 'string') return value.trim() === ''
@@ -191,15 +189,7 @@ function validateSettingsFieldValue(
   raw: unknown,
   ctx: unknown,
   locale: Locale,
-  draft?: string,
 ): string {
-  if (field.kind === 'number' && draft !== undefined) {
-    if (draft.trim() === '') {
-      if (field.required) return translate(locale, 'scripts', 'settingsFieldRequired')
-    } else if (!Number.isFinite(Number.parseFloat(draft))) {
-      return translate(locale, 'scripts', 'settingsFieldInvalidNumber')
-    }
-  }
   if (field.required && isEmptySettingsValue(raw)) {
     return translate(locale, 'scripts', 'settingsFieldRequired')
   }
@@ -231,17 +221,22 @@ function validateSettingsFieldValue(
 export function PluginSettingsSchemaRenderer<TSettings = unknown>({
   schema,
   locale,
+  translateText,
   value,
   updateValue,
   onOpenModal,
+  onRunAction,
   permissions,
 }: PluginSettingsSchemaRendererProps<TSettings>) {
+  const localizeText = (text: string | undefined, textI18n?: Partial<Record<Locale, string>>) =>
+    localize(text, textI18n, locale, translateText)
   const record = getSettingsRecord(value)
   const [openObjectListCards, setOpenObjectListCards] = useState<Record<string, string>>({})
-  const [openSelectId, setOpenSelectId] = useState<string | null>(null)
   const [numberDrafts, setNumberDrafts] = useState<Record<string, string>>({})
   const [visibleSensitiveKeys, setVisibleSensitiveKeys] = useState<Set<string>>(new Set())
   const [touchedKeys, setTouchedKeys] = useState<Set<string>>(() => new Set())
+  const [runningAction, setRunningAction] = useState<string | null>(null)
+  const [actionProgress, setActionProgress] = useState<(PluginSettingsActionProgress & { id: string }) | null>(null)
   function setFieldValue(key: string, next: unknown) {
     updateValue({ [key]: next } as Partial<TSettings>)
   }
@@ -293,53 +288,18 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
     onChange: (next: string) => void,
     disabled?: boolean,
   ) {
-    const selected = options.find((option) => option.value === currentValue) ?? options[0]
-    const isOpen = openSelectId === id
     return (
-      <div
-        className={`schema-select-wrap ${isOpen ? 'is-open' : ''}`}
-        onBlur={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-            setOpenSelectId((current) => (current === id ? null : current))
-          }
-        }}
-      >
-        <button
-          type="button"
-          className="schema-select-trigger"
-          disabled={disabled}
-          aria-haspopup="listbox"
-          aria-expanded={isOpen}
-          onClick={() => setOpenSelectId((current) => (current === id ? null : id))}
-        >
-          <span>{selected ? localize(selected.label, selected.labelI18n, locale) : ''}</span>
-          <ChevronDown className="schema-select-chevron" size={14} strokeWidth={1.8} />
-        </button>
-        {isOpen && (
-          <div className="schema-select-menu" role="listbox">
-            {options.map((option) => {
-              const selectedOption = option.value === currentValue
-              return (
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={selectedOption}
-                  className={`schema-select-option ${selectedOption ? 'is-selected' : ''}`}
-                  key={option.value}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => {
-                    onChange(option.value)
-                    setOpenSelectId(null)
-                  }}
-                >
-                  <span>{localize(option.label, option.labelI18n, locale)}</span>
-                  {selectedOption && <Check className="schema-select-check" size={13} strokeWidth={2} />}
-                </button>
-              )
-            })}
-          </div>
-        )}
-      </div>
+      <Select
+        id={id}
+        className="schema-select-wrap"
+        value={currentValue}
+        disabled={disabled}
+        options={options.map((option) => ({
+          value: option.value,
+          label: localizeText(option.label, option.labelI18n),
+        }))}
+        onChange={(event) => onChange(event.currentTarget.value)}
+      />
     )
   }
 
@@ -349,9 +309,9 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
     controlId: string,
     onChange: (next: unknown) => void,
   ) {
-    const label = localize(itemField.label, itemField.labelI18n, locale)
-    const description = localize(itemField.description, itemField.descriptionI18n, locale)
-    const placeholder = localize(itemField.placeholder, itemField.placeholderI18n, locale)
+    const label = localizeText(itemField.label, itemField.labelI18n)
+    const description = localizeText(itemField.description, itemField.descriptionI18n)
+    const placeholder = localizeText(itemField.placeholder, itemField.placeholderI18n)
     const value = item[itemField.key]
     const itemLabel = renderControlLabel(label, description)
 
@@ -376,11 +336,33 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
 
     if (itemField.kind === 'switch') {
       return (
-        <label className="schema-object-list-switch wr-field">
+        <div className="schema-object-list-switch wr-field">
           <span className="schema-object-list-switch-copy">{itemLabel}</span>
-          <input className="schema-native-hidden" type="checkbox" checked={Boolean(value)} onChange={(event) => onChange(event.currentTarget.checked)} />
-          <span className={`sw schema-switch ${Boolean(value) ? 'on' : ''}`} />
-        </label>
+          <Switch checked={Boolean(value)} onCheckedChange={onChange} aria-label={label} />
+        </div>
+      )
+    }
+
+    if (itemField.kind === 'modal') {
+      const reason = permissionReason(permissions, itemField.requires, locale)
+      return (
+        <div className="schema-row schema-object-list-field-wide">
+          {renderFieldTitle(label, description, reason)}
+          <button
+            type="button"
+            className="scripts-btn"
+            disabled={Boolean(reason)}
+            onClick={() => onOpenModal({
+              kind: 'modal',
+              id: itemField.key,
+              modalId: itemField.modalId,
+              label: itemField.label,
+              context: { itemId: String(item.id ?? '') },
+            })}
+          >
+            {localizeText(itemField.buttonLabel, itemField.buttonLabelI18n)}
+          </button>
+        </div>
       )
     }
 
@@ -394,22 +376,18 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
     }
 
     if (itemField.kind === 'number') {
-      const unitLabel = localize(itemField.unit, itemField.unitI18n, locale)
+      const unitLabel = localizeText(itemField.unit, itemField.unitI18n)
       const numeric = typeof value === 'number' ? value : Number(value)
       return (
         <label className="schema-object-list-field wr-field">
           {itemLabel}
           <span className="plugin-settings-num-field-row">
-            <input
-              className="wr-in"
-              type="text"
-              inputMode="decimal"
-              value={Number.isFinite(numeric) ? String(numeric) : ''}
-              onChange={(event) => {
-                const next = Number.parseFloat(event.currentTarget.value)
-                if (Number.isFinite(next)) onChange(clampNumber(next, itemField.min, itemField.max))
-                else if (event.currentTarget.value.trim() === '') onChange(0)
-              }}
+            <NumberField
+              value={Number.isFinite(numeric) ? numeric : 0}
+              min={itemField.min}
+              max={itemField.max}
+              aria-label={label}
+              onChange={(next) => onChange(clampNumber(next, itemField.min, itemField.max))}
             />
             {unitLabel && <span className="plugin-settings-num-unit">{unitLabel}</span>}
           </span>
@@ -504,63 +482,83 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
   }
 
   function renderField(field: PluginSettingsField<TSettings>) {
-    const label = localize(field.label, field.labelI18n, locale)
-    const description = localize(field.description, field.descriptionI18n, locale)
+    const label = localizeText(field.label, field.labelI18n)
+    const description = localizeText(field.description, field.descriptionI18n)
     const reason = permissionReason(permissions, field.requires, locale)
     const disabled = Boolean(field.disabled || reason)
     const commonLabel = renderFieldTitle(label, description, reason)
     const Icon = fieldIconComponent(field.kind, field.icon)
 
+    if (field.kind === 'action') {
+      const progress = actionProgress?.id === field.id ? actionProgress : null
+      return (
+        <div className={`schema-row ${disabled ? 'is-disabled' : ''}`}>
+          <span className="schema-row-icon"><Icon size={14} strokeWidth={1.8} /></span>
+          {commonLabel}
+          <div className="schema-action-control">
+            <button
+              type="button"
+              className="scripts-btn"
+              disabled={disabled || runningAction === field.id}
+              onClick={() => {
+                setRunningAction(field.id)
+                setActionProgress({ id: field.id, current: 0, label: '' })
+                void onRunAction(field, (next) => setActionProgress({ id: field.id, ...next }))
+                  .finally(() => {
+                    setRunningAction(null)
+                    setActionProgress(null)
+                  })
+              }}
+            >
+              {localizeText(field.buttonLabel, field.buttonLabelI18n)}
+            </button>
+            {progress && (
+              <div className="schema-action-progress">
+                <div
+                  className="schema-action-progress-track"
+                  role="progressbar"
+                  aria-valuenow={progress.current}
+                  aria-valuemin={0}
+                  aria-valuemax={progress.total}
+                >
+                  <span style={{ width: progress.total ? `${Math.min(100, progress.current / progress.total * 100)}%` : '18%' }} />
+                </div>
+                {progress.label && <small>{progress.label}</small>}
+              </div>
+            )}
+          </div>
+        </div>
+      )
+    }
+
     if (field.kind === 'switch') {
       return (
-        <label className={`schema-row ${disabled ? 'is-disabled' : ''}`}>
+        <div className={`schema-row ${disabled ? 'is-disabled' : ''}`}>
           <span className="schema-row-icon"><Icon size={14} strokeWidth={1.8} /></span>
           {commonLabel}
           <span className="schema-row-control">
-            <input
-              className="schema-native-hidden"
-              type="checkbox"
+            <Switch
               checked={Boolean(record[field.key])}
               disabled={disabled}
-              onChange={(event: ChangeEvent<HTMLInputElement>) => setFieldValue(field.key, event.currentTarget.checked)}
+              aria-label={label}
+              onCheckedChange={(next) => setFieldValue(field.key, next)}
             />
-            <span className={`sw schema-switch ${Boolean(record[field.key]) ? 'on' : ''}`} />
           </span>
-        </label>
+        </div>
       )
     }
 
     if (field.kind === 'number') {
       const scale = field.storageScale && field.storageScale > 0 ? field.storageScale : 1
       const rawValue = typeof record[field.key] === 'number' ? Number(record[field.key]) : 0
-      const displayValue = scale === 1 ? rawValue : rawValue / scale
-      const displayText = numberDrafts[field.key] ?? formatNumberInputValue(displayValue)
-      const unitLabel = localize(field.unit, field.unitI18n, locale)
+      const displayValue = scale === 1 ? rawValue : Number((rawValue / scale).toFixed(6))
+      const unitLabel = localizeText(field.unit, field.unitI18n)
       const commitDisplayValue = (nextDisplayValue: number) => {
         const clamped = clampNumber(nextDisplayValue, field.min, field.max)
         setFieldValue(field.key, scale === 1 ? clamped : Math.round(clamped * scale))
       }
-      const commitDraft = () => {
-        markTouched(field.key)
-        const draft = numberDrafts[field.key]
-        if (draft === undefined) return
-        const next = Number.parseFloat(draft)
-        if (Number.isFinite(next)) {
-          commitDisplayValue(next)
-        }
-        setNumberDrafts((current) => {
-          const { [field.key]: _removed, ...rest } = current
-          return rest
-        })
-      }
       const errorMessage = touchedKeys.has(field.key)
-        ? validateSettingsFieldValue(
-          { ...field, kind: 'number' },
-          scale === 1 ? rawValue : displayValue,
-          value,
-          locale,
-          numberDrafts[field.key],
-        )
+        ? validateSettingsFieldValue({ ...field, kind: 'number' }, scale === 1 ? rawValue : displayValue, value, locale)
         : ''
       return (
         <label className={`schema-row ${disabled ? 'is-disabled' : ''} ${errorMessage ? 'has-error' : ''}`}>
@@ -568,22 +566,16 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
           {commonLabel}
           <div className="schema-row-control schema-row-control-number">
             <span className="plugin-settings-num-field">
-              <input
-                type="text"
-                inputMode="decimal"
-                value={displayText}
+              <NumberField
+                value={Number.isFinite(displayValue) ? displayValue : 0}
+                min={field.min}
+                max={field.max}
+                step={field.step}
                 disabled={disabled}
+                aria-label={label}
                 aria-invalid={Boolean(errorMessage)}
-                onChange={(event: ChangeEvent<HTMLInputElement>) => {
-                  const next = event.currentTarget.value.trim()
-                  setNumberDrafts((current) => ({ ...current, [field.key]: next }))
-                  const numericValue = Number.parseFloat(next)
-                  if (Number.isFinite(numericValue)) commitDisplayValue(numericValue)
-                }}
-                onBlur={commitDraft}
-                onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
-                  if (event.key === 'Enter') event.currentTarget.blur()
-                }}
+                onChange={commitDisplayValue}
+                onBlur={() => markTouched(field.key)}
               />
             </span>
             {unitLabel && <span className="plugin-settings-num-unit">{unitLabel}</span>}
@@ -617,7 +609,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
             className={field.mono ? 'schema-mono' : undefined}
             type="text"
             value={String(record[field.key] ?? '')}
-            placeholder={localize(field.placeholder, field.placeholderI18n, locale)}
+            placeholder={localizeText(field.placeholder, field.placeholderI18n)}
             disabled={disabled}
             aria-invalid={Boolean(errorMessage)}
             onChange={(event: ChangeEvent<HTMLInputElement>) => setFieldValue(field.key, event.currentTarget.value)}
@@ -639,7 +631,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
             className={field.mono ? 'schema-mono' : undefined}
             rows={field.rows ?? 4}
             value={String(record[field.key] ?? '')}
-            placeholder={localize(field.placeholder, field.placeholderI18n, locale)}
+            placeholder={localizeText(field.placeholder, field.placeholderI18n)}
             disabled={disabled}
             aria-invalid={Boolean(errorMessage)}
             onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setFieldValue(field.key, event.currentTarget.value)}
@@ -673,8 +665,8 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
 
     if (field.kind === 'object-list') {
       const items = getObjectList(record[field.key])
-      const itemLabel = localize(field.itemLabel, field.itemLabelI18n, locale) || label
-      const addLabel = localize(field.addLabel, field.addLabelI18n, locale) || '+'
+      const itemLabel = localizeText(field.itemLabel, field.itemLabelI18n) || label
+      const addLabel = localizeText(field.addLabel, field.addLabelI18n) || '+'
       const selectedCardId = openObjectListCards[field.key]
       const selectedIndex = items.findIndex((item, i) => String(item.id ?? i) === selectedCardId)
       const activeIndex = selectedIndex >= 0 ? selectedIndex : (items.length > 0 ? 0 : -1)
@@ -691,7 +683,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
       const titleKey = field.itemTitleKey ?? 'title'
       const tagsKey = field.itemTagsKey
 
-      const emptyText = localize(field.emptyText, field.emptyTextI18n, locale)
+      const emptyText = localizeText(field.emptyText, field.emptyTextI18n)
         || translate(locale, 'scripts', 'settingsEmptyList')
       const emptyHint = translate(locale, 'scripts', 'settingsEmptyListHint')
       const deleteLabel = translate(locale, 'scripts', 'settingsDelete')
@@ -739,7 +731,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
                       <span className="schema-object-list-master-title">{title}</span>
                       {tags.map((tag) => (
                         <span key={tag} className="schema-object-list-master-tag">
-                          {localize(tag, field.itemTagLabelsI18n?.[tag], locale)}
+                          {localizeText(tag, field.itemTagLabelsI18n?.[tag])}
                         </span>
                       ))}
                     </span>
@@ -800,7 +792,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
                       }
                       return groups.map((grp, gi) => {
                         const groupTitle = grp.group
-                          ? localize(grp.group, grp.fields[0]?.groupI18n, locale)
+                          ? localizeText(grp.group, grp.fields[0]?.groupI18n)
                           : ''
                         const body = grp.fields.map((itemField) => (
                           <div key={itemField.key} className={itemField.kind === 'text' || itemField.kind === 'select' || itemField.kind === 'string-list' || itemField.kind === 'textarea' ? 'schema-object-list-span-full' : undefined}>
@@ -882,7 +874,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
             disabled={disabled}
             onClick={() => onOpenModal(field)}
           >
-            {localize(field.buttonLabel, field.buttonLabelI18n, locale) || label}
+            {localizeText(field.buttonLabel, field.buttonLabelI18n) || label}
           </button>
         </div>
       )
@@ -900,17 +892,17 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
           <section key={section.id} className="schema-section">
             {(section.title || section.titleI18n || section.description || section.descriptionI18n) && (
               <header className="schema-section-header">
-                {localize(section.title, section.titleI18n, locale) && (
-                  <h3>{localize(section.title, section.titleI18n, locale)}</h3>
+                {localizeText(section.title, section.titleI18n) && (
+                  <h3>{localizeText(section.title, section.titleI18n)}</h3>
                 )}
-                {localize(section.description, section.descriptionI18n, locale) && (
-                  <p>{localize(section.description, section.descriptionI18n, locale)}</p>
+                {localizeText(section.description, section.descriptionI18n) && (
+                  <p>{localizeText(section.description, section.descriptionI18n)}</p>
                 )}
               </header>
             )}
             <div className="schema-section-body">
               {fields.map((field) => (
-                <div key={field.kind === 'modal' ? field.id : field.key} className={`schema-field schema-field-${field.kind}`}>
+                <div key={field.kind === 'modal' || field.kind === 'action' ? field.id : field.key} className={`schema-field schema-field-${field.kind}`}>
                   {renderField(field)}
                 </div>
               ))}
