@@ -1,7 +1,9 @@
 # Hiven Global Launcher 通用 LauncherItem 模型重设计
 
-日期：2026-08-30  
-状态：设计与交互原型，未修改正式代码  
+日期：2026-08-30
+
+状态：设计与交互原型，未修改正式代码
+
 配套 Demo：`doc/launcher-item-model-redesign-prototype.html?variant=A|B|C`
 
 ## 1. 结论先行

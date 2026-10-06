@@ -1031,4 +1031,3 @@ Agent 最后作为受限 Consumer 接入
 - [R3] `wmgx/hiven` 公开主分支：`launcher/controller.ts`、`toolAdapter.ts`、`output.ts`、`usageJournal.ts`、`pluginTypes.ts`、`pluginRuntime.ts`、`pluginBackgroundManager.ts`、`workflow/pipeline.ts` 等。
 - [R4] Pi 官方仓库与文档：minimal coding harness、extensions、session format。
 - [R5] DeepSeek Harness 官方仓库与文档：capability seams、services、lifecycle/effects、session、tools。
-

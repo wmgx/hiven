@@ -1,6 +1,7 @@
 # Hiven LauncherItem 行为与交互设计
 
-日期：2026-08-30  
+日期：2026-08-30
+
 状态：设计提案，未实现
 
 ## 1. 结论
@@ -287,4 +288,3 @@ type LauncherResultSelection = {
 - 搜索输入、IME 和返回栈行为稳定。
 - 插件不能注入自定义 renderer、CSS、任意快捷键或无限动作层级。
 - 只为 controller、normalize 和状态转换写最小测试；UI 不写单元测试。
-

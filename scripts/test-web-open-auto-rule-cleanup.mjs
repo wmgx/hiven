@@ -7,7 +7,7 @@ const app = readFileSync('src/App.tsx', 'utf8')
 
 assert.match(source, /filter\(\(entry\) => !isAutoLearnedEntry\(entry\)\)/)
 assert.match(source, /Boolean\(entry\.learnedFrom\).*AUTO_CREATED_TAG/s)
-assert.doesNotMatch(source, /registerSink\(['"]web-open['"]/) 
+assert.doesNotMatch(source, /registerSink\(['"]web-open['"]/)
 assert.match(learning, /candidate\.transform\.kind !== 'url-template'/)
 assert.match(app, /purgeStaleUrlTemplateLearning\(\)/)
 
