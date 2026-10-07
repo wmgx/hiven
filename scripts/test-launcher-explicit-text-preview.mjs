@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Real bundled loader → registry → JSON tool behavior, with delivery spies. */
+/** Real bundled loader → registry → explicit text tools, with delivery spies. */
 import assert from 'node:assert/strict'
 import { createServer } from 'vite'
 
@@ -71,7 +71,7 @@ try {
   assert.equal(item.executionMode, 'explicit-text-preview')
   assert.equal(item.display.title, 'JSON Prettify')
   assert.equal(item.display.titleI18n.zh, 'JSON 格式化')
-  assert.deepEqual(items.filter((candidate) => candidate.executionMode).map((candidate) => candidate.systemKey), [key], 'only one tool opts in')
+  assert.deepEqual(items.filter((candidate) => candidate.executionMode).map((candidate) => candidate.systemKey).sort(), [key, 'plugin:encode-decode:tool:base64.decode', 'plugin:line-tools:tool:line-tools.remove-blank-lines'].sort(), 'only the three declared tools opt in')
   assert.ok(collectStaticCandidates('editor-command-bar').some((candidate) => candidate.systemKey === key), 'editor entry remains')
   const workbench = items.find((candidate) => candidate.systemKey === 'plugin:json-tools:launcher:open-format')
   assert.equal(workbench.display.title, 'JSON Prettify Workbench')
@@ -118,7 +118,7 @@ try {
   }
   assert.equal((await item.execute(ctx)).ok, false, 'no input must fail without implicit selection/clipboard reads')
   assert.equal((await item.execute({ ...ctxWithoutGetters(ctx), input: { text: '   ' } })).ok, false)
-  assert.equal(runnerCalls, 0)
+  assert.equal(runnerCalls, 1, 'nonempty whitespace reaches the pure runner and JSON still rejects it')
   const input = '{"z":1,"a":{"c":3,"b":2}}'
   const expected = '{\n    "a": {\n        "b": 2,\n        "c": 3\n    },\n    "z": 1\n}'
   const result = await item.executeWithParams(Object.assign(Object.create(ctx), {
@@ -126,7 +126,7 @@ try {
   }), { indent: 4, sortKeys: true })
   assert.equal(result.ok, true)
   assert.equal(result.output.choices[0].preview, expected, 'non-default params reach the actual formatter')
-  assert.equal(runnerCalls, 1)
+  assert.equal(runnerCalls, 2)
   assert.equal(hiddenReads, 0, 'no editor, clipboard, foreground or shell fallback')
   assert.deepEqual(deliveries, [], 'execution produces a preview without delivery')
   const choice = result.output.choices[0]
@@ -188,7 +188,77 @@ try {
   release()
   assert.equal((await pending).ok, false, 'registration must still be current after asynchronous execution')
   assert.equal(deliveries.length, 2)
-  console.log('Explicit JSON preview: real bundled discovery, restricted context, parameters, no implicit I/O, editor compatibility, provenance and replacement checks passed')
+  const extensions = [
+    {
+      pluginId: 'encode-decode', toolId: 'base64.decode', route: 'open-base64-decode',
+      title: 'Base64 Decode', titleZh: 'Base64 解码', alias: 'base64 decode',
+      cases: [],
+    },
+    {
+      pluginId: 'line-tools', toolId: 'line-tools.remove-blank-lines', route: 'open-line-remove-blank',
+      title: 'Remove Blank Lines', titleZh: '删除空行', alias: 'remove blank lines',
+      cases: [['\n  中文 🙂  \n \t\nnext \n\n', '  中文 🙂  \nnext '], [' \t\n\r\n  ', '']],
+    },
+  ]
+  const exactDecoded = '  中文 🙂\t \n\n'
+  extensions[0].cases = [[Buffer.from(exactDecoded).toString('base64'), exactDecoded], [Buffer.from(' \t\n').toString('base64'), ' \t\n']]
+  for (const extension of extensions) {
+    const extensionKey = `plugin:${extension.pluginId}:tool:${extension.toolId}`
+    const actual = items.find((candidate) => candidate.systemKey === extensionKey)
+    assert.equal(actual.executionMode, 'explicit-text-preview')
+    assert.equal(actual.display.title, extension.title)
+    assert.equal(actual.display.titleI18n.zh, extension.titleZh)
+    const route = items.find((candidate) => candidate.systemKey === `plugin:${extension.pluginId}:launcher:${extension.route}`)
+    assert.equal(route.display.title, `${extension.title} Workbench`)
+    assert.equal(route.display.titleI18n.zh, `${extension.titleZh}工作台`)
+    assert.ok(route.display.aliases.includes(extension.alias))
+    const extensionDeliveries = []
+    const extensionCtx = Object.assign(Object.create(ctx), {
+      t: makePluginT(extension.pluginId, 'en'),
+      api: {
+        copyText: async (text) => { extensionDeliveries.push(['copy', text]) },
+        returnToLauncher: async (text) => { extensionDeliveries.push(['return', text]) },
+      },
+    })
+    assert.equal((await actual.execute(extensionCtx)).ok, false)
+    assert.equal((await actual.execute(Object.assign(Object.create(extensionCtx), { input: { text: '' } }))).ok, false)
+    for (const [source, expectedText] of extension.cases) {
+      const beforeDelivery = extensionDeliveries.length
+      const result = await actual.execute(Object.assign(Object.create(extensionCtx), { input: { text: source } }))
+      assert.equal(result.ok, true)
+      const preview = result.output.choices[0]
+      assert.equal(preview.preview, expectedText, 'real pure helper preserves meaningful whitespace and Unicode')
+      assert.equal(getHostOutputIntent(preview), 'copy')
+      assert.deepEqual(preview.secondaryActions.map(getHostOutputIntent), ['return-to-launcher'])
+      assert.equal(extensionDeliveries.length, beforeDelivery, 'preview produces no delivery')
+      await preview.primaryAction()
+      await preview.secondaryActions[0].run()
+      assert.deepEqual(extensionDeliveries.slice(beforeDelivery), [['copy', expectedText], ['return', expectedText]])
+    }
+    if (extension.pluginId === 'encode-decode') {
+      const count = extensionDeliveries.length
+      assert.equal((await actual.execute(Object.assign(Object.create(extensionCtx), { input: { text: '%%%invalid%%%' } }))).ok, false)
+      assert.equal(extensionDeliveries.length, count)
+    }
+    const [source, expectedText] = extension.cases[0]
+    const writes = []
+    assert.deepEqual(await actual.execute({
+      ...ctxWithoutGetters(extensionCtx), surfaceId: 'editor-command-bar',
+      api: { getSelectionText: () => source, replaceActiveText: async (text) => { writes.push(text) } },
+    }), { ok: true })
+    assert.deepEqual(writes, [expectedText], 'editor tool still replaces directly')
+    const currentDefinition = registry.getPluginDefinition(extension.pluginId, 'production')
+    const currentTool = currentDefinition.tools.find((candidate) => candidate.id === extension.toolId)
+    assert.equal(adaptToolToLauncherItem(currentTool, { pluginId: extension.pluginId, source: 'builtin', systemKey: extensionKey }).executionMode, undefined)
+    registry.registerProductionPlugin(extension.pluginId, [], [], [], [], { ...currentDefinition })
+    try {
+      assert.equal((await actual.execute(Object.assign(Object.create(extensionCtx), { input: { text: source } }))).ok, false, 'new tools also fail closed after source replacement')
+      assert.equal(collectStaticCandidates('global-launcher').some((candidate) => candidate.systemKey === extensionKey), false)
+    } finally {
+      registry.registerProductionPlugin(extension.pluginId, [], [], [], [], currentDefinition)
+    }
+  }
+  console.log('Explicit text preview passed: JSON, Base64 decode and blank-line removal, exact text, restricted context, editor compatibility and source identity')
 } finally {
   if (rawTool && originalPreview) rawTool.explicitTextPreview = originalPreview
   registry?.unregisterDevPlugin(pluginId)
