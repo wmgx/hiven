@@ -40,10 +40,10 @@
   "input.placeholder": "输入或粘贴要翻译的文本...",
   "output.placeholder": "译文会显示在这里。",
   "status.idle": "空闲",
-  "status.waiting": "等待翻译...",
-  "status.translating": "翻译中...",
+  "status.waiting": "暂停输入后将自动开始翻译。",
+  "status.translating": "翻译中… 当前预览尚未完成。",
   "status.success": "已翻译",
-  "status.error": "翻译失败 - {message}",
+  "status.error": "翻译失败：{message}。请重试或检查设置。",
   "status.quota": "已达到月度额度",
   "meta.character": "{count} 个字符",
   "meta.characters": "{count} 个字符",
@@ -62,5 +62,13 @@
   "language.ko": "韩文",
   "language.fr": "法文",
   "language.de": "德文",
-  "language.es": "西班牙文"
+  "language.es": "西班牙文",
+  "status.stopped": "已停止，预览尚未完成。请重试或修改原文。",
+  "pane.incomplete": "未完成预览",
+  "action.stop": "停止",
+  "action.retry": "重试",
+  "error.ai.incomplete": "AI 输出流在完成前已结束",
+  "error.ai.empty": "AI 未返回译文",
+  "error.unknown": "发生未知错误",
+  "status.noProfile": "暂无已启用的配置组。请在设置中启用翻译配置组。"
 }
