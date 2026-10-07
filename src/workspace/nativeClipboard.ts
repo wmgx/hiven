@@ -13,8 +13,10 @@ export function isTauriClipboardRuntime(): boolean {
 }
 
 // Native commands serialize macOS pasteboard access with WebKit on the main thread.
-export async function writeText(text: string): Promise<void> {
+export async function writeText(text: string, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return
   const { invoke } = await import('@tauri-apps/api/core')
+  if (signal?.aborted) return
   await invoke('clipboard_write_text', { text })
 }
 
