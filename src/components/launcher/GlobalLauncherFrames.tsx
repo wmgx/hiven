@@ -43,6 +43,14 @@ export function GlobalLauncherFrameSwitch({
   showWorkflowObjectHint,
   customizeShortcutLabel,
   isFavoriteSelected,
+  isImeComposingRef,
+  browsingActions,
+  onBrowseActions,
+  onLeaveActionBrowser,
+  truncateSearchItems,
+  onToggleSearchFavorite,
+  favoriteKeys,
+  pinnableItemKeys,
   onSettingsClose,
   onSurfaceBack,
   onSurfaceClose,
@@ -96,6 +104,14 @@ export function GlobalLauncherFrameSwitch({
   customizeShortcutLabel: string
   /** Focused row is in launcher favorites. */
   isFavoriteSelected?: boolean
+  isImeComposingRef: RefObject<boolean>
+  browsingActions?: boolean
+  onBrowseActions?: () => void
+  onLeaveActionBrowser?: () => void
+  truncateSearchItems?: boolean
+  onToggleSearchFavorite?: (item: LauncherMixedItem) => void
+  favoriteKeys?: readonly string[]
+  pinnableItemKeys?: ReadonlySet<string>
   onSettingsClose: () => void
   onSurfaceBack: () => void
   onSurfaceClose: () => void
@@ -230,6 +246,7 @@ export function GlobalLauncherFrameSwitch({
     return (
       <LauncherFlowFrame frameKey={`collect:${frame.item.systemKey}`}>
         <GlobalLauncherCollectInputFrame
+          isImeComposingRef={isImeComposingRef}
           inputRef={inputRef}
           bindSearchInputRef={bindSearchInputRef}
           frame={frame}
@@ -286,6 +303,13 @@ export function GlobalLauncherFrameSwitch({
       showWorkflowObjectHint={showWorkflowObjectHint}
       customizeShortcutLabel={customizeShortcutLabel}
       isFavoriteSelected={isFavoriteSelected}
+      browsingActions={browsingActions}
+      onBrowseActions={onBrowseActions}
+      onLeaveActionBrowser={onLeaveActionBrowser}
+      truncateItems={truncateSearchItems}
+      onToggleFavorite={onToggleSearchFavorite}
+      favoriteKeys={favoriteKeys}
+      pinnableItemKeys={pinnableItemKeys}
       onQueryChange={onSearchQueryChange}
       onSelectItem={onSearchSelectItem}
       onHoverIndex={onSearchHoverIndex}
