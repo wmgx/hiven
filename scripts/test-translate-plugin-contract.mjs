@@ -78,7 +78,7 @@ assert.doesNotMatch(index, /TranslateSettingsPanel|component:\s*TranslateSetting
 assert.match(index, /ui:\s*\{[\s\S]*surfaces:\s*\[/, 'translate plugin must contribute a ui surface')
 assert.match(index, /kind:\s*['"]custom-view['"]/, 'translate plugin must use custom-view surface')
 assert.match(index, /id:\s*['"]main['"]/, 'translate surface id must be main')
-assert.match(index, /launcher:\s*true/, 'translate surface must be available from launcher')
+assert.match(index, /launcher:\s*\{\s*surfaces:\s*\[['"]global-launcher['"]\]/, 'translate surface must be available from Global Launcher')
 assert.match(index, /shortcutBindable:\s*true/, 'translate surface must be shortcut-bindable')
 assert.match(index, /recommendedShortcut:\s*['"]CmdOrCtrl\+Shift\+T['"]/, 'translate should recommend CmdOrCtrl+Shift+T')
 assert.match(index, /closeOnBlur:\s*false/, 'translate surface should not close on blur')
