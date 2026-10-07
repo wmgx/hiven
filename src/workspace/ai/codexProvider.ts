@@ -409,6 +409,8 @@ export const codexChatGptProvider: AiProviderAdapter = {
       kind: 'openai-chatgpt-subscription',
       name: 'OpenAI ChatGPT',
       status: isChatGpt ? 'ready' as const : 'login_required' as const,
+      modelCatalog: !Array.isArray(modelResult.data) ? 'unknown' as const
+        : modelResult.nextCursor ? 'partial' as const : 'complete' as const,
       capabilities,
       agents,
       subscription: isChatGpt ? {
