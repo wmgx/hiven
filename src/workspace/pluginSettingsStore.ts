@@ -29,7 +29,7 @@ export type PluginSettingsStore = {
 export type PluginSettingsDialogTarget = {
   pluginId: string
   source: PluginSettingsSource
-  presentation?: 'dialog' | 'global-launcher'
+  presentation?: 'dialog' | 'global-launcher' | 'plugin-surface-window'
   context?: {
     surfaceId?: LauncherHostId
   }
