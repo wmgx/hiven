@@ -3,7 +3,7 @@ import type { Locale } from '../../i18n'
 import type { LauncherHostSurfaceTarget, PluginSurfaceOpenTarget } from '../../store'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
 import type { LauncherController, LauncherControllerState, ResultFrame } from '../../workspace/launcher/controller'
-import type { LauncherResultChoice } from '../../workspace/launcher/types'
+import type { LauncherExecuteResult, LauncherResultChoice } from '../../workspace/launcher/types'
 import type { GlobalLauncherActiveSurfaceFrame } from './GlobalLauncherFrames'
 import { GlobalLauncherFrameSwitch } from './GlobalLauncherFrames'
 import type { GlobalLauncherPermissionFrameState } from './GlobalLauncherPermissionFrame'
@@ -43,7 +43,7 @@ type GlobalLauncherPanelProps = {
   activateResultChoice: (choice: LauncherResultChoice) => void
   activateSecondaryAction?: (choice: LauncherResultChoice, actionId: string) => void
   /** Package 4: paste collect-input preview text to foreground app. */
-  pastePreviewText?: (text: string) => void | Promise<void>
+  pastePreviewText?: (text: string, isCurrent: () => boolean) => Promise<LauncherExecuteResult>
   toggleResultChoice: (choice: LauncherResultChoice, frame: ResultFrame) => void
   closeLauncher: () => void
   visibleFiltered: GlobalLauncherItem[]
@@ -138,6 +138,9 @@ export function GlobalLauncherPanel({
   expandSelectedObjectAction,
   executeSelectedObjectAction,
 }: GlobalLauncherPanelProps) {
+  const activatePreviewPaste = pastePreviewText
+    ? (choice: LauncherResultChoice) => controllerRef.current?.activatePreviewPaste(choice, pastePreviewText)
+    : undefined
   // Stable handlers so LauncherMixedListItem memo is not busted every parent render.
   const handleSearchSelectItem = useCallback((item: GlobalLauncherItem) => {
     selectItem(item)
@@ -243,7 +246,7 @@ export function GlobalLauncherPanel({
         setResultSelectedIndex: setResultSelectedIndex as never,
         toggleResultChoice: toggleResultChoice as never,
         activateResultSecondary: activateSecondaryAction as never,
-        pastePreviewText,
+        pastePreviewText: activatePreviewPaste,
         isKeyboardNavRef,
         visibleFilteredLength: visibleFiltered.length,
         setSelectedIndex,
@@ -324,7 +327,7 @@ export function GlobalLauncherPanel({
         onCollectInputChange={(value) => controllerRef.current?.setInputText(value)}
         onActivateResultChoice={activateResultChoice}
         onSecondaryAction={activateSecondaryAction}
-        onPastePreviewText={pastePreviewText}
+        onPastePreviewText={activatePreviewPaste}
         onSubmitCollectInput={() => { void controllerRef.current?.submitInput?.() }}
         onCaptureSelection={() => { void controllerRef.current?.captureInput() }}
         onHoverResultChoice={setResultSelectedIndex}
