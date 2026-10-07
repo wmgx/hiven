@@ -226,7 +226,8 @@
     "test:plugin-runtime-lifecycle": "node scripts/test-plugin-runtime-lifecycle-behavior.mjs",
     "test:ai-preflight": "node scripts/test-ai-preflight-behavior.mjs",
     "test:translate-ai-readiness": "node scripts/test-translate-ai-readiness.mjs",
-    "test:translate-output-eligibility": "node scripts/test-translate-output-eligibility.mjs"
+    "test:translate-output-eligibility": "node scripts/test-translate-output-eligibility.mjs",
+    "test:regex-match-extraction": "node --experimental-strip-types scripts/test-regex-match-extraction.mts"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

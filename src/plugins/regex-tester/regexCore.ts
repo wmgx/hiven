@@ -6,6 +6,8 @@ export type MatchResult = {
   col: number
 }
 
+export const MAX_REGEX_MATCHES = 1000
+
 export function evaluateRegex(
   pattern: string,
   flags: string,
@@ -26,7 +28,7 @@ export function evaluateRegex(
     regex.lastIndex = 0
     while ((match = regex.exec(sourceText)) !== null) {
       matches.push(toMatchResult(sourceText, match))
-      if (matches.length >= 1000) break
+      if (matches.length >= MAX_REGEX_MATCHES) break
       if (match[0].length === 0) {
         const codePoint = sourceText.codePointAt(regex.lastIndex)
         regex.lastIndex += (regex.unicode || flags.includes('v')) && codePoint !== undefined && codePoint >= 0x10000

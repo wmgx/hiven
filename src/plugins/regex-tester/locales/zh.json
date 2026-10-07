@@ -30,5 +30,9 @@
   "surface.revealMatch": "定位到第 {line} 行第 {col} 列的匹配",
   "surface.noMatchesHint": "调整表达式、标记或示例文本。",
   "surface.enterPatternHint": "在上方输入表达式后开始测试。",
+  "surface.extractMatches": "提取当前匹配并继续处理",
+  "surface.extractHint": "提取当前匹配的完整文本（最多 {limit} 条），按顺序换行连接，保留重复和空白。",
+  "surface.emptyMatches": "当前匹配均为零长度，没有可提取的文本。",
+  "error.continueFailed": "无法带回 Launcher，原文和匹配结果已保留，请重试。",
   "error.invalid": "正则表达式或标记无效，请检查后重试。"
 }
