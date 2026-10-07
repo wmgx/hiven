@@ -9,18 +9,19 @@ import { t } from '../../i18n'
 import { getPlatformShortcutMeta } from './launcherParamShortcuts'
 import { LauncherHintKey } from './LauncherFooterHints'
 
-export type OutputDestinationId = 'copy' | 'paste-foreground' | 'return-to-launcher'
+export type OutputDestinationId = 'primary' | 'copy' | 'paste-foreground' | 'return-to-launcher'
 
 export type OutputDestination = {
   id: OutputDestinationId
   keys: string
-  labelKey: 'outputCopy' | 'outputPasteForeground' | 'returnToLauncher'
+  labelKey: 'outputRunAction' | 'outputCopy' | 'outputPasteForeground' | 'returnToLauncher'
 }
 
 export function buildOutputDestinations(params: {
   hasPaste: boolean
   hasReturn: boolean
   hasCopy?: boolean
+  hasPrimary?: boolean
   primaryIntent?: 'copy' | 'return-to-launcher'
   metaLabel?: string
 }): OutputDestination[] {
@@ -29,6 +30,7 @@ export function buildOutputDestinations(params: {
   const list: OutputDestination[] = params.hasCopy === false ? [] : [
     { id: 'copy', keys: '↵', labelKey: 'outputCopy' },
   ]
+  if (params.hasPrimary) list.unshift({ id: 'primary', keys: '↵', labelKey: 'outputRunAction' })
   if (params.hasPaste) {
     list.push({ id: 'paste-foreground', keys: '⇧↵', labelKey: 'outputPasteForeground' })
   }
@@ -43,11 +45,13 @@ export function LauncherOutputTargetsBar({
   activeId,
   locale,
   onSelect,
+  disabled = false,
 }: {
   destinations: OutputDestination[]
   activeId: OutputDestinationId
   locale: Locale
   onSelect: (id: OutputDestinationId) => void
+  disabled?: boolean
 }) {
   if (destinations.length === 0) return null
   return (
@@ -62,6 +66,7 @@ export function LauncherOutputTargetsBar({
           key={dest.id}
           type="button"
           role="option"
+          disabled={disabled}
           aria-selected={activeId === dest.id}
           className={`launcher-output-target${activeId === dest.id ? ' is-active' : ''}`}
           onMouseDown={(event) => event.preventDefault()}
@@ -131,10 +136,10 @@ export function useOutputDestinationState(params: {
     shiftKey: boolean
   }): OutputDestinationId => {
     if (event.metaKey || event.ctrlKey) {
-      return params.destinations.find((d) => d.id === 'return-to-launcher')?.id ?? 'copy'
+      return params.destinations.find((d) => d.id === 'return-to-launcher')?.id ?? activeDest?.id ?? 'copy'
     }
     if (event.shiftKey) {
-      return params.destinations.find((d) => d.id === 'paste-foreground')?.id ?? 'copy'
+      return params.destinations.find((d) => d.id === 'paste-foreground')?.id ?? activeDest?.id ?? 'copy'
     }
     return activeDest?.id ?? 'copy'
   }
@@ -153,6 +158,7 @@ export function useOutputDestinations(params: {
   hasPaste: boolean
   hasReturn: boolean
   hasCopy?: boolean
+  hasPrimary?: boolean
   primaryIntent?: 'copy' | 'return-to-launcher'
   resetKey: string
 }) {
@@ -162,10 +168,11 @@ export function useOutputDestinations(params: {
       hasPaste: params.hasPaste,
       hasReturn: params.hasReturn,
       hasCopy: params.hasCopy,
+      hasPrimary: params.hasPrimary,
       primaryIntent: params.primaryIntent,
       metaLabel,
     }),
-    [params.hasPaste, params.hasReturn, params.hasCopy, params.primaryIntent, metaLabel],
+    [params.hasPaste, params.hasReturn, params.hasCopy, params.hasPrimary, params.primaryIntent, metaLabel],
   )
   const state = useOutputDestinationState({ destinations, resetKey: params.resetKey })
   return { destinations, metaLabel, ...state }
