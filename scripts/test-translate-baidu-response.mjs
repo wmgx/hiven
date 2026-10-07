@@ -70,6 +70,7 @@ assert.deepEqual(previews, ['Hel', 'Hello'], 'each delta produces an unfinished 
 assert.deepEqual(Array.from(aiRequests[0].capabilities), ['text.generate'])
 
 const request = { text: '你好', sourceLang: 'auto', targetLang: 'en' }
+const aiSelection = { providerId: 'fixture-provider', agentId: 'fixture-model' }
 const delta = (text) => ({ type: 'text.delta', runId: 'run', delta: text })
 const completed = { type: 'completed', runId: 'run', status: 'completed' }
 const cancelled = { ...completed, status: 'cancelled' }
@@ -84,7 +85,7 @@ async function checkTerminal(events, acceptsError) {
     async *stream() {
       try { yield* events } finally { cleaned = true }
     },
-  }, { onText: (text) => output.push(text) })
+  }, { aiSelection, onText: (text) => output.push(text) })
   await assert.rejects(pending, acceptsError)
   assert.equal(cleaned, true, 'terminal failure closes the iterator')
   return output
@@ -97,6 +98,8 @@ await checkTerminal([delta('  \n '), completed], streamError('empty'))
 await checkTerminal([], streamError('incomplete'))
 
 let opened = 0
+await assert.rejects(translateWithAi(request, {}, { stream() { opened += 1; throw new Error('Must not open') } }), streamError('selection'))
+assert.equal(opened, 0, 'missing concrete provider/model rejects without opening a stream')
 controller.abort()
 await assert.rejects(translateWithAi(request, {}, { stream() { opened += 1; throw new Error('Must not open') } }, { signal: controller.signal }), aborted)
 assert.equal(opened, 0, 'pre-aborted translation never opens a stream')
@@ -113,7 +116,7 @@ await assert.rejects(translateWithAi(request, {}, {
       yield completed
     } finally { midCleaned = true }
   },
-}, { signal: midController.signal, onText: (text) => midPreviews.push(text) }), aborted)
+}, { aiSelection, signal: midController.signal, onText: (text) => midPreviews.push(text) }), aborted)
 assert.deepEqual(midPreviews, ['partial'], 'late deltas after abort never reach the preview')
 assert.equal(midCleaned, true)
 
@@ -132,7 +135,7 @@ const terminalResult = translateWithAi(request, {}, {
       async return() { ordered.push('cleanup-start'); await cleanup; ordered.push('cleanup-end'); return { done: true } },
     }
   },
-}, { onText: (text) => terminalPreviews.push(text) }).then((result) => { resolved = true; return result })
+}, { aiSelection, onText: (text) => terminalPreviews.push(text) }).then((result) => { resolved = true; return result })
 await new Promise((resolve) => setImmediate(resolve))
 assert.equal(resolved, false, 'success waits for iterator cleanup')
 assert.equal(nextCalls, 2, 'completed immediately stops pulling late delta/error events')
