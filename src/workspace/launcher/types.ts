@@ -681,6 +681,8 @@ export type LauncherItem = {
      */
     origin?: 'builtin' | 'learned'
   }
+  /** Only automatic habit results carry this runtime provenance and cancellation token. */
+  automaticLearningSignal?: AbortSignal
   /**
    * When true, selection writes to launcher usage for ranking.
    * Dynamic items must opt in with a stable systemKey; static items omit this (treated as true).
