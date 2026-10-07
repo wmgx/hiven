@@ -196,7 +196,8 @@
     "test:self-learning-pr3": "node --experimental-strip-types scripts/test-self-learning-pr3.mjs",
     "perf:launcher": "node scripts/launcher-perf-report.mjs",
     "telemetry": "node scripts/launcher-perf-report.mjs",
-    "test:lockfile-registry": "node scripts/test-lockfile-registry.mjs"
+    "test:lockfile-registry": "node scripts/test-lockfile-registry.mjs",
+    "test:baseline-runtime-fallbacks": "node scripts/test-baseline-runtime-fallbacks.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
