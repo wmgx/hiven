@@ -58,6 +58,7 @@ const fire = loadModule('src/workspace/learning/fire.ts', {
     /import\s*\{[\s\S]*?\}\s*from\s*'\.\/urlTemplate'\s*;?\s*\n?/g,
   ],
   globals: {
+    getAutomaticLearningSignal: () => new AbortController().signal,
     t: (_l, key) => key,
     openExternalUrl: async () => {},
     TelemetryEvents: { learningRuleFired: 'learningRuleFired' },
