@@ -13,6 +13,7 @@
  */
 
 import { t, type Locale } from '../../i18n'
+import { getAutomaticLearningSignal } from '../../store'
 import { openExternalUrl } from '../effectRunner'
 import { TelemetryEvents, trackBehavior } from '../telemetry'
 import type { LauncherItem } from './../launcher/types'
@@ -23,7 +24,7 @@ import { getCurrentActiveHost, getRecentHistoryForRecall } from './navigationSen
 import { getRecentClipboardTokensWithSource } from './observer'
 import { isNewlyLearned } from './proposals'
 import { runLearnedChain } from './registryRunners'
-import { bumpRuleStrength, pruneForgottenRules, queryAllRules, type LearnedRule } from './store'
+import { bumpRuleStrength, queryAllRules, type LearnedRule } from './store'
 import { fillTemplate, queryMatchesSlot, type UrlSlotKind } from './urlTemplate'
 
 /**
@@ -66,35 +67,43 @@ export function sourceHostForQuery(query: string): string | null {
 
 let cachedUrlRules: LearnedRule[] = []
 let cachedTransformRules: LearnedRule[] = []
+let cacheRevision = 0
 
 /**
- * Reload the in-memory learned-rule caches (forgetting decayed rules first).
+ * Reload the in-memory learned-rule caches without deleting stored rules.
  * Call on start + rule changes.
  */
-export async function refreshLearnedUrlRules(): Promise<void> {
+export async function refreshLearnedUrlRules(signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return
+  const revision = ++cacheRevision
   try {
-    await pruneForgottenRules()
     const rules = await queryAllRules()
+    if (signal?.aborted || revision !== cacheRevision) return
     cachedUrlRules = rules.filter((r) => r.transform.kind === 'url-template')
     cachedTransformRules = rules.filter((r) => r.transform.kind === 'tool' || r.transform.kind === 'chain')
   } catch {
+    if (signal?.aborted || revision !== cacheRevision) return
     cachedUrlRules = []
     cachedTransformRules = []
   }
 }
 
-async function feedback(rule: LearnedRule): Promise<void> {
+async function feedback(rule: LearnedRule, signal?: AbortSignal): Promise<void> {
   // Frecency: used → stronger + fresher; refresh so the new weight ranks the next fire.
-  await bumpRuleStrength(rule.clusterKey, FIRE_STRENGTH_BONUS)
-  void refreshLearnedUrlRules()
+  if (signal?.aborted) return
+  await bumpRuleStrength(rule.clusterKey, FIRE_STRENGTH_BONUS, Date.now(), signal)
+  if (signal?.aborted) return
+  void refreshLearnedUrlRules(signal)
 }
 
-async function copyToClipboard(text: string): Promise<void> {
+async function copyToClipboard(text: string, signal?: AbortSignal): Promise<void> {
   try {
     const { writeText } = await import('../nativeClipboard')
-    await writeText(text)
+    if (signal?.aborted) return
+    await writeText(text, signal)
   } catch {
     try {
+      if (signal?.aborted) return
       await navigator.clipboard.writeText(text)
     } catch {
       // best-effort
@@ -115,6 +124,7 @@ function truncate(text: string, max = 80): string {
 // ─── url-template fire (scenario D) ────────────────────────────────────────────
 
 function buildOpenUrlItem(rule: LearnedRule, url: string, locale: Locale): LauncherItem {
+  const signal = rule.autoLearned === true ? getAutomaticLearningSignal() : undefined
   const host = rule.transform.kind === 'url-template' ? hostOf(rule.transform.template) : ''
   const hostBoost = activeHostFireBoost(host, getCurrentActiveHost())
   const boosted = hostBoost > 0
@@ -144,9 +154,13 @@ function buildOpenUrlItem(rule: LearnedRule, url: string, locale: Locale): Launc
     // now (disambiguates same-shape tokens learned on different sites).
     directAnswer: { priority: firePriority(rule) + hostBoost, origin: 'learned' },
     recordUsage: false,
+    automaticLearningSignal: signal,
     execute: async () => {
-      await openExternalUrl(url)
-      await feedback(rule)
+      if (signal?.aborted) return { ok: false, message: t(locale, 'palette.learnStopped') }
+      await openExternalUrl(url, signal)
+      if (signal?.aborted) return { ok: false, message: t(locale, 'palette.learnStopped') }
+      await feedback(rule, signal)
+      if (signal?.aborted) return { ok: false, message: t(locale, 'palette.learnStopped') }
       trackBehavior(TelemetryEvents.learningRuleFired, {
         transformKind: 'url-template',
         slotKind: rule.transform.kind === 'url-template' ? rule.transform.slotKind : undefined,
@@ -162,6 +176,7 @@ function buildOpenUrlItem(rule: LearnedRule, url: string, locale: Locale): Launc
 // ─── tool / chain fire (scenario B) ────────────────────────────────────────────
 
 function buildTransformItem(rule: LearnedRule, result: string, locale: Locale): LauncherItem {
+  const signal = rule.autoLearned === true ? getAutomaticLearningSignal() : undefined
   const transformKind = rule.transform.kind === 'tool' ? 'tool' : 'chain'
   const steps = rule.transform.kind === 'tool' ? 1 : rule.transform.kind === 'chain' ? rule.transform.toolIds.length : 0
   return {
@@ -179,9 +194,13 @@ function buildTransformItem(rule: LearnedRule, result: string, locale: Locale): 
     surfaces: ['global-launcher'],
     directAnswer: { priority: firePriority(rule), origin: 'learned' },
     recordUsage: false,
+    automaticLearningSignal: signal,
     execute: async () => {
-      await copyToClipboard(result)
-      await feedback(rule)
+      if (signal?.aborted) return { ok: false, message: t(locale, 'palette.learnStopped') }
+      await copyToClipboard(result, signal)
+      if (signal?.aborted) return { ok: false, message: t(locale, 'palette.learnStopped') }
+      await feedback(rule, signal)
+      if (signal?.aborted) return { ok: false, message: t(locale, 'palette.learnStopped') }
       trackBehavior(TelemetryEvents.learningRuleFired, { transformKind, steps })
       return { ok: true as const }
     },
@@ -199,6 +218,7 @@ function buildTransformItem(rule: LearnedRule, result: string, locale: Locale): 
  * stays out of the tuned arrow-key model.
  */
 function buildUndoItem(rule: LearnedRule, locale: Locale, priority: number): LauncherItem {
+  const signal = rule.autoLearned === true ? getAutomaticLearningSignal() : undefined
   return {
     systemKey: `learned-undo:${rule.clusterKey}`,
     kind: 'dynamic',
@@ -213,9 +233,13 @@ function buildUndoItem(rule: LearnedRule, locale: Locale, priority: number): Lau
     // Just below its own rule, so it never outranks the answer it annotates.
     directAnswer: { priority: Math.max(0, priority - 1), origin: 'learned' },
     recordUsage: false,
+    automaticLearningSignal: signal,
     execute: async () => {
+      if (signal?.aborted) return { ok: false, message: t(locale, 'palette.learnStopped') }
       const { undoLearnedRule } = await import('./learningController')
-      await undoLearnedRule(rule)
+      if (signal?.aborted) return { ok: false, message: t(locale, 'palette.learnStopped') }
+      await undoLearnedRule(rule, signal)
+      if (signal?.aborted) return { ok: false, message: t(locale, 'palette.learnStopped') }
       return { ok: true as const }
     },
   }
@@ -224,6 +248,7 @@ function buildUndoItem(rule: LearnedRule, locale: Locale, priority: number): Lau
 // ─── history recall fire (scenario L3) ─────────────────────────────────────────
 
 function buildHistoryRecallItem(hit: HistoryRecallHit, locale: Locale): LauncherItem {
+  const signal = getAutomaticLearningSignal()
   return {
     systemKey: `learned-recall:${hit.url}`,
     kind: 'dynamic',
@@ -239,8 +264,11 @@ function buildHistoryRecallItem(hit: HistoryRecallHit, locale: Locale): Launcher
     // the destination (a page you already saw), not the typed token.
     directAnswer: { priority: HISTORY_RECALL_PRIORITY, origin: 'builtin' },
     recordUsage: false,
+    automaticLearningSignal: signal,
     execute: async () => {
-      await openExternalUrl(hit.url)
+      if (signal?.aborted) return { ok: false, message: t(locale, 'palette.learnStopped') }
+      await openExternalUrl(hit.url, signal)
+      if (signal.aborted) return { ok: false, message: t(locale, 'palette.learnStopped') }
       trackBehavior(TelemetryEvents.learningRuleFired, { transformKind: 'history-recall' })
       return { ok: true as const }
     },
@@ -254,7 +282,8 @@ export function learnedLauncherItems(query: string, locale: Locale): LauncherIte
   const items: LauncherItem[] = []
   const now = Date.now()
 
-  if (isPlausibleToken(q)) {
+  const automaticEnabled = !getAutomaticLearningSignal().aborted
+  if (automaticEnabled && isPlausibleToken(q)) {
     const history = getRecentHistoryForRecall()
     if (history.length > 0) {
       const hits = findHistoryRecall(normalizeToken(q), history, HISTORY_RECALL_LIMIT)
@@ -264,6 +293,7 @@ export function learnedLauncherItems(query: string, locale: Locale): LauncherIte
 
   const currentSourceHost = sourceHostForQuery(q)
   for (const rule of cachedUrlRules) {
+    if (rule.autoLearned === true && !automaticEnabled) continue
     if (isForgettable(rule, now)) continue
     if (rule.transform.kind !== 'url-template') continue
     if (!queryMatchesSlot(q, rule.transform.slotKind as UrlSlotKind)) continue
@@ -283,6 +313,7 @@ export function learnedLauncherItems(query: string, locale: Locale): LauncherIte
   if (cachedTransformRules.length > 0) {
     const sig = featureSignature(extractFeatures(q))
     for (const rule of cachedTransformRules) {
+      if (rule.autoLearned === true && !automaticEnabled) continue
       if (isForgettable(rule, now)) continue
       if (rule.matcher.kind !== 'feature-sig' || rule.matcher.sig !== sig) continue
       if (rule.transform.kind !== 'tool' && rule.transform.kind !== 'chain') continue
