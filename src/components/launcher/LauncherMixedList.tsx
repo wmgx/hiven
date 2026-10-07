@@ -4,6 +4,8 @@ import { resolveIcon } from '../../utils/resolveIcon'
 import type { LauncherItem as DomainLauncherItem } from '../../workspace/launcher/types'
 import type { MatchRange, MatchType } from '../../workspace/searchRanking'
 import { getPlatformShortcutMeta, isMacPlatform } from './launcherParamShortcuts'
+import { Pin, PinOff } from 'lucide-react'
+import { MAX_VISIBLE_IDLE } from '../../workspace/launcher/visibleItems'
 
 /** Rows 1–8 are quick-run via ⌘N / Ctrl+N (see GlobalLauncherKeyboard). */
 export const QUICK_SELECT_MAX = 8
@@ -19,7 +21,7 @@ export type LauncherMixedItem =
   | { kind: 'domain'; id: string; title: string; subtitle: string; icon?: string; aliases?: string[]; shortcut?: string; disabled?: boolean; domainItem: DomainLauncherItem; matchRanges?: MatchRange[]; matchType?: MatchType }
 
 /** Maximum items rendered in the list when no query is active (scannable empty-open). */
-export const MAX_VISIBLE_IDLE = 12
+export { MAX_VISIBLE_IDLE } from '../../workspace/launcher/visibleItems'
 
 export function LauncherMixedList({
   items,
@@ -29,6 +31,9 @@ export function LauncherMixedList({
   onSelect,
   onHoverIndex,
   isKeyboardNavRef,
+  onToggleFavorite,
+  favoriteKeys,
+  pinnableItemKeys,
 }: {
   items: LauncherMixedItem[]
   selected?: LauncherMixedItem
@@ -42,6 +47,9 @@ export function LauncherMixedList({
    * mouse move does not force reflow via scrollIntoView on every row.
    */
   isKeyboardNavRef?: MutableRefObject<boolean>
+  onToggleFavorite?: (item: LauncherMixedItem) => void
+  favoriteKeys?: readonly string[]
+  pinnableItemKeys?: ReadonlySet<string>
 }) {
   // Stable identity for memo children — do not allocate per-row lambdas in map.
   // Must run before any early return (Rules of Hooks).
@@ -68,6 +76,8 @@ export function LauncherMixedList({
             onSelect={onSelect}
             onHoverIndex={onHoverIndex ? handleHover : undefined}
             isKeyboardNavRef={isKeyboardNavRef}
+            onToggleFavorite={pinnableItemKeys?.has(item.id) ? onToggleFavorite : undefined}
+            favorite={favoriteKeys?.includes(item.id) ?? false}
           />
         )
       })}
@@ -88,6 +98,8 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
   onSelect,
   onHoverIndex,
   isKeyboardNavRef,
+  onToggleFavorite,
+  favorite,
 }: {
   item: LauncherMixedItem
   index: number
@@ -96,8 +108,10 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
   onSelect: (item: LauncherMixedItem) => void
   onHoverIndex?: (index: number) => void
   isKeyboardNavRef?: MutableRefObject<boolean>
+  onToggleFavorite?: (item: LauncherMixedItem) => void
+  favorite: boolean
 }) {
-  const ref = useRef<HTMLButtonElement>(null)
+  const ref = useRef<HTMLDivElement>(null)
   const appIcon = isAppIconRef(item.icon)
   const avatarIcon = isRemoteAvatarIcon(item.icon)
   const tag = getLauncherItemKindLabel(item, locale)
@@ -127,20 +141,23 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
   }, [item, onSelect])
 
   return (
-    <button
+    <div
       ref={ref}
-      type="button"
-      tabIndex={-1}
       data-launcher-row-index={index}
       data-quick-select={quickSelectLabel ?? undefined}
       className={`l-row cmd-item w-full border-none text-left ${selected ? 'sel selected' : ''} ${item.disabled ? 'disabled' : ''}`}
-      disabled={item.disabled}
-      onClick={handleClick}
       // Hover select is gated by parent (must move pointer first); enter alone is not enough.
       onMouseEnter={onHoverIndex ? handleMouseEnter : undefined}
       // Keep the search caret — do not let list rows take focus on mousedown.
       onMouseDown={(event) => event.preventDefault()}
     >
+      <button
+        type="button"
+        tabIndex={-1}
+        className="launcher-row-main"
+        disabled={item.disabled}
+        onClick={handleClick}
+      >
       <span className={iconSlotClass}>
         {appIcon ? (
           <span className="app-icon">
@@ -186,7 +203,26 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
           {quickSelectLabel}
         </kbd>
       )}
-    </button>
+      </button>
+      {onToggleFavorite && (
+        <button
+          type="button"
+          className={`launcher-row-pin${favorite ? ' is-pinned' : ''}`}
+          aria-pressed={favorite}
+          aria-label={`${t(locale, favorite ? 'palette.actionUnpin' : 'palette.actionPin')}: ${item.title}`}
+          title={t(locale, favorite ? 'palette.actionUnpin' : 'palette.actionPin')}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') event.stopPropagation()
+          }}
+          onClick={(event) => {
+            event.stopPropagation()
+            onToggleFavorite(item)
+          }}
+        >
+          {favorite ? <PinOff size={14} aria-hidden /> : <Pin size={14} aria-hidden />}
+        </button>
+      )}
+    </div>
   )
 })
 
