@@ -112,6 +112,11 @@ export function GlobalLauncherSearchFrame({
             locale={locale}
             exiting={blockExiting}
             onRemove={() => clipboardBlock?.removeBlock()}
+            onRestore={clipboardBlock?.canRestorePreviousMaterial ? () => {
+              clipboardBlock.restorePreviousMaterial()
+              inputRef.current?.focus()
+            } : undefined}
+            restoreDisabled={busy}
           />
         )}
         <input

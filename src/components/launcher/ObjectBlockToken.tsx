@@ -10,7 +10,7 @@
  *   When secretMasked: masked label
  */
 
-import { X } from 'lucide-react'
+import { Undo2, X } from 'lucide-react'
 import { t, type Locale } from '../../i18n'
 import { useAppStore } from '../../store'
 import type { LauncherObjectBlock } from '../../launcher/clipboard/objectBlock'
@@ -24,11 +24,15 @@ function truncatePreview(text: string, maxLen: number): string {
 export function ObjectBlockToken({
   block,
   onRemove,
+  onRestore,
+  restoreDisabled = false,
   locale: localeProp,
   exiting = false,
 }: {
   block: LauncherObjectBlock
   onRemove: () => void
+  onRestore?: () => void
+  restoreDisabled?: boolean
   locale?: Locale
   /** Play remove transition while parent keeps this mounted. */
   exiting?: boolean
@@ -72,6 +76,21 @@ export function ObjectBlockToken({
       )}
       {selected && (
         <span className="object-block-delete-hint">{t(locale, 'palette.objectBlockDeleteHint')}</span>
+      )}
+      {onRestore && !exiting && (
+        <button
+          type="button"
+          className="object-block-remove"
+          disabled={restoreDisabled}
+          onMouseDown={(event) => event.preventDefault()}
+          onKeyDown={(event) => event.stopPropagation()}
+          onKeyUp={(event) => event.stopPropagation()}
+          onClick={(event) => { event.stopPropagation(); onRestore() }}
+          aria-label={t(locale, 'palette.objectBlockRestore')}
+          title={t(locale, 'palette.objectBlockRestoreHint')}
+        >
+          <Undo2 size={12} strokeWidth={2.2} aria-hidden="true" />
+        </button>
       )}
       <button
         type="button"

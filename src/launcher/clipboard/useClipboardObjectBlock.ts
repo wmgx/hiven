@@ -34,6 +34,14 @@ import {
 } from './clipboardSnapshot'
 import { launcherPerfNow, logLauncherPerfDuration } from '../../workspace/launcher/perf'
 import { TelemetryEvents, trackBehavior } from '../../workspace/telemetry'
+import {
+  acceptMaterialHandoff,
+  discardCurrentMaterial,
+  forgetPreviousMaterial,
+  replaceCurrentMaterial,
+  restorePreviousMaterial,
+  type CurrentMaterial,
+} from './currentMaterial'
 
 /** Keep token mounted for compositor-only exit (opacity + transform). */
 export const OBJECT_BLOCK_EXIT_MS = 130
@@ -52,6 +60,8 @@ export type ClipboardObjectBlockState = {
   attachHintAsBlock: () => void
   attachQueryAsBlock: (text: string) => void
   markBlockConsumed: () => void
+  canRestorePreviousMaterial: boolean
+  restorePreviousMaterial: () => void
 }
 
 /** Blocks handed in from history / tools — re-stash on hide so ⌘↵ is not lost mid-transition. */
@@ -71,13 +81,19 @@ export function useClipboardObjectBlock(params: {
   suppressAutoAttach?: () => boolean
 }): ClipboardObjectBlockState {
   const { open, readClipboard, suppressAutoAttach } = params
-  const [block, setBlock] = useState<LauncherObjectBlock | null>(null)
+  const [material, setMaterial] = useState(() => replaceCurrentMaterial(null))
+  const block = material.block
   const [isExiting, setIsExiting] = useState(false)
   const [hint, setHint] = useState<RecentClipboardHint | null>(null)
   const didReadRef = useRef(false)
   const exitTimerRef = useRef<number | null>(null)
-  const blockRef = useRef<LauncherObjectBlock | null>(null)
-  blockRef.current = block
+  const exitFrameRef = useRef<number | null>(null)
+  const materialRef = useRef(material)
+  materialRef.current = material
+  const materialGenerationRef = useRef(0)
+  const mountedRef = useRef(false)
+  const openRef = useRef(open)
+  openRef.current = open
   /** User dismissed the token — do not re-stash on close. */
   const userDismissedRef = useRef(false)
   // Host often passes an inline suppress fn — keep in ref so open effect is stable.
@@ -85,30 +101,46 @@ export function useClipboardObjectBlock(params: {
   suppressAutoAttachRef.current = suppressAutoAttach
 
   const clearExitTimer = useCallback(() => {
+    if (exitFrameRef.current != null) {
+      cancelAnimationFrame(exitFrameRef.current)
+      exitFrameRef.current = null
+    }
     if (exitTimerRef.current != null) {
       window.clearTimeout(exitTimerRef.current)
       exitTimerRef.current = null
     }
   }, [])
 
+  const publishMaterial = useCallback((next: CurrentMaterial) => {
+    materialGenerationRef.current += 1
+    materialRef.current = next
+    setMaterial(next)
+  }, [])
+
   const applyHandoffBlock = useCallback((pending: LauncherObjectBlock) => {
-    // The in-flight open read may settle before React commits setBlock below.
+    // The in-flight open read may settle before React commits material below.
     // Publish explicit material synchronously so that older clipboard read cannot replace it.
-    blockRef.current = pending
+    const next = acceptMaterialHandoff(materialRef.current, pending, openRef.current && !userDismissedRef.current)
+    if (next === materialRef.current) return
+    publishMaterial(next)
     clearExitTimer()
     setIsExiting(false)
-    setBlock(pending)
     setHint(null)
     didReadRef.current = true
     userDismissedRef.current = false
-  }, [clearExitTimer])
+  }, [clearExitTimer, publishMaterial])
 
   // Live deliver pending blocks while launcher stays open (history stack → list).
   useEffect(() => {
     return subscribePendingObjectBlock((pending) => {
       applyHandoffBlock(pending)
       // Re-persist without re-notifying so hide/show races can still recover.
-      setPendingObjectBlock(pending, { persist: true, silent: true })
+      const current = materialRef.current.block
+      if (current && !userDismissedRef.current) {
+        setPendingObjectBlock(current, { persist: true, silent: true })
+      } else {
+        clearPendingObjectBlock()
+      }
     })
   }, [applyHandoffBlock])
 
@@ -126,27 +158,31 @@ export function useClipboardObjectBlock(params: {
     if (pending) {
       applyHandoffBlock(pending)
       // Keep a silent backup until the open frame has fully settled (close race).
-      setPendingObjectBlock(pending, { persist: true, silent: true })
+      const current = materialRef.current.block
+      if (current) setPendingObjectBlock(current, { persist: true, silent: true })
       return
     }
     if (didReadRef.current) return
     didReadRef.current = true
 
     let cancelled = false
+    const generation = materialGenerationRef.current
+    const isReadCurrent = () => mountedRef.current && !cancelled && generation === materialGenerationRef.current
     const readAfterFirstPaint = async () => {
+      if (!isReadCurrent() || userDismissedRef.current) return
       const startedAt = launcherPerfNow()
       try {
         const text = await readClipboard()
-        if (cancelled || userDismissedRef.current) return
+        if (!isReadCurrent() || userDismissedRef.current) return
         // Never clobber a history handoff that landed while we were reading.
-        if (isHandoffBlock(blockRef.current)) return
+        if (isHandoffBlock(materialRef.current.block)) return
         logLauncherPerfDuration('clipboard-object-block:read', startedAt, {
           kind: 'latency',
           hasText: Boolean(text),
           textLength: text.length,
         })
         if (!text) {
-          setBlock(null)
+          publishMaterial(replaceCurrentMaterial(null))
           setIsExiting(false)
           setHint(null)
           return
@@ -168,15 +204,15 @@ export function useClipboardObjectBlock(params: {
           snapshot = observeClipboardText(text) ?? updateClipboardSnapshot(text)
         }
 
-        if (cancelled) return
-        if (isHandoffBlock(blockRef.current)) return
+        if (!isReadCurrent()) return
+        if (isHandoffBlock(materialRef.current.block)) return
         const suppress = suppressAutoAttachRef.current?.() === true
         const newBlock = isClipboardDismissed(snapshot)
           ? null
           : createClipboardObjectBlock(snapshot, Date.now(), { suppressAutoAttach: suppress })
         clearExitTimer()
         setIsExiting(false)
-        setBlock(newBlock)
+        publishMaterial(replaceCurrentMaterial(newBlock))
         // Hint only when not suppressed and content would qualify (policy inside builder).
         setHint(newBlock || suppress ? null : buildRecentClipboardHint(snapshot))
         if (newBlock) {
@@ -193,13 +229,13 @@ export function useClipboardObjectBlock(params: {
           })
         }
       } catch {
-        if (cancelled) return
-        if (isHandoffBlock(blockRef.current)) return
+        if (!isReadCurrent() || userDismissedRef.current) return
+        if (isHandoffBlock(materialRef.current.block)) return
         logLauncherPerfDuration('clipboard-object-block:read', startedAt, {
           kind: 'latency',
           failed: true,
         })
-        setBlock(null)
+        publishMaterial(replaceCurrentMaterial(null))
         setIsExiting(false)
         setHint(null)
       }
@@ -215,24 +251,34 @@ export function useClipboardObjectBlock(params: {
       cancelled = true
       cancelAnimationFrame(raf1)
       window.clearTimeout(timer)
+      // Effect replay may cancel the first read before it starts. Only retry
+      // that untouched read; an explicit handoff/restoration already owns it.
+      if (generation === materialGenerationRef.current) didReadRef.current = false
     }
-  }, [open, readClipboard, clearExitTimer, applyHandoffBlock])
+  }, [open, readClipboard, clearExitTimer, applyHandoffBlock, publishMaterial])
 
   // When launcher closes: re-stash handoff blocks so ⌘↵ is not lost if hide races show.
   useEffect(() => {
     if (!open) {
       clearExitTimer()
-      const current = blockRef.current
+      const current = materialRef.current.block
       if (!userDismissedRef.current && isHandoffBlock(current) && current) {
         setPendingObjectBlock(current, { persist: true, silent: true })
       }
-      setBlock(null)
+      publishMaterial(replaceCurrentMaterial(null))
       setIsExiting(false)
       setHint(null)
     }
-  }, [open, clearExitTimer])
+  }, [open, clearExitTimer, publishMaterial])
 
-  useEffect(() => () => clearExitTimer(), [clearExitTimer])
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      materialGenerationRef.current += 1
+      clearExitTimer()
+    }
+  }, [clearExitTimer])
 
   /**
    * Dismiss snapshot immediately (no re-attach), keep token mounted for exit CSS, then unmount.
@@ -241,6 +287,7 @@ export function useClipboardObjectBlock(params: {
   const removeBlock = useCallback(() => {
     if (!block || isExiting) return
     userDismissedRef.current = true
+    publishMaterial(forgetPreviousMaterial(materialRef.current))
     trackBehavior(TelemetryEvents.clipboardBlockRemove, {
       kind: block.kind,
       source: block.source,
@@ -251,18 +298,24 @@ export function useClipboardObjectBlock(params: {
     setIsExiting(true)
     clearExitTimer()
     // rAF: apply .is-exiting paint first; avoid unmount racing the first transition frame.
-    requestAnimationFrame(() => {
+    const generation = materialGenerationRef.current
+    exitFrameRef.current = requestAnimationFrame(() => {
+      exitFrameRef.current = null
+      if (generation !== materialGenerationRef.current) return
       exitTimerRef.current = window.setTimeout(() => {
-        setBlock(null)
+        if (generation !== materialGenerationRef.current) return
+        publishMaterial(discardCurrentMaterial(materialRef.current))
         setIsExiting(false)
         exitTimerRef.current = null
       }, OBJECT_BLOCK_EXIT_MS)
     })
-  }, [block, isExiting, clearExitTimer])
+  }, [block, isExiting, clearExitTimer, publishMaterial])
 
   const selectBlockForDelete = useCallback(() => {
-    setBlock((prev) => prev ? { ...prev, selectedForDelete: true } : null)
-  }, [])
+    if (userDismissedRef.current) return
+    const current = materialRef.current
+    if (current.block) publishMaterial({ ...current, block: { ...current.block, selectedForDelete: true } })
+  }, [publishMaterial])
 
   /**
    * Mark the current block's clipboard content as handled — for when an object
@@ -278,15 +331,14 @@ export function useClipboardObjectBlock(params: {
   const markBlockConsumed = useCallback(() => {
     // Completion must also cancel history/tool handoff recovery after a native hide.
     userDismissedRef.current = true
-    blockRef.current = null
+    publishMaterial(discardCurrentMaterial(materialRef.current))
     clearPendingObjectBlock()
     clearExitTimer()
-    setBlock(null)
     setHint(null)
     setIsExiting(false)
     const snapshot = getLastClipboardSnapshot()
     if (snapshot) dismissClipboardBlock(snapshot)
-  }, [clearExitTimer])
+  }, [clearExitTimer, publishMaterial])
 
   /**
    * Handle Backspace when query is empty: remove the object block in one press
@@ -314,10 +366,27 @@ export function useClipboardObjectBlock(params: {
       })
       clearExitTimer()
       setIsExiting(false)
-      setBlock(forcedBlock)
+      publishMaterial(replaceCurrentMaterial(forcedBlock))
+      clearPendingObjectBlock()
+      userDismissedRef.current = false
       setHint(null)
     }
-  }, [hint, clearExitTimer])
+  }, [hint, clearExitTimer, publishMaterial])
+
+  const restoreMaterial = useCallback(() => {
+    // A queued click from a removed token/session cannot restore newer work.
+    if (!mountedRef.current || !openRef.current || userDismissedRef.current || materialRef.current !== material) return
+    const next = restorePreviousMaterial(materialRef.current)
+    if (next === materialRef.current || !next.block) return
+    clearExitTimer()
+    publishMaterial(next)
+    setIsExiting(false)
+    setHint(null)
+    didReadRef.current = true
+    // Restore only the current material. Ordinary handoff listeners reset the
+    // host's query/browser intent, so synchronize the backup without notifying.
+    setPendingObjectBlock(next.block, { persist: true, silent: true })
+  }, [clearExitTimer, publishMaterial, material])
 
   const attachQueryAsBlock = useCallback((text: string) => {
     if (text.length === 0) return
@@ -338,5 +407,7 @@ export function useClipboardObjectBlock(params: {
     attachHintAsBlock,
     attachQueryAsBlock,
     markBlockConsumed,
+    canRestorePreviousMaterial: open && Boolean(material.previousBlock) && !isExiting,
+    restorePreviousMaterial: restoreMaterial,
   }
 }
