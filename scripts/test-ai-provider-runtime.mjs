@@ -84,7 +84,6 @@ assert.doesNotMatch(codex, /sandboxPolicy:/, 'general AI turns must not send the
 assert.match(native, /fn allowed_method/, 'native Codex bridge must use an RPC allowlist')
 assert.match(native, /\.current_dir\(&workspace\)/, 'Codex must not inherit the Hiven process working directory')
 assert.match(native, /HIVEN_CODEX_INITIALIZATION_REQUIRED/, 'a restarted Codex process must force bridge reinitialization')
-assert.match(codex, /bridgePromise = undefined[\s\S]*await ensureBridge\(\)/, 'the provider must reinitialize after a Codex process restart')
 assert.doesNotMatch(native.match(/fn allowed_method[\s\S]*?\n\}/)?.[0] ?? '', /command\/exec/, 'plugins must not reach Codex shell execution through the AI bridge')
 assert.match(pluginTypes, /PluginSurfaceHostApi[\s\S]*ai: PluginAiApi/, 'plugin surfaces must receive scoped AI')
 assert.match(launcherTypes, /LauncherExecutionContext[\s\S]*ai: PluginAiApi/, 'launcher executions must receive scoped AI')
@@ -100,5 +99,7 @@ assert.match(settingsContent, /if \(props\.searchable\) \{\s*return \(\s*<Combob
 assert.match(css, /\.hiven-ui-combobox-search/, 'Combobox search lives inside the popup, not on the closed trigger')
 assert.match(settingsContent, /id\.trim\(\)\.toLowerCase\(\) === 'gpt-reserve'[\s\S]*aiQuotaOther/, 'internal reserve bucket IDs must use a conservative user-facing label')
 assert.match(settingsContent, /title=\{entry\.technicalId\}/, 'unknown quota labels must retain the raw bucket ID for diagnostics')
+
+await import('./test-ai-cancellation-behavior.mjs')
 
 console.log('AI provider runtime contract OK')
