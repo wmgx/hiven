@@ -291,6 +291,7 @@ const artifactEvents = []
 let savedCommandArgs
 const savedFromCommand = { ...artifact, id: 'artifact_command' }
 const hostActionsModule = loadModule('src/workspace/launcher/hostActions.ts', {
+  '../../i18n': { translate },
   '../savedActions/lastSaveableRun': { getLastSaveableRun: async () => lastRun },
   '../savedActions/store': {
     createSavedAction: (run, name, aliases) => {
@@ -307,18 +308,32 @@ const savedActionCommands = hostActionsModule.getHostSavedActionItems()
 const saveCommand = savedActionCommands.find((entry) => entry.systemKey === 'host:saved-action:save-last')
 const deleteCommand = savedActionCommands.find((entry) => entry.systemKey === 'host:saved-action:delete')
 assert.ok(saveCommand && deleteCommand)
-assert.equal((await saveCommand.execute({ input: { text: 'Join commas | csv|pipe, comma' } })).ok, true)
+const saveController = new controllerModule.LauncherController({
+  surfaceId: 'global-launcher', api, locale: 'en', makeT: () => (key) => key,
+  getSettings: () => ({}), recordSelection: () => {}, requestClose: () => {}, onChange: () => {},
+})
+await saveController.selectItem(saveCommand, { objectBlockText: 'PRIVATE_MATERIAL_NOT_A_NAME' })
+assert.equal(saveController.getState().frames.at(-1).kind, 'collect-input')
+assert.equal(saveController.getState().frames.at(-1).inputText, '')
+assert.equal(savedCommandArgs, undefined)
+saveController.setInputText('Join commas | csv|pipe, comma')
+await saveController.submitInput()
+assert.equal(saveController.getState().error, null)
+assert.equal(saveController.getState().frames.at(-1).kind, 'list')
 assert.deepEqual(Array.from(savedCommandArgs.aliases), [' csv|pipe', ' comma'])
 assert.deepEqual(artifactEvents, [['artifact.saved', 'artifact_command']])
 
 let unsupportedSaveCalls = 0
 const unsupportedHostActions = loadModule('src/workspace/launcher/hostActions.ts', {
+  '../../i18n': { translate },
   '../savedActions/lastSaveableRun': { getLastSaveableRun: async () => ({ ...lastRun, outputIntent: 'insert' }) },
   '../savedActions/store': { createSavedAction: () => { unsupportedSaveCalls += 1 } },
   '../savedActions/compatibility': { isGlobalLauncherSavedActionOutput },
 }).getHostSavedActionItems()
 const unsupportedSaveCommand = unsupportedHostActions.find((entry) => entry.systemKey === 'host:saved-action:save-last')
-assert.equal((await unsupportedSaveCommand.execute({ input: { text: 'Never runnable' } })).ok, false)
+await saveController.selectItem(unsupportedSaveCommand)
+assert.equal(saveController.getState().error, 'savedActionEditorOutputUnsupported')
+assert.equal(saveController.getState().frames.at(-1).kind, 'list')
 assert.equal(unsupportedSaveCalls, 0, 'editor-only output must be rejected before creating an Artifact')
 const deleteSuggestions = await deleteCommand.suggest({ inputText: '' })
 const deleteConfirmation = await deleteSuggestions.choices[0].primaryAction()
