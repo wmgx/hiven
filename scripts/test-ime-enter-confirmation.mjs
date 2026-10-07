@@ -210,6 +210,16 @@ if (typeof resetImeCompositionGuardForTests === 'function') {
 }
 
 const composingRef = { current: false }
+for (const key of ['Enter', 'Tab', 'Backspace']) {
+  assert(
+    shouldIgnoreImeKeyDown({ key, keyCode: 0, nativeEvent: { keyCode: 229 } }, { current: false }) === true,
+    `${key}: synthetic keyCode=0 must not mask native IME keyCode=229`,
+  )
+  assert(
+    shouldIgnoreImeKeyDown({ key, keyCode: 229, nativeEvent: { keyCode: 0 } }, { current: false }) === true,
+    `${key}: synthetic IME keyCode=229 must also be honored`,
+  )
+}
 assert(
   shouldIgnoreImeKeyDown({ key: 'Enter', keyCode: 13, nativeEvent: { isComposing: false } }, composingRef) === false,
   'plain Enter outside IME composition should still submit/select',
