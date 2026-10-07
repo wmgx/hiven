@@ -199,7 +199,7 @@ export function PluginSurfaceRenderer({
               openSettingsDialog({
                 pluginId: target.pluginId,
                 source: target.source,
-                presentation: presentation as 'global-launcher' | 'dialog' | undefined,
+                presentation: presentation === 'editor-panel' ? 'dialog' : presentation,
                 context: { surfaceId: contextSurfaceId as never },
               })
             },
