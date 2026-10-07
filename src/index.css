@@ -6031,6 +6031,77 @@ body[data-theme='dark'] .launcher-preview-well {
   opacity: 0.5;
 }
 
+.launcher-row-main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+  align-self: stretch;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: inherit;
+}
+
+.launcher-row-pin,
+.launcher-query-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.launcher-row-pin.is-pinned {
+  color: var(--accent);
+}
+
+.launcher-row-pin:hover,
+.launcher-row-pin:focus-visible,
+.launcher-query-clear:hover,
+.launcher-query-clear:focus-visible {
+  color: var(--text);
+  background: var(--accent-soft);
+}
+
+.launcher-discovery-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 3px 12px 6px;
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+.launcher-discovery-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.launcher-discovery-action:hover,
+.launcher-discovery-action:focus-visible {
+  background: var(--accent-soft);
+}
+
 /* Light hover: readable surface grey (not near-invisible ink wash). */
 .l-row:hover:not(.sel):not(.selected) {
   background: var(--surface, #f3f4f5);
