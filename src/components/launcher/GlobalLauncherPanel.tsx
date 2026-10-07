@@ -14,7 +14,6 @@ import type { GlobalLauncherItem } from './GlobalLauncherItems'
 import type { ClipboardObjectBlockState } from '../../launcher/clipboard/useClipboardObjectBlock'
 import type { RecommendedAction, RecommendedOutputTarget } from '../../launcher/clipboard/actionRecommendation'
 import { GLOBAL_LAUNCHER_SETTINGS_HEIGHT, STANDALONE_SURFACE_MAX_HEIGHT } from './GlobalLauncherLayout'
-import { MAX_VISIBLE_IDLE } from './LauncherMixedList'
 import { useAppStore } from '../../store'
 
 type GlobalLauncherPanelProps = {
@@ -61,6 +60,10 @@ type GlobalLauncherPanelProps = {
   clearLauncherHostSurface: () => void
   query: string
   setQuery: (value: string) => void
+  browsingActions: boolean
+  onBrowseActions: () => void
+  onLeaveActionBrowser: () => void
+  availableItemKeys: ReadonlySet<string>
   locale: Locale
   searchPlaceholder: string
   requestSurfaceBack: () => void
@@ -116,6 +119,10 @@ export function GlobalLauncherPanel({
   clearLauncherHostSurface: _omit_clearLauncherHostSurface,
   query,
   setQuery,
+  browsingActions,
+  onBrowseActions,
+  onLeaveActionBrowser,
+  availableItemKeys,
   locale,
   searchPlaceholder,
   requestSurfaceBack,
@@ -139,8 +146,11 @@ export function GlobalLauncherPanel({
   const launcherFavoriteKeys = useAppStore((s) => s.launcherFavoriteKeys)
   const handleToggleFavorite = useCallback((item: GlobalLauncherItem) => {
     const key = item.kind === 'domain' ? item.domainItem.systemKey : item.id
-    if (key) toggleLauncherFavorite(key)
-  }, [toggleLauncherFavorite])
+    if (!key || !availableItemKeys.has(key)) return
+    const index = visibleFiltered.findIndex((candidate) => candidate.id === item.id)
+    if (index >= 0) setSelectedIndex(index)
+    toggleLauncherFavorite(key)
+  }, [availableItemKeys, setSelectedIndex, toggleLauncherFavorite, visibleFiltered])
   const isFavoriteSelected = Boolean(
     selectedItem
       && launcherFavoriteKeys.includes(
@@ -235,14 +245,10 @@ export function GlobalLauncherPanel({
         activateResultSecondary: activateSecondaryAction as never,
         pastePreviewText,
         isKeyboardNavRef,
-        visibleFilteredLength: !query && visibleFiltered.length > MAX_VISIBLE_IDLE
-          ? MAX_VISIBLE_IDLE
-          : visibleFiltered.length,
+        visibleFilteredLength: visibleFiltered.length,
         setSelectedIndex,
         selectedItem,
-        visibleItems: !query && visibleFiltered.length > MAX_VISIBLE_IDLE
-          ? visibleFiltered.slice(0, MAX_VISIBLE_IDLE)
-          : visibleFiltered,
+        visibleItems: visibleFiltered,
         isWorkflowObjectLauncherItem,
         selectItem,
         handleClipboardBackspace: clipboardBlock?.handleBackspace,
@@ -285,6 +291,14 @@ export function GlobalLauncherPanel({
         showWorkflowObjectHint={isWorkflowObjectLauncherItem(selectedItem)}
         customizeShortcutLabel={getPlatformShortcutMeta().label}
         isFavoriteSelected={isFavoriteSelected}
+        isImeComposingRef={isImeComposingRef}
+        browsingActions={browsingActions}
+        onBrowseActions={onBrowseActions}
+        onLeaveActionBrowser={onLeaveActionBrowser}
+        truncateSearchItems={false}
+        onToggleSearchFavorite={handleToggleFavorite}
+        favoriteKeys={launcherFavoriteKeys}
+        pinnableItemKeys={availableItemKeys}
         onSettingsClose={() => {
           closeSettingsDialog()
           focusSearchInputAfterBack()
