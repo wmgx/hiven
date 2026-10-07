@@ -3,9 +3,8 @@
 /**
  * B1 quality gate — mandatory checks for PR / main.
  *
- * Full `tsc --noEmit` and full refactor-suite still carry historical debt;
- * this gate enforces the freeze-batch must-not-regress set:
- * architecture, reachability, permission least-privilege, and key boundary contracts.
+ * Enforces typecheck/build, dependency portability, runtime fallbacks,
+ * architecture, reachability, permissions and key boundary contracts.
  *
  * Tag release must not be weaker than this gate.
  */
@@ -14,6 +13,7 @@ import { spawnSync } from 'node:child_process'
 
 const commands = [
   ['npm', ['run', 'test:lockfile-registry']],
+  ['npm', ['run', 'test:baseline-runtime-fallbacks']],
   ['npm', ['run', 'check:typecheck']],
   ['npm', ['run', 'check:architecture']],
   ['npm', ['run', 'check:reachability']],
