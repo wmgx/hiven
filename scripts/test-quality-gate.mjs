@@ -15,6 +15,7 @@ const commands = [
   ['npm', ['run', 'test:lockfile-registry']],
   ['npm', ['run', 'test:baseline-runtime-fallbacks']],
   ['npm', ['run', 'test:builtin-plugin-release']],
+  ['npm', ['run', 'test:plugin-runtime-lifecycle']],
   ['npm', ['run', 'check:typecheck']],
   ['npm', ['run', 'check:architecture']],
   ['npm', ['run', 'check:reachability']],
