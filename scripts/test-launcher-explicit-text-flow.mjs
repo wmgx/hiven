@@ -25,6 +25,9 @@ try {
   const { collectStaticCandidates } = await vite.ssrLoadModule('/src/workspace/launcher/registry.ts')
   const { LauncherController } = await vite.ssrLoadModule('/src/workspace/launcher/controller.ts')
   const output = await vite.ssrLoadModule('/src/workspace/launcher/output.ts')
+  const { createGlobalLauncherPluginApi } = await vite.ssrLoadModule('/src/launcher/clipboard/globalLauncherApi.ts')
+  const { consumePendingObjectBlock } = await vite.ssrLoadModule('/src/launcher/clipboard/pendingObjectBlock.ts')
+  const hostReturn = createGlobalLauncherPluginApi({}).returnToLauncher
   const { getLastSaveableRun, setLastSaveableRun } = await vite.ssrLoadModule('/src/workspace/savedActions/lastSaveableRun.ts')
   const store = await vite.ssrLoadModule('/src/workspace/savedActions/store.ts')
   const provider = await vite.ssrLoadModule('/src/workspace/savedActions/provider.ts')
@@ -51,7 +54,11 @@ try {
     async returnToLauncher(text) {
       if (failDelivery) throw new Error('Return denied')
       deliveries.push(['return', text])
-      material = text
+      await hostReturn(text)
+      const returnedBlock = consumePendingObjectBlock()
+      assert.equal(returnedBlock.source, 'tool-result')
+      assert.equal(returnedBlock.payloadText, text, 'real host material bridge preserves even an empty string')
+      material = returnedBlock.payloadText
     },
     async pasteToForegroundApp() { throw new Error('Unexpected paste') },
   }
@@ -308,6 +315,74 @@ try {
     assert.equal(rootReturns, rootReturnCount)
     api[method] = original
   }
+  // Real newly opted-in tools follow the same controller, delivery and save contract.
+  const extensionCases = [
+    { key: 'plugin:encode-decode:tool:base64.decode', input: Buffer.from('  中文 🙂\t\n\n').toString('base64'), expected: '  中文 🙂\t\n\n', destination: 'copy' },
+    { key: 'plugin:encode-decode:tool:base64.decode', input: Buffer.from(' \t\n').toString('base64'), expected: ' \t\n', destination: 'return' },
+    { key: 'plugin:line-tools:tool:line-tools.remove-blank-lines', input: '\n first \n \t\n中文 🙂\n\n', expected: ' first \n中文 🙂', destination: 'return' },
+    { key: 'plugin:line-tools:tool:line-tools.remove-blank-lines', input: ' \t\n\r\n ', expected: '', destination: 'copy' },
+    { key: 'plugin:line-tools:tool:line-tools.remove-blank-lines', input: ' \t\n\r\n ', expected: '', destination: 'return' },
+  ]
+  for (const sample of extensionCases) {
+    controller.reset()
+    const actual = collectStaticCandidates('global-launcher').find((item) => item.systemKey === sample.key)
+    const beforeRun = structuredClone(await getLastSaveableRun())
+    const deliveryCount = deliveries.length
+    await controller.selectItem(actual)
+    assert.equal(top().kind, 'collect-input', 'no invented parameter step for parameter-free tools')
+    await controller.submitInput()
+    assert.equal(top().kind, 'collect-input', 'truly empty input is still missing')
+    assert.ok(controller.getState().error)
+    controller.setInputText(sample.input)
+    await controller.previewInput()
+    assert.equal(top().previewOutput, undefined, 'typing never performs the new tools')
+    await controller.submitInput()
+    assert.equal(top().kind, 'result', 'nonempty whitespace input is meaningful')
+    assert.equal(top().output.choices[0].preview, sample.expected)
+    assert.deepEqual(await getLastSaveableRun(), beforeRun, 'new-tool previews cannot be saved as completed runs')
+    assert.equal(deliveries.length, deliveryCount)
+    const choice = top().output.choices[0]
+    if (sample.destination === 'copy') await controller.activateChoice(choice)
+    else await controller.activateSecondary(choice, 'return-to-launcher')
+    assert.deepEqual(deliveries.at(-1), [sample.destination, sample.expected])
+    if (sample.destination === 'return') {
+      assert.equal(top().kind, 'list')
+      assert.equal(material, sample.expected, 'empty return replaces previous material with an empty payload')
+    }
+    const completed = structuredClone(await getLastSaveableRun())
+    assert.equal(completed.actionKey, sample.key)
+    assert.equal(completed.inputBinding, 'prompt')
+    assert.deepEqual(completed.savedParams, {})
+    const saved = store.createSavedAction(completed, `Saved ${actual.display.title}`, [])
+    try {
+      const replay = collectStaticCandidates('global-launcher').find((item) => item.savedActionArtifactId === saved.id)
+      controller.reset()
+      await controller.selectItem(replay, { objectBlockText: sample.input })
+      assert.equal(top().kind, 'result')
+      assert.equal(top().output.choices[0].preview, sample.expected)
+      assert.equal(deliveries.length, deliveryCount + 1, 'replay waits for explicit delivery')
+      await controller.activateChoice(top().output.choices[0])
+      assert.deepEqual(deliveries.at(-1), [sample.destination, sample.expected])
+      assert.deepEqual(await getLastSaveableRun(), completed, 'replay does not overwrite completed-run metadata')
+      for (const candidates of [[actual, { ...actual, source: 'dev' }], [{ ...actual, source: 'dev' }, actual]]) {
+        const ambiguous = provider.getSavedActionLauncherItems(candidates).find((item) => item.savedActionArtifactId === saved.id)
+        assert.equal(ambiguous.disabledReason.code, 'ambiguous-action')
+      }
+    } finally {
+      store.deleteSavedAction(saved.id)
+    }
+  }
+  const beforeInvalidBase64 = structuredClone(await getLastSaveableRun())
+  const beforeInvalidDeliveries = deliveries.length
+  controller.reset()
+  await controller.selectItem(collectStaticCandidates('global-launcher').find((item) => item.systemKey === 'plugin:encode-decode:tool:base64.decode'))
+  controller.setInputText('%%%invalid%%%')
+  await controller.submitInput()
+  assert.equal(top().kind, 'collect-input')
+  assert.ok(controller.getState().error)
+  assert.equal(deliveries.length, beforeInvalidDeliveries)
+  assert.deepEqual(await getLastSaveableRun(), beforeInvalidBase64, 'invalid Base64 never becomes a saveable success')
+
   assert.equal(hiddenReads, 0, 'new explicit flow never reads editor/selection/clipboard')
   api.getSelectionText = () => ''
   api.getActiveText = () => ''
@@ -334,7 +409,7 @@ try {
   await controller.activateChoice(cancellation)
   assert.equal(top().kind, 'collect-input', 'ordinary cancellation pops only its result layer')
   assert.equal(rootReturns, rootReturnCount)
-  console.log('Explicit text journey passed: params, preview, exact delivery, save snapshot, durable artifacts, replay, failed writes, stale preview cancellation and legacy behavior')
+  console.log('Explicit text journey passed: JSON/Base64/blank-line removal, empty material return, exact delivery, save snapshot, durable artifacts, replay, failed writes, stale preview cancellation and legacy behavior')
 } finally {
   console.info = originalInfo
   await vite.close()
