@@ -203,12 +203,15 @@ export function useGlobalLauncherHostEscape({
   controllerRef,
   closeLauncher,
   focusSearchInputAfterBack,
+  onRootBack,
 }: {
   open: boolean
   isImeComposingRef: RefObject<boolean>
   controllerRef: RefObject<{ back?: () => boolean | void } | null>
   closeLauncher: () => void
   focusSearchInputAfterBack: () => void
+  /** Optional root navigation; command/surface Escape handlers still take precedence. */
+  onRootBack?: () => boolean
 }) {
   const handleHostEscape = useCallback((event: KeyboardEvent) => {
     if (event.key !== 'Escape') return
@@ -242,6 +245,8 @@ export function useGlobalLauncherHostEscape({
       return
     }
 
+    if (onRootBack?.()) return
+
     // Root: only now may Escape dismiss the launcher.
     closeLauncher()
   }, [
@@ -249,6 +254,7 @@ export function useGlobalLauncherHostEscape({
     controllerRef,
     focusSearchInputAfterBack,
     isImeComposingRef,
+    onRootBack,
   ])
 
   useEffect(() => {
