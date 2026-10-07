@@ -18,10 +18,11 @@ import {
   listDesktopBridgeHistory,
   listDesktopBridgeTargets,
 } from '../desktopControl/bridgeTargets'
+import { getAutomaticLearningSignal } from '../../store'
 import { TelemetryEvents, trackPerf } from '../telemetry'
 import type { HistoryEntryLike } from './clipboardBrowserLink'
 import { getRecentClipboardTokensWithSource, setCurrentSourceHost } from './observer'
-import { putNavigation, putPathObservation, pruneOldNavigations } from './store'
+import { putNavigation, putPathObservation } from './store'
 import { saltedHash } from './store'
 import { hostnameOf, templatizeUrl, templatizeUrlWithToken, type UrlTemplateResult } from './urlTemplate'
 
@@ -45,9 +46,10 @@ export function getRecentHistoryForRecall(): readonly HistoryEntryLike[] {
   return recentHistoryEntries
 }
 
-async function refreshHistoryRecallCache(): Promise<void> {
+async function refreshHistoryRecallCache(signal: AbortSignal): Promise<void> {
   try {
     const items = await listDesktopBridgeHistory()
+    if (signal.aborted) return
     recentHistoryEntries = items.slice(0, HISTORY_RECALL_CAP).map((item) => ({
       url: item.url,
       title: item.title,
@@ -172,7 +174,8 @@ function pathSegmentsOf(url: string): { host: string; segments: string[] } | nul
  * Runs for EVERY http navigation, including ones templatizeUrl rejects — those
  * are exactly the text-variable paths this induction exists to find.
  */
-function recordPathShape(url: string): void {
+function recordPathShape(url: string, signal: AbortSignal): void {
+  if (signal.aborted) return
   const parsed = pathSegmentsOf(url)
   if (!parsed) return
   const { host, segments } = parsed
@@ -189,13 +192,14 @@ function recordPathShape(url: string): void {
     host,
     segmentHashes: segments.map((segment) => saltedHash(segment)),
     ts: Date.now(),
-  })
+  }, signal)
 }
 
-function recordNavigation(url: string): void {
+function recordNavigation(url: string, signal: AbortSignal): void {
+  if (signal.aborted) return
   // Independent of templatization: a path with no id-shaped segment still
   // carries positional evidence.
-  recordPathShape(url)
+  recordPathShape(url, signal)
 
   const resolved = resolveTemplate(url)
   if (!resolved) return
@@ -210,7 +214,7 @@ function recordNavigation(url: string): void {
     slotKind,
     ts: Date.now(),
     sourceHost: scoped ? sourceHost : undefined,
-  })
+  }, signal)
   // Shape-only diagnostics — never the raw URL/value.
   trackPerf(TelemetryEvents.learningNavObserve, { host: result.host, slotKind, copyCorrelated, scoped: Boolean(scoped) })
 }
@@ -218,37 +222,36 @@ function recordNavigation(url: string): void {
 let started = false
 
 /** Start passive navigation observation. Idempotent; returns a stop function. */
-export function startNavigationSensor(): () => void {
-  if (started) return () => undefined
+export function startNavigationSensor(parentSignal: AbortSignal = getAutomaticLearningSignal()): () => void {
+  if (started || parentSignal.aborted) return () => undefined
   if (!isTauriRuntime()) return () => undefined
   started = true
-  void pruneOldNavigations()
-
-  let stopped = false
+  const controller = new AbortController()
+  const { signal } = controller
   let polling = false
   let lastUrl: string | null = null
   let lastEventTs = 0
   let historySeeded = false
 
   const consumeUrl = (url: string | null | undefined) => {
-    if (!isHttpUrl(url) || url === lastUrl) return
+    if (signal.aborted || !isHttpUrl(url) || url === lastUrl) return
     lastUrl = url
     currentActiveHost = hostnameOf(url)
     setCurrentSourceHost(currentActiveHost)
-    recordNavigation(url)
+    recordNavigation(url, signal)
   }
 
   const seedHistory = async () => {
-    if (historySeeded) return
+    if (signal.aborted || historySeeded) return
     try {
       const items = await listDesktopBridgeHistory()
-      if (items.length === 0) return
+      if (signal.aborted || items.length === 0) return
       historySeeded = true
       const seen = new Set<string>()
       for (const item of items.slice(0, HISTORY_SEED_CAP)) {
         if (!isHttpUrl(item.url) || seen.has(item.url)) continue
         seen.add(item.url)
-        recordNavigation(item.url)
+        recordNavigation(item.url, signal)
       }
     } catch {
       // isolate from the poll loop
@@ -258,6 +261,7 @@ export function startNavigationSensor(): () => void {
   const consumeEvents = async () => {
     try {
       const events = await listDesktopBridgeEvents(undefined, lastEventTs)
+      if (signal.aborted) return
       for (const event of events) {
         if (event.ts > lastEventTs) lastEventTs = event.ts
         if (!PAGE_EVENT_TYPES.has(event.type)) continue
@@ -269,14 +273,16 @@ export function startNavigationSensor(): () => void {
   }
 
   const tick = async () => {
-    if (stopped || polling) return
+    if (signal.aborted || polling) return
     polling = true
     try {
       await consumeEvents()
+      if (signal.aborted) return
       if (!historySeeded) await seedHistory()
+      if (signal.aborted) return
       // Snapshot fallback when the extension is connected but events are quiet.
       const url = await readActiveUrl()
-      if (!stopped) consumeUrl(url)
+      consumeUrl(url)
     } catch {
       // isolate from the poll loop
     } finally {
@@ -288,18 +294,23 @@ export function startNavigationSensor(): () => void {
   void tick()
 
   const recallIntervalId = window.setInterval(
-    () => void refreshHistoryRecallCache(),
+    () => { if (!signal.aborted) void refreshHistoryRecallCache(signal) },
     HISTORY_RECALL_REFRESH_MS,
   )
-  void refreshHistoryRecallCache()
+  void refreshHistoryRecallCache(signal)
 
-  return () => {
-    stopped = true
+  const stop = () => {
+    if (signal.aborted) return
+    controller.abort()
+    parentSignal.removeEventListener('abort', stop)
     started = false
     currentActiveHost = null
     setCurrentSourceHost(null)
     recentHistoryEntries = []
+    recentPathSamples.clear()
     window.clearInterval(intervalId)
     window.clearInterval(recallIntervalId)
   }
+  parentSignal.addEventListener('abort', stop, { once: true })
+  return stop
 }
