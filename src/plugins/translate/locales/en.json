@@ -40,10 +40,10 @@
   "input.placeholder": "Type or paste text to translate...",
   "output.placeholder": "Translation appears here.",
   "status.idle": "Idle",
-  "status.waiting": "Waiting to translate...",
-  "status.translating": "Translating...",
+  "status.waiting": "Translation starts automatically when you pause typing.",
+  "status.translating": "Translating… Preview is incomplete.",
   "status.success": "Translated",
-  "status.error": "Translation failed - {message}",
+  "status.error": "Translation failed: {message}. Retry or check Settings.",
   "status.quota": "Monthly quota reached",
   "meta.character": "{count} character",
   "meta.characters": "{count} characters",
@@ -62,5 +62,13 @@
   "language.ko": "Korean",
   "language.fr": "French",
   "language.de": "German",
-  "language.es": "Spanish"
+  "language.es": "Spanish",
+  "status.stopped": "Stopped. Preview is incomplete. Retry or edit the text.",
+  "pane.incomplete": "Incomplete preview",
+  "action.stop": "Stop",
+  "action.retry": "Retry",
+  "error.ai.incomplete": "The AI stream ended before completion",
+  "error.ai.empty": "The AI returned no translation",
+  "error.unknown": "An unknown error occurred",
+  "status.noProfile": "No enabled profile. Enable a translation profile in Settings."
 }
