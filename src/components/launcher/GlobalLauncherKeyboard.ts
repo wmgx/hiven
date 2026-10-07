@@ -1,4 +1,6 @@
 import type { KeyboardEvent as ReactKeyboardEvent, MutableRefObject } from 'react'
+import { getHostOutputIntent } from '../../workspace/launcher/output'
+import type { LauncherResultChoice } from '../../workspace/launcher/types'
 import type { CollectInputFrame, ResultFrame } from '../../workspace/launcher/controller'
 import type { LauncherMixedItem } from './LauncherMixedList'
 import { shouldCustomizeParams } from './launcherParamShortcuts'
@@ -108,6 +110,8 @@ export function handleGlobalLauncherKeyDown({
       }
       if (event.key === 'Enter') {
         event.preventDefault()
+        const inputFrame = topFrame as CollectInputFrame
+        if (inputFrame.item.executionMode === 'explicit-text-preview' && (event.shiftKey || event.altKey)) return
         void controllerRef.current?.submitInput?.()
         return
       }
@@ -144,6 +148,21 @@ export function handleGlobalLauncherKeyDown({
           | { secondaryActions?: Array<{ id: string }>; preview?: string; title?: string }
           | undefined
         if (!choice) return
+        if (resultFrame.executionMode === 'explicit-text-preview') {
+          if (controllerState.busy || event.shiftKey || event.altKey) return
+          const markedChoice = choice as LauncherResultChoice
+          if (event.metaKey || event.ctrlKey) {
+            if (getHostOutputIntent(markedChoice) === 'return-to-launcher') {
+              toggleResultChoice(choice, resultFrame)
+              return
+            }
+            const action = markedChoice.secondaryActions?.find((candidate) => getHostOutputIntent(candidate) === 'return-to-launcher')
+            if (action) activateResultSecondary?.(choice, action.id)
+            return
+          }
+          toggleResultChoice(choice, resultFrame)
+          return
+        }
         // Align with collect-input destinations: ⇧↵ paste · ⌘↵ return · ↵ primary
         if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
           if (choice.secondaryActions?.some((a) => a.id === 'return-to-launcher')) {
