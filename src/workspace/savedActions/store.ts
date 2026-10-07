@@ -117,6 +117,39 @@ export function deleteSavedAction(id: string): SavedActionV1 | undefined {
   return removed
 }
 
+function readSavedActionsForRename(): SavedActionV1[] {
+  const target = storage()
+  if (!target) throw new Error('Saved Action storage is unavailable')
+  const parsed = JSON.parse(target.getItem(STORAGE_KEY) ?? '[]') as unknown
+  if (!Array.isArray(parsed)) throw new Error('Saved Action storage is invalid')
+  return parsed.filter(isSavedAction)
+}
+
+/** Unlike list discovery, an explicit edit must distinguish read failure from deletion. */
+export function getSavedActionForRename(id: string): SavedActionV1 | undefined {
+  return readSavedActionsForRename().find((action) => action.id === id)
+}
+
+/** Rename the chosen artifact without replacing its identity or execution settings. */
+export function renameSavedAction(
+  id: string,
+  name: string,
+  expectedName: string,
+): { status: 'renamed'; action: SavedActionV1 } | { status: 'missing' | 'changed' | 'invalid-name' } {
+  const cleanName = name.trim()
+  if (!cleanName || cleanName.length > 80) return { status: 'invalid-name' }
+  const actions = readSavedActionsForRename()
+  const index = actions.findIndex((action) => action.id === id)
+  if (index < 0) return { status: 'missing' }
+  const current = actions[index]
+  if (current.name !== expectedName) return { status: 'changed' }
+  if (current.name === cleanName) return { status: 'renamed', action: current }
+  const renamed = { ...current, name: cleanName }
+  actions[index] = renamed
+  write(actions)
+  return { status: 'renamed', action: renamed }
+}
+
 export function touchSavedAction(id: string): void {
   const actions = listSavedActions()
   const index = actions.findIndex((action) => action.id === id)

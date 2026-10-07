@@ -14,7 +14,7 @@ import {
 } from '../experience/journal'
 import type { LastSaveableRunState } from '../savedActions/types'
 import { getLastSaveableRun } from '../savedActions/lastSaveableRun'
-import { createSavedAction, deleteSavedAction, listSavedActions } from '../savedActions/store'
+import { createSavedAction, deleteSavedAction, getSavedActionForRename, listSavedActions, renameSavedAction } from '../savedActions/store'
 import { recordSavedActionEvent } from '../savedActions/events'
 import { isGlobalLauncherSavedActionOutput } from '../savedActions/compatibility'
 import { describeSavedAction } from '../savedActions/display'
@@ -284,6 +284,60 @@ export function createSaveLastRunItem(options: {
       execute: async (ctx) => ({ ok: false, message: translate(ctx.locale, 'palette', 'savedActionNoRecent') }),
     }
   return saveLastItem
+}
+
+/** A row action names metadata only; it never executes the underlying tool. */
+export function createRenameSavedActionItem(artifactId: string): LauncherItem {
+  const item: LauncherItem = {
+    systemKey: `host:saved-action:rename:${artifactId}`,
+    kind: 'host',
+    display: { title: 'Rename saved tool', titleI18n: { zh: '重命名已保存工具' }, icon: 'Pencil' },
+    surfaces: ['global-launcher'],
+    metadataInput: true,
+    experienceRecord: false,
+    recordUsage: false,
+    behavior: {
+      type: 'collect-input',
+      input: {
+        placeholder: 'New name (up to 80 characters)',
+        placeholderI18n: { zh: '新名称（最多 80 个字符）' },
+        emptyInputMessage: 'A name is required',
+        emptyInputMessageI18n: { zh: '请输入名称' },
+      },
+    },
+    prepare: (ctx) => {
+      let selected
+      try {
+        selected = getSavedActionForRename(artifactId)
+      } catch {
+        throw new Error(translate(ctx.locale, 'palette', 'savedActionRenameReadFailed'))
+      }
+      if (!selected) throw new Error(translate(ctx.locale, 'palette', 'savedActionRenameMissing'))
+      const originalName = selected.name
+      return {
+        ...item,
+        prepare: undefined,
+        display: {
+          ...item.display,
+          title: `Rename “${originalName}”`,
+          titleI18n: { zh: `重命名“${originalName}”` },
+        },
+        execute: async (inputCtx) => {
+          try {
+            const result = renameSavedAction(artifactId, inputCtx.input?.text ?? '', originalName)
+            if (result.status === 'renamed') return { ok: true, keepOpen: true }
+            const key = result.status === 'missing' ? 'savedActionRenameMissing'
+              : result.status === 'changed' ? 'savedActionRenameChanged' : 'savedActionRenameInvalid'
+            return { ok: false, message: translate(inputCtx.locale, 'palette', key) }
+          } catch {
+            return { ok: false, message: translate(inputCtx.locale, 'palette', 'savedActionRenameFailed') }
+          }
+        },
+      }
+    },
+    execute: async (ctx) => ({ ok: false, message: translate(ctx.locale, 'palette', 'savedActionRenameMissing') }),
+  }
+  return item
 }
 
 export function getHostSavedActionItems(resolveBaseItems: () => LauncherItem[] = () => []): LauncherItem[] {

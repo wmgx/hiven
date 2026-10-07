@@ -47,6 +47,7 @@ export function GlobalLauncherSearchFrame({
   onLeaveActionBrowser,
   truncateItems = true,
   onToggleFavorite,
+  onRenameSavedAction,
   favoriteKeys,
   pinnableItemKeys,
   onQueryChange,
@@ -78,6 +79,7 @@ export function GlobalLauncherSearchFrame({
   onLeaveActionBrowser?: () => void
   truncateItems?: boolean
   onToggleFavorite?: (item: LauncherMixedItem) => void
+  onRenameSavedAction?: (item: LauncherMixedItem) => void
   favoriteKeys?: readonly string[]
   pinnableItemKeys?: ReadonlySet<string>
   onQueryChange: (value: string) => void
@@ -245,6 +247,7 @@ export function GlobalLauncherSearchFrame({
               locale={locale}
               truncate={truncateItems && !query}
               onToggleFavorite={onToggleFavorite}
+              onRenameSavedAction={onRenameSavedAction}
               favoriteKeys={favoriteKeys}
               pinnableItemKeys={pinnableItemKeys}
               onSelect={onSelectItem}

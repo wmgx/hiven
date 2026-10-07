@@ -59,6 +59,7 @@ const commands = [
   ['npm', ['run', 'test:self-learning-pr0']],
   ['npm', ['run', 'test:self-learning-pr1']],
   ['npm', ['run', 'test:self-learning-pr2']],
+  ['npm', ['run', 'test:saved-action-rename']],
   ['npm', ['run', 'test:self-learning-pr3']],
   ['npm', ['run', 'test:window-architecture-phases']],
   ['npm', ['run', 'test:plugin-editor-surface-open-lifecycle']],

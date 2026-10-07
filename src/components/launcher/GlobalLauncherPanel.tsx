@@ -4,6 +4,7 @@ import type { LauncherHostSurfaceTarget, PluginSurfaceOpenTarget } from '../../s
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
 import type { CollectInputFrame, LauncherController, LauncherControllerState, ResultFrame } from '../../workspace/launcher/controller'
 import type { LauncherExecuteResult, LauncherResultChoice } from '../../workspace/launcher/types'
+import { createRenameSavedActionItem } from '../../workspace/launcher/hostActions'
 import type { GlobalLauncherActiveSurfaceFrame } from './GlobalLauncherFrames'
 import { GlobalLauncherFrameSwitch } from './GlobalLauncherFrames'
 import type { GlobalLauncherPermissionFrameState } from './GlobalLauncherPermissionFrame'
@@ -149,6 +150,11 @@ export function GlobalLauncherPanel({
   const handleSearchSelectItem = useCallback((item: GlobalLauncherItem) => {
     selectItem(item)
   }, [selectItem])
+  const handleRenameSavedAction = useCallback((item: GlobalLauncherItem) => {
+    const artifactId = item.domainItem.savedActionArtifactId
+    if (!artifactId) return
+    void controllerRef.current?.selectItem(createRenameSavedActionItem(artifactId))
+  }, [controllerRef])
   const toggleLauncherFavorite = useAppStore((s) => s.toggleLauncherFavorite)
   const launcherFavoriteKeys = useAppStore((s) => s.launcherFavoriteKeys)
   const handleToggleFavorite = useCallback((item: GlobalLauncherItem) => {
@@ -305,6 +311,7 @@ export function GlobalLauncherPanel({
         onLeaveActionBrowser={onLeaveActionBrowser}
         truncateSearchItems={false}
         onToggleSearchFavorite={handleToggleFavorite}
+        onRenameSavedAction={handleRenameSavedAction}
         favoriteKeys={launcherFavoriteKeys}
         pinnableItemKeys={availableItemKeys}
         onSettingsClose={() => {
