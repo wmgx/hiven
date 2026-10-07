@@ -57,7 +57,7 @@ export function handleGlobalLauncherKeyDown({
   toggleResultChoice: (choice: unknown, frame: ResultFrame) => void
   /** Package 4: result secondary e.g. return-to-launcher */
   activateResultSecondary?: (choice: { secondaryActions?: Array<{ id: string }>; preview?: string; title?: string }, actionId: string) => void
-  pastePreviewText?: (text: string) => void | Promise<void>
+  pastePreviewText?: (choice: LauncherResultChoice) => void | Promise<void>
   isKeyboardNavRef: MutableRefObject<boolean>
   visibleFilteredLength: number
   setSelectedIndex: (
@@ -110,6 +110,7 @@ export function handleGlobalLauncherKeyDown({
       }
       if (event.key === 'Enter') {
         event.preventDefault()
+        if (controllerState.busy) return
         const inputFrame = topFrame as CollectInputFrame
         if (inputFrame.item.executionMode === 'explicit-text-preview' && (event.shiftKey || event.altKey)) return
         void controllerRef.current?.submitInput?.()
@@ -147,7 +148,11 @@ export function handleGlobalLauncherKeyDown({
         const choice = choices[Math.min(resultSelectedIndex, Math.max(0, choices.length - 1))] as
           | { secondaryActions?: Array<{ id: string }>; preview?: string; title?: string }
           | undefined
-        if (!choice) return
+        if (!choice || controllerState.busy) return
+        if (resultFrame.retryOnly) {
+          if (!event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey) toggleResultChoice(choice, resultFrame)
+          return
+        }
         if (resultFrame.executionMode === 'explicit-text-preview') {
           if (controllerState.busy || event.shiftKey || event.altKey) return
           const markedChoice = choice as LauncherResultChoice
@@ -173,7 +178,7 @@ export function handleGlobalLauncherKeyDown({
         if (event.key === 'Enter' && event.shiftKey && pastePreviewText) {
           const text = (choice.preview ?? choice.title ?? '').trim()
           if (text) {
-            void pastePreviewText(text)
+            void pastePreviewText(choice as LauncherResultChoice)
             return
           }
         }
