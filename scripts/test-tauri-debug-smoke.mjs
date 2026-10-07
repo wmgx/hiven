@@ -1,103 +1,20 @@
 #!/usr/bin/env node
 
-import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, rmSync } from 'node:fs'
-import { writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
-import { spawn } from 'node:child_process'
-import net from 'node:net'
+import { duration, isPortBusy, nativeExecutable, runNativeSmoke, tauriCommand } from './lib/tauri-debug-runner.mjs'
 
-const root = process.cwd()
-const tempDir = join(root, 'temp')
-mkdirSync(tempDir, { recursive: true })
-
-const logPath = join(tempDir, `tauri-debug-smoke-${Date.now()}.log`)
-const timeoutMs = Number(process.env.HIVEN_TAURI_SMOKE_TIMEOUT_MS ?? 25_000)
-const shutdownMs = Number(process.env.HIVEN_TAURI_SMOKE_SHUTDOWN_MS ?? 2_000)
-const suspiciousPattern = /Unhandled rejection|ReferenceError|TypeError|panic|panicked|compilation failed|error:/i
-
-async function isPortBusy(port) {
-  const tryHost = (host) => new Promise((resolve) => {
-    const socket = net.connect({ port, host }, () => {
-      socket.end()
-      resolve(true)
-    })
-    socket.on('error', () => resolve(false))
-  })
-  // Vite may bind IPv6-only on macOS localhost; probe both families.
-  return (await tryHost('127.0.0.1')) || (await tryHost('::1')) || (await tryHost('localhost'))
-}
-
-if (await isPortBusy(1420) && process.env.HIVEN_TAURI_SMOKE_FORCE !== '1') {
+if (!['linux', 'darwin'].includes(process.platform)) {
+  console.log(`tauri debug smoke skipped: native process probing is unsupported on ${process.platform}`)
+} else if (process.env.HIVEN_TAURI_SMOKE_FORCE !== '1' && await isPortBusy(1420)) {
   console.log('tauri debug smoke skipped: port 1420 already in use (set HIVEN_TAURI_SMOKE_FORCE=1 to force)')
-  process.exit(0)
-}
-
-const packageManagerPath = process.env.npm_execpath ?? ''
-const userAgent = process.env.npm_config_user_agent ?? ''
-const isPnpm = /pnpm/i.test(packageManagerPath) || /pnpm\//i.test(userAgent)
-const npmCommand = packageManagerPath ? process.execPath : isPnpm ? 'pnpm' : 'npm'
-const npmArgs = packageManagerPath
-  ? isPnpm
-    ? [packageManagerPath, 'run', 'tauri', 'dev']
-    : [packageManagerPath, 'run', 'tauri', '--', 'dev']
-  : isPnpm
-    ? ['run', 'tauri', 'dev']
-    : ['run', 'tauri', '--', 'dev']
-const pathEntries = [
-  process.env.npm_node_execpath ? dirname(process.env.npm_node_execpath) : '',
-  '/opt/homebrew/bin',
-  process.env.PATH ?? '',
-].filter(Boolean)
-
-const child = spawn(npmCommand, npmArgs, {
-  cwd: root,
-  detached: true,
-  stdio: ['ignore', 'pipe', 'pipe'],
-  env: { ...process.env, NO_COLOR: process.env.NO_COLOR ?? '1', PATH: pathEntries.join(':') },
-})
-
-let output = ''
-child.stdout.on('data', (chunk) => { output += chunk.toString() })
-child.stderr.on('data', (chunk) => { output += chunk.toString() })
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
-const closePromise = new Promise((resolve) => child.once('close', (code, signal) => resolve({ code, signal })))
-
-let earlyExit = null
-await Promise.race([
-  closePromise.then((result) => { earlyExit = result }),
-  sleep(timeoutMs),
-])
-
-if (earlyExit) {
-  await writeFile(logPath, output)
-  try {
-    if (/Port 1420 is already in use/i.test(output) && process.env.HIVEN_TAURI_SMOKE_FORCE !== '1') {
-      console.log('tauri debug smoke skipped: port 1420 became busy during start')
-      process.exit(0)
-    }
-    assert.fail(`tauri dev exited before smoke timeout: code=${earlyExit.code} signal=${earlyExit.signal}`)
-  } finally {
-    if (!process.env.HIVEN_KEEP_TAURI_SMOKE_LOG && existsSync(logPath)) rmSync(logPath, { force: true })
-  }
-}
-
-try { process.kill(-child.pid, 'SIGTERM') } catch { child.kill('SIGTERM') }
-await Promise.race([closePromise, sleep(shutdownMs)])
-if (child.exitCode === null && child.signalCode === null) {
-  try { process.kill(-child.pid, 'SIGKILL') } catch { child.kill('SIGKILL') }
-  await Promise.race([closePromise, sleep(1_000)])
-}
-
-await writeFile(logPath, output)
-try {
-  assert.match(output, /VITE v[\s\S]*ready|Running DevCommand|Running `target\/debug\/hiven`/, 'tauri debug smoke should reach the dev/runtime startup path')
-  assert.doesNotMatch(output, suspiciousPattern, 'tauri debug smoke log must not contain startup/runtime failure signatures')
-  console.log('tauri debug smoke checks passed')
-} finally {
-  if (existsSync(logPath)) {
-    if (process.env.HIVEN_KEEP_TAURI_SMOKE_LOG === '1') console.log(`kept tauri debug smoke log at ${logPath}`)
-    else rmSync(logPath, { force: true })
-  }
+} else {
+  const root = process.cwd()
+  const result = await runNativeSmoke({
+    root, ...tauriCommand(), executable: nativeExecutable(root),
+    timeoutMs: duration(process.env.HIVEN_TAURI_SMOKE_TIMEOUT_MS, 25_000, 'startup timeout'),
+    settleMs: duration(process.env.HIVEN_TAURI_SMOKE_SETTLE_MS, 1_500, 'settle duration'),
+    shutdownMs: duration(process.env.HIVEN_TAURI_SMOKE_SHUTDOWN_MS, 2_000, 'shutdown timeout'),
+    keepLog: process.env.HIVEN_KEEP_TAURI_SMOKE_LOG === '1',
+  })
+  console.log(`tauri debug smoke checks passed: native pid=${result.pid}`)
+  if (result.logPath) console.log(`kept tauri debug smoke log at ${result.logPath}`)
 }

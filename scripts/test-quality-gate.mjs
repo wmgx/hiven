@@ -14,6 +14,7 @@ import { spawnSync } from 'node:child_process'
 const commands = [
   ['npm', ['run', 'test:lockfile-registry']],
   ['npm', ['run', 'test:baseline-runtime-fallbacks']],
+  ['npm', ['run', 'test:tauri-debug-runner']],
   ['npm', ['run', 'test:builtin-plugin-release']],
   ['npm', ['run', 'test:builtin-application-updates']],
   ['npm', ['run', 'test:plugin-runtime-lifecycle']],

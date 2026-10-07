@@ -158,6 +158,7 @@
     "test:refactor-final-acceptance": "node scripts/test-refactor-final-acceptance.mjs",
     "test:background-lifecycle": "node scripts/test-background-lifecycle.mjs",
     "test:tauri-debug-smoke": "node scripts/test-tauri-debug-smoke.mjs",
+    "test:tauri-debug-runner": "node scripts/test-tauri-debug-runner.mjs",
     "test:tauri-debug-runtime-state": "node scripts/test-tauri-debug-runtime-state.mjs",
     "test:desktop-tray-startup": "node scripts/test-desktop-tray-startup.mjs",
     "test:refactor-suite": "node scripts/test-refactor-suite.mjs",
