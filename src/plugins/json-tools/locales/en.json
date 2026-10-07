@@ -30,6 +30,7 @@
   "yaml.fromJson.description": "Convert JSON to YAML",
   "route.expression": "JSON expression",
   "route.open": "Open this tool in the workbench",
+  "route.formatWorkbench": "JSON Prettify Workbench",
   "surface.inputPlaceholder": "Paste JSON here…",
   "surface.queryPlaceholder": "Paste a=1&b=2 or a full query string…",
   "surface.emptyOutput": "Output appears here.",
