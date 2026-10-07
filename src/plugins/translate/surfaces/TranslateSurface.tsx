@@ -5,6 +5,8 @@ import { BackIcon, CloseIcon, SettingsIcon } from '@hiven/plugin-ui/icons'
 import { AlertTriangle, ArrowRight, LoaderCircle } from 'lucide-react'
 import type { SourceLanguageCode, TargetLanguageCode, TranslateProfile, TranslateSettings } from '../settings/model'
 import { currentUsageMonth } from '../settings/model'
+import { useAiTranslationReadiness } from '../ai/useReadiness'
+import { AiReadinessNotice } from '../ai/AiReadinessNotice'
 import { AiTranslationError, estimateBilledChars, isAutoTranslateReady, resolveSmartTargetLang, translateText } from '../providers/adapters'
 
 const AUTO_TRANSLATE_DEBOUNCE_MS = 800
@@ -30,6 +32,7 @@ type TranslationRun = {
   identity: string
   controller: AbortController
   timer?: number
+  aiRevision?: number
 }
 
 type CacheEntry = {
@@ -213,10 +216,11 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
     () => profiles.find((profile) => profile.id === profileId) ?? initialProfile,
     [profiles, profileId, initialProfile],
   )
+  const { controller: readinessController, readiness } = useAiTranslationReadiness(host.ai, activeProfile)
   const profileRef = useRef(activeProfile)
   profileRef.current = activeProfile
   const translateProfileKey = profileExecutionKey(activeProfile)
-  const requestIdentity = JSON.stringify([inputText, sourceLang, targetLang, translateProfileKey, settings.defaultTargetLang])
+  const requestIdentity = JSON.stringify([inputText, sourceLang, targetLang, translateProfileKey, settings.defaultTargetLang, activeProfile?.provider === 'ai' ? readiness.revision : null])
   const identityRef = useRef(requestIdentity)
   identityRef.current = requestIdentity
   // Render-time identity also blocks stale success/copy before effect cleanup runs.
@@ -225,11 +229,13 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
     ? view.status
     : !activeProfile
       ? { kind: 'unconfigured' }
-      : isAutoTranslateReady(inputText)
+      : activeProfile.provider === 'ai' && !readinessController.execution(host.ai, activeProfile)
+        ? { kind: 'idle' }
+        : isAutoTranslateReady(inputText)
         ? { kind: 'waiting', dueAt: Date.now() + AUTO_TRANSLATE_DEBOUNCE_MS }
         : { kind: 'idle' }
-  const copyableRef = useRef<{ identity: string; text: string; view: TranslationView } | null>(null)
-  copyableRef.current = status.kind === 'success' && outputText ? { identity: requestIdentity, text: outputText, view } : null
+  const copyableRef = useRef<{ identity: string; text: string; view: TranslationView; aiRevision?: number } | null>(null)
+  copyableRef.current = status.kind === 'success' && outputText ? { identity: requestIdentity, text: outputText, view, aiRevision: activeProfile?.provider === 'ai' ? readiness.revision : undefined } : null
 
   const cancelCurrentRun = useCallback(() => {
     const run = runRef.current
@@ -255,8 +261,15 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
 
   const translateCurrentText = useCallback(async (run: TranslationRun, profile: TranslateProfile, text: string, source: SourceLanguageCode, target: TargetLanguageCode) => {
     const isCurrent = () => runRef.current === run && identityRef.current === run.identity && !run.controller.signal.aborted
+      && (profile.provider !== 'ai' || (readinessController.getSnapshot().revision === run.aiRevision && readinessController.matches(hostRef.current.ai, profile)))
     if (!isCurrent()) return
     run.timer = undefined
+    const aiSelection = profile.provider === 'ai' ? readinessController.execution(hostRef.current.ai, profile) : undefined
+    if (profile.provider === 'ai' && !aiSelection) {
+      runRef.current = null
+      setView({ identity: run.identity, outputText: '', status: { kind: 'idle' } })
+      return
+    }
     const month = currentUsageMonth()
     const normalizedProfile = resetUsageMonth(profile, month)
     const effectiveTarget = target === 'smart' ? resolveSmartTargetLang(text) : target
@@ -283,6 +296,7 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
     try {
       const result = await translateText({ text, sourceLang: source, targetLang: effectiveTarget }, normalizedProfile, hostRef.current.network, hostRef.current.ai, {
         signal: run.controller.signal,
+        aiSelection,
         onText: (text) => {
           if (!isCurrent()) return
           preview = text
@@ -307,7 +321,7 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
     } finally {
       if (runRef.current === run) runRef.current = null
     }
-  }, [])
+  }, [readinessController])
 
   useEffect(() => {
     const trimmed = inputText.trim()
@@ -319,14 +333,19 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
       return
     }
 
-    const run = { id: ++requestIdRef.current, identity: requestIdentity, controller: new AbortController() } as TranslationRun
+    if (profile.provider === 'ai' && (readinessController.getSnapshot().revision !== readiness.revision || !readinessController.execution(hostRef.current.ai, profile))) {
+      setView({ identity: requestIdentity, outputText: '', status: { kind: 'idle' } })
+      return
+    }
+
+    const run: TranslationRun = { id: ++requestIdRef.current, identity: requestIdentity, controller: new AbortController(), aiRevision: readiness.revision }
     runRef.current = run
     setView({ identity: requestIdentity, outputText: '', status: { kind: 'waiting', dueAt: Date.now() + AUTO_TRANSLATE_DEBOUNCE_MS } })
     run.timer = window.setTimeout(() => {
       void translateCurrentText(run, profile, trimmed, sourceLang, targetLang)
     }, AUTO_TRANSLATE_DEBOUNCE_MS)
     return cancelCurrentRun
-  }, [requestIdentity, inputText, sourceLang, targetLang, translateCurrentText, cancelCurrentRun])
+  }, [requestIdentity, inputText, sourceLang, targetLang, translateCurrentText, cancelCurrentRun, readinessController])
 
   const stopTranslation = () => {
     cancelCurrentRun()
@@ -334,16 +353,27 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
   }
 
   const retryTranslation = () => {
+    if (activeProfile?.provider === 'ai' && readinessController.getSnapshot().revision !== readiness.revision) return
     cancelCurrentRun()
     if (!activeProfile || !isAutoTranslateReady(inputText)) return
-    const run = { id: ++requestIdRef.current, identity: requestIdentity, controller: new AbortController() }
+    if (activeProfile.provider === 'ai' && !readinessController.execution(hostRef.current.ai, activeProfile)) return
+    const run: TranslationRun = { id: ++requestIdRef.current, identity: requestIdentity, controller: new AbortController(), aiRevision: readiness.revision }
     runRef.current = run
     void translateCurrentText(run, activeProfile, inputText.trim(), sourceLang, targetLang)
   }
 
+  const openSettings = () => {
+    cancelCurrentRun()
+    setView({ identity: requestIdentity, outputText: '', status: { kind: 'idle' } })
+    host.openSettings()
+  }
+
+  const canRetry = activeProfile?.provider !== 'ai' || Boolean(readinessController.execution(host.ai, activeProfile))
+
   const copyOutput = useCallback(async () => {
     const output = copyableRef.current
     if (!output || output.identity !== identityRef.current) return
+    if (output.aiRevision !== undefined && output.aiRevision !== readinessController.getSnapshot().revision) return
     try {
       await host.clipboard.writeText(output.text)
       if (copyableRef.current?.view !== output.view) return
@@ -353,7 +383,7 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
       if (copyableRef.current?.view !== output.view) return
       host.showMessage(localizedText(t, 'toast.copyFailed', 'Copy failed'), 'error')
     }
-  }, [host, t])
+  }, [host, t, readinessController])
 
   const activeUsedChars = activeProfile ? (usageByProfile.get(activeProfile.id) ?? activeProfile.usedChars) : 0
   const monthlyLimit = activeProfile?.monthlyLimitChars ?? 0
@@ -374,16 +404,12 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
           <Button type="button" onClick={stopTranslation}>{t('action.stop')}</Button>
         )}
         {(status.kind === 'stopped' || status.kind === 'error') && (
-          <Button type="button" onClick={retryTranslation}>{t('action.retry')}</Button>
+          <Button type="button" onClick={retryTranslation} disabled={!canRetry}>{t('action.retry')}</Button>
         )}
         <Button type="button" variant="primary" disabled={status.kind !== 'success' || !outputText} onClick={() => void copyOutput()}>
           {localizedText(t, 'action.copy', 'Copy')}
         </Button>
-        <IconButton type="button" label={localizedText(t, 'action.openSettings', 'Open Settings')} onClick={() => {
-          cancelCurrentRun()
-          setView({ identity: requestIdentity, outputText: '', status: { kind: 'idle' } })
-          host.openSettings()
-        }}>
+        <IconButton type="button" label={localizedText(t, 'action.openSettings', 'Open Settings')} onClick={openSettings}>
           <SettingsIcon size={16} />
         </IconButton>
         <IconButton type="button" label={localizedText(t, 'action.close', 'Close')} onClick={() => { cancelCurrentRun(); host.close() }}>
@@ -401,6 +427,10 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
         <span className="translate-controls-label">{localizedText(t, 'control.profile', 'Profile')}</span>
         <SchemaSelect value={activeProfile?.id ?? ''} options={profileOptions} onChange={(value) => { if (value !== profileId) { cancelCurrentRun(); setProfileId(value) } }} width={222} ariaLabel={localizedText(t, 'control.profile', 'Profile')} />
       </div>
+
+      {activeProfile?.provider === 'ai' && (
+        <AiReadinessNotice readiness={readiness} profile={activeProfile} t={t} onRefresh={() => { cancelCurrentRun(); void readinessController.refresh(true) }} onSettings={openSettings} />
+      )}
 
       <div className="translate-surface__body">
         <div className="translate-pane translate-pane--source">
@@ -454,11 +484,13 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
         <div className="grow" />
         <div className="translate-meta">
           <span>{localizedText(t, inputChars === 1 ? 'meta.character' : 'meta.characters', inputChars === 1 ? '{count} character' : '{count} characters').replace('{count}', inputChars.toLocaleString())}</span>
+          {(activeProfile?.provider !== 'ai' || monthlyLimit > 0) && <>
           <span className="sep">·</span>
           <div className={`translate-quota ${status.kind === 'quota-exceeded' ? 'is-over' : ''}`}>
             <span className="translate-quota__num">{formatLimit(activeUsedChars)} / {formatLimit(monthlyLimit)}</span>
             <span className="translate-quota__bar"><span className="translate-quota__fill" style={{ width: `${quotaPercent}%` }} /></span>
           </div>
+          </>}
         </div>
       </footer>
     </section>
