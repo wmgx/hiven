@@ -92,6 +92,9 @@ export function useClipboardObjectBlock(params: {
   }, [])
 
   const applyHandoffBlock = useCallback((pending: LauncherObjectBlock) => {
+    // The in-flight open read may settle before React commits setBlock below.
+    // Publish explicit material synchronously so that older clipboard read cannot replace it.
+    blockRef.current = pending
     clearExitTimer()
     setIsExiting(false)
     setBlock(pending)
