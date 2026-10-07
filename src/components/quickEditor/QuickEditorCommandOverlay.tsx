@@ -291,6 +291,7 @@ export function QuickEditorCommandOverlay() {
       onCompositionEnd={handleCompositionEnd}
     >
       <GlobalLauncherFrameSwitch
+        isImeComposingRef={isImeComposingRef}
         hostSurfaceTarget={null}
         hostSurfaceHeight={0}
         launcherSettingsTarget={null}
