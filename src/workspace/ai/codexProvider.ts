@@ -12,14 +12,15 @@ import type {
   AiUsageMetric,
 } from './types'
 
-type RpcEvent = { method: string; params?: Record<string, unknown> }
+type RpcEvent = { method: string; params?: Record<string, unknown>; _hivenConnectionId: string }
 type RpcResult = Record<string, unknown>
 
 const subscribers = new Set<(event: RpcEvent) => void>()
 const activeTurns = new Map<string, () => Promise<void>>()
 let listenerPromise: Promise<void> | undefined
-let bridgePromise: Promise<void> | undefined
-let initialized = false
+let bridgePromise: Promise<string> | undefined
+let bridgeConnectionId: string | undefined
+const closedConnections = new Set<string>()
 
 function isTauri(): boolean {
   return typeof window !== 'undefined' && !!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
@@ -45,10 +46,30 @@ function withSignal<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
   })
 }
 
-async function ensureBridge(signal?: AbortSignal): Promise<void> {
+function connectionId(result: RpcResult): string {
+  const id = result._hivenConnectionId
+  if (typeof id !== 'string' || !id) throw new Error('Codex did not return a connection id')
+  return id
+}
+
+function invalidateBridge(id?: string): void {
+  if (id && bridgeConnectionId !== id) return
+  bridgePromise = undefined
+  bridgeConnectionId = undefined
+}
+
+function checkConnection(id: string): void {
+  if (closedConnections.has(id)) throw new Error('HIVEN_CODEX_CONNECTION_CHANGED')
+}
+
+async function ensureBridge(signal?: AbortSignal): Promise<string> {
   throwIfAborted(signal)
   if (!isTauri()) throw new Error('Codex App Server requires the desktop app')
   listenerPromise ??= listen<RpcEvent>('hiven://ai-codex-event', ({ payload }) => {
+    if (payload.method === 'hiven/transport/closed' && payload._hivenConnectionId) {
+      closedConnections.add(payload._hivenConnectionId)
+      invalidateBridge(payload._hivenConnectionId)
+    }
     for (const subscriber of subscribers) subscriber(payload)
   }).then(() => undefined).catch((error) => {
     listenerPromise = undefined
@@ -57,36 +78,63 @@ async function ensureBridge(signal?: AbortSignal): Promise<void> {
   await withSignal(listenerPromise, signal)
   throwIfAborted(signal)
   // Initialization is shared. Cancelling this waiter must not corrupt other runs' handshake.
-  bridgePromise ??= (async () => {
-    await rpc('initialize', {
-      clientInfo: { name: 'hiven', title: 'Hiven', version: '0.2.57' },
-      capabilities: { experimentalApi: true, requestAttestation: false },
-    }, false)
-    await invoke('ai_codex_notify', { method: 'initialized', params: {} })
-    initialized = true
-  })().catch((error) => {
-    bridgePromise = undefined
-    initialized = false
-    throw error
-  })
-  await withSignal(bridgePromise, signal)
+  if (!bridgePromise) {
+    let initializing!: Promise<string>
+    initializing = (async () => {
+      const result = await rpc('initialize', {
+        clientInfo: { name: 'hiven', title: 'Hiven', version: '0.2.57' },
+        capabilities: { experimentalApi: true, requestAttestation: false },
+      }, false)
+      const id = connectionId(result)
+      checkConnection(id)
+      if (bridgePromise !== initializing) throw new Error('HIVEN_CODEX_CONNECTION_CHANGED')
+      bridgeConnectionId = id
+      await invoke('ai_codex_notify', { method: 'initialized', params: {}, expectedConnectionId: id })
+      checkConnection(id)
+      if (bridgePromise !== initializing) throw new Error('HIVEN_CODEX_CONNECTION_CHANGED')
+      return id
+    })().catch((error) => {
+      // A late failure from an old handshake cannot clear a replacement handshake.
+      if (bridgePromise === initializing) invalidateBridge()
+      throw error
+    })
+    bridgePromise = initializing
+  }
+  const id = await withSignal(bridgePromise, signal)
   throwIfAborted(signal)
+  checkConnection(id)
+  return id
 }
 
-async function rpc(method: string, params?: unknown, initialize = true, signal?: AbortSignal): Promise<RpcResult> {
+async function rpc(
+  method: string,
+  params?: unknown,
+  initialize = true,
+  signal?: AbortSignal,
+  expectedConnectionId?: string,
+): Promise<RpcResult> {
   throwIfAborted(signal)
-  if (initialize && !initialized) await ensureBridge(signal)
-  throwIfAborted(signal)
+  let id = expectedConnectionId ?? (initialize ? await ensureBridge(signal) : undefined)
+  const send = async () => {
+    throwIfAborted(signal)
+    if (id) checkConnection(id)
+    const result = await invoke<RpcResult>('ai_codex_rpc', { method, params: params ?? null, expectedConnectionId: id ?? null })
+    const returnedId = connectionId(result)
+    if (id && returnedId !== id) throw new Error('HIVEN_CODEX_CONNECTION_CHANGED')
+    checkConnection(returnedId)
+    return result
+  }
   try {
-    return await invoke<RpcResult>('ai_codex_rpc', { method, params: params ?? null })
+    return await send()
   } catch (error) {
     throwIfAborted(signal)
-    if (!initialize || !String(error).includes('HIVEN_CODEX_INITIALIZATION_REQUIRED')) throw error
-    initialized = false
-    bridgePromise = undefined
-    await ensureBridge(signal)
+    const changed = String(error).includes('HIVEN_CODEX_INITIALIZATION_REQUIRED') || String(error).includes('HIVEN_CODEX_CONNECTION_CHANGED')
+    // A bound thread/turn must never be replayed into a replacement process.
+    if (!initialize || expectedConnectionId || !changed) throw error
+    invalidateBridge(id)
+    id = await ensureBridge(signal)
     throwIfAborted(signal)
-    return invoke<RpcResult>('ai_codex_rpc', { method, params: params ?? null })
+    return send()
   }
 }
 
@@ -205,24 +253,30 @@ async function* streamCodex(request: AiProviderRequest): AsyncIterable<AiEvent> 
   let wake: (() => void) | undefined
   let threadId = ''
   let turnId = ''
+  let runConnectionId = ''
+  let transportFailure: Extract<AiEvent, { type: 'error' }> | undefined
+  let finishStartup!: () => void
+  const terminalReady = new Promise<void>((resolve) => { finishStartup = resolve })
   let terminal: 'completed' | 'cancelled' | 'failed' | undefined
   let closed = false
   let interruption: Promise<void> | undefined
   const interrupt = () => {
-    if (!threadId || !turnId) return Promise.resolve()
-    interruption ??= rpc('turn/interrupt', { threadId, turnId }).then(() => undefined, () => undefined)
+    if (!threadId || !turnId || !runConnectionId) return Promise.resolve()
+    interruption ??= rpc('turn/interrupt', { threadId, turnId }, true, undefined, runConnectionId).then(() => undefined, () => undefined)
     return interruption
   }
   const push = (event: AiEvent) => {
     if (closed || terminal) return
     if (event.type === 'completed') terminal = event.status
     else if (event.type === 'error') terminal = 'failed'
+    if (terminal) finishStartup()
     queue.push(event)
     wake?.()
     wake = undefined
   }
   const cancel = () => {
-    if (closed || terminal === 'completed') return Promise.resolve()
+    // A queued terminal is already authoritative, including an error before startup returns.
+    if (closed || terminal) return Promise.resolve()
     controller.abort(request.signal?.reason)
     if (!terminal) {
       queue.length = 0
@@ -236,7 +290,13 @@ async function* streamCodex(request: AiProviderRequest): AsyncIterable<AiEvent> 
   if (request.signal?.aborted) abort()
   const unsubscribe = subscribe((event) => {
     if (signal.aborted || closed || terminal) return
+    if (!runConnectionId || event._hivenConnectionId !== runConnectionId) return
     const params = asRecord(event.params)
+    if (event.method === 'hiven/transport/closed') {
+      transportFailure = { type: 'error', runId: request.runId, code: 'codex_transport_closed', message: String(params.message ?? 'Codex App Server stopped') }
+      push(transportFailure)
+      return
+    }
     if (!threadId || params.threadId !== threadId) return
     const eventTurnId = params.turnId ?? asRecord(params.turn).id
     if (turnId && eventTurnId && eventTurnId !== turnId) return
@@ -286,28 +346,35 @@ async function* streamCodex(request: AiProviderRequest): AsyncIterable<AiEvent> 
       baseInstructions: 'Follow the user request as a general AI assistant. Do not inspect files or run commands.',
     }, true, signal), signal)
     throwIfAborted(signal)
+    runConnectionId = connectionId(threadResult)
+    checkConnection(runConnectionId)
     threadId = String(asRecord(threadResult.thread).id ?? '')
     if (!threadId) throw new Error('Codex did not return a thread id')
     const input = request.input.map((item) => item.type === 'text' ? { ...item, text_elements: [] } : item)
     const startingTurn = rpc('turn/start', {
       threadId, input, model: request.agentId, effort: request.effort, approvalPolicy: 'never',
-    }, true, signal).then((result) => {
+    }, true, signal, runConnectionId).then((result) => {
       turnId = String(asRecord(result.turn).id ?? '')
       // The RPC may create a turn after the cancelled caller has already left.
-      if (signal.aborted || closed) void interrupt()
+      if ((signal.aborted || closed) && terminal !== 'completed') void interrupt()
       return result
     })
-    await withSignal(startingTurn, signal)
+    // Notifications may precede the turn/start RPC response, including its terminal event.
+    await Promise.race([withSignal(startingTurn, signal), terminalReady])
     throwIfAborted(signal)
-    if (!turnId) throw new Error('Codex did not return a turn id')
-    yield { type: 'run.started', runId: request.runId, providerId: codexChatGptProvider.id, agentId: request.agentId }
+    if (!turnId && !terminal) throw new Error('Codex did not return a turn id')
+    if (!transportFailure) yield { type: 'run.started', runId: request.runId, providerId: codexChatGptProvider.id, agentId: request.agentId }
     while (true) {
       while (queue.length > 0) yield queue.shift()!
       if (terminal) break
       await new Promise<void>((resolve) => { wake = resolve })
     }
   } catch (error) {
-    if (!signal.aborted) throw error
+    if (!signal.aborted) {
+      if (!transportFailure) throw error
+      yield transportFailure
+      return
+    }
     // Startup cancellation has no run.started event, but still has one terminal event.
     yield { type: 'completed', runId: request.runId, status: 'cancelled' }
   } finally {
