@@ -89,6 +89,10 @@ export type ParamInputFrame = {
   selectedIndex: number
   /** Carried from selectItem options; used to skip collect-input after params. */
   objectBlockText?: string
+  /** Manual input draft for this command, restored after editing its params. */
+  inputText?: string
+  /** Unsubmitted text/number edits; normalization happens only on commit. */
+  paramDrafts?: Record<string, string>
   recordUsage: boolean
 }
 
@@ -359,16 +363,29 @@ export class LauncherController {
     paramIndex = 0,
     objectBlockText?: string,
     recordUsage = this.shouldRecord(item, {}),
+    inputText?: string,
+    paramDrafts?: Record<string, string>,
   ): ParamInputFrame {
     const param = item.params?.[paramIndex]
+    const currentValue = param && params[param.key]
+    if (param?.type === 'multi-select' && Array.isArray(currentValue)) {
+      // Options may have changed since this step was last visited. Drop only
+      // unavailable selections, which the user can no longer see or deselect.
+      const options = this.paramOptions(param)
+      params = { ...params, [param.key]: [...new Set(currentValue)].filter((value) => options.includes(value)) }
+    }
     return {
       kind: 'param-input',
       item,
       params,
       paramIndex,
-      query: this.queryFor(param, params),
+      query: param && (param.type === 'text' || param.type === 'number')
+        ? paramDrafts?.[param.key] ?? this.queryFor(param, params)
+        : '',
       selectedIndex: this.selectedIndexFor(param, params),
       objectBlockText,
+      inputText,
+      paramDrafts,
       recordUsage,
     }
   }
@@ -433,6 +450,7 @@ export class LauncherController {
     item: LauncherItem,
     params?: Record<string, unknown>,
     recordUsage = this.shouldRecord(item, {}),
+    inputText?: string,
   ): CollectInputFrame {
     const input = item.behavior.type === 'collect-input'
       ? item.behavior.input
@@ -443,7 +461,7 @@ export class LauncherController {
     return {
       kind: 'collect-input',
       item,
-      inputText: item.initialInputText ?? '',
+      inputText: inputText ?? item.initialInputText ?? '',
       input,
       params,
       recordUsage,
@@ -459,7 +477,8 @@ export class LauncherController {
     if (this.state.busy && this.pendingItemKey === item.systemKey) return
     this.invalidatePendingActions()
     const prepareGeneration = ++this.prepareGeneration
-    this.setState({ error: null })
+    // A first-level selection starts a new command, never a nested draft session.
+    this.setState({ frames: [{ kind: 'list' }], error: null })
     if (item.prepare) {
       this.setState({ busy: true })
       try {
@@ -618,13 +637,25 @@ export class LauncherController {
 
   private validateParam(param: LauncherParamSpec, params: Record<string, unknown>): string | null {
     const value = params[param.key]
-    if (param.type === 'multi-select' && Array.isArray(value)) {
-      const min = param.minSelect ?? (param.required ? 1 : 0)
-      if (value.length < min) return translate(this.deps.locale as Locale, 'palette', 'fieldRequiredWithLabel', { label: param.label })
+    const label = param.labelI18n?.[this.deps.locale as Locale] ?? param.label
+    const required = () => translate(this.deps.locale as Locale, 'palette', 'fieldRequiredWithLabel', { label })
+    const invalid = () => translate(this.deps.locale as Locale, 'palette', 'invalidParamWithLabel', { label })
+    if (value === undefined || value === null || value === '') {
+      return param.required || (param.type === 'multi-select' && (param.minSelect ?? 0) > 0) ? required() : null
     }
-    if (!param.required) return null
-    if (value === undefined || value === null || value === '') return translate(this.deps.locale as Locale, 'palette', 'fieldRequiredWithLabel', { label: param.label })
-    if (Array.isArray(value) && value.length === 0) return translate(this.deps.locale as Locale, 'palette', 'fieldRequiredWithLabel', { label: param.label })
+    if (param.type === 'number' && (typeof value !== 'number' || !Number.isFinite(value))) {
+      return translate(this.deps.locale as Locale, 'palette', 'invalidNumber')
+    }
+    if (param.type === 'text' && typeof value !== 'string') return invalid()
+    if (param.type === 'boolean' && typeof value !== 'boolean') return invalid()
+    if (param.type === 'single-select' && !this.paramOptions(param).includes(value)) return invalid()
+    if (param.type === 'multi-select') {
+      if (!Array.isArray(value)) return invalid()
+      if (value.length < Math.max(param.minSelect ?? 0, param.required ? 1 : 0)) return required()
+      const options = this.paramOptions(param)
+      if (value.length > (param.maxSelect ?? Number.POSITIVE_INFINITY) ||
+        new Set(value).size !== value.length || value.some((entry) => !options.includes(entry))) return invalid()
+    }
     return null
   }
 
@@ -658,16 +689,18 @@ export class LauncherController {
       return
     }
 
+    const paramDrafts = { ...top.paramDrafts }
+    delete paramDrafts[param.key]
     const nextIndex = top.paramIndex + 1
     if (nextIndex < (top.item.params?.length ?? 0)) {
       const frames = this.state.frames.slice(0, -1)
-      frames.push(this.paramFrameFor(top.item, params, nextIndex, top.objectBlockText, top.recordUsage))
+      frames.push(this.paramFrameFor(top.item, params, nextIndex, top.objectBlockText, top.recordUsage, top.inputText, paramDrafts))
       this.setState({ frames, error: null })
       return
     }
 
     const frames = this.state.frames.slice(0, -1)
-    frames.push(this.paramFrameFor(top.item, params, top.paramIndex, top.objectBlockText, top.recordUsage))
+    frames.push(this.paramFrameFor(top.item, params, top.paramIndex, top.objectBlockText, top.recordUsage, top.inputText, paramDrafts))
     this.setState({ frames, error: null })
     await this.submitParams()
   }
@@ -684,9 +717,9 @@ export class LauncherController {
       return
     }
 
-    if (this.shouldCollectTextInput(top.item)) {
+    if (top.inputText !== undefined || top.item.behavior.type === 'collect-input' || this.shouldCollectTextInput(top.item)) {
       // If Object Block text is available, skip collect-input and execute directly with params.
-      if (top.item.initialInputText === undefined && this.hasObjectBlockText(top.objectBlockText)) {
+      if (top.inputText === undefined && top.item.initialInputText === undefined && this.hasObjectBlockText(top.objectBlockText)) {
         await this.commitResolvedAction({
           item: top.item,
           via: top.item.commitVia ?? 'execute',
@@ -700,7 +733,7 @@ export class LauncherController {
         return
       }
       const frames = this.state.frames.slice(0, -1)
-      frames.push(this.collectInputFrameFor(top.item, top.params, top.recordUsage))
+      frames.push(this.collectInputFrameFor(top.item, top.params, top.recordUsage, top.inputText))
       this.setState({ frames, error: null })
       return
     }
@@ -861,6 +894,12 @@ export class LauncherController {
     // Suggest path owns empty/partial lists for collect-input items with suggest.
     if (top.item.suggest) return
 
+    const paramError = top.params && this.validateParams(top.item, top.params)
+    if (paramError) {
+      this.setState({ error: paramError })
+      return
+    }
+
     const { item, inputText } = top
     if (!inputText.trim() && !top.input.allowEmptyInput) {
       this.clearCollectInputPreview(top)
@@ -939,6 +978,11 @@ export class LauncherController {
     const top = this.topFrame()
     if (top.kind !== 'collect-input') return
     if (this.state.busy) return
+    const paramError = top.params && this.validateParams(top.item, top.params)
+    if (paramError) {
+      this.setState({ error: paramError })
+      return
+    }
     const { item, inputText } = top
     trackBehavior(TelemetryEvents.launcherSubmitInput, {
       ...itemTelemetryProps(item),
@@ -1086,8 +1130,8 @@ export class LauncherController {
 
   /**
    * Escape / empty ⌫: stack-style step back.
-   * - param-input paramIndex > 0 → previous param (drop values from that step on)
-   * - collect-input with params → re-enter last param step (drop last param value)
+   * - param-input paramIndex > 0 → previous param, preserving the command draft
+   * - collect-input with params → re-enter last param with the input draft
    * - otherwise → pop one frame (list keeps launcher open)
    * From the base list frame, returns false so the host can close the launcher.
    */
@@ -1104,18 +1148,22 @@ export class LauncherController {
 
     if (top.kind === 'param-input' && top.paramIndex > 0) {
       const prevIndex = top.paramIndex - 1
-      const nextParams = this.paramsUpToIndex(top.item, top.params, prevIndex)
+      const param = this.currentParam(top)
+      // Text edits may not have been committed yet; keep them as a draft too.
+      const paramDrafts = param && (param.type === 'text' || param.type === 'number')
+        ? { ...top.paramDrafts, [param.key]: top.query }
+        : top.paramDrafts
       const frames = this.state.frames.slice(0, -1)
-      frames.push(this.paramFrameFor(top.item, nextParams, prevIndex, top.objectBlockText, top.recordUsage))
+      frames.push(this.paramFrameFor(top.item, top.params, prevIndex, top.objectBlockText, top.recordUsage, top.inputText, paramDrafts))
       this.setState({ frames, error: null })
       return true
     }
 
     if (top.kind === 'collect-input' && top.item.params && top.item.params.length > 0) {
       const lastIndex = top.item.params.length - 1
-      const nextParams = this.paramsUpToIndex(top.item, top.params ?? {}, lastIndex)
+      const nextParams = top.params ?? this.defaultParamsFor(top.item)
       const frames = this.state.frames.slice(0, -1)
-      frames.push(this.paramFrameFor(top.item, nextParams, lastIndex, undefined, top.recordUsage))
+      frames.push(this.paramFrameFor(top.item, nextParams, lastIndex, undefined, top.recordUsage, top.inputText))
       this.setState({ frames, error: null })
       return true
     }
@@ -1139,20 +1187,6 @@ export class LauncherController {
     }
     this.setState({ frames: [base], error: null })
     return true
-  }
-
-  /** Keep only params strictly before `index` (values for index..end are dropped). */
-  private paramsUpToIndex(
-    item: LauncherItem,
-    params: Record<string, unknown>,
-    index: number,
-  ): Record<string, unknown> {
-    const next: Record<string, unknown> = { ...params }
-    for (let i = index; i < (item.params?.length ?? 0); i++) {
-      const key = item.params?.[i]?.key
-      if (key) delete next[key]
-    }
-    return next
   }
 
   // ─── Execution plumbing ────────────────────────────────────────────────────

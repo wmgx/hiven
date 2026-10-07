@@ -37,6 +37,7 @@ const commands = [
   ['npm', ['run', 'test:launcher-discovery-availability']],
   ['npm', ['run', 'test:launcher-explicit-text-preview']],
   ['npm', ['run', 'test:launcher-explicit-text-flow']],
+  ['npm', ['run', 'test:launcher-input-drafts']],
   ['npm', ['run', 'test:launcher-output-recovery']],
   ['npm', ['run', 'test:ai-provider-runtime']],
   ['npm', ['run', 'test:ai-preflight']],

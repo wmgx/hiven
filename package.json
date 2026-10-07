@@ -118,6 +118,7 @@
     "test:search-ranking-match": "node scripts/test-search-ranking-match.mjs",
     "test:launcher-registry": "node scripts/test-launcher-registry.mjs",
     "test:launcher-controller": "node scripts/test-launcher-controller.mjs",
+    "test:launcher-input-drafts": "node scripts/test-launcher-input-drafts.mjs",
     "test:launcher-back-focus": "node scripts/test-launcher-back-focus.mjs",
     "test:global-launcher-v3-ui": "node scripts/test-global-launcher-v3-ui.mjs",
     "test:global-launcher-window-height": "node scripts/test-global-launcher-window-height.mjs",
