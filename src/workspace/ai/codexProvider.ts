@@ -16,7 +16,7 @@ type RpcEvent = { method: string; params?: Record<string, unknown> }
 type RpcResult = Record<string, unknown>
 
 const subscribers = new Set<(event: RpcEvent) => void>()
-const activeTurns = new Map<string, { threadId: string; turnId: string }>()
+const activeTurns = new Map<string, () => Promise<void>>()
 let listenerPromise: Promise<void> | undefined
 let bridgePromise: Promise<void> | undefined
 let initialized = false
@@ -25,13 +25,39 @@ function isTauri(): boolean {
   return typeof window !== 'undefined' && !!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
 }
 
-async function ensureBridge(): Promise<void> {
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw signal.reason ?? new Error('AI request cancelled')
+}
+
+function withSignal<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise
+  return new Promise((resolve, reject) => {
+    const abort = () => {
+      signal.removeEventListener('abort', abort)
+      reject(signal.reason ?? new Error('AI request cancelled'))
+    }
+    signal.addEventListener('abort', abort, { once: true })
+    promise.then(
+      (value) => { signal.removeEventListener('abort', abort); resolve(value) },
+      (error) => { signal.removeEventListener('abort', abort); reject(error) },
+    )
+    if (signal.aborted) abort()
+  })
+}
+
+async function ensureBridge(signal?: AbortSignal): Promise<void> {
+  throwIfAborted(signal)
   if (!isTauri()) throw new Error('Codex App Server requires the desktop app')
+  listenerPromise ??= listen<RpcEvent>('hiven://ai-codex-event', ({ payload }) => {
+    for (const subscriber of subscribers) subscriber(payload)
+  }).then(() => undefined).catch((error) => {
+    listenerPromise = undefined
+    throw error
+  })
+  await withSignal(listenerPromise, signal)
+  throwIfAborted(signal)
+  // Initialization is shared. Cancelling this waiter must not corrupt other runs' handshake.
   bridgePromise ??= (async () => {
-    listenerPromise ??= listen<RpcEvent>('hiven://ai-codex-event', ({ payload }) => {
-      for (const subscriber of subscribers) subscriber(payload)
-    }).then(() => undefined)
-    await listenerPromise
     await rpc('initialize', {
       clientInfo: { name: 'hiven', title: 'Hiven', version: '0.2.57' },
       capabilities: { experimentalApi: true, requestAttestation: false },
@@ -43,18 +69,23 @@ async function ensureBridge(): Promise<void> {
     initialized = false
     throw error
   })
-  await bridgePromise
+  await withSignal(bridgePromise, signal)
+  throwIfAborted(signal)
 }
 
-async function rpc(method: string, params?: unknown, initialize = true): Promise<RpcResult> {
-  if (initialize && !initialized) await ensureBridge()
+async function rpc(method: string, params?: unknown, initialize = true, signal?: AbortSignal): Promise<RpcResult> {
+  throwIfAborted(signal)
+  if (initialize && !initialized) await ensureBridge(signal)
+  throwIfAborted(signal)
   try {
     return await invoke<RpcResult>('ai_codex_rpc', { method, params: params ?? null })
   } catch (error) {
+    throwIfAborted(signal)
     if (!initialize || !String(error).includes('HIVEN_CODEX_INITIALIZATION_REQUIRED')) throw error
     initialized = false
     bridgePromise = undefined
-    await ensureBridge()
+    await ensureBridge(signal)
+    throwIfAborted(signal)
     return invoke<RpcResult>('ai_codex_rpc', { method, params: params ?? null })
   }
 }
@@ -168,22 +199,47 @@ function usageMetrics(params: Record<string, unknown>): AiUsageMetric[] {
 }
 
 async function* streamCodex(request: AiProviderRequest): AsyncIterable<AiEvent> {
-  await ensureBridge()
-  let finish!: () => void
-  const finished = new Promise<void>((resolve) => { finish = resolve })
+  const controller = new AbortController()
+  const signal = controller.signal
   const queue: AiEvent[] = []
   let wake: (() => void) | undefined
   let threadId = ''
   let turnId = ''
+  let terminal: 'completed' | 'cancelled' | 'failed' | undefined
+  let closed = false
+  let interruption: Promise<void> | undefined
+  const interrupt = () => {
+    if (!threadId || !turnId) return Promise.resolve()
+    interruption ??= rpc('turn/interrupt', { threadId, turnId }).then(() => undefined, () => undefined)
+    return interruption
+  }
   const push = (event: AiEvent) => {
+    if (closed || terminal) return
+    if (event.type === 'completed') terminal = event.status
+    else if (event.type === 'error') terminal = 'failed'
     queue.push(event)
     wake?.()
     wake = undefined
   }
+  const cancel = () => {
+    if (closed || terminal === 'completed') return Promise.resolve()
+    controller.abort(request.signal?.reason)
+    if (!terminal) {
+      queue.length = 0
+      push({ type: 'completed', runId: request.runId, status: 'cancelled' })
+    }
+    return interrupt()
+  }
+  const abort = () => { void cancel() }
+  request.signal?.addEventListener('abort', abort, { once: true })
+  activeTurns.set(request.runId, cancel)
+  if (request.signal?.aborted) abort()
   const unsubscribe = subscribe((event) => {
+    if (signal.aborted || closed || terminal) return
     const params = asRecord(event.params)
     if (!threadId || params.threadId !== threadId) return
-    if (turnId && params.turnId && params.turnId !== turnId) return
+    const eventTurnId = params.turnId ?? asRecord(params.turn).id
+    if (turnId && eventTurnId && eventTurnId !== turnId) return
     if (event.method === 'item/agentMessage/delta' && typeof params.delta === 'string') {
       push({ type: 'text.delta', runId: request.runId, delta: params.delta })
     } else if ((event.method === 'item/reasoning/summaryTextDelta' || event.method === 'item/reasoning/textDelta') && typeof params.delta === 'string') {
@@ -193,8 +249,7 @@ async function* streamCodex(request: AiProviderRequest): AsyncIterable<AiEvent> 
       push({ type: event.method === 'item/started' ? 'item.started' : 'item.completed', runId: request.runId, item: params.item })
       if (event.method === 'item/completed' && item.type === 'imageGeneration') {
         push({
-          type: 'image.completed',
-          runId: request.runId,
+          type: 'image.completed', runId: request.runId,
           base64: typeof item.result === 'string' ? item.result : undefined,
           path: typeof item.savedPath === 'string' ? item.savedPath : undefined,
           revisedPrompt: typeof item.revisedPrompt === 'string' ? item.revisedPrompt : undefined,
@@ -213,48 +268,57 @@ async function* streamCodex(request: AiProviderRequest): AsyncIterable<AiEvent> 
       } else {
         push({ type: 'completed', runId: request.runId, status: turn.status === 'interrupted' ? 'cancelled' : 'completed' })
       }
-      finish()
     }
   })
 
   try {
+    throwIfAborted(signal)
+    await ensureBridge(signal)
+    throwIfAborted(signal)
     const unsupported = request.input.find((item) => item.type === 'localFile')
     if (unsupported) throw new Error('The Codex subscription provider does not support generic file inputs')
-    const threadResult = await rpc('thread/start', {
+    const threadResult = await withSignal(rpc('thread/start', {
       model: request.agentId,
       approvalPolicy: 'never',
       permissions: ':read-only',
       ephemeral: true,
       serviceName: 'hiven',
       baseInstructions: 'Follow the user request as a general AI assistant. Do not inspect files or run commands.',
-    })
+    }, true, signal), signal)
+    throwIfAborted(signal)
     threadId = String(asRecord(threadResult.thread).id ?? '')
     if (!threadId) throw new Error('Codex did not return a thread id')
     const input = request.input.map((item) => item.type === 'text' ? { ...item, text_elements: [] } : item)
-    const turnResult = await rpc('turn/start', {
-      threadId,
-      input,
-      model: request.agentId,
-      effort: request.effort,
-      approvalPolicy: 'never',
+    const startingTurn = rpc('turn/start', {
+      threadId, input, model: request.agentId, effort: request.effort, approvalPolicy: 'never',
+    }, true, signal).then((result) => {
+      turnId = String(asRecord(result.turn).id ?? '')
+      // The RPC may create a turn after the cancelled caller has already left.
+      if (signal.aborted || closed) void interrupt()
+      return result
     })
-    turnId = String(asRecord(turnResult.turn).id ?? '')
+    await withSignal(startingTurn, signal)
+    throwIfAborted(signal)
     if (!turnId) throw new Error('Codex did not return a turn id')
-    activeTurns.set(request.runId, { threadId, turnId })
     yield { type: 'run.started', runId: request.runId, providerId: codexChatGptProvider.id, agentId: request.agentId }
-
     while (true) {
       while (queue.length > 0) yield queue.shift()!
-      if (await Promise.race([finished.then(() => true), new Promise<false>((resolve) => {
-        wake = () => resolve(false)
-      })])) {
-        while (queue.length > 0) yield queue.shift()!
-        break
-      }
+      if (terminal) break
+      await new Promise<void>((resolve) => { wake = resolve })
     }
+  } catch (error) {
+    if (!signal.aborted) throw error
+    // Startup cancellation has no run.started event, but still has one terminal event.
+    yield { type: 'completed', runId: request.runId, status: 'cancelled' }
   } finally {
+    closed = true
     activeTurns.delete(request.runId)
+    request.signal?.removeEventListener('abort', abort)
     unsubscribe()
+    if (terminal !== 'completed') {
+      controller.abort()
+      void interrupt()
+    }
   }
 }
 
@@ -292,8 +356,7 @@ export const codexChatGptProvider: AiProviderAdapter = {
   stream: streamCodex,
 
   async cancel(runId) {
-    const active = activeTurns.get(runId)
-    if (active) await rpc('turn/interrupt', active)
+    await activeTurns.get(runId)?.()
   },
 
   async login() {
