@@ -592,6 +592,8 @@ export type LauncherItem = {
   executionMode?: 'explicit-text-preview'
   /** Host-owned input form for action metadata; never seed it from an Object Block. */
   metadataInput?: boolean
+  /** Host-only current-material draft: multiline, with explicit confirmation. */
+  materialTextEdit?: boolean
   /** Freeze per-selection state before entering the host input flow. */
   prepare?: (ctx: LauncherExecutionContext) => Promise<LauncherItem | void> | LauncherItem | void
   /** Tool behavior metadata. Missing means {@link DEFAULT_TOOL_ACTION_POLICY}. */

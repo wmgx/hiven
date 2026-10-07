@@ -31,7 +31,7 @@ export function useGlobalLauncherFocusSession({
   retainSearchFocus = true,
 }: {
   open: boolean
-  inputRef: RefObject<HTMLInputElement | null>
+  inputRef: RefObject<HTMLInputElement | HTMLTextAreaElement | null>
   setQuery: (value: string) => void
   setSelectedIndex: (value: number, options?: { pin?: boolean }) => void
   retainSearchFocus?: boolean
@@ -63,8 +63,8 @@ export function useGlobalLauncherFocusSession({
    * One focus attempt only; the sole native rekey happens on the cold first
    * mount, after DOM focus — the order the WKWebView ghost-focus fix requires.
    */
-  const bindSearchInputRef = useCallback((node: HTMLInputElement | null) => {
-    ;(inputRef as MutableRefObject<HTMLInputElement | null>).current = node
+  const bindSearchInputRef = useCallback((node: HTMLInputElement | HTMLTextAreaElement | null) => {
+    ;(inputRef as MutableRefObject<HTMLInputElement | HTMLTextAreaElement | null>).current = node
     if (node && openRef.current && retainRef.current) {
       // Defer past commit so the node is in the document before focus.
       requestAnimationFrame(() => {
@@ -165,7 +165,7 @@ export function useGlobalLauncherCollectInputPreview({
   open: boolean
   controllerState: LauncherControllerState | null | undefined
   controllerRef: RefObject<{ previewInput?: () => void | Promise<void> } | null>
-  inputRef: RefObject<HTMLInputElement | null>
+  inputRef: RefObject<HTMLInputElement | HTMLTextAreaElement | null>
 }) {
   useEffect(() => {
     if (!open || !controllerState || controllerState.frames.length <= 1) return

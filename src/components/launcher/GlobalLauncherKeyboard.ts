@@ -48,7 +48,7 @@ export function handleGlobalLauncherKeyDown({
   itemPermissionFrame: unknown
   controllerState: { frames: Array<{ kind: string }>; error?: string | null; busy: boolean } | null | undefined
   controllerRef: MutableRefObject<{
-    submitInput?: () => void | Promise<void>
+    submitInput?: (frame?: CollectInputFrame) => void | Promise<void>
     back?: () => boolean | void
     moveSuggestionHighlight?: (delta: number) => void
   } | null>
@@ -96,6 +96,16 @@ export function handleGlobalLauncherKeyDown({
     if (topFrame.kind === 'param-input') return
 
     if (topFrame.kind === 'collect-input') {
+      const inputFrame = topFrame as CollectInputFrame
+      if (inputFrame.item.materialTextEdit) {
+        // Multiline drafts own caret movement, line breaks and empty Backspace.
+        if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey) {
+          event.preventDefault()
+          event.stopPropagation()
+          if (!controllerState.busy) void controllerRef.current?.submitInput?.(inputFrame)
+        }
+        return
+      }
       if (event.key === 'ArrowDown') {
         event.preventDefault()
         event.stopPropagation()

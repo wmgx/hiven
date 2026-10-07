@@ -10,7 +10,7 @@
  *   When secretMasked: masked label
  */
 
-import { Undo2, X } from 'lucide-react'
+import { Pencil, Undo2, X } from 'lucide-react'
 import { t, type Locale } from '../../i18n'
 import { useAppStore } from '../../store'
 import type { LauncherObjectBlock } from '../../launcher/clipboard/objectBlock'
@@ -26,6 +26,8 @@ export function ObjectBlockToken({
   onRemove,
   onRestore,
   restoreDisabled = false,
+  onEdit,
+  editDisabled = false,
   locale: localeProp,
   exiting = false,
 }: {
@@ -33,6 +35,8 @@ export function ObjectBlockToken({
   onRemove: () => void
   onRestore?: () => void
   restoreDisabled?: boolean
+  onEdit?: () => void
+  editDisabled?: boolean
   locale?: Locale
   /** Play remove transition while parent keeps this mounted. */
   exiting?: boolean
@@ -76,6 +80,21 @@ export function ObjectBlockToken({
       )}
       {selected && (
         <span className="object-block-delete-hint">{t(locale, 'palette.objectBlockDeleteHint')}</span>
+      )}
+      {onEdit && !exiting && (
+        <button
+          type="button"
+          className="object-block-remove"
+          disabled={editDisabled}
+          onMouseDown={(event) => event.preventDefault()}
+          onKeyDown={(event) => event.stopPropagation()}
+          onKeyUp={(event) => event.stopPropagation()}
+          onClick={(event) => { event.stopPropagation(); onEdit() }}
+          aria-label={t(locale, 'palette.objectBlockEdit')}
+          title={t(locale, 'palette.objectBlockEdit')}
+        >
+          <Pencil size={12} strokeWidth={2.2} aria-hidden="true" />
+        </button>
       )}
       {onRestore && !exiting && (
         <button

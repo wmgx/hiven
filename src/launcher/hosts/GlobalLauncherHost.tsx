@@ -71,7 +71,7 @@ export function GlobalLauncherHost() {
   const closeAfterActionRef = useRef<() => void>(() => {})
   const focusSearchInputAfterBackRef = useRef<() => void>(() => {})
   const isKeyboardNavRef = useRef(false)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const visibleSelectionItemsRef = useRef<readonly LauncherItem[]>([])
   const [selectedObjectActionIndex, setSelectedObjectActionIndex] = useState(0)
@@ -128,6 +128,29 @@ export function GlobalLauncherHost() {
     rankedLauncherItems: [nearbySaveDomainItem], query: '', locale,
   })[0] : undefined, [nearbySaveDomainItem, locale])
   liveQueryRef.current = query
+  const editMaterial = () => {
+    const active = controllerRef.current
+    if (!useAppStore.getState().globalLauncherOpen || !active || active.getState().busy || active.getState().frames.length > 1) return
+    const draft = clipboardBlock.beginTextEdit()
+    if (!draft) return
+    const item: LauncherItem = {
+      systemKey: 'host:object-block:edit-text',
+      kind: 'host',
+      display: { title: t(locale, 'palette.objectBlockEdit') },
+      behavior: { type: 'collect-input', input: { allowEmptyInput: true } },
+      initialInputText: draft.text,
+      materialTextEdit: true,
+      experienceRecord: false,
+      recordUsage: false,
+      execute: ({ input }) => {
+        if (!useAppStore.getState().globalLauncherOpen || !draft.commit(input?.text ?? '')) {
+          return { ok: false, message: t(locale, 'palette.objectBlockEditExpired') }
+        }
+        return { ok: true, keepOpen: true }
+      },
+    }
+    void active.selectItem(item, { recordUsage: false })
+  }
   // An explicit content handoff starts a new command search; ordinary Back keeps it.
   useEffect(() => subscribePendingObjectBlock(() => {
     setQuery('')
@@ -869,6 +892,7 @@ export function GlobalLauncherHost() {
         handleCompositionStart={handleCompositionStart}
         handleCompositionEnd={handleCompositionEnd}
         clipboardBlock={clipboardBlock}
+        onEditMaterial={editMaterial}
         onExecuteObjectAction={executeObjectAction}
         objectActionCount={objectActions.length}
         selectedActionIndex={selectedObjectActionIndex}

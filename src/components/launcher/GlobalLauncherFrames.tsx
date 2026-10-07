@@ -77,6 +77,7 @@ export function GlobalLauncherFrameSwitch({
   onSearchMouseMove,
   isKeyboardNavRef,
   clipboardBlock,
+  onEditMaterial,
   clipboardHintSelected,
   onExecuteAction,
   selectedActionIndex,
@@ -91,8 +92,8 @@ export function GlobalLauncherFrameSwitch({
   activeSurfaceFrame: GlobalLauncherActiveSurfaceFrame | null
   itemPermissionFrame: GlobalLauncherPermissionFrameState | null
   controllerState: { frames: Array<CollectInputFrame | ParamInputFrame | ResultFrame | { kind: string }>; error?: string | null; busy: boolean; deliveryIntent?: LauncherControllerState['deliveryIntent'] } | null | undefined
-  inputRef: RefObject<HTMLInputElement | null>
-  bindSearchInputRef?: (node: HTMLInputElement | null) => void
+  inputRef: RefObject<HTMLInputElement | HTMLTextAreaElement | null>
+  bindSearchInputRef?: (node: HTMLInputElement | HTMLTextAreaElement | null) => void
   query: string
   searchPlaceholder: string
   visibleFiltered: LauncherMixedItem[]
@@ -123,17 +124,17 @@ export function GlobalLauncherFrameSwitch({
   onParamSelectedIndexChange: (index: number) => void
   onParamCommit: (value: unknown) => void
   onParamMultiToggle: (value: unknown) => void
-  onFrameBack: () => void
+  onFrameBack: (frame?: CollectInputFrame) => void
   /** Command-tag × — pop entire command stack to list. */
-  onExitCommand?: () => void
-  onCollectInputChange: (value: string) => void
+  onExitCommand?: (frame?: CollectInputFrame) => void
+  onCollectInputChange: (value: string, frame?: CollectInputFrame) => void
   onActivateResultChoice: (choice: LauncherResultChoice) => void
   /** Collect-input / result secondary actions (id is plugin-defined). */
   onSecondaryAction?: (choice: LauncherResultChoice, actionId: string) => void
   /** Package 4: paste live-preview text into the foreground app. */
   onPastePreviewText?: (choice: LauncherResultChoice) => void | Promise<void>
   /** Package 4: default collect-input submit when no destination chrome. */
-  onSubmitCollectInput?: () => void
+  onSubmitCollectInput?: (frame?: CollectInputFrame) => void
   onCaptureSelection?: () => void
   onHoverResultChoice: (index: number) => void
   onToggleResultChoice: (choice: LauncherResultChoice, frame: ResultFrame) => void
@@ -143,6 +144,7 @@ export function GlobalLauncherFrameSwitch({
   onSearchMouseMove: (event: ReactMouseEvent) => void
   isKeyboardNavRef?: MutableRefObject<boolean>
   clipboardBlock?: ClipboardObjectBlockState
+  onEditMaterial?: () => void
   /** Recent-clipboard hint is the focused row (selectedIndex === -1). */
   clipboardHintSelected?: boolean
   onExecuteAction?: (action: RecommendedAction, target: RecommendedOutputTarget) => void
@@ -257,13 +259,13 @@ export function GlobalLauncherFrameSwitch({
           error={controllerState?.error ?? null}
           locale={locale}
           paramChips={paramChips}
-          onInputChange={onCollectInputChange}
-          onBack={onFrameBack}
-          onExitCommand={onExitCommand}
+          onInputChange={(value) => onCollectInputChange(value, frame.item.materialTextEdit ? frame : undefined)}
+          onBack={() => onFrameBack(frame.item.materialTextEdit ? frame : undefined)}
+          onExitCommand={onExitCommand ? () => onExitCommand(frame.item.materialTextEdit ? frame : undefined) : undefined}
           onActivateChoice={onActivateResultChoice}
           onSecondaryAction={onSecondaryAction}
           onPastePreviewText={onPastePreviewText}
-          onSubmitPrimary={onSubmitCollectInput}
+          onSubmitPrimary={() => onSubmitCollectInput?.(frame.item.materialTextEdit ? frame : undefined)}
           onCaptureSelection={onCaptureSelection}
         />
       </LauncherFlowFrame>
@@ -303,6 +305,7 @@ export function GlobalLauncherFrameSwitch({
       query={query}
       placeholder={searchPlaceholder}
       clipboardBlock={clipboardBlock}
+      onEditMaterial={onEditMaterial}
       clipboardHintSelected={clipboardHintSelected}
       error={controllerState?.error ?? null}
       items={visibleFiltered}

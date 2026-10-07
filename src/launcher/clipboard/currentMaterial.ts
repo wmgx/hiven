@@ -41,3 +41,21 @@ export function restorePreviousMaterial(current: CurrentMaterial): CurrentMateri
   if (!current.previousBlock) return current
   return { ...current, block: current.previousBlock, previousBlock: null }
 }
+
+/** Only text payloads may enter the editor; media paths and masked secrets are not text material. */
+export function canEditMaterialText(block: LauncherObjectBlock | null): boolean {
+  return Boolean(block && typeof block.payloadText === 'string' &&
+    !block.payloadText.includes('\0') && !block.secretMasked && block.kind !== 'secret' && block.kind !== 'secret-like' &&
+    block.kind !== 'image' && block.kind !== 'files' && !block.payloadImage && !block.payloadFiles)
+}
+
+/** Textarea uses LF; keep unchanged text exact and preserve uniform CRLF drafts. */
+export function reconcileMaterialTextInput(previous: string, next: string): string {
+  if (previous === next) return previous
+  const normalized = previous.replace(/\r\n|\r/g, '\n')
+  if (normalized === next) return previous
+  const lineEndings = previous.match(/\r\n|\r|\n/g)
+  return lineEndings?.every((ending) => ending === '\r\n')
+    ? next.replace(/\n/g, '\r\n')
+    : next
+}

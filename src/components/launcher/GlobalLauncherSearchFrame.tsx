@@ -39,6 +39,7 @@ export function GlobalLauncherSearchFrame({
   showWorkflowObjectHint,
   customizeShortcutLabel,
   clipboardBlock,
+  onEditMaterial,
   clipboardHintSelected,
   isFavoriteSelected,
   browsingActions = false,
@@ -54,8 +55,8 @@ export function GlobalLauncherSearchFrame({
   onMouseMove,
   isKeyboardNavRef,
 }: {
-  inputRef: RefObject<HTMLInputElement | null>
-  bindSearchInputRef?: (node: HTMLInputElement | null) => void
+  inputRef: RefObject<HTMLInputElement | HTMLTextAreaElement | null>
+  bindSearchInputRef?: (node: HTMLInputElement | HTMLTextAreaElement | null) => void
   query: string
   placeholder: string
   error?: string | null
@@ -68,6 +69,7 @@ export function GlobalLauncherSearchFrame({
   showWorkflowObjectHint: boolean
   customizeShortcutLabel: string
   clipboardBlock?: ClipboardObjectBlockState
+  onEditMaterial?: () => void
   clipboardHintSelected?: boolean
   /** Whether the focused row is currently pinned. */
   isFavoriteSelected?: boolean
@@ -117,10 +119,12 @@ export function GlobalLauncherSearchFrame({
               inputRef.current?.focus()
             } : undefined}
             restoreDisabled={busy}
+            onEdit={clipboardBlock?.canEditText ? onEditMaterial : undefined}
+            editDisabled={busy}
           />
         )}
         <input
-          ref={bindSearchInputRef ?? inputRef}
+          ref={bindSearchInputRef ?? (inputRef as RefObject<HTMLInputElement | null>)}
           value={query}
           name="launcher-query"
           inputMode="text"

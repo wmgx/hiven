@@ -7,7 +7,7 @@ import ts from 'typescript'
 const compiled = ts.transpileModule(readFileSync('src/launcher/clipboard/currentMaterial.ts', 'utf8'), {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
 }).outputText
-const { acceptMaterialHandoff, replaceCurrentMaterial, forgetPreviousMaterial, discardCurrentMaterial, restorePreviousMaterial } =
+const { acceptMaterialHandoff, replaceCurrentMaterial, forgetPreviousMaterial, discardCurrentMaterial, restorePreviousMaterial, canEditMaterialText, reconcileMaterialTextInput } =
   await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
 
 let serial = 0
@@ -108,6 +108,27 @@ check('same text from a distinct handoff remains a distinct processing step', ()
   const state = acceptMaterialHandoff(replaceCurrentMaterial(first), second, true)
   assert.equal(state.block, second)
   assert.equal(state.previousBlock, first)
+})
+
+check('only visible real text may be edited', () => {
+  assert.equal(canEditMaterialText(null), false)
+  for (const payloadText of ['', '  \n\n', '{"bad":}']) assert.equal(canEditMaterialText(block('query', { payloadText })), true)
+  for (const extras of [
+    { payloadText: undefined }, { kind: 'image' }, { kind: 'files' },
+    { payloadImage: { blobId: 'image' } }, { payloadFiles: { paths: ['/tmp/example'] } },
+    { secretMasked: true }, { kind: 'secret' }, { kind: 'secret-like' }, { payloadText: 'binary\0payload' },
+  ]) assert.equal(canEditMaterialText(block('query', extras)), false)
+})
+
+check('textarea reconciliation preserves whitespace and uniform CRLF', () => {
+  for (const original of ['  first\n\nsecond  \n', 'first\r\n\r\nsecond\r\n', 'first\rsecond\nthird\r\n']) {
+    assert.equal(reconcileMaterialTextInput(original, original), original)
+    assert.equal(reconcileMaterialTextInput(original, original.replace(/\r\n|\r/g, '\n')), original)
+  }
+  assert.equal(reconcileMaterialTextInput('first\r\n\r\nlast\r\n', '  changed\n\nlast\n'), '  changed\r\n\r\nlast\r\n')
+  assert.equal(reconcileMaterialTextInput('first\nlast', ' first\n\nlast  \n'), ' first\n\nlast  \n')
+  assert.equal(reconcileMaterialTextInput('mixed\r\nline\nend', 'mixed\nline\nchanged'), 'mixed\nline\nchanged')
+  assert.equal(reconcileMaterialTextInput('before', ''), '')
 })
 
 console.log(`Launcher current material passed: ${passed} material lifecycle cases`)

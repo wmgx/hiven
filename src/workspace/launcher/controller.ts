@@ -396,13 +396,11 @@ export class LauncherController {
 
   private shouldCollectTextInput(item: LauncherItem): boolean {
     if (this.isExplicitTextPreview(item)) return true
+    if (this.deps.surfaceId !== 'global-launcher' || item.behavior.type !== 'perform' || !item.inputPolicy) return false
     const mode = item.inputPolicy?.mode ?? 'auto'
     const api = this.deps.makeApi?.(item) ?? this.deps.api
     const hasBoundSelection = (mode === 'auto' || mode === 'selection') && Boolean(api.getSelectionText())
-    return this.deps.surfaceId === 'global-launcher' &&
-      item.behavior.type === 'perform' &&
-      item.inputPolicy != null &&
-      !hasBoundSelection
+    return !hasBoundSelection
   }
 
   /**
@@ -752,9 +750,12 @@ export class LauncherController {
   }
 
   /** Update the text in the active collect-input frame. */
-  setInputText(text: string): void {
+  setInputText(text: string, expectedFrame?: CollectInputFrame): void {
     const top = this.topFrame()
     if (top.kind !== 'collect-input') return
+    // Host drafts get a fresh item per edit. Typing replaces the frame, while
+    // its item remains the same until that edit is left or another one starts.
+    if (expectedFrame && top.item !== expectedFrame.item) return
     if (text !== top.inputText) this.invalidatePendingActions()
     const frames = this.state.frames.slice(0, -1)
     if (top.item.suggest) {
@@ -974,9 +975,10 @@ export class LauncherController {
    * Submit the active collect-input frame. Executes exactly once; the UI must
    * ensure a single Enter owner (no double submit, IME-safe).
    */
-  async submitInput(): Promise<void> {
+  async submitInput(expectedFrame?: CollectInputFrame): Promise<void> {
     const top = this.topFrame()
     if (top.kind !== 'collect-input') return
+    if (expectedFrame && top !== expectedFrame) return
     if (this.state.busy) return
     const paramError = top.params && this.validateParams(top.item, top.params)
     if (paramError) {
@@ -1135,7 +1137,9 @@ export class LauncherController {
    * - otherwise → pop one frame (list keeps launcher open)
    * From the base list frame, returns false so the host can close the launcher.
    */
-  back(): boolean {
+  back(expectedFrame?: CollectInputFrame): boolean {
+    const current = this.topFrame()
+    if (expectedFrame && (current.kind !== 'collect-input' || current.item !== expectedFrame.item)) return false
     this.invalidatePendingActions()
     this.prepareGeneration += 1
     if (this.state.frames.length <= 1) return false
@@ -1176,7 +1180,9 @@ export class LauncherController {
    * Command-tag × : leave the whole command and return to search list in one step.
    * Does not step through intermediate params (unlike empty ⌫ / Esc).
    */
-  exitCommand(): boolean {
+  exitCommand(expectedFrame?: CollectInputFrame): boolean {
+    const current = this.topFrame()
+    if (expectedFrame && (current.kind !== 'collect-input' || current.item !== expectedFrame.item)) return false
     this.invalidatePendingActions()
     this.prepareGeneration += 1
     if (this.state.frames.length <= 1) return false

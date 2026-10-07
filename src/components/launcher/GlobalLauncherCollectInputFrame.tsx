@@ -13,6 +13,8 @@ import { LauncherHintKey, LauncherHintText } from './LauncherFooterHints'
 import { LauncherCommandTag, LauncherParamChipTrail } from './LauncherCommandTag'
 import { LauncherEmptyWell } from './LauncherEmptyWell'
 import { shouldIgnoreImeKeyDown } from '../../utils/imeKeyboard'
+import { reconcileMaterialTextInput } from '../../launcher/clipboard/currentMaterial'
+import { getPlatformShortcutMeta } from './launcherParamShortcuts'
 import {
   type OutputDestinationId,
   LauncherOutputTargetsBar,
@@ -126,8 +128,8 @@ export function GlobalLauncherCollectInputFrame({
   onCaptureSelection,
 }: {
   isImeComposingRef: RefObject<boolean>
-  inputRef: RefObject<HTMLInputElement | null>
-  bindSearchInputRef?: (node: HTMLInputElement | null) => void
+  inputRef: RefObject<HTMLInputElement | HTMLTextAreaElement | null>
+  bindSearchInputRef?: (node: HTMLInputElement | HTMLTextAreaElement | null) => void
   frame: CollectInputFrame
   busy: boolean
   deliveryIntent?: LauncherControllerState['deliveryIntent']
@@ -150,12 +152,13 @@ export function GlobalLauncherCollectInputFrame({
 }) {
   const placeholder = frame.input.placeholderI18n?.[locale] ?? frame.input.placeholder ?? ''
   const explicitPreview = frame.item.executionMode === 'explicit-text-preview'
+  const materialTextEdit = frame.item.materialTextEdit === true
   const previewChoices = frame.previewOutput?.choices ?? []
   const selectedIndex = frame.selectedSuggestionIndex ?? -1
   const hasSuggestions = previewChoices.length > 0
   const isSuggestMode = Boolean(frame.item.suggest)
   const livePreviewText = !isSuggestMode ? extractLivePreviewText(frame.previewOutput) : null
-  const showLivePreview = !isSuggestMode && !explicitPreview && !frame.item.metadataInput
+  const showLivePreview = !isSuggestMode && !explicitPreview && !frame.item.metadataInput && !materialTextEdit
   const filterText = frame.inputText.trim()
   // Local latch: never blank the well while typing — only replace when a new text arrives.
   const lastPreviewRef = useRef<string | null>(null)
@@ -178,7 +181,7 @@ export function GlobalLauncherCollectInputFrame({
   const commandTitle = resolveDisplayTitle(frame.item.display, locale)
   const previewChoice = livePreviewText ? previewChoices[0] : undefined
   const hasReturn = Boolean(previewChoice?.secondaryActions?.some((a) => a.id === 'return-to-launcher'))
-  const hasPaste = !explicitPreview && !frame.item.metadataInput && Boolean(onPastePreviewText)
+  const hasPaste = !explicitPreview && !frame.item.metadataInput && !materialTextEdit && Boolean(onPastePreviewText)
   const {
     destinations,
     activeDest,
@@ -214,8 +217,16 @@ export function GlobalLauncherCollectInputFrame({
     }
   }
 
-  const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+  const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
+    if (materialTextEdit) {
+      if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey) {
+        event.preventDefault()
+        event.stopPropagation()
+        if (!busy) onSubmitPrimary?.()
+      }
+      return
+    }
     if (event.key === 'Backspace' && !frame.inputText) {
       event.preventDefault()
       event.stopPropagation()
@@ -252,8 +263,8 @@ export function GlobalLauncherCollectInputFrame({
           onRemove={onExitCommand ?? onBack}
         />
         <LauncherParamChipTrail chips={paramChips} />
-        <input
-          ref={bindSearchInputRef ?? inputRef}
+        {!materialTextEdit && <input
+          ref={bindSearchInputRef ?? (inputRef as RefObject<HTMLInputElement | null>)}
           value={frame.inputText}
           autoFocus
           onChange={(event) => onInputChange(event.target.value)}
@@ -261,11 +272,30 @@ export function GlobalLauncherCollectInputFrame({
           placeholder={placeholder}
           className="mono"
           style={{ caretColor: 'var(--text, currentColor)' }}
-        />
+        />}
         {busy && (
           <span className="meta anim-running-pulse" role="status" aria-live="polite">{t(locale, deliveryIntent === 'copy' ? 'palette.outputCopying' : deliveryIntent ? 'palette.outputDelivering' : 'palette.outputRunning')}</span>
         )}
       </div>
+      {materialTextEdit && (
+        <div className="global-launcher-body launcher-material-text-edit" data-no-drag>
+          <textarea
+            ref={bindSearchInputRef ?? (inputRef as RefObject<HTMLTextAreaElement | null>)}
+            value={frame.inputText.replace(/\r\n|\r/g, '\n')}
+            autoFocus
+            rows={8}
+            spellCheck={false}
+            autoComplete="off"
+            autoCapitalize="none"
+            autoCorrect="off"
+            aria-label={commandTitle}
+            data-launcher-scrollable
+            onChange={(event) => onInputChange(reconcileMaterialTextInput(frame.inputText, event.target.value))}
+            onKeyDown={handleInputKeyDown}
+            onWheel={(event) => event.stopPropagation()}
+          />
+        </div>
+      )}
       {error && (
         <div role="alert" className="px-3.5 py-2 text-[12px]" style={{ color: 'var(--color-error)' }}>
           {error}
@@ -392,7 +422,25 @@ export function GlobalLauncherCollectInputFrame({
             {t(locale, 'palette.captureSelection')}
           </button>
         )}
-        {showLivePreview && displayPreviewText && !showLiveEmpty ? (
+        {materialTextEdit ? (
+          <>
+            <LauncherHintKey keys="↵" label={t(locale, 'palette.objectBlockEditNewline')} />
+            <button
+              type="button"
+              className="launcher-footer-back-btn"
+              disabled={busy}
+              data-no-drag
+              onMouseDown={(event) => event.preventDefault()}
+              onKeyDown={(event) => {
+                if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) event.preventDefault()
+                if (event.key !== 'Escape') event.stopPropagation()
+              }}
+              onClick={() => { if (!busy) onSubmitPrimary?.() }}
+            >
+              <LauncherHintKey keys={`${getPlatformShortcutMeta().label}↵`} label={t(locale, 'palette.objectBlockEditConfirm')} />
+            </button>
+          </>
+        ) : showLivePreview && displayPreviewText && !showLiveEmpty ? (
           <LauncherOutputTargetsFooter destinations={destinations} locale={locale} />
         ) : isSuggestMode && hasSuggestions ? (
           <LauncherHintText label={t(locale, 'palette.collectInputSuggestHint')} />
@@ -409,10 +457,15 @@ export function GlobalLauncherCollectInputFrame({
           data-testid="launcher-collect-footer-back"
           data-no-drag
           onMouseDown={(event) => event.preventDefault()}
+          onKeyDown={(event) => {
+            if (!materialTextEdit) return
+            if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) event.preventDefault()
+            if (event.key !== 'Escape') event.stopPropagation()
+          }}
           onClick={() => onBack()}
-          aria-label={t(locale, 'palette.back')}
+          aria-label={t(locale, materialTextEdit ? 'palette.objectBlockEditCancel' : 'palette.back')}
         >
-          <LauncherHintKey keys="esc" label={t(locale, 'palette.back')} />
+          <LauncherHintKey keys="esc" label={t(locale, materialTextEdit ? 'palette.objectBlockEditCancel' : 'palette.back')} />
         </button>
       </div>
     </>

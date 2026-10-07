@@ -36,6 +36,7 @@ import { launcherPerfNow, logLauncherPerfDuration } from '../../workspace/launch
 import { TelemetryEvents, trackBehavior } from '../../workspace/telemetry'
 import {
   acceptMaterialHandoff,
+  canEditMaterialText,
   discardCurrentMaterial,
   forgetPreviousMaterial,
   replaceCurrentMaterial,
@@ -62,6 +63,9 @@ export type ClipboardObjectBlockState = {
   markBlockConsumed: () => void
   canRestorePreviousMaterial: boolean
   restorePreviousMaterial: () => void
+  canEditText: boolean
+  /** Bound to the displayed material/session; null for a stale entry button. */
+  beginTextEdit: () => { text: string; commit: (text: string) => boolean } | null
 }
 
 /** Blocks handed in from history / tools — re-stash on hide so ⌘↵ is not lost mid-transition. */
@@ -388,6 +392,28 @@ export function useClipboardObjectBlock(params: {
     setPendingObjectBlock(next.block, { persist: true, silent: true })
   }, [clearExitTimer, publishMaterial, material])
 
+  const renderedGeneration = materialGenerationRef.current
+  const beginTextEdit = useCallback(() => {
+    const isCurrent = () => mountedRef.current && openRef.current && !userDismissedRef.current &&
+      materialRef.current === material && materialGenerationRef.current === renderedGeneration
+    if (!isCurrent() || !canEditMaterialText(material.block)) return null
+    return {
+      text: material.block!.payloadText!,
+      commit: (text: string) => {
+        if (!isCurrent()) return false
+        // Editing deliberately replaces material; it is not another processing handoff.
+        const next = replaceCurrentMaterial(createQueryObjectBlock({ query: text }))
+        clearExitTimer()
+        publishMaterial(next)
+        setIsExiting(false)
+        setHint(null)
+        didReadRef.current = true
+        setPendingObjectBlock(next.block!, { persist: true, silent: true })
+        return true
+      },
+    }
+  }, [clearExitTimer, publishMaterial, material, renderedGeneration])
+
   const attachQueryAsBlock = useCallback((text: string) => {
     if (text.length === 0) return
     setPendingObjectBlock(createQueryObjectBlock({ query: text }))
@@ -409,5 +435,7 @@ export function useClipboardObjectBlock(params: {
     markBlockConsumed,
     canRestorePreviousMaterial: open && Boolean(material.previousBlock) && !isExiting,
     restorePreviousMaterial: restoreMaterial,
+    canEditText: open && !isExiting && canEditMaterialText(block),
+    beginTextEdit,
   }
 }

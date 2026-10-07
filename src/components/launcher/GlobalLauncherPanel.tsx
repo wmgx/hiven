@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, type RefObject } from 'react'
 import type { Locale } from '../../i18n'
 import type { LauncherHostSurfaceTarget, PluginSurfaceOpenTarget } from '../../store'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
-import type { LauncherController, LauncherControllerState, ResultFrame } from '../../workspace/launcher/controller'
+import type { CollectInputFrame, LauncherController, LauncherControllerState, ResultFrame } from '../../workspace/launcher/controller'
 import type { LauncherExecuteResult, LauncherResultChoice } from '../../workspace/launcher/types'
 import type { GlobalLauncherActiveSurfaceFrame } from './GlobalLauncherFrames'
 import { GlobalLauncherFrameSwitch } from './GlobalLauncherFrames'
@@ -18,9 +18,9 @@ import { useAppStore } from '../../store'
 
 type GlobalLauncherPanelProps = {
   panelRef: RefObject<HTMLDivElement | null>
-  inputRef: RefObject<HTMLInputElement | null>
+  inputRef: RefObject<HTMLInputElement | HTMLTextAreaElement | null>
   /** Prefer over inputRef for focus-on-mount (cold open). */
-  bindSearchInputRef?: (node: HTMLInputElement | null) => void
+  bindSearchInputRef?: (node: HTMLInputElement | HTMLTextAreaElement | null) => void
   controllerRef: RefObject<LauncherController | null>
   isImeComposingRef: RefObject<boolean>
   isKeyboardNavRef: RefObject<boolean>
@@ -72,6 +72,7 @@ type GlobalLauncherPanelProps = {
   handleCompositionStart: () => void
   handleCompositionEnd: () => void
   clipboardBlock: ClipboardObjectBlockState
+  onEditMaterial?: () => void
   onExecuteObjectAction?: (action: RecommendedAction, target: RecommendedOutputTarget) => void
   objectActionCount?: number
   selectedActionIndex?: number
@@ -132,6 +133,7 @@ export function GlobalLauncherPanel({
   handleCompositionStart,
   handleCompositionEnd,
   clipboardBlock,
+  onEditMaterial,
   onExecuteObjectAction,
   objectActionCount = 0,
   selectedActionIndex,
@@ -317,21 +319,20 @@ export function GlobalLauncherPanel({
         onParamSelectedIndexChange={(index) => controllerRef.current?.setParamSelectedIndex(index)}
         onParamCommit={(value) => { void controllerRef.current?.commitCurrentParam(value) }}
         onParamMultiToggle={(value) => controllerRef.current?.toggleCurrentMultiParamValue(value)}
-        onFrameBack={() => {
-          controllerRef.current?.back()
-          focusSearchInputAfterBack()
+        onFrameBack={(frame) => {
+          const handled = controllerRef.current?.back(frame)
+          if (handled || !frame) focusSearchInputAfterBack()
         }}
-        onExitCommand={() => {
-          const ctl = controllerRef.current as { exitCommand?: () => boolean; back?: () => boolean } | null
-          if (ctl?.exitCommand) ctl.exitCommand()
-          else ctl?.back?.()
-          focusSearchInputAfterBack()
+        onExitCommand={(frame) => {
+          const ctl = controllerRef.current as { exitCommand?: (frame?: CollectInputFrame) => boolean; back?: (frame?: CollectInputFrame) => boolean } | null
+          const handled = ctl?.exitCommand ? ctl.exitCommand(frame) : ctl?.back?.(frame)
+          if (handled || !frame) focusSearchInputAfterBack()
         }}
-        onCollectInputChange={(value) => controllerRef.current?.setInputText(value)}
+        onCollectInputChange={(value, frame) => controllerRef.current?.setInputText(value, frame)}
         onActivateResultChoice={activateResultChoice}
         onSecondaryAction={activateSecondaryAction}
         onPastePreviewText={activatePreviewPaste}
-        onSubmitCollectInput={() => { void controllerRef.current?.submitInput?.() }}
+        onSubmitCollectInput={(frame) => { void controllerRef.current?.submitInput?.(frame) }}
         onCaptureSelection={() => { void controllerRef.current?.captureInput() }}
         onHoverResultChoice={setResultSelectedIndex}
         onToggleResultChoice={toggleResultChoice}
@@ -341,6 +342,7 @@ export function GlobalLauncherPanel({
         onSearchMouseMove={handleSearchMouseMove}
         isKeyboardNavRef={isKeyboardNavRef}
         clipboardBlock={clipboardBlock}
+        onEditMaterial={onEditMaterial}
         clipboardHintSelected={selectedIndex < 0}
         onExecuteAction={onExecuteObjectAction}
         selectedActionIndex={selectedActionIndex}
