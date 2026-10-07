@@ -943,7 +943,8 @@ export class LauncherController {
 
     const spec = item.behavior.type === 'collect-input' ? item.behavior.input : undefined
     const inputSpec = top.input ?? spec
-    if (!inputText.trim() && !inputSpec?.allowEmptyInput) {
+    const hasInput = this.isExplicitTextPreview(item) ? inputText.length > 0 : inputText.trim().length > 0
+    if (!hasInput && !inputSpec?.allowEmptyInput) {
       this.setState({ error: inputSpec?.emptyInputMessageI18n?.[this.deps.locale as Locale] ?? inputSpec?.emptyInputMessage ?? translate(this.deps.locale as Locale, 'palette', 'inputRequired') })
       return
     }
