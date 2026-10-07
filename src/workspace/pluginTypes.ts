@@ -869,6 +869,12 @@ export type PluginDefinition<TSettings = unknown> = {
   /** Launcher contributions (custom launcher lifecycle/output UX). */
   launcher?: {
     items?: LauncherItemContribution<TSettings>[]
+    /**
+     * Synchronous, settings-aware ordinary candidates. When present, replaces
+     * `items` at collection time, including empty-query discovery and favorites.
+     * A failed provider yields no candidates; stale static items are not reused.
+     */
+    itemsFor?: (settings: TSettings) => LauncherItemContribution<TSettings>[]
     dynamicItems?: LauncherDynamicItemProvider
   }
   /** Panel-only actions (separate surface from launcher). */

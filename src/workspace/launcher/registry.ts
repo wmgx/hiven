@@ -179,8 +179,23 @@ function resolvePluginSettingsItem(
   }
 }
 
-function shouldExposePluginSettingsLauncherItem(definition: PluginDefinition<unknown>): boolean {
-  return definition.launcher?.items?.some((item) => item.hostEntry === 'plugin-settings') ?? false
+/** Settings-aware candidates are authoritative, including an empty result. */
+export function resolvePluginLauncherItems(
+  def: PluginDefinition<unknown>,
+  settings: unknown,
+  pluginId = 'unknown',
+): LauncherItemContribution[] {
+  if (typeof def.launcher?.itemsFor === 'function') {
+    try {
+      const selected = def.launcher.itemsFor(settings)
+      if (Array.isArray(selected)) return selected
+      console.warn(`[launcher] plugin "${pluginId}" itemsFor returned a non-array; no launcher items collected`)
+    } catch (error) {
+      console.warn(`[launcher] plugin "${pluginId}" itemsFor failed; no launcher items collected:`, error)
+    }
+    return []
+  }
+  return def.launcher?.items ?? []
 }
 
 /**
@@ -215,8 +230,8 @@ export function collectStaticPluginItems(): LauncherItem[] {
       ? resolvePluginSettings(settingsSource, pluginId, def.settings).value
       : {}
 
-    // launcher.items
-    const contributions = def.launcher?.items ?? []
+    // Ordinary launcher candidates, including settings-aware contributions.
+    const contributions = resolvePluginLauncherItems(def, settings, pluginId)
     const launcherIds = contributions.map((c) => c.id)
     const idErrors = validateLauncherItemIds(launcherIds)
     const badIds = new Set(idErrors.map((e) => e.itemId))
@@ -280,7 +295,7 @@ export function collectStaticPluginItems(): LauncherItem[] {
       items.push(item)
     }
 
-    if (shouldExposePluginSettingsLauncherItem(def)) {
+    if (contributions.some((item) => item.hostEntry === 'plugin-settings')) {
       const settingsItem = resolvePluginSettingsItem(def, pluginId, source)
       if (settingsItem) {
         items.push(settingsItem)

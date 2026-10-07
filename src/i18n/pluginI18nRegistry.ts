@@ -337,9 +337,19 @@ export function localizeContributions(
       }
     : undefined
   const launcherItems = contributions.launcher?.items?.map((item) => localizeLauncherItem(messages, item))
+  const launcherItemsFor = contributions.launcher?.itemsFor
+  const itemsFor = launcherItemsFor
+    ? (settings: unknown) => {
+        const selected = launcherItemsFor(settings)
+        // Localize the current contribution, never an older item with the same id.
+        return Array.isArray(selected)
+          ? selected.map((item) => localizeLauncherItem(messages, item))
+          : selected
+      }
+    : undefined
   const panelActions = contributions.panel?.actions?.map((action) => localizePanelAction(messages, action))
   const launcher = contributions.launcher
-    ? { ...contributions.launcher, items: launcherItems }
+    ? { ...contributions.launcher, items: launcherItems, itemsFor }
     : undefined
   const panel = contributions.panel
     ? { ...contributions.panel, actions: panelActions }

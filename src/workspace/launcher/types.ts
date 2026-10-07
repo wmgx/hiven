@@ -434,6 +434,7 @@ export type LauncherExecutionContext<TSettings = unknown> = {
    * back into that same app over the default copy-first output.
    */
   input?: { text: string; source?: 'foreground-app' }
+  /** Resolved on access. Retained action handlers should read ctx.settings when run. */
   settings: TSettings
   locale: Locale
   api: PluginLauncherApi
@@ -460,6 +461,7 @@ export type LauncherExecuteWithParamsHandler<TSettings = unknown> = (
 export type LauncherSuggestContext<TSettings = unknown> = {
   surfaceId: LauncherSurfaceId
   inputText: string
+  /** Resolved on access. Retained choice handlers should read ctx.settings when run. */
   settings: TSettings
   locale: Locale
   api: PluginLauncherApi

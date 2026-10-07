@@ -13,7 +13,7 @@
   "emptyQueryOpen": "允许为空",
   "emptyQueryBehavior": "空输入行为",
   "testOpen": "测试打开",
-  "disabledMessage": "快开规则已关闭",
+  "disabledMessage": "网页快开规则已禁用，请启用后重新选择。",
   "defaultBaiduTitle": "百度搜索",
   "defaultBaiduPlaceholder": "输入搜索关键词",
   "matchPattern": "快捷匹配正则",
@@ -82,5 +82,13 @@
   "settings.idleTimeout.7d": "7 天",
   "settings.idleTimeout.custom": "{minutes} 分钟",
   "settings.footer": "空搜索不会展示标签；输入标题或 URL 片段即可。断连时静默无结果，不打扰其它搜索。更新后请重新加载已解压的扩展，以便授予「历史记录」权限。",
-  "settings.reloadHint": "更新后请在浏览器里重新加载已解压的扩展，以便授予新的「历史记录」权限。"
+  "settings.reloadHint": "更新后请在浏览器里重新加载已解压的扩展，以便授予新的「历史记录」权限。",
+  "ruleChangedMessage": "此规则已更改或删除，请返回并重新选择。",
+  "emptyInputMessage": "请输入内容",
+  "default.google.title": "Google 搜索",
+  "default.google.placeholder": "输入搜索关键词",
+  "default.github.title": "GitHub 仓库",
+  "default.github.placeholder": "owner/repo 或关键词",
+  "default.mdn.title": "MDN 文档",
+  "default.mdn.placeholder": "输入 Web API 或 CSS 关键词"
 }

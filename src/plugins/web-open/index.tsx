@@ -70,11 +70,43 @@ function shouldRecordHistory(entry: WebQuickOpenEntry): boolean {
   return entry.recordQueryHistory === true
 }
 
+function configuredEntries(settings: WebQuickOpenSettings | undefined): WebQuickOpenEntry[] {
+  // An explicit empty list means the user removed every rule.
+  return settings?.entries ?? DEFAULT_WEB_QUICK_OPEN_SETTINGS.entries
+}
+
+type RuleContext = Pick<LauncherExecutionContext<WebQuickOpenSettings>, 'settings' | 't'>
+
+function currentRule(ctx: RuleContext, selected: WebQuickOpenEntry): WebQuickOpenEntry | null {
+  if (ctx.settings?.enabled === false) return null
+  const current = configuredEntries(ctx.settings).find((entry) => entry.id === selected.id)
+  // A retained button must never silently switch targets after a settings edit.
+  return current && current.urlTemplate === selected.urlTemplate && current.encodeQuery === selected.encodeQuery
+    ? current
+    : null
+}
+
+function unavailableRule(ctx: RuleContext) {
+  return {
+    ok: false as const,
+    message: ctx.t(ctx.settings?.enabled === false ? 'disabledMessage' : 'ruleChangedMessage'),
+  }
+}
+
 async function openAndMaybeRecord(
-  ctx: Pick<LauncherExecutionContext<WebQuickOpenSettings>, 'api' | 'storage'>,
-  entry: WebQuickOpenEntry,
+  ctx: Pick<LauncherExecutionContext<WebQuickOpenSettings>, 'api' | 'storage' | 'settings' | 't'>,
+  selected: WebQuickOpenEntry,
   query: string,
+  requirePattern = false,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
+  const entry = currentRule(ctx, selected)
+  if (!entry) return unavailableRule(ctx)
+  if (requirePattern && (!entry.matchPattern || !testMatchPattern(entry.matchPattern, query))) {
+    return { ok: false, message: ctx.t('ruleChangedMessage') }
+  }
+  if (entry.emptyQueryBehavior === 'block' && !query.trim()) {
+    return { ok: false, message: ctx.t('emptyInputMessage') }
+  }
   const url = buildWebQuickOpenUrl(entry.urlTemplate, query, entry.encodeQuery)
   try {
     await ctx.api.openUrl(url)
@@ -90,7 +122,7 @@ async function openAndMaybeRecord(
 function buildHistoryOutput(
   entry: WebQuickOpenEntry,
   items: Awaited<ReturnType<typeof loadQueryHistory>>,
-  ctx: Pick<LauncherSuggestContext<WebQuickOpenSettings>, 'api' | 'storage' | 'network' | 't' | 'pluginId' | 'source'>,
+  ctx: Pick<LauncherSuggestContext<WebQuickOpenSettings>, 'api' | 'storage' | 'settings' | 't'>,
 ): LauncherOutput {
   const icon = entrySiteIcon(entry)
   return {
@@ -101,15 +133,7 @@ function buildHistoryOutput(
         title: item.text,
         subtitle: url,
         icon,
-        primaryAction: async () => {
-          try {
-            await ctx.api.openUrl(url)
-          } catch (error) {
-            return { ok: false as const, message: error instanceof Error ? error.message : String(error) }
-          }
-          void recordQueryHistory(ctx.storage, entry.id, item.text, resolveEntryHistoryLimit(entry))
-          return { ok: true as const }
-        },
+        primaryAction: () => openAndMaybeRecord(ctx, entry, item.text),
         secondaryActions: [
           {
             id: 'delete',
@@ -129,13 +153,13 @@ async function suggestHistoryForEntry(
   ctx: LauncherSuggestContext<WebQuickOpenSettings>,
   entry: WebQuickOpenEntry,
 ): Promise<LauncherOutput | null> {
-  const runtimeEntry =
-    ctx.settings?.entries?.find((candidate) => candidate.id === entry.id) ?? entry
-  if (!shouldRecordHistory(runtimeEntry)) return null
+  const runtimeEntry = currentRule(ctx, entry)
+  if (!runtimeEntry || !shouldRecordHistory(runtimeEntry)) return null
   const all = await loadQueryHistory(ctx.storage, runtimeEntry.id)
   const filtered = filterQueryHistory(all, ctx.inputText)
-  if (filtered.length === 0) return null
-  return buildHistoryOutput(runtimeEntry, filtered, ctx)
+  const current = currentRule(ctx, entry)
+  if (!current || !shouldRecordHistory(current) || filtered.length === 0) return null
+  return buildHistoryOutput({ ...current }, filtered, ctx)
 }
 
 /**
@@ -174,19 +198,30 @@ function scheduleWarmFavicons(
   }, 350)
 }
 
+function defaultEntryTextKey(entry: WebQuickOpenEntry, field: 'title' | 'placeholder'): string | undefined {
+  const defaults = DEFAULT_WEB_QUICK_OPEN_SETTINGS.entries.find((candidate) => candidate.id === entry.id)
+  return defaults && entry[field] === defaults[field] ? `default.${entry.id}.${field}` : undefined
+}
+
 function buildEntryLauncherItem(
   entry: WebQuickOpenSettings['entries'][number],
-  icon?: string,
 ): LauncherItemContribution<WebQuickOpenSettings> {
+  // Capture the selected target even if a caller mutates its settings object.
+  entry = { ...entry }
   const aliases = Array.isArray(entry.aliases) ? entry.aliases : []
+  const titleKey = defaultEntryTextKey(entry, 'title')
+  const placeholderKey = defaultEntryTextKey(entry, 'placeholder')
+  const title = entry.title || entry.urlTemplate
   return {
     id: entry.id,
     surfaces: ['global-launcher'],
-    // Stable site/action id — safe to learn frequency when used as dynamic.
+    // Stable site/action id for favorites and existing references.
     recordUsage: true,
     display: {
-      title: entry.title || entry.urlTemplate,
-      icon: icon ?? entrySiteIcon(entry),
+      title: titleKey ?? title,
+      // User text can equal a locale key. Explicit values keep it literal.
+      titleI18n: titleKey ? undefined : { en: title, zh: title },
+      icon: entrySiteIcon(entry),
       aliases: [
         ...aliases,
         entry.placeholder,
@@ -196,55 +231,23 @@ function buildEntryLauncherItem(
     behavior: {
       type: 'collect-input' as const,
       input: {
-        placeholder: entry.placeholder,
+        placeholder: placeholderKey ?? entry.placeholder,
+        placeholderI18n: placeholderKey ? undefined : { en: entry.placeholder, zh: entry.placeholder },
         allowEmptyInput: entry.emptyQueryBehavior !== 'block',
-        emptyInputMessage: entry.emptyQueryBehavior === 'block' ? 'Please enter content' : undefined,
-        emptyInputMessageI18n: entry.emptyQueryBehavior === 'block'
-          ? { zh: '请输入内容', en: 'Please enter content' }
-          : undefined,
+        emptyInputMessage: entry.emptyQueryBehavior === 'block' ? 'emptyInputMessage' : undefined,
       },
     },
     suggest: (ctx) => suggestHistoryForEntry(ctx, entry),
-    async execute(ctx) {
-      if (ctx.settings?.enabled === false) {
-        const message = ctx.t('disabledMessage')
-        ctx.api.showMessage(message, 'warning')
-        return { ok: false, message }
-      }
-      const runtimeEntry = ctx.settings?.entries?.find((candidate) => candidate.id === entry.id) ?? entry
-      return openAndMaybeRecord(ctx, runtimeEntry, ctx.input?.text ?? '')
-    },
+    execute: (ctx) => openAndMaybeRecord(ctx, entry, ctx.input?.text ?? ''),
   }
 }
 
-/** Rebuilt each static collect so icons pick up memory blob after warm. */
-function buildLauncherItems(): LauncherItemContribution<WebQuickOpenSettings>[] {
-  return DEFAULT_WEB_QUICK_OPEN_SETTINGS.entries.map((entry) => buildEntryLauncherItem(entry))
-}
-
-function entryMatchesQuery(entry: WebQuickOpenSettings['entries'][number], query: string): boolean {
-  const q = query.trim().toLowerCase()
-  if (!q) return false
-  const aliases = Array.isArray(entry.aliases) ? entry.aliases : []
-  return [
-    entry.title,
-    entry.placeholder,
-    entry.urlTemplate,
-    ...aliases,
-  ].some((value) => String(value ?? '').toLowerCase().includes(q))
-}
-
-function isUnchangedDefaultEntry(entry: WebQuickOpenSettings['entries'][number]): boolean {
-  const defaultEntry = DEFAULT_WEB_QUICK_OPEN_SETTINGS.entries.find((candidate) => candidate.id === entry.id)
-  if (!defaultEntry) return false
-  return (
-    entry.title === defaultEntry.title &&
-    entry.placeholder === defaultEntry.placeholder &&
-    entry.urlTemplate === defaultEntry.urlTemplate &&
-    entry.encodeQuery === defaultEntry.encodeQuery &&
-    entry.emptyQueryBehavior === defaultEntry.emptyQueryBehavior &&
-    (Array.isArray(entry.aliases) ? entry.aliases : []).join('\n') === defaultEntry.aliases.join('\n')
-  )
+/** Rebuilt from current settings so browsing, favorites and search share one identity. */
+function buildLauncherItems(settings: WebQuickOpenSettings): LauncherItemContribution<WebQuickOpenSettings>[] {
+  if (settings?.enabled === false) return []
+  return configuredEntries(settings)
+    .filter((entry) => !isAutoLearnedEntry(entry))
+    .map((entry) => buildEntryLauncherItem(entry))
 }
 
 function isValidUrl(text: string): boolean {
@@ -263,7 +266,7 @@ function resolveLauncherIcon(
 async function buildDynamicLauncherItems(ctx: LauncherDynamicContext): Promise<LauncherItemContribution[]> {
   const settings = ctx.settings as WebQuickOpenSettings | undefined
   if (settings?.enabled === false) return []
-  const entries = settings?.entries ?? DEFAULT_WEB_QUICK_OPEN_SETTINGS.entries
+  const entries = configuredEntries(settings)
   const query = ctx.query.trim()
   if (!query) return []
 
@@ -278,12 +281,14 @@ async function buildDynamicLauncherItems(ctx: LauncherDynamicContext): Promise<L
 
   // A. Pattern-matched entries → perform (one-step open)
   // Favicon uses plugin-internal memory/kv cache; network warm is non-blocking.
-  for (const entry of entries) {
+  for (const configuredEntry of entries) {
+    const entry = { ...configuredEntry }
     if (!entry.matchPattern) continue
     if (!testMatchPattern(entry.matchPattern, query)) continue
 
     const url = buildWebQuickOpenUrl(entry.urlTemplate, query, entry.encodeQuery)
     const icon = resolveLauncherIcon(url, ctx)
+    const titleKey = defaultEntryTextKey(entry, 'title')
 
     results.push({
       id: entry.id + '-quick',
@@ -291,7 +296,7 @@ async function buildDynamicLauncherItems(ctx: LauncherDynamicContext): Promise<L
       // Pattern-matched site templates are stable intents (e.g. google-quick).
       recordUsage: true,
       display: {
-        title: entry.title || entry.urlTemplate,
+        title: titleKey ? ctx.t(titleKey) : entry.title || entry.urlTemplate,
         subtitle: url,
         icon,
         // Keep the matched query as an alias so ranking matchScore stays high
@@ -300,10 +305,7 @@ async function buildDynamicLauncherItems(ctx: LauncherDynamicContext): Promise<L
       },
       behavior: { type: 'perform' as const },
       async execute(execCtx) {
-        const runtimeEntry =
-          (execCtx.settings as WebQuickOpenSettings | undefined)?.entries?.find((candidate) => candidate.id === entry.id)
-          ?? entry
-        return openAndMaybeRecord(execCtx as LauncherExecutionContext<WebQuickOpenSettings>, runtimeEntry, query)
+        return openAndMaybeRecord(execCtx as LauncherExecutionContext<WebQuickOpenSettings>, entry, query, true)
       },
     })
   }
@@ -326,24 +328,13 @@ async function buildDynamicLauncherItems(ctx: LauncherDynamicContext): Promise<L
       },
       behavior: { type: 'perform' as const },
       async execute(execCtx) {
+        const current = execCtx as LauncherExecutionContext<WebQuickOpenSettings>
+        if (current.settings?.enabled === false) return unavailableRule(current)
         await execCtx.api.openUrl(query)
         return { ok: true }
       },
     })
   }
-
-  // C. Existing behavior: user-customized entries matching by keyword
-  // Prefer memory/blob favicon when available; otherwise multi-try origin icon.
-  const keywordMatches = entries
-    .filter((entry) => !isUnchangedDefaultEntry(entry))
-    .filter((entry) => !entry.learnedFrom)
-    .filter((entry) => entryMatchesQuery(entry, ctx.query))
-    .map((entry) => {
-      const icon = resolveLauncherIcon(entry.urlTemplate, ctx)
-      return buildEntryLauncherItem(entry, icon) as LauncherItemContribution
-    })
-
-  results.push(...keywordMatches)
 
   return results
 }
@@ -727,10 +718,7 @@ export default definePlugin<WebQuickOpenSettings>({
   },
 
   launcher: {
-    // Getter: re-resolve icons from memory cache after settings/startup warm.
-    get items() {
-      return buildLauncherItems()
-    },
+    itemsFor: buildLauncherItems,
     dynamicItems: buildDynamicLauncherItems,
   },
 })

@@ -186,7 +186,7 @@ export function useLauncherSession({
   const recordPersistableLauncherSelection = useAppStore((s) => s.recordPersistableLauncherSelection)
   const rankingNow = useMemo(() => Date.now(), [open])
   const pluginRegistryVersion = usePluginRegistryVersion()
-  // toolsFor depends on live settings — recollect static tools when any plugin settings change.
+  // toolsFor and launcher.itemsFor depend on live settings; recollect after edits.
   const pluginSettings = usePluginSettingsStore((s) => s.pluginSettings)
   const pluginPermissions = usePluginPermissionStore((s) => s.permissions)
 
@@ -450,6 +450,8 @@ export function useLauncherSession({
       return
     }
 
+    // A settings/registry edit starts a new generation even when text is unchanged.
+    setPluginDynamicItems([])
     pluginQueryRef.current = q
     const timer = window.setTimeout(() => {
       if (pluginQueryRef.current !== q) return
@@ -491,7 +493,7 @@ export function useLauncherSession({
       window.clearTimeout(timer)
       pluginAbortRef.current?.abort()
     }
-  }, [collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open, query])
+  }, [collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open, query, pluginSettings, pluginRegistryVersion])
 
   // ── Host dynamic path (apps / workflow) — isolated, longer debounce ────────
   useEffect(() => {
@@ -663,7 +665,7 @@ export function useLauncherSession({
   }, [collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open])
 
   // Collect static candidates separately — they change with plugin registry or
-  // plugin settings (toolsFor filters), not on every keystroke.
+  // plugin settings (toolsFor / itemsFor), not on every keystroke.
   const staticCandidates = useMemo<LauncherItem[]>(() => {
     void pluginRegistryVersion
     void pluginSettings

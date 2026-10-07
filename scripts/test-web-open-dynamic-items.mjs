@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Verifies Web Quick Open exposes user-configured settings entries through
- * launcher.dynamicItems, so custom links are searchable at runtime.
+ * launcher.itemsFor, while dynamicItems handles patterns and direct URLs.
  * Also checks progressive session path, non-blocking favicon resolve, and
  * matchPattern cache replace semantics.
  */
@@ -224,11 +224,13 @@ const settings = {
   ],
 }
 
-const items = await definition.launcher.dynamicItems({ query: 'gh', locale: 'en', settings })
+const ordinaryItems = definition.launcher.itemsFor(settings)
+const items = ordinaryItems.filter((item) => item.id === 'github-issues')
+assert.equal((await definition.launcher.dynamicItems({ query: 'gh', locale: 'en', settings })).length, 0, 'ordinary rules must not be duplicated dynamically')
 assert.equal(items.length, 1, 'custom settings entry should be searchable by alias')
 assert.equal(items[0].id, 'github-issues')
 assert.equal(JSON.stringify(items[0].surfaces), JSON.stringify(['global-launcher']))
-assert.ok(definition.launcher.items.every((item) => JSON.stringify(item.surfaces) === JSON.stringify(['global-launcher'])))
+assert.ok(ordinaryItems.every((item) => JSON.stringify(item.surfaces) === JSON.stringify(['global-launcher'])))
 assert.equal(items[0].display.title, 'GitHub Issues')
 assert.equal(items[0].behavior.type, 'collect-input')
 assert.equal(items[0].behavior.input.placeholder, 'Issue id')
@@ -245,7 +247,8 @@ const urlMatches = await definition.launcher.dynamicItems({
   locale: 'en',
   settings,
 })
-assert.equal(urlMatches.length, 1, 'custom settings entry should be searchable by URL template')
+assert.equal(urlMatches.length, 0, 'ordinary keyword matching stays on the static path')
+assert.ok(items[0].display.aliases.includes('https://github.com/acme/project/issues/{query}'))
 
 const sampleLogId = '20260702192928EC9CFA9EFD91F021E1EB'
 const logMatches = await definition.launcher.dynamicItems({
@@ -322,7 +325,7 @@ await items[0].execute({
   },
   t: (key) => key,
 })
-assert.equal(openedUrl, 'https://github.com/acme/project/issues/123', 'dynamic item should open the runtime settings URL')
+assert.equal(openedUrl, 'https://github.com/acme/project/issues/123', 'ordinary item should open the current settings URL')
 
 const disabledItems = definition.launcher.dynamicItems({
   query: 'gh',

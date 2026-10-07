@@ -18,6 +18,7 @@ const commands = [
   ['npm', ['run', 'test:builtin-plugin-release']],
   ['npm', ['run', 'test:builtin-application-updates']],
   ['npm', ['run', 'test:plugin-runtime-lifecycle']],
+  ['npm', ['run', 'test:web-open-rule-consistency']],
   ['npm', ['run', 'check:typecheck']],
   ['npm', ['run', 'check:architecture']],
   ['npm', ['run', 'check:reachability']],

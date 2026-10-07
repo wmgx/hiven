@@ -280,10 +280,11 @@ export class LauncherController {
    */
   private buildExecutionContext(item: LauncherItem, inputText?: string, inputSource?: 'foreground-app') {
     const resolvedInputText = inputText !== undefined ? inputText : item.initialInputText
+    const getSettings = () => this.deps.getSettings(item)
     return {
       surfaceId: this.deps.surfaceId,
       input: resolvedInputText !== undefined ? { text: resolvedInputText, source: inputSource } : undefined,
-      settings: this.deps.getSettings(item),
+      get settings() { return getSettings() },
       locale: this.deps.locale as never,
       api: this.deps.makeApi?.(item) ?? this.deps.api,
       storage: this.deps.getStorage?.(item) ?? emptyStorage,
@@ -837,12 +838,13 @@ export class LauncherController {
     const shouldToggleBusy = !this.state.busy && !hasExistingChoices
     if (shouldToggleBusy) this.setState({ busy: true, error: null })
     let output: LauncherOutput | null | undefined
+    const getSettings = () => this.deps.getSettings(item)
     try {
       output = await Promise.resolve(
         item.suggest!({
           surfaceId: this.deps.surfaceId,
           inputText,
-          settings: this.deps.getSettings(item),
+          get settings() { return getSettings() },
           locale: this.deps.locale as never,
           api: this.deps.makeApi?.(item) ?? this.deps.api,
           storage: this.deps.getStorage?.(item) ?? emptyStorage,

@@ -13,7 +13,7 @@
   "emptyQueryOpen": "Allow empty",
   "emptyQueryBehavior": "Empty input behavior",
   "testOpen": "Test open",
-  "disabledMessage": "Quick-open rules are disabled",
+  "disabledMessage": "Quick-open rules are disabled. Enable them, then select the rule again.",
   "defaultBaiduTitle": "Baidu Search",
   "defaultBaiduPlaceholder": "Enter search keywords",
   "matchPattern": "Quick match pattern",
@@ -82,5 +82,13 @@
   "settings.idleTimeout.7d": "7 days",
   "settings.idleTimeout.custom": "{minutes} minutes",
   "settings.footer": "Empty search never lists tabs; type a title or URL fragment. When disconnected, results stay silent. After this update, reload the unpacked extension so Chrome grants History access.",
-  "settings.reloadHint": "After this update, reload the unpacked extension so Chrome grants the new History permission."
+  "settings.reloadHint": "After this update, reload the unpacked extension so Chrome grants the new History permission.",
+  "ruleChangedMessage": "This rule changed or was removed. Go back and select it again.",
+  "emptyInputMessage": "Please enter content",
+  "default.google.title": "Google Search",
+  "default.google.placeholder": "Enter search keywords",
+  "default.github.title": "GitHub Repositories",
+  "default.github.placeholder": "owner/repo or keywords",
+  "default.mdn.title": "MDN Documentation",
+  "default.mdn.placeholder": "Enter Web API or CSS keywords"
 }
