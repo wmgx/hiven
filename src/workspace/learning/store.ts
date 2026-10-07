@@ -193,8 +193,19 @@ function openDb(): Promise<IDBDatabase | null> {
   return dbPromise
 }
 
-function objectStore(db: IDBDatabase, store: string, mode: IDBTransactionMode): IDBObjectStore {
-  return db.transaction(store, mode).objectStore(store)
+function objectStore(db: IDBDatabase, store: string, mode: IDBTransactionMode, signal?: AbortSignal): IDBObjectStore {
+  const transaction = db.transaction(store, mode)
+  if (signal) {
+    const abort = () => {
+      try { transaction.abort() } catch { /* already completed */ }
+    }
+    signal.addEventListener('abort', abort, { once: true })
+    const cleanup = () => signal.removeEventListener('abort', abort)
+    transaction.addEventListener('complete', cleanup, { once: true })
+    transaction.addEventListener('abort', cleanup, { once: true })
+    if (signal.aborted) abort()
+  }
+  return transaction.objectStore(store)
 }
 
 function awaitRequest(request: IDBRequest): Promise<void> {
@@ -234,21 +245,21 @@ export function saltedHash(text: string): string {
 
 // ─── writes / reads (all fail-soft) ───────────────────────────────────────────
 
-export async function putEvent(event: ObservationEvent): Promise<void> {
+export async function putEvent(event: ObservationEvent, signal?: AbortSignal): Promise<void> {
   const db = await openDb()
-  if (!db) return
+  if (!db || signal?.aborted) return
   try {
-    await awaitRequest(objectStore(db, STORE_EVENTS, 'readwrite').add(event))
+    await awaitRequest(objectStore(db, STORE_EVENTS, 'readwrite', signal).add(event))
   } catch {
     // fail-soft
   }
 }
 
-export async function putPair(pair: LearnedPair): Promise<void> {
+export async function putPair(pair: LearnedPair, signal?: AbortSignal): Promise<void> {
   const db = await openDb()
-  if (!db) return
+  if (!db || signal?.aborted) return
   try {
-    await awaitRequest(objectStore(db, STORE_PAIRS, 'readwrite').add(pair))
+    await awaitRequest(objectStore(db, STORE_PAIRS, 'readwrite', signal).add(pair))
   } catch {
     // fail-soft
   }
@@ -345,11 +356,11 @@ export async function pruneOldEvents(now: number = Date.now()): Promise<void> {
 // ─── rules (P2 output) ─────────────────────────────────────────────────────────
 
 /** Persist a user-confirmed rule. `clusterKey` is unique — a re-accept updates. */
-export async function putRule(rule: LearnedRule): Promise<void> {
+export async function putRule(rule: LearnedRule, signal?: AbortSignal): Promise<void> {
   const db = await openDb()
-  if (!db) return
+  if (!db || signal?.aborted) return
   try {
-    await awaitRequest(objectStore(db, STORE_RULES, 'readwrite').put(rule))
+    await awaitRequest(objectStore(db, STORE_RULES, 'readwrite', signal).put(rule))
   } catch {
     // fail-soft
   }
@@ -369,11 +380,11 @@ export async function queryAllRules(): Promise<LearnedRule[]> {
   })
 }
 
-export async function deleteRule(id: number): Promise<void> {
+export async function deleteRule(id: number, signal?: AbortSignal): Promise<void> {
   const db = await openDb()
-  if (!db) return
+  if (!db || signal?.aborted) return
   try {
-    await awaitRequest(objectStore(db, STORE_RULES, 'readwrite').delete(id))
+    await awaitRequest(objectStore(db, STORE_RULES, 'readwrite', signal).delete(id))
   } catch {
     // fail-soft
   }
@@ -384,16 +395,17 @@ export async function bumpRuleStrength(
   clusterKey: string,
   delta: number,
   now: number = Date.now(),
+  signal?: AbortSignal,
 ): Promise<void> {
   const db = await openDb()
-  if (!db) return
+  if (!db || signal?.aborted) return
   try {
-    const store = objectStore(db, STORE_RULES, 'readwrite')
+    const store = objectStore(db, STORE_RULES, 'readwrite', signal)
     await new Promise<void>((resolve) => {
       const request = store.index('clusterKey').get(clusterKey)
       request.onsuccess = () => {
         const rule = request.result as LearnedRule | undefined
-        if (!rule) {
+        if (!rule || signal?.aborted) {
           resolve()
           return
         }
@@ -439,12 +451,12 @@ export async function pruneForgottenRules(now: number = Date.now()): Promise<voi
 // ─── suppressions (rejected clusters) ──────────────────────────────────────────
 
 /** Record that the user rejected a cluster — never propose it again. Idempotent. */
-export async function addSuppression(clusterKey: string, now: number = Date.now()): Promise<void> {
+export async function addSuppression(clusterKey: string, now: number = Date.now(), signal?: AbortSignal): Promise<void> {
   const db = await openDb()
-  if (!db) return
+  if (!db || signal?.aborted) return
   try {
     await awaitRequest(
-      objectStore(db, STORE_SUPPRESSIONS, 'readwrite').put({ clusterKey, ts: now } as Suppression),
+      objectStore(db, STORE_SUPPRESSIONS, 'readwrite', signal).put({ clusterKey, ts: now } as Suppression),
     )
   } catch {
     // fail-soft
@@ -479,11 +491,11 @@ export async function removeSuppression(clusterKey: string): Promise<void> {
 // ─── navigations (scenario D — template discovery) ─────────────────────────────
 
 /** Record a passively observed navigation (template + salted slot hash, no raw URL). */
-export async function putNavigation(nav: NavigationRecord): Promise<void> {
+export async function putNavigation(nav: NavigationRecord, signal?: AbortSignal): Promise<void> {
   const db = await openDb()
-  if (!db) return
+  if (!db || signal?.aborted) return
   try {
-    await awaitRequest(objectStore(db, STORE_NAV, 'readwrite').add(nav))
+    await awaitRequest(objectStore(db, STORE_NAV, 'readwrite', signal).add(nav))
   } catch {
     // fail-soft
   }
@@ -512,11 +524,11 @@ export interface PathObservationRecord {
   ts: number
 }
 
-export async function putPathObservation(observation: PathObservationRecord): Promise<void> {
+export async function putPathObservation(observation: PathObservationRecord, signal?: AbortSignal): Promise<void> {
   const db = await openDb()
-  if (!db) return
+  if (!db || signal?.aborted) return
   try {
-    await awaitRequest(objectStore(db, STORE_PATHS, 'readwrite').add(observation))
+    await awaitRequest(objectStore(db, STORE_PATHS, 'readwrite', signal).add(observation))
   } catch {
     // fail-soft
   }
