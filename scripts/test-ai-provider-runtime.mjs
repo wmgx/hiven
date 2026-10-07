@@ -101,5 +101,6 @@ assert.match(settingsContent, /id\.trim\(\)\.toLowerCase\(\) === 'gpt-reserve'[\
 assert.match(settingsContent, /title=\{entry\.technicalId\}/, 'unknown quota labels must retain the raw bucket ID for diagnostics')
 
 await import('./test-ai-cancellation-behavior.mjs')
+await import('./test-ai-permission-behavior.mjs')
 
 console.log('AI provider runtime contract OK')
