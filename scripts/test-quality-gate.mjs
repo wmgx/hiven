@@ -14,6 +14,7 @@ import { spawnSync } from 'node:child_process'
 const commands = [
   ['npm', ['run', 'test:lockfile-registry']],
   ['npm', ['run', 'test:baseline-runtime-fallbacks']],
+  ['npm', ['run', 'test:builtin-plugin-release']],
   ['npm', ['run', 'check:typecheck']],
   ['npm', ['run', 'check:architecture']],
   ['npm', ['run', 'check:reachability']],
@@ -47,6 +48,7 @@ const commands = [
   ['npm', ['run', 'test:plugin-editor-surface-open-lifecycle']],
   ['npm', ['run', 'test:refactor-final-acceptance']],
   ['npm', ['run', 'build']],
+  ['npm', ['run', 'test:startup-source-graph']],
 ]
 
 function resolveCommand(command, args) {
