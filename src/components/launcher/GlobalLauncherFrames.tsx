@@ -2,7 +2,7 @@ import { type MouseEvent as ReactMouseEvent, type MutableRefObject, type ReactNo
 import { t, type Locale } from '../../i18n'
 import { localized, type LauncherHostSurfaceTarget, type PluginSurfaceOpenTarget } from '../../store'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
-import type { CollectInputFrame, ParamInputFrame, ResultFrame } from '../../workspace/launcher/controller'
+import type { CollectInputFrame, LauncherControllerState, ParamInputFrame, ResultFrame } from '../../workspace/launcher/controller'
 import type { LauncherResultChoice } from '../../workspace/launcher/types'
 import { LauncherParamStep, resolveParamValueLabel } from './LauncherParamStep'
 import type { LauncherMixedItem } from './LauncherMixedList'
@@ -89,7 +89,7 @@ export function GlobalLauncherFrameSwitch({
   surfaceFrame: PluginSurfaceOpenTarget | null
   activeSurfaceFrame: GlobalLauncherActiveSurfaceFrame | null
   itemPermissionFrame: GlobalLauncherPermissionFrameState | null
-  controllerState: { frames: Array<CollectInputFrame | ParamInputFrame | ResultFrame | { kind: string }>; error?: string | null; busy: boolean } | null | undefined
+  controllerState: { frames: Array<CollectInputFrame | ParamInputFrame | ResultFrame | { kind: string }>; error?: string | null; busy: boolean; deliveryIntent?: LauncherControllerState['deliveryIntent'] } | null | undefined
   inputRef: RefObject<HTMLInputElement | null>
   bindSearchInputRef?: (node: HTMLInputElement | null) => void
   query: string
@@ -129,7 +129,7 @@ export function GlobalLauncherFrameSwitch({
   /** Collect-input / result secondary actions (id is plugin-defined). */
   onSecondaryAction?: (choice: LauncherResultChoice, actionId: string) => void
   /** Package 4: paste live-preview text into the foreground app. */
-  onPastePreviewText?: (text: string) => void | Promise<void>
+  onPastePreviewText?: (choice: LauncherResultChoice) => void | Promise<void>
   /** Package 4: default collect-input submit when no destination chrome. */
   onSubmitCollectInput?: () => void
   onCaptureSelection?: () => void
@@ -251,6 +251,7 @@ export function GlobalLauncherFrameSwitch({
           bindSearchInputRef={bindSearchInputRef}
           frame={frame}
           busy={controllerState?.busy ?? false}
+          deliveryIntent={controllerState?.deliveryIntent}
           error={controllerState?.error ?? null}
           locale={locale}
           paramChips={paramChips}
@@ -273,6 +274,8 @@ export function GlobalLauncherFrameSwitch({
       <LauncherFlowFrame frameKey={`result:${frame.committedRun?.runId ?? frame.sourceTitle ?? ''}`}>
         <GlobalLauncherResultFrame
           frame={frame}
+          busy={controllerState?.busy ?? false}
+          deliveryIntent={controllerState?.deliveryIntent}
           error={controllerState?.error ?? null}
           locale={locale}
           selectedIndex={resultSelectedIndex}
@@ -288,6 +291,10 @@ export function GlobalLauncherFrameSwitch({
   }
 
   return (
+    <>
+    {controllerState?.deliveryIntent && (
+      <span role="status" aria-live="polite">{t(locale, controllerState.deliveryIntent === 'copy' ? 'palette.outputCopying' : 'palette.outputDelivering')}</span>
+    )}
     <GlobalLauncherSearchFrame
       inputRef={inputRef}
       bindSearchInputRef={bindSearchInputRef}
@@ -320,6 +327,7 @@ export function GlobalLauncherFrameSwitch({
       onSelectedActionIndexChange={onSelectedActionIndexChange}
       onObjectActionController={onObjectActionController}
     />
+    </>
   )
 }
 
