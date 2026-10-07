@@ -2,6 +2,7 @@
   "base64.encode.title": "Base64 Encode",
   "base64.encode.description": "Encode text to Base64",
   "base64.decode.title": "Base64 Decode",
+  "route.base64DecodeWorkbench": "Base64 Decode Workbench",
   "base64.decode.description": "Decode Base64 text to original",
   "url.encode.title": "URL Encode",
   "url.encode.description": "Encode text with encodeURIComponent",
