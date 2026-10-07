@@ -91,7 +91,7 @@ async function registerAccelerator(
     }
 
     await register(accelerator, (event) => {
-      if (event.state !== 'Pressed') return
+      if (!installed || generation !== syncGeneration || event.state !== 'Pressed') return
       const current = useAppStore.getState().settings.quickEditorShortcut
       if (shortcutIdentity(current) !== shortcutIdentity(shortcut)) return
       void routeQuickEditorShortcut()

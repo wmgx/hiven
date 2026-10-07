@@ -137,7 +137,7 @@ async function registerShortcut(
       return
     }
     await register(accelerator, (event) => {
-      if (event.state !== 'Pressed') return
+      if (!installed || generation !== syncGeneration || event.state !== 'Pressed') return
       const latest = usePluginSurfaceShortcutStore.getState().shortcuts[key]
       if (!latest || !latest.enabled || normalizeAccelerator(latest.accelerator) !== accelerator) return
       void openSurfaceForShortcut(shortcut.target)

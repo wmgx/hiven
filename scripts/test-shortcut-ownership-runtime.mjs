@@ -25,6 +25,7 @@ await writeFile(entry, [
   ...['appHotkeys', 'quickEditor', 'pluginSurfaceShortcuts'].map((name) => `export * from '${resolve('src/hotkeys', name + '.ts')}';`),
   `export { useAppStore } from '${resolve('src/store.ts')}';`,
   `export { usePluginSurfaceShortcutStore, pluginSurfaceShortcutKey } from '${resolve('src/workspace/pluginSurfaceShortcuts.ts')}';`,
+  `export { usePluginPermissionStore } from '${resolve('src/workspace/pluginPermissions.ts')}';`,
   `export { pluginRegistry } from '${resolve('src/workspace/pluginRegistry.ts')}';`,
   `export { translate } from '${resolve('src/i18n/index.ts')}';`,
 ].join('\n'))
@@ -81,7 +82,7 @@ try {
   })
 
   let fixtureId = 0
-  async function fixture() {
+  async function fixture(requestedPermissions = []) {
     storage.clear()
     globalThis.window = Object.assign(new EventTarget(), { localStorage, __TAURI_INTERNALS__: {} })
     const native = globalThis.__ownerNative = {
@@ -113,9 +114,12 @@ try {
     api.useAppStore.getState().updateSetting('globalPinnedLauncherShortcut', { kind: 'disabled' })
     api.useAppStore.getState().updateSetting('quickEditorShortcut', { kind: 'disabled' })
     api.useAppStore.getState().updateSetting('appHotkeys', [binding(A)])
+    if (requestedPermissions.length > 0) {
+      api.usePluginPermissionStore.getState().grantPermissions(target.source, target.pluginId, requestedPermissions)
+    }
     api.pluginRegistry.registerDevPlugin(target.pluginId, [], [], [], [], {
       id: target.pluginId, ui: { surfaces: [{ id: target.surfaceId, entry: { shortcutBindable: true } }] },
-    }, [])
+    }, requestedPermissions)
     const stops = {
       app: api.installAppHotkeys(), quick: api.installQuickEditorHotkeys(), surface: api.installPluginSurfaceShortcutHotkeys(),
     }
@@ -283,6 +287,122 @@ try {
     await f.finish()
   }
 
+  // Native delivery may already be queued when disposal unregisters a key.
+  for (const who of ['quick', 'surface']) {
+    const f = await fixture()
+    await f.setAndWait(who, B)
+    const retired = f.owner(B)
+    f.stop(who)
+    retired.callback({ state: 'Pressed' })
+    await until(() => !f.owner(B))
+    retired.callback({ state: 'Pressed' })
+    await tick()
+    assert.deepEqual(f.native.routes, [], `${who}: disposal must reject queued and late callbacks`)
+    await f.press(A)
+    assert.deepEqual(f.native.routes, ['app:app-a'])
+    await f.finish()
+  }
+
+  // Reusing the same accelerator must not revive a callback from an earlier binding.
+  for (const who of ['quick', 'surface']) {
+    const f = await fixture()
+    await f.setAndWait(who, B)
+    const retired = f.owner(B)
+    await f.setAndWait(who, C)
+    await f.setAndWait(who, B)
+    assert.notEqual(f.owner(B), retired)
+    retired.callback({ state: 'Pressed' })
+    await tick()
+    assert.deepEqual(f.native.routes, [], `${who}: the original callback remains retired after changing back`)
+    await f.press(B)
+    assert.deepEqual(f.native.routes, [who === 'quick' ? 'quick' : 'window:owner-test'])
+    await f.finish()
+  }
+
+  // Registry resync replaces even an unchanged surface shortcut with a fresh callback.
+  {
+    const f = await fixture()
+    await f.setAndWait('surface', B)
+    const retired = f.owner(B)
+    f.pluginRegistry.registerDevPlugin('another-plugin', [], [], [], [], { id: 'another-plugin' }, [])
+    retired.callback({ state: 'Pressed' })
+    await until(() => f.owner(B) && f.owner(B) !== retired)
+    retired.callback({ state: 'Pressed' })
+    await tick()
+    assert.deepEqual(f.native.routes, [], 'resync must retire the old callback before native cleanup completes')
+    await f.press(B)
+    assert.deepEqual(f.native.routes, ['window:owner-test'])
+    await f.finish()
+  }
+
+  // An enabled shortcut record can remain after its plugin is removed from the registry.
+  {
+    const f = await fixture()
+    await f.setAndWait('surface', B)
+    const retired = f.owner(B)
+    const lifetime = f.pluginRegistry.getPluginLifetime(target.pluginId, target.source)
+    f.pluginRegistry.unregisterDevPlugin(target.pluginId)
+    retired.callback({ state: 'Pressed' })
+    await f.waitStatus('surface', 'disabled')
+    assert.equal(lifetime.active, false)
+    assert.equal(f.surface().enabled, true, 'registry removal preserves the configured binding')
+    assert.equal(f.surface().registrationError, 'Plugin surface is not registered')
+    assert.equal(f.owner(B), undefined)
+    retired.callback({ state: 'Pressed' })
+    await tick()
+    assert.deepEqual(f.native.routes, [], 'a removed plugin must not reopen through its old shortcut')
+    await f.finish()
+  }
+
+  // Permission revocation retires the callback while retaining the shortcut for a later grant.
+  {
+    const f = await fixture(['globalShortcut.register'])
+    await f.setAndWait('surface', B)
+    const retired = f.owner(B)
+    f.usePluginPermissionStore.getState().revokePermissions(target.source, target.pluginId, ['globalShortcut.register'])
+    retired.callback({ state: 'Pressed' })
+    await f.waitStatus('surface', 'failed')
+    assert.equal(f.surface().enabled, true)
+    assert.equal(f.surface().registrationError, 'Missing permission: globalShortcut.register')
+    assert.equal(f.owner(B), undefined)
+    retired.callback({ state: 'Pressed' })
+    await tick()
+    assert.deepEqual(f.native.routes, [], 'revoked permission must block queued and late callbacks')
+    f.usePluginPermissionStore.getState().grantPermissions(target.source, target.pluginId, ['globalShortcut.register'])
+    await f.waitStatus('surface', 'registered')
+    assert.notEqual(f.owner(B), retired)
+    retired.callback({ state: 'Pressed' })
+    await tick()
+    assert.deepEqual(f.native.routes, [], 'a later grant must not revive the retired callback')
+    await f.press(B)
+    assert.deepEqual(f.native.routes, ['window:owner-test'])
+    await f.finish()
+  }
+
+  // Existing disabled/cleared settings still reject saved native callbacks.
+  for (const action of ['quick-disabled', 'surface-disabled', 'surface-cleared']) {
+    const f = await fixture()
+    const who = action.startsWith('quick') ? 'quick' : 'surface'
+    await f.setAndWait(who, B)
+    const retired = f.owner(B)
+    if (action === 'quick-disabled') {
+      f.useAppStore.getState().updateSetting('quickEditorShortcut', { kind: 'disabled' })
+      await f.waitStatus('quick', 'Disabled')
+    } else if (action === 'surface-disabled') {
+      f.usePluginSurfaceShortcutStore.getState().setShortcutEnabled(target, false)
+      await f.waitStatus('surface', 'disabled')
+      assert.equal(f.surface().enabled, false)
+    } else {
+      f.usePluginSurfaceShortcutStore.getState().clearShortcut(target)
+      assert.equal(f.surface(), undefined)
+    }
+    await until(() => !f.owner(B))
+    retired.callback({ state: 'Pressed' })
+    await tick()
+    assert.deepEqual(f.native.routes, [], action)
+    await f.finish()
+  }
+
   // Both UI consumers use these actual locale mappings, including native-race failures.
   {
     const f = await fixture()
@@ -296,7 +416,7 @@ try {
     }
     await f.finish()
   }
-  console.log('✓ shortcut-ownership-runtime: shared registrars, original routes, conflicts, disposal, races, owned cleanup and locales passed')
+  console.log('✓ shortcut-ownership-runtime: shared registrars, original routes, conflicts, disposal, retired callbacks, races, owned cleanup and locales passed')
 } finally {
   await rm(scratch, { recursive: true, force: true })
 }
