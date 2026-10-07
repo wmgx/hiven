@@ -10,6 +10,7 @@
   "group.stats": "文本统计",
   "operation.label": "行处理功能",
   "route.open": "在文本整理中打开",
+  "route.removeBlankLinesWorkbench": "删除空行工作台",
   "pane.input": "输入",
   "pane.output": "输出",
   "pane.sourceName": "原始文本",
