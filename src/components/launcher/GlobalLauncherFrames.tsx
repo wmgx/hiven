@@ -124,7 +124,7 @@ export function GlobalLauncherFrameSwitch({
   onSearchHoverIndex: (index: number) => void
   onSearchMouseMove: (event: ReactMouseEvent) => void
   isKeyboardNavRef?: MutableRefObject<boolean>
-  clipboardBlock: ClipboardObjectBlockState
+  clipboardBlock?: ClipboardObjectBlockState
   /** Recent-clipboard hint is the focused row (selectedIndex === -1). */
   clipboardHintSelected?: boolean
   onExecuteAction?: (action: RecommendedAction, target: RecommendedOutputTarget) => void
