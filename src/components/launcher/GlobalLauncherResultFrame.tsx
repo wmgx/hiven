@@ -5,6 +5,8 @@ import type { LauncherResultChoice } from '../../workspace/launcher/types'
 import { LauncherHintKey, LauncherHintText } from './LauncherFooterHints'
 import { LauncherResultChoiceRow } from './LauncherResultChoiceRow'
 import { LauncherCommandTag } from './LauncherCommandTag'
+import { getHostOutputIntent } from '../../workspace/launcher/output'
+import { shouldIgnoreImeKeyDown } from '../../utils/imeKeyboard'
 import {
   type OutputDestinationId,
   LauncherOutputTargetsBar,
@@ -12,11 +14,11 @@ import {
   useOutputDestinations,
 } from './LauncherOutputTargets'
 
-function isSingleTextResult(choices: LauncherResultChoice[]): boolean {
+function isSingleTextResult(choices: LauncherResultChoice[], explicitPreview = false): boolean {
   if (choices.length !== 1) return false
   const choice = choices[0]
   const text = (choice.preview ?? choice.title ?? '').trim()
-  if (!text) return false
+  if (!text && !explicitPreview) return false
   // Confirm dialogs use tone danger/muted — keep list UI.
   if (choice.tone === 'danger' || choice.tone === 'muted') return false
   return true
@@ -54,11 +56,18 @@ export function GlobalLauncherResultFrame({
     : null
 
   const isConfirmDialog = choices.length <= 3 && choices.some((c) => c.tone === 'danger' || c.tone === 'muted')
-  const singleText = isSingleTextResult(choices)
+  const explicitPreview = frame.executionMode === 'explicit-text-preview'
+  const singleText = isSingleTextResult(choices, explicitPreview)
   const textChoice = singleText ? choices[0] : undefined
-  const previewText = textChoice ? (textChoice.preview ?? textChoice.title ?? '').trim() : ''
-  const hasReturn = Boolean(textChoice?.secondaryActions?.some((a) => a.id === 'return-to-launcher'))
-  const hasPaste = Boolean(onPastePreviewText)
+  const rawPreviewText = textChoice ? (textChoice.preview ?? textChoice.title ?? '') : ''
+  const previewText = explicitPreview ? rawPreviewText : rawPreviewText.trim()
+  const primaryIntent = textChoice ? getHostOutputIntent(textChoice) : null
+  const hasIntent = (intent: 'copy' | 'return-to-launcher') => Boolean(textChoice && (
+    primaryIntent === intent || textChoice.secondaryActions?.some((action) => getHostOutputIntent(action) === intent)
+  ))
+  const hasReturn = explicitPreview ? hasIntent('return-to-launcher') : Boolean(textChoice?.secondaryActions?.some((a) => a.id === 'return-to-launcher'))
+  const hasCopy = explicitPreview ? hasIntent('copy') : true
+  const hasPaste = !explicitPreview && Boolean(onPastePreviewText)
   const {
     destinations,
     activeDest,
@@ -68,11 +77,23 @@ export function GlobalLauncherResultFrame({
   } = useOutputDestinations({
     hasPaste,
     hasReturn,
+    hasCopy,
+    primaryIntent: explicitPreview && primaryIntent === 'return-to-launcher' ? 'return-to-launcher' : 'copy',
     resetKey: `${frame.sourceTitle ?? ''}:${previewText}`,
   })
 
   const runDestination = async (destId: OutputDestinationId) => {
     if (!textChoice) return
+    if (explicitPreview) {
+      const intent = destId === 'copy' ? 'copy' : destId === 'return-to-launcher' ? 'return-to-launcher' : null
+      if (!intent) return
+      if (getHostOutputIntent(textChoice) === intent) onToggleChoice(textChoice, frame)
+      else {
+        const action = textChoice.secondaryActions?.find((candidate) => getHostOutputIntent(candidate) === intent)
+        if (action) onSecondaryAction?.(textChoice, action.id)
+      }
+      return
+    }
     if (destId === 'copy') {
       onToggleChoice(textChoice, frame)
       return
@@ -92,6 +113,7 @@ export function GlobalLauncherResultFrame({
         className="launcher-result-text-frame"
         tabIndex={-1}
         onKeyDown={(event) => {
+          if (shouldIgnoreImeKeyDown(event, { current: false })) return
           if (event.key === 'Tab' && !event.metaKey && !event.ctrlKey && !event.altKey) {
             event.preventDefault()
             event.stopPropagation()
@@ -101,6 +123,7 @@ export function GlobalLauncherResultFrame({
           if (event.key !== 'Enter') return
           event.preventDefault()
           event.stopPropagation()
+          if (explicitPreview && (event.shiftKey || event.altKey)) return
           void runDestination(resolveFromKeyboard(event))
         }}
       >
@@ -139,6 +162,9 @@ export function GlobalLauncherResultFrame({
             }}
           >
             <span className="launcher-preview-text">{previewText}</span>
+            {explicitPreview && previewText.length === 0 ? (
+              <span className="meta">{t(locale, 'palette.emptyTextOutput')}</span>
+            ) : null}
           </pre>
         </div>
         <LauncherOutputTargetsBar
