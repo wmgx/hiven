@@ -54,7 +54,7 @@ const HISTORY_RANK_STEP_BIAS = 4
 let cachedBrowserTargets: DesktopBridgeTargetDto[] = []
 let cachedBrowserHistory: DesktopBridgeHistoryDto[] = []
 let cachedBrowserHealthy = false
-let historySearchDays: BrowserTabsSettings['historySearchDays'] = 5
+let configuredHistorySearchDays: BrowserTabsSettings['historySearchDays'] = 5
 
 /** Refresh off the query path; launcher filtering reads these arrays only. */
 export async function refreshChromiumBrowserIndex(): Promise<void> {
@@ -253,6 +253,7 @@ export function createChromiumTabsProvider(): DesktopTargetProvider {
           }
         })
 
+      const historySearchDays = configuredHistorySearchDays
       const history = historySearchDays === 'all'
         ? cachedBrowserHistory
         : cachedBrowserHistory.filter((item) =>
@@ -371,7 +372,7 @@ export function unregisterChromiumTabsProvider(): void {
 
 export function pushChromiumBridgeConfig(settings: Partial<BrowserTabsSettings> | null | undefined): void {
   const next = normalizeBrowserTabsSettings(settings ?? DEFAULT_BROWSER_TABS_SETTINGS)
-  historySearchDays = next.historySearchDays
+  configuredHistorySearchDays = next.historySearchDays
   void getPluginHostSdk().desktopTargets.bridge.setSourceConfig(CHROMIUM_SOURCE_ID, {
     historyEnabled: next.historyEnabled,
     autoCloseIdleTabs: next.autoCloseIdleTabs,
