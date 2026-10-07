@@ -43,6 +43,7 @@ import type {
   PluginLauncherApi,
 } from './types'
 import { normalizeLauncherSurfaceId } from './types'
+import { subscribeSavedActions } from '../savedActions/store'
 
 /** Local compute plugins (calc / timestamp / regex match) — keep near-instant. */
 const PLUGIN_DYNAMIC_DEBOUNCE_MS = 60
@@ -184,6 +185,8 @@ export function useLauncherSession({
   const pluginSettings = usePluginSettingsStore((s) => s.pluginSettings)
   const pluginPermissions = usePluginPermissionStore((s) => s.permissions)
 
+  const [savedActionVersion, setSavedActionVersion] = useState(0)
+  useEffect(() => subscribeSavedActions(() => setSavedActionVersion((version) => version + 1)), [])
   const [query, setQueryState] = useState('')
   const [selectedIndex, setSelectedIndexState] = useState(0)
   const [controllerState, setControllerState] = useState<LauncherControllerState | null>(null)
@@ -381,6 +384,7 @@ export function useLauncherSession({
             }
           },
           requestClose: () => requestCloseRef.current(),
+          onReturnToRoot: () => setQueryState(''),
           onChange: (state) => {
             const prev = prevControllerStateRef.current
             if (prev && prev.busy === state.busy && prev.error === state.error && prev.frames === state.frames) {
@@ -630,11 +634,12 @@ export function useLauncherSession({
   const staticCandidates = useMemo<LauncherItem[]>(() => {
     void pluginRegistryVersion
     void pluginSettings
+    void savedActionVersion
     const raw = measureLauncherPerfSync('session:static-candidates', () => collectStaticCandidates(normalizedHostId), () => ({
       surfaceId: normalizedHostId,
     }))
     return staticItemFilter ? staticItemFilter(raw) : raw
-  }, [normalizedHostId, open, pluginRegistryVersion, pluginSettings, staticItemFilter])
+  }, [normalizedHostId, open, pluginRegistryVersion, pluginSettings, savedActionVersion, staticItemFilter])
 
   /** Host recents from plugin-opted persistable selections (contacts/chats/docs). */
   const persistableRecentItems = useMemo<LauncherItem[]>(() => {
