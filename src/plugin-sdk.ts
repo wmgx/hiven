@@ -138,6 +138,8 @@ export type {
   PluginToolContribution,
   PluginToolContext,
   PluginToolResult,
+  PluginToolExplicitTextPreviewContext,
+  PluginToolTextPreviewResult,
   PluginToolSurfaces,
   PluginToolOutput,
   PanelActionContribution,
