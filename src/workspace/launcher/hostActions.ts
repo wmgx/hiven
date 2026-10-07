@@ -12,6 +12,7 @@ import {
   isExperienceLearningPaused,
   setExperienceLearningPaused,
 } from '../experience/journal'
+import type { LastSaveableRunState } from '../savedActions/types'
 import { getLastSaveableRun } from '../savedActions/lastSaveableRun'
 import { createSavedAction, deleteSavedAction, listSavedActions } from '../savedActions/store'
 import { recordSavedActionEvent } from '../savedActions/events'
@@ -217,7 +218,7 @@ export function getHostExperienceJournalItems(): LauncherItem[] {
 }
 
 export function getHostSavedActionItems(): LauncherItem[] {
-  return [
+  const saveLastItem: LauncherItem =
     {
       systemKey: 'host:saved-action:save-last',
       kind: 'host',
@@ -240,31 +241,40 @@ export function getHostSavedActionItems(): LauncherItem[] {
       },
       surfaces: ['global-launcher'],
       experienceRecord: false,
-      execute: async (ctx) => {
-        const lastRun = await getLastSaveableRun()
-        if (!lastRun) return { ok: false, message: translate(ctx.locale, 'palette', 'savedActionNoRecent') }
+      metadataInput: true,
+      prepare: async (ctx) => {
+        // Freeze the completed run when naming starts. A later delivery cannot
+        // replace the user's selected save target while this frame is open.
+        const lastRun: LastSaveableRunState | null = structuredClone(await getLastSaveableRun())
+        if (!lastRun) throw new Error(translate(ctx.locale, 'palette', 'savedActionNoRecent'))
         if (lastRun.status === 'blocked') {
-          return {
-            ok: false,
-            message: translate(ctx.locale, 'palette', 'savedActionBlockedParams', { keys: lastRun.blockedKeys.join(', ') }),
-          }
+          throw new Error(translate(ctx.locale, 'palette', 'savedActionBlockedParams', { keys: lastRun.blockedKeys.join(', ') }))
         }
         if (!isGlobalLauncherSavedActionOutput(lastRun.outputIntent)) {
-          return { ok: false, message: translate(ctx.locale, 'palette', 'savedActionEditorOutputUnsupported') }
+          throw new Error(translate(ctx.locale, 'palette', 'savedActionEditorOutputUnsupported'))
         }
-        const [rawName, ...rawAliasParts] = (ctx.input?.text ?? '').split('|')
-        const rawAliases = rawAliasParts.join('|')
-        if (!rawName?.trim()) return { ok: false, message: translate(ctx.locale, 'palette', 'savedActionNameRequired') }
-        try {
-          const artifact = createSavedAction(lastRun, rawName ?? '', rawAliases.split(','))
-          recordSavedActionEvent('artifact.saved', artifact)
-          return { ok: true }
-        } catch (error) {
-          console.warn('[hiven] Failed to save Saved Action:', error)
-          return { ok: false, message: translate(ctx.locale, 'palette', 'savedActionSaveFailed') }
+        return {
+          ...saveLastItem,
+          prepare: undefined,
+          execute: async (inputCtx) => {
+            const [rawName, ...rawAliasParts] = (inputCtx.input?.text ?? '').split('|')
+            const rawAliases = rawAliasParts.join('|')
+            if (!rawName?.trim()) return { ok: false, message: translate(inputCtx.locale, 'palette', 'savedActionNameRequired') }
+            try {
+              const artifact = createSavedAction(lastRun, rawName, rawAliases.split(','))
+              recordSavedActionEvent('artifact.saved', artifact)
+              return { ok: true, keepOpen: true }
+            } catch (error) {
+              console.warn('[hiven] Failed to save Saved Action:', error)
+              return { ok: false, message: translate(inputCtx.locale, 'palette', 'savedActionSaveFailed') }
+            }
+          },
         }
       },
-    },
+      // Execution without entering the naming session must fail closed.
+      execute: async (ctx) => ({ ok: false, message: translate(ctx.locale, 'palette', 'savedActionNoRecent') }),
+    }
+  return [saveLastItem,
     {
       systemKey: 'host:saved-action:delete',
       kind: 'host',
@@ -286,6 +296,7 @@ export function getHostSavedActionItems(): LauncherItem[] {
       },
       surfaces: ['global-launcher'],
       experienceRecord: false,
+      metadataInput: true,
       suggest: async (ctx) => {
         const query = ctx.inputText.trim().toLocaleLowerCase()
         return {
@@ -304,8 +315,13 @@ export function getHostSavedActionItems(): LauncherItem[] {
                       titleI18n: { zh: `确认删除“${artifact.name}”` },
                       tone: 'danger' as const,
                       primaryAction: async () => {
-                        const removed = deleteSavedAction(artifact.id)
-                        if (removed) recordSavedActionEvent('artifact.deleted', removed)
+                        try {
+                          const removed = deleteSavedAction(artifact.id)
+                          if (removed) recordSavedActionEvent('artifact.deleted', removed)
+                          return { ok: true as const }
+                        } catch {
+                          return { ok: false as const, message: translate(ctx.locale, 'palette', 'savedActionDeleteFailed') }
+                        }
                       },
                     },
                     {
