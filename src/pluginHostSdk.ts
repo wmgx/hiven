@@ -51,6 +51,7 @@ export type {
   DesktopTargetProvider,
   DesktopBridgeEventDto,
   DesktopBridgeHistoryDto,
+  DesktopBridgeTargetDto,
   DesktopBridgeSourceConfig,
 } from './workspace/desktopTargets/pluginApi'
 
