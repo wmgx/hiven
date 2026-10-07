@@ -213,6 +213,8 @@ assert.equal(savedActionDisabledReason(artifact, saveableItem), undefined)
 let baseExecutions = 0
 const lineToolsModule = loadModule('src/plugins/line-tools/index.ts', {
   '@hiven/plugin': { definePlugin: (definition) => definition },
+  './core': loadModule('src/plugins/line-tools/core.ts'),
+  './routes': loadModule('src/plugins/line-tools/routes.ts'),
 })
 const joinTool = lineToolsModule.lineToolsPlugin.tools.find((tool) => tool.id === 'line-tools.join')
 assert.ok(joinTool)
