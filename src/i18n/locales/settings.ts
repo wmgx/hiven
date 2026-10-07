@@ -2,6 +2,8 @@ export default {
   en: {
     'title': 'Settings',
     'general': 'General',
+    'automaticLearning': 'Automatic habit learning (experimental)',
+    'automaticLearningInfo': 'Off by default. Collects clipboard patterns and browser navigation locally to create automatic rules and show their results. Turn off to stop collection, rule creation and automatic results. Existing data and manually saved rules are preserved. Rules restricted to a copy source only trigger when that source can be verified.',
     'ai': 'AI subscriptions',
     'aiSubscriptionManagement': 'Subscription management',
     'aiLoadingProviders': 'Loading AI subscriptions',
@@ -133,6 +135,8 @@ export default {
     'errorCopied': 'Copied',
   },
   zh: {
+    'automaticLearning': '自动习惯学习（实验）',
+    'automaticLearningInfo': '默认关闭。开启后在本机采集剪贴板特征和浏览器导航，用于自动建规则并展示结果。关闭即停止采集、自动建规则及其结果；已有数据和手动保存的规则保留。限定复制来源的规则在缺少可信来源时不会触发。',
     'title': '设置',
     'general': '通用',
     'ai': 'AI 订阅',
