@@ -30,6 +30,7 @@
   "yaml.fromJson.description": "将 JSON 转为 YAML",
   "route.expression": "JSON 表达式",
   "route.open": "打开工作台中的对应功能",
+  "route.formatWorkbench": "JSON 格式化工作台",
   "surface.inputPlaceholder": "在此粘贴 JSON…",
   "surface.queryPlaceholder": "粘贴 a=1&b=2 或完整查询字符串…",
   "surface.emptyOutput": "处理结果将显示在这里。",
