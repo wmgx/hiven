@@ -49,6 +49,7 @@ const commands = [
   ['npm', ['run', 'test:ai-provider-runtime']],
   ['npm', ['run', 'test:ai-preflight']],
   ['npm', ['run', 'test:translate-ai-readiness']],
+  ['npm', ['run', 'test:translate-output-eligibility']],
   ['npm', ['run', 'test:translate-plugin']],
   ['npm', ['run', 'test:ime-enter-confirmation']],
   ['npm', ['run', 'test:automatic-learning-settings']],

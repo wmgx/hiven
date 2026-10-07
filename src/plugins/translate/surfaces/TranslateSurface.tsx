@@ -8,6 +8,7 @@ import { currentUsageMonth } from '../settings/model'
 import { useAiTranslationReadiness } from '../ai/useReadiness'
 import { AiReadinessNotice } from '../ai/AiReadinessNotice'
 import { AiTranslationError, estimateBilledChars, isAutoTranslateReady, resolveSmartTargetLang, translateText } from '../providers/adapters'
+import { isCurrentTranslationOutput, type TranslationOutput } from './outputEligibility'
 
 const AUTO_TRANSLATE_DEBOUNCE_MS = 800
 
@@ -223,7 +224,7 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
   const requestIdentity = JSON.stringify([inputText, sourceLang, targetLang, translateProfileKey, settings.defaultTargetLang, activeProfile?.provider === 'ai' ? readiness.revision : null])
   const identityRef = useRef(requestIdentity)
   identityRef.current = requestIdentity
-  // Render-time identity also blocks stale success/copy before effect cleanup runs.
+  // Render-time identity also blocks stale output actions before effect cleanup runs.
   const outputText = view.identity === requestIdentity ? view.outputText : ''
   const status: TranslateStatus = view.identity === requestIdentity
     ? view.status
@@ -234,13 +235,18 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
         : isAutoTranslateReady(inputText)
         ? { kind: 'waiting', dueAt: Date.now() + AUTO_TRANSLATE_DEBOUNCE_MS }
         : { kind: 'idle' }
-  const copyableRef = useRef<{ identity: string; text: string; view: TranslationView; aiRevision?: number } | null>(null)
-  copyableRef.current = status.kind === 'success' && outputText ? { identity: requestIdentity, text: outputText, view, aiRevision: activeProfile?.provider === 'ai' ? readiness.revision : undefined } : null
+  const availableOutput: TranslationOutput | null = status.kind === 'success' && outputText.trim()
+    ? { view, aiRevision: activeProfile?.provider === 'ai' ? readiness.revision : undefined }
+    : null
+  const outputRef = useRef<TranslationOutput | null>(null)
+  outputRef.current = availableOutput
+  const outputActionRef = useRef<TranslationOutput['view'] | null>(null)
+  const [outputActionView, setOutputActionView] = useState<TranslationOutput['view'] | null>(null)
 
   const cancelCurrentRun = useCallback(() => {
     const run = runRef.current
     runRef.current = null
-    copyableRef.current = null
+    outputRef.current = null
     if (!run) return
     if (run.timer !== undefined) window.clearTimeout(run.timer)
     run.controller.abort()
@@ -370,20 +376,47 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
 
   const canRetry = activeProfile?.provider !== 'ai' || Boolean(readinessController.execution(host.ai, activeProfile))
 
-  const copyOutput = useCallback(async () => {
-    const output = copyableRef.current
-    if (!output || output.identity !== identityRef.current) return
-    if (output.aiRevision !== undefined && output.aiRevision !== readinessController.getSnapshot().revision) return
+  const canUseOutput = (output: TranslationOutput | null): output is TranslationOutput =>
+    isCurrentTranslationOutput(output, outputRef.current, identityRef.current, readinessController.getSnapshot().revision)
+
+  const copyOutput = async () => {
+    const output = availableOutput
+    if (!canUseOutput(output) || outputActionRef.current === output.view) return
+    outputActionRef.current = output.view
+    setOutputActionView(output.view)
     try {
-      await host.clipboard.writeText(output.text)
-      if (copyableRef.current?.view !== output.view) return
+      await host.clipboard.writeText(output.view.outputText)
+      if (!canUseOutput(output)) return
       host.showMessage(localizedText(t, 'toast.copied', 'Copied'), 'success')
       host.complete()
     } catch {
-      if (copyableRef.current?.view !== output.view) return
+      if (!canUseOutput(output)) return
       host.showMessage(localizedText(t, 'toast.copyFailed', 'Copy failed'), 'error')
+    } finally {
+      if (outputActionRef.current === output.view && canUseOutput(output)) {
+        outputActionRef.current = null
+        setOutputActionView((current) => current === output.view ? null : current)
+      }
     }
-  }, [host, t, readinessController])
+  }
+
+  const continueProcessing = () => {
+    const output = availableOutput
+    if (!canUseOutput(output) || outputActionRef.current === output.view) return
+    outputActionRef.current = output.view
+    setOutputActionView(output.view)
+    try {
+      host.returnToLauncherWithObject({ kind: 'text', text: output.view.outputText, source: 'tool-result' })
+      cancelCurrentRun()
+    } catch {
+      if (outputActionRef.current === output.view) {
+        outputActionRef.current = null
+        setOutputActionView((current) => current === output.view ? null : current)
+      }
+      if (!canUseOutput(output)) return
+      host.showMessage(t('toast.continueFailed'), 'error')
+    }
+  }
 
   const activeUsedChars = activeProfile ? (usageByProfile.get(activeProfile.id) ?? activeProfile.usedChars) : 0
   const monthlyLimit = activeProfile?.monthlyLimitChars ?? 0
@@ -406,7 +439,10 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
         {(status.kind === 'stopped' || status.kind === 'error') && (
           <Button type="button" onClick={retryTranslation} disabled={!canRetry}>{t('action.retry')}</Button>
         )}
-        <Button type="button" variant="primary" disabled={status.kind !== 'success' || !outputText} onClick={() => void copyOutput()}>
+        <IconButton type="button" label={t('action.continueProcessing')} disabled={!availableOutput || outputActionView === view} onClick={continueProcessing}>
+          <ArrowRight size={16} />
+        </IconButton>
+        <Button type="button" variant="primary" disabled={!availableOutput || outputActionView === view} onClick={() => void copyOutput()}>
           {localizedText(t, 'action.copy', 'Copy')}
         </Button>
         <IconButton type="button" label={localizedText(t, 'action.openSettings', 'Open Settings')} onClick={openSettings}>
