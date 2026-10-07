@@ -73,6 +73,9 @@ export function SettingsContent() {
         <SettingsListRow icon={<Save size={15} strokeWidth={2} />} name={t('persistParams')} desc={t('persistParamsInfo')}>
           <Switch checked={settings.persistParams} onCheckedChange={(value) => updateSetting('persistParams', value)} aria-label={t('persistParams')} />
         </SettingsListRow>
+        <SettingsListRow icon={<BrainCircuit size={15} strokeWidth={2} />} name={t('automaticLearning')} desc={t('automaticLearningInfo')}>
+          <Switch checked={settings.automaticLearningEnabled === true} onCheckedChange={(value) => updateSetting('automaticLearningEnabled', value)} aria-label={t('automaticLearning')} />
+        </SettingsListRow>
       </SettingGroup>
 
       <SettingGroup title={t('hotkeys')}>
