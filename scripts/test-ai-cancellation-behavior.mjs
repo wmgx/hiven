@@ -1,27 +1,7 @@
 #!/usr/bin/env node
 // Exercise the real TS modules with controlled provider/native boundaries. No UI or source-pattern checks.
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { randomUUID } from 'node:crypto'
-import vm from 'node:vm'
-import ts from 'typescript'
-
-const compiled = new Map()
-function load(path, dependencies, globals = {}) {
-  if (!compiled.has(path)) compiled.set(path, ts.transpileModule(readFileSync(path, 'utf8'), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023 },
-  }).outputText)
-  const exports = {}
-  vm.runInNewContext(compiled.get(path), {
-    exports, module: { exports }, AbortController, Error, Promise, setTimeout, clearTimeout,
-    crypto: { randomUUID }, console, ...globals,
-    require: (id) => {
-      assert.ok(id in dependencies, `Unexpected dependency ${id} in ${path}`)
-      return dependencies[id]
-    },
-  }, { filename: path })
-  return exports
-}
+import { load, permissionHarness, registryHarness } from './ai-runtime-test-harness.mjs'
 function deferred() {
   let resolve, reject
   const promise = new Promise((accept, fail) => { resolve = accept; reject = fail })
@@ -56,22 +36,23 @@ function descriptor(id = 'selected') {
   }
 }
 function runtimeHarness(nativeInvoke) {
-  const stored = new Map()
+  const permissionState = permissionHarness()
   const discovery = []
   const settings = { aiDefaultProviderId: 'selected', aiDefaultAgentId: 'chosen-model', aiDefaultEffort: 'high' }
   const inactive = (id) => ({ id, async describe() { discovery.push(id); return { ...descriptor(id), status: 'unavailable' } } })
   const runtime = load('src/workspace/ai/runtime.ts', {
     '@tauri-apps/api/core': { invoke: nativeInvoke ?? (async () => { throw new Error('Unexpected native call') }) },
     '../../store': { useAppStore: { getState: () => ({ settings }) } },
-    '../pluginPermissions': { requirePluginPermissions: (permissions) => { if (!permissions['ai.use']?.granted) throw new Error('permission denied') } },
+    '../pluginPermissions': permissionState.permissions,
+    '../pluginRegistry': registryHarness(),
     '../telemetry': { measureLatency: (_label, work) => work() },
     './codexProvider': { codexChatGptProvider: inactive('openai-chatgpt') },
     './xaiProvider': { xaiGrokProvider: inactive('xai-grok') },
-  }, { ...(nativeInvoke ? { window: { __TAURI_INTERNALS__: {} } } : {}), localStorage: { getItem: (key) => stored.get(key) ?? null, setItem: (key, value) => stored.set(key, value) } })
-  const permissions = { 'ai.use': { granted: true } }
-  const owner = runtime.createPluginAi('translate', 'installed', permissions)
+  }, { ...(nativeInvoke ? { window: { __TAURI_INTERNALS__: {} } } : {}), localStorage: permissionState.storage })
+  permissionState.grant('installed', 'translate')
+  const owner = runtime.createPluginAi('translate', 'installed', permissionState.snapshot('installed', 'translate'))
   const calls = []
-  const h = { runtime, owner, calls, discovery, settings }
+  const h = { runtime, owner, calls, discovery, settings, permissionState }
   h.register = (overrides = {}) => runtime.registerAiProvider({
     id: 'selected',
     async describe() { discovery.push('selected'); return descriptor() },
@@ -141,7 +122,8 @@ await check('only the exact plugin and source owner can cancel; adapter remains 
   const iterator = h.owner.stream(h.request())[Symbol.asyncIterator]()
   const first = await iterator.next()
   for (const [id, source] of [['other', 'installed'], ['translate', 'dev']]) {
-    await h.runtime.createPluginAi(id, source, { 'ai.use': { granted: true } }).cancel(first.value.runId)
+    h.permissionState.grant(source, id)
+    await h.runtime.createPluginAi(id, source, h.permissionState.snapshot(source, id)).cancel(first.value.runId)
   }
   assert.equal(h.calls.length, 0); assert.equal(request.signal.aborted, false)
   unregister()
