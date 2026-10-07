@@ -2,11 +2,13 @@ import { useCallback } from 'react'
 import type { Locale } from '../../i18n'
 import { t } from '../../i18n'
 import type { PluginPermission } from '../../workspace/pluginTypes'
+import type { LauncherItem } from '../../workspace/launcher/types'
 import { useLauncherEscapeInterceptor } from './launcherEscapeInterceptor'
 import { PluginSurfacePermissionGate } from '../pluginSurface/PluginSurfaceRenderer'
 import { LauncherHintKey } from './LauncherFooterHints'
 
 export type GlobalLauncherPermissionFrameState = {
+  item: LauncherItem
   permissions: PluginPermission[]
 }
 
