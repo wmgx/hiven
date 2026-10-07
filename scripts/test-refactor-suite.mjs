@@ -6,6 +6,7 @@ const commands = [
   ['npm', ['run', 'test:hiven-brand-migration']],
   ['npm', ['run', 'test:refactor-final-acceptance']],
   ['npm', ['run', 'test:background-lifecycle']],
+  ['npm', ['run', 'test:app-hotkeys-runtime']],
   ['npm', ['run', 'test:tauri-debug-smoke']],
   ['npm', ['run', 'test:tauri-debug-runtime-state']],
   ['npm', ['run', 'test:window-architecture-phases']],

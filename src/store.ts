@@ -207,7 +207,7 @@ function persistedAutomaticLearningEnabled(fallback: boolean): boolean {
   }
 }
 
-export const useAppStore = create<AppState>()(persist((set) => ({
+export const useAppStore = create<AppState>()(persist((set, get) => ({
   // Editor command bar
   editorCommandBarOpen: false,
   setEditorCommandBarOpen: (open) => set({ editorCommandBarOpen: open }),
@@ -331,13 +331,24 @@ export const useAppStore = create<AppState>()(persist((set) => ({
       automaticLearningWrite = undefined
     }
   },
-  setAppHotkey: (binding) =>
-    set((state) => ({
-      settings: {
-        ...state.settings,
-        appHotkeys: upsertAppHotkey(state.settings.appHotkeys ?? [], binding),
-      },
-    })),
+  setAppHotkey: (binding) => {
+    const before = get().settings.appHotkeys
+    const next = upsertAppHotkey(before ?? [], binding)
+    try {
+      set((state) => ({ settings: { ...state.settings, appHotkeys: next } }))
+    } catch (error) {
+      // persist publishes in memory before writing storage. Restore every displaced
+      // row only if no synchronous subscriber has already made a newer edit.
+      if (get().settings.appHotkeys === next) {
+        try {
+          set((state) => ({ settings: { ...state.settings, appHotkeys: before } }))
+        } catch {
+          // A full/unavailable storage can also reject the restore; memory is restored.
+        }
+      }
+      throw error
+    }
+  },
   removeAppHotkey: (appId) =>
     set((state) => ({
       settings: {

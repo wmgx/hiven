@@ -53,7 +53,12 @@ list = asArr(
   }),
 )
 assert.equal(list.length, 2)
-assert.equal(list.find((b) => b.appId.includes('Safari')).accelerator, 'Cmd+Option+S')
+assert.equal(list.find((b) => b.appId.includes('Safari')).accelerator, 'Cmd+Alt+S')
+const transferred = asArr(mod.upsertAppHotkey(list, {
+  appId: 'macos:bundle:com.apple.Notes', name: 'Notes', accelerator: 'Command + Option + S',
+}))
+assert.equal(transferred.length, 1, 'native accelerator aliases must transfer the same binding')
+assert.equal(transferred[0].appId, 'macos:bundle:com.apple.Notes')
 list = asArr(mod.removeAppHotkey(list, 'macos:bundle:com.apple.Safari'))
 assert.equal(list.length, 1)
 

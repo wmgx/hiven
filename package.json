@@ -118,6 +118,7 @@
     "test:launcher-r2-clipboard-follow-through": "node scripts/test-launcher-r2-clipboard-follow-through.mjs",
     "test:user-commands-model": "node scripts/test-user-commands-model.mjs",
     "test:app-hotkeys": "node scripts/test-app-hotkeys.mjs",
+    "test:app-hotkeys-runtime": "node scripts/test-app-hotkeys-runtime.mjs",
     "test:search-ranking-match": "node scripts/test-search-ranking-match.mjs",
     "test:launcher-registry": "node scripts/test-launcher-registry.mjs",
     "test:launcher-controller": "node scripts/test-launcher-controller.mjs",

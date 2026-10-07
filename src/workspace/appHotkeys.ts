@@ -19,6 +19,15 @@ export function emptyAppHotkeys(): AppHotkeyBinding[] {
   return []
 }
 
+export function normalizeAppHotkeyAccelerator(raw: string): string {
+  return raw
+    .replace(/\s+/g, '')
+    .replace(/CommandOrControl/gi, 'CmdOrCtrl')
+    .replace(/Command/gi, 'Cmd')
+    .replace(/Control/gi, 'Ctrl')
+    .replace(/Option/gi, 'Alt')
+}
+
 export function normalizeAppHotkeys(raw: unknown): AppHotkeyBinding[] {
   if (!Array.isArray(raw)) return []
   const out: AppHotkeyBinding[] = []
@@ -29,7 +38,7 @@ export function normalizeAppHotkeys(raw: unknown): AppHotkeyBinding[] {
     const r = row as Partial<AppHotkeyBinding>
     const appId = typeof r.appId === 'string' ? r.appId.trim() : ''
     const name = typeof r.name === 'string' ? r.name.trim() : ''
-    const accelerator = typeof r.accelerator === 'string' ? r.accelerator.trim() : ''
+    const accelerator = typeof r.accelerator === 'string' ? normalizeAppHotkeyAccelerator(r.accelerator) : ''
     if (!appId || !accelerator) continue
     const accKey = accelerator.toLowerCase()
     if (seenAcc.has(accKey) || seenApp.has(appId)) continue

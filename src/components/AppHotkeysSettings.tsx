@@ -1,7 +1,7 @@
 /**
  * Settings UI for per-app global hotkeys (focus / hide toggle).
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AppWindow, Plus, Trash2 } from 'lucide-react'
 import { useAppStore } from '../store'
 import { t } from '../i18n'
@@ -9,19 +9,28 @@ import { ShortcutRecorder } from './ShortcutRecorder'
 import type { AppHotkeyBinding } from '../workspace/appHotkeys'
 import type { DiscoveredApp } from '../workspace/launcher/types'
 import { Combobox } from '../plugin-ui'
+import { saveAppHotkey } from '../hotkeys/appHotkeys'
+import { showToast } from '../workspace/toast'
 
 type ListedApp = { appId: string; name: string }
 
 export function AppHotkeysSettings() {
   const locale = useAppStore((s) => s.locale)
   const bindings = useAppStore((s) => s.settings.appHotkeys ?? [])
-  const setAppHotkey = useAppStore((s) => s.setAppHotkey)
   const removeAppHotkey = useAppStore((s) => s.removeAppHotkey)
 
   const [apps, setApps] = useState<ListedApp[]>([])
   const [selectedAppId, setSelectedAppId] = useState('')
   const [draftAccel, setDraftAccel] = useState('')
   const [loadError, setLoadError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const editVersion = useRef(0)
+  const invalidateSave = () => {
+    editVersion.current += 1
+    setSaving(false)
+  }
+
+  useEffect(() => () => { editVersion.current += 1 }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -53,7 +62,7 @@ export function AppHotkeysSettings() {
 
   const selectedName = apps.find((a) => a.appId === selectedAppId)?.name ?? selectedAppId
 
-  const handleAdd = useCallback(() => {
+  const handleAdd = useCallback(async () => {
     if (!selectedAppId || !draftAccel.trim()) return
     const binding: AppHotkeyBinding = {
       appId: selectedAppId,
@@ -61,9 +70,27 @@ export function AppHotkeysSettings() {
       accelerator: draftAccel.trim(),
       enabled: true,
     }
-    setAppHotkey(binding)
-    setDraftAccel('')
-  }, [draftAccel, selectedAppId, selectedName, setAppHotkey])
+    const version = ++editVersion.current
+    const current = () => editVersion.current === version
+    setSaving(true)
+    let result: Awaited<ReturnType<typeof saveAppHotkey>> = 'failed'
+    try {
+      result = await saveAppHotkey(binding, current)
+    } catch (error) {
+      console.warn('[hiven] app hotkey save failed', error)
+    } finally {
+      if (current()) setSaving(false)
+    }
+    if (!current()) return
+    if (result === 'saved') setDraftAccel('')
+    if (result === 'conflict' || result === 'failed') {
+      showToast(t(locale, result === 'conflict'
+        ? 'settings.appHotkeysConflict'
+        : 'settings.appHotkeysRegistrationFailed', {
+        name: binding.name, shortcut: binding.accelerator,
+      }), 'error')
+    }
+  }, [draftAccel, selectedAppId, selectedName, locale])
 
   return (
     <div className="app-hotkeys-settings">
@@ -79,7 +106,7 @@ export function AppHotkeysSettings() {
               <button
                 type="button"
                 className="app-hotkeys-remove"
-                onClick={() => removeAppHotkey(b.appId)}
+                onClick={() => { invalidateSave(); removeAppHotkey(b.appId) }}
                 aria-label={t(locale, 'settings.appHotkeysRemove')}
               >
                 <Trash2 size={14} strokeWidth={2} />
@@ -99,7 +126,7 @@ export function AppHotkeysSettings() {
             placeholder={t(locale, 'settings.appHotkeysFilter')}
             emptyLabel={t(locale, 'settings.appHotkeysSelect')}
             aria-label={t(locale, 'settings.appHotkeysPickApp')}
-            onChange={setSelectedAppId}
+            onChange={(value) => { invalidateSave(); setSelectedAppId(value) }}
           />
         </label>
 
@@ -114,16 +141,16 @@ export function AppHotkeysSettings() {
             allowDoubleModifier={false}
             emptyLabel={t(locale, 'settings.hotkeyRecord')}
             onRecord={(value) => {
-              if (value.kind === 'accelerator') setDraftAccel(value.accelerator)
+              if (value.kind === 'accelerator') { invalidateSave(); setDraftAccel(value.accelerator) }
             }}
-            onClear={() => setDraftAccel('')}
+            onClear={() => { invalidateSave(); setDraftAccel('') }}
           />
         </div>
 
         <button
           type="button"
           className="app-hotkeys-add-btn"
-          disabled={!selectedAppId || !draftAccel.trim()}
+          disabled={saving || !selectedAppId || !draftAccel.trim()}
           onClick={handleAdd}
         >
           <Plus size={14} strokeWidth={2} />
