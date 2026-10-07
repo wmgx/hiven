@@ -23,6 +23,7 @@ const files = {
   pluginStore: read('src/workspace/pluginStore.ts'),
   pluginTypes: read('src/workspace/pluginTypes.ts'),
   configInit: read('src/configInit.ts'),
+  builtinPluginSources: read('src/builtinPluginSources.ts'),
   store: read('src/store.ts'),
   app: read('src/App.tsx'),
   pluginsSurface: readIfExists('src/surfaces/PluginsSurface.tsx'),
@@ -263,7 +264,7 @@ check('Builtin packages are released purely from auto-discovered first-party plu
   assert.match(files.configInit, /releaseBuiltinPluginManifests/, 'configInit should release builtin plugin package directories')
   assert.match(files.configInit, /pluginBuiltinDir[\s\S]*manifest\.json|BUILTIN_PLUGIN_PACKAGES/, 'builtin packages should be written under plugins/builtin from discovered packages')
   assert.doesNotMatch(files.configInit, /DEMO_PLUGIN_SOURCE|DEMO_PLUGIN_README|demo-text-plugin/, 'configInit should not release a defineAction-based demo plugin')
-  assert.match(files.configInit, /PLUGIN_FILE_MODULES = import\.meta\.glob\([^\n]*\bcss\b/, 'builtin package release must include plugin styles')
+  assert.match(files.builtinPluginSources, /PLUGIN_FILE_MODULES = import\.meta\.glob\([^\n]*\bcss\b/, 'builtin package release must include plugin styles')
   assert.match(files.configInit, /DOWNLOADABLE_PLUGIN_FILE_PATTERN = [^\n]*\bcss\b/, 'remote package updates must retain plugin styles')
 })
 
@@ -276,9 +277,9 @@ check('Text Diff builtin directory includes the adaptive diff UI source files', 
     'configInit should auto-discover first-party plugin manifests via import.meta.glob',
   )
   assert.match(
-    files.configInit,
+    files.builtinPluginSources,
     /import\.meta\.glob\(['"]\.\/plugins\/\*\/\*\*\/\*\.\{[^}]+\}['"]/,
-    'configInit should auto-discover all package source files via import.meta.glob, not a hardcoded list',
+    'deferred builtin sources should auto-discover all package files via import.meta.glob, not a hardcoded list',
   )
   assert.doesNotMatch(
     files.configInit,
