@@ -1,14 +1,16 @@
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{ipc::Channel, AppHandle, Manager};
+
+#[path = "ai_xai_stream.rs"]
+mod stream;
+use stream::{forward_response_stream, RunRegistry};
 
 const CLIENT_ID: &str = "b1a00492-073a-47ea-816f-4c329264a828";
 const SCOPE: &str = "openid profile email offline_access grok-cli:access api:access";
@@ -16,7 +18,7 @@ const DEVICE_URL: &str = "https://auth.x.ai/oauth2/device/code";
 const TOKEN_URL: &str = "https://auth.x.ai/oauth2/token";
 const API_URL: &str = "https://cli-chat-proxy.grok.com/v1";
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize, PartialEq)]
 struct XaiAuth {
     access_token: String,
     refresh_token: String,
@@ -42,7 +44,8 @@ struct DeviceResponse {
 
 static LOGIN_ACTIVE: OnceLock<Mutex<bool>> = OnceLock::new();
 static AUTH_LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
-static ACTIVE_RUNS: OnceLock<Mutex<HashMap<String, Arc<AtomicBool>>>> = OnceLock::new();
+static AUTH_FILE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+static ACTIVE_RUNS: OnceLock<RunRegistry> = OnceLock::new();
 
 fn proxy_headers(builder: reqwest::RequestBuilder, model: Option<&str>) -> reqwest::RequestBuilder {
     let version =
@@ -77,7 +80,10 @@ fn auth_path(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 fn read_auth(app: &AppHandle) -> Result<Option<XaiAuth>, String> {
-    let path = auth_path(app)?;
+    read_auth_file(&auth_path(app)?)
+}
+
+fn read_auth_file(path: &Path) -> Result<Option<XaiAuth>, String> {
     match fs::read_to_string(path) {
         Ok(text) => serde_json::from_str(&text)
             .map(Some)
@@ -88,7 +94,18 @@ fn read_auth(app: &AppHandle) -> Result<Option<XaiAuth>, String> {
 }
 
 fn write_auth(app: &AppHandle, auth: &XaiAuth) -> Result<(), String> {
-    let path = auth_path(app)?;
+    let _guard = AUTH_FILE_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .map_err(|error| error.to_string())?;
+    write_auth_unlocked(app, auth)
+}
+
+fn write_auth_unlocked(app: &AppHandle, auth: &XaiAuth) -> Result<(), String> {
+    write_auth_file(&auth_path(app)?, auth)
+}
+
+fn write_auth_file(path: &Path, auth: &XaiAuth) -> Result<(), String> {
     let parent = path.parent().ok_or("xAI auth path has no parent")?;
     fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     let temp = path.with_extension("json.tmp");
@@ -129,7 +146,7 @@ fn auth_from_tokens(tokens: TokenResponse, old_refresh: Option<&str>) -> Result<
 }
 
 async fn refresh_auth(app: &AppHandle) -> Result<Option<XaiAuth>, String> {
-    let _guard = AUTH_LOCK
+    let guard = AUTH_LOCK
         .get_or_init(|| tokio::sync::Mutex::new(()))
         .lock()
         .await;
@@ -139,8 +156,21 @@ async fn refresh_auth(app: &AppHandle) -> Result<Option<XaiAuth>, String> {
     if auth.expires_at > now_seconds() + 120 {
         return Ok(Some(auth));
     }
+    // Only a refresh that owns the lock needs to survive a cancelled waiter.
+    // Cancelled runs waiting for the lock never start extra refresh requests.
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let _guard = guard;
+        finish_auth_refresh(&app, auth).await
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+async fn finish_auth_refresh(app: &AppHandle, auth: XaiAuth) -> Result<Option<XaiAuth>, String> {
     let response = reqwest::Client::new()
         .post(TOKEN_URL)
+        .timeout(Duration::from_secs(30))
         .form(&[
             ("grant_type", "refresh_token"),
             ("refresh_token", auth.refresh_token.as_str()),
@@ -152,8 +182,21 @@ async fn refresh_auth(app: &AppHandle) -> Result<Option<XaiAuth>, String> {
     let value = decode_response(response, "xAI token refresh").await?;
     let tokens: TokenResponse = serde_json::from_value(value).map_err(|error| error.to_string())?;
     let refreshed = auth_from_tokens(tokens, Some(&auth.refresh_token))?;
-    write_auth(app, &refreshed)?;
+    commit_refreshed_auth(&auth_path(app)?, &auth, &refreshed)?;
     Ok(Some(refreshed))
+}
+
+fn commit_refreshed_auth(path: &Path, previous: &XaiAuth, refreshed: &XaiAuth) -> Result<(), String> {
+    // A run may stop waiting while this refresh finishes rotating its token.
+    // Serialize the compare/write with login/logout so it cannot revive an old session.
+    let _file_guard = AUTH_FILE_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .map_err(|error| error.to_string())?;
+    if read_auth_file(path)?.as_ref() != Some(previous) {
+        return Err("xAI sign-in changed during token refresh".to_string());
+    }
+    write_auth_file(path, refreshed)
 }
 
 async fn poll_login(app: AppHandle, device: DeviceResponse) {
@@ -337,22 +380,15 @@ fn response_input(input: Value) -> Result<Value, String> {
 
 async fn run_response_stream(
     app: &AppHandle,
-    run_id: &str,
     model: &str,
     input: Value,
     effort: Option<String>,
     web_search: bool,
     on_event: &Channel<Value>,
 ) -> Result<(), String> {
-    let auth = refresh_auth(&app)
+    let auth = refresh_auth(app)
         .await?
         .ok_or("Connect a Grok subscription first")?;
-    let cancelled = Arc::new(AtomicBool::new(false));
-    ACTIVE_RUNS
-        .get_or_init(|| Mutex::new(HashMap::new()))
-        .lock()
-        .map_err(|error| error.to_string())?
-        .insert(run_id.to_string(), cancelled.clone());
     let mut body = json!({
         "model": model,
         "input": response_input(input)?,
@@ -366,7 +402,7 @@ async fn run_response_stream(
         body["tools"] = json!([{ "type": "web_search" }]);
     }
     let body = serde_json::to_string(&body).map_err(|error| error.to_string())?;
-    let mut response = proxy_headers(
+    let response = proxy_headers(
         reqwest::Client::new()
             .post(format!("{}/responses", API_URL))
             .bearer_auth(&auth.access_token),
@@ -377,36 +413,9 @@ async fn run_response_stream(
     .send()
     .await
     .map_err(|error| error.to_string())?;
-    if !response.status().is_success() {
-        return Err(format!(
-            "xAI response failed ({}): {}",
-            response.status().as_u16(),
-            response.text().await.unwrap_or_default()
-        ));
-    }
-    let mut buffer = String::new();
-    while let Some(chunk) = response.chunk().await.map_err(|error| error.to_string())? {
-        if cancelled.load(Ordering::Relaxed) {
-            let _ = on_event.send(json!({ "type": "hiven.cancelled" }));
-            return Ok(());
-        }
-        buffer.push_str(&String::from_utf8_lossy(&chunk));
-        while let Some(end) = buffer.find('\n') {
-            let line = buffer[..end].trim().to_string();
-            buffer.drain(..=end);
-            let Some(data) = line.strip_prefix("data:") else {
-                continue;
-            };
-            let data = data.trim();
-            if data == "[DONE]" {
-                continue;
-            }
-            if let Ok(event) = serde_json::from_str::<Value>(data) {
-                let _ = on_event.send(event);
-            }
-        }
-    }
-    Ok(())
+    forward_response_stream(response, |event| {
+        on_event.send(event).map_err(|error| error.to_string())
+    }).await
 }
 
 #[tauri::command]
@@ -419,35 +428,72 @@ pub async fn ai_xai_response_stream(
     web_search: bool,
     on_event: Channel<Value>,
 ) -> Result<(), String> {
-    let result =
-        run_response_stream(&app, &run_id, &model, input, effort, web_search, &on_event).await;
-    if let Ok(mut runs) = ACTIVE_RUNS
-        .get_or_init(|| Mutex::new(HashMap::new()))
-        .lock()
-    {
-        runs.remove(&run_id);
+    // Register before auth, input conversion or the first await. The guard cleans
+    // up success, errors, cancellation, and a dropped command future alike.
+    let run = ACTIVE_RUNS.get_or_init(RunRegistry::default).register(&run_id)?;
+    match run.until_cancelled(run_response_stream(
+        &app, &model, input, effort, web_search, &on_event,
+    )).await {
+        Some(result) => result,
+        None => on_event.send(json!({ "type": "hiven.cancelled" }))
+            .map_err(|error| error.to_string()),
     }
-    result
 }
 
 #[tauri::command]
 pub fn ai_xai_cancel(run_id: String) {
-    if let Ok(runs) = ACTIVE_RUNS
-        .get_or_init(|| Mutex::new(HashMap::new()))
-        .lock()
-    {
-        if let Some(cancelled) = runs.get(&run_id) {
-            cancelled.store(true, Ordering::Relaxed);
-        }
-    }
+    ACTIVE_RUNS.get_or_init(RunRegistry::default).cancel(&run_id);
 }
 
 #[tauri::command]
 pub fn ai_xai_logout(app: AppHandle) -> Result<(), String> {
+    let _guard = AUTH_FILE_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .map_err(|error| error.to_string())?;
     let path = auth_path(&app)?;
     match fs::remove_file(path) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(error.to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn refresh_commit_preserves_rotation_but_cannot_restore_logout_or_replace_login() {
+        let directory = std::env::temp_dir().join(format!(
+            "hiven-xai-auth-fixture-{}-{}",
+            std::process::id(),
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos(),
+        ));
+        let path = directory.join("auth.json");
+        let previous = XaiAuth {
+            access_token: "fixture-access-not-a-real-token".into(),
+            refresh_token: "fixture-refresh-not-a-real-token".into(),
+            expires_at: 1,
+        };
+        let refreshed = XaiAuth {
+            access_token: "fixture-rotated-access".into(),
+            refresh_token: "fixture-rotated-refresh".into(),
+            expires_at: 2,
+        };
+        write_auth_file(&path, &previous).unwrap();
+        commit_refreshed_auth(&path, &previous, &refreshed).unwrap();
+        assert!(read_auth_file(&path).unwrap().as_ref() == Some(&refreshed));
+
+        // Logging out while a detached refresh is in flight must stay logged out.
+        fs::remove_file(&path).unwrap();
+        assert!(commit_refreshed_auth(&path, &previous, &refreshed).is_err());
+        assert!(!path.exists());
+
+        // A different login must not be overwritten by the old refresh result.
+        write_auth_file(&path, &refreshed).unwrap();
+        assert!(commit_refreshed_auth(&path, &previous, &previous).is_err());
+        assert!(read_auth_file(&path).unwrap().as_ref() == Some(&refreshed));
+        fs::remove_dir_all(directory).unwrap();
     }
 }
