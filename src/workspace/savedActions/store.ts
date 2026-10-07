@@ -1,6 +1,13 @@
 import type { LastSaveableRun, SavedActionDisabledReason, SavedActionV1 } from './types'
 
 const STORAGE_KEY = 'hiven:saved-actions:v1'
+const listeners = new Set<() => void>()
+
+/** Reuse the existing persisted artifacts; this only invalidates live candidates. */
+export function subscribeSavedActions(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => { listeners.delete(listener) }
+}
 
 function storage(): Storage | null {
   try {
@@ -36,7 +43,7 @@ function isSavedAction(value: unknown): value is SavedActionV1 {
     typeof action.actionPolicy.learnable === 'boolean',
   )
   const disabledReasonValid = action.disabledReason === undefined || [
-    'missing-action', 'contract-changed', 'policy-changed', 'saveability-changed',
+    'missing-action', 'ambiguous-action', 'contract-changed', 'policy-changed', 'saveability-changed',
     'input-unavailable', 'output-unavailable',
   ].includes(action.disabledReason)
   return action.schemaVersion === 1 &&
@@ -62,8 +69,17 @@ export function listSavedActions(): SavedActionV1[] {
   }
 }
 
-function write(actions: SavedActionV1[]): void {
-  storage()?.setItem(STORAGE_KEY, JSON.stringify(actions))
+function write(actions: SavedActionV1[], notify = true): void {
+  const target = storage()
+  if (!target) throw new Error('Saved Action storage is unavailable')
+  const serialized = JSON.stringify(actions)
+  target.setItem(STORAGE_KEY, serialized)
+  if (target.getItem(STORAGE_KEY) !== serialized) throw new Error('Saved Action persistence failed')
+  if (notify) {
+    for (const listener of listeners) {
+      try { listener() } catch (error) { console.warn('[hiven] Saved Action refresh failed:', error) }
+    }
+  }
 }
 
 function cleanText(value: string, maxLength: number): string {
@@ -106,7 +122,7 @@ export function touchSavedAction(id: string): void {
   const index = actions.findIndex((action) => action.id === id)
   if (index < 0) return
   actions[index] = { ...actions[index], lastInvokedAt: Date.now() }
-  write(actions)
+  write(actions, false)
 }
 
 export function setSavedActionDisabledReason(id: string, disabledReason?: SavedActionDisabledReason): void {
@@ -115,5 +131,5 @@ export function setSavedActionDisabledReason(id: string, disabledReason?: SavedA
   if (index < 0 || actions[index].disabledReason === disabledReason) return
   const { disabledReason: _previous, ...action } = actions[index]
   actions[index] = disabledReason ? { ...action, disabledReason } : action
-  write(actions)
+  write(actions, false)
 }
