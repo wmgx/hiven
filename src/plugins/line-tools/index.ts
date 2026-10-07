@@ -83,7 +83,7 @@ export const lineToolsPlugin = definePlugin({
     items: textToolRoutes.map((route) => ({
       id: `open-${route.surfaceId}`,
       display: {
-        title: route.titleKey,
+        title: route.surfaceId === 'line-remove-blank' ? 'route.removeBlankLinesWorkbench' : route.titleKey,
         subtitle: 'route.open',
         icon: route.group === 'case' ? 'CaseSensitive' : route.group === 'stats' ? 'ChartBar' : 'ArrowUpDown',
         aliases: route.aliases,
@@ -126,6 +126,7 @@ export const lineToolsPlugin = definePlugin({
     {
       id: 'line-tools.remove-blank-lines', title: 'removeBlankLines.title', subtitle: 'removeBlankLines.description', icon: 'RemoveFormatting',
       aliases: ['remove empty lines', '删除空行', 'remove blank lines', '去除空行'], inputPolicy: { mode: 'auto' }, policy: LEARNABLE_PURE,
+      explicitTextPreview: { run: (ctx) => ({ ok: true, text: removeBlankLines(ctx.input.text) }) },
       run(ctx) { return ctx.output.text(removeBlankLines(ctx.input.text)) }, surfaces: EDITOR_TOOL_SURFACES,
     },
     {
