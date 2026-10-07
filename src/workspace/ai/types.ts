@@ -46,6 +46,10 @@ export type AiProviderDescriptor = {
   name: string
   status: AiProviderStatus
   statusMessage?: string
+  /** Evidence from describe(), never a model inference or quota guarantee. */
+  statusReason?: 'desktop_required' | 'cli_missing' | 'metadata_unavailable'
+  /** partial confirms listed live models only; fallback entries are not discovery evidence. */
+  modelCatalog?: 'complete' | 'partial' | 'fallback' | 'unknown'
   isDefault: boolean
   capabilities: AiCapability[]
   agents: AiAgent[]
@@ -72,6 +76,49 @@ export type AiRequest = {
   effort?: AiReasoningEffort | 'inherit'
   input: AiInput[]
   capabilities?: AiCapability[]
+}
+
+/** Configuration metadata only. Never include a prompt, body, input or blob identifier. */
+export type AiPreflightRequest = {
+  providerId?: string
+  agentId?: string
+  effort?: AiReasoningEffort | 'inherit'
+  capabilities?: AiCapability[]
+  inputModalities?: string[]
+  forceRefresh?: boolean
+}
+
+export type AiPreflightReason =
+  | 'configuration_ready'
+  | 'provider_not_configured'
+  | 'provider_not_registered'
+  | 'provider_login_required'
+  | 'desktop_required'
+  | 'cli_missing'
+  | 'metadata_unavailable'
+  | 'metadata_timeout'
+  | 'model_catalog_unknown'
+  | 'model_catalog_incomplete'
+  | 'model_catalog_fallback'
+  | 'agent_unknown'
+  | 'capability_unavailable'
+  | 'input_unavailable'
+  | 'configuration_changed'
+
+export type AiPreflightResult = {
+  /** ready means configuration checks passed; it does not guarantee quota or a successful run. */
+  status: 'ready' | 'blocked' | 'unknown'
+  reason: AiPreflightReason
+  providerId?: string
+  providerName?: string
+  agentId?: string
+  agentName?: string
+  effort?: AiReasoningEffort
+  checkedAt: number
+  /** Opaque identity of the configuration checked, useful for rejecting stale UI results. */
+  selectionKey: string
+  /** Optional provider diagnostic. Consumers should localize their UI using reason. */
+  message?: string
 }
 
 export type AiUsageMetric = {
@@ -112,6 +159,9 @@ export type AiEvent =
 
 export interface PluginAiApi {
   providers(): Promise<AiProviderDescriptor[]>
+  preflight?(request?: AiPreflightRequest): Promise<AiPreflightResult>
+  /** Invalidates displayed checks on selection, permission or explicit account/provider changes. */
+  subscribePreflight?(listener: () => void): () => void
   stream(request: AiRequest): AsyncIterable<AiEvent>
   cancel(runId: string): Promise<void>
   usage(query?: AiUsageQuery): Promise<AiUsageRecord[]>
