@@ -29,6 +29,7 @@ import type {
   LauncherResultChoice,
   LauncherSurfaceId,
   MiningRunSnapshot,
+  OutputIntent,
   PluginLauncherApi,
 } from './types'
 import type { PluginNetworkApi, PluginPrivateStorageApi, PluginShellApi } from '../pluginTypes'
@@ -93,6 +94,8 @@ export type ParamInputFrame = {
 
 export type ResultFrame = {
   kind: 'result'
+  /** Host-controlled explicit previews never auto-deliver a single choice. */
+  executionMode?: LauncherItem['executionMode']
   output: LauncherOutput
   /** The item or choice that produced this output (for labeling). */
   sourceTitle?: string
@@ -131,6 +134,8 @@ export type LauncherControllerDeps = {
   recordSelection: (surfaceId: LauncherSurfaceId, item: LauncherItem) => void
   /** Notify the host that the launcher should close (success, no output). */
   requestClose: () => void
+  /** Clear search after a successful host return/save, preserving attached material. */
+  onReturnToRoot?: () => void
   /** Notify subscribers of a state change. */
   onChange: (state: LauncherControllerState) => void
   /** Test/alternate sink injection; production defaults to the native journal. */
@@ -194,6 +199,9 @@ export class LauncherController {
   private readonly experienceRunQueues = new WeakMap<CommittedRunContext, Promise<void>>()
   private state: LauncherControllerState
   private deps: LauncherControllerDeps
+  private explicitGeneration = 0
+  private prepareGeneration = 0
+  private readonly explicitChoices = new WeakMap<LauncherResultChoice, number>()
   private previewRunId = 0
   private suggestRunId = 0
   /** Debounce timer for suggest refresh (kill process filter, history, …). */
@@ -232,6 +240,8 @@ export class LauncherController {
       this.suggestDebounceTimer = null
     }
     this.fallbackSessionId = newExperienceId('session')
+    this.explicitGeneration += 1
+    this.prepareGeneration += 1
     this.setState({ frames: [{ kind: 'list' }], error: null, busy: false })
   }
 
@@ -283,7 +293,12 @@ export class LauncherController {
     return params
   }
 
+  private isExplicitTextPreview(item: LauncherItem): boolean {
+    return this.deps.surfaceId === 'global-launcher' && item.executionMode === 'explicit-text-preview'
+  }
+
   private inputBindingFor(item: LauncherItem): InputBinding | undefined {
+    if (this.isExplicitTextPreview(item)) return 'prompt'
     const mode = item.inputPolicy?.mode
     if (!mode) return undefined
     const api = this.deps.makeApi?.(item) ?? this.deps.api
@@ -337,6 +352,7 @@ export class LauncherController {
   }
 
   private shouldCollectTextInput(item: LauncherItem): boolean {
+    if (this.isExplicitTextPreview(item)) return true
     const mode = item.inputPolicy?.mode ?? 'auto'
     const api = this.deps.makeApi?.(item) ?? this.deps.api
     const hasBoundSelection = (mode === 'auto' || mode === 'selection') && Boolean(api.getSelectionText())
@@ -353,6 +369,7 @@ export class LauncherController {
    * only — callers decide *when* to actually trigger a capture.
    */
   private isForegroundCaptureEligible(item: LauncherItem): boolean {
+    if (this.isExplicitTextPreview(item) || item.metadataInput) return false
     const mode = item.inputPolicy?.mode ?? 'auto'
     return this.deps.surfaceId === 'global-launcher' &&
       item.behavior.type === 'perform' &&
@@ -382,7 +399,7 @@ export class LauncherController {
   }
 
   private shouldPreviewInput(frame: CollectInputFrame): boolean {
-    return this.shouldCollectTextInput(frame.item)
+    return !this.isExplicitTextPreview(frame.item) && !frame.item.metadataInput && this.shouldCollectTextInput(frame.item)
   }
 
   private collectInputFrameFor(
@@ -412,7 +429,28 @@ export class LauncherController {
    * Usage is recorded only when the resulting commit succeeds.
    */
   async selectItem(item: LauncherItem, options: SelectOptions = {}): Promise<void> {
+    this.explicitGeneration += 1
+    const prepareGeneration = ++this.prepareGeneration
     this.setState({ error: null })
+    if (item.prepare) {
+      this.setState({ busy: true })
+      try {
+        const prepared = await item.prepare(this.buildExecutionContext(item))
+        if (prepareGeneration !== this.prepareGeneration) return
+        item = prepared ?? item
+      } catch (error) {
+        if (prepareGeneration === this.prepareGeneration) {
+          this.setState({ busy: false, error: error instanceof Error ? error.message : String(error) })
+        }
+        return
+      }
+      this.setState({ busy: false })
+    }
+    // Names and search filters are command metadata, never attached material.
+    if (item.metadataInput) {
+      options = { ...options, objectBlockText: undefined }
+      item = { ...item, initialInputText: undefined }
+    }
     if (item.disabledReason) {
       this.setState({
         error: item.disabledReason.messageI18n?.[this.deps.locale as Locale] ?? item.disabledReason.message,
@@ -427,7 +465,7 @@ export class LauncherController {
     })
     const recordUsage = this.shouldRecord(item, options)
 
-    if (options.customizeParams && this.hasCustomizableParams(item)) {
+    if ((options.customizeParams || this.isExplicitTextPreview(item)) && this.hasCustomizableParams(item)) {
       trackBehavior(TelemetryEvents.launcherEnterParamInput, itemTelemetryProps(item))
       this.setState({
         frames: [...this.state.frames, this.paramFrameFor(item, undefined, 0, options.objectBlockText, recordUsage)],
@@ -573,6 +611,7 @@ export class LauncherController {
   async commitCurrentParam(value: unknown): Promise<void> {
     const top = this.topFrame()
     if (top.kind !== 'param-input') return
+    if (this.state.busy && this.isExplicitTextPreview(top.item)) return
     const param = this.currentParam(top)
     if (!param) {
       await this.submitParams()
@@ -609,6 +648,7 @@ export class LauncherController {
   async submitParams(): Promise<void> {
     const top = this.topFrame()
     if (top.kind !== 'param-input' || !top.item.executeWithParams) return
+    if (this.state.busy && this.isExplicitTextPreview(top.item)) return
 
     const error = this.validateParams(top.item, top.params)
     if (error) {
@@ -654,6 +694,10 @@ export class LauncherController {
   setInputText(text: string): void {
     const top = this.topFrame()
     if (top.kind !== 'collect-input') return
+    if (this.isExplicitTextPreview(top.item) && text !== top.inputText) {
+      this.explicitGeneration += 1
+      this.setState({ busy: false })
+    }
     const frames = this.state.frames.slice(0, -1)
     if (top.item.suggest) {
       frames.push({ ...top, inputText: text })
@@ -871,6 +915,7 @@ export class LauncherController {
   async submitInput(): Promise<void> {
     const top = this.topFrame()
     if (top.kind !== 'collect-input') return
+    if (this.state.busy && (this.isExplicitTextPreview(top.item) || top.item.metadataInput)) return
     const { item, inputText } = top
     trackBehavior(TelemetryEvents.launcherSubmitInput, {
       ...itemTelemetryProps(item),
@@ -899,7 +944,7 @@ export class LauncherController {
     const spec = item.behavior.type === 'collect-input' ? item.behavior.input : undefined
     const inputSpec = top.input ?? spec
     if (!inputText.trim() && !inputSpec?.allowEmptyInput) {
-      this.setState({ error: inputSpec?.emptyInputMessage ?? translate(this.deps.locale as Locale, 'palette', 'inputRequired') })
+      this.setState({ error: inputSpec?.emptyInputMessageI18n?.[this.deps.locale as Locale] ?? inputSpec?.emptyInputMessage ?? translate(this.deps.locale as Locale, 'palette', 'inputRequired') })
       return
     }
 
@@ -937,8 +982,18 @@ export class LauncherController {
     })
   }
 
+  private canActivateExplicitChoice(choice: LauncherResultChoice): boolean {
+    const generation = this.explicitChoices.get(choice)
+    if (generation === undefined) return true
+    if (generation !== this.explicitGeneration) return false
+    const top = this.topFrame()
+    return !this.state.busy && top.kind === 'result' &&
+      top.executionMode === 'explicit-text-preview' && top.output.choices.includes(choice)
+  }
+
   /** Activate a result choice's primary action. */
   async activateChoice(choice: LauncherResultChoice): Promise<void> {
+    if (!this.canActivateExplicitChoice(choice)) return
     trackBehavior(TelemetryEvents.launcherChoiceActivate, {
       via: 'primary',
     })
@@ -954,6 +1009,7 @@ export class LauncherController {
 
   /** Activate a result choice's secondary action by id. */
   async activateSecondary(choice: LauncherResultChoice, actionId: string): Promise<void> {
+    if (!this.canActivateExplicitChoice(choice)) return
     const action = choice.secondaryActions?.find((a) => a.id === actionId)
     if (!action) return
     trackBehavior(TelemetryEvents.launcherChoiceActivate, {
@@ -992,8 +1048,12 @@ export class LauncherController {
    * From the base list frame, returns false so the host can close the launcher.
    */
   back(): boolean {
+    this.explicitGeneration += 1
+    this.prepareGeneration += 1
     if (this.state.frames.length <= 1) return false
     const top = this.topFrame()
+    if ((top.kind === 'result' && top.executionMode === 'explicit-text-preview') ||
+      ('item' in top && this.isExplicitTextPreview(top.item))) this.setState({ busy: false })
     trackBehavior(TelemetryEvents.launcherBack, {
       surfaceId: this.state.surfaceId,
       fromFrame: top.kind,
@@ -1027,7 +1087,12 @@ export class LauncherController {
    * Does not step through intermediate params (unlike empty ⌫ / Esc).
    */
   exitCommand(): boolean {
+    this.explicitGeneration += 1
+    this.prepareGeneration += 1
     if (this.state.frames.length <= 1) return false
+    const top = this.topFrame()
+    if ((top.kind === 'result' && top.executionMode === 'explicit-text-preview') ||
+      ('item' in top && this.isExplicitTextPreview(top.item))) this.setState({ busy: false })
     const base = this.state.frames[0]
     if (!base || base.kind !== 'list') {
       this.setState({ frames: this.state.frames.slice(0, 1), error: null })
@@ -1161,7 +1226,11 @@ export class LauncherController {
         via: run.via,
         artifactId: run.artifactId,
       })
-      touchSavedAction(run.artifactId)
+      try {
+        touchSavedAction(run.artifactId)
+      } catch (error) {
+        console.warn('[hiven] Failed to update Saved Action usage:', error)
+      }
     }
     if (run.via !== 'saved-action') {
       const completedAt = Date.now()
@@ -1198,6 +1267,7 @@ export class LauncherController {
     resolvedChoice?: LauncherResultChoice
   }): Promise<void> {
     const { item, via, sourceTitle, execute, resolvedChoice } = input
+    const explicitGeneration = this.isExplicitTextPreview(item) || item.metadataInput ? this.explicitGeneration : undefined
     const committedRun = this.committedRunFor(item, via)
     let miningSnapshot: Promise<MiningRunSnapshot | null> | undefined
     if (
@@ -1290,7 +1360,9 @@ export class LauncherController {
     let result: LauncherExecuteResult
     try {
       result = await execute()
+      if (explicitGeneration !== undefined && explicitGeneration !== this.explicitGeneration) return
     } catch (error) {
+      if (explicitGeneration !== undefined && explicitGeneration !== this.explicitGeneration) return
       const failure = classifyExperienceError(error, 'provider-failed')
       if (committedRun) this.recordRunFinished(committedRun, failure.status, failure.errorType)
       trackLatencyFrom(TelemetryEvents.launcherItemExecute, startedAt, {
@@ -1331,12 +1403,16 @@ export class LauncherController {
     actionNode?: LauncherResultChoice | LauncherResultAction,
     pendingUsage?: ResultFrame['pendingUsage'],
   ): Promise<void> {
+    const explicitGeneration = pendingUsage && this.isExplicitTextPreview(pendingUsage.item)
+      ? this.explicitGeneration
+      : undefined
     this.setState({ busy: true, error: null })
     const startedAt = telemetryNow()
     let result: Awaited<ReturnType<LauncherResultChoice['primaryAction']>>
     try {
       result = await run()
     } catch (error) {
+      if (explicitGeneration !== undefined && explicitGeneration !== this.explicitGeneration) return
       trackLatencyFrom(TelemetryEvents.launcherChoiceLatency, startedAt, {
         failed: true,
         ...extra,
@@ -1357,11 +1433,15 @@ export class LauncherController {
     if (committedRun && actionNode && launcherResult?.ok !== false) {
       this.recordOutputApplied(committedRun, actionNode)
     }
+    // An already-started delivery may finish after navigation. Its successful
+    // delivery still counts, but it must not close or overwrite a newer flow.
+    if (explicitGeneration !== undefined && explicitGeneration !== this.explicitGeneration) return
     // Choice actions may return more output (multi-level) or void (terminal).
     if (launcherResult) {
-      await this.applyResult(launcherResult, sourceTitle, committedRun, usageToCommit)
+      await this.applyResult(launcherResult, sourceTitle, committedRun, usageToCommit, actionNode ? getHostOutputIntent(actionNode) ?? undefined : undefined)
     } else {
       // Terminal action with no further output → close.
+      if (pendingUsage && this.isExplicitTextPreview(pendingUsage.item)) this.explicitGeneration += 1
       if (usageToCommit) {
         this.recordSuccessfulSelection(usageToCommit.item, { recordUsage: usageToCommit.recordUsage })
       }
@@ -1375,6 +1455,7 @@ export class LauncherController {
     sourceTitle: string,
     committedRun?: CommittedRunContext,
     pendingUsage?: ResultFrame['pendingUsage'],
+    appliedOutputIntent?: OutputIntent,
   ): Promise<void> {
     if (!result.ok) {
       // Failure: keep launcher open, show error.
@@ -1382,8 +1463,12 @@ export class LauncherController {
       return
     }
     if (isOutputResult(result)) {
-      // Single choice: execute directly without entering result frame
-      if (result.output.choices.length === 1) {
+      const explicitPreview = pendingUsage && this.isExplicitTextPreview(pendingUsage.item)
+      if (explicitPreview) {
+        for (const choice of result.output.choices) this.explicitChoices.set(choice, this.explicitGeneration)
+      }
+      // Existing single-choice actions retain their immediate execution.
+      if (!explicitPreview && result.output.choices.length === 1) {
         const choice = result.output.choices[0]
         await this.runChoiceAction(
           () => choice.primaryAction(),
@@ -1401,6 +1486,7 @@ export class LauncherController {
         error: null,
         frames: [...this.state.frames, {
           kind: 'result',
+          executionMode: explicitPreview ? 'explicit-text-preview' : undefined,
           output: result.output,
           sourceTitle,
           committedRun,
@@ -1413,6 +1499,12 @@ export class LauncherController {
       this.recordSuccessfulSelection(pendingUsage.item, { recordUsage: pendingUsage.recordUsage })
     }
     if (result.keepOpen) {
+      if (appliedOutputIntent === 'return-to-launcher') {
+        this.explicitGeneration += 1
+        this.deps.onReturnToRoot?.()
+        this.setState({ busy: false, error: null, frames: this.state.frames.slice(0, 1) })
+        return
+      }
       // Collect-input with suggest: keep the same frame and refresh suggestions
       // (e.g. secondary action mutates suggestion source). Generic, not product-specific.
       const top = this.topFrame()
@@ -1435,6 +1527,7 @@ export class LauncherController {
       // opens a tool surface) so system Esc back lands on the root list, not a
       // stale intermediate step under the surface.
       const root = this.state.frames[0]
+      if (pendingUsage?.item.metadataInput) this.deps.onReturnToRoot?.()
       this.setState({
         busy: false,
         error: null,
