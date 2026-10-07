@@ -35,11 +35,8 @@ const DOWNLOADABLE_PLUGIN_FILE_PATTERN = /\.(?:ts|tsx|js|jsx|mjs|json|css|md)$/i
 type DiscoveredBuiltinPackage = {
   pluginId: string
   dir: string
-  displayName: string
-  displayNameI18n?: Record<string, string>
   version: string
-  capabilities: string[]
-  files: Record<string, string>
+  rawManifest: string
 }
 
 type BuiltinPluginIndexPackage = {
@@ -75,12 +72,6 @@ const BUILTIN_PLUGIN_INDEX_MODULES = import.meta.glob('./builtin-plugins/index.j
   import: 'default',
 }) as Record<string, string>
 
-const PLUGIN_FILE_MODULES = import.meta.glob('./plugins/*/**/*.{ts,tsx,js,jsx,mjs,json,css,md}', {
-  eager: true,
-  query: '?raw',
-  import: 'default',
-}) as Record<string, string>
-
 function pluginDirFromModulePath(path: string): string | null {
   const match = path.match(/\.\/plugins\/([^/]+)\//)
   return match ? match[1] : null
@@ -93,26 +84,13 @@ function discoverBuiltinPluginPackages(): DiscoveredBuiltinPackage[] {
     if (!dir) continue
     const manifest = JSON.parse(rawManifest) as {
       pluginId: string
-      displayName?: string
-      displayNameI18n?: Record<string, string>
       version?: string
-      capabilities?: string[]
     }
-    const prefix = `./plugins/${dir}/`
-    const files: Record<string, string> = {}
-    for (const [filePath, content] of Object.entries(PLUGIN_FILE_MODULES)) {
-      if (!filePath.startsWith(prefix)) continue
-      files[filePath.slice(prefix.length)] = content
-    }
-    files['manifest.json'] = rawManifest
     packages.push({
       pluginId: manifest.pluginId,
       dir,
-      displayName: manifest.displayName || manifest.pluginId,
-      displayNameI18n: manifest.displayNameI18n,
       version: manifest.version || '1.0.0',
-      capabilities: manifest.capabilities || ['command'],
-      files,
+      rawManifest,
     })
   }
   return packages
@@ -131,6 +109,14 @@ async function invoke<T>(command: string, args?: Record<string, unknown>): Promi
 
 async function ensureTextFile(path: string, content: string) {
   await invoke<void>('save_plugin_file', { path, content })
+}
+
+// A failed write must not release the init single-flight while other writes
+// are still running: a retry could otherwise remove their destination folders.
+async function settleWrites(writes: Promise<unknown>[]): Promise<void> {
+  const results = await Promise.allSettled(writes)
+  const failure = results.find((result) => result.status === 'rejected')
+  if (failure?.status === 'rejected') throw failure.reason
 }
 
 async function fetchWithFallback(urls: string[]): Promise<string> {
@@ -322,16 +308,23 @@ async function releaseBuiltinPluginManifests(_configDir: string, pluginBuiltinDi
   const needsRelease = versionChanged || builtinPackageVersionsChanged(currentIndex.packages, embeddedIndex.packages)
 
   if (needsRelease) {
+    // Keep package source strings outside the normal startup graph. Prepare
+    // every package before deleting anything, so a failed import is harmless.
+    const { getBuiltinPluginFiles } = await import('./builtinPluginSources')
+    const packages = BUILTIN_PLUGIN_PACKAGES.map((pkg) => ({
+      ...pkg,
+      files: { ...getBuiltinPluginFiles(pkg.dir), 'manifest.json': pkg.rawManifest },
+    }))
     // 整目录覆盖：先删除每个内置包的现有目录，清掉历史残留文件
     // （如旧版释放的 index.js / entry.js），再以当前源码包内容重写。
     // 不同 pluginId 目录互不依赖，可并行处理。
-    await Promise.all(BUILTIN_PLUGIN_PACKAGES.map(async (pkg) => {
+    await settleWrites(packages.map(async (pkg) => {
       await invoke<void>('remove_plugin_dir', {
         rootPath: pluginBuiltinDir,
         pluginId: pkg.pluginId,
       }).catch(() => undefined)
       const pluginDir = `${pluginBuiltinDir}/${pkg.pluginId}`
-      await Promise.all(
+      await settleWrites(
         Object.entries(pkg.files).map(([fileName, content]) =>
           ensureTextFile(`${pluginDir}/${fileName}`, content)
         )
@@ -369,7 +362,7 @@ async function initPluginPackageDirs(): Promise<string | null> {
   const pluginInstalledDir = `${configDir}/plugins/installed`
   const pluginDevDir = `${configDir}/plugins/dev`
 
-  await Promise.all([
+  await settleWrites([
     ensureTextFile(`${pluginBuiltinDir}/.keep`, ''),
     ensureTextFile(`${pluginInstalledDir}/.keep`, ''),
     ensureTextFile(`${pluginDevDir}/.keep`, ''),
@@ -378,19 +371,29 @@ async function initPluginPackageDirs(): Promise<string | null> {
   return configDir
 }
 
+// Covers concurrent callers in this module/webview, including StrictMode.
+// It is not a lock across separate webviews or the remote update workflow.
+let configInitInFlight: Promise<string | null> | null = null
+
 export async function initConfigDir(): Promise<string | null> {
   if (!isTauri()) return null
-
-  try {
-    const configDir = await initPluginPackageDirs()
-    if (!configDir) return null
-    await releaseBuiltinPluginManifests(configDir, `${configDir}/plugins/builtin`)
-
-    return configDir
-  } catch (error) {
-    console.error('[hiven] Failed to init config dir:', error)
-    return null
+  if (!configInitInFlight) {
+    configInitInFlight = (async () => {
+      try {
+        const configDir = await initPluginPackageDirs()
+        if (!configDir) return null
+        await releaseBuiltinPluginManifests(configDir, `${configDir}/plugins/builtin`)
+        return configDir
+      } catch (error) {
+        console.error('[hiven] Failed to init config dir:', error)
+        return null
+      }
+    })().finally(() => {
+      // A failed attempt is retryable, and later calls recheck disk metadata.
+      configInitInFlight = null
+    })
   }
+  return configInitInFlight
 }
 
 /**
