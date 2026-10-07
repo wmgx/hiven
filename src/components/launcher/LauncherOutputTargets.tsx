@@ -20,18 +20,20 @@ export type OutputDestination = {
 export function buildOutputDestinations(params: {
   hasPaste: boolean
   hasReturn: boolean
+  hasCopy?: boolean
+  primaryIntent?: 'copy' | 'return-to-launcher'
   metaLabel?: string
 }): OutputDestination[] {
   const metaLabel = params.metaLabel ?? getPlatformShortcutMeta().label
   // ↵ copy · ⇧↵ paste front · ⌘/Ctrl↵ return to launcher
-  const list: OutputDestination[] = [
+  const list: OutputDestination[] = params.hasCopy === false ? [] : [
     { id: 'copy', keys: '↵', labelKey: 'outputCopy' },
   ]
   if (params.hasPaste) {
     list.push({ id: 'paste-foreground', keys: '⇧↵', labelKey: 'outputPasteForeground' })
   }
   if (params.hasReturn) {
-    list.push({ id: 'return-to-launcher', keys: `${metaLabel}↵`, labelKey: 'returnToLauncher' })
+    list.push({ id: 'return-to-launcher', keys: params.primaryIntent === 'return-to-launcher' ? '↵' : `${metaLabel}↵`, labelKey: 'returnToLauncher' })
   }
   return list
 }
@@ -150,6 +152,8 @@ export function useOutputDestinationState(params: {
 export function useOutputDestinations(params: {
   hasPaste: boolean
   hasReturn: boolean
+  hasCopy?: boolean
+  primaryIntent?: 'copy' | 'return-to-launcher'
   resetKey: string
 }) {
   const metaLabel = getPlatformShortcutMeta().label
@@ -157,9 +161,11 @@ export function useOutputDestinations(params: {
     () => buildOutputDestinations({
       hasPaste: params.hasPaste,
       hasReturn: params.hasReturn,
+      hasCopy: params.hasCopy,
+      primaryIntent: params.primaryIntent,
       metaLabel,
     }),
-    [params.hasPaste, params.hasReturn, metaLabel],
+    [params.hasPaste, params.hasReturn, params.hasCopy, params.primaryIntent, metaLabel],
   )
   const state = useOutputDestinationState({ destinations, resetKey: params.resetKey })
   return { destinations, metaLabel, ...state }
