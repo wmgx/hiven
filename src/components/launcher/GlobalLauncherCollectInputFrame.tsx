@@ -141,13 +141,14 @@ export function GlobalLauncherCollectInputFrame({
   onSubmitPrimary?: () => void
   onCaptureSelection?: () => void
 }) {
-  const placeholder = frame.input.placeholder ?? ''
+  const placeholder = frame.input.placeholderI18n?.[locale] ?? frame.input.placeholder ?? ''
+  const explicitPreview = frame.item.executionMode === 'explicit-text-preview'
   const previewChoices = frame.previewOutput?.choices ?? []
   const selectedIndex = frame.selectedSuggestionIndex ?? -1
   const hasSuggestions = previewChoices.length > 0
   const isSuggestMode = Boolean(frame.item.suggest)
   const livePreviewText = !isSuggestMode ? extractLivePreviewText(frame.previewOutput) : null
-  const showLivePreview = !isSuggestMode
+  const showLivePreview = !isSuggestMode && !explicitPreview && !frame.item.metadataInput
   const filterText = frame.inputText.trim()
   // Local latch: never blank the well while typing — only replace when a new text arrives.
   const lastPreviewRef = useRef<string | null>(null)
@@ -170,7 +171,7 @@ export function GlobalLauncherCollectInputFrame({
   const commandTitle = resolveDisplayTitle(frame.item.display, locale)
   const previewChoice = livePreviewText ? previewChoices[0] : undefined
   const hasReturn = Boolean(previewChoice?.secondaryActions?.some((a) => a.id === 'return-to-launcher'))
-  const hasPaste = Boolean(onPastePreviewText)
+  const hasPaste = !explicitPreview && !frame.item.metadataInput && Boolean(onPastePreviewText)
   const {
     destinations,
     activeDest,
@@ -222,6 +223,10 @@ export function GlobalLauncherCollectInputFrame({
       if (isSuggestMode) return
       event.preventDefault()
       event.stopPropagation()
+      if (explicitPreview || frame.item.metadataInput) {
+        if (!event.shiftKey && !event.altKey) onSubmitPrimary?.()
+        return
+      }
       void runDestination(resolveFromKeyboard(event))
     }
   }
@@ -254,6 +259,9 @@ export function GlobalLauncherCollectInputFrame({
         <div role="alert" className="px-3.5 py-2 text-[12px]" style={{ color: 'var(--color-error)' }}>
           {error}
         </div>
+      )}
+      {explicitPreview && (
+        <LauncherEmptyWell title={t(locale, 'palette.explicitPreviewInput')} />
       )}
       {showLivePreview && (
         <>
@@ -357,7 +365,7 @@ export function GlobalLauncherCollectInputFrame({
         />
       )}
       <div className="global-launcher-footer l-foot">
-        {onCaptureSelection && !frame.inputText && frame.item.behavior.type === 'perform' && frame.item.inputPolicy && frame.item.inputPolicy.mode !== 'all' && (
+        {!explicitPreview && !frame.item.metadataInput && onCaptureSelection && !frame.inputText && frame.item.behavior.type === 'perform' && frame.item.inputPolicy && frame.item.inputPolicy.mode !== 'all' && (
           <button
             type="button"
             className="launcher-footer-back-btn"
