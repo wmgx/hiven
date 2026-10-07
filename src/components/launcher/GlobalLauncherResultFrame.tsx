@@ -1,6 +1,6 @@
 import type { Locale } from '../../i18n'
 import { t } from '../../i18n'
-import type { ResultFrame } from '../../workspace/launcher/controller'
+import type { LauncherControllerState, ResultFrame } from '../../workspace/launcher/controller'
 import type { LauncherResultChoice } from '../../workspace/launcher/types'
 import { LauncherHintKey, LauncherHintText } from './LauncherFooterHints'
 import { LauncherResultChoiceRow } from './LauncherResultChoiceRow'
@@ -21,11 +21,13 @@ function isSingleTextResult(choices: LauncherResultChoice[], explicitPreview = f
   if (!text && !explicitPreview) return false
   // Confirm dialogs use tone danger/muted — keep list UI.
   if (choice.tone === 'danger' || choice.tone === 'muted') return false
-  return true
+  return explicitPreview || getHostOutputIntent(choice) === 'copy' || getHostOutputIntent(choice) === 'return-to-launcher'
 }
 
 export function GlobalLauncherResultFrame({
   frame,
+  busy = false,
+  deliveryIntent,
   error,
   locale,
   selectedIndex,
@@ -37,6 +39,8 @@ export function GlobalLauncherResultFrame({
   onPastePreviewText,
 }: {
   frame: ResultFrame
+  busy?: boolean
+  deliveryIntent?: LauncherControllerState['deliveryIntent']
   error?: string | null
   locale: Locale
   selectedIndex: number
@@ -45,7 +49,7 @@ export function GlobalLauncherResultFrame({
   onHoverChoice: (index: number) => void
   onToggleChoice: (choice: LauncherResultChoice, frame: ResultFrame) => void
   onSecondaryAction?: (choice: LauncherResultChoice, actionId: string) => void
-  onPastePreviewText?: (text: string) => void | Promise<void>
+  onPastePreviewText?: (choice: LauncherResultChoice) => void | Promise<void>
 }) {
   const choices = frame.output.choices
   const selection = frame.output.selection
@@ -57,7 +61,7 @@ export function GlobalLauncherResultFrame({
 
   const isConfirmDialog = choices.length <= 3 && choices.some((c) => c.tone === 'danger' || c.tone === 'muted')
   const explicitPreview = frame.executionMode === 'explicit-text-preview'
-  const singleText = isSingleTextResult(choices, explicitPreview)
+  const singleText = selection?.type !== 'multi' && (frame.retryOnly || isSingleTextResult(choices, explicitPreview))
   const textChoice = singleText ? choices[0] : undefined
   const rawPreviewText = textChoice ? (textChoice.preview ?? textChoice.title ?? '') : ''
   const previewText = explicitPreview ? rawPreviewText : rawPreviewText.trim()
@@ -65,9 +69,9 @@ export function GlobalLauncherResultFrame({
   const hasIntent = (intent: 'copy' | 'return-to-launcher') => Boolean(textChoice && (
     primaryIntent === intent || textChoice.secondaryActions?.some((action) => getHostOutputIntent(action) === intent)
   ))
-  const hasReturn = explicitPreview ? hasIntent('return-to-launcher') : Boolean(textChoice?.secondaryActions?.some((a) => a.id === 'return-to-launcher'))
-  const hasCopy = explicitPreview ? hasIntent('copy') : true
-  const hasPaste = !explicitPreview && Boolean(onPastePreviewText)
+  const hasReturn = explicitPreview || primaryIntent === 'return-to-launcher' ? hasIntent('return-to-launcher') : Boolean(textChoice?.secondaryActions?.some((a) => a.id === 'return-to-launcher'))
+  const hasCopy = hasIntent('copy')
+  const hasPaste = !explicitPreview && !frame.retryOnly && Boolean(onPastePreviewText)
   const {
     destinations,
     activeDest,
@@ -78,13 +82,13 @@ export function GlobalLauncherResultFrame({
     hasPaste,
     hasReturn,
     hasCopy,
-    primaryIntent: explicitPreview && primaryIntent === 'return-to-launcher' ? 'return-to-launcher' : 'copy',
+    primaryIntent: primaryIntent === 'return-to-launcher' ? 'return-to-launcher' : 'copy',
     resetKey: `${frame.sourceTitle ?? ''}:${previewText}`,
   })
 
   const runDestination = async (destId: OutputDestinationId) => {
-    if (!textChoice) return
-    if (explicitPreview) {
+    if (!textChoice || busy || frame.retryOnly) return
+    if (explicitPreview || primaryIntent === 'return-to-launcher') {
       const intent = destId === 'copy' ? 'copy' : destId === 'return-to-launcher' ? 'return-to-launcher' : null
       if (!intent) return
       if (getHostOutputIntent(textChoice) === intent) onToggleChoice(textChoice, frame)
@@ -99,7 +103,7 @@ export function GlobalLauncherResultFrame({
       return
     }
     if (destId === 'paste-foreground') {
-      await onPastePreviewText?.(previewText)
+      await onPastePreviewText?.(textChoice)
       return
     }
     if (destId === 'return-to-launcher') {
@@ -123,6 +127,11 @@ export function GlobalLauncherResultFrame({
           if (event.key !== 'Enter') return
           event.preventDefault()
           event.stopPropagation()
+          if (busy) return
+          if (frame.retryOnly) {
+            if (!event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey) onToggleChoice(textChoice, frame)
+            return
+          }
           if (explicitPreview && (event.shiftKey || event.altKey)) return
           void runDestination(resolveFromKeyboard(event))
         }}
@@ -167,7 +176,23 @@ export function GlobalLauncherResultFrame({
             ) : null}
           </pre>
         </div>
-        <LauncherOutputTargetsBar
+        {frame.retryOnly ? (
+          <button
+            type="button"
+            className="launcher-output-target"
+            disabled={busy}
+            onMouseDown={(event) => event.preventDefault()}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' && event.key !== ' ') return
+              event.stopPropagation()
+              if (event.shiftKey || event.altKey || event.metaKey || event.ctrlKey) event.preventDefault()
+            }}
+            onClick={() => onToggleChoice(textChoice, frame)}
+          >
+            {t(locale, 'palette.outputRetry')}
+          </button>
+        ) : <LauncherOutputTargetsBar
+          disabled={busy}
           destinations={destinations}
           activeId={activeDest?.id ?? 'copy'}
           locale={locale}
@@ -175,14 +200,15 @@ export function GlobalLauncherResultFrame({
             selectId(id)
             void runDestination(id)
           }}
-        />
+        />}
+        {busy && <span role="status" aria-live="polite">{t(locale, deliveryIntent === 'copy' ? 'palette.outputCopying' : 'palette.outputDelivering')}</span>}
         {error && (
-          <div className="px-3.5 py-2 text-[12px]" style={{ color: 'var(--color-error)' }}>
+          <div role="alert" className="px-3.5 py-2 text-[12px]" style={{ color: 'var(--color-error)' }}>
             {error}
           </div>
         )}
         <div className="global-launcher-footer l-foot">
-          <LauncherOutputTargetsFooter destinations={destinations} locale={locale} />
+          {frame.retryOnly ? <LauncherHintKey keys="↵" label={t(locale, 'palette.outputRetry')} /> : <LauncherOutputTargetsFooter destinations={destinations} locale={locale} />}
           <LauncherHintKey keys="esc" label={t(locale, 'palette.back')} />
         </div>
       </div>
@@ -201,7 +227,7 @@ export function GlobalLauncherResultFrame({
       <div className={`global-launcher-body l-results ${isConfirmDialog ? 'l-results-confirm' : ''}`}>
         {choices.map((choice, index) => {
           const checked = selectedChoiceIds.has(choice.id)
-          const disabled = selection?.type === 'multi' && selectedCount >= selection.max && !checked
+          const disabled = busy || (selection?.type === 'multi' && selectedCount >= selection.max && !checked)
           return (
             <LauncherResultChoiceRow
               key={choice.id}
@@ -218,8 +244,9 @@ export function GlobalLauncherResultFrame({
           )
         })}
       </div>
+      {busy && <span role="status" aria-live="polite">{t(locale, deliveryIntent === 'copy' ? 'palette.outputCopying' : 'palette.outputDelivering')}</span>}
       {error && (
-        <div className="px-3.5 py-2 text-[12px]" style={{ color: 'var(--color-error)' }}>
+        <div role="alert" className="px-3.5 py-2 text-[12px]" style={{ color: 'var(--color-error)' }}>
           {error}
         </div>
       )}
