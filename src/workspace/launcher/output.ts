@@ -87,6 +87,17 @@ export function textResult(text: string, api: PluginLauncherApi, locale: Locale 
   return { ok: true, output: { choices: [choice] } }
 }
 
+/** Pure text previews offer only the two explicit global-launcher deliveries. */
+export function explicitTextPreviewResult(text: string, api: PluginLauncherApi, locale: Locale = 'en'): LauncherExecuteResult {
+  const result = textResult(text, api, locale)
+  if (isOutputResult(result)) {
+    result.output.choices[0].secondaryActions = result.output.choices[0].secondaryActions?.filter(
+      (action) => getHostOutputIntent(action) === 'return-to-launcher',
+    )
+  }
+  return result
+}
+
 /**
  * Text output whose primary (Enter) action pastes straight into whatever app
  * was foreground before the launcher took focus, instead of copying. Used
