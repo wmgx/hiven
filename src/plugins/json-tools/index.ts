@@ -5,7 +5,7 @@
  * Direct conversion tools remain available in editor command entries.
  */
 
-import { definePlugin, type PluginToolSurfaces } from '@hiven/plugin'
+import { definePlugin, type PluginToolExplicitTextPreviewContext, type PluginToolTextPreviewResult, type PluginToolSurfaces } from '@hiven/plugin'
 import { JsonSurface } from './JsonSurface'
 import { operationRoutes } from './routes'
 import {
@@ -47,6 +47,14 @@ function toolError(error: unknown, t: (key: string, vars?: Record<string, string
   return t('error.convert', { message: error instanceof Error ? error.message : String(error) })
 }
 
+function prettifyText(ctx: PluginToolExplicitTextPreviewContext): PluginToolTextPreviewResult {
+  try {
+    return { ok: true, text: jsonPrettify(ctx.input.text, Number(ctx.params.indent ?? 2), Boolean(ctx.params.sortKeys)) }
+  } catch (error) {
+    return { ok: false, message: toolError(error, ctx.t) }
+  }
+}
+
 export const jsonToolsPlugin = definePlugin({
   ui: {
     surfaces: [
@@ -80,7 +88,7 @@ export const jsonToolsPlugin = definePlugin({
     items: operationRoutes.map((route) => ({
       id: `open-${route.id}`,
       display: {
-        title: route.titleKey,
+        title: route.id === 'format' ? 'route.formatWorkbench' : route.titleKey,
         subtitle: 'route.open',
         icon: 'Braces',
         aliases: route.aliases,
@@ -132,6 +140,7 @@ export const jsonToolsPlugin = definePlugin({
       aliases: ['fmt', '格式化', 'pretty', 'json format', 'json格式化', 'pretty json', 'json beautify', 'format json'],
       inputPolicy: { mode: 'auto' },
       policy: LEARNABLE_PURE,
+      explicitTextPreview: { run: prettifyText },
       params: [
         { key: 'indent', label: 'json.indent.label', type: 'number', default: 2, saveable: true },
         { key: 'sortKeys', label: 'json.sortKeys.label', type: 'boolean', default: false, saveable: true },
@@ -139,8 +148,8 @@ export const jsonToolsPlugin = definePlugin({
       accepts: { kinds: ['json'], aliases: ['fmt', '格式化', 'pretty'] },
       textMatch: isJson,
       run(ctx) {
-        try { return ctx.output.text(jsonPrettify(ctx.input.text, Number(ctx.params.indent ?? 2), Boolean(ctx.params.sortKeys))) }
-        catch (error) { return ctx.output.error(toolError(error, ctx.t)) }
+        const result = prettifyText(ctx)
+        return result.ok ? ctx.output.text(result.text) : ctx.output.error(result.message)
       },
       surfaces: EDITOR_TOOL_SURFACES,
     },
