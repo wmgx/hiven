@@ -218,6 +218,20 @@ class PluginRegistryImpl {
   private devDefinitions = new Map<string, PluginDefinition<unknown>>()
   private productionPermissions = new Map<string, PluginPermission[]>()
   private devPermissions = new Map<string, PluginPermission[]>()
+  private productionLifetimes = new Map<string, { active: boolean }>()
+  private devLifetimes = new Map<string, { active: boolean }>()
+  private readonly missingLifetime = Object.freeze({ active: false })
+
+  /** A registration's identity survives metadata refresh, never removal/reload. */
+  getPluginLifetime(pluginId: string, source: ContributionSource | 'builtin' | 'installed'): { readonly active: boolean } {
+    return (source === 'dev' ? this.devLifetimes : this.productionLifetimes).get(pluginId) ?? this.missingLifetime
+  }
+
+  private revokeLifetime(lifetimes: Map<string, { active: boolean }>, pluginId: string): void {
+    const lifetime = lifetimes.get(pluginId)
+    if (lifetime) lifetime.active = false
+    lifetimes.delete(pluginId)
+  }
 
   readonly production = {
     commands: new ScopedCommandRegistry(),
@@ -271,6 +285,10 @@ class PluginRegistryImpl {
       this.production.toolbar.register(tb, pluginId, 'production')
     }
     if (definition) {
+      if (this.productionDefinitions.get(pluginId) !== definition) {
+        this.revokeLifetime(this.productionLifetimes, pluginId)
+        this.productionLifetimes.set(pluginId, { active: true })
+      }
       this.productionDefinitions.set(pluginId, definition)
     }
     this.productionPermissions.set(pluginId, permissions)
@@ -278,6 +296,7 @@ class PluginRegistryImpl {
   }
 
   unregisterProductionPlugin(pluginId: string): void {
+    this.revokeLifetime(this.productionLifetimes, pluginId)
     this.production.commands.unregisterByPlugin(pluginId)
     this.production.renderers.unregisterByPlugin(pluginId)
     this.production.panels.unregisterByPlugin(pluginId)
@@ -311,6 +330,10 @@ class PluginRegistryImpl {
       this.dev.toolbar.register(tb, pluginId, 'dev')
     }
     if (definition) {
+      if (this.devDefinitions.get(pluginId) !== definition) {
+        this.revokeLifetime(this.devLifetimes, pluginId)
+        this.devLifetimes.set(pluginId, { active: true })
+      }
       this.devDefinitions.set(pluginId, definition)
     }
     this.devPermissions.set(pluginId, permissions)
@@ -318,6 +341,7 @@ class PluginRegistryImpl {
   }
 
   unregisterDevPlugin(pluginId: string): void {
+    this.revokeLifetime(this.devLifetimes, pluginId)
     this.dev.commands.unregisterByPlugin(pluginId)
     this.dev.renderers.unregisterByPlugin(pluginId)
     this.dev.panels.unregisterByPlugin(pluginId)
@@ -328,6 +352,7 @@ class PluginRegistryImpl {
   }
 
   clearAllDev(): void {
+    for (const pluginId of this.devLifetimes.keys()) this.revokeLifetime(this.devLifetimes, pluginId)
     this.dev.commands.clear()
     this.dev.renderers.clear()
     this.dev.panels.clear()

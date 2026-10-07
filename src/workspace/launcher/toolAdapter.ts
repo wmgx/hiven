@@ -225,6 +225,7 @@ export function adaptToolToLauncherItem(
   return {
     systemKey: options.systemKey,
     kind: 'plugin',
+    pluginLifetime: pluginRegistry.getPluginLifetime(options.pluginId, options.source),
     pluginId: options.pluginId,
     source: options.source,
     display: toolDisplay(tool),

@@ -20,6 +20,7 @@ import type {
 import type { ContributionSource } from '../pluginTypes'
 import { sanitizeSurfaces } from './identity'
 import { resolvePluginSettingsSource } from './pluginSource'
+import { pluginRegistry } from '../pluginRegistry'
 
 /**
  * Ranking nudge given to any plugin-declared direct answer. Deliberately below
@@ -74,6 +75,7 @@ export function normalizeContribution(
     systemKey: options.systemKey,
     kind: options.kind,
     pluginId: options.pluginId,
+    pluginLifetime: pluginRegistry.getPluginLifetime(options.pluginId, options.source),
     source: settingsSource,
     display: contribution.display,
     behavior: contribution.behavior ?? { type: 'perform' },

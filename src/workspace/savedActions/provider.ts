@@ -43,6 +43,7 @@ export function projectSavedAction(
     systemKey: `host:saved-action:${artifact.id}`,
     kind: 'host',
     pluginId: baseAction?.pluginId,
+    pluginLifetime: baseAction?.pluginLifetime,
     source: baseAction?.source,
     display: {
       title: artifact.name,

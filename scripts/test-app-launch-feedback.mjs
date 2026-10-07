@@ -59,6 +59,7 @@ const host = load('src/workspace/appLauncher/hostAppLauncher.ts', {
 })
 let id = 0
 const { LauncherController } = load('src/workspace/launcher/controller.ts', {
+  './pluginLifetime': load('src/workspace/launcher/pluginLifetime.ts'),
   '../../i18n': i18n,
   '../usageJournal': { appendUsageJournal: async () => {} },
   './output': { isOutputResult: (result) => result.ok && Boolean(result.output) },

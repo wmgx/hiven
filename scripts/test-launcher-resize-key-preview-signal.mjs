@@ -47,7 +47,7 @@ function loadModule(path, { stripImports = [], globals = {} } = {}) {
     apply: () => undefined,
     construct: () => ({}),
   })
-  const fallbackRequire = () => new Proxy({}, { get: () => inert })
+  const fallbackRequire = (id) => id === './pluginLifetime' ? loadModule('src/workspace/launcher/pluginLifetime.ts') : new Proxy({}, { get: () => inert })
   const sandbox = {
     exports: moduleExports,
     module: { exports: moduleExports },
@@ -103,7 +103,7 @@ const toolAdapter = loadModule('src/workspace/launcher/toolAdapter.ts', {
   globals: {
     getPluginPermissionSnapshot: () => ({ granted: [], requested: [] }),
     createPluginShell: () => ({ run: () => Promise.reject(new Error('shell unavailable in test')) }),
-    pluginRegistry: { getPluginPermissions: () => [], getAllPluginDefinitions: () => [] },
+    pluginRegistry: { getPluginLifetime: () => undefined, getPluginPermissions: () => [], getAllPluginDefinitions: () => [] },
     normalizeLauncherSurfaceId: (surfaceId) => surfaceId === 'command-palette' ? 'editor-command-bar' : surfaceId,
     textResult: output.textResult,
     replaceActiveTextResult: output.replaceActiveTextResult,

@@ -31,6 +31,7 @@ const commands = [
   ['npm', ['run', 'test:launcher-plugin-contract']],
   ['npm', ['run', 'test:csv-entry']],
   ['npm', ['run', 'test:launcher-normalize-contribution']],
+  ['npm', ['run', 'test:launcher-plugin-lifetime']],
   ['npm', ['run', 'test:plugin-diff-boundary']],
   ['npm', ['run', 'test:intent-engine']],
   ['npm', ['run', 'test:intent-content-recommend']],

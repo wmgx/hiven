@@ -35,6 +35,7 @@ import {
   findUnknownSurfaces,
 } from './identity'
 import { createPluginLauncherApi, createPluginLauncherStorage } from './pluginApi'
+import { bindPluginLauncherApi } from './pluginLifetime'
 import { createPluginNetwork } from '../pluginNetwork'
 import { createPluginAi } from '../ai/runtime'
 import { createPluginShell } from '../pluginShell'
@@ -162,6 +163,7 @@ function resolvePluginSettingsItem(
     systemKey: `plugin-settings:${settingsSource}:${pluginId}`,
     kind: 'host',
     pluginId,
+    pluginLifetime: pluginRegistry.getPluginLifetime(pluginId, source),
     source: settingsSource,
     display: {
       title: withSettingsSuffix(baseTitle, 'Settings'),
@@ -271,6 +273,7 @@ export function collectStaticPluginItems(): LauncherItem[] {
         systemKey: getPluginSurfaceItemKey(settingsSource, pluginId, surface.id),
         kind: 'plugin',
         pluginId,
+        pluginLifetime: pluginRegistry.getPluginLifetime(pluginId, source),
         source: settingsSource,
         display: {
           title: surface.title,
@@ -311,6 +314,7 @@ type DynamicProviderEntry = {
   provider: LauncherDynamicItemProvider
   pluginId: string
   source: ContributionSource
+  lifetime: NonNullable<LauncherItem['pluginLifetime']>
 }
 
 function collectDynamicProviders(): DynamicProviderEntry[] {
@@ -318,7 +322,7 @@ function collectDynamicProviders(): DynamicProviderEntry[] {
   for (const { definition, pluginId, source } of pluginRegistry.getAllPluginDefinitions()) {
     const provider = (definition as PluginDefinition<unknown>).launcher?.dynamicItems
     // Later definitions (dev) replace production for the same plugin id.
-    if (provider) entries.set(pluginId, { provider, pluginId, source })
+    if (provider) entries.set(pluginId, { provider, pluginId, source, lifetime: pluginRegistry.getPluginLifetime(pluginId, source) })
   }
   return [...entries.values()]
 }
@@ -421,8 +425,8 @@ export async function collectDynamicItems(
     onPartial?.({ kind: 'plugin', pluginId, items: [] })
   }
   const results = await Promise.all(
-    providers.map(async ({ provider, pluginId, source }) => {
-      if (signal?.aborted) return [] as LauncherItem[]
+    providers.map(async ({ provider, pluginId, source, lifetime }) => {
+      if (signal?.aborted || !lifetime.active) return [] as LauncherItem[]
       const startedAt = launcherPerfNow()
       try {
         const settings = getSettings(pluginId, source)
@@ -437,7 +441,11 @@ export async function collectDynamicItems(
             source: settingsSource,
             pluginId,
             signal,
-            api: createPluginLauncherApi({ pluginId, source: settingsSource, requestedPermissions }),
+            api: bindPluginLauncherApi(
+              createPluginLauncherApi({ pluginId, source: settingsSource, requestedPermissions }),
+              lifetime,
+              () => translate(locale, 'palette', 'pluginActionUnavailable'),
+            ),
             storage: createPluginLauncherStorage({ pluginId, source: settingsSource, requestedPermissions }),
             network: createPluginNetwork(getPluginPermissionSnapshot(settingsSource, pluginId, requestedPermissions)),
             ai: createPluginAi(
@@ -450,7 +458,7 @@ export async function collectDynamicItems(
           })),
           DYNAMIC_PROVIDER_TIMEOUT_MS,
         )
-        if (signal?.aborted) return []
+        if (signal?.aborted || !lifetime.active) return []
         if (!Array.isArray(raw)) {
           onPartial?.({ kind: 'plugin', pluginId, items: [] })
           return []

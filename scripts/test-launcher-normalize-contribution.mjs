@@ -31,6 +31,7 @@ const normalize = loadModule('src/workspace/launcher/normalizeContribution.ts', 
     /import\s*\{[^}]*\}\s*from\s*'\.\/pluginSource'\s*;?\s*\n?/,
   ],
   globals: {
+    require: (id) => { assert.equal(id, '../pluginRegistry'); return { pluginRegistry: { getPluginLifetime: () => undefined } } },
     // Stub host helpers — unit under test is field-copy protocol only.
     sanitizeSurfaces: (surfaces) => surfaces,
     resolvePluginSettingsSource: (_pluginId, source) => (

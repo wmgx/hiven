@@ -51,6 +51,7 @@ const journalModule = {
 let captureCalls = 0
 let captureSelection = async () => 'foreground text'
 const controllerModule = loadModule('src/workspace/launcher/controller.ts', {
+  './pluginLifetime': loadModule('src/workspace/launcher/pluginLifetime.ts'),
   '../usageJournal': { appendUsageJournal: async () => {} },
   './output': output,
   './foregroundSelectionCapture': {

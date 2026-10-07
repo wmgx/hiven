@@ -239,6 +239,9 @@ export function useLauncherSession({
    */
   const [documentDynamicItems, documentInputIdentity, setDocumentDynamicItems, setDocumentDynamicItemsNextFrame] = useFrameBatchedLauncherItems()
   const controllerRef = useRef<LauncherController | null>(null)
+  // Registry notifications revoke an open flow synchronously, before React's
+  // next render/effect. Controller entry points also check the captured lifetime.
+  useEffect(() => pluginRegistry.subscribe(() => controllerRef.current?.invalidateUnavailablePlugin()), [])
   const pluginQueryRef = useRef('')
   const hostQueryRef = useRef('')
   const documentQueryRef = useRef('')

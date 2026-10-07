@@ -100,6 +100,7 @@ const snapshots = []
 const touchedArtifacts = []
 let nextId = 0
 const controllerModule = loadModule('src/workspace/launcher/controller.ts', {
+  './pluginLifetime': loadModule('src/workspace/launcher/pluginLifetime.ts'),
   '../usageJournal': { appendUsageJournal: async () => {} },
   './output': outputModule,
   '../../i18n': { translate },

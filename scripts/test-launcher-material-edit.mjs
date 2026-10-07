@@ -43,6 +43,7 @@ let serial = 0
 let inputReads = 0
 const forbidden = () => { inputReads++; throw new Error('Unexpected input acquisition or external delivery') }
 const { LauncherController } = load('src/workspace/launcher/controller.ts', {
+  './pluginLifetime': load('src/workspace/launcher/pluginLifetime.ts'),
   './output': output, '../../i18n': { translate },
   './foregroundSelectionCapture': { captureForegroundSelectionText: forbidden },
   '../usageJournal': { appendUsageJournal: forbidden },

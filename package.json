@@ -17,6 +17,7 @@
     "test:plugin-permission-least-privilege": "node scripts/test-plugin-permission-least-privilege.mjs",
     "test:plugin-permission-foreground": "node scripts/test-plugin-permission-foreground.mjs",
     "test:launcher-normalize-contribution": "node scripts/test-launcher-normalize-contribution.mjs",
+    "test:launcher-plugin-lifetime": "node scripts/test-launcher-plugin-lifetime-behavior.mjs",
     "test:plugin-diff-boundary": "node scripts/test-plugin-diff-boundary.mjs",
     "test:intent-engine": "node scripts/test-intent-engine.mjs",
     "test:learning-pairing": "node scripts/test-learning-pairing.mjs",

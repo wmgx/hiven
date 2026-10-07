@@ -583,6 +583,8 @@ export type LauncherItem = {
   /** Host-owned text supplied when the user selected this item from a text recommendation. */
   initialInputText?: string
   pluginId?: string
+  /** Host-owned registration lifetime. Captured before resolving plugin callbacks. */
+  pluginLifetime?: { readonly active: boolean }
   /** Product-level provider name, e.g. JSON Tools, not the raw plugin id. */
   productProvider?: string
   source?: 'builtin' | 'installed' | 'dev'

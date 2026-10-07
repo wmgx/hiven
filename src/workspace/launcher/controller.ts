@@ -57,6 +57,7 @@ import { extractSaveableParams } from '../experience/saveableParams'
 import { createMiningFingerprints } from '../experience/miningFingerprint'
 import { setLastSaveableRun } from '../savedActions/lastSaveableRun'
 import { touchSavedAction } from '../savedActions/store'
+import { bindPluginLauncherApi } from './pluginLifetime'
 
 // ─── Frames ──────────────────────────────────────────────────────────────────
 
@@ -207,6 +208,8 @@ export class LauncherController {
   private readonly experienceRunQueues = new WeakMap<CommittedRunContext, Promise<void>>()
   private state: LauncherControllerState
   private deps: LauncherControllerDeps
+  private activePluginLifetime?: LauncherItem['pluginLifetime']
+  private pluginUnavailable = false
   private flowGeneration = 0
   private prepareGeneration = 0
   private readonly choiceGenerations = new WeakMap<LauncherResultChoice, number>()
@@ -242,6 +245,9 @@ export class LauncherController {
       const previousOutput = previous.kind === 'result' ? previous.output : previous.kind === 'collect-input' ? previous.previewOutput : undefined
       if (output && output !== previousOutput) this.registerChoices(output)
     }
+    if (this.activePluginLifetime?.active === false) {
+      patch = { ...patch, error: this.unavailableMessage(), busy: false, deliveryIntent: null }
+    }
     this.state = { ...this.state, ...patch }
     this.deps.onChange(this.state)
   }
@@ -263,6 +269,32 @@ export class LauncherController {
     for (const choice of output.choices) this.choiceGenerations.set(choice, this.flowGeneration)
   }
 
+  private unavailableMessage(): string {
+    return translate(this.deps.locale as Locale, 'palette', 'pluginActionUnavailable')
+  }
+
+  /** Called synchronously by the session's registry subscription and every action gate. */
+  invalidateUnavailablePlugin(): boolean {
+    if (this.activePluginLifetime?.active !== false) return false
+    if (!this.pluginUnavailable) {
+      this.pluginUnavailable = true
+      this.prepareGeneration += 1
+      if (this.suggestDebounceTimer != null) {
+        clearTimeout(this.suggestDebounceTimer)
+        this.suggestDebounceTimer = null
+      }
+      this.invalidatePendingActions()
+    }
+    return true
+  }
+
+  /** Ordinary navigation/success never revokes a still-registered plugin's API. */
+  private apiFor(item: LauncherItem): PluginLauncherApi {
+    const api = this.deps.makeApi?.(item) ?? this.deps.api
+    const lifetime = item.pluginLifetime ?? this.activePluginLifetime
+    return bindPluginLauncherApi(api, lifetime, () => this.unavailableMessage())
+  }
+
   /** Reset to the base list frame (e.g. when the launcher opens). */
   reset(): void {
     if (this.suggestDebounceTimer != null) {
@@ -270,6 +302,8 @@ export class LauncherController {
       this.suggestDebounceTimer = null
     }
     this.fallbackSessionId = newExperienceId('session')
+    this.activePluginLifetime = undefined
+    this.pluginUnavailable = false
     this.invalidatePendingActions()
     this.prepareGeneration += 1
     this.setState({ frames: [{ kind: 'list' }], error: null, busy: false })
@@ -286,7 +320,7 @@ export class LauncherController {
       input: resolvedInputText !== undefined ? { text: resolvedInputText, source: inputSource } : undefined,
       get settings() { return getSettings() },
       locale: this.deps.locale as never,
-      api: this.deps.makeApi?.(item) ?? this.deps.api,
+      api: this.apiFor(item),
       storage: this.deps.getStorage?.(item) ?? emptyStorage,
       ai: this.deps.getAi?.(item) ?? emptyAi,
       t: this.deps.makeT(item),
@@ -303,7 +337,7 @@ export class LauncherController {
 
   /** Record a successfully committed selection + fire-and-forget journal row. */
   recordSuccessfulSelection(item: LauncherItem, options: SelectOptions = {}): void {
-    if (!this.shouldRecord(item, options)) return
+    if (item.pluginLifetime?.active === false || !this.shouldRecord(item, options)) return
     this.deps.recordSelection(this.deps.surfaceId, item)
     void appendUsageJournal({
       commandId: item.systemKey,
@@ -332,7 +366,7 @@ export class LauncherController {
     if (this.isExplicitTextPreview(item)) return 'prompt'
     const mode = item.inputPolicy?.mode
     if (!mode) return undefined
-    const api = this.deps.makeApi?.(item) ?? this.deps.api
+    const api = this.apiFor(item)
     if (mode === 'selection') return api.getSelectionText() ? 'selection' : undefined
     if (mode === 'all') return api.getActiveText() ? 'active-text' : undefined
     if (api.getSelectionText()) return 'selection'
@@ -399,7 +433,7 @@ export class LauncherController {
     if (this.isExplicitTextPreview(item)) return true
     if (this.deps.surfaceId !== 'global-launcher' || item.behavior.type !== 'perform' || !item.inputPolicy) return false
     const mode = item.inputPolicy?.mode ?? 'auto'
-    const api = this.deps.makeApi?.(item) ?? this.deps.api
+    const api = this.apiFor(item)
     const hasBoundSelection = (mode === 'auto' || mode === 'selection') && Boolean(api.getSelectionText())
     return !hasBoundSelection
   }
@@ -421,17 +455,18 @@ export class LauncherController {
 
   /** Explicitly import the foreground selection into an empty input step. */
   async captureInput(): Promise<void> {
+    if (this.invalidateUnavailablePlugin()) return
     const top = this.topFrame()
     if (top.kind !== 'collect-input' || top.inputText || this.state.busy || !this.isForegroundCaptureEligible(top.item)) return
-    const api = this.deps.makeApi?.(top.item) ?? this.deps.api
+    const api = this.apiFor(top.item)
     const generation = this.flowGeneration
     this.setState({ busy: true, error: null })
     try {
       const text = await captureForegroundSelectionText(api, this.deps.locale as Locale, { restoreLauncher: true })
       // Navigation or typing while capture is pending must not overwrite a newer draft.
-      if (this.topFrame() === top && text !== undefined) this.setInputText(text)
+      if (generation === this.flowGeneration && !this.invalidateUnavailablePlugin() && this.topFrame() === top && text !== undefined) this.setInputText(text)
     } catch (error) {
-      if (this.topFrame() === top) this.setState({ error: error instanceof Error ? error.message : String(error) })
+      if (generation === this.flowGeneration && !this.invalidateUnavailablePlugin() && this.topFrame() === top) this.setState({ error: error instanceof Error ? error.message : String(error) })
     } finally {
       if (generation === this.flowGeneration) this.setState({ busy: false })
     }
@@ -473,7 +508,14 @@ export class LauncherController {
    * Usage is recorded only when the resulting commit succeeds.
    */
   async selectItem(item: LauncherItem, options: SelectOptions = {}): Promise<void> {
+    if (item.pluginLifetime?.active === false) {
+      this.invalidateUnavailablePlugin()
+      this.setState({ error: this.unavailableMessage() })
+      return
+    }
     if (this.state.busy && this.pendingItemKey === item.systemKey) return
+    this.activePluginLifetime = item.pluginLifetime
+    this.pluginUnavailable = false
     this.invalidatePendingActions()
     const prepareGeneration = ++this.prepareGeneration
     // A first-level selection starts a new command, never a nested draft session.
@@ -482,10 +524,14 @@ export class LauncherController {
       this.setState({ busy: true })
       try {
         const prepared = await item.prepare(this.buildExecutionContext(item))
-        if (prepareGeneration !== this.prepareGeneration) return
-        item = prepared ?? item
+        if (prepareGeneration !== this.prepareGeneration || this.invalidateUnavailablePlugin()) return
+        if (prepared) {
+          item = { ...prepared, pluginLifetime: item.pluginLifetime ?? prepared.pluginLifetime }
+          this.activePluginLifetime = item.pluginLifetime
+          if (this.invalidateUnavailablePlugin()) return
+        }
       } catch (error) {
-        if (prepareGeneration === this.prepareGeneration) {
+        if (prepareGeneration === this.prepareGeneration && !this.invalidateUnavailablePlugin()) {
           this.setState({ busy: false, error: error instanceof Error ? error.message : String(error) })
         }
         return
@@ -667,6 +713,7 @@ export class LauncherController {
   }
 
   async commitCurrentParam(value: unknown): Promise<void> {
+    if (this.invalidateUnavailablePlugin()) return
     const top = this.topFrame()
     if (top.kind !== 'param-input') return
     if (this.state.busy) return
@@ -706,6 +753,7 @@ export class LauncherController {
 
   /** Submit the active parameter input frame. */
   async submitParams(): Promise<void> {
+    if (this.invalidateUnavailablePlugin()) return
     const top = this.topFrame()
     if (top.kind !== 'param-input' || !top.item.executeWithParams) return
     if (this.state.busy) return
@@ -822,6 +870,7 @@ export class LauncherController {
 
   /** Load / refresh collect-input suggestions from item.suggest. */
   async refreshSuggestions(): Promise<void> {
+    if (this.invalidateUnavailablePlugin()) return
     const top = this.topFrame()
     if (this.activeDelivery || top.kind !== 'collect-input' || !top.item.suggest) return
 
@@ -846,7 +895,7 @@ export class LauncherController {
           inputText,
           get settings() { return getSettings() },
           locale: this.deps.locale as never,
-          api: this.deps.makeApi?.(item) ?? this.deps.api,
+          api: this.apiFor(item),
           storage: this.deps.getStorage?.(item) ?? emptyStorage,
           network: this.deps.getNetwork?.(item) ?? emptyNetwork,
           shell: this.deps.getShell?.(item) ?? emptyShell,
@@ -857,13 +906,13 @@ export class LauncherController {
         }),
       )
     } catch {
-      if (runId !== this.suggestRunId) return
+      if (runId !== this.suggestRunId || this.invalidateUnavailablePlugin()) return
       this.clearCollectInputPreview(top)
       if (shouldToggleBusy) this.setState({ busy: false })
       return
     }
 
-    if (runId !== this.suggestRunId) return
+    if (runId !== this.suggestRunId || this.invalidateUnavailablePlugin()) return
     const latestTop = this.topFrame()
     if (
       latestTop.kind !== 'collect-input' ||
@@ -892,6 +941,7 @@ export class LauncherController {
   }
 
   async previewInput(): Promise<void> {
+    if (this.invalidateUnavailablePlugin()) return
     const top = this.topFrame()
     if (this.activeDelivery || top.kind !== 'collect-input' || !this.shouldPreviewInput(top)) return
     // Suggest path owns empty/partial lists for collect-input items with suggest.
@@ -921,12 +971,12 @@ export class LauncherController {
           : item.execute(this.buildExecutionContext(item, inputText)),
       )
     } catch (error) {
-      if (runId !== this.previewRunId) return
+      if (runId !== this.previewRunId || this.invalidateUnavailablePlugin()) return
       this.setState({ error: error instanceof Error ? error.message : String(error) })
       return
     }
 
-    if (runId !== this.previewRunId) return
+    if (runId !== this.previewRunId || this.invalidateUnavailablePlugin()) return
     const latestTop = this.topFrame()
     if (latestTop.kind !== 'collect-input' || latestTop.item.systemKey !== item.systemKey || latestTop.inputText !== inputText) {
       return
@@ -978,6 +1028,7 @@ export class LauncherController {
    * ensure a single Enter owner (no double submit, IME-safe).
    */
   async submitInput(expectedFrame?: CollectInputFrame): Promise<void> {
+    if (this.invalidateUnavailablePlugin()) return
     const top = this.topFrame()
     if (top.kind !== 'collect-input') return
     if (expectedFrame && top !== expectedFrame) return
@@ -1055,7 +1106,7 @@ export class LauncherController {
   }
 
   private canActivateChoice(choice: LauncherResultChoice): boolean {
-    if (this.state.busy || this.activeDelivery) return false
+    if (this.invalidateUnavailablePlugin() || this.state.busy || this.activeDelivery) return false
     if (this.choiceGenerations.get(choice) !== this.flowGeneration) return false
     const top = this.topFrame()
     if (top.kind === 'result') return top.output.choices.includes(choice)
@@ -1077,7 +1128,8 @@ export class LauncherController {
     const pendingUsage = top.kind === 'result' ? top.pendingUsage
       : top.kind === 'collect-input' ? { item: top.item, recordUsage: top.recordUsage } : undefined
     const generation = this.flowGeneration
-    await this.runChoiceAction(() => paste(text, () => generation === this.flowGeneration), choice.title, { via: 'preview-paste' },
+    const pluginLifetime = this.activePluginLifetime
+    await this.runChoiceAction(() => paste(text, () => pluginLifetime?.active !== false && generation === this.flowGeneration), choice.title, { via: 'preview-paste' },
       undefined, undefined, pendingUsage, { intent: 'paste-to-foreground-app' })
   }
 
@@ -1119,6 +1171,7 @@ export class LauncherController {
 
   /** Submit a multi-select result frame. */
   async submitResultSelection(choices: LauncherResultChoice[]): Promise<void> {
+    if (this.invalidateUnavailablePlugin()) return
     const top = this.topFrame()
     if (this.state.busy || top.kind !== 'result' || top.output.selection?.type !== 'multi' || top.retryOnly) return
     if (choices.some((choice) => !this.canActivateChoice(choice))) return
@@ -1174,6 +1227,10 @@ export class LauncherController {
       return true
     }
 
+    if (this.state.frames.length === 2) {
+      this.activePluginLifetime = undefined
+      this.pluginUnavailable = false
+    }
     this.setState({ frames: this.state.frames.slice(0, -1), error: null })
     return true
   }
@@ -1189,6 +1246,8 @@ export class LauncherController {
     this.prepareGeneration += 1
     if (this.state.frames.length <= 1) return false
     const base = this.state.frames[0]
+    this.activePluginLifetime = undefined
+    this.pluginUnavailable = false
     if (!base || base.kind !== 'list') {
       this.setState({ frames: this.state.frames.slice(0, 1), error: null })
       return true
@@ -1347,6 +1406,7 @@ export class LauncherController {
     execute?: () => Promise<LauncherExecuteResult>
     resolvedChoice?: LauncherResultChoice
   }): Promise<void> {
+    if (this.invalidateUnavailablePlugin()) return
     const { item, via, sourceTitle, execute, resolvedChoice } = input
     const flowGeneration = this.flowGeneration
     const committedRun = this.committedRunFor(item, via)
@@ -1368,7 +1428,7 @@ export class LauncherController {
           contractFingerprint: item.contractFingerprint,
           actionPolicy: item.actionPolicy,
         }
-        const api = this.deps.makeApi?.(item) ?? this.deps.api
+        const api = this.apiFor(item)
         const inputText = input.inputText ?? (
           input.inputBinding === 'selection'
             ? api.getSelectionText()
@@ -1401,9 +1461,9 @@ export class LauncherController {
     let result: LauncherExecuteResult
     try {
       result = await execute()
-      if (flowGeneration !== this.flowGeneration) return
+      if (flowGeneration !== this.flowGeneration || this.invalidateUnavailablePlugin()) return
     } catch (error) {
-      if (flowGeneration !== this.flowGeneration) return
+      if (flowGeneration !== this.flowGeneration || this.invalidateUnavailablePlugin()) return
       const failure = classifyExperienceError(error, 'provider-failed')
       if (committedRun) this.recordRunFinished(committedRun, failure.status, failure.errorType)
       trackLatencyFrom(TelemetryEvents.launcherItemExecute, startedAt, {
@@ -1445,7 +1505,8 @@ export class LauncherController {
     pendingUsage?: ResultFrame['pendingUsage'],
     options: { retryFrame?: ResultFrame; finishRun?: boolean; intent?: OutputIntent } = {},
   ): Promise<void> {
-    if (this.activeDelivery) return
+    if (this.invalidateUnavailablePlugin() || this.activeDelivery) return
+    const pluginLifetime = this.activePluginLifetime
     const generation = this.flowGeneration
     const delivery = Symbol('output-delivery')
     this.activeDelivery = delivery
@@ -1453,18 +1514,26 @@ export class LauncherController {
     // A pending preview/suggestion refresh must not clear delivery busy/error state.
     this.previewRunId += 1
     this.suggestRunId += 1
-    const isCurrent = () => generation === this.flowGeneration && this.activeDelivery === delivery
+    const isCurrent = () => pluginLifetime?.active !== false && generation === this.flowGeneration && this.activeDelivery === delivery
     this.setState({ busy: true, error: null, deliveryIntent: options.intent ?? (actionNode && getHostOutputIntent(actionNode)) ?? 'action' })
     const startedAt = telemetryNow()
     let result: Awaited<ReturnType<LauncherResultChoice['primaryAction']>>
     try {
       result = await run()
     } catch (error) {
+      if (pluginLifetime?.active === false) {
+        this.invalidateUnavailablePlugin()
+        return
+      }
       const failure = classifyExperienceError(error, 'output-failed')
       if (committedRun && options.finishRun) this.recordRunFinished(committedRun, failure.status, failure.errorType)
       trackLatencyFrom(TelemetryEvents.launcherChoiceLatency, startedAt, { failed: true, ...extra })
       if (!isCurrent()) return
       this.failDelivery(error instanceof Error ? error.message : String(error), options.retryFrame)
+      return
+    }
+    if (pluginLifetime?.active === false) {
+      this.invalidateUnavailablePlugin()
       return
     }
     const launcherResult = result && typeof result === 'object' && 'ok' in result
@@ -1517,6 +1586,7 @@ export class LauncherController {
     pendingUsage?: ResultFrame['pendingUsage'],
     appliedOutputIntent?: OutputIntent,
   ): Promise<void> {
+    if (this.invalidateUnavailablePlugin()) return
     if (!result.ok) {
       // Failure: keep launcher open, show error.
       this.setState({ busy: false, error: result.message })

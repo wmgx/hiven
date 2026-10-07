@@ -231,6 +231,7 @@ const baseCtx = (over = {}) => ({
 // already applies to staticPriority.
 {
   const normalize = loadTs('src/workspace/launcher/normalizeContribution.ts', [
+    [/import\s*\{[^}]*\}\s*from\s*'\.\.\/pluginRegistry'\s*;?\s*\n?/, 'const pluginRegistry = { getPluginLifetime: () => undefined };\n'],
     [/import\s+type\s*\{[\s\S]*?\}\s*from\s*'\.\/types'\s*;?\s*\n?/, ''],
     [/import\s+type\s*\{[^}]*\}\s*from\s*'\.\.\/pluginTypes'\s*;?\s*\n?/, ''],
     [/import\s*\{[^}]*\}\s*from\s*'\.\/identity'\s*;?\s*\n?/, 'const sanitizeSurfaces=(s)=>s;\n'],
