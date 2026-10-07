@@ -13,6 +13,7 @@
 import { spawnSync } from 'node:child_process'
 
 const commands = [
+  ['npm', ['run', 'test:lockfile-registry']],
   ['npm', ['run', 'check:typecheck']],
   ['npm', ['run', 'check:architecture']],
   ['npm', ['run', 'check:reachability']],
