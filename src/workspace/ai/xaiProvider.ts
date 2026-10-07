@@ -206,6 +206,8 @@ export const xaiGrokProvider: AiProviderAdapter = {
       kind: 'xai-grok-subscription',
       name: 'xAI Grok',
       status: description.status,
+      // The native bridge exposes returned models, but not catalogue pagination metadata.
+      modelCatalog: description.models.length ? 'partial' as const : 'fallback' as const,
       capabilities: [...new Set(agents.flatMap((agent) => agent.capabilities))],
       agents,
       subscription: description.status === 'ready' ? {
