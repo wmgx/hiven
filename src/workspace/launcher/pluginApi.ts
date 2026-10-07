@@ -26,6 +26,7 @@ import { readQuickEditorPaneSnapshot } from '../quickEditor/quickEditorPaneSnaps
 import type { PluginPermission } from '../pluginTypes'
 import { readNativeClipboardText } from '../nativeClipboard'
 import { createPluginPaste } from '../pluginPaste'
+import { rethrowAppLaunchError } from '../appLauncher/appLaunchError'
 import { writeClipboardText } from '../pluginClipboard'
 import type { PluginSettingsSource } from '../pluginSettingsStore'
 import type { DiscoveredApp, PluginAppsApi, PluginLauncherApi } from './types'
@@ -154,7 +155,11 @@ export function createPluginAppsApi(options: PluginLauncherApiOptions = {}): Plu
       const snapshot = permissions()
       if (snapshot) requirePluginPermissions(snapshot, ['app.launch'])
       const { invoke } = await import('@tauri-apps/api/core')
-      await invoke('launch_installed_app', { appId })
+      try {
+        await invoke('launch_installed_app', { appId })
+      } catch (error) {
+        await rethrowAppLaunchError(error)
+      }
     },
   }
 }

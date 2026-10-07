@@ -26,6 +26,8 @@ pub mod desktop_bridge;
 pub mod desktop_capture;
 pub mod hotkeys;
 pub mod keyboard_observation;
+#[cfg(target_os = "linux")]
+mod linux_app_launch;
 
 const LAUNCHER_COMPACT_WIDTH: f64 = 660.0;
 const LAUNCHER_COMPACT_HEIGHT: f64 = 318.0;
@@ -3068,16 +3070,6 @@ fn system_open_app_target(target: &str) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-#[cfg(target_os = "linux")]
-fn system_open_app_target(target: &str) -> Result<(), String> {
-    std::process::Command::new("gtk-launch")
-        .arg(target)
-        .spawn()
-        .or_else(|_| std::process::Command::new("xdg-open").arg(target).spawn())
-        .map(|_| ())
-        .map_err(|e| e.to_string())
-}
-
 #[cfg(target_os = "macos")]
 fn discover_platform_apps() -> Vec<InstalledAppEntry> {
     let mut roots = vec![
@@ -3330,12 +3322,11 @@ fn discover_installed_apps() -> Result<Vec<DiscoveredApp>, String> {
     Ok(apps.iter().map(installed_app_from_entry).collect())
 }
 
-#[tauri::command]
-fn launch_installed_app(app_id: String) -> Result<(), String> {
+fn installed_app_target(app_id: &str) -> Result<String, String> {
     let cached_target = installed_app_targets()
         .lock()
         .ok()
-        .and_then(|targets| targets.get(&app_id).cloned());
+        .and_then(|targets| targets.get(app_id).cloned());
     let target = if let Some(target) = cached_target {
         target
     } else {
@@ -3344,7 +3335,12 @@ fn launch_installed_app(app_id: String) -> Result<(), String> {
             .iter()
             .find(|app| app.app_id == app_id)
             .map(|app| app.launch_target.clone())
-            .ok_or_else(|| "Application is no longer available".to_string())?;
+            .ok_or_else(|| {
+                #[cfg(target_os = "linux")]
+                return "APP_LAUNCH_UNAVAILABLE".to_string();
+                #[cfg(not(target_os = "linux"))]
+                return "Application is no longer available".to_string();
+            })?;
         if let Ok(mut targets) = installed_app_targets().lock() {
             for app in &apps {
                 targets.insert(app.app_id.clone(), app.launch_target.clone());
@@ -3352,14 +3348,34 @@ fn launch_installed_app(app_id: String) -> Result<(), String> {
         }
         target
     };
+    Ok(target)
+}
+
+#[cfg(not(target_os = "linux"))]
+#[tauri::command]
+fn launch_installed_app(app_id: String) -> Result<(), String> {
+    let target = installed_app_target(&app_id)?;
     system_open_app_target(&target)?;
     // Same as focus_desktop_window: hide_launcher must not restore the prior app.
     clear_previous_foreground_app();
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
+#[tauri::command]
+async fn launch_installed_app(app_id: String) -> Result<(), String> {
+    // Discovery and process creation/waiting must not block the UI or async runtime.
+    let target = tokio::task::spawn_blocking(move || installed_app_target(&app_id))
+        .await
+        .map_err(|_| "APP_LAUNCH_START_FAILED".to_string())??;
+    linux_app_launch::open(&target).await?;
+    clear_previous_foreground_app();
+    Ok(())
+}
+
 /// Tinycast-style per-app hotkey: if the app is already frontmost, hide it;
 /// otherwise launch/activate. Returns `"hidden" | "launched"`.
+#[cfg(not(target_os = "linux"))]
 #[tauri::command]
 fn toggle_installed_app(app_id: String) -> Result<String, String> {
     #[cfg(target_os = "macos")]
@@ -3377,6 +3393,13 @@ fn toggle_installed_app(app_id: String) -> Result<String, String> {
         }
     }
     launch_installed_app(app_id)?;
+    Ok("launched".into())
+}
+
+#[cfg(target_os = "linux")]
+#[tauri::command]
+async fn toggle_installed_app(app_id: String) -> Result<String, String> {
+    launch_installed_app(app_id).await?;
     Ok("launched".into())
 }
 

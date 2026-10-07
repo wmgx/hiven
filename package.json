@@ -67,6 +67,7 @@
     "test:web-open-browser-template-learning": "node scripts/test-web-open-browser-template-learning.mjs",
     "test:app-launcher-contract": "node scripts/test-app-launcher-contract.mjs",
     "test:app-launcher-cache-normalization": "node scripts/test-app-launcher-cache-normalization.mjs",
+    "test:app-launch-feedback": "node scripts/test-app-launch-feedback.mjs",
     "test:desktop-window-process-contract": "node scripts/test-desktop-window-process-contract.mjs",
     "test:quick-editor-host-surface": "node scripts/test-quick-editor-host-surface.mjs",
     "test:quick-editor-hotkey": "node scripts/test-quick-editor-hotkey.mjs",

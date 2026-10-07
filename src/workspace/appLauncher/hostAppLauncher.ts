@@ -4,6 +4,7 @@ import type { DiscoveredApp, LauncherItem, LauncherSurfaceId } from '../launcher
 import type { AppWorkObject } from '../../workflow/workObject'
 import { logLauncherPerfDuration, launcherPerfNow } from '../launcher/perf'
 import { normalizeHostAppEntries } from './hostAppIndex'
+import { rethrowAppLaunchError } from './appLaunchError'
 
 // v2: drop stale caches that used path-hash appIds (binary Info.plist parse failures)
 // and avoid matching internal ids/paths in search.
@@ -88,7 +89,11 @@ async function discoverInstalledApps(): Promise<DiscoveredApp[]> {
 async function launchInstalledApp(appId: string): Promise<void> {
   if (!isTauriRuntime()) throw new Error('Application launch is only available in the desktop runtime.')
   const { invoke } = await import('@tauri-apps/api/core')
-  await invoke('launch_installed_app', { appId })
+  try {
+    await invoke('launch_installed_app', { appId })
+  } catch (error) {
+    await rethrowAppLaunchError(error)
+  }
 }
 
 export async function launchHostAppObject(appId: string): Promise<void> {
