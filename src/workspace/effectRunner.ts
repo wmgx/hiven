@@ -301,12 +301,14 @@ function applyAppEffect(effect: AppEffect) {
   }
 }
 
-export async function openExternalUrl(url: string): Promise<void> {
+export async function openExternalUrl(url: string, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return
   const target = url.trim()
   if (!target) return
 
   // Host-layer routing: plugins register custom schemes; do not expand Tauri shell scope.
   const { routeHostOpenUrl, canHostOpenUrl, extractUrlScheme } = await import('./urlSchemeRegistry')
+  if (signal?.aborted) return
   const route = routeHostOpenUrl(target)
   const scheme = extractUrlScheme(target)
   console.info('[hiven:openExternalUrl] route', { url: target, scheme, route })
@@ -322,10 +324,12 @@ export async function openExternalUrl(url: string): Promise<void> {
     try {
       console.info('[hiven:openExternalUrl] try shell.open', { url: target })
       const { open } = await import('@tauri-apps/plugin-shell')
+      if (signal?.aborted) return
       await open(target)
       console.info('[hiven:openExternalUrl] shell.open ok', { url: target })
       return
     } catch (error) {
+      if (signal?.aborted) return
       console.warn('[hiven:openExternalUrl] shell.open failed, try open_system_url', {
         url: target,
         message: error instanceof Error ? error.message : String(error),
@@ -341,10 +345,12 @@ export async function openExternalUrl(url: string): Promise<void> {
     try {
       console.info('[hiven:openExternalUrl] try open_system_url', { url: target })
       const { invoke } = await import('@tauri-apps/api/core')
+      if (signal?.aborted) return
       await invoke('open_system_url', { url: target })
       console.info('[hiven:openExternalUrl] open_system_url ok', { url: target })
       return
     } catch (error) {
+      if (signal?.aborted) return
       console.warn('[hiven:openExternalUrl] open_system_url failed', {
         url: target,
         message: error instanceof Error ? error.message : String(error),
@@ -355,6 +361,7 @@ export async function openExternalUrl(url: string): Promise<void> {
 
   // Non-Tauri / last resort (custom schemes usually no-op in webview).
   console.warn('[hiven:openExternalUrl] falling back to window.open', { url: target })
+  if (signal?.aborted) return
   window.open(target, '_blank')
 }
 
