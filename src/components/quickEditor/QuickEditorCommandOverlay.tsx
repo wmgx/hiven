@@ -12,7 +12,6 @@ import { executeGlobalLauncherDomainItem } from '../launcher/GlobalLauncherSelec
 import { isQuickEditorDetachedWindow } from '../../workspace/windowManager/quickEditorWindow'
 import { quickEditorImperative } from './quickEditorImperative'
 import { useT } from '../../i18n'
-import type { ClipboardObjectBlockState } from '../../launcher/clipboard/useClipboardObjectBlock'
 
 const MAX_OVERLAY_ITEMS = 12
 
@@ -64,17 +63,6 @@ export function QuickEditorCommandOverlay() {
     controller: controllerRef.current,
     activeResultFrame: isResultFrame ? activeResultFrame : null,
   })
-
-  const emptyClipboardBlock = useMemo<ClipboardObjectBlockState>(() => ({
-    mode: 'search-only',
-    block: null,
-    isExiting: false,
-    hint: null,
-    removeBlock: () => {},
-    selectBlockForDelete: () => {},
-    handleBackspace: () => false,
-    attachHintAsBlock: () => {},
-  }), [])
 
   const visibleFiltered = useMemo(() => buildGlobalLauncherItems({
     rankedLauncherItems: rankedItems.slice(0, MAX_OVERLAY_ITEMS),
@@ -344,7 +332,6 @@ export function QuickEditorCommandOverlay() {
         onSearchSelectItem={(item) => selectMixedItem(item)}
         onSearchHoverIndex={handleSearchHoverIndex}
         onSearchMouseMove={handleSearchMouseMove}
-        clipboardBlock={emptyClipboardBlock}
       />
     </div>
   )
