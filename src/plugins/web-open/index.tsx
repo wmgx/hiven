@@ -21,6 +21,7 @@ import {
   type WebQuickOpenEntry,
   type WebQuickOpenSettings,
 } from './settings/model'
+import { isAutoLearnedEntry } from './learnedRules'
 import { FaviconCacheModal } from './settings/FaviconCacheModal'
 import {
   extractDomain,
@@ -347,10 +348,6 @@ async function buildDynamicLauncherItems(ctx: LauncherDynamicContext): Promise<L
   return results
 }
 
-function isAutoLearnedEntry(entry: Pick<WebQuickOpenEntry, 'tags' | 'learnedFrom'>): boolean {
-  return Boolean(entry.learnedFrom) || Boolean(entry.tags?.includes(AUTO_CREATED_TAG))
-}
-
 function migrateWebQuickOpenSettings(stored: unknown): WebQuickOpenSettings {
   const value = stored && typeof stored === 'object' && !Array.isArray(stored)
     ? stored as Partial<WebQuickOpenSettings>
@@ -359,7 +356,7 @@ function migrateWebQuickOpenSettings(stored: unknown): WebQuickOpenSettings {
   const migrated: WebQuickOpenSettings = {
     enabled: typeof value.enabled === 'boolean' ? value.enabled : DEFAULT_WEB_QUICK_OPEN_SETTINGS.enabled,
     entries: entries
-      .map((entry, index) => {
+      .map((entry, index): WebQuickOpenEntry => {
         const source = entry && typeof entry === 'object' && !Array.isArray(entry)
           ? entry as Partial<WebQuickOpenSettings['entries'][number]>
           : {}
@@ -376,8 +373,8 @@ function migrateWebQuickOpenSettings(stored: unknown): WebQuickOpenSettings {
           maxQueryHistory: clampMaxQueryHistory(
             typeof source.maxQueryHistory === 'number' ? source.maxQueryHistory : DEFAULT_MAX_QUERY_HISTORY,
           ),
-          // Preserved through migration: dropping it would let the learner claim
-          // the same cluster again on the next pass, duplicating the rule.
+          // Preserve legacy provenance until the cleanup filter below can
+          // distinguish automatically learned rules from manual entries.
           learnedFrom: typeof source.learnedFrom === 'string' ? source.learnedFrom : undefined,
           tags: Array.isArray(source.tags) ? source.tags.map(String).filter(Boolean) : undefined,
         }
