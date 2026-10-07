@@ -2,6 +2,7 @@
   "base64.encode.title": "Base64 编码",
   "base64.encode.description": "将文本进行 Base64 编码",
   "base64.decode.title": "Base64 解码",
+  "route.base64DecodeWorkbench": "Base64 解码工作台",
   "base64.decode.description": "将 Base64 文本解码为原始文本",
   "url.encode.title": "URL 编码",
   "url.encode.description": "对文本进行 URL 编码（encodeURIComponent）",
