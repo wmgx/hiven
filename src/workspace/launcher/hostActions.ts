@@ -17,6 +17,7 @@ import { getLastSaveableRun } from '../savedActions/lastSaveableRun'
 import { createSavedAction, deleteSavedAction, listSavedActions } from '../savedActions/store'
 import { recordSavedActionEvent } from '../savedActions/events'
 import { isGlobalLauncherSavedActionOutput } from '../savedActions/compatibility'
+import { describeSavedAction } from '../savedActions/display'
 import { translate } from '../../i18n'
 
 type SystemPowerAction = 'restart' | 'shutdown' | 'lock-screen'
@@ -285,7 +286,12 @@ export function createSaveLastRunItem(options: {
   return saveLastItem
 }
 
-export function getHostSavedActionItems(): LauncherItem[] {
+export function getHostSavedActionItems(resolveBaseItems: () => LauncherItem[] = () => []): LauncherItem[] {
+  const describe = (artifact: ReturnType<typeof listSavedActions>[number], baseItems = resolveBaseItems()) => {
+    const candidates = baseItems.filter((item) => item.systemKey === artifact.baseActionKey)
+    const { subtitle, subtitleI18n } = describeSavedAction(artifact, candidates.length === 1 ? candidates[0] : null, undefined, candidates.length > 1)
+    return { subtitle, subtitleI18n }
+  }
   return [createSaveLastRunItem(),
     {
       systemKey: 'host:saved-action:delete',
@@ -311,12 +317,14 @@ export function getHostSavedActionItems(): LauncherItem[] {
       metadataInput: true,
       suggest: async (ctx) => {
         const query = ctx.inputText.trim().toLocaleLowerCase()
+        const baseItems = resolveBaseItems()
         return {
           choices: listSavedActions()
             .filter((artifact) => !query || [artifact.name, ...artifact.aliases].some((value) => value.toLocaleLowerCase().includes(query)))
             .map((artifact) => ({
               id: `saved-action-delete-${artifact.id}`,
               title: artifact.name,
+              ...describe(artifact, baseItems),
               primaryAction: async () => ({
                 ok: true as const,
                 output: {
@@ -325,6 +333,7 @@ export function getHostSavedActionItems(): LauncherItem[] {
                       id: `saved-action-delete-confirm-${artifact.id}`,
                       title: `Confirm deleting “${artifact.name}”`,
                       titleI18n: { zh: `确认删除“${artifact.name}”` },
+                      ...describe(artifact),
                       tone: 'danger' as const,
                       primaryAction: async () => {
                         try {

@@ -522,7 +522,7 @@ function resolveDynamicProviderItems(
 // ─── Combined candidate collection ───────────────────────────────────────────
 
 /** All sources, before host/capability filtering: collisions must remain visible. */
-function collectBaseCandidates(): LauncherItem[] {
+export function collectBaseCandidates(): LauncherItem[] {
   return [...getHostLauncherItems(), ...collectStaticPluginItems()]
 }
 

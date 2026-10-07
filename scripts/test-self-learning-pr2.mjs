@@ -3,10 +3,11 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import ts from 'typescript'
+import { pinyin } from 'pinyin-pro'
 import { extractSaveableParams } from '../src/workspace/experience/saveableParams.ts'
 import { CONTENT_SOURCE_STORES } from '../src/workspace/contentBoundary.ts'
 import { getLastSaveableRun, setLastSaveableRun } from '../src/workspace/savedActions/lastSaveableRun.ts'
-import { createSavedAction, deleteSavedAction, listSavedActions } from '../src/workspace/savedActions/store.ts'
+import { createSavedAction, deleteSavedAction, listSavedActions, setSavedActionDisabledReason } from '../src/workspace/savedActions/store.ts'
 import {
   isGlobalLauncherSavedActionOutput,
   savedActionDisabledReason,
@@ -232,9 +233,15 @@ const replayBase = {
     })
   },
 }
+const savedDisplayModule = loadModule('src/workspace/savedActions/display.ts', {
+  '../../i18n': { translate },
+  '../launcher/display': loadModule('src/workspace/launcher/display.ts'),
+  './compatibility': { isGlobalLauncherSavedActionOutput, savedActionDisabledReason },
+})
 const providerModule = loadModule('src/workspace/savedActions/provider.ts', {
   '../launcher/output': outputModule,
   './compatibility': { isGlobalLauncherSavedActionOutput, savedActionDisabledReason },
+  './display': savedDisplayModule,
 })
 const replay = providerModule.projectSavedAction(artifact, replayBase)
 assert.equal(replay.systemKey, `host:saved-action:${artifact.id}`)
@@ -303,6 +310,7 @@ const hostActionsModule = loadModule('src/workspace/launcher/hostActions.ts', {
   },
   '../savedActions/events': { recordSavedActionEvent: (eventType, saved) => artifactEvents.push([eventType, saved.id]) },
   '../savedActions/compatibility': { isGlobalLauncherSavedActionOutput },
+  '../savedActions/display': savedDisplayModule,
 })
 const savedActionCommands = hostActionsModule.getHostSavedActionItems()
 const saveCommand = savedActionCommands.find((entry) => entry.systemKey === 'host:saved-action:save-last')
@@ -339,5 +347,184 @@ const deleteSuggestions = await deleteCommand.suggest({ inputText: '' })
 const deleteConfirmation = await deleteSuggestions.choices[0].primaryAction()
 await deleteConfirmation.output.choices[0].primaryAction()
 assert.deepEqual(artifactEvents.at(-1), ['artifact.deleted', 'artifact_command'])
+
+// Presentation uses the real store, compatibility, locale, provider, registry,
+// host registration and ranking logic. Only unrelated services are replaced;
+// storage is the synthetic Map above and no command or native API is invoked.
+localValues.clear()
+const i18n = loadModule('src/i18n/registry.ts')
+i18n.registerMessages('palette', loadModule('src/i18n/locales/palette.ts').default)
+const launcherDisplay = loadModule('src/workspace/launcher/display.ts')
+const localizedSavedDisplay = loadModule('src/workspace/savedActions/display.ts', {
+  '../../i18n': i18n,
+  '../launcher/display': launcherDisplay,
+  './compatibility': { isGlobalLauncherSavedActionOutput, savedActionDisabledReason },
+})
+const realSavedStore = { createSavedAction, deleteSavedAction, listSavedActions, setSavedActionDisabledReason }
+const localizedProvider = loadModule('src/workspace/savedActions/provider.ts', {
+  '../launcher/output': outputModule,
+  './compatibility': { isGlobalLauncherSavedActionOutput, savedActionDisabledReason },
+  './display': localizedSavedDisplay,
+  './store': realSavedStore,
+})
+const localizedHostActions = loadModule('src/workspace/launcher/hostActions.ts', {
+  '../../i18n': i18n,
+  '../savedActions/store': realSavedStore,
+  '../savedActions/compatibility': { isGlobalLauncherSavedActionOutput },
+  '../savedActions/display': localizedSavedDisplay,
+})
+const launcherTypes = loadModule('src/workspace/launcher/types.ts')
+const actualRegistry = loadModule('src/workspace/launcher/registry.ts', {
+  '../../i18n': i18n,
+  '../pluginRegistry': { pluginRegistry: { getAllPluginDefinitions: () => [] } },
+  './types': launcherTypes,
+  './pluginApi': { createPluginLauncherApi: () => api },
+  '../savedActions/provider': localizedProvider,
+})
+let commandExecutions = 0
+const formatBase = {
+  systemKey: 'host:test-format-json', kind: 'host',
+  display: { title: 'Format JSON', titleI18n: { zh: '格式化 JSON' } },
+  behavior: { type: 'perform' },
+  params: [
+    { key: 'indent', label: 'Indent', labelI18n: { zh: '缩进' }, type: 'number', default: 2, saveable: true },
+    { key: 'sortKeys', label: 'Sort keys', labelI18n: { zh: '排序键' }, type: 'boolean', default: false, saveable: true },
+  ],
+  contractFingerprint: 'v1:1111111111111111', actionPolicy: { effect: 'pure', learnable: true },
+  execute: () => { commandExecutions += 1; throw new Error('Display must never execute a command') },
+}
+const optionBase = {
+  ...formatBase, systemKey: 'host:test-options',
+  display: { title: 'Text options', titleI18n: { zh: '文本选项' } },
+  params: [
+    { key: 'mode', label: 'Mode', labelI18n: { zh: '模式' }, type: 'single-select', saveable: true,
+      options: [{ value: 'internal_mode_compact', label: 'Compact', labelI18n: { zh: '紧凑' } }] },
+    { key: 'fields', label: 'Fields', labelI18n: { zh: '字段' }, type: 'multi-select', saveable: true,
+      options: [{ value: 'internal_field_title', label: 'Title', labelI18n: { zh: '标题' } }, 'count'] },
+    { key: 'separator', label: 'Separator', labelI18n: { zh: '分隔符' }, type: 'text', saveable: true, saveableMaxLength: 256 },
+    { key: 'unstored', label: 'Unstored default', type: 'number', default: 7, saveable: true },
+  ],
+}
+let currentBaseItems = [formatBase, optionBase]
+const inertHostItem = (id) => ({ ...formatBase, systemKey: `host:test-${id}` })
+const hostRegistration = loadModule('src/workspace/launcher/hostProvider.ts', {
+  './registry': actualRegistry,
+  './hostActions': {
+    getHostSavedActionItems: localizedHostActions.getHostSavedActionItems,
+    getHostPaneControlItems: () => currentBaseItems,
+    getHostSystemPowerItems: () => [], getHostExperienceJournalItems: () => [],
+  },
+  '../appLauncher/hostAppLauncher': { getHostAppLauncherStaticItems: () => [] },
+  '../../workflow/pipelineLauncher': { getTextPipelineLauncherItems: () => [] },
+  '../desktopControl/killProcessCommand': { getKillProcessHostItem: () => inertHostItem('kill') },
+  '../desktopControl/switchWindowCommand': { getSwitchWindowHostItem: () => inertHostItem('switch') },
+})
+hostRegistration.registerHostLauncherProviders()
+const saveFixture = (base, savedParams, outputIntent = 'copy', name = 'My JSON') => createSavedAction({
+  ...lastRun, actionKey: base.systemKey, contractFingerprint: base.contractFingerprint,
+  actionPolicy: base.actionPolicy, savedParams, outputIntent,
+}, name, ['saved fixture'])
+const sameNamed = [
+  saveFixture(formatBase, { indent: 2, sortKeys: false }),
+  saveFixture(formatBase, { indent: 4, sortKeys: true }),
+  saveFixture(formatBase, { indent: 4, sortKeys: true }, 'return-to-launcher'),
+]
+const optionsArtifact = saveFixture(optionBase, {
+  mode: 'internal_mode_compact', fields: ['internal_field_title', 'count'], separator: 'PRIVATE_FREE_TEXT_CANARY',
+}, 'open-quick-editor', 'Options')
+const savedRows = () => actualRegistry.collectStaticCandidates('global-launcher').filter((row) => row.savedActionArtifactId)
+const descriptions = (rows, locale) => Array.from(rows, (row) => launcherDisplay.resolveDisplaySubtitle(row.display, locale))
+const beforeDescriptions = JSON.stringify(listSavedActions())
+const rows = savedRows()
+const jsonRows = rows.filter((row) => sameNamed.some((saved) => saved.id === row.savedActionArtifactId))
+assert.deepEqual(descriptions(jsonRows, 'en'), [
+  'Copy · Format JSON · Indent: 2 · Sort keys: No',
+  'Copy · Format JSON · Indent: 4 · Sort keys: Yes',
+  'Return to Launcher · Format JSON · Indent: 4 · Sort keys: Yes',
+])
+assert.deepEqual(descriptions(jsonRows, 'zh'), [
+  '复制 · 格式化 JSON · 缩进: 2 · 排序键: 否',
+  '复制 · 格式化 JSON · 缩进: 4 · 排序键: 是',
+  '返回 Launcher · 格式化 JSON · 缩进: 4 · 排序键: 是',
+])
+assert.equal(new Set(jsonRows.map((row) => row.systemKey)).size, 3, 'same names retain independent artifact identities')
+assert.ok(jsonRows.every((row) => row.display.title === 'My JSON'))
+const optionsRow = rows.find((row) => row.savedActionArtifactId === optionsArtifact.id)
+assert.equal(launcherDisplay.resolveDisplaySubtitle(optionsRow.display, 'en'),
+  'Open Quick Editor · Text options · Mode: Compact · Fields: Title, count · Separator: Set')
+assert.equal(launcherDisplay.resolveDisplaySubtitle(optionsRow.display, 'zh'),
+  '打开快速编辑器 · 文本选项 · 模式: 紧凑 · 字段: 标题, count · 分隔符: 已设置')
+assert.doesNotMatch(JSON.stringify(rows.map((row) => row.display)),
+  /PRIVATE_|internal_mode_|internal_field_|artifact_|host:test-|Unstored default/)
+assert.equal(JSON.stringify(listSavedActions()), beforeDescriptions, 'describing valid settings must not change artifacts')
+for (const [saved, base] of [
+  [{ ...sameNamed[0], savedParams: { indent: 'PRIVATE_BAD_NUMBER' } }, formatBase],
+  [{ ...sameNamed[0], savedParams: { sortKeys: 'PRIVATE_BAD_BOOLEAN' } }, formatBase],
+  [{ ...sameNamed[0], savedParams: { unknown: 'PRIVATE_UNKNOWN_VALUE' } }, formatBase],
+  [{ ...optionsArtifact, savedParams: { mode: 'PRIVATE_UNKNOWN_OPTION' } }, optionBase],
+  [{ ...optionsArtifact, savedParams: { fields: ['PRIVATE_UNKNOWN_MULTI_OPTION'] } }, optionBase],
+  [optionsArtifact, { ...optionBase, params: optionBase.params.map((param) => ({ ...param, saveable: false })) }],
+  [optionsArtifact, { ...optionBase, params: optionBase.params.map((param) => param.type === 'text'
+    ? { ...param, saveableMaxLength: 4 } : param) }],
+]) {
+  const invalid = localizedProvider.projectSavedAction(saved, base)
+  assert.equal(invalid.disabledReason?.code, 'saveability-changed')
+  for (const locale of ['en', 'zh']) {
+    assert.equal(launcherDisplay.resolveDisplaySubtitle(invalid.display, locale),
+      i18n.translate(locale, 'palette', 'savedActionSaveabilityChanged'))
+  }
+  assert.doesNotMatch(JSON.stringify(invalid.display), /PRIVATE_|internal_|Indent|Separator|Mode|Fields/)
+}
+
+const usageModule = loadModule('src/workspace/launcher/usage.ts', { './types': launcherTypes })
+const actualRanking = loadModule('src/workspace/launcher/ranking.ts', {
+  '../searchRanking': loadModule('src/workspace/searchRanking.ts', { 'pinyin-pro': { pinyin } }),
+  '../desktopTargets/browserWindowPolicy': loadModule('src/workspace/desktopTargets/browserWindowPolicy.ts'),
+  './intentEngine': loadModule('src/workspace/launcher/intentEngine.ts'),
+  './usage': usageModule, './display': launcherDisplay,
+})
+const favoriteKeys = jsonRows.map((row) => row.systemKey)
+for (const locale of ['en', 'zh']) {
+  for (const query of ['', 'My JSON', 'saved fixture']) {
+    const ranked = actualRanking.rankLauncherItems({ query, locale, surfaceId: 'global-launcher',
+      usage: usageModule.emptyUsageBySurface(), now: Date.now(), favoriteKeys,
+    }, jsonRows)
+    assert.deepEqual(Array.from(ranked, (row) => row.systemKey), Array.from(favoriteKeys))
+    assert.equal(new Set(descriptions(ranked, locale)).size, 3, 'search and pinned rows preserve distinguishable descriptions')
+  }
+}
+const actualDelete = actualRegistry.collectBaseCandidates().find((row) => row.systemKey === 'host:saved-action:delete')
+const deleteChoices = (await actualDelete.suggest({ inputText: 'My JSON' })).choices
+assert.equal(deleteChoices.length, 3)
+for (let index = 0; index < deleteChoices.length; index += 1) {
+  const choice = deleteChoices[index]
+  const confirmation = (await choice.primaryAction()).output.choices[0]
+  for (const locale of ['en', 'zh']) {
+    assert.equal(launcherDisplay.resolveDisplaySubtitle(choice, locale), descriptions(jsonRows, locale)[index])
+    assert.equal(launcherDisplay.resolveDisplaySubtitle(confirmation, locale), descriptions(jsonRows, locale)[index])
+  }
+  assert.equal(confirmation.id, `saved-action-delete-confirm-${sameNamed[index].id}`)
+}
+// An existing deletion row must use the source registry as it is now, not when
+// its list was built. This also exercises hostProvider's lazy registry callback.
+for (const [replacement, key] of [
+  [[], 'savedActionMissing'],
+  [[formatBase, { ...formatBase, source: 'dev' }], 'savedActionAmbiguous'],
+  [[{ ...formatBase, contractFingerprint: 'v1:2222222222222222' }], 'savedActionContractChanged'],
+]) {
+  currentBaseItems = replacement
+  const confirmation = (await deleteChoices[0].primaryAction()).output.choices[0]
+  assert.equal(confirmation.id, `saved-action-delete-confirm-${sameNamed[0].id}`)
+  for (const locale of ['en', 'zh']) {
+    assert.equal(launcherDisplay.resolveDisplaySubtitle(confirmation, locale), i18n.translate(locale, 'palette', key))
+  }
+  const unavailableRows = savedRows().filter((row) => sameNamed.some((saved) => saved.id === row.savedActionArtifactId))
+  assert.ok(unavailableRows.every((row) => row.disabledReason))
+  assert.doesNotMatch(JSON.stringify(unavailableRows.map((row) => row.display)), /Indent|缩进|Format JSON|格式化 JSON/)
+}
+currentBaseItems = [formatBase, optionBase]
+assert.equal(savedRows().filter((row) => row.disabledReason).length, 0, 'restoring the source restores current descriptions')
+assert.equal(JSON.stringify(listSavedActions()), beforeDescriptions, 'availability updates preserve each artifact and its settings')
+assert.equal(commandExecutions, 0)
 
 console.log('self-learning PR2 checks passed')

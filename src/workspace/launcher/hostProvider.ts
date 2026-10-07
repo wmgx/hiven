@@ -15,6 +15,7 @@ import { getTextPipelineLauncherItems } from '../../workflow/pipelineLauncher'
 import { registerBuiltinTextPipelines } from '../../workflow/pipeline'
 import { getWorkflowObjectLauncherItems } from '../../workflow/workflowLauncherAdapter'
 import {
+  collectBaseCandidates,
   setHostLauncherDynamicItemsProvider,
   setHostLauncherItemsProvider,
 } from './registry'
@@ -36,7 +37,7 @@ export function registerHostLauncherProviders(): void {
     ...getHostPaneControlItems(),
     ...getHostSystemPowerItems(),
     ...getHostExperienceJournalItems(),
-    ...getHostSavedActionItems(),
+    ...getHostSavedActionItems(collectBaseCandidates),
     ...getHostAppLauncherStaticItems(),
     ...getTextPipelineLauncherItems(),
     // Kill Process: first-level command → collect-input second level (suggest list).

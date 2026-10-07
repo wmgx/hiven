@@ -3,20 +3,11 @@ import { selectHostOutputResult } from '../launcher/output'
 import { isGlobalLauncherSavedActionOutput, savedActionDisabledReason } from './compatibility'
 import { listSavedActions, setSavedActionDisabledReason } from './store'
 import type { SavedActionDisabledReason, SavedActionV1 } from './types'
-import { translate, type Locale } from '../../i18n'
+import type { Locale } from '../../i18n'
+import { describeSavedAction, savedActionDisabledMessage } from './display'
 
-const disabledText = {
-  'ambiguous-action': ['Multiple sources provide the original action', '多个来源提供了同一个原动作', 'savedActionAmbiguous'],
-  'missing-action': ['Original action is missing', '原动作不存在', 'savedActionMissing'],
-  'contract-changed': ['Action contract changed', '动作契约已变化', 'savedActionContractChanged'],
-  'policy-changed': ['Action policy changed', '动作策略已变化', 'savedActionPolicyChanged'],
-  'saveability-changed': ['Saved parameters are no longer allowed', '已保存参数不再允许固化', 'savedActionSaveabilityChanged'],
-  'input-unavailable': ['Required input is unavailable', '所需输入当前不可用', 'savedActionInputUnavailable'],
-  'output-unavailable': ['Saved output is unavailable', '保存的输出方式当前不可用', 'savedActionOutputUnavailable'],
-} as const
-
-function unavailable(reason: keyof typeof disabledText, locale: Locale) {
-  return { ok: false as const, message: translate(locale, 'palette', disabledText[reason][2]) }
+function unavailable(reason: SavedActionDisabledReason, locale: Locale) {
+  return { ok: false as const, message: savedActionDisabledMessage(reason, locale) }
 }
 
 function boundInput(artifact: SavedActionV1, ctx: LauncherExecutionContext): string | null {
@@ -32,11 +23,7 @@ export function projectSavedAction(
   sourceAmbiguous = false,
   resolveBaseItems?: () => LauncherItem[],
 ): LauncherItem {
-  const disabledReason = sourceAmbiguous ? 'ambiguous-action' : savedActionDisabledReason(artifact, baseAction, {
-    inputAvailable,
-    outputAvailable: isGlobalLauncherSavedActionOutput(artifact.outputIntent),
-  })
-  const subtitle = disabledReason ? disabledText[disabledReason] : ['Saved Action', '已保存工具']
+  const { disabledReason, subtitle, subtitleI18n } = describeSavedAction(artifact, baseAction, inputAvailable, sourceAmbiguous)
   const projectedSource = baseAction?.source
   const projectedExecutionMode = baseAction?.executionMode
   // Frames can outlive a registry update. Never replay their captured source
@@ -59,8 +46,8 @@ export function projectSavedAction(
     source: baseAction?.source,
     display: {
       title: artifact.name,
-      subtitle: subtitle[0],
-      subtitleI18n: { zh: subtitle[1] },
+      subtitle,
+      subtitleI18n,
       icon: disabledReason ? 'CircleSlash2' : 'Bookmark',
       aliases: artifact.aliases,
     },
@@ -81,8 +68,8 @@ export function projectSavedAction(
     savedActionArtifactId: artifact.id,
     disabledReason: disabledReason ? {
       code: disabledReason,
-      message: disabledText[disabledReason][0],
-      messageI18n: { zh: disabledText[disabledReason][1] },
+      message: subtitle,
+      messageI18n: subtitleI18n,
     } : undefined,
     recordUsage: true,
     execute: async (ctx) => {
