@@ -27,6 +27,12 @@ const stripTypeImports = [
 ]
 
 const model = loadModule('src/plugins/web-open/settings/model.ts', { stripImports: stripTypeImports })
+const learnedRules = loadModule('src/plugins/web-open/learnedRules.ts', {
+  globals: { require: (specifier) => {
+    assert.equal(specifier, './settings/model')
+    return model
+  } },
+})
 const matchPatternCache = loadModule('src/plugins/web-open/matchPatternCache.ts', { stripImports: stripTypeImports })
 const launcherTypesSource = readFileSync('src/workspace/launcher/types.ts', 'utf8')
 const launcherRegistrySource = readFileSync('src/workspace/launcher/registry.ts', 'utf8')
@@ -46,6 +52,7 @@ const webOpen = loadModule('src/plugins/web-open/index.tsx', {
     ...stripTypeImports,
     /import\s*\{[\s\S]*?\}\s*from\s*'@hiven\/plugin'\s*;?\s*\n?/g,
     /import\s*\{[\s\S]*?\}\s*from\s*'\.\/settings\/model'\s*;?\s*\n?/g,
+    /import\s*\{[\s\S]*?\}\s*from\s*'\.\/learnedRules'\s*;?\s*\n?/g,
     /import\s*\{[\s\S]*?\}\s*from\s*'\.\/settings\/FaviconCacheModal'\s*;?\s*\n?/g,
     /import\s*\{[\s\S]*?\}\s*from\s*'\.\/settings\/QueryHistoryModal'\s*;?\s*\n?/g,
     /import\s*\{[\s\S]*?\}\s*from\s*'\.\/faviconCache'\s*;?\s*\n?/g,
@@ -67,8 +74,7 @@ const webOpen = loadModule('src/plugins/web-open/index.tsx', {
     DEFAULT_MAX_QUERY_HISTORY: model.DEFAULT_MAX_QUERY_HISTORY,
     DEFAULT_WEB_QUICK_OPEN_SETTINGS: model.DEFAULT_WEB_QUICK_OPEN_SETTINGS,
     AUTO_CREATED_TAG: model.AUTO_CREATED_TAG,
-    learnedOfferToEntry: () => null,
-    mergeLearnedEntry: (entries) => entries,
+    isAutoLearnedEntry: learnedRules.isAutoLearnedEntry,
     FaviconCacheModal: () => null,
     QueryHistoryModal: () => null,
     extractDomain: (url) => {
