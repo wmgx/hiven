@@ -17,10 +17,8 @@ export type WebQuickOpenEntry = {
   /** Max history items for this entry. Default 20. */
   maxQueryHistory?: number
   /**
-   * Set when this rule came from the self-learning layer rather than the user
-   * (holds the originating cluster key). Two uses: don't claim the same cluster
-   * twice, and let the UI mark it as learned. The rule is otherwise an ordinary
-   * entry — fully editable, which is the whole point of storing it here.
+   * Legacy originating cluster key. Migration uses this provenance to remove
+   * automatically learned URL rules while preserving hand-written entries.
    */
   learnedFrom?: string
   /**
