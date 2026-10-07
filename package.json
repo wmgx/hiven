@@ -199,7 +199,9 @@
     "test:lockfile-registry": "node scripts/test-lockfile-registry.mjs",
     "test:baseline-runtime-fallbacks": "node scripts/test-baseline-runtime-fallbacks.mjs",
     "test:launcher-visible-items": "node scripts/test-launcher-visible-items.mjs",
-    "test:launcher-discovery-availability": "node scripts/test-launcher-discovery-availability.mjs"
+    "test:launcher-discovery-availability": "node scripts/test-launcher-discovery-availability.mjs",
+    "test:launcher-explicit-text-preview": "node scripts/test-launcher-explicit-text-preview.mjs",
+    "test:launcher-explicit-text-flow": "node scripts/test-launcher-explicit-text-flow.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
