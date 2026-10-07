@@ -170,7 +170,7 @@ export function adaptToolToLauncherItem(
         return errorResult(translate(ctx.locale, 'palette', 'savedActionMissing'))
       }
       const text = ctx.input?.text
-      if (typeof text !== 'string' || text.trim().length === 0) {
+      if (typeof text !== 'string' || text.length === 0) {
         return errorResult(translate(ctx.locale, 'palette', 'inputRequired'))
       }
       const result = await previewRunner({ input: { text }, params, locale: ctx.locale, t: ctx.t })
