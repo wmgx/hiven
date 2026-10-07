@@ -1,35 +1,36 @@
 use serde_json::Value;
-use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
-use tokio::sync::oneshot;
+
+#[path = "ai_codex_transport.rs"]
+mod transport;
+use transport::{Connection, PendingReply, CONNECTION_CHANGED};
 
 const EVENT_NAME: &str = "hiven://ai-codex-event";
 const RPC_TIMEOUT: Duration = Duration::from_secs(120);
 const INITIALIZATION_REQUIRED: &str = "HIVEN_CODEX_INITIALIZATION_REQUIRED";
 
-type RpcResult = Result<Value, String>;
-type Pending = Arc<Mutex<HashMap<u64, oneshot::Sender<RpcResult>>>>;
-
 struct CodexProcess {
     child: Child,
     stdin: ChildStdin,
-    pending: Pending,
+    connection: Arc<Connection>,
     initialized: bool,
 }
 
 impl Drop for CodexProcess {
     fn drop(&mut self) {
+        self.connection.close("Codex App Server stopped");
         let _ = self.child.kill();
     }
 }
 
 static PROCESS: OnceLock<Mutex<Option<CodexProcess>>> = OnceLock::new();
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+static NEXT_CONNECTION_ID: AtomicU64 = AtomicU64::new(1);
 
 fn process_slot() -> &'static Mutex<Option<CodexProcess>> {
     PROCESS.get_or_init(|| Mutex::new(None))
@@ -97,42 +98,15 @@ fn spawn_codex(app: &AppHandle) -> Result<CodexProcess, String> {
     let stdin = child.stdin.take().ok_or("Codex stdin is unavailable")?;
     let stdout = child.stdout.take().ok_or("Codex stdout is unavailable")?;
     let stderr = child.stderr.take().ok_or("Codex stderr is unavailable")?;
-    let pending: Pending = Arc::new(Mutex::new(HashMap::new()));
-    let reader_pending = pending.clone();
     let reader_app = app.clone();
+    let connection = Connection::new(
+        NEXT_CONNECTION_ID.fetch_add(1, Ordering::Relaxed).to_string(),
+        move |event| { let _ = reader_app.emit(EVENT_NAME, event); },
+    );
+    let reader_connection = connection.clone();
 
     std::thread::spawn(move || {
-        for line in BufReader::new(stdout).lines() {
-            let Ok(line) = line else { break };
-            let Ok(message) = serde_json::from_str::<Value>(&line) else {
-                continue;
-            };
-            if let Some(id) = message.get("id").and_then(Value::as_u64) {
-                if let Some(sender) = reader_pending
-                    .lock()
-                    .ok()
-                    .and_then(|mut map| map.remove(&id))
-                {
-                    let result = if let Some(error) = message.get("error") {
-                        Err(error
-                            .get("message")
-                            .and_then(Value::as_str)
-                            .unwrap_or("Codex RPC failed")
-                            .to_string())
-                    } else {
-                        Ok(message.get("result").cloned().unwrap_or(Value::Null))
-                    };
-                    let _ = sender.send(result);
-                }
-            } else {
-                let _ = reader_app.emit(EVENT_NAME, message);
-            }
-        }
-        if let Ok(mut map) = reader_pending.lock() {
-            for (_, sender) in map.drain() {
-                let _ = sender.send(Err("Codex App Server stopped".to_string()));
-            }
-        }
+        reader_connection.read(BufReader::new(stdout));
     });
 
     std::thread::spawn(move || {
@@ -144,7 +118,7 @@ fn spawn_codex(app: &AppHandle) -> Result<CodexProcess, String> {
     Ok(CodexProcess {
         child,
         stdin,
-        pending,
+        connection,
         initialized: false,
     })
 }
@@ -157,57 +131,58 @@ fn reuses_completed_handshake(initialized: bool, method: Option<&str>) -> bool {
     initialized && matches!(method, Some("initialize" | "initialized"))
 }
 
+fn accepts_connection(
+    method: Option<&str>,
+    expected: Option<&str>,
+    connection: Option<&Connection>,
+) -> bool {
+    match expected {
+        Some(expected) => connection.is_some_and(|connection| connection.matches(expected)),
+        None => method != Some("initialized"),
+    }
+}
+
 fn write_message(
     app: &AppHandle,
     message: &Value,
-) -> Result<Option<oneshot::Receiver<RpcResult>>, String> {
+    expected_connection_id: Option<&str>,
+) -> Result<Option<PendingReply>, String> {
     let mut slot = process_slot().lock().map_err(|error| error.to_string())?;
+    let method = message.get("method").and_then(Value::as_str);
     let should_restart = slot
         .as_mut()
-        .map(|process| process.child.try_wait().ok().flatten().is_some())
+        .map(|process| process.connection.is_closed() || process.child.try_wait().ok().flatten().is_some())
         .unwrap_or(true);
+    // An acknowledgement or an existing turn belongs to one exact process.
+    // Never spawn/replay it on a replacement process, even if the old one died
+    // between initialize's response and the initialized notification.
+    if expected_connection_id.is_some() || method == Some("initialized") {
+        if should_restart || !accepts_connection(
+            method, expected_connection_id, slot.as_ref().map(|process| process.connection.as_ref()),
+        ) {
+            return Err(CONNECTION_CHANGED.to_string());
+        }
+    }
     if should_restart {
         *slot = Some(spawn_codex(app)?);
     }
     let process = slot.as_mut().ok_or("Codex process is unavailable")?;
-    let method = message.get("method").and_then(Value::as_str);
     if reuses_completed_handshake(process.initialized, method) {
         let receiver = message.get("id").and_then(Value::as_u64).map(|_| {
-            let (sender, receiver) = oneshot::channel();
-            let _ = sender.send(Ok(Value::Object(Default::default())));
-            receiver
+            PendingReply::ready(process.connection.tag(Value::Object(Default::default())))
         });
         return Ok(receiver);
     }
     if requires_initialization(process.initialized, method) {
         return Err(INITIALIZATION_REQUIRED.to_string());
     }
-    let receiver = if let Some(id) = message.get("id").and_then(Value::as_u64) {
-        let (sender, receiver) = oneshot::channel();
-        process
-            .pending
-            .lock()
-            .map_err(|error| error.to_string())?
-            .insert(id, sender);
-        Some(receiver)
-    } else {
-        None
-    };
-    let mut encoded = serde_json::to_vec(message).map_err(|error| error.to_string())?;
-    encoded.push(b'\n');
-    if let Err(error) = process
-        .stdin
-        .write_all(&encoded)
-        .and_then(|_| process.stdin.flush())
-    {
-        if let Some(id) = message.get("id").and_then(Value::as_u64) {
-            process
-                .pending
-                .lock()
-                .ok()
-                .and_then(|mut map| map.remove(&id));
+    let receiver = process.connection.write(&mut process.stdin, message)?;
+    if method == Some("initialized") {
+        if process.connection.is_closed() {
+            return Err(CONNECTION_CHANGED.to_string());
         }
-        return Err(error.to_string());
+        // Keep the write and state change under the same process-slot lock.
+        process.initialized = true;
     }
     Ok(receiver)
 }
@@ -229,17 +204,15 @@ pub async fn ai_codex_rpc(
     app: AppHandle,
     method: String,
     params: Option<Value>,
+    expected_connection_id: Option<String>,
 ) -> Result<Value, String> {
     if !allowed_method(&method) {
         return Err(format!("Codex RPC method is not allowed: {}", method));
     }
     let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
-    let receiver = write_message(&app, &rpc_message(method, Some(id), params))?
+    let receiver = write_message(&app, &rpc_message(method, Some(id), params), expected_connection_id.as_deref())?
         .ok_or("Codex RPC response channel is unavailable")?;
-    tokio::time::timeout(RPC_TIMEOUT, receiver)
-        .await
-        .map_err(|_| "Codex RPC timed out".to_string())?
-        .map_err(|_| "Codex RPC response channel closed".to_string())?
+    receiver.wait(RPC_TIMEOUT).await
 }
 
 #[tauri::command]
@@ -247,15 +220,12 @@ pub fn ai_codex_notify(
     app: AppHandle,
     method: String,
     params: Option<Value>,
+    expected_connection_id: Option<String>,
 ) -> Result<(), String> {
     if method != "initialized" {
         return Err("Codex notification is not allowed".to_string());
     }
-    write_message(&app, &rpc_message(method, None, params))?;
-    let mut slot = process_slot().lock().map_err(|error| error.to_string())?;
-    if let Some(process) = slot.as_mut() {
-        process.initialized = true;
-    }
+    write_message(&app, &rpc_message(method, None, params), expected_connection_id.as_deref())?;
     Ok(())
 }
 
@@ -292,5 +262,19 @@ mod tests {
         assert!(reuses_completed_handshake(true, Some("initialized")));
         assert!(!reuses_completed_handshake(false, Some("initialize")));
         assert!(!reuses_completed_handshake(true, Some("account/read")));
+    }
+
+    #[test]
+    fn initialized_ack_and_bound_turn_cannot_cross_connection_generations() {
+        let connection = Connection::new("new".into(), |_| {});
+        assert!(!accepts_connection(Some("initialized"), None, Some(&connection)));
+        assert!(!accepts_connection(Some("initialized"), Some("old"), Some(&connection)));
+        assert!(!accepts_connection(Some("initialized"), Some("old"), None));
+        assert!(!accepts_connection(Some("turn/start"), Some("old"), Some(&connection)));
+        assert!(accepts_connection(Some("initialized"), Some("new"), Some(&connection)));
+        assert!(accepts_connection(Some("turn/interrupt"), Some("new"), Some(&connection)));
+        connection.close("fixture close");
+        assert!(!accepts_connection(Some("initialized"), Some("new"), Some(&connection)));
+        assert!(accepts_connection(Some("initialize"), None, None));
     }
 }
