@@ -11,6 +11,7 @@ import { Tooltip } from '../Tooltip'
 import { LauncherHintKey, LauncherHintText } from './LauncherFooterHints'
 import { LauncherCommandTag, LauncherParamChipTrail } from './LauncherCommandTag'
 import { LauncherEmptyWell } from './LauncherEmptyWell'
+import { shouldIgnoreImeKeyDown } from '../../utils/imeKeyboard'
 import {
   type OutputDestinationId,
   LauncherOutputTargetsBar,
@@ -101,6 +102,7 @@ export function extractLivePreviewText(output?: LauncherOutput): string | null {
 }
 
 export function GlobalLauncherCollectInputFrame({
+  isImeComposingRef,
   inputRef,
   bindSearchInputRef,
   frame,
@@ -117,6 +119,7 @@ export function GlobalLauncherCollectInputFrame({
   onSubmitPrimary,
   onCaptureSelection,
 }: {
+  isImeComposingRef: RefObject<boolean>
   inputRef: RefObject<HTMLInputElement | null>
   bindSearchInputRef?: (node: HTMLInputElement | null) => void
   frame: CollectInputFrame
@@ -201,6 +204,7 @@ export function GlobalLauncherCollectInputFrame({
   }
 
   const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
     if (event.key === 'Backspace' && !frame.inputText) {
       event.preventDefault()
       event.stopPropagation()
