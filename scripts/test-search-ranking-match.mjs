@@ -173,6 +173,49 @@ assert.equal(settingsHighlight.ranges?.length, 1)
 assert.equal(settingsHighlight.ranges[0].start, 7)
 assert.equal(settingsHighlight.ranges[0].end, 9)
 
+// Two-character Chinese words can occur within unsegmented titles and aliases.
+for (const [title, query] of [
+  ['剪贴板历史', '历史'],
+  ['随机密码', '密码'],
+  ['随机整数', '整数'],
+  ['随机颜色', '颜色'],
+]) {
+  const candidate = fields({ title })
+  assert.ok(searchableFieldsMatch(candidate, query, 'zh'), `${query} should find ${title}`)
+  assert.equal(scoreSearchableFields(candidate, query, 'zh'), 1000, 'Chinese substring keeps the existing tier')
+  assert.ok(searchableFieldsMatch(fields({ title: 'Other', aliases: [title] }), query, 'en'), 'intentional aliases share the rule')
+  const { type, ranges } = computeTitleMatchRanges(title, query, 'zh')
+  assert.equal(type, 'substring')
+  assert.equal(ranges.length, 1)
+  assert.equal(title.slice(ranges[0].start, ranges[0].end), query, 'highlight slices the displayed title')
+}
+
+for (const [title, query] of [
+  ['随机密码', '密'],
+  ['随机𠮷色', '𠮷'],
+  ['随机密a', '密a'],
+  ['abéécd', 'éé'],
+  ['abかなcd', 'かな'],
+]) {
+  assert.equal(searchableFieldsMatch(fields({ title }), query, 'zh'), false, 'no broad relaxation for other short queries')
+  assert.equal(scoreSearchableFields(fields({ title }), query, 'zh'), 0)
+  assert.equal(computeTitleMatchRanges(title, query, 'zh').type, 'none')
+}
+assert.ok(searchableFieldsMatch(fields({ title: '密码' }), '密', 'zh'), 'single-character prefixes still work')
+assert.equal(scoreSearchableFields(fields({ title: '密码' }), '密码', 'zh'), 6000, 'exact tier is unchanged')
+assert.equal(scoreSearchableFields(fields({ title: '密码生成器' }), '密码', 'zh'), 4000, 'prefix tier is unchanged')
+assert.equal(searchableFieldsMatch(fields({ title: 'History', titleI18n: { zh: '剪贴板历史' } }), '历史', 'en'), false, 'inactive locale titles remain excluded')
+
+// The Han rule counts characters; highlighting must retain JavaScript string offsets.
+for (const [title, query] of [['🧰随机密码', '密码'], ['🧰随机𠮷色', '𠮷色']]) {
+  assert.ok(searchableFieldsMatch(fields({ title }), query, 'zh'))
+  const { ranges } = computeTitleMatchRanges(title, query, 'zh')
+  assert.equal(ranges.length, 1)
+  assert.equal(ranges[0].start, 4)
+  assert.equal(ranges[0].end, 4 + query.length)
+  assert.equal(title.slice(ranges[0].start, ranges[0].end), query)
+}
+
 // Filtering and scoring must use the same match classification.
 for (const candidate of [
   fields({ title: 'Settings' }),

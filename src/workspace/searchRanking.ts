@@ -12,7 +12,8 @@ export type SearchableFields = {
 }
 
 /**
- * Queries shorter than this only match token prefixes / acronyms / pinyin initials.
+ * Short queries only match token prefixes / acronyms / pinyin initials,
+ * except words of at least two Han characters (Chinese titles have no spaces).
  * Arbitrary mid-token substring (`base`/`session`/`clause` containing `se`) is disabled.
  */
 const SUBSTRING_MIN_QUERY_LENGTH = 3
@@ -33,7 +34,7 @@ function tokenizeSearchText(text: string): string[] {
 }
 
 function allowMidTokenSubstring(query: string): boolean {
-  return query.length >= SUBSTRING_MIN_QUERY_LENGTH
+  return query.length >= SUBSTRING_MIN_QUERY_LENGTH || /^\p{Script=Han}{2,}$/u.test(query)
 }
 
 /** Token/word prefix: "se" → settings; not base64. */
@@ -171,7 +172,7 @@ export function computeTitleMatchRanges(title: string, q: string, locale: Locale
   const lowerQ = q.trim().toLowerCase()
   if (!lowerQ) return { ranges: [], type: 'none' }
 
-  // Short queries: only highlight token-prefix hits (not mid-token "se" in Base64).
+  // Use the same short-query rule as filtering (not mid-token "se" in Base64).
   if (!allowMidTokenSubstring(lowerQ)) {
     if (lowerTitle.startsWith(lowerQ)) {
       return { ranges: [{ start: 0, end: lowerQ.length }], type: 'substring' }
