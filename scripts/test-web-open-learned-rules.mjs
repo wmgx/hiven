@@ -1,214 +1,81 @@
 #!/usr/bin/env node
-/**
- * Contract: learned url-templates become editable quick-open rules.
- *   src/plugins/web-open/learnedRules.ts
- *
- * The learner discovers "type an MR number → open that MR". web-open already
- * owns that concept, so it claims the rule and stores it as a normal quick-open
- * entry — one list, editable, instead of a second delete-only store.
- *
- * THE LOAD-BEARING TEST is the cross-layer one at the bottom: the host decides a
- * token's slot kind with classifyTokenSlot, while the plugin matches it with a
- * regex. If those two disagree, a rule is learned and then never fires — exactly
- * the silent failure fixed earlier in urlTemplate.ts. So every representative
- * token for a slot kind MUST match the pattern generated for that kind.
- *
- * Run: node scripts/test-web-open-learned-rules.mjs
- */
+/** Legacy URL-rule cleanup must remove automatic rules and retain manual ones. */
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import ts from 'typescript'
 
-const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8')
-function loadModule(path) {
-  const out = ts.transpileModule(read(path), {
+function loadModule(path, modules = {}) {
+  const output = ts.transpileModule(readFileSync(path, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023 },
   }).outputText
-  const moduleExports = {}
-  // learnedRules.ts imports AUTO_CREATED_TAG as a VALUE (not a type), so the
-  // require survives transpilation and the sandbox has to resolve it.
-  const requireShim = (id) => {
-    if (id.endsWith('settings/model')) return loadModule('src/plugins/web-open/settings/model.ts')
-    throw new Error('unexpected require: ' + id)
-  }
+  const exports = {}
   const sandbox = {
-    exports: moduleExports,
-    module: { exports: moduleExports },
-    console,
-    require: requireShim,
+    exports, module: { exports }, console,
+    require(specifier) {
+      assert.ok(Object.hasOwn(modules, specifier), `unexpected dependency: ${specifier}`)
+      return modules[specifier]
+    },
   }
-  vm.runInNewContext(out, sandbox)
+  vm.runInNewContext(output, sandbox, { filename: path })
   return sandbox.module.exports
 }
 
-const L = loadModule('src/plugins/web-open/learnedRules.ts')
-const U = loadModule('src/workspace/learning/urlTemplate.ts')
-const C = loadModule('src/workspace/learning/coverage.ts')
-const webOpenIndex = read('src/plugins/web-open/index.tsx')
+const model = loadModule('src/plugins/web-open/settings/model.ts')
+const learnedRules = loadModule('src/plugins/web-open/learnedRules.ts', { './settings/model': model })
+const { isAutoLearnedEntry } = learnedRules
+const cache = loadModule('src/plugins/web-open/matchPatternCache.ts')
+const history = loadModule('src/plugins/web-open/queryHistory.ts')
+const browserModel = loadModule('src/plugins/web-open/browserTabsModel.ts')
+const plugin = loadModule('src/plugins/web-open/index.tsx', {
+  '@hiven/plugin': { definePlugin: (definition) => definition },
+  './settings/model': model,
+  './learnedRules': learnedRules,
+  './matchPatternCache': cache,
+  './queryHistory': history,
+  './browserTabsModel': browserModel,
+  './settings/FaviconCacheModal': {},
+  './settings/BrowserTabsConnectionModal': {},
+  './faviconCache': {},
+  './browserProvider': {},
+}).default
 
-assert.match(
-  webOpenIndex,
-  /const keywordMatches = entries[\s\S]{0,180}\.filter\(\(entry\) => !entry\.learnedFrom\)/,
-  'learned rules must only fire through matchPattern, not ordinary title search',
+assert.equal(isAutoLearnedEntry({ learnedFrom: 'url:example.com/{hex}' }), true)
+assert.equal(isAutoLearnedEntry({ tags: ['work', model.AUTO_CREATED_TAG] }), true)
+assert.equal(isAutoLearnedEntry({ learnedFrom: '', tags: [] }), false)
+assert.equal(isAutoLearnedEntry({ tags: ['manual', 'automation'] }), false)
+assert.equal(isAutoLearnedEntry({}), false)
+assert.equal(learnedRules.learnedOfferToEntry, undefined, 'migration helper must not recreate automatic URL rules')
+
+const manual = {
+  id: 'manual-logid', title: 'Manual log lookup', aliases: ['logs'], placeholder: 'Log ID',
+  urlTemplate: 'https://example.com/logs/{query}', encodeQuery: false,
+  emptyQueryBehavior: 'block', matchPattern: '^LOG-[0-9]+$',
+  recordQueryHistory: true, maxQueryHistory: 12, tags: ['work'],
+}
+const oldAutomaticRules = [
+  { ...manual, id: 'learned-cluster', learnedFrom: 'url:example.com/{id}', tags: [] },
+  { ...manual, id: 'auto-tag', tags: [model.AUTO_CREATED_TAG] },
+  { ...manual, id: 'edited-auto-title', title: 'Renamed old rule', learnedFrom: 'url:example.net/{hex}' },
+]
+const saved = { enabled: false, entries: [manual, ...oldAutomaticRules] }
+const before = structuredClone(saved)
+const migrated = plugin.settings.migrate(saved, 8)
+assert.equal(migrated.enabled, false)
+assert.equal(migrated.entries.length, 1)
+assert.deepEqual(JSON.parse(JSON.stringify(migrated.entries[0])), manual, 'manual rule fields and pattern survive migration')
+assert.deepEqual(saved, before, 'migration must not mutate stored settings')
+assert.deepEqual(
+  JSON.parse(JSON.stringify(plugin.settings.migrate(migrated, 8))),
+  JSON.parse(JSON.stringify(migrated)),
+  'cleanup is idempotent',
 )
+assert.equal(plugin.settings.migrate({ entries: oldAutomaticRules }, 8).entries.length, 0)
+assert.equal(plugin.settings.migrate({ entries: [] }, 8).entries.length, 0, 'an explicitly empty rule list stays empty')
+assert.equal(plugin.settings.migrate(null, 8).entries.length, model.DEFAULT_WEB_QUICK_OPEN_SETTINGS.entries.length)
+assert.ok(cache.testMatchPattern(manual.matchPattern, 'LOG-123'), 'the manual rule remains usable after migration')
+assert.equal(cache.testMatchPattern(manual.matchPattern, 'unrelated-query'), false)
 
-const offer = (over = {}) => ({
-  kind: 'url-template',
-  template: 'code.byted.org/lark/x/commit/{hex}',
-  slotKind: 'hex',
-  clusterKey: 'url:code.byted.org/lark/x/commit/{hex}',
-  evidence: { sampleCount: 27, distinctInputs: 7 },
-  ...over,
-})
-
-// ─── 1. a learned offer becomes a usable quick-open entry ────────────────────
-{
-  const entry = L.learnedOfferToEntry(offer())
-  assert.ok(entry, 'url-template offer converts')
-  assert.equal(
-    entry.urlTemplate,
-    'https://code.byted.org/lark/x/commit/{query}',
-    'slot becomes {query} and the scheme is restored',
-  )
-  assert.ok(entry.matchPattern, 'carries a match pattern so it only fires on the right shape')
-  assert.equal(entry.encodeQuery, false, 'ids must not be percent-encoded into garbage')
-  assert.equal(entry.emptyQueryBehavior, 'block', 'empty input must not open the bare template')
-  assert.equal(entry.learnedFrom, offer().clusterKey, 'remembers which cluster taught it')
-  assert.ok(
-    entry.tags?.includes('auto'),
-    'carries the auto-created tag — the user must never wonder where a rule they did not write came from',
-  )
-  assert.ok(entry.id.length > 0, 'has a stable id')
-  assert.ok(entry.title.includes('code.byted.org'), 'titled by host — neutral, needs no translation')
-}
-
-// ─── 2. ids are stable and derived from the cluster (idempotent claiming) ────
-{
-  const a = L.learnedOfferToEntry(offer())
-  const b = L.learnedOfferToEntry(offer())
-  assert.equal(a.id, b.id, 'same offer → same id, so re-claiming cannot duplicate')
-
-  const other = L.learnedOfferToEntry(offer({ clusterKey: 'url:other.org/x/{hex}', template: 'other.org/x/{hex}' }))
-  assert.notEqual(a.id, other.id, 'different clusters get different ids')
-}
-
-// ─── 3. query-slot templates survive the round trip ──────────────────────────
-{
-  const entry = L.learnedOfferToEntry(offer({
-    template: 'argos.byted.org/trace?logid={hex}',
-    slotKind: 'hex',
-    clusterKey: 'url:argos.byted.org/trace?logid={hex}',
-  }))
-  assert.equal(
-    entry.urlTemplate,
-    'https://argos.byted.org/trace?logid={query}',
-    'a slot inside the query string converts too',
-  )
-}
-
-// ─── 4. junk in, nothing out ─────────────────────────────────────────────────
-{
-  assert.equal(L.learnedOfferToEntry(offer({ kind: 'chain' })), null, 'only url-templates convert')
-  assert.equal(L.learnedOfferToEntry(offer({ template: 'no-slot-here.org/x' })), null, 'a template with no slot is useless')
-  assert.equal(L.learnedOfferToEntry(offer({ template: '' })), null, 'empty template rejected')
-  assert.equal(L.learnedOfferToEntry(offer({ slotKind: 'nonsense' })), null, 'unknown slot kind rejected')
-  assert.equal(
-    L.learnedOfferToEntry(offer({ template: 'x.org/a/{n}', slotKind: 'n', clusterKey: 'url:x.org/a/{n}' })),
-    null,
-    'number slot kind is no longer supported — too ambiguous to safely auto-fire',
-  )
-}
-
-// ─── 5. merging into existing entries: no duplicates, user edits preserved ───
-{
-  const entry = L.learnedOfferToEntry(offer())
-  const existing = [
-    { id: 'web-1', title: 'Google', aliases: ['g'], urlTemplate: 'https://google.com/search?q={query}' },
-  ]
-
-  const merged = L.mergeLearnedEntry(existing, entry)
-  assert.equal(merged.length, 2, 'the learned rule is appended')
-  assert.equal(merged[0].id, 'web-1', 'existing rules are untouched')
-
-  const again = L.mergeLearnedEntry(merged, entry)
-  assert.equal(again.length, 2, 'claiming the same rule twice does not duplicate it')
-  assert.equal(again, merged, 'an unchanged merge returns the same array (no pointless write)')
-
-  // If the user edited the learned rule, re-claiming must not clobber their edit.
-  const edited = merged.map((e) =>
-    e.learnedFrom ? { ...e, title: 'My MRs', urlTemplate: 'https://code.byted.org/custom/{query}' } : e,
-  )
-  const afterEdit = L.mergeLearnedEntry(edited, entry)
-  assert.equal(afterEdit, edited, 'user edits to a learned rule are never overwritten')
-}
-
-// ─── 6. CROSS-LAYER: host slot kinds and plugin regexes must agree ───────────
-// If these drift, rules get learned and silently never fire.
-{
-  for (const slotKind of ['hex', 'uuid', 'id', 'slug']) {
-    const entry = L.learnedOfferToEntry(offer({
-      template: `x.org/a/{${slotKind}}`,
-      slotKind,
-      clusterKey: `url:x.org/a/{${slotKind}}`,
-    }))
-    assert.ok(entry, `${slotKind}: converts`)
-    const re = new RegExp(entry.matchPattern)
-
-    for (const token of C.representativeTokens(slotKind)) {
-      // Sanity: the host itself classifies this token as this kind.
-      assert.equal(
-        U.classifyTokenSlot(token),
-        slotKind,
-        `${slotKind}: representative token "${token}" must classify as its own kind`,
-      )
-      // The load-bearing assertion.
-      assert.ok(
-        re.test(token),
-        `${slotKind}: host would fire on "${token}" but the plugin pattern ${entry.matchPattern} does not match it`,
-      )
-    }
-  }
-}
-
-// ─── 7. patterns stay discriminating (a slot kind is not a catch-all) ────────
-{
-  const patternFor = (slotKind) =>
-    new RegExp(L.learnedOfferToEntry(offer({
-      template: `x.org/a/{${slotKind}}`,
-      slotKind,
-      clusterKey: `k:${slotKind}`,
-    })).matchPattern)
-
-  assert.equal(patternFor('uuid').test('12345'), false, '{uuid} must not match a plain number')
-  // A bare word is never a slot value anywhere (guardrail mirrored from the host).
-  for (const kind of ['hex', 'uuid', 'id', 'slug']) {
-    assert.equal(
-      patternFor(kind).test('hello'),
-      false,
-      `{${kind}} must not match a bare word — every search query would open a page`,
-    )
-  }
-}
-
-// ─── 8. the auto tag is declared, localized, and survives migration ──────────
-// A tag that renders but doesn't survive a settings migration is worse than
-// none: the marker silently disappears and a system rule starts looking
-// hand-written.
-{
-  const index = readFileSync(new URL('../src/plugins/web-open/index.tsx', import.meta.url), 'utf8')
-  assert.match(index, /itemTagsKey: 'tags'/, 'rules list renders the tags field')
-  assert.match(index, /itemTagLabelsI18n/, 'tag labels are localized, not persisted')
-  assert.match(index, /zh: '自动创建'/, 'auto tag has Chinese copy')
-  assert.match(
-    index,
-    /tags: Array\.isArray\(source\.tags\)/,
-    'tags survive the settings migration (migrate rebuilds every entry)',
-  )
-
-  const model = readFileSync(new URL('../src/plugins/web-open/settings/model.ts', import.meta.url), 'utf8')
-  assert.match(model, /AUTO_CREATED_TAG = 'auto'/, 'the reserved tag value is a named constant')
-  assert.match(model, /tags\?: string\[\]/, 'entries carry tags')
-}
-
-console.log('test-web-open-learned-rules: ok')
+const source = readFileSync('src/plugins/web-open/index.tsx', 'utf8')
+assert.doesNotMatch(source, /registerSink\(['"]web-open['"]/, 'automatic URL learning must remain disabled')
+console.log('test-web-open-learned-rules: legacy cleanup passed')
