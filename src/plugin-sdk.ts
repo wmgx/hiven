@@ -36,6 +36,7 @@ export type {
   DesktopTargetProvider,
   DesktopBridgeEventDto,
   DesktopBridgeHistoryDto,
+  DesktopBridgeTargetDto,
   DesktopBridgeSourceConfig,
   HivenEventBusApi,
   HivenHostEvents,
