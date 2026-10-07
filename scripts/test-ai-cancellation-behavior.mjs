@@ -43,6 +43,7 @@ async function collect(iterable) {
 }
 let passed = 0
 async function check(name, test) {
+  if (process.argv.includes('--codex-only') && !name.startsWith('Codex')) return
   try { await test(); passed++ } catch (error) { error.message = `${name}: ${error.message}`; throw error }
 }
 function descriptor(id = 'selected') {
@@ -231,19 +232,27 @@ await check('an adapter whose cleanup never settles cannot hold a completed run 
 })
 
 function codexHarness(hooks = {}) {
-  const calls = []; let listener
+  const calls = []; let listener; let currentConnection = 'connection-1'
   const api = load('src/workspace/ai/codexProvider.ts', {
     '@tauri-apps/api/core': { async invoke(command, args) {
-      calls.push([command, args]); const result = hooks.invoke?.(command, args)
-      if (result !== undefined) return result
-      if (args.method === 'thread/start') return { thread: { id: 'thread-1' } }
-      if (args.method === 'turn/start') return { turn: { id: 'turn-1' } }
-      return {}
+      calls.push([command, args])
+      const connection = currentConnection
+      if (args.expectedConnectionId && args.expectedConnectionId !== connection) throw new Error('HIVEN_CODEX_CONNECTION_CHANGED')
+      const result = hooks.invoke?.(command, args)
+      if (result !== undefined) return { ...await result, _hivenConnectionId: connection }
+      if (args.method === 'thread/start') return { thread: { id: 'thread-1' }, _hivenConnectionId: connection }
+      if (args.method === 'turn/start') return { turn: { id: 'turn-1' }, _hivenConnectionId: connection }
+      return { _hivenConnectionId: connection }
     } },
     '@tauri-apps/api/event': { listen(_name, callback) { listener = callback; return hooks.listen?.() ?? Promise.resolve(() => {}) } },
   }, { window: { __TAURI_INTERNALS__: {} } })
-  return { provider: api.codexChatGptProvider, calls, methods: () => calls.map(([, args]) => args.method), emit: (method, params) => listener({ payload: { method, params } }) }
+  return {
+    provider: api.codexChatGptProvider, calls, methods: () => calls.map(([, args]) => args.method),
+    replaceConnection: (id) => { currentConnection = id },
+    emit: (method, params = {}, id = currentConnection) => listener({ payload: { method, params, _hivenConnectionId: id } }),
+  }
 }
+
 const providerRequest = (signal) => ({ runId: 'provider-run', agentId: 'chosen-model', input: [{ type: 'text', text: 'input' }], signal })
 for (const stage of ['listen', 'initialize', 'thread/start', 'turn/start']) {
   await check(`Codex cancellation while ${stage} is pending blocks subsequent starts`, async () => {
@@ -302,6 +311,136 @@ await check('Codex live cancellation discards queued deltas and interrupts once'
   const events = await collect({ [Symbol.asyncIterator]: () => iterator })
   assert.equal(events.length, 1); assert.equal(events[0].status, 'cancelled')
   assert.equal(h.methods().filter((method) => method === 'turn/interrupt').length, 1)
+})
+
+await check('Codex EOF fails all active runs on that connection once and permits a fresh connection', async () => {
+  const h = codexHarness()
+  const first = h.provider.stream({ ...providerRequest(), runId: 'first' })[Symbol.asyncIterator]()
+  const second = h.provider.stream({ ...providerRequest(), runId: 'second' })[Symbol.asyncIterator]()
+  await Promise.all([first.next(), second.next()])
+  const a = first.next(); const b = second.next()
+  h.emit('hiven/transport/closed', { message: 'reader EOF' })
+  h.emit('hiven/transport/closed', { message: 'duplicate EOF' })
+  h.emit('item/agentMessage/delta', { threadId: 'thread-1', delta: 'late' })
+  for (const [iterator, pending] of [[first, a], [second, b]]) {
+    const terminal = (await bounded(pending)).value
+    assert.equal(terminal.type, 'error'); assert.equal(terminal.code, 'codex_transport_closed')
+    assert.equal((await iterator.next()).done, true)
+  }
+  h.replaceConnection('connection-2')
+  const fresh = h.provider.stream({ ...providerRequest(), runId: 'fresh' })[Symbol.asyncIterator]()
+  assert.equal((await fresh.next()).value.type, 'run.started')
+  h.emit('hiven/transport/closed', { message: 'old reader closed later' }, 'connection-1')
+  h.emit('turn/completed', { threadId: 'thread-1', turn: { id: 'turn-1', status: 'completed' } }, 'connection-1')
+  h.emit('item/agentMessage/delta', { threadId: 'thread-1', turnId: 'turn-1', delta: 'new' })
+  assert.equal((await fresh.next()).value.delta, 'new')
+  h.emit('turn/completed', { threadId: 'thread-1', turn: { id: 'turn-1', status: 'completed' } })
+  assert.equal((await fresh.next()).value.status, 'completed'); await fresh.next()
+  const another = h.provider.stream({ ...providerRequest(), runId: 'another' })[Symbol.asyncIterator]()
+  await another.next(); await another.return()
+  assert.equal(h.methods().filter((method) => method === 'initialize').length, 2, 'stale close cannot invalidate the new handshake')
+})
+await check('Codex disconnect while turn/start is pending settles without waiting for its RPC', async () => {
+  const gate = deferred(); const entered = deferred()
+  const h = codexHarness({ invoke: (_command, args) => { if (args.method === 'turn/start') { entered.resolve(); return gate.promise } } })
+  const pending = collect(h.provider.stream(providerRequest()))
+  await entered.promise
+  h.emit('hiven/transport/closed', { message: 'broken transport' })
+  const events = await bounded(pending)
+  assert.equal(events.length, 1); assert.equal(events[0].code, 'codex_transport_closed')
+  gate.resolve({ turn: { id: 'turn-1' } }); await flush()
+  assert.equal(h.methods().filter((method) => method === 'initialize').length, 1)
+  assert.ok(!h.methods().includes('turn/interrupt'), 'a dead old connection is never restarted to interrupt its old turn')
+})
+for (const failure of ['EOF', 'error']) {
+  await check(`Codex pending startup ${failure} followed by abort preserves the first terminal`, async () => {
+    const gate = deferred(); const entered = deferred()
+    const h = codexHarness({ invoke: (_command, args) => { if (args.method === 'turn/start') { entered.resolve(); return gate.promise } } })
+    const controller = new AbortController()
+    const pending = collect(h.provider.stream(providerRequest(controller.signal)))
+    await entered.promise
+    if (failure === 'EOF') h.emit('hiven/transport/closed', { message: 'EOF first' })
+    else h.emit('error', { threadId: 'thread-1', error: { message: 'provider error first' } })
+    controller.abort()
+    const events = await bounded(pending)
+    const terminals = events.filter((event) => event.type === 'completed' || event.type === 'error')
+    assert.equal(terminals.length, 1)
+    assert.equal(terminals[0].type, 'error')
+    assert.equal(terminals[0].code, failure === 'EOF' ? 'codex_transport_closed' : 'codex_error')
+    assert.equal(terminals[0].message, failure === 'EOF' ? 'EOF first' : 'provider error first')
+    gate.reject(new Error('late startup rejection')); await flush()
+  })
+}
+await check('Codex bound turn/start never retries into a replacement process', async () => {
+  const h = codexHarness({ invoke: (_command, args) => {
+    if (args.method === 'turn/start') return Promise.reject(new Error('HIVEN_CODEX_INITIALIZATION_REQUIRED'))
+  } })
+  await assert.rejects(collect(h.provider.stream(providerRequest())), /INITIALIZATION_REQUIRED/)
+  assert.equal(h.methods().filter((method) => method === 'initialize').length, 1)
+  const turns = h.calls.filter(([, args]) => args.method === 'turn/start')
+  assert.equal(turns.length, 1); assert.equal(turns[0][1].expectedConnectionId, 'connection-1')
+})
+await check('Codex cancel sends its bound generation and cannot interrupt a replacement process', async () => {
+  const h = codexHarness(); const controller = new AbortController()
+  const iterator = h.provider.stream(providerRequest(controller.signal))[Symbol.asyncIterator]()
+  await iterator.next(); h.replaceConnection('connection-2'); controller.abort()
+  const events = await collect({ [Symbol.asyncIterator]: () => iterator })
+  assert.equal(events.length, 1); assert.equal(events[0].status, 'cancelled')
+  const interrupts = h.calls.filter(([, args]) => args.method === 'turn/interrupt')
+  assert.equal(interrupts.length, 1); assert.equal(interrupts[0][1].expectedConnectionId, 'connection-1')
+  assert.equal(h.methods().filter((method) => method === 'initialize').length, 1)
+})
+await check('Codex old handshake acknowledgement cannot clear a newer handshake', async () => {
+  const gate = deferred(); const entered = deferred()
+  const h = codexHarness({ invoke: (command, args) => {
+    if (command === 'ai_codex_notify' && args.expectedConnectionId === 'connection-1') { entered.resolve(); return gate.promise }
+  } })
+  const old = h.provider.stream({ ...providerRequest(), runId: 'old' })[Symbol.asyncIterator]()
+  const oldFailure = assert.rejects(old.next(), /CONNECTION_CHANGED/)
+  await entered.promise; h.emit('hiven/transport/closed'); h.replaceConnection('connection-2')
+  const fresh = h.provider.stream({ ...providerRequest(), runId: 'fresh' })[Symbol.asyncIterator]()
+  await fresh.next(); gate.resolve({}); await oldFailure
+  const another = h.provider.stream({ ...providerRequest(), runId: 'another' })[Symbol.asyncIterator]()
+  await another.next()
+  assert.equal(h.methods().filter((method) => method === 'initialize').length, 2)
+  const acknowledgements = h.calls.filter(([command]) => command === 'ai_codex_notify')
+  assert.deepEqual(acknowledgements.map(([, args]) => args.expectedConnectionId), ['connection-1', 'connection-2'])
+  await fresh.return(); await another.return()
+})
+await check('Codex EOF before initialize response cannot acknowledge the dead connection', async () => {
+  const gate = deferred(); const entered = deferred()
+  const h = codexHarness({ invoke: (_command, args) => { if (args.method === 'initialize') { entered.resolve(); return gate.promise } } })
+  const failure = assert.rejects(collect(h.provider.stream(providerRequest())), /CONNECTION_CHANGED/)
+  await entered.promise; h.emit('hiven/transport/closed'); gate.resolve({}); await failure
+  assert.ok(!h.methods().includes('initialized')); assert.ok(!h.methods().includes('thread/start'))
+})
+await check('Codex shared initialization survives cancellation of only one waiter', async () => {
+  const gate = deferred(); const entered = deferred()
+  const h = codexHarness({ invoke: (_command, args) => { if (args.method === 'initialize') { entered.resolve(); return gate.promise } } })
+  const controller = new AbortController()
+  const first = collect(h.provider.stream({ ...providerRequest(controller.signal), runId: 'cancelled' }))
+  await entered.promise
+  const second = h.provider.stream({ ...providerRequest(), runId: 'live' })[Symbol.asyncIterator]()
+  const started = second.next(); controller.abort()
+  assert.equal((await bounded(first))[0].status, 'cancelled')
+  gate.resolve({}); assert.equal((await started).value.type, 'run.started')
+  assert.equal(h.methods().filter((method) => method === 'initialize').length, 1)
+  h.emit('turn/completed', { threadId: 'thread-1', turn: { id: 'turn-1', status: 'completed' } })
+  assert.equal((await second.next()).value.status, 'completed'); await second.next()
+})
+await check('Codex terminal notification before turn/start response is authoritative', async () => {
+  const gate = deferred(); const entered = deferred()
+  const h = codexHarness({ invoke: (_command, args) => { if (args.method === 'turn/start') { entered.resolve(); return gate.promise } } })
+  const pending = collect(h.provider.stream(providerRequest()))
+  await entered.promise
+  h.emit('item/agentMessage/delta', { threadId: 'thread-1', turnId: 'turn-1', delta: 'answer' })
+  h.emit('turn/completed', { threadId: 'thread-1', turn: { id: 'turn-1', status: 'completed' } })
+  h.emit('hiven/transport/closed')
+  const events = await bounded(pending)
+  assert.deepEqual(events.map((event) => event.type), ['run.started', 'text.delta', 'completed'])
+  assert.equal(events.at(-1).status, 'completed')
+  gate.resolve({ turn: { id: 'turn-1' } }); await flush()
+  assert.ok(!h.methods().includes('turn/interrupt'))
 })
 
 function xaiHarness() {
