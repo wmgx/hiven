@@ -201,7 +201,8 @@
     "test:launcher-visible-items": "node scripts/test-launcher-visible-items.mjs",
     "test:launcher-discovery-availability": "node scripts/test-launcher-discovery-availability.mjs",
     "test:launcher-explicit-text-preview": "node scripts/test-launcher-explicit-text-preview.mjs",
-    "test:launcher-explicit-text-flow": "node scripts/test-launcher-explicit-text-flow.mjs"
+    "test:launcher-explicit-text-flow": "node scripts/test-launcher-explicit-text-flow.mjs",
+    "test:launcher-output-recovery": "node scripts/test-launcher-output-recovery.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
