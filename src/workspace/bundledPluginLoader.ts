@@ -3,6 +3,7 @@ import { registerPluginMessages, localizeContributions, type PluginMessages } fr
 import type { PluginDefinition, PluginManifest } from './pluginTypes'
 import { applyPluginProductMetadata } from './pluginProductCatalog'
 import type { PluginPackageSummary } from './pluginRuntime'
+import { markBundledPluginDefinition } from './bundledPluginIdentity'
 
 type BundledPluginModule = {
   default?: PluginDefinition
@@ -101,6 +102,7 @@ export function registerBundledPluginPackages() {
     registerPluginMessages(manifest.pluginId, readBundledPluginMessages(dir))
     const productDefinition = applyPluginProductMetadata(manifest.pluginId, definition, manifest)
     const localized = localizeContributions(manifest.pluginId, productDefinition)
+    markBundledPluginDefinition(manifest.pluginId, localized.definition)
     pluginRegistry.registerProductionPlugin(
       manifest.pluginId,
       localized.commands,
