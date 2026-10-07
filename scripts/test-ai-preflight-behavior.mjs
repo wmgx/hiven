@@ -38,6 +38,7 @@ function appStoreHarness(storage) {
       }),
       './workspace/launcher/favorites': load('src/workspace/launcher/favorites.ts', {}),
       './workspace/appHotkeys': load('src/workspace/appHotkeys.ts', {}),
+      './workspace/appLauncher/appSearchAliases': load('src/workspace/appLauncher/appSearchAliases.ts', {}),
     }, { localStorage: storage }).useAppStore
   } finally {
     if (previous === undefined) delete globalThis.localStorage
