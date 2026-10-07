@@ -13,6 +13,8 @@ Codex App Server 使用 Hiven 独立的 `CODEX_HOME`，不会读取、覆盖或�
 ```ts
 interface PluginAiApi {
   providers(): Promise<AiProviderDescriptor[]>
+  preflight?(request?: AiPreflightRequest): Promise<AiPreflightResult>
+  subscribePreflight?(listener: () => void): () => void
   stream(request: AiRequest): AsyncIterable<AiEvent>
   cancel(runId: string): Promise<void>
   usage(query?: AiUsageQuery): Promise<AiUsageRecord[]>
@@ -21,7 +23,20 @@ interface PluginAiApi {
 
 `AiRequest.providerId` 可选。解析顺序为：请求值 → 系统默认 Provider → 第一个 `ready` Provider。`agentId` 采用相同规则；`effort` 为空或 `inherit` 时使用系统默认强度，再回退到 Agent 默认强度。
 
-插件只声明 `ai.use` 权限。`pluginId` 和插件来源由 Host 注入，不能从请求覆盖；Host 用它们形成稳定的消费归因键。
+插件只声明 `ai.use` 权限。`pluginId` 和插件来源由 Host 注入，不能从请求覆盖；Host 用它们形成稳定的消费归因键。 当前调用同时受创建 handle 时的授权上界和实时授权约束；撤权使等待及活动调用失效，重新授予不会恢复旧调用。
+
+### 运行前配置检查
+
+`preflight` 只接受服务、模型、强度、能力和输入模态等元数据，不接受正文或附件，也不发模型试请求。它严格解析当前明确选择或系统默认目标，不使用 `stream` 的历史跨服务回退。
+
+- `ready` 仅表示配置检查通过，不保证额度、网络可达或本次请求成功。
+- `blocked` 表示已有确定阻碍；`unknown` 表示目录不全、静态回退或检查失败等不确定情况。未列出模型不等于模型不存在，未知上限不能用于截断文本。
+- 配置检查独立缓存约60秒，同一服务合并在途读取；`forceRefresh` 绕过已完成缓存。实际 `stream` 仍重新校验，不靠预检放行。
+- `selectionKey` 用于识别旧检查结果，不是授权凭证。`subscribePreflight` 通知配置、权限及显式账户/服务操作造成的失效；卸载调用方时应取消订阅，替换 `host.ai` 后应重新绑定。
+- 翻译界面只在打开、AI配置变化或明确刷新时检查，键入和流式片段不触发探测；执行明确传入界面展示的服务和模型。未知但可以明确绑定的目标保留兼容调用；无法确认继承目标时要求用户明确选择。
+
+旧宿主可不提供这两个可选方法，插件应检测其存在。预检不验证供应商工具已全部禁用，也不会自动登录、切换账户或新建服务。
+
 
 ## 3. Provider 契约与责任
 
