@@ -13,10 +13,11 @@
  */
 
 import { detectClipboardType, subscribeClipboardChange } from '../../launcher/clipboard/clipboardSnapshot'
+import { getAutomaticLearningSignal } from '../../store'
 import { TelemetryEvents, trackBehavior, trackLatency, trackPerf, telemetryNow } from '../telemetry'
 import { extractFeatures, featureSignature, isPlausibleToken, normalizeToken } from './features'
 import { verifyTransformChain, verifyTransformPair, type PureTransformRunner } from './pairing'
-import { putEvent, putPair, pruneOldEvents, pruneOldPairs, saltedHash } from './store'
+import { putEvent, putPair, saltedHash } from './store'
 
 /** How many recent clipboard texts to keep in memory for pair/chain verification. */
 const TIMELINE_MAX = 6
@@ -82,8 +83,8 @@ function isSecretType(type: string): boolean {
   return type === 'secret' || type === 'secret-like'
 }
 
-function handleClipboardText(text: string): void {
-  if (!text.trim()) return
+function handleClipboardText(text: string, signal: AbortSignal): void {
+  if (signal.aborted || !text.trim()) return
 
   const detectedType = detectClipboardType(text)
   if (isSecretType(detectedType)) {
@@ -96,7 +97,7 @@ function handleClipboardText(text: string): void {
 
   const features = extractFeatures(text)
   const featureSig = featureSignature(features)
-  void putEvent({ ts: Date.now(), featureSig, detectedType, saltedHash: saltedHash(text) })
+  void putEvent({ ts: Date.now(), featureSig, detectedType, saltedHash: saltedHash(text) }, signal)
   // Shape-only diagnostics — never the raw text.
   trackPerf(TelemetryEvents.learningObserve, { detectedType, featureSig, len: features.len })
 
@@ -110,7 +111,7 @@ function handleClipboardText(text: string): void {
     })
     if (hit) {
       const inSig = featureSignature(extractFeatures(previous))
-      void putPair({ ts: Date.now(), kind: 'transform', inSig, toolId: hit.toolId, inHash: saltedHash(previous) })
+      void putPair({ ts: Date.now(), kind: 'transform', inSig, toolId: hit.toolId, inHash: saltedHash(previous) }, signal)
       trackBehavior(TelemetryEvents.learningPairVerified, { toolId: hit.toolId, kind: 'transform', inSig })
     } else {
       trackPerf(TelemetryEvents.learningPairMiss, { runnersTried: runners.length, inType: detectedType })
@@ -125,7 +126,7 @@ function handleClipboardText(text: string): void {
     const chain = verifyTransformChain([a, b, text], runners)
     if (chain && chain.toolIds.length >= 2) {
       const inSig = featureSignature(extractFeatures(a))
-      void putPair({ ts: Date.now(), kind: 'chain', inSig, toolIds: chain.toolIds, inHash: saltedHash(a) })
+      void putPair({ ts: Date.now(), kind: 'chain', inSig, toolIds: chain.toolIds, inHash: saltedHash(a) }, signal)
       trackBehavior(TelemetryEvents.learningPairVerified, { kind: 'chain', inSig, steps: chain.toolIds.length })
     }
   }
@@ -139,22 +140,27 @@ function handleClipboardText(text: string): void {
 let started = false
 
 /** Start passive observation. Idempotent; returns a stop function. */
-export function startLearningObserver(): () => void {
-  if (started) return () => undefined
+export function startLearningObserver(parentSignal: AbortSignal = getAutomaticLearningSignal()): () => void {
+  if (started || parentSignal.aborted) return () => undefined
   started = true
-  void pruneOldEvents()
-  void pruneOldPairs()
+  const controller = new AbortController()
   const unsubscribe = subscribeClipboardChange((text) => {
     try {
-      handleClipboardText(text)
+      handleClipboardText(text, controller.signal)
     } catch {
       // Isolate learning from the clipboard tracker loop.
     }
   })
-  return () => {
+  const stop = () => {
+    if (controller.signal.aborted) return
+    controller.abort()
+    parentSignal.removeEventListener('abort', stop)
     started = false
     recentTexts.length = 0
     recentSourceHosts.length = 0
+    currentSourceHost = null
     unsubscribe()
   }
+  parentSignal.addEventListener('abort', stop, { once: true })
+  return stop
 }
