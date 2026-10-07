@@ -20,7 +20,7 @@ import { showToast } from './toast'
 import { createPluginScaffoldFiles } from './pluginScaffold.ts'
 import { parsePluginDefinitionSource } from './pluginDebugRunner.ts'
 import { createPluginHostSdk, type PluginHostSdk } from '../pluginHostSdk.ts'
-import { registerPluginMessages, localizeContributions, type PluginMessages } from '../i18n/pluginI18nRegistry.ts'
+import { registerPluginMessages, unregisterPluginMessages, localizeContributions, type PluginMessages } from '../i18n/pluginI18nRegistry.ts'
 import { stopPluginBackground } from './pluginBackgroundManager.ts'
 import { clearPluginPrivateStorage } from './pluginStorage.ts'
 import { usePluginPermissionStore } from './pluginPermissions.ts'
@@ -78,6 +78,11 @@ export type InstalledPluginUpdateResult = {
 /** Maps pluginId → watcher unlisten fn for dev plugins */
 const watcherCleanups = new Map<string, () => void>()
 
+// A persisted status describes intent; only the registry proves this runtime loaded it.
+// Package identity invalidates stale I/O; display names and update-check metadata do not.
+const pluginActivations = new Map<string, { record: InstalledPlugin; promise: Promise<void> }>()
+const pluginUninstalls = new Map<string, Promise<void>>()
+
 function installPluginGlobals(): void {
   if (typeof window === 'undefined') return
   const sdk = createPluginHostSdk()
@@ -108,7 +113,11 @@ async function readFileText(path: string): Promise<string> {
  * Load a plugin package's locale dictionaries from `locales/{en,zh}.json`
  * and register them under the pluginId namespace. Missing files are ignored.
  */
-async function loadAndRegisterPluginMessages(pluginId: string, folderPath: string): Promise<void> {
+async function loadAndRegisterPluginMessages(
+  pluginId: string,
+  folderPath: string,
+  isCurrent: () => boolean = () => true,
+): Promise<void> {
   const messages: PluginMessages = {}
   for (const locale of ['en', 'zh'] as const) {
     try {
@@ -117,6 +126,7 @@ async function loadAndRegisterPluginMessages(pluginId: string, folderPath: strin
     } catch {
       // No locale file for this language; skip.
     }
+    if (!isCurrent()) return
   }
   registerPluginMessages(pluginId, messages)
 }
@@ -444,28 +454,65 @@ export async function installLocalPlugin(
   return record
 }
 
-/**
- * Enable an installed plugin: load entry, validate, register to production registry.
- */
-export async function enablePlugin(pluginId: string): Promise<void> {
+function samePluginActivationRecord(current: InstalledPlugin | undefined, expected: InstalledPlugin): boolean {
+  if (!current) return false
+  return current.status === expected.status
+    && current.installedAt === expected.installedAt
+    && current.folderPath === expected.folderPath
+    && current.packagePath === expected.packagePath
+    && current.entry === expected.entry
+    && current.version === expected.version
+    && current.source === expected.source
+    && current.sourceUrl === expected.sourceUrl
+    && (current.capabilities ?? []).length === (expected.capabilities ?? []).length
+    && (current.capabilities ?? []).every((value, index) => value === expected.capabilities?.[index])
+    && (current.permissions ?? []).length === (expected.permissions ?? []).length
+    && (current.permissions ?? []).every((value, index) => value === expected.permissions?.[index])
+}
+
+/** Load once per record, with every async boundary guarded against newer intent. */
+function activateInstalledPlugin(pluginId: string, reload: boolean): Promise<void> {
+  if (pluginUninstalls.has(pluginId)) {
+    return Promise.reject(new Error(`Plugin "${pluginId}" is being uninstalled`))
+  }
   const { plugins, updatePluginStatus } = usePluginStore.getState()
   const record = plugins[pluginId]
+  if (!record) return Promise.reject(new Error(`Plugin "${pluginId}" is not installed`))
 
-  if (!record) {
-    throw new Error(`Plugin "${pluginId}" is not installed`)
+  const pending = pluginActivations.get(pluginId)
+  if (!reload && pending && samePluginActivationRecord(record, pending.record)) return pending.promise
+  if (!reload && record.status === 'enabled' && pluginRegistry.getPluginDefinition(pluginId, 'production')) {
+    return Promise.resolve()
   }
-  if (record.status === 'enabled') {
-    return // already enabled
+  if (reload) disablePlugin(pluginId)
+  if (pluginUninstalls.has(pluginId)) {
+    return Promise.reject(new Error(`Plugin "${pluginId}" is being uninstalled`))
   }
 
-  updatePluginStatus(pluginId, 'loading')
-
-  try {
-    const definition = await loadPluginEntry(record.folderPath, record.entry)
-    validateContributionIds(definition, 'production')
-
-    await loadAndRegisterPluginMessages(pluginId, record.folderPath)
+  let begin!: () => void
+  let fail!: (error: unknown) => void
+  const ready = new Promise<void>((resolve, reject) => { begin = resolve; fail = reject })
+  const activation = { record, promise: ready }
+  const isCurrent = () => pluginActivations.get(pluginId) === activation
+    && !pluginUninstalls.has(pluginId)
+    && samePluginActivationRecord(usePluginStore.getState().plugins[pluginId], activation.record)
+  activation.promise = ready.then(async () => {
+    if (!isCurrent()) return
+    const manifest = reload ? await loadManifest(record.folderPath) : undefined
+    if (!isCurrent()) return
+    const definition = await loadPluginEntry(record.folderPath, manifest?.entry ?? record.entry, reload)
+    if (!isCurrent()) return
+    await loadAndRegisterPluginMessages(pluginId, record.folderPath, isCurrent)
+    if (!isCurrent()) return
+    validateContributionIds(definition, 'production', reload ? pluginId : undefined)
     const localized = localizeContributions(pluginId, definition)
+
+    if (manifest) {
+      usePluginStore.getState().updatePluginVersion(pluginId, manifest.version, manifest.entry, manifest.capabilities)
+      usePluginStore.getState().updatePluginMetadata(pluginId, { permissions: manifest.permissions ?? [] })
+      activation.record = usePluginStore.getState().plugins[pluginId]
+      if (!isCurrent()) return
+    }
     pluginRegistry.registerProductionPlugin(
       pluginId,
       localized.commands,
@@ -473,124 +520,106 @@ export async function enablePlugin(pluginId: string): Promise<void> {
       localized.panels,
       localized.toolbar,
       localized.definition,
-      record.permissions ?? [],
+      manifest?.permissions ?? record.permissions ?? [],
     )
-
+    // Registry subscribers may synchronously disable/uninstall the plugin.
+    if (!isCurrent()) return
     updatePluginStatus(pluginId, 'enabled')
-  } catch (err: unknown) {
-    const errMsg = err instanceof Error ? err.message : String(err)
+
+    if (manifest) {
+      const oldCapabilities = record.capabilities ?? []
+      const added = manifest.capabilities.filter((c) => !oldCapabilities.includes(c))
+      const removed = oldCapabilities.filter((c) => !manifest.capabilities.includes(c))
+      if (added.length > 0 || removed.length > 0) {
+        const parts: string[] = []
+        if (added.length > 0) parts.push(`added: ${added.join(', ')}`)
+        if (removed.length > 0) parts.push(`removed: ${removed.join(', ')}`)
+        showToast(`"${record.displayName}" capabilities changed — ${parts.join(' | ')}`, 'info')
+      }
+      showToast(`Plugin "${record.displayName}" reloaded`, 'success')
+    }
+  }).catch((error: unknown) => {
+    if (!isCurrent()) return
+    pluginRegistry.unregisterProductionPlugin(pluginId)
+    if (!pluginRegistry.getPluginDefinition(pluginId, 'dev')) unregisterPluginMessages(pluginId)
+    const errMsg = error instanceof Error ? error.message : String(error)
     updatePluginStatus(pluginId, 'error', errMsg)
-    throw err
+    throw error
+  }).finally(() => {
+    if (pluginActivations.get(pluginId) === activation) pluginActivations.delete(pluginId)
+  })
+  pluginActivations.set(pluginId, activation)
+  try {
+    updatePluginStatus(pluginId, 'loading')
+    activation.record = usePluginStore.getState().plugins[pluginId]
+    begin()
+  } catch (error) {
+    fail(error)
   }
+  return activation.promise
 }
 
-/**
- * Disable an enabled plugin: unregister contributions, clean up active surfaces.
- */
+/** Enable persisted intent only after contributions exist in this runtime. */
+export async function enablePlugin(pluginId: string): Promise<void> {
+  return activateInstalledPlugin(pluginId, false)
+}
+
+/** Disable contributions and invalidate even a still-loading activation. */
 export function disablePlugin(pluginId: string): void {
+  pluginActivations.delete(pluginId)
   const { plugins, updatePluginStatus } = usePluginStore.getState()
   const record = plugins[pluginId]
-
-  if (!record || record.status !== 'enabled') return
-
-  void stopPluginBackground(pluginId, pluginSettingsSourceForRecord(record))
-
-  // Unregister from production registry
-  // Get panelIds before unregistering (they're removed from registry after)
   const panelIds = pluginRegistry.getPluginPanelIds(pluginId)
   pluginRegistry.unregisterProductionPlugin(pluginId)
+  if (!pluginRegistry.getPluginDefinition(pluginId, 'dev')) unregisterPluginMessages(pluginId)
+  if (!record) return
 
-  // Clean up editor-owned pane renderers and panels through the editor runtime.
+  void stopPluginBackground(pluginId, pluginSettingsSourceForRecord(record))
   cleanupPluginEditorContributions(pluginId, panelIds)
-
   updatePluginStatus(pluginId, 'disabled')
-  showToast(`Plugin "${record.displayName}" disabled`, 'info')
+  if (record.status === 'enabled') showToast(`Plugin "${record.displayName}" disabled`, 'info')
 }
 
-/**
- * Reload a plugin: disable → re-import → enable.
- */
+/** Reload with a fresh activation, invalidating any preceding load. */
 export async function reloadPlugin(pluginId: string): Promise<void> {
-  const { plugins, updatePluginStatus } = usePluginStore.getState()
-  const record = plugins[pluginId]
-
-  if (!record) throw new Error(`Plugin "${pluginId}" is not installed`)
-
-  const oldCapabilities = record.capabilities ?? []
-
-  // Disable first (if enabled)
-  if (record.status === 'enabled') {
-    disablePlugin(pluginId)
-  }
-
-  updatePluginStatus(pluginId, 'loading')
-
-  try {
-    // Load new manifest to get updated capabilities
-    const newManifest = await loadManifest(record.folderPath)
-    const newCapabilities = newManifest.capabilities ?? []
-
-    const definition = await loadPluginEntry(record.folderPath, newManifest.entry, true /* cache bust */)
-    validateContributionIds(definition, 'production', pluginId)
-
-    await loadAndRegisterPluginMessages(pluginId, record.folderPath)
-    const localized = localizeContributions(pluginId, definition)
-    pluginRegistry.registerProductionPlugin(
-      pluginId,
-      localized.commands,
-      localized.renderers,
-      localized.panels,
-      localized.toolbar,
-      localized.definition,
-      newManifest.permissions ?? [],
-    )
-
-    // Update stored capabilities
-    usePluginStore.getState().updatePluginVersion(pluginId, newManifest.version, newManifest.entry, newCapabilities)
-    usePluginStore.getState().updatePluginMetadata(pluginId, { permissions: newManifest.permissions ?? [] })
-    updatePluginStatus(pluginId, 'enabled')
-
-    // Show capability diff
-    const added = newCapabilities.filter((c) => !oldCapabilities.includes(c))
-    const removed = oldCapabilities.filter((c) => !newCapabilities.includes(c))
-    if (added.length > 0 || removed.length > 0) {
-      const parts: string[] = []
-      if (added.length > 0) parts.push(`added: ${added.join(', ')}`)
-      if (removed.length > 0) parts.push(`removed: ${removed.join(', ')}`)
-      showToast(`"${record.displayName}" capabilities changed — ${parts.join(' | ')}`, 'info')
-    }
-
-    showToast(`Plugin "${record.displayName}" reloaded`, 'success')
-  } catch (err: unknown) {
-    const errMsg = err instanceof Error ? err.message : String(err)
-    updatePluginStatus(pluginId, 'error', errMsg)
-    throw err
-  }
+  return activateInstalledPlugin(pluginId, true)
 }
 
 /**
- * Uninstall a plugin: disable it, remove its installed package directory, then remove from store.
+ * Revoke runtime access immediately. Delete only after synchronous preparation
+ * succeeds; keep a disabled store record when deletion fails so users can retry.
  */
 export async function uninstallPlugin(pluginId: string): Promise<void> {
-  const { plugins, uninstallPlugin: removeFromStore } = usePluginStore.getState()
-  const record = plugins[pluginId]
+  const pending = pluginUninstalls.get(pluginId)
+  if (pending) return pending
+  const record = usePluginStore.getState().plugins[pluginId]
   if (!record) return
   const source = pluginSettingsSourceForRecord(record)
 
-  if (record.status === 'enabled') {
+  let begin!: () => void
+  let fail!: (error: unknown) => void
+  const ready = new Promise<void>((resolve, reject) => { begin = resolve; fail = reject })
+  const removal = ready.then(async () => {
+    if (record.source !== 'builtin') {
+      const installedRoot = await getInstalledPluginRoot()
+      await invokeCommand<void>('remove_plugin_dir', {
+        rootPath: installedRoot,
+        pluginId,
+      })
+      clearPluginHostState(source, pluginId, { clearStorage: true })
+    }
+    usePluginStore.getState().uninstallPlugin(pluginId)
+  }).finally(() => {
+    if (pluginUninstalls.get(pluginId) === removal) pluginUninstalls.delete(pluginId)
+  })
+  pluginUninstalls.set(pluginId, removal)
+  try {
     disablePlugin(pluginId)
+    begin()
+  } catch (error) {
+    fail(error)
   }
-
-  if (record.source !== 'builtin') {
-    const installedRoot = await getInstalledPluginRoot()
-    await invokeCommand<void>('remove_plugin_dir', {
-      rootPath: installedRoot,
-      pluginId,
-    })
-    clearPluginHostState(source, pluginId, { clearStorage: true })
-  }
-
-  removeFromStore(pluginId)
+  return removal
 }
 
 // ─── Dev Plugin Operations ────────────────────────────────────────────────────
@@ -1095,10 +1124,12 @@ export async function loadInstalledPluginsFromStore(): Promise<void> {
   for (const plugin of plugins) {
     try {
       await getPluginPackageSummary(plugin.folderPath)
+      if (!samePluginActivationRecord(usePluginStore.getState().plugins[plugin.pluginId], plugin)) continue
       if (plugin.status === 'enabled' || plugin.status === 'loading') {
         await enablePlugin(plugin.pluginId)
       }
     } catch (error: unknown) {
+      if (!samePluginActivationRecord(usePluginStore.getState().plugins[plugin.pluginId], plugin)) continue
       usePluginStore.getState().updatePluginStatus(
         plugin.pluginId,
         'error',
