@@ -577,6 +577,10 @@ function formatHotkeyRegistrationStatus(
   if (!shortcut) return t('hotkeyStatusPending')
   if (shortcut.registrationError) {
     if (shortcut.registrationError.includes('Accessibility permission is required')) return t('hotkeyAccessibilityRequired')
+    if (shortcut.registrationError === 'Shortcut is already registered' ||
+        shortcut.registrationError === 'Shortcut is already used by Global Launcher') {
+      return t('hotkeyRegistrationFailed', { message: t('hotkeyShortcutConflict') })
+    }
     return t('hotkeyRegistrationFailed', { message: shortcut.registrationError })
   }
   if (shortcut.kind === 'disabled') return t('hotkeyStatusDisabled')

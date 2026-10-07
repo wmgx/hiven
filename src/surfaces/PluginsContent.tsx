@@ -817,6 +817,13 @@ export function PluginsContent({}: PluginsContentProps) {
                     {shortcut?.accelerator && (
                       <kbd className="plugins-shortcut-badge">{formatPluginShortcutLabel(shortcut.accelerator)}</kbd>
                     )}
+                    {(shortcut?.registrationStatus === 'conflict' || shortcut?.registrationStatus === 'failed') && (
+                      <span className="plugins-drawer-error" role="status">
+                        {t(locale, shortcut.registrationStatus === 'conflict'
+                          ? 'settings.hotkeyShortcutConflict'
+                          : 'settings.hotkeyRegistrationRetry')}
+                      </span>
+                    )}
                     {isRecording ? (
                       <div className="plugins-drawer-shortcut-record">
                         <ShortcutRecorder

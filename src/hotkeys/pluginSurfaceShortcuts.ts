@@ -7,7 +7,7 @@ import {
   usePluginSurfaceShortcutStore,
   type PluginSurfaceShortcut,
 } from '../workspace/pluginSurfaceShortcuts'
-import { useAppStore, type PluginSurfaceOpenTarget } from '../store'
+import type { PluginSurfaceOpenTarget } from '../store'
 import { resolvePluginSettingsSource } from '../workspace/launcher/pluginSource'
 
 type GlobalShortcutApi = typeof import('@tauri-apps/plugin-global-shortcut')
@@ -126,15 +126,15 @@ async function registerShortcut(
       await unregisterKey(key)
     }
 
-    if (await isRegistered(accelerator)) {
-      if (isGlobalPinnedLauncherAccelerator(accelerator)) {
-        usePluginSurfaceShortcutStore.getState().updateRegistration(key, {
-          registrationStatus: 'conflict',
-          registrationError: 'Shortcut is already registered',
-        })
-        return
-      }
-      await unregisterAccelerator(accelerator)
+    const occupied = await isRegistered(accelerator)
+    if (generation !== syncGeneration) return
+    if (occupied) {
+      // Occupancy alone never authorizes taking over another registrar's key.
+      usePluginSurfaceShortcutStore.getState().updateRegistration(key, {
+        registrationStatus: 'conflict',
+        registrationError: 'Shortcut is already registered',
+      })
+      return
     }
     await register(accelerator, (event) => {
       if (event.state !== 'Pressed') return
@@ -152,6 +152,7 @@ async function registerShortcut(
       registrationError: undefined,
     })
   } catch (error) {
+    if (generation !== syncGeneration) return
     usePluginSurfaceShortcutStore.getState().updateRegistration(key, {
       registrationStatus: 'failed',
       registrationError: formatError(error),
@@ -239,11 +240,6 @@ function shortcutSyncSignature(shortcuts: Record<string, PluginSurfaceShortcut>)
     ].join('\u0000'))
     .sort()
     .join('\u0001')
-}
-
-function isGlobalPinnedLauncherAccelerator(accelerator: string): boolean {
-  const shortcut = useAppStore.getState().settings.globalPinnedLauncherShortcut
-  return shortcut.kind === 'accelerator' && normalizeAccelerator(shortcut.accelerator) === accelerator
 }
 
 function isTauriRuntime(): boolean {

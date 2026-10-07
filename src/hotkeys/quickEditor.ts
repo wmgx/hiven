@@ -71,7 +71,7 @@ async function registerAccelerator(
 ) {
   try {
     const accelerator = normalizeAccelerator(shortcut.accelerator)
-    const { register, isRegistered, unregister } = await loadGlobalShortcutApi()
+    const { register, isRegistered } = await loadGlobalShortcutApi()
 
     const launcher = useAppStore.getState().settings.globalPinnedLauncherShortcut
     if (
@@ -82,12 +82,12 @@ async function registerAccelerator(
       return
     }
 
-    if (await isRegistered(accelerator)) {
-      try {
-        await unregister(accelerator)
-      } catch {
-        // ignore reclaim failures
-      }
+    const occupied = await isRegistered(accelerator)
+    if (generation !== syncGeneration) return
+    if (occupied) {
+      // isRegistered does not identify an owner. Only release our own prior key.
+      updateShortcutStatus(shortcut, 'Registration failed', 'Shortcut is already registered')
+      return
     }
 
     await register(accelerator, (event) => {
