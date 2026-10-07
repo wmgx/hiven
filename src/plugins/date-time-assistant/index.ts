@@ -111,8 +111,11 @@ type ParsedResult = {
 }
 
 class TimestampConversionError extends Error {
-  constructor(readonly value: string) {
+  readonly value: string
+
+  constructor(value: string) {
     super(`Invalid date "${value}"`)
+    this.value = value
   }
 }
 
