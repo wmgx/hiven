@@ -1,6 +1,7 @@
 import type { PluginAiApi, PluginNetworkApi } from '@hiven/plugin'
 import type { LanguageCode, SourceLanguageCode, TranslateProfile } from '../settings/model'
 import { translateWithTencent } from './tencent'
+import type { AiTranslationSelection } from '../ai/readiness'
 
 export type TranslateRequest = {
   text: string
@@ -16,15 +17,17 @@ export type TranslateResult = {
 
 export type TranslateExecutionOptions = {
   signal?: AbortSignal
+  /** The concrete provider/model shown by the metadata preflight. */
+  aiSelection?: AiTranslationSelection
   /** The accumulated, unfinished translation. Only the resolved result is complete. */
   onText?: (text: string) => void
 }
 
 export class AiTranslationError extends Error {
-  readonly code: 'incomplete' | 'empty'
+  readonly code: 'incomplete' | 'empty' | 'selection'
 
-  constructor(code: 'incomplete' | 'empty') {
-    super(code === 'incomplete' ? 'AI translation ended without completion' : 'AI returned an empty translation')
+  constructor(code: 'incomplete' | 'empty' | 'selection') {
+    super(code === 'selection' ? 'Choose an explicit AI provider and model' : code === 'incomplete' ? 'AI translation ended without completion' : 'AI returned an empty translation')
     this.name = 'AiTranslationError'
     this.code = code
   }
@@ -252,13 +255,15 @@ async function translateWithDeepL(req: TranslateRequest, profile: TranslateProfi
 
 export async function translateWithAi(req: TranslateRequest, profile: TranslateProfile, ai: PluginAiApi, options: TranslateExecutionOptions = {}): Promise<TranslateResult> {
   if (options.signal?.aborted) throw translationAborted()
+  const selection = options.aiSelection ?? { providerId: profile.aiProviderId, agentId: profile.aiAgentId, effort: profile.aiEffort === 'inherit' ? undefined : profile.aiEffort }
+  if (!selection.providerId || !selection.agentId) throw new AiTranslationError('selection')
   const prompt = `Translate the text below from ${LANGUAGE_NAME[req.sourceLang]} to ${LANGUAGE_NAME[req.targetLang]}. Preserve meaning, tone, formatting, and line breaks. Return only the translation, with no explanation.\n\n${req.text}`
   let text = ''
   let completed = false
   for await (const event of ai.stream({
-    providerId: profile.aiProviderId || undefined,
-    agentId: profile.aiAgentId || undefined,
-    effort: profile.aiEffort || 'inherit',
+    providerId: selection.providerId,
+    agentId: selection.agentId,
+    effort: selection.effort,
     input: [{ type: 'text', text: prompt }],
     capabilities: ['text.generate'],
     signal: options.signal,
