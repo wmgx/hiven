@@ -33,20 +33,24 @@ import type {
 } from './types'
 import { DEFAULT_TOOL_ACTION_POLICY } from './types'
 import { normalizeLauncherSurfaceId } from './types'
-import { emptyResult, textResult, foregroundPasteResult, replaceActiveTextResult, errorResult, choicesResult, REPLACE_ACTIVE_TEXT_OUTPUT_CHOICE_ID } from './output'
+import { emptyResult, textResult, explicitTextPreviewResult, foregroundPasteResult, replaceActiveTextResult, errorResult, choicesResult, REPLACE_ACTIVE_TEXT_OUTPUT_CHOICE_ID } from './output'
 import { toDirectAnswer } from './normalizeContribution'
 import { computeContractFingerprint } from './contractFingerprint'
 import { assertLearnableToolSaveableContract } from './toolContract'
 import { captureForegroundSelectionText } from './foregroundSelectionCapture'
-import type { Locale } from '../../i18n'
+import { translate, type Locale } from '../../i18n'
 import { getPluginPermissionSnapshot } from '../pluginPermissions'
 import { createPluginShell } from '../pluginShell'
 import { pluginRegistry } from '../pluginRegistry'
+import type { PluginDefinition } from '../pluginTypes'
+import { resolveBundledTextPreviewRunner } from '../bundledPluginIdentity'
 
 export type ToolAdaptOptions = {
   pluginId: string
   source: 'builtin' | 'installed' | 'dev'
   systemKey: string
+  /** Exact final definition being collected, never inferred from its source label. */
+  definition?: PluginDefinition
 }
 
 function resolveTextInput(api: PluginLauncherApi, mode: TextInputMode): ResolvedTextInput {
@@ -142,6 +146,9 @@ export function adaptToolToLauncherItem(
   const launcherOpt = tool.surfaces?.launcher
   const launcherOptions = typeof launcherOpt === 'object' ? launcherOpt : undefined
   const mode: TextInputMode = tool.inputPolicy?.mode ?? 'auto'
+  const hasPreviewDeclaration = tool.explicitTextPreview !== undefined
+  const previewRunner = resolveBundledTextPreviewRunner(options.pluginId, options.source, options.definition, tool)
+  const executionMode = previewRunner ? 'explicit-text-preview' as const : undefined
   const defaultParams = { ...(tool.defaultParams ?? {}) }
   for (const param of tool.params ?? []) {
     if (defaultParams[param.key] === undefined && param.default !== undefined) {
@@ -156,6 +163,26 @@ export function adaptToolToLauncherItem(
     const normalizedSurfaceId = normalizeLauncherSurfaceId(ctx.surfaceId)
     const isEditorLike = normalizedSurfaceId === 'editor-command-bar' || normalizedSurfaceId === 'quick-editor-command'
     const isGlobalLauncher = normalizedSurfaceId === 'global-launcher'
+    if (isGlobalLauncher && hasPreviewDeclaration) {
+      // No fallback to the full tool context: a replaced/unregistered bundle
+      // invalidates already collected items as well as future discovery.
+      if (!previewRunner || resolveBundledTextPreviewRunner(options.pluginId, options.source, options.definition, tool) !== previewRunner) {
+        return errorResult(translate(ctx.locale, 'palette', 'savedActionMissing'))
+      }
+      const text = ctx.input?.text
+      if (typeof text !== 'string' || text.trim().length === 0) {
+        return errorResult(translate(ctx.locale, 'palette', 'inputRequired'))
+      }
+      const result = await previewRunner({ input: { text }, params, locale: ctx.locale, t: ctx.t })
+      // A registration change while an async pure runner was pending also
+      // invalidates its output before any delivery actions can be produced.
+      if (resolveBundledTextPreviewRunner(options.pluginId, options.source, options.definition, tool) !== previewRunner) {
+        return errorResult(translate(ctx.locale, 'palette', 'savedActionMissing'))
+      }
+      return result.ok
+        ? explicitTextPreviewResult(result.text, ctx.api, ctx.locale)
+        : errorResult(result.message)
+    }
     const hasManualInput = ctx.input?.text !== undefined
     const allowForegroundFallback = isGlobalLauncher && tool.inputPolicy !== undefined && mode !== 'all'
     const input = hasManualInput
@@ -202,12 +229,16 @@ export function adaptToolToLauncherItem(
     source: options.source,
     display: toolDisplay(tool),
     behavior: { type: 'perform' },
-    surfaces: launcherOptions?.surfaces,
+    surfaces: previewRunner && launcherOptions?.surfaces?.length
+      ? [...new Set([...launcherOptions.surfaces, 'global-launcher' as const])]
+      : launcherOptions?.surfaces,
     inputPolicy: tool.inputPolicy,
+    executionMode,
     actionPolicy: tool.policy ?? DEFAULT_TOOL_ACTION_POLICY,
     contractFingerprint: computeContractFingerprint({
       systemKey: options.systemKey,
       inputPolicy: tool.inputPolicy,
+      executionMode,
       params: tool.params,
     }),
     params: tool.params,
