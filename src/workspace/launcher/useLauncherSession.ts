@@ -13,7 +13,7 @@ import { createPluginAi } from '../ai/runtime'
 import { chooseJevCandidate, validJevSettings } from '../ai/jev'
 import { resolveDisplaySubtitle, resolveDisplayTitle } from './display'
 import { createPluginShell } from '../pluginShell'
-import { getPluginPermissionSnapshot } from '../pluginPermissions'
+import { getPluginPermissionSnapshot, usePluginPermissionStore } from '../pluginPermissions'
 import { resolvePluginSettingsSource } from './pluginSource'
 import { subscribeDesktopWindowsUpdated } from '../desktopControl/windows'
 import { getDesktopDocumentLauncherDynamicItems } from '../desktopTargets/collectDocumentLauncherItems'
@@ -22,6 +22,7 @@ import {
   collectDynamicItems,
   collectStaticCandidates,
   filterDynamicForSurface,
+  filterAvailableLauncherItems,
 } from './registry'
 import { resolvePreservedSelection } from './selectionPreserve'
 import {
@@ -94,6 +95,8 @@ export type LauncherSession = {
   controllerRef: MutableRefObject<LauncherController | null>
   controllerState: LauncherControllerState | null
   rankedItems: LauncherItem[]
+  /** Current resolved candidates before ranking caps, strictly eligible for discovery. */
+  availableItems: LauncherItem[]
   syncSelection: () => void
   reset: () => void
 }
@@ -179,6 +182,7 @@ export function useLauncherSession({
   const pluginRegistryVersion = usePluginRegistryVersion()
   // toolsFor depends on live settings — recollect static tools when any plugin settings change.
   const pluginSettings = usePluginSettingsStore((s) => s.pluginSettings)
+  const pluginPermissions = usePluginPermissionStore((s) => s.permissions)
 
   const [query, setQueryState] = useState('')
   const [selectedIndex, setSelectedIndexState] = useState(0)
@@ -645,12 +649,8 @@ export function useLauncherSession({
   // Keep open-path warm-cache decision off the render dependency list.
   hostDynamicItemsRef.current = hostDynamicItems
 
-  const localRankedItems = useMemo<LauncherItem[]>(() => {
-    // contentText for textMatch: Object Block takes precedence (it IS the text to process);
-    // only fall back to query when no Object Block is present.
+  const resolvedCandidateItems = useMemo<LauncherItem[]>(() => {
     const rankQuery = query.trim()
-    const contentText = objectBlockText ?? (rankQuery || undefined)
-    const detections = contentText ? detectContent(contentText) : []
     const inputIdentity = launcherInputIdentity(rankQuery, objectBlockText)
     const visiblePluginDynamicItems = pluginInputIdentity === inputIdentity ? pluginDynamicItems : []
     const visibleHostDynamicItems = hostInputIdentity === inputIdentity ? hostDynamicItems : []
@@ -659,6 +659,22 @@ export function useLauncherSession({
     // also creates duplicate React keys, which corrupts visible quick-run indices.
     const liveKeys = new Set([...staticCandidates, ...visiblePluginDynamicItems, ...visibleHostDynamicItems, ...visibleDocumentDynamicItems].map((item) => item.systemKey))
     const recentsDeduped = persistableRecentItems.filter((item) => !liveKeys.has(item.systemKey))
+    return [...staticCandidates, ...visiblePluginDynamicItems, ...visibleHostDynamicItems,
+      ...recentsDeduped, ...visibleDocumentDynamicItems]
+  }, [query, objectBlockText, pluginInputIdentity, pluginDynamicItems, hostInputIdentity,
+    hostDynamicItems, documentInputIdentity, documentDynamicItems, staticCandidates, persistableRecentItems])
+
+  const availableItems = useMemo(() => {
+    void pluginPermissions
+    void pluginRegistryVersion
+    return filterAvailableLauncherItems(resolvedCandidateItems, normalizedHostId)
+  }, [resolvedCandidateItems, normalizedHostId, pluginPermissions, pluginRegistryVersion])
+
+  const localRankedItems = useMemo<LauncherItem[]>(() => {
+    // The original ranking input and scoring remain shared by every host.
+    const rankQuery = query.trim()
+    const contentText = objectBlockText ?? (rankQuery || undefined)
+    const detections = contentText ? detectContent(contentText) : []
     return measureLauncherPerfSync('session:rank-items', () => rankLauncherItems(
       {
         query: rankQuery,
@@ -671,42 +687,24 @@ export function useLauncherSession({
         foregroundApp,
         favoriteKeys: launcherFavoriteKeys,
       },
-      [
-        ...staticCandidates,
-        ...visiblePluginDynamicItems,
-        ...visibleHostDynamicItems,
-        ...recentsDeduped,
-        ...visibleDocumentDynamicItems,
-      ],
+      resolvedCandidateItems,
     ), (items) => ({
       surfaceId: normalizedHostId,
       queryLength: rankQuery.length,
       hasObjectBlockText: Boolean(objectBlockText),
-      inputCount:
-        staticCandidates.length +
-        visiblePluginDynamicItems.length +
-        visibleHostDynamicItems.length +
-        recentsDeduped.length +
-        visibleDocumentDynamicItems.length,
+      inputCount: resolvedCandidateItems.length,
       resultCount: items.length,
     }))
   }, [
-    documentDynamicItems,
-    documentInputIdentity,
     foregroundApp,
-    hostDynamicItems,
-    hostInputIdentity,
     launcherFavoriteKeys,
     launcherUsageBySurface,
     locale,
     normalizedHostId,
     objectBlockText,
-    persistableRecentItems,
-    pluginDynamicItems,
-    pluginInputIdentity,
     query,
     rankingNow,
-    staticCandidates,
+    resolvedCandidateItems,
   ])
   const hasLocalMatches = localRankedItems.length > 0
   const jevFrameKind = controllerState?.frames.at(-1)?.kind
@@ -783,6 +781,7 @@ export function useLauncherSession({
     controllerRef,
     controllerState,
     rankedItems,
+    availableItems,
     syncSelection,
     reset,
   }
