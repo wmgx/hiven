@@ -33,6 +33,7 @@ const commands = [
   ['npm', ['run', 'test:launcher-discovery-availability']],
   ['npm', ['run', 'test:launcher-explicit-text-preview']],
   ['npm', ['run', 'test:launcher-explicit-text-flow']],
+  ['npm', ['run', 'test:launcher-output-recovery']],
   ['npm', ['run', 'test:ime-enter-confirmation']],
   ['npm', ['run', 'test:self-learning-pr0']],
   ['npm', ['run', 'test:self-learning-pr1']],
