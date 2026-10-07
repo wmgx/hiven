@@ -5,7 +5,7 @@
  * Direct tools plus a shared conversion workspace.
  */
 
-import { definePlugin, type PluginToolSurfaces } from '@hiven/plugin'
+import { definePlugin, type PluginToolExplicitTextPreviewContext, type PluginToolTextPreviewResult, type PluginToolSurfaces } from '@hiven/plugin'
 import { EncodeDecodeSurface } from './EncodeDecodeSurface'
 import {
   base64Decode,
@@ -50,6 +50,11 @@ const OPERATION_ROUTES = [
   { id: 'jwt-decode', title: 'jwt.decode.title', aliases: ['jwt decode', 'decode jwt', 'jwt-decode', 'jwt解码', 'jwt 解码'] },
 ] as const
 
+function decodeBase64Text(ctx: PluginToolExplicitTextPreviewContext): PluginToolTextPreviewResult {
+  try { return { ok: true, text: base64Decode(ctx.input.text) } }
+  catch (error) { return { ok: false, message: ctx.t('error.convert', { message: error instanceof Error ? error.message : String(error) }) } }
+}
+
 // ─── Plugin Definition ────────────────────────────────────────────────────────
 
 export const encodeDecodePlugin = definePlugin({
@@ -85,7 +90,7 @@ export const encodeDecodePlugin = definePlugin({
     items: OPERATION_ROUTES.map((route) => ({
       id: `open-${route.id}`,
       display: {
-        title: route.title,
+        title: route.id === 'base64-decode' ? 'route.base64DecodeWorkbench' : route.title,
         subtitle: 'route.open',
         icon: 'Binary',
         aliases: [...route.aliases],
@@ -122,11 +127,12 @@ export const encodeDecodePlugin = definePlugin({
       aliases: ['b64', 'base64', 'base64 decode', 'base64解码', 'b64 decode', 'atob', 'decode base64', '解码'],
       inputPolicy: { mode: 'auto' },
       policy: LEARNABLE_PURE,
+      explicitTextPreview: { run: decodeBase64Text },
       accepts: { kinds: ['base64'], aliases: ['b64', 'base64', 'base64 decode', 'base64解码'] },
       textMatch: isBase64,
       run(ctx) {
-        try { return ctx.output.text(base64Decode(ctx.input.text)) }
-        catch (e: any) { return ctx.output.error(ctx.t('error.convert', { message: e.message })) }
+        const result = decodeBase64Text(ctx)
+        return result.ok ? ctx.output.text(result.text) : ctx.output.error(result.message)
       },
       surfaces: EDITOR_TOOL_SURFACES,
     },
