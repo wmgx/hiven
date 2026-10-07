@@ -3,6 +3,8 @@ import type { AiAgent, AiCapability, AiEvent, AiProviderAdapter, AiProviderReque
 
 type XaiDescription = { status: 'ready' | 'login_required'; models: unknown[]; user?: unknown; billing?: unknown }
 
+const activeRuns = new Map<string, () => Promise<void>>()
+
 const FALLBACK_MODELS = [
   { id: 'grok-composer-2.5-fast', context_window: 200_000, max_output_tokens: 30_000 },
   { id: 'grok-build', context_window: 500_000, max_output_tokens: 30_000 },
@@ -78,46 +80,89 @@ export function mapStreamEvent(value: unknown, runId: string): AiEvent[] {
       { type: 'completed', runId, status: 'completed' },
     ]
   }
-  if (type === 'response.failed' || type === 'error') {
-    const error = asRecord(event.error)
-    return [{ type: 'error', runId, code: 'xai_response_failed', message: String(error.message ?? event.message ?? 'Grok request failed') }]
+  if (type === 'response.failed' || type === 'response.incomplete' || type === 'error') {
+    const response = asRecord(event.response)
+    const error = asRecord(event.error ?? response.error)
+    const reason = asRecord(response.incomplete_details).reason
+    return [{ type: 'error', runId, code: 'xai_response_failed', message: String(error.message ?? reason ?? event.message ?? 'Grok request failed') }]
   }
   return []
 }
 
 async function* streamXai(request: AiProviderRequest): AsyncIterable<AiEvent> {
-  const unsupported = request.input.find((item) => item.type !== 'text' && item.type !== 'localImage')
-  if (unsupported) throw new Error('The Grok subscription provider supports text and image inputs')
-  yield { type: 'run.started', runId: request.runId, providerId: xaiGrokProvider.id, agentId: request.agentId }
-
   const queue: AiEvent[] = []
   let wake: (() => void) | undefined
   let done = false
+  let closed = false
+  let started = false
+  let terminal: 'completed' | 'cancelled' | 'failed' | undefined
+  let cancellation: Promise<void> | undefined
+  const notify = () => { wake?.(); wake = undefined }
+  const cancelNative = () => {
+    if (!started) return Promise.resolve()
+    cancellation ??= invoke('ai_xai_cancel', { runId: request.runId }).then(() => undefined, () => undefined)
+    return cancellation
+  }
+  const push = (event: AiEvent) => {
+    if (closed || terminal) return
+    if (event.type === 'completed') terminal = event.status
+    else if (event.type === 'error') terminal = 'failed'
+    queue.push(event)
+    notify()
+  }
+  const cancel = () => {
+    if (closed || terminal === 'completed') return Promise.resolve()
+    if (!terminal) {
+      queue.length = 0
+      push({ type: 'completed', runId: request.runId, status: 'cancelled' })
+    }
+    return cancelNative()
+  }
+  const abort = () => { void cancel() }
+  request.signal?.addEventListener('abort', abort, { once: true })
+  activeRuns.set(request.runId, cancel)
+  if (request.signal?.aborted) abort()
   const channel = new Channel<unknown>()
   channel.onmessage = (raw) => {
-    for (const event of mapStreamEvent(raw, request.runId)) queue.push(event)
-    wake?.()
-    wake = undefined
+    if (closed || terminal) return
+    for (const event of mapStreamEvent(raw, request.runId)) push(event)
   }
-  const invocation = invoke('ai_xai_response_stream', {
-    runId: request.runId,
-    model: request.agentId,
-    input: request.input,
-    effort: request.effort ?? null,
-    webSearch: request.capabilities?.includes('web.search') ?? false,
-    onEvent: channel,
-  }).catch((error) => {
-    queue.push({ type: 'error', runId: request.runId, code: 'xai_error', message: String(error) })
-  }).finally(() => {
-    done = true
-    wake?.()
-  })
-
-  while (!done || queue.length) {
-    while (queue.length) yield queue.shift()!
-    if (!done) await new Promise<void>((resolve) => { wake = resolve })
+  try {
+    if (!terminal) {
+      const unsupported = request.input.find((item) => item.type !== 'text' && item.type !== 'localImage')
+      if (unsupported) throw new Error('The Grok subscription provider supports text and image inputs')
+      yield { type: 'run.started', runId: request.runId, providerId: xaiGrokProvider.id, agentId: request.agentId }
+    }
+    // The consumer can cancel or return while suspended at run.started.
+    if (!terminal) {
+      started = true
+      void invoke('ai_xai_response_stream', {
+        runId: request.runId,
+        model: request.agentId,
+        input: request.input,
+        effort: request.effort ?? null,
+        webSearch: request.capabilities?.includes('web.search') ?? false,
+        onEvent: channel,
+      }).catch((error) => {
+        push({ type: 'error', runId: request.runId, code: 'xai_error', message: String(error) })
+      }).finally(() => {
+        done = true
+        notify()
+      })
+    }
+    while (true) {
+      while (queue.length) yield queue.shift()!
+      if (terminal || done) break
+      await new Promise<void>((resolve) => { wake = resolve })
+    }
+    if (!terminal) throw new Error('The Grok stream ended without a terminal event')
+  } finally {
+    closed = true
+    request.signal?.removeEventListener('abort', abort)
+    activeRuns.delete(request.runId)
+    channel.onmessage = () => {}
+    if (terminal !== 'completed') void cancelNative()
   }
-  await invocation
 }
 
 export function quotaFromBilling(value: unknown): { buckets: AiQuotaBucket[] } | undefined {
@@ -174,7 +219,7 @@ export const xaiGrokProvider: AiProviderAdapter = {
   stream: streamXai,
 
   async cancel(runId) {
-    await invoke('ai_xai_cancel', { runId })
+    await activeRuns.get(runId)?.()
   },
 
   async login() {
