@@ -3,7 +3,8 @@ import { CornerDownLeft, History } from 'lucide-react'
 // note: lastPreviewRef keeps display text across brief controller gaps
 import type { Locale } from '../../i18n'
 import { t } from '../../i18n'
-import type { CollectInputFrame } from '../../workspace/launcher/controller'
+import { getHostOutputIntent } from '../../workspace/launcher/output'
+import type { CollectInputFrame, LauncherControllerState } from '../../workspace/launcher/controller'
 import { resolveDisplayTitle } from '../../workspace/launcher/display'
 import type { IconRef, LauncherOutput, LauncherResultChoice } from '../../workspace/launcher/types'
 import { resolveIcon } from '../../utils/resolveIcon'
@@ -24,12 +25,14 @@ function CollectInputSuggestRow({
   choice,
   selected,
   fallbackIcon,
+  disabled,
   onActivateChoice,
   onSecondaryAction,
 }: {
   choice: LauncherResultChoice
   selected: boolean
   fallbackIcon?: IconRef
+  disabled?: boolean
   onActivateChoice: (choice: LauncherResultChoice) => void
   onSecondaryAction?: (choice: LauncherResultChoice, actionId: string) => void
 }) {
@@ -49,6 +52,7 @@ function CollectInputSuggestRow({
         type="button"
         tabIndex={-1}
         className="l-suggest-row-main"
+        disabled={disabled}
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => onActivateChoice(choice)}
       >
@@ -73,6 +77,7 @@ function CollectInputSuggestRow({
             type="button"
             tabIndex={-1}
             className="l-suggest-row-secondary"
+            disabled={disabled}
             aria-label={action.title}
             onMouseDown={(event) => event.preventDefault()}
             onClick={(event) => {
@@ -107,6 +112,7 @@ export function GlobalLauncherCollectInputFrame({
   bindSearchInputRef,
   frame,
   busy,
+  deliveryIntent,
   error,
   locale,
   paramChips,
@@ -124,6 +130,7 @@ export function GlobalLauncherCollectInputFrame({
   bindSearchInputRef?: (node: HTMLInputElement | null) => void
   frame: CollectInputFrame
   busy: boolean
+  deliveryIntent?: LauncherControllerState['deliveryIntent']
   error?: string | null
   locale: Locale
   paramChips: { label: string; value: string }[]
@@ -136,7 +143,7 @@ export function GlobalLauncherCollectInputFrame({
   /** Host wiring: run a secondary action by id (plugin defines the action ids). */
   onSecondaryAction?: (choice: LauncherResultChoice, actionId: string) => void
   /** Paste live-preview text into the frontmost app (package 4 destination). */
-  onPastePreviewText?: (text: string) => void | Promise<void>
+  onPastePreviewText?: (choice: LauncherResultChoice) => void | Promise<void>
   /** Enter when no destination chrome — default submit path. */
   onSubmitPrimary?: () => void
   onCaptureSelection?: () => void
@@ -181,22 +188,25 @@ export function GlobalLauncherCollectInputFrame({
   } = useOutputDestinations({
     hasPaste,
     hasReturn,
+    hasCopy: !previewChoice || getHostOutputIntent(previewChoice) === 'copy',
+    hasPrimary: Boolean(previewChoice && getHostOutputIntent(previewChoice) !== 'copy'),
     // Do not reset destination index on every preview text change (avoids bar remount thrash).
     resetKey: frame.item.systemKey,
   })
 
   const runDestination = async (destId: OutputDestinationId) => {
+    if (busy) return
     // No fresh preview for current input → full submit (fresh execute).
     if (!previewChoice || !livePreviewText || !previewFresh) {
       onSubmitPrimary?.()
       return
     }
-    if (destId === 'copy') {
+    if (destId === 'copy' || destId === 'primary') {
       await onActivateChoice(previewChoice)
       return
     }
     if (destId === 'paste-foreground') {
-      await onPastePreviewText?.(livePreviewText)
+      await onPastePreviewText?.(previewChoice)
       return
     }
     if (destId === 'return-to-launcher') {
@@ -223,6 +233,7 @@ export function GlobalLauncherCollectInputFrame({
       if (isSuggestMode) return
       event.preventDefault()
       event.stopPropagation()
+      if (busy) return
       if (explicitPreview || frame.item.metadataInput) {
         if (!event.shiftKey && !event.altKey) onSubmitPrimary?.()
         return
@@ -252,7 +263,7 @@ export function GlobalLauncherCollectInputFrame({
           style={{ caretColor: 'var(--text, currentColor)' }}
         />
         {busy && (
-          <span className="meta anim-running-pulse" aria-live="polite">...</span>
+          <span className="meta anim-running-pulse" role="status" aria-live="polite">{t(locale, deliveryIntent === 'copy' ? 'palette.outputCopying' : deliveryIntent ? 'palette.outputDelivering' : 'palette.outputRunning')}</span>
         )}
       </div>
       {error && (
@@ -316,6 +327,7 @@ export function GlobalLauncherCollectInputFrame({
           {displayPreviewText && destinations.length > 0 && (
             <LauncherOutputTargetsBar
               destinations={destinations}
+              disabled={busy}
               activeId={activeDest?.id ?? 'copy'}
               locale={locale}
               onSelect={(id) => {
@@ -334,6 +346,7 @@ export function GlobalLauncherCollectInputFrame({
               choice={choice}
               selected={index === selectedIndex}
               fallbackIcon={frame.item.display.icon}
+              disabled={busy}
               onActivateChoice={onActivateChoice}
               onSecondaryAction={onSecondaryAction}
             />
