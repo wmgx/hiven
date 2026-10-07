@@ -7127,7 +7127,19 @@ fn expand_path(path: &str) -> PathBuf {
     PathBuf::from(path)
 }
 
+#[cfg(test)]
+thread_local! {
+    static TEST_HOME_OVERRIDE: std::cell::RefCell<Option<PathBuf>> = const {
+        std::cell::RefCell::new(None)
+    };
+}
+
 fn dirs_next_home() -> Option<PathBuf> {
+    #[cfg(test)]
+    if let Some(home) = TEST_HOME_OVERRIDE.with(|value| value.borrow().clone()) {
+        return Some(home);
+    }
+
     std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
         .map(PathBuf::from)
@@ -7383,6 +7395,24 @@ mod plugin_dir_command_tests {
     use super::*;
     use std::env;
 
+    // The home override is thread-local, but PLUGIN_KV_DB is process-wide.
+    // Hold this lock until the fixture and its cleanup have both completed.
+    static ISOLATED_HOME_LOCK: Mutex<()> = Mutex::new(());
+
+    struct IsolatedHomeGuard {
+        home: PathBuf,
+        previous: Option<PathBuf>,
+    }
+
+    impl Drop for IsolatedHomeGuard {
+        fn drop(&mut self) {
+            TEST_HOME_OVERRIDE.with(|value| {
+                *value.borrow_mut() = self.previous.take();
+            });
+            let _ = fs::remove_dir_all(&self.home);
+        }
+    }
+
     fn unique_home(label: &str) -> PathBuf {
         let millis = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -7392,18 +7422,58 @@ mod plugin_dir_command_tests {
     }
 
     fn with_isolated_home<T>(label: &str, test: impl FnOnce(PathBuf) -> T) -> T {
-        let previous_home = env::var_os("HOME");
+        let _fixture_lock = ISOLATED_HOME_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let home = unique_home(label);
         fs::create_dir_all(&home).expect("test home should be created");
-        env::set_var("HOME", &home);
-        let result = test(home.clone());
-        if let Some(value) = previous_home {
-            env::set_var("HOME", value);
-        } else {
-            env::remove_var("HOME");
-        }
-        let _ = fs::remove_dir_all(home);
-        result
+        let previous = TEST_HOME_OVERRIDE.with(|value| value.replace(Some(home.clone())));
+        let _home_guard = IsolatedHomeGuard {
+            home: home.clone(),
+            previous,
+        };
+        test(home)
+    }
+
+    #[test]
+    fn isolated_home_is_thread_local_and_preserves_process_home() {
+        let original_home = dirs_next_home();
+        let process_home = env::var_os("HOME");
+
+        with_isolated_home("thread-local-home", |home| {
+            assert_eq!(dirs_next_home(), Some(home));
+            assert_eq!(env::var_os("HOME"), process_home);
+            assert_eq!(thread::spawn(dirs_next_home).join().unwrap(), original_home);
+            assert!(matches!(
+                ISOLATED_HOME_LOCK.try_lock(),
+                Err(std::sync::TryLockError::WouldBlock)
+            ));
+        });
+
+        assert_eq!(dirs_next_home(), original_home);
+        assert_eq!(env::var_os("HOME"), process_home);
+    }
+
+    #[test]
+    fn isolated_home_restores_and_cleans_up_after_panic() {
+        let original_home = dirs_next_home();
+        let process_home = env::var_os("HOME");
+        let mut fixture_home = None;
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            with_isolated_home("panic-home", |home| {
+                fixture_home = Some(home);
+                panic!("exercise fixture cleanup during unwinding");
+            });
+        }));
+
+        assert!(result.is_err());
+        assert_eq!(dirs_next_home(), original_home);
+        assert_eq!(env::var_os("HOME"), process_home);
+        assert!(!fixture_home.unwrap().exists());
+
+        with_isolated_home("home-after-panic", |home| {
+            assert_eq!(dirs_next_home(), Some(home));
+        });
     }
 
     #[test]
