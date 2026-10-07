@@ -60,9 +60,41 @@ npm run test:quality-gate
 
 ## 构建
 
+先安装前端依赖（`npm ci`）。原生构建还需要 Rust/Cargo 和对应系统的构建依赖，例如 Linux 的 GTK / WebKitGTK 开发库；按 [Tauri v2 环境准备](https://v2.tauri.app/start/prerequisites/) 配置当前平台，不以某次构建环境的版本作为项目最低版本承诺。
+
+### 前端产物
+
 ```bash
-npm run tauri build
+npm run build
 ```
+
+仅构建 `dist/` 中的前端资源，不编译 Rust，也不生成桌面可执行文件或安装包。
+
+### 本机原生可执行文件
+
+```bash
+npm run build:desktop:native        # release
+npm run build:desktop:native:debug  # debug
+```
+
+两者均由 Tauri 先执行前端构建，再编译当前主机平台的原生程序；`--no-bundle` 跳过应用包、安装包与更新包生成。不会自动启动应用，也不会替其他操作系统交叉编译。
+
+默认产物为 `src-tauri/target/release/hiven` 或 `src-tauri/target/debug/hiven`（Windows 为 `hiven.exe`）；设置了 `CARGO_TARGET_DIR` 等 Cargo 配置时，以构建日志中的产物路径为准。
+
+### macOS 应用包与发布
+
+```bash
+npm run build:desktop
+npm run build:desktop:debug
+```
+
+这两个原有命令固定生成 macOS `.app` / `.dmg`，沿用现有签名配置，并关闭 updater artifacts；不适用于 Linux / Windows。本机只检查原生构建时，使用上面的 `build:desktop:native` 系列。
+
+正式发布仍由 [Build & Release](.github/workflows/build.yml) 按 macOS arm64 / x64、Windows x64 矩阵生成发布与更新产物。Linux 尚未进入正式发布流水线。
+
+### 验证范围
+
+原生构建通过只说明当前主机的编译与链接成功，不代表 GUI、全局快捷键、系统托盘、前台应用交互或全部平台已经验收。这些运行行为需要在对应桌面系统中另行验证。Linux 当前不支持模拟粘贴回前台应用，不能以构建成功视为该能力可用。
 
 ## 文档
 

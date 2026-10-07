@@ -8,6 +8,8 @@
     "build": "vite build",
     "build:desktop": "tauri build --bundles app,dmg --config '{\"bundle\":{\"createUpdaterArtifacts\":false}}'",
     "build:desktop:debug": "tauri build --debug --bundles app,dmg --config '{\"bundle\":{\"createUpdaterArtifacts\":false}}'",
+    "build:desktop:native": "tauri build --no-bundle",
+    "build:desktop:native:debug": "tauri build --debug --no-bundle",
     "lint": "eslint .",
     "check:architecture": "node scripts/check-architecture.mjs",
     "check:reachability": "node scripts/check-reachability.mjs",
