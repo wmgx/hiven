@@ -14,6 +14,28 @@ export type TranslateResult = {
   providerRequestId?: string
 }
 
+export type TranslateExecutionOptions = {
+  signal?: AbortSignal
+  /** The accumulated, unfinished translation. Only the resolved result is complete. */
+  onText?: (text: string) => void
+}
+
+export class AiTranslationError extends Error {
+  readonly code: 'incomplete' | 'empty'
+
+  constructor(code: 'incomplete' | 'empty') {
+    super(code === 'incomplete' ? 'AI translation ended without completion' : 'AI returned an empty translation')
+    this.name = 'AiTranslationError'
+    this.code = code
+  }
+}
+
+function translationAborted(): Error {
+  const error = new Error('AI translation cancelled')
+  error.name = 'AbortError'
+  return error
+}
+
 type BaiduResponse = {
   trans_result?: Array<{ src: string; dst: string }>
   error_code?: string | number
@@ -228,28 +250,43 @@ async function translateWithDeepL(req: TranslateRequest, profile: TranslateProfi
   return { text, billedChars: estimateBilledChars(req.text) }
 }
 
-export async function translateWithAi(req: TranslateRequest, profile: TranslateProfile, ai: PluginAiApi): Promise<TranslateResult> {
+export async function translateWithAi(req: TranslateRequest, profile: TranslateProfile, ai: PluginAiApi, options: TranslateExecutionOptions = {}): Promise<TranslateResult> {
+  if (options.signal?.aborted) throw translationAborted()
   const prompt = `Translate the text below from ${LANGUAGE_NAME[req.sourceLang]} to ${LANGUAGE_NAME[req.targetLang]}. Preserve meaning, tone, formatting, and line breaks. Return only the translation, with no explanation.\n\n${req.text}`
   let text = ''
+  let completed = false
   for await (const event of ai.stream({
     providerId: profile.aiProviderId || undefined,
     agentId: profile.aiAgentId || undefined,
     effort: profile.aiEffort || 'inherit',
     input: [{ type: 'text', text: prompt }],
     capabilities: ['text.generate'],
+    signal: options.signal,
   })) {
-    if (event.type === 'text.delta') text += event.delta
+    if (options.signal?.aborted) throw translationAborted()
+    if (event.type === 'text.delta') {
+      text += event.delta
+      options.onText?.(text)
+    }
     if (event.type === 'error') throw new Error(event.message)
+    if (event.type === 'completed') {
+      if (event.status === 'cancelled') throw translationAborted()
+      completed = true
+      // Breaking awaits iterator.return(), and never consumes post-terminal events.
+      break
+    }
   }
+  if (options.signal?.aborted) throw translationAborted()
+  if (!completed) throw new AiTranslationError('incomplete')
   text = text.trim()
-  if (!text) throw new Error('AI returned an empty translation')
+  if (!text) throw new AiTranslationError('empty')
   return { text, billedChars: estimateBilledChars(req.text) }
 }
 
-export async function translateText(req: TranslateRequest, profile: TranslateProfile, network: PluginNetworkApi, ai: PluginAiApi): Promise<TranslateResult> {
+export async function translateText(req: TranslateRequest, profile: TranslateProfile, network: PluginNetworkApi, ai: PluginAiApi, options: TranslateExecutionOptions = {}): Promise<TranslateResult> {
   switch (profile.provider) {
     case 'ai':
-      return translateWithAi(req, profile, ai)
+      return translateWithAi(req, profile, ai, options)
     case 'baidu':
       return translateWithBaidu(req, profile, network)
     case 'deepl':
