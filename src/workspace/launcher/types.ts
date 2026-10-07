@@ -588,6 +588,12 @@ export type LauncherItem = {
   behavior: LauncherBehavior
   surfaces?: LauncherSurfaceId[]
   inputPolicy?: TextInputPolicy
+  /** Host-owned global execution path with explicit text and deferred delivery. */
+  executionMode?: 'explicit-text-preview'
+  /** Host-owned input form for action metadata; never seed it from an Object Block. */
+  metadataInput?: boolean
+  /** Freeze per-selection state before entering the host input flow. */
+  prepare?: (ctx: LauncherExecutionContext) => Promise<LauncherItem | void> | LauncherItem | void
   /** Tool behavior metadata. Missing means {@link DEFAULT_TOOL_ACTION_POLICY}. */
   actionPolicy?: ToolActionPolicy
   /** Stable behavior contract hash; labels and saveability metadata are excluded. */
@@ -772,6 +778,18 @@ export type PluginToolContext<TSettings = unknown> = {
 
 export type PluginToolResult = LauncherExecuteResult
 
+/** Pure, explicit-input runner. It receives no workspace, storage, AI, or shell API. */
+export type PluginToolExplicitTextPreviewContext = {
+  input: { text: string }
+  params: Record<string, unknown>
+  locale: Locale
+  t: (key: string, vars?: Record<string, string | number>) => string
+}
+
+export type PluginToolTextPreviewResult =
+  | { ok: true; text: string }
+  | { ok: false; message: string }
+
 type PluginToolContributionBase<TSettings> = {
   id: string
   title: string
@@ -781,6 +799,10 @@ type PluginToolContributionBase<TSettings> = {
   icon?: IconRef
   aliases?: string[]
   inputPolicy?: TextInputPolicy
+  /** Opt in to host-gated explicit text preview on supported trusted packages. */
+  explicitTextPreview?: {
+    run(ctx: PluginToolExplicitTextPreviewContext): Promise<PluginToolTextPreviewResult> | PluginToolTextPreviewResult
+  }
   defaultParams?: Record<string, unknown>
   /** When true, launcher selection prompts for params even when defaults exist. */
   requireParamSelection?: boolean
