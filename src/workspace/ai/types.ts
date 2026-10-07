@@ -66,6 +66,7 @@ export type AiInput =
   | { type: 'file'; blobId: string }
 
 export type AiRequest = {
+  signal?: AbortSignal
   providerId?: string
   agentId?: string
   effort?: AiReasoningEffort | 'inherit'
