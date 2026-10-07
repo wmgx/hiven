@@ -1,4 +1,4 @@
-import type { LauncherParamOption, LauncherParamSpec, SystemLauncherItemKey, TextInputPolicy } from './types'
+import type { LauncherItem, LauncherParamOption, LauncherParamSpec, SystemLauncherItemKey, TextInputPolicy } from './types'
 
 function optionValue(option: LauncherParamOption): string {
   return typeof option === 'string' ? option : option.value
@@ -16,11 +16,14 @@ export function fnv1a64(value: string): string {
 export function computeContractFingerprint(contract: {
   systemKey: SystemLauncherItemKey
   inputPolicy?: TextInputPolicy
+  executionMode?: LauncherItem['executionMode']
   params?: LauncherParamSpec[]
 }): string {
   const canonical = JSON.stringify({
     systemKey: contract.systemKey,
     inputPolicy: contract.inputPolicy ?? null,
+    // Preserve existing contracts for tools that have not opted into this path.
+    ...(contract.executionMode ? { executionMode: contract.executionMode } : {}),
     params: (contract.params ?? []).map((param) => ({
       key: param.key,
       type: param.type,
