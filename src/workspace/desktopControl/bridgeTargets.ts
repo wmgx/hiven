@@ -91,7 +91,7 @@ export async function desktopBridgeStatus(): Promise<DesktopBridgeStatus | null>
 }
 
 export async function listDesktopBridgeTargets(sourceId?: string): Promise<DesktopBridgeTargetDto[]> {
-  if (!isTauriRuntime()) return 0
+  if (!isTauriRuntime()) return []
   const key = sourceId ?? null
   const now = Date.now()
   if (listCache && listCache.sourceId === key && now - listCache.fetchedAt < LIST_TTL_MS) {
