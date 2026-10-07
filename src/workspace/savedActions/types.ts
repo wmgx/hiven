@@ -30,6 +30,7 @@ export type LastSaveableRunState = LastSaveableRun | BlockedSaveableRun
 
 export type SavedActionDisabledReason =
   | 'missing-action'
+  | 'ambiguous-action'
   | 'contract-changed'
   | 'policy-changed'
   | 'saveability-changed'
