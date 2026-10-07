@@ -118,6 +118,7 @@ function resolveToolItem(
   tool: PluginToolContribution,
   pluginId: string,
   source: ContributionSource,
+  definition: PluginDefinition,
 ): LauncherItem | null {
   const launcherOpt = tool.surfaces?.launcher
   if (launcherOpt === false || launcherOpt == null) return null
@@ -125,6 +126,7 @@ function resolveToolItem(
     pluginId,
     source: resolvePluginSettingsSource(pluginId, source),
     systemKey: getPluginToolItemKey(pluginId, tool.id),
+    definition,
   }))
 }
 
@@ -233,7 +235,7 @@ export function collectStaticPluginItems(): LauncherItem[] {
     }
     for (const tool of tools) {
       if (badToolIds.has(tool.id)) continue
-      const item = resolveToolItem(tool, pluginId, source)
+      const item = resolveToolItem(tool, pluginId, source, def)
       if (item) {
         items.push(item)
       }
@@ -520,9 +522,9 @@ export function collectStaticCandidates(surfaceId: LauncherSurfaceId): LauncherI
   const baseItems = [...getHostLauncherItems(), ...collectStaticPluginItems()]
   const api = createPluginLauncherApi()
   const all = [...baseItems, ...getSavedActionLauncherItems(baseItems, {
-    selection: Boolean(api.getSelectionText()),
-    activeText: Boolean(api.getActiveText()),
-  })]
+    get selection() { return Boolean(api.getSelectionText()) },
+    get activeText() { return Boolean(api.getActiveText()) },
+  }, () => [...getHostLauncherItems(), ...collectStaticPluginItems()])]
   return all.filter((item) => appearsOnSurface(item, surfaceId))
 }
 
