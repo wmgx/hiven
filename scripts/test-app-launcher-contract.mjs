@@ -80,7 +80,7 @@ assert.equal(existsSync(join(root, 'src/plugins/core-pane')), false, 'core-pane 
 
 assert.match(files.hostAppLauncher, /HOST_APP_INDEX_CACHE_KEY\s*=\s*['"]hiven:host-app-launcher:index:v2['"]/, 'host app launcher must use a host-owned cache key (v2 drops path-hash false matches)')
 assert.match(files.hostAppLauncher, /id:\s*['"]['"]/, 'host app search fields must not match internal appId/path hashes')
-assert.match(files.hostAppLauncher, /humanAppAliases|isInternalAppSearchToken/, 'host app search must only use human-readable name aliases')
+assert.match(files.hostAppLauncher, /getAppSearchAliases/, 'host app search must only use human-readable name aliases')
 assert.match(files.tauriLib, /fn read_info_plist_xml/, 'native discovery must read binary Info.plist via XML conversion')
 assert.match(files.tauriLib, /plutil/, 'native discovery must convert binary Info.plist with plutil')
 assert.doesNotMatch(files.hostAppLauncher, /app-launcher:index:v5|createPluginPrivateStorage|PluginPrivateStorageApi|storage\.kv/, 'host app launcher must not reuse the old plugin cache or plugin storage')

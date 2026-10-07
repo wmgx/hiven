@@ -45,6 +45,8 @@ const host = load('src/workspace/appLauncher/hostAppLauncher.ts', {
   '../launcher/perf': { launcherPerfNow: () => 0, logLauncherPerfDuration() {} },
   './hostAppIndex': load('src/workspace/appLauncher/hostAppIndex.ts'),
   './appLaunchError': errors,
+  '../../store': { useAppStore: { getState: () => ({ settings: { appSearchAliases: {} } }) } },
+  './appSearchAliases': load('src/workspace/appLauncher/appSearchAliases.ts'),
   '@tauri-apps/api/core': native,
 }, {
   window: {

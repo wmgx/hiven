@@ -34,6 +34,11 @@ import {
   upsertAppHotkey,
   type AppHotkeyBinding,
 } from './workspace/appHotkeys'
+import {
+  normalizeAppSearchAliases,
+  parseAppSearchAliasInput,
+  type AppSearchAliases,
+} from './workspace/appLauncher/appSearchAliases'
 
 migrateLocalStorageKey('fluxtext-settings', 'hiven-settings')
 
@@ -175,6 +180,8 @@ interface AppState {
     globalLauncherWindowPositionSource?: 'user'
     /** Per-app global shortcuts (focus/hide toggle). */
     appHotkeys: AppHotkeyBinding[]
+    /** Explicit human search aliases; app ids and launch behavior stay unchanged. */
+    appSearchAliases: AppSearchAliases
     aiDefaultProviderId?: string
     aiDefaultAgentId?: string
     aiDefaultEffort: 'low' | 'medium' | 'high' | 'xhigh'
@@ -183,6 +190,7 @@ interface AppState {
   updateSetting: (key: string, value: any) => void
   setAppHotkey: (binding: AppHotkeyBinding) => void
   removeAppHotkey: (appId: string) => void
+  setAppSearchAliases: (appId: string, aliases: string[]) => void
   toggleBuiltinDisabled: (name: string) => void
   toggleCustomDisabled: (name: string) => void
   locale: Locale
@@ -195,6 +203,18 @@ function stripShortcutRuntimeStatus(shortcut: GlobalPinnedLauncherShortcut): Glo
   return { kind: 'disabled' }
 }
 
+function mergeShortcutRuntimeStatus(
+  shortcut: GlobalPinnedLauncherShortcut,
+  current: GlobalPinnedLauncherShortcut,
+): GlobalPinnedLauncherShortcut {
+  const normalized = stripShortcutRuntimeStatus(shortcut)
+  // Unrelated cross-window settings updates must not erase this window's result.
+  // A changed shortcut still starts without the previous registration status.
+  return JSON.stringify(normalized) === JSON.stringify(stripShortcutRuntimeStatus(current))
+    ? current
+    : normalized
+}
+
 // Other windows may persist unrelated settings before their storage event runs.
 // Only an explicit toggle may overwrite the latest persisted experiment choice.
 let automaticLearningWrite: boolean | undefined
@@ -205,6 +225,29 @@ function persistedAutomaticLearningEnabled(fallback: boolean): boolean {
   } catch {
     return fallback
   }
+}
+
+// Keep newer per-app edits when another window persists an unrelated setting.
+let appSearchAliasesWrite = false
+function readPersistedAppSearchAliases(): AppSearchAliases {
+  const raw = localStorage.getItem('hiven-settings')
+  return normalizeAppSearchAliases(raw ? JSON.parse(raw)?.state?.settings?.appSearchAliases : undefined)
+}
+
+function persistedAppSearchAliases(fallback: AppSearchAliases): AppSearchAliases {
+  try {
+    return readPersistedAppSearchAliases()
+  } catch {
+    return fallback
+  }
+}
+
+function appSearchAliasesEqual(left: AppSearchAliases, right: AppSearchAliases): boolean {
+  const keys = Object.keys(left)
+  return keys.length === Object.keys(right).length && keys.every((key) =>
+    Object.hasOwn(right, key) && left[key].length === right[key].length
+      && left[key].every((alias, index) => alias === right[key][index]),
+  )
 }
 
 export const useAppStore = create<AppState>()(persist((set, get) => ({
@@ -312,12 +355,14 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
     globalLauncherWindowPosition: undefined,
     globalLauncherWindowPositionSource: undefined,
     appHotkeys: emptyAppHotkeys(),
+    appSearchAliases: {},
     aiDefaultProviderId: 'openai-chatgpt',
     aiDefaultAgentId: undefined,
     aiDefaultEffort: 'medium',
     jevCommandSuggestion: { enabled: false, apiKey: '', ...JEV_PRESETS.tencent },
   },
   updateSetting: (key, value) => {
+    if (key === 'appSearchAliases') throw new Error('Save application search aliases with setAppSearchAliases.')
     if (key === 'automaticLearningEnabled') automaticLearningWrite = value === true
     try {
       set((state) => {
@@ -356,6 +401,40 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
         appHotkeys: removeAppHotkey(state.settings.appHotkeys ?? [], appId),
       },
     })),
+  setAppSearchAliases: (appId, aliases) => {
+    if (typeof appId !== 'string' || !appId.trim() || appId !== appId.trim()
+      || ['__proto__', 'prototype', 'constructor'].includes(appId)
+      || /[\u0000-\u001f\u007f-\u009f]/.test(appId)
+      || !Array.isArray(aliases) || aliases.some((alias) => typeof alias !== 'string' || /[\r\n]/.test(alias))) {
+      throw new Error('Invalid application search aliases.')
+    }
+    const parsed = parseAppSearchAliasInput(aliases.join('\n'))
+    if (!parsed.ok) throw new Error(`Invalid application search aliases: ${parsed.reason}`)
+    // Missing storage must fail explicitly, including persist's unavailable-storage fallback.
+    if (!useAppStore.persist?.getOptions().storage) throw new Error('Application settings storage is unavailable.')
+    const next = { ...readPersistedAppSearchAliases() }
+    if (parsed.aliases.length) next[appId] = parsed.aliases
+    else delete next[appId]
+    const before = get().settings.appSearchAliases
+    const previousWrite = appSearchAliasesWrite
+    appSearchAliasesWrite = true
+    try {
+      set((state) => ({ settings: { ...state.settings, appSearchAliases: next } }))
+    } catch (error) {
+      // Zustand publishes first; undo an unsaved edit unless a subscriber replaced it.
+      if (get().settings.appSearchAliases === next) {
+        appSearchAliasesWrite = false
+        try {
+          set((state) => ({ settings: { ...state.settings, appSearchAliases: before } }))
+        } catch {
+          // Restore memory even when storage also rejects the rollback write.
+        }
+      }
+      throw error
+    } finally {
+      appSearchAliasesWrite = previousWrite
+    }
+  },
   toggleBuiltinDisabled: (name) =>
     set((state) => {
       const list = state.settings.disabledBuiltins
@@ -378,6 +457,9 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
       ...state.settings,
       automaticLearningEnabled: automaticLearningWrite
         ?? persistedAutomaticLearningEnabled(state.settings.automaticLearningEnabled === true),
+      appSearchAliases: appSearchAliasesWrite
+        ? state.settings.appSearchAliases
+        : persistedAppSearchAliases(state.settings.appSearchAliases),
       globalPinnedLauncherShortcut: stripShortcutRuntimeStatus(state.settings.globalPinnedLauncherShortcut),
       quickEditorShortcut: stripShortcutRuntimeStatus(state.settings.quickEditorShortcut),
     },
@@ -415,15 +497,19 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
     merged.settings = { ...current.settings, ...persistedState.settings }
     // Older settings have no opt-in; never inherit a live window's old true.
     merged.settings.automaticLearningEnabled = persistedState.settings?.automaticLearningEnabled === true
-    merged.settings.globalPinnedLauncherShortcut = stripShortcutRuntimeStatus(
-      merged.settings.globalPinnedLauncherShortcut ?? current.settings.globalPinnedLauncherShortcut
+    merged.settings.globalPinnedLauncherShortcut = mergeShortcutRuntimeStatus(
+      merged.settings.globalPinnedLauncherShortcut ?? current.settings.globalPinnedLauncherShortcut,
+      current.settings.globalPinnedLauncherShortcut,
     )
-    merged.settings.quickEditorShortcut = stripShortcutRuntimeStatus(
-      merged.settings.quickEditorShortcut ?? current.settings.quickEditorShortcut
+    merged.settings.quickEditorShortcut = mergeShortcutRuntimeStatus(
+      merged.settings.quickEditorShortcut ?? current.settings.quickEditorShortcut,
+      current.settings.quickEditorShortcut,
     )
     merged.settings.appHotkeys = normalizeAppHotkeys(
       persistedState.settings?.appHotkeys ?? current.settings.appHotkeys,
     )
+    // Absent/deleted settings mean cleared aliases, never the current window's stale map.
+    merged.settings.appSearchAliases = normalizeAppSearchAliases(persistedState.settings?.appSearchAliases)
 
     // Restore persisted launcher usage; one-shot seed from legacy action usage if needed.
     const persistedLauncherUsage = persistedState.launcherUsageBySurface
@@ -508,7 +594,11 @@ export function getAutomaticLearningSignal(): AbortSignal {
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', (event) => {
     if ((event.key === 'hiven-settings' || event.key === null)
-      && persistedAutomaticLearningEnabled(false) !== (useAppStore.getState().settings.automaticLearningEnabled === true)) {
+      && (persistedAutomaticLearningEnabled(false) !== (useAppStore.getState().settings.automaticLearningEnabled === true)
+        || !appSearchAliasesEqual(
+          persistedAppSearchAliases(useAppStore.getState().settings.appSearchAliases),
+          useAppStore.getState().settings.appSearchAliases,
+        ))) {
       // Rehydrate does not persist a stale snapshot back to the other window.
       void useAppStore.persist.rehydrate()
     }

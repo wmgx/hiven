@@ -65,6 +65,7 @@ type SelectProps = {
 
 type ComboboxProps = {
   options: SelectOption[]
+  filter?: (option: SelectOption, query: string) => boolean
   value?: string
   disabled?: boolean
   className?: string
@@ -312,12 +313,13 @@ export const Select = forwardRef<HTMLDivElement, SelectProps>(function Select(
   )
 })
 
-export function Combobox({ options, value = '', disabled, className, placeholder, emptyLabel = '', 'aria-label': ariaLabel, onChange }: ComboboxProps) {
+export function Combobox({ options, filter, value = '', disabled, className, placeholder, emptyLabel = '', 'aria-label': ariaLabel, onChange }: ComboboxProps) {
   const selected = options.find((option) => option.value === value) ?? null
   const [open, setOpen] = useState(false)
   return (
     <BaseCombobox.Root
       items={options}
+      filter={filter}
       value={selected}
       disabled={disabled}
       onValueChange={(option) => onChange(option?.value ?? '')}

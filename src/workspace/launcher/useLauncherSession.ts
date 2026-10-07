@@ -178,6 +178,8 @@ export function useLauncherSession({
   const normalizedHostId = normalizeLauncherSurfaceId(hostId)
   const locale = useAppStore((s) => s.locale)
   const automaticLearningEnabled = useAppStore((s) => s.settings.automaticLearningEnabled)
+  const appSearchAliases = useAppStore((s) => s.settings.appSearchAliases)
+  const appSearchAliasesRef = useRef(appSearchAliases)
   const jevSettings = useAppStore((s) => s.settings.jevCommandSuggestion)
   const launcherUsageBySurface = useAppStore((s) => s.launcherUsageBySurface)
   const recordLauncherSelection = useAppStore((s) => s.recordLauncherSelection)
@@ -511,6 +513,12 @@ export function useLauncherSession({
       return
     }
 
+    // Alias edits can change matches for an unchanged query. Clear the prior
+    // generation before scheduling the replacement; cleanup aborts old work.
+    if (appSearchAliasesRef.current !== appSearchAliases) {
+      appSearchAliasesRef.current = appSearchAliases
+      setHostDynamicItems([])
+    }
     hostQueryRef.current = q
     // Empty open: delay past first paint. Typing: normal debounce.
     const delayMs = q ? HOST_DYNAMIC_DEBOUNCE_MS : HOST_EMPTY_OPEN_DELAY_MS
@@ -561,7 +569,7 @@ export function useLauncherSession({
       window.clearTimeout(timer)
       hostAbortRef.current?.abort()
     }
-  }, [automaticLearningEnabled, collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open, query])
+  }, [appSearchAliases, automaticLearningEnabled, collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open, query])
 
   // ── Remote document Desktop Targets (feishu.docs, …) — progressive, slow debounce ──
   useEffect(() => {

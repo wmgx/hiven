@@ -5,6 +5,8 @@ import type { AppWorkObject } from '../../workflow/workObject'
 import { logLauncherPerfDuration, launcherPerfNow } from '../launcher/perf'
 import { normalizeHostAppEntries } from './hostAppIndex'
 import { rethrowAppLaunchError } from './appLaunchError'
+import { useAppStore } from '../../store'
+import { getAppSearchAliases } from './appSearchAliases'
 
 // v2: drop stale caches that used path-hash appIds (binary Info.plist parse failures)
 // and avoid matching internal ids/paths in search.
@@ -113,47 +115,23 @@ function sourceLabel(app: HostAppEntry): string {
   }
 }
 
-/** Internal app ids / filesystem paths must never participate in query matching. */
-function isInternalAppSearchToken(value: string): boolean {
-  const v = value.trim().toLowerCase()
-  if (!v) return true
-  if (v.startsWith('macos:') || v.startsWith('windows:') || v.startsWith('linux:')) return true
-  if (v.startsWith('host:app-launcher:')) return true
-  if (v.startsWith('/') || v.includes('\\')) return true
-  if (v.endsWith('.app') || v.includes('.app/')) return true
-  return false
-}
+type AppAliasMap = Record<string, string[]>
 
-function humanAppAliases(app: HostAppEntry): string[] {
-  const values = [
-    app.name,
-    ...Object.values(app.nameI18n ?? {}),
-    ...(app.aliases ?? []),
-  ]
-  const aliases: string[] = []
-  for (const value of values) {
-    if (!value || isInternalAppSearchToken(value)) continue
-    if (aliases.some((existing) => existing.toLowerCase() === value.toLowerCase())) continue
-    aliases.push(value)
-  }
-  return aliases
-}
-
-function appSearchFields(app: HostAppEntry): SearchableFields {
-  // Empty id: never match macos:path:<hex> / bundle path system keys.
-  // Aliases are human display names only (no path, no appId).
+function appSearchFields(app: HostAppEntry, aliases: AppAliasMap): SearchableFields {
+  // User aliases enrich search only, after catalog normalization. Never pass
+  // them to app deduplication, process-owner resolution or launch arguments.
   return {
     id: '',
     title: app.name,
     titleI18n: app.nameI18n,
-    aliases: humanAppAliases(app),
+    aliases: getAppSearchAliases(app, aliases),
   }
 }
 
-function appMatchesQuery(app: HostAppEntry, query: string, locale: Locale): boolean {
+function appMatchesQuery(app: HostAppEntry, query: string, locale: Locale, aliases: AppAliasMap): boolean {
   const q = query.trim().toLowerCase()
   if (!q) return true
-  return searchableFieldsMatch(appSearchFields(app), q, locale)
+  return searchableFieldsMatch(appSearchFields(app, aliases), q, locale)
 }
 
 function appIconRef(appId: string): string {
@@ -249,10 +227,11 @@ export async function getHostAppLauncherDynamicItems({
   if (surfaceId !== 'global-launcher') return []
   const startedAt = launcherPerfNow()
   const cache = readCache()
+  const aliases = useAppStore.getState().settings.appSearchAliases
   const q = query.trim()
   // Source providers return every match; the shared ranker owns ordering and caps.
   const apps = q
-    ? cache.apps.filter((app) => appMatchesQuery(app, query, locale))
+    ? cache.apps.filter((app) => appMatchesQuery(app, query, locale, aliases))
     : cache.apps
 
   const items = apps.map((app) => ({
@@ -264,7 +243,7 @@ export async function getHostAppLauncherDynamicItems({
       subtitle: app.displayPath || sourceLabel(app),
       icon: appIconRef(app.appId),
       // Human names only — ranking must not match path/appId via aliases.
-      aliases: humanAppAliases(app),
+      aliases: getAppSearchAliases(app, aliases),
     },
     behavior: { type: 'perform' },
     surfaces: ['global-launcher'],
@@ -291,8 +270,9 @@ export async function getHostAppLauncherDynamicItems({
 }
 
 export function getHostAppWorkObjects(query: string, locale: Locale): AppWorkObject[] {
+  const aliases = useAppStore.getState().settings.appSearchAliases
   return readCache().apps
-    .filter((app) => appMatchesQuery(app, query, locale))
+    .filter((app) => appMatchesQuery(app, query, locale, aliases))
     .map((app) => ({
       id: `app:${app.appId}`,
       type: 'app',

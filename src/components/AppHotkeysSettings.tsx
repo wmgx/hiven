@@ -1,7 +1,7 @@
 /**
- * Settings UI for per-app global hotkeys (focus / hide toggle).
+ * Settings UI for per-app global hotkeys and explicit search aliases.
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { AppWindow, Plus, Trash2 } from 'lucide-react'
 import { useAppStore } from '../store'
 import { t } from '../i18n'
@@ -11,16 +11,113 @@ import type { DiscoveredApp } from '../workspace/launcher/types'
 import { Combobox } from '../plugin-ui'
 import { saveAppHotkey } from '../hotkeys/appHotkeys'
 import { showToast } from '../workspace/toast'
+import { getAppSearchAliases, parseAppSearchAliasInput } from '../workspace/appLauncher/appSearchAliases'
+import { searchableFieldsMatch } from '../workspace/searchRanking'
 
-type ListedApp = { appId: string; name: string }
+type AliasDraft = { text: string; savedText: string; edited: boolean }
+
+function AppSearchAliasEditor({ app }: { app: DiscoveredApp }) {
+  const locale = useAppStore((s) => s.locale)
+  const savedAliases = useAppStore((s) => s.settings.appSearchAliases[app.appId])
+  const setAppSearchAliases = useAppStore((s) => s.setAppSearchAliases)
+  const savedText = (savedAliases ?? []).join('\n')
+  const [draft, setDraft] = useState<AliasDraft>({ text: savedText, savedText, edited: false })
+  const [notice, setNotice] = useState('')
+  const [saveError, setSaveError] = useState(false)
+  const fieldId = useId()
+  const parsed = parseAppSearchAliasInput(draft.text)
+  const dirty = draft.edited
+  const changedElsewhere = dirty && savedText !== draft.savedText
+  const validationError = parsed.ok ? '' : t(locale, {
+    'too-many': 'settings.appSearchAliasesTooMany',
+    'too-long': 'settings.appSearchAliasesTooLong',
+    invalid: 'settings.appSearchAliasesInvalid',
+  }[parsed.reason])
+
+  useEffect(() => {
+    // A storage update may refresh a clean editor, but never replace its draft.
+    setDraft((current) => !current.edited
+      ? { text: savedText, savedText, edited: false }
+      : current)
+  }, [savedText])
+
+  const persist = (aliases: string[]) => {
+    try {
+      setAppSearchAliases(app.appId, aliases)
+      setSaveError(false)
+      return true
+    } catch {
+      setSaveError(true)
+      setNotice('')
+      return false
+    }
+  }
+
+  const save = () => {
+    if (!parsed.ok || !persist(parsed.aliases)) return
+    const text = parsed.aliases.join('\n')
+    setDraft({ text, savedText: text, edited: false })
+    setNotice('settings.appSearchAliasesSaved')
+  }
+
+  const clear = () => {
+    setDraft({ ...draft, text: '', edited: true })
+    setSaveError(false)
+    setNotice('')
+  }
+
+  return (
+    <>
+      <label className="app-hotkeys-field" htmlFor={fieldId}>
+        <span>{t(locale, 'settings.appSearchAliasesLabel', { name: app.name })}</span>
+        <textarea
+          id={fieldId}
+          className="hiven-ui-input hiven-ui-textarea"
+          rows={4}
+          value={draft.text}
+          placeholder={t(locale, 'settings.appSearchAliasesPlaceholder')}
+          aria-describedby={`${fieldId}-hint${validationError ? ` ${fieldId}-error` : ''}`}
+          aria-invalid={Boolean(validationError)}
+          onChange={(event) => {
+            setDraft({ ...draft, text: event.currentTarget.value, edited: true })
+            setNotice('')
+            setSaveError(false)
+          }}
+        />
+      </label>
+      <p id={`${fieldId}-hint`} className="app-hotkeys-empty">{t(locale, 'settings.appSearchAliasesHint')}</p>
+      {validationError ? <p id={`${fieldId}-error`} className="app-hotkeys-error" role="alert">{validationError}</p> : null}
+      {changedElsewhere ? <p className="app-hotkeys-empty" role="status">{t(locale, 'settings.appSearchAliasesChanged')}</p> : null}
+      <div>
+        <button type="button" className="app-hotkeys-add-btn" disabled={!dirty || !parsed.ok} onClick={save}>
+          {t(locale, 'settings.appSearchAliasesSave')}
+        </button>{' '}
+        <button type="button" className="app-hotkeys-add-btn" disabled={!draft.text} onClick={clear}>
+          {t(locale, 'settings.appSearchAliasesClear')}
+        </button>{' '}
+        <button type="button" className="app-hotkeys-add-btn" disabled={!dirty} onClick={() => {
+          setDraft({ text: savedText, savedText, edited: false })
+          setSaveError(false)
+          setNotice('')
+        }}>
+          {t(locale, 'settings.appSearchAliasesDiscard')}
+        </button>
+      </div>
+      {saveError ? <p className="app-hotkeys-error" role="alert">{t(locale, 'settings.appSearchAliasesSaveFailed')}</p> : null}
+      {notice ? <p className="app-hotkeys-empty" role="status">{t(locale, notice)}</p> : null}
+    </>
+  )
+}
 
 export function AppHotkeysSettings() {
   const locale = useAppStore((s) => s.locale)
   const bindings = useAppStore((s) => s.settings.appHotkeys ?? [])
+  const aliasMap = useAppStore((s) => s.settings.appSearchAliases)
   const removeAppHotkey = useAppStore((s) => s.removeAppHotkey)
 
-  const [apps, setApps] = useState<ListedApp[]>([])
+  const [apps, setApps] = useState<DiscoveredApp[]>([])
   const [selectedAppId, setSelectedAppId] = useState('')
+  const [aliasAppId, setAliasAppId] = useState('')
   const [draftAccel, setDraftAccel] = useState('')
   const [loadError, setLoadError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -44,9 +141,7 @@ export function AppHotkeysSettings() {
         const discovered = await invoke<DiscoveredApp[]>('discover_installed_apps')
         if (cancelled) return
         setApps(
-          (discovered ?? [])
-            .map((a) => ({ appId: a.appId, name: a.name }))
-            .sort((a, b) => a.name.localeCompare(b.name)),
+          [...(discovered ?? [])].sort((a, b) => a.name.localeCompare(b.name)),
         )
         setLoadError('')
       } catch (error) {
@@ -60,13 +155,34 @@ export function AppHotkeysSettings() {
     }
   }, [])
 
-  const selectedName = apps.find((a) => a.appId === selectedAppId)?.name ?? selectedAppId
+  const appOptions = useMemo(() => {
+    const nameCounts = new Map<string, number>()
+    for (const app of apps) nameCounts.set(app.name, (nameCounts.get(app.name) ?? 0) + 1)
+    return apps.map((app) => ({
+      value: app.appId,
+      label: (nameCounts.get(app.name) ?? 0) > 1 && app.displayPath
+        ? `${app.name} (${app.displayPath})`
+        : app.name,
+    }))
+  }, [apps])
+  const appsById = useMemo(() => new Map(apps.map((app) => [app.appId, app])), [apps])
+  const filterApp = useCallback((option: { value: string }, query: string) => {
+    const app = appsById.get(option.value)
+    return Boolean(app && searchableFieldsMatch({
+      id: '',
+      title: app.name,
+      titleI18n: app.nameI18n,
+      aliases: getAppSearchAliases(app, aliasMap),
+    }, query, locale))
+  }, [appsById, aliasMap, locale])
+  const selectedName = appsById.get(selectedAppId)?.name ?? ''
+  const aliasApp = appsById.get(aliasAppId)
 
   const handleAdd = useCallback(async () => {
-    if (!selectedAppId || !draftAccel.trim()) return
+    if (!selectedAppId || !selectedName || !draftAccel.trim()) return
     const binding: AppHotkeyBinding = {
       appId: selectedAppId,
-      name: selectedName || selectedAppId,
+      name: selectedName,
       accelerator: draftAccel.trim(),
       enabled: true,
     }
@@ -122,7 +238,8 @@ export function AppHotkeysSettings() {
           <Combobox
             className="app-hotkeys-app-select"
             value={selectedAppId}
-            options={apps.map((app) => ({ value: app.appId, label: app.name }))}
+            options={appOptions}
+            filter={filterApp}
             placeholder={t(locale, 'settings.appHotkeysFilter')}
             emptyLabel={t(locale, 'settings.appHotkeysSelect')}
             aria-label={t(locale, 'settings.appHotkeysPickApp')}
@@ -156,6 +273,25 @@ export function AppHotkeysSettings() {
           <Plus size={14} strokeWidth={2} />
           {t(locale, 'settings.appHotkeysAdd')}
         </button>
+      </div>
+
+      <div className="app-hotkeys-add">
+        <span className="app-hotkeys-name">{t(locale, 'settings.appSearchAliases')}</span>
+        <p className="app-hotkeys-empty">{t(locale, 'settings.appSearchAliasesInfo')}</p>
+        <label className="app-hotkeys-field">
+          <span>{t(locale, 'settings.appHotkeysPickApp')}</span>
+          <Combobox
+            className="app-hotkeys-app-select"
+            value={aliasAppId}
+            options={appOptions}
+            filter={filterApp}
+            placeholder={t(locale, 'settings.appHotkeysFilter')}
+            emptyLabel={t(locale, 'settings.appHotkeysSelect')}
+            aria-label={t(locale, 'settings.appSearchAliasesPickApp')}
+            onChange={setAliasAppId}
+          />
+        </label>
+        {aliasApp ? <AppSearchAliasEditor key={aliasApp.appId} app={aliasApp} /> : null}
       </div>
 
       {loadError ? <p className="app-hotkeys-error">{loadError}</p> : null}

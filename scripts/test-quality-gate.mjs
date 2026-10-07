@@ -39,6 +39,7 @@ const commands = [
   ['npm', ['run', 'test:launcher-visible-items']],
   ['npm', ['run', 'test:launcher-discovery-availability']],
   ['npm', ['run', 'test:app-launch-feedback']],
+  ['npm', ['run', 'test:app-search-aliases']],
   ['npm', ['run', 'test:app-hotkeys-runtime']],
   ['npm', ['run', 'test:shortcut-ownership-runtime']],
   ['npm', ['run', 'test:launcher-explicit-text-preview']],
