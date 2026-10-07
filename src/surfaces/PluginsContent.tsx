@@ -352,8 +352,8 @@ export function PluginsContent({}: PluginsContentProps) {
     let cancelled = false
     async function loadDirectoryPlugins() {
       setDirectoryLoading(true)
+      setBuiltinPlugins(listBundledPluginPackageSummaries())
       if (!isTauri()) {
-        setBuiltinPlugins(listBundledPluginPackageSummaries())
         setInstalledPackages([])
         setDirectoryLoading(false)
         return
@@ -365,12 +365,9 @@ export function PluginsContent({}: PluginsContentProps) {
       }
       try {
         setListError('')
-        const [builtinSummaries, installedSummaries] = await Promise.all([
-          listPluginDirs(`${configDir}/plugins/builtin`),
-          listPluginDirs(`${configDir}/plugins/installed`),
-        ])
+        setBuiltinPlugins(listBundledPluginPackageSummaries(`${configDir}/plugins/builtin`))
+        const installedSummaries = await listPluginDirs(`${configDir}/plugins/installed`)
         if (!cancelled) {
-          setBuiltinPlugins(builtinSummaries)
           setInstalledPackages(installedSummaries)
           const store = usePluginStore.getState()
           for (const pkg of installedSummaries) {
@@ -405,7 +402,6 @@ export function PluginsContent({}: PluginsContentProps) {
           }
         }
       } catch (error) {
-        if (!cancelled) setBuiltinPlugins([])
         if (!cancelled) setInstalledPackages([])
         if (!cancelled) setListError(error instanceof Error ? error.message : String(error))
       } finally {

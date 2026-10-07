@@ -111,6 +111,7 @@ export function GlobalLauncherHost() {
     controllerState,
     rankedItems: rankedLauncherItems,
     availableItems: availableLauncherItems,
+    nearbySaveItem: nearbySaveDomainItem,
     syncSelection,
     reset: resetSession,
   } = useLauncherSession({
@@ -123,6 +124,9 @@ export function GlobalLauncherHost() {
     makeApi: createGlobalLauncherPluginApi,
     visibleSelectionItemsRef,
   })
+  const nearbySaveItem = useMemo(() => nearbySaveDomainItem ? buildGlobalLauncherItems({
+    rankedLauncherItems: [nearbySaveDomainItem], query: '', locale,
+  })[0] : undefined, [nearbySaveDomainItem, locale])
   liveQueryRef.current = query
   // An explicit content handoff starts a new command search; ordinary Back keeps it.
   useEffect(() => subscribePendingObjectBlock(() => {
@@ -836,6 +840,7 @@ export function GlobalLauncherHost() {
         toggleResultChoice={toggleResultChoice}
         closeLauncher={closeLauncher}
         visibleFiltered={visibleFiltered}
+        nearbySaveItem={nearbySaveItem}
         selectedItem={selectedItem}
         selectedIndex={clampedSelectedIndex}
         setSelectedIndex={setSelectedIndex}

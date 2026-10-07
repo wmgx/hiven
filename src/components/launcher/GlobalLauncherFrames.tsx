@@ -35,6 +35,7 @@ export function GlobalLauncherFrameSwitch({
   query,
   searchPlaceholder,
   visibleFiltered,
+  nearbySaveItem,
   selectedItem,
   locale,
   resultSelectedIndex,
@@ -95,6 +96,7 @@ export function GlobalLauncherFrameSwitch({
   query: string
   searchPlaceholder: string
   visibleFiltered: LauncherMixedItem[]
+  nearbySaveItem?: LauncherMixedItem
   selectedItem?: LauncherMixedItem
   locale: Locale
   resultSelectedIndex: number
@@ -304,6 +306,8 @@ export function GlobalLauncherFrameSwitch({
       clipboardHintSelected={clipboardHintSelected}
       error={controllerState?.error ?? null}
       items={visibleFiltered}
+      nearbySaveItem={nearbySaveItem}
+      busy={controllerState?.busy ?? false}
       selectedItem={selectedItem}
       locale={locale}
       showCustomizeHint={showCustomizeHint}

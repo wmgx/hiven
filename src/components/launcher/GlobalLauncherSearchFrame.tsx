@@ -1,5 +1,5 @@
 import type { MouseEvent as ReactMouseEvent, MutableRefObject, RefObject } from 'react'
-import { ArrowLeft, Search, X } from 'lucide-react'
+import { ArrowLeft, BookmarkPlus, Search, X } from 'lucide-react'
 import type { Locale } from '../../i18n'
 import { t } from '../../i18n'
 import { LauncherHintKey } from './LauncherFooterHints'
@@ -31,6 +31,8 @@ export function GlobalLauncherSearchFrame({
   placeholder,
   error,
   items,
+  nearbySaveItem,
+  busy = false,
   selectedItem,
   locale,
   showCustomizeHint,
@@ -58,6 +60,8 @@ export function GlobalLauncherSearchFrame({
   placeholder: string
   error?: string | null
   items: LauncherMixedItem[]
+  nearbySaveItem?: LauncherMixedItem
+  busy?: boolean
   selectedItem?: LauncherMixedItem
   locale: Locale
   showCustomizeHint: boolean
@@ -193,6 +197,23 @@ export function GlobalLauncherSearchFrame({
               {t(locale, browsingActions ? 'palette.backToSearch' : 'palette.browseAllActions')}
             </button>
             {browsingActions && <span>{t(locale, 'palette.allActions')}</span>}
+          </div>
+        )}
+        {nearbySaveItem && !query.trim() && !browsingActions && (
+          <div className="launcher-discovery-nav">
+            <button
+              type="button"
+              className="launcher-discovery-action"
+              disabled={busy}
+              onMouseDown={(event) => event.preventDefault()}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') event.stopPropagation()
+              }}
+              onClick={() => onSelectItem(nearbySaveItem)}
+            >
+              <BookmarkPlus size={14} aria-hidden />
+              {nearbySaveItem.title}
+            </button>
           </div>
         )}
         {hint && !block && (

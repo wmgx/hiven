@@ -217,12 +217,18 @@ export function getHostExperienceJournalItems(): LauncherItem[] {
   ]
 }
 
-export function getHostSavedActionItems(): LauncherItem[] {
+/** Shared naming flow for search and a nearby offer bound before it is displayed. */
+export function createSaveLastRunItem(options: {
+  run?: LastSaveableRunState
+  display?: LauncherItem['display']
+  validate?: () => boolean
+} = {}): LauncherItem {
+  const offeredRun = options.run ? structuredClone(options.run) : undefined
   const saveLastItem: LauncherItem =
     {
       systemKey: 'host:saved-action:save-last',
       kind: 'host',
-      display: {
+      display: options.display ?? {
         title: 'Save Last Run as a Tool',
         titleI18n: { zh: '把上一次运行保存为工具' },
         subtitle: 'Use “Name | alias one, alias two”',
@@ -245,8 +251,9 @@ export function getHostSavedActionItems(): LauncherItem[] {
       prepare: async (ctx) => {
         // Freeze the completed run when naming starts. A later delivery cannot
         // replace the user's selected save target while this frame is open.
-        const lastRun: LastSaveableRunState | null = structuredClone(await getLastSaveableRun())
+        const lastRun: LastSaveableRunState | null = structuredClone(offeredRun ?? await getLastSaveableRun())
         if (!lastRun) throw new Error(translate(ctx.locale, 'palette', 'savedActionNoRecent'))
+        if (options.validate && !options.validate()) throw new Error(translate(ctx.locale, 'palette', 'savedActionOfferUnavailable'))
         if (lastRun.status === 'blocked') {
           throw new Error(translate(ctx.locale, 'palette', 'savedActionBlockedParams', { keys: lastRun.blockedKeys.join(', ') }))
         }
@@ -257,6 +264,7 @@ export function getHostSavedActionItems(): LauncherItem[] {
           ...saveLastItem,
           prepare: undefined,
           execute: async (inputCtx) => {
+            if (options.validate && !options.validate()) return { ok: false, message: translate(inputCtx.locale, 'palette', 'savedActionOfferUnavailable') }
             const [rawName, ...rawAliasParts] = (inputCtx.input?.text ?? '').split('|')
             const rawAliases = rawAliasParts.join('|')
             if (!rawName?.trim()) return { ok: false, message: translate(inputCtx.locale, 'palette', 'savedActionNameRequired') }
@@ -274,7 +282,11 @@ export function getHostSavedActionItems(): LauncherItem[] {
       // Execution without entering the naming session must fail closed.
       execute: async (ctx) => ({ ok: false, message: translate(ctx.locale, 'palette', 'savedActionNoRecent') }),
     }
-  return [saveLastItem,
+  return saveLastItem
+}
+
+export function getHostSavedActionItems(): LauncherItem[] {
+  return [createSaveLastRunItem(),
     {
       systemKey: 'host:saved-action:delete',
       kind: 'host',

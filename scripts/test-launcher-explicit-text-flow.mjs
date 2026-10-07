@@ -22,13 +22,16 @@ const vite = await createServer({ server: { middlewareMode: true }, appType: 'cu
 try {
   const { registerBundledPluginPackages } = await vite.ssrLoadModule('/src/workspace/bundledPluginLoader.ts')
   const { pluginRegistry } = await vite.ssrLoadModule('/src/workspace/pluginRegistry.ts')
-  const { collectStaticCandidates } = await vite.ssrLoadModule('/src/workspace/launcher/registry.ts')
+  const { collectStaticCandidates, getNearbySaveRunItem, resolvePluginTools } = await vite.ssrLoadModule('/src/workspace/launcher/registry.ts')
   const { LauncherController } = await vite.ssrLoadModule('/src/workspace/launcher/controller.ts')
   const output = await vite.ssrLoadModule('/src/workspace/launcher/output.ts')
   const { createGlobalLauncherPluginApi } = await vite.ssrLoadModule('/src/launcher/clipboard/globalLauncherApi.ts')
   const { consumePendingObjectBlock } = await vite.ssrLoadModule('/src/launcher/clipboard/pendingObjectBlock.ts')
   const hostReturn = createGlobalLauncherPluginApi({}).returnToLauncher
-  const { getLastSaveableRun, setLastSaveableRun } = await vite.ssrLoadModule('/src/workspace/savedActions/lastSaveableRun.ts')
+  const { getLastSaveableRun, setLastSaveableRun, subscribeLastSaveableRun } = await vite.ssrLoadModule('/src/workspace/savedActions/lastSaveableRun.ts')
+  const { usePluginPermissionStore } = await vite.ssrLoadModule('/src/workspace/pluginPermissions.ts')
+  const runNotifications = []
+  const stopRunNotifications = subscribeLastSaveableRun((run) => runNotifications.push(run))
   const store = await vite.ssrLoadModule('/src/workspace/savedActions/store.ts')
   const provider = await vite.ssrLoadModule('/src/workspace/savedActions/provider.ts')
   const { getHostSavedActionItems } = await vite.ssrLoadModule('/src/workspace/launcher/hostActions.ts')
@@ -93,6 +96,8 @@ try {
   assert.equal(top().output.choices[0].preview, expected)
   assert.deepEqual(deliveries, [])
   assert.equal(await getLastSaveableRun(), null, 'preview is not a completed delivery')
+  assert.equal(getNearbySaveRunItem(await getLastSaveableRun()), null)
+  assert.equal(runNotifications.length, 0, 'preview cannot notify a nearby save offer')
   const cancelledChoice = top().output.choices[0]
   controller.back()
   await controller.activateChoice(cancelledChoice)
@@ -112,15 +117,68 @@ try {
   assert.equal(deliveries.length, 1, 'returned preview is invalid after root navigation')
   assert.equal(store.listSavedActions().length, 0, 'successful output alone never creates a tool')
 
+  assert.equal(runNotifications.length, 1, 'successful delivery refreshes the nearby offer immediately')
+  const nearbyOffer = getNearbySaveRunItem(originalRun)
+  assert.ok(nearbyOffer)
+  assert.equal(nearbyOffer.display.title, `Save ${formatter.display.title} settings`)
+  assert.equal(nearbyOffer.display.titleI18n.zh, `保存“${formatter.display.titleI18n.zh}”设置`)
+  for (const invalid of [null, { ...originalRun, status: 'blocked' },
+    { ...originalRun, outputIntent: 'open-quick-editor' },
+    { ...originalRun, completedAt: Date.now() - 31 * 60 * 1000 },
+    { ...originalRun, contractFingerprint: 'outdated' }]) {
+    assert.equal(getNearbySaveRunItem(invalid), null)
+  }
+  // A dev source confined to the editor still makes the action key ambiguous.
+  const originalDefinition = pluginRegistry.getPluginDefinition('json-tools', 'production')
+  const editorOnlyDefinition = {
+    ...originalDefinition, toolsFor: undefined,
+    tools: resolvePluginTools(originalDefinition, {}).map((tool) => ({
+      ...tool, surfaces: { ...tool.surfaces, launcher: { surfaces: ['editor-command-bar'] } },
+    })),
+  }
+  const registerCollision = () => pluginRegistry.registerDevPlugin('json-tools', [], [], [], [], editorOnlyDefinition)
+  registerCollision()
+  assert.equal(collectStaticCandidates('global-launcher').filter((item) => item.systemKey === formatter.systemKey).length, 1,
+    'fixture collision is hidden from global candidates')
+  assert.equal(getNearbySaveRunItem(originalRun), null, 'offer checks every source before surface filtering')
+  await controller.selectItem(nearbyOffer)
+  assert.equal(top().kind, 'list', 'a stale displayed offer fails before naming')
+  assert.ok(controller.getState().error)
+  pluginRegistry.unregisterDevPlugin('json-tools')
+
+  await controller.selectItem(nearbyOffer)
+  controller.setInputText('Must not save a collision')
+  registerCollision()
+  await controller.submitInput()
+  assert.equal(top().kind, 'collect-input', 'naming also rechecks current sources')
+  assert.ok(controller.getState().error)
+  assert.equal(store.listSavedActions().length, 0)
+  pluginRegistry.unregisterDevPlugin('json-tools')
+  controller.exitCommand()
+
+  await controller.selectItem(nearbyOffer)
+  const permissions = usePluginPermissionStore.getState()
+  permissions.revokePermissions(formatter.source, formatter.pluginId, ['clipboard.write'])
+  assert.equal(getNearbySaveRunItem(originalRun), null, 'revoked permissions hide the offer')
+  controller.setInputText('Must not save without permission')
+  await controller.submitInput()
+  assert.equal(top().kind, 'collect-input')
+  assert.ok(controller.getState().error)
+  assert.equal(store.listSavedActions().length, 0)
+  permissions.clearPluginPermissions(formatter.source, formatter.pluginId)
+  controller.exitCommand()
+
   const saveCommand = getHostSavedActionItems().find((item) => item.systemKey === 'host:saved-action:save-last')
   await controller.selectItem(saveCommand, { objectBlockText: material })
   assert.equal(top().kind, 'collect-input')
   assert.equal(top().inputText, '', 'material cannot become a name')
   controller.exitCommand()
   assert.equal(store.listSavedActions().length, 0, 'cancelled naming never creates a tool')
-  await controller.selectItem(saveCommand, { objectBlockText: material })
   const laterRun = { ...originalRun, actionKey: 'plugin:later:tool:other', runId: 'run_later', savedParams: {} }
   setLastSaveableRun(laterRun)
+  await controller.selectItem(nearbyOffer, { objectBlockText: material })
+  assert.equal(top().inputText, '', 'nearby save enters the shared metadata naming flow')
+  setLastSaveableRun({ ...laterRun, runId: 'run_later_again' })
   let changed = 0
   const unsubscribe = store.subscribeSavedActions(() => { changed++ })
   controller.setInputText('Sorted JSON | neat JSON')
@@ -131,7 +189,9 @@ try {
   assert.equal(closed, 0)
   assert.equal(changed, 1, 'successful save refreshes candidates')
   const artifact = store.listSavedActions()[0]
-  assert.equal(artifact.baseActionKey, formatter.systemKey, 'save uses the entry-time snapshot, never a later LastRun')
+  assert.equal(artifact.baseActionKey, formatter.systemKey, 'nearby save uses the display-time snapshot before and after naming')
+  assert.equal(getNearbySaveRunItem(originalRun), null, 'successful save removes the already-saved suggestion')
+  setLastSaveableRun(laterRun)
   assert.deepEqual(artifact.savedParams, { indent: 4, sortKeys: true })
   assert.equal(artifact.outputIntent, 'return-to-launcher')
   assert.doesNotMatch(JSON.stringify(artifact), /ORIGINAL_ATTACHED_MATERIAL|"inputText"|"outputText"/)
@@ -353,6 +413,7 @@ try {
     assert.equal(completed.actionKey, sample.key)
     assert.equal(completed.inputBinding, 'prompt')
     assert.deepEqual(completed.savedParams, {})
+    assert.ok(getNearbySaveRunItem(completed), 'successful Copy/Return is recovered from the existing last-run snapshot')
     const saved = store.createSavedAction(completed, `Saved ${actual.display.title}`, [])
     try {
       const replay = collectStaticCandidates('global-launcher').find((item) => item.savedActionArtifactId === saved.id)
@@ -383,6 +444,7 @@ try {
   assert.equal(deliveries.length, beforeInvalidDeliveries)
   assert.deepEqual(await getLastSaveableRun(), beforeInvalidBase64, 'invalid Base64 never becomes a saveable success')
 
+  stopRunNotifications()
   assert.equal(hiddenReads, 0, 'new explicit flow never reads editor/selection/clipboard')
   api.getSelectionText = () => ''
   api.getActiveText = () => ''

@@ -47,6 +47,7 @@ type GlobalLauncherPanelProps = {
   toggleResultChoice: (choice: LauncherResultChoice, frame: ResultFrame) => void
   closeLauncher: () => void
   visibleFiltered: GlobalLauncherItem[]
+  nearbySaveItem?: GlobalLauncherItem
   selectedItem?: GlobalLauncherItem
   /** List selection; -1 means recent-clipboard hint is focused. */
   selectedIndex?: number
@@ -110,6 +111,7 @@ export function GlobalLauncherPanel({
   toggleResultChoice,
   closeLauncher: _omit_closeLauncher,
   visibleFiltered,
+  nearbySaveItem,
   selectedItem,
   selectedIndex = 0,
   setSelectedIndex,
@@ -286,6 +288,7 @@ export function GlobalLauncherPanel({
         query={query}
         searchPlaceholder={searchPlaceholder}
         visibleFiltered={visibleFiltered}
+        nearbySaveItem={nearbySaveItem}
         selectedItem={selectedItem}
         locale={locale}
         resultSelectedIndex={resultSelectedIndex}

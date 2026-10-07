@@ -7,7 +7,6 @@ import { BrainCircuit, Check, Command, Download, Hash, Languages, LogIn, LogOut,
 import { useAppStore } from '../store'
 import { useT } from '../i18n'
 import { pickLocale } from '../i18n/pickLocale'
-import { checkBuiltinPluginsUpdate } from '../configInit'
 import { ShortcutRecorder } from '../components/ShortcutRecorder'
 import { AppHotkeysSettings } from '../components/AppHotkeysSettings'
 import { listAiProviders, loginAiProvider, logoutAiProvider, refreshAiProvider } from '../workspace/ai/runtime'
@@ -601,22 +600,15 @@ function UpdateChecker({ compact = false }: { compact?: boolean }) {
   const [version, setVersion] = useState('')
   const [error, setError] = useState('')
   const [errorFull, setErrorFull] = useState('')
-  const [pluginStatus, setPluginStatus] = useState<'idle' | 'checking' | 'updated' | 'up-to-date' | 'error'>('idle')
-  const [pluginVersion, setPluginVersion] = useState(0)
-  const [pluginError, setPluginError] = useState('')
-  const [pluginErrorFull, setPluginErrorFull] = useState('')
-  const [copiedWhich, setCopiedWhich] = useState<'app' | 'plugin' | null>(null)
+  const [copiedError, setCopiedError] = useState(false)
   const updateRef = useRef<Awaited<ReturnType<typeof check>> | null>(null)
   const settingsT = useT('settings')
 
   const handleCheck = async () => {
     setStatus('checking')
-    setPluginStatus('checking')
     setError('')
     setErrorFull('')
-    setPluginError('')
-    setPluginErrorFull('')
-    setCopiedWhich(null)
+    setCopiedError(false)
     try {
       const update = await check()
       if (update) {
@@ -631,26 +623,6 @@ function UpdateChecker({ compact = false }: { compact?: boolean }) {
       setError(formatted.short)
       setErrorFull(formatted.full)
       setStatus('error')
-    }
-
-    try {
-      const result = await checkBuiltinPluginsUpdate()
-      if (result.updated) {
-        setPluginStatus('updated')
-        setPluginVersion(result.version || 0)
-      } else if (result.error) {
-        const formatted = formatUserFacingError(result.error)
-        setPluginError(formatted.short)
-        setPluginErrorFull(formatted.full)
-        setPluginStatus('error')
-      } else {
-        setPluginStatus('up-to-date')
-      }
-    } catch (err) {
-      const formatted = formatUserFacingError(err)
-      setPluginError(formatted.short)
-      setPluginErrorFull(formatted.full)
-      setPluginStatus('error')
     }
   }
 
@@ -669,11 +641,11 @@ function UpdateChecker({ compact = false }: { compact?: boolean }) {
     }
   }
 
-  const copyErrorDetail = async (which: 'app' | 'plugin', detail: string) => {
+  const copyErrorDetail = async (detail: string) => {
     try {
       await navigator.clipboard.writeText(detail)
-      setCopiedWhich(which)
-      window.setTimeout(() => setCopiedWhich((cur) => (cur === which ? null : cur)), 1500)
+      setCopiedError(true)
+      window.setTimeout(() => setCopiedError(false), 1500)
     } catch {
       // ignore clipboard failures
     }
@@ -691,19 +663,41 @@ function UpdateChecker({ compact = false }: { compact?: boolean }) {
     }
   }
 
+  const updateResult = status !== 'idle' && status !== 'checking' && status !== 'downloading' && (
+    <span role="status" style={{ fontSize: 'var(--text-sm)', overflowWrap: 'anywhere', textAlign: compact ? 'right' : undefined, color: status === 'error' ? 'var(--color-error-text)' : status === 'no-update' ? 'var(--text-3)' : 'var(--accent)' }}>
+      {statusText()}
+      {status === 'error' && errorFull && (
+        <button
+          type="button"
+          className="scripts-btn"
+          style={{ marginLeft: 8, padding: '2px 6px', fontSize: 11 }}
+          onClick={() => void copyErrorDetail(errorFull)}
+        >
+          {copiedError ? settingsT('errorCopied') : settingsT('copyError')}
+        </button>
+      )}
+    </span>
+  )
+
   if (compact) {
     return (
-      <div className="flex items-center gap-2">
-        {status === 'available' && <button className="scripts-btn" onClick={handleDownloadAndInstall}><Download size={11} /> {version}</button>}
-        {status === 'ready' && <button className="scripts-btn scripts-btn-primary" onClick={() => relaunch()}>{t('restart')}</button>}
-        {(status === 'idle' || status === 'no-update' || status === 'error') && (
-          <button className="scripts-btn" onClick={handleCheck}><RefreshCw size={11} /> {t('checkUpdate')}</button>
-        )}
-        {(status === 'checking' || status === 'downloading') && (
-          <span className="flex items-center gap-1 px-2.5 py-1" style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-tertiary)' }}>
-            <RefreshCw size={11} className="animate-spin" /> {statusText()}
-          </span>
-        )}
+      <div className="flex flex-col items-end gap-1" style={{ maxWidth: 'min(320px, 55vw)' }}>
+        <div className="flex items-center gap-2">
+          {status === 'available' && <button className="scripts-btn" onClick={handleDownloadAndInstall}><Download size={11} /> {version}</button>}
+          {status === 'ready' && <button className="scripts-btn scripts-btn-primary" onClick={() => relaunch()}>{t('restart')}</button>}
+          {(status === 'idle' || status === 'no-update' || status === 'error') && (
+            <button className="scripts-btn" onClick={handleCheck}><RefreshCw size={11} /> {t('checkUpdate')}</button>
+          )}
+          {(status === 'checking' || status === 'downloading') && (
+            <span className="flex items-center gap-1 px-2.5 py-1" style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-tertiary)' }}>
+              <RefreshCw size={11} className="animate-spin" /> {statusText()}
+            </span>
+          )}
+        </div>
+        {updateResult}
+        <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-tertiary)' }}>
+          {t('builtinManagedByApp')}
+        </span>
       </div>
     )
   }
@@ -725,40 +719,10 @@ function UpdateChecker({ compact = false }: { compact?: boolean }) {
           )}
         </div>
       </div>
-      {status !== 'idle' && status !== 'checking' && status !== 'downloading' && (
-        <span style={{ fontSize: 'var(--text-sm)', color: status === 'error' ? 'var(--color-error-text)' : status === 'no-update' ? 'var(--text-3)' : 'var(--accent)' }}>
-          {statusText()}
-          {status === 'error' && errorFull && (
-            <button
-              type="button"
-              className="scripts-btn"
-              style={{ marginLeft: 8, padding: '2px 6px', fontSize: 11 }}
-              onClick={() => void copyErrorDetail('app', errorFull)}
-            >
-              {copiedWhich === 'app' ? settingsT('errorCopied') : settingsT('copyError')}
-            </button>
-          )}
-        </span>
-      )}
-      {pluginStatus !== 'idle' && pluginStatus !== 'checking' && (
-        <span style={{ fontSize: 'var(--text-sm)', color: pluginStatus === 'updated' ? 'var(--accent)' : pluginStatus === 'error' ? 'var(--color-error-text)' : 'var(--text-3)' }}>
-          {pluginStatus === 'updated'
-            ? t('pluginsUpdated', { version: String(pluginVersion) })
-            : pluginStatus === 'up-to-date'
-              ? t('pluginsUpToDate')
-              : `${t('pluginsUpdateError')}: ${pluginError}`}
-          {pluginStatus === 'error' && pluginErrorFull && (
-            <button
-              type="button"
-              className="scripts-btn"
-              style={{ marginLeft: 8, padding: '2px 6px', fontSize: 11 }}
-              onClick={() => void copyErrorDetail('plugin', pluginErrorFull)}
-            >
-              {copiedWhich === 'plugin' ? settingsT('errorCopied') : settingsT('copyError')}
-            </button>
-          )}
-        </span>
-      )}
+      {updateResult}
+      <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-tertiary)' }}>
+        {t('builtinManagedByApp')}
+      </span>
     </div>
   )
 }

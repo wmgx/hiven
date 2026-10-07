@@ -89,7 +89,6 @@ assert.match(files.pluginsSurfaceContent, /hasPluginSettings/, 'Plugin manager m
 assert.match(files.pluginsSurfaceContent, /openPluginsSurfaceSettings\(row\.pluginId,\s*row\.settingsSource\)/, 'Plugin settings must open through the shared settings dialog')
 assert.match(files.pluginsSurfaceContent, /surfaceShortcutHintForPlugin/, 'Plugin rows must show shortcut hints instead of generic status text')
 assert.match(files.pluginsSurfaceContent, /listBundledPluginPackageSummaries/, 'Browser preview must list bundled plugins without Tauri directory APIs')
-assert.match(files.pluginsSurfaceContent, /if \(!isTauri\(\)\)[\s\S]{0,220}setBuiltinPlugins\(listBundledPluginPackageSummaries\(\)\)/, 'Non-Tauri path must render real bundled plugin details for visual QA')
 assert.equal((files.pluginsSurfaceContent.match(/data-testid=["']plugin-new-button["']/g) ?? []).length, 1, 'Plugin manager must expose exactly one add-plugin button')
 assert.doesNotMatch(files.pluginsSurfaceContent, /handleSideloadDev|handleCreatePlugin|scripts\.importDev|scripts\.new/, 'Add Plugin menu must only expose GitHub, zip, and directory imports')
 assert.doesNotMatch(files.pluginsSurfaceContent, /scripts-title|className=["']phead scripts-header["']|className=["']ptitle scripts-title["']/, 'Plugin manager must not render the old plugin page title/count header')

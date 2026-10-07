@@ -11,7 +11,7 @@ type BundledPluginModule = {
 
 type BundledPluginPackage = {
   dir: string
-  manifest: PluginManifest
+  manifest: PluginManifest & { entry: string }
   definition: PluginDefinition
 }
 
@@ -81,16 +81,18 @@ function readBundledPluginPackages(): BundledPluginPackage[] {
 
 let registered = false
 
-export function listBundledPluginPackageSummaries(): PluginPackageSummary[] {
+// The released directory is a source copy. Its manifest must never override
+// the metadata of the implementation compiled into this app.
+export function listBundledPluginPackageSummaries(releasedRoot?: string): PluginPackageSummary[] {
   return readBundledPluginPackages().map(({ dir, manifest }) => ({
     pluginId: manifest.pluginId,
     displayName: manifest.displayName ?? manifest.pluginId,
     displayNameI18n: manifest.displayNameI18n,
     version: manifest.version ?? '0.0.0',
-    entry: 'index.tsx',
+    entry: manifest.entry,
     capabilities: manifest.capabilities ?? [],
     permissions: manifest.permissions ?? [],
-    folderPath: `src/plugins/${dir}`,
+    folderPath: releasedRoot ? `${releasedRoot}/${manifest.pluginId}` : `src/plugins/${dir}`,
   }))
 }
 

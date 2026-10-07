@@ -21,6 +21,7 @@ import { rankLauncherItems } from './ranking'
 import {
   collectDynamicItems,
   collectStaticCandidates,
+  getNearbySaveRunItem,
   filterDynamicForSurface,
   filterAvailableLauncherItems,
 } from './registry'
@@ -44,6 +45,8 @@ import type {
 } from './types'
 import { normalizeLauncherSurfaceId } from './types'
 import { subscribeSavedActions } from '../savedActions/store'
+import { getLastSaveableRun, subscribeLastSaveableRun } from '../savedActions/lastSaveableRun'
+import type { LastSaveableRunState } from '../savedActions/types'
 
 /** Local compute plugins (calc / timestamp / regex match) — keep near-instant. */
 const PLUGIN_DYNAMIC_DEBOUNCE_MS = 60
@@ -98,6 +101,7 @@ export type LauncherSession = {
   rankedItems: LauncherItem[]
   /** Current resolved candidates before ranking caps, strictly eligible for discovery. */
   availableItems: LauncherItem[]
+  nearbySaveItem: LauncherItem | null
   syncSelection: () => void
   reset: () => void
 }
@@ -188,6 +192,34 @@ export function useLauncherSession({
 
   const [savedActionVersion, setSavedActionVersion] = useState(0)
   useEffect(() => subscribeSavedActions(() => setSavedActionVersion((version) => version + 1)), [])
+  const [lastSaveableRun, setLastSaveableRun] = useState<LastSaveableRunState | null>(null)
+  useEffect(() => {
+    if (!open || normalizedHostId !== 'global-launcher') {
+      setLastSaveableRun(null)
+      return
+    }
+    let cancelled = false
+    let delivered = false
+    const unsubscribe = subscribeLastSaveableRun((run) => {
+      delivered = true
+      setLastSaveableRun(run)
+    })
+    // Recover a previous successful copy on reopen. A newer live delivery wins
+    // over an outstanding native read; no timer or new persistence is needed.
+    void getLastSaveableRun().then((run) => {
+      if (!cancelled && !delivered) setLastSaveableRun(run)
+    }).catch(() => {
+      if (!cancelled && !delivered) setLastSaveableRun(null)
+    })
+    return () => { cancelled = true; unsubscribe() }
+  }, [normalizedHostId, open])
+  const nearbySaveItem = useMemo(() => {
+    void pluginRegistryVersion
+    void pluginSettings
+    void pluginPermissions
+    void savedActionVersion
+    return open && normalizedHostId === 'global-launcher' ? getNearbySaveRunItem(lastSaveableRun) : null
+  }, [lastSaveableRun, normalizedHostId, open, pluginRegistryVersion, pluginSettings, pluginPermissions, savedActionVersion])
   const [query, setQueryState] = useState('')
   const [selectedIndex, setSelectedIndexState] = useState(0)
   const [controllerState, setControllerState] = useState<LauncherControllerState | null>(null)
@@ -790,6 +822,7 @@ export function useLauncherSession({
     controllerState,
     rankedItems,
     availableItems,
+    nearbySaveItem,
     syncSelection,
     reset,
   }

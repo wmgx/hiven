@@ -206,6 +206,7 @@
     "test:automatic-learning-settings": "node scripts/test-automatic-learning-settings.mjs",
     "test:automatic-learning-lifecycle": "node scripts/test-automatic-learning-lifecycle.mjs",
     "test:builtin-plugin-release": "node scripts/test-builtin-plugin-release.mjs",
+    "test:builtin-application-updates": "node scripts/test-builtin-application-updates.mjs",
     "test:startup-source-graph": "node scripts/measure-startup-graph.mjs --check",
     "test:plugin-runtime-lifecycle": "node scripts/test-plugin-runtime-lifecycle-behavior.mjs",
     "test:ai-preflight": "node scripts/test-ai-preflight-behavior.mjs",

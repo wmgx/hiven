@@ -9,7 +9,7 @@ export function isGlobalLauncherSavedActionOutput(outputIntent: OutputIntent): b
 }
 
 export function savedActionDisabledReason(
-  artifact: SavedActionV1,
+  artifact: Pick<SavedActionV1, 'savedParams' | 'contractFingerprint' | 'actionPolicy'>,
   baseAction: LauncherItem | null,
   availability: { inputAvailable?: boolean; outputAvailable?: boolean } = {},
 ): SavedActionDisabledReason | undefined {
