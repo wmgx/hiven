@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { useAppStore } from '../../store'
-import { requirePluginPermissions } from '../pluginPermissions'
+import { getPluginPermissionSnapshot, requirePluginPermissions, usePluginPermissionStore } from '../pluginPermissions'
+import { pluginRegistry } from '../pluginRegistry'
 import type { PluginPermissionSnapshot } from '../pluginTypes'
 import { measureLatency } from '../telemetry'
 import { codexChatGptProvider } from './codexProvider'
@@ -187,12 +188,42 @@ export function createPluginAi(
   pluginSource: 'builtin' | 'installed' | 'dev',
   permissions: PluginPermissionSnapshot,
 ): PluginAiApi {
-  const requireAi = () => requirePluginPermissions(permissions, ['ai.use'])
+  const definition = pluginRegistry.getPluginDefinition(pluginId, pluginSource)
+  const requireAi = () => {
+    // The captured snapshot is a ceiling; a later grant cannot expand this handle.
+    requirePluginPermissions(permissions, ['ai.use'])
+    if (definition && pluginRegistry.getPluginDefinition(pluginId, pluginSource) !== definition) {
+      throw new Error('Plugin permission required: ai.use')
+    }
+    const requested = definition ? pluginRegistry.getPluginPermissions(pluginId, pluginSource) : ['ai.use'] as const
+    requirePluginPermissions(getPluginPermissionSnapshot(pluginSource, pluginId, requested), ['ai.use'])
+  }
+  const watchAi = (onRevoked: (reason: unknown) => void) => {
+    const check = () => {
+      try { requireAi() } catch (error) { onRevoked(error) }
+    }
+    const unwatchPermissions = usePluginPermissionStore.subscribe(check)
+    const unwatchDefinition = definition ? pluginRegistry.subscribe(check) : undefined
+    return () => { unwatchPermissions(); unwatchDefinition?.() }
+  }
+  const withAi = async <T>(work: () => Promise<T>): Promise<T> => {
+    requireAi()
+    const controller = new AbortController()
+    // Abort latches revocation even if permission is granted again before the await settles.
+    const unwatch = watchAi((reason) => controller.abort(reason))
+    try {
+      const result = await withSignal(work(), controller.signal)
+      throwIfAborted(controller.signal)
+      requireAi()
+      return result
+    } finally {
+      unwatch()
+    }
+  }
 
   return {
     async providers() {
-      requireAi()
-      return describeProviders()
+      return withAi(() => describeProviders())
     },
 
     async *stream(request) {
@@ -207,12 +238,28 @@ export function createPluginAi(
       let providerStarted = false
       let cancellation: Promise<void> | undefined
       let usageWrite = Promise.resolve()
+      let unwatch = () => {}
+      const checkPermission = () => {
+        throwIfAborted(signal)
+        requireAi()
+      }
+      const detach = () => {
+        unwatch()
+        request.signal?.removeEventListener('abort', abortExternal)
+        activeRuns.delete(runId)
+      }
       const persistRecord = () => {
         if (!record) return usageWrite
         const snapshot = { ...record, metrics: record.metrics.map((metric) => ({ ...metric })) }
         // Keep a delayed running upsert from overwriting a newer terminal record.
         usageWrite = usageWrite.then(() => persistUsage(snapshot))
         return usageWrite
+      }
+      const finishRecord = (status: AiUsageRecord['status']) => {
+        if (!record || record.status !== 'running') return usageWrite
+        record.status = status
+        record.finishedAt = Date.now()
+        return persistRecord()
       }
       const cancelProvider = () => {
         if (!providerStarted || !adapter) return Promise.resolve()
@@ -221,28 +268,29 @@ export function createPluginAi(
         ).catch(() => undefined)
         return cancellation
       }
-      const abort = () => {
+      const abort = (reason?: unknown) => {
         if (terminal) return
-        controller.abort(request.signal?.reason)
+        controller.abort(reason)
+        detach()
+        // A consumer may remain suspended at yield; finalize usage without waiting for its next().
+        void finishRecord('cancelled')
         void cancelProvider()
       }
-      request.signal?.addEventListener('abort', abort, { once: true })
-      if (request.signal?.aborted) abort()
+      const abortExternal = () => abort(request.signal?.reason)
+      unwatch = watchAi(abort)
+      request.signal?.addEventListener('abort', abortExternal, { once: true })
+      if (request.signal?.aborted) abortExternal()
       const finish = async (status: AiUsageRecord['status']) => {
         terminal = true
-        activeRuns.delete(runId)
-        if (record) {
-          record.status = status
-          record.finishedAt = Date.now()
-          const writing = persistRecord()
-          // Cancellation must not wait for an already pending storage operation.
-          if (!signal.aborted) await writing
-        }
+        detach()
+        const writing = finishRecord(status)
+        // Cancellation must not wait for an already pending storage operation.
+        if (!signal.aborted) await writing
       }
       try {
-        throwIfAborted(signal)
+        checkPermission()
         const available = await withSignal(describeProviders(undefined, request.providerId), signal)
-        throwIfAborted(signal)
+        checkPermission()
         const explicitProvider = request.providerId != null
         const descriptor = explicitProvider
           ? available.find((item) => item.id === request.providerId)
@@ -301,20 +349,20 @@ export function createPluginAi(
         await withSignal(persistRecord(), signal)
         const input: AiProviderRequest['input'] = []
         for (const item of request.input) {
-          throwIfAborted(signal)
+          checkPermission()
           if (item.type === 'text') input.push(item)
           else input.push({
             type: item.type === 'image' ? 'localImage' : item.type === 'audio' ? 'localAudio' : 'localFile',
             path: await withSignal(blobPath(pluginSource, pluginId, item.blobId), signal),
           })
         }
-        throwIfAborted(signal)
+        checkPermission()
         providerStarted = true
         iterator = adapter.stream({ runId, agentId: agent.id, effort, input, capabilities: request.capabilities, signal })[Symbol.asyncIterator]()
         while (true) {
-          throwIfAborted(signal)
+          checkPermission()
           const next = await withSignal(Promise.resolve(iterator.next()), signal)
-          throwIfAborted(signal)
+          checkPermission()
           if (next.done) {
             await finish('failed')
             void cancelProvider()
@@ -326,7 +374,7 @@ export function createPluginAi(
           if (event.type === 'usage.updated') {
             record.metrics = event.metrics
             await withSignal(persistRecord(), signal)
-            throwIfAborted(signal)
+            checkPermission()
           } else if (event.type === 'completed' || event.type === 'error') {
             await finish(event.type === 'error' ? 'failed' : event.status)
             if (record.status !== 'completed') void cancelProvider()
@@ -345,7 +393,7 @@ export function createPluginAi(
             : { type: 'error', runId, code: 'provider_error', message: error instanceof Error ? error.message : String(error) }
         }
       } finally {
-        request.signal?.removeEventListener('abort', abort)
+        detach()
         if (!terminal) await finish('cancelled')
         // Cancel before closing the iterator: return() alone can wait behind a pending next().
         if (record?.status !== 'completed') {
@@ -366,8 +414,7 @@ export function createPluginAi(
     },
 
     async usage(query) {
-      requireAi()
-      return readUsage(pluginId, pluginSource, query)
+      return withAi(() => readUsage(pluginId, pluginSource, query))
     },
   }
 }
