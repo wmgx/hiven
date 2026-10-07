@@ -197,7 +197,9 @@
     "perf:launcher": "node scripts/launcher-perf-report.mjs",
     "telemetry": "node scripts/launcher-perf-report.mjs",
     "test:lockfile-registry": "node scripts/test-lockfile-registry.mjs",
-    "test:baseline-runtime-fallbacks": "node scripts/test-baseline-runtime-fallbacks.mjs"
+    "test:baseline-runtime-fallbacks": "node scripts/test-baseline-runtime-fallbacks.mjs",
+    "test:launcher-visible-items": "node scripts/test-launcher-visible-items.mjs",
+    "test:launcher-discovery-availability": "node scripts/test-launcher-discovery-availability.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
