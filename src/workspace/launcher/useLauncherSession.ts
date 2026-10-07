@@ -173,6 +173,7 @@ export function useLauncherSession({
 }: UseLauncherSessionOptions): LauncherSession {
   const normalizedHostId = normalizeLauncherSurfaceId(hostId)
   const locale = useAppStore((s) => s.locale)
+  const automaticLearningEnabled = useAppStore((s) => s.settings.automaticLearningEnabled)
   const jevSettings = useAppStore((s) => s.settings.jevCommandSuggestion)
   const launcherUsageBySurface = useAppStore((s) => s.launcherUsageBySurface)
   const recordLauncherSelection = useAppStore((s) => s.recordLauncherSelection)
@@ -523,7 +524,7 @@ export function useLauncherSession({
       window.clearTimeout(timer)
       hostAbortRef.current?.abort()
     }
-  }, [collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open, query])
+  }, [automaticLearningEnabled, collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open, query])
 
   // ── Remote document Desktop Targets (feishu.docs, …) — progressive, slow debounce ──
   useEffect(() => {
@@ -666,7 +667,9 @@ export function useLauncherSession({
     const recentsDeduped = persistableRecentItems.filter((item) => !liveKeys.has(item.systemKey))
     return [...staticCandidates, ...visiblePluginDynamicItems, ...visibleHostDynamicItems,
       ...recentsDeduped, ...visibleDocumentDynamicItems]
-  }, [query, objectBlockText, pluginInputIdentity, pluginDynamicItems, hostInputIdentity,
+      .filter((item) => !item.automaticLearningSignal
+        || (automaticLearningEnabled === true && !item.automaticLearningSignal.aborted))
+  }, [automaticLearningEnabled, query, objectBlockText, pluginInputIdentity, pluginDynamicItems, hostInputIdentity,
     hostDynamicItems, documentInputIdentity, documentDynamicItems, staticCandidates, persistableRecentItems])
 
   const availableItems = useMemo(() => {
