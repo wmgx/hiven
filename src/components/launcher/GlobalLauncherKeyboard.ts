@@ -97,7 +97,7 @@ export function handleGlobalLauncherKeyDown({
 
     if (topFrame.kind === 'collect-input') {
       const inputFrame = topFrame as CollectInputFrame
-      if (inputFrame.item.materialTextEdit) {
+      if (inputFrame.item.materialTextEdit || inputFrame.item.executionMode === 'explicit-text-preview') {
         // Multiline drafts own caret movement, line breaks and empty Backspace.
         if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey) {
           event.preventDefault()

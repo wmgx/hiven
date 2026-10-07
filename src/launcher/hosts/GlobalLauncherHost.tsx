@@ -440,7 +440,7 @@ export function GlobalLauncherHost() {
     const top = controllerState.frames[controllerState.frames.length - 1]
     const topKind = top?.kind ?? 'none'
     const previewSignal = top?.kind === 'collect-input'
-      ? `:${top.inputText.trim() ? 1 : 0}:${top.previewOutput?.choices?.length ? 1 : 0}`
+      ? `:${top.item.materialTextEdit || top.item.executionMode === 'explicit-text-preview' ? 'multi' : 'single'}:${top.inputText.trim() ? 1 : 0}:${top.previewOutput?.choices?.length ? 1 : 0}`
       : ''
     return `${controllerState.busy ? 1 : 0}:${controllerState.frames.length}:${topKind}:${controllerState.error ?? ''}${previewSignal}`
   }, [controllerState])

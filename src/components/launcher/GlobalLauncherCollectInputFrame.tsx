@@ -153,6 +153,7 @@ export function GlobalLauncherCollectInputFrame({
   const placeholder = frame.input.placeholderI18n?.[locale] ?? frame.input.placeholder ?? ''
   const explicitPreview = frame.item.executionMode === 'explicit-text-preview'
   const materialTextEdit = frame.item.materialTextEdit === true
+  const multilineInput = materialTextEdit || explicitPreview
   const previewChoices = frame.previewOutput?.choices ?? []
   const selectedIndex = frame.selectedSuggestionIndex ?? -1
   const hasSuggestions = previewChoices.length > 0
@@ -219,7 +220,7 @@ export function GlobalLauncherCollectInputFrame({
 
   const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
-    if (materialTextEdit) {
+    if (multilineInput) {
       if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey) {
         event.preventDefault()
         event.stopPropagation()
@@ -263,7 +264,7 @@ export function GlobalLauncherCollectInputFrame({
           onRemove={onExitCommand ?? onBack}
         />
         <LauncherParamChipTrail chips={paramChips} />
-        {!materialTextEdit && <input
+        {!multilineInput && <input
           ref={bindSearchInputRef ?? (inputRef as RefObject<HTMLInputElement | null>)}
           value={frame.inputText}
           autoFocus
@@ -277,7 +278,7 @@ export function GlobalLauncherCollectInputFrame({
           <span className="meta anim-running-pulse" role="status" aria-live="polite">{t(locale, deliveryIntent === 'copy' ? 'palette.outputCopying' : deliveryIntent ? 'palette.outputDelivering' : 'palette.outputRunning')}</span>
         )}
       </div>
-      {materialTextEdit && (
+      {multilineInput && (
         <div className="global-launcher-body launcher-material-text-edit" data-no-drag>
           <textarea
             ref={bindSearchInputRef ?? (inputRef as RefObject<HTMLTextAreaElement | null>)}
@@ -289,6 +290,7 @@ export function GlobalLauncherCollectInputFrame({
             autoCapitalize="none"
             autoCorrect="off"
             aria-label={commandTitle}
+            placeholder={placeholder}
             data-launcher-scrollable
             onChange={(event) => onInputChange(reconcileMaterialTextInput(frame.inputText, event.target.value))}
             onKeyDown={handleInputKeyDown}
@@ -300,9 +302,6 @@ export function GlobalLauncherCollectInputFrame({
         <div role="alert" className="px-3.5 py-2 text-[12px]" style={{ color: 'var(--color-error)' }}>
           {error}
         </div>
-      )}
-      {explicitPreview && (
-        <LauncherEmptyWell title={t(locale, 'palette.explicitPreviewInput')} />
       )}
       {showLivePreview && (
         <>
@@ -422,7 +421,7 @@ export function GlobalLauncherCollectInputFrame({
             {t(locale, 'palette.captureSelection')}
           </button>
         )}
-        {materialTextEdit ? (
+        {multilineInput ? (
           <>
             <LauncherHintKey keys="↵" label={t(locale, 'palette.objectBlockEditNewline')} />
             <button
@@ -437,7 +436,7 @@ export function GlobalLauncherCollectInputFrame({
               }}
               onClick={() => { if (!busy) onSubmitPrimary?.() }}
             >
-              <LauncherHintKey keys={`${getPlatformShortcutMeta().label}↵`} label={t(locale, 'palette.objectBlockEditConfirm')} />
+              <LauncherHintKey keys={`${getPlatformShortcutMeta().label}↵`} label={t(locale, materialTextEdit ? 'palette.objectBlockEditConfirm' : 'palette.preview')} />
             </button>
           </>
         ) : showLivePreview && displayPreviewText && !showLiveEmpty ? (
@@ -458,7 +457,7 @@ export function GlobalLauncherCollectInputFrame({
           data-no-drag
           onMouseDown={(event) => event.preventDefault()}
           onKeyDown={(event) => {
-            if (!materialTextEdit) return
+            if (!multilineInput) return
             if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) event.preventDefault()
             if (event.key !== 'Escape') event.stopPropagation()
           }}
