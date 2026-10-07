@@ -109,6 +109,8 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
   const currentResultRef = useRef<typeof result | null>(result)
   currentResultRef.current = result
   const activeRef = useRef(true)
+  const actionEpochRef = useRef(0)
+  const [actionEpoch, setActionEpoch] = useState(0)
   const handedOffResultRef = useRef<typeof result | null>(null)
   const [handedOffResult, setHandedOffResult] = useState<typeof result | null>(null)
   const [failedResult, setFailedResult] = useState<typeof result | null>(null)
@@ -121,7 +123,13 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
   }, [])
 
   // Revoke rendered actions immediately, before an input change commits a new render.
-  const invalidateResult = () => { currentResultRef.current = null }
+  const invalidateResult = () => {
+    currentResultRef.current = null
+    actionEpochRef.current += 1
+    // Hidden native surfaces remain mounted. Refresh the current button while
+    // permanently invalidating callbacks captured before leaving this view.
+    setActionEpoch(actionEpochRef.current)
+  }
 
   const toggleFlag = (flag: string) => {
     invalidateResult()
@@ -134,7 +142,7 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
   }
 
   const continueProcessing = () => {
-    if (!activeRef.current || currentResultRef.current !== result || extraction.status !== 'ready' || handedOffResultRef.current === result) return
+    if (!activeRef.current || actionEpochRef.current !== actionEpoch || currentResultRef.current !== result || extraction.status !== 'ready' || handedOffResultRef.current === result) return
     handedOffResultRef.current = result
     setHandedOffResult(result)
     setFailedResult(null)
@@ -162,13 +170,13 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
   return (
     <section className="regex-tester-surface" aria-label={t('surface.title')}>
       <header className="regex-tester-surface__header">
-        <IconButton type="button" label={t('surface.back')} onClick={() => { activeRef.current = false; host.requestBack() }}>
+        <IconButton type="button" label={t('surface.back')} onClick={() => { invalidateResult(); host.requestBack() }}>
           <BackIcon size={14} strokeWidth={2} />
         </IconButton>
         <strong>{t('surface.title')}</strong>
         <span>{t('surface.subtitle')}</span>
         <div className="regex-tester-surface__header-spacer" />
-        <IconButton type="button" label={t('surface.close')} onClick={() => { activeRef.current = false; host.close() }}>
+        <IconButton type="button" label={t('surface.close')} onClick={() => { invalidateResult(); host.close() }}>
           <CloseIcon size={14} strokeWidth={2} />
         </IconButton>
       </header>

@@ -4,6 +4,7 @@ import { Menu } from '@hiven/plugin-ui'
 import { getPluginDiffHost, type DiffSource } from '@hiven/plugin-diff'
 import { canUseSemanticJsonDiff } from './autoDiffMode'
 import { useDiffSourceText } from './useDiffSourceText'
+import { createDiffSourceReader } from './sourceReadLifetime'
 
 type DiffMode = 'text' | 'json'
 
@@ -120,23 +121,30 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
   const payload = useMemo(() => parsePayload(initialText), [initialText])
   const [originalSource, setOriginalSource] = useState(payload.original)
   const [modifiedSource, setModifiedSource] = useState(payload.modified)
-  const [originalText, setOriginalText] = useDiffSourceText(originalSource)
-  const [modifiedText, setModifiedText] = useDiffSourceText(modifiedSource)
+  const [originalText, writeOriginalText] = useDiffSourceText(originalSource)
+  const [modifiedText, writeModifiedText] = useDiffSourceText(modifiedSource)
+  const [originalReader] = useState(createDiffSourceReader)
+  const [modifiedReader] = useState(createDiffSourceReader)
+  const setOriginalText = useCallback((text: string) => {
+    originalReader.invalidate()
+    writeOriginalText(text)
+  }, [originalReader, writeOriginalText])
+  const setModifiedText = useCallback((text: string) => {
+    modifiedReader.invalidate()
+    writeModifiedText(text)
+  }, [modifiedReader, writeModifiedText])
+  const invalidateSourceReads = useCallback(() => {
+    originalReader.invalidate()
+    modifiedReader.invalidate()
+  }, [originalReader, modifiedReader])
+  // Revoke existing reads without locking a hidden/reopened window or effect replay.
+  useEffect(() => invalidateSourceReads, [invalidateSourceReads])
   const [diffMode, setDiffMode] = useState<DiffMode>(surfaceId === 'json' ? 'json' : 'text')
 
   const sourceOptions = payload.sources?.length ? payload.sources : [
     asDiffSource({ sourceId: 'clipboard', kind: 'clipboard', title: t('choice.clipboard') }, 'clipboard'),
     asDiffSource({ sourceId: 'empty', kind: 'empty', title: t('source.empty') }, 'empty'),
   ]
-  const selectSource = async (source: DiffSource, setSource: (source: DiffSource) => void) => {
-    try {
-      const text = source.kind === 'clipboard' ? await host.clipboard.readText() : source.text ?? ''
-      // Source picks import a snapshot into this comparison, like pasting text.
-      setSource({ sourceId: source.sourceId, kind: 'empty', title: source.title, text })
-    } catch {
-      host.showToast(t('source.readFailed'), 'error')
-    }
-  }
   const [currentHunkIndex, setCurrentHunkIndex] = useState(0)
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -205,7 +213,7 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
   const handleSwap = useCallback(() => {
     setOriginalText(modifiedText)
     setModifiedText(originalText)
-  }, [originalText, modifiedText])
+  }, [originalText, modifiedText, setOriginalText, setModifiedText])
 
   /** Pretty-print both sides without sorting keys; only rewrites parseable sides. */
   const handleFormat = useCallback(() => {
@@ -213,7 +221,7 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
     const right = formatJsonPreserveKeyOrder(modifiedText)
     if (left != null) setOriginalText(left)
     if (right != null) setModifiedText(right)
-  }, [formatJsonPreserveKeyOrder, originalText, modifiedText])
+  }, [formatJsonPreserveKeyOrder, originalText, modifiedText, setOriginalText, setModifiedText])
 
   const canFormat = useMemo(() => {
     if (diffMode !== 'json') return false
@@ -221,9 +229,10 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
   }, [parseJson, diffMode, originalText, modifiedText])
 
   const handleDetach = useCallback(() => {
+    invalidateSourceReads()
     const p = JSON.stringify({ original: { text: originalText }, modified: { text: modifiedText } })
     host.detachToWindow(p)
-  }, [originalText, modifiedText, host])
+  }, [originalText, modifiedText, host, invalidateSourceReads])
 
   const handlePrevHunk = useCallback(() => {
     if (totalHunks === 0) return
@@ -242,7 +251,7 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
     <div className="td-surface">
       {/* Header — breadcrumb left, mode center-right, actions right */}
       <div className="td-hdr">
-        <button type="button" className="td-bc-back" onClick={() => host.requestBack()}>
+        <button type="button" className="td-bc-back" onClick={() => { invalidateSourceReads(); host.requestBack() }}>
           <IconBack /><span className="td-bc-root">hiven</span>
         </button>
         <span className="td-bc-sep">/</span>
@@ -285,7 +294,7 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
           <button type="button" className="td-ib" onClick={handleDetach} title={t('diff.detach')} aria-label={t('diff.detach')}>
             <IconDetach />
           </button>
-          <button type="button" className="td-ib td-ib--close" onClick={() => host.close()} title={t('diff.close')} aria-label={t('diff.close')}>
+          <button type="button" className="td-ib td-ib--close" onClick={() => { invalidateSourceReads(); host.close() }} title={t('diff.close')} aria-label={t('diff.close')}>
             <IconClose />
           </button>
         </div>
@@ -293,9 +302,9 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
 
       <div className="td-pane-labels">
         {([
-          ['original', originalSource, setOriginalSource],
-          ['modified', modifiedSource, setModifiedSource],
-        ] as const).map(([side, source, setSource]) => (
+          ['original', originalSource, setOriginalSource, originalReader],
+          ['modified', modifiedSource, setModifiedSource, modifiedReader],
+        ] as const).map(([side, source, setSource, reader]) => (
           <div className="td-pane-label" key={side}>
             <span>{t(`surface.${side}`)}</span>
             <Menu
@@ -304,7 +313,10 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
               items={sourceOptions.map((option) => ({
                 key: option.sourceId,
                 label: option.kind === 'empty' ? t('source.empty') : option.title,
-                onSelect: () => { void selectSource(option, setSource) },
+                onSelect: () => {
+                  void reader.select(option, () => host.clipboard.readText(), setSource,
+                    () => host.showToast(t('source.readFailed'), 'error'))
+                },
               }))}
             />
           </div>

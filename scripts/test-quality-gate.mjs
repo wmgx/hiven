@@ -54,6 +54,7 @@ const commands = [
   ['npm', ['run', 'test:translate-ai-readiness']],
   ['npm', ['run', 'test:translate-output-eligibility']],
   ['npm', ['run', 'test:regex-match-extraction']],
+  ['npm', ['run', 'test:text-diff-source-read-lifetime']],
   ['npm', ['run', 'test:translate-plugin']],
   ['npm', ['run', 'test:ime-enter-confirmation']],
   ['npm', ['run', 'test:automatic-learning-settings']],
