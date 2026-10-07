@@ -64,8 +64,7 @@ export function shouldIgnoreImeKeyDown(event: ImeKeyEvent, composingRef: Composi
   if (composingRef.current) return true
   if (event.isComposing === true) return true
   if (event.nativeEvent?.isComposing === true) return true
-  const keyCode = event.keyCode ?? event.nativeEvent?.keyCode
-  if (keyCode === 229) return true
+  if (event.keyCode === 229 || event.nativeEvent?.keyCode === 229) return true
 
   const key = event.key
   if (key === 'Enter' || key === 'Process') {
