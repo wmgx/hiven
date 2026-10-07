@@ -304,8 +304,13 @@ function sumNumericTokens(text: string): string {
 type BaseConversionMode = 'dec2hex' | 'hex2dec' | 'dec2bin' | 'bin2dec'
 
 class BaseConversionError extends Error {
-  constructor(readonly kind: 'missing' | 'decimal' | 'hex' | 'binary', readonly value: string) {
+  readonly kind: 'missing' | 'decimal' | 'hex' | 'binary'
+  readonly value: string
+
+  constructor(kind: 'missing' | 'decimal' | 'hex' | 'binary', value: string) {
     super(`${kind}: ${value}`)
+    this.kind = kind
+    this.value = value
   }
 }
 
