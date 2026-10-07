@@ -8,6 +8,8 @@ import { codexChatGptProvider } from './codexProvider'
 import { xaiGrokProvider } from './xaiProvider'
 import type {
   AiEvent,
+  AiPreflightRequest,
+  AiPreflightResult,
   AiProviderAdapter,
   AiProviderDescriptor,
   AiProviderRequest,
@@ -32,6 +34,27 @@ const PROVIDER_TIMEOUT_MS = 10_000
 const PROVIDER_CACHE_MS = 60_000
 const RUN_CLEANUP_TIMEOUT_MS = 1_000
 const providerCache = new Map<string, { value: AiProviderDescriptor; cachedAt: number }>()
+type PreflightMetadata = { value: AiProviderDescriptor; checkedAt: number; timedOut?: boolean }
+const preflightCache = new Map<string, PreflightMetadata>()
+const preflightInFlight = new Map<string, Promise<PreflightMetadata>>()
+const providerRevisions = new Map<string, number>()
+const preflightListeners = new Set<() => void>()
+
+function diagnostic(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function unavailableProvider(providerId: string, error: unknown): AiProviderDescriptor {
+  const message = diagnostic(error)
+  return {
+    id: providerId, kind: providerId, name: providerId, status: 'unavailable',
+    // Native startup failures can mix missing files, permission failures and other causes.
+    // Preserve the diagnostic, but only classify evidence with an unambiguous meaning.
+    statusReason: message === 'Codex App Server requires the desktop app' ? 'desktop_required' : 'metadata_unavailable',
+    statusMessage: message,
+    capabilities: [], agents: [], isDefault: false,
+  }
+}
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -64,11 +87,121 @@ function withSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
 
 function invalidateProvider(providerId: string): void {
   providerCache.delete(providerId)
+  preflightCache.delete(providerId)
+  preflightInFlight.delete(providerId)
+  providerRevisions.set(providerId, (providerRevisions.get(providerId) ?? 0) + 1)
+  for (const listener of preflightListeners) listener()
 }
 
 export function registerAiProvider(provider: AiProviderAdapter): () => void {
   providers.set(provider.id, provider)
-  return () => providers.delete(provider.id)
+  invalidateProvider(provider.id)
+  return () => {
+    if (providers.get(provider.id) !== provider) return
+    providers.delete(provider.id)
+    invalidateProvider(provider.id)
+  }
+}
+
+function preflightSelection(request: AiPreflightRequest) {
+  const settings = useAppStore.getState().settings
+  const providerId = request.providerId ?? settings.aiDefaultProviderId
+  const agentId = request.agentId ?? settings.aiDefaultAgentId
+  const effort = request.effort && request.effort !== 'inherit' ? request.effort : settings.aiDefaultEffort
+  const key = JSON.stringify([providerId, agentId, effort, providerRevisions.get(providerId ?? '') ?? 0])
+  return { providerId, agentId, effort, key }
+}
+
+/** This cache is exclusively for metadata preflight. Running a model always rechecks describe(). */
+function describeForPreflight(provider: AiProviderAdapter, forceRefresh: boolean): Promise<PreflightMetadata> {
+  const pending = preflightInFlight.get(provider.id)
+  if (pending) return pending
+  const cached = preflightCache.get(provider.id)
+  if (!forceRefresh && cached && Date.now() - cached.checkedAt < PROVIDER_CACHE_MS) return Promise.resolve(cached)
+  const revision = providerRevisions.get(provider.id)
+  let partial: AiProviderDescriptor | undefined
+  let work!: Promise<PreflightMetadata>
+  work = (async () => {
+    let metadata: PreflightMetadata
+    try {
+      const value = await withTimeout(measureLatency(
+        'latency:ai.provider.preflight',
+        () => provider.describe((update) => { partial = { ...update, isDefault: false } }),
+        { providerId: provider.id },
+      ), PROVIDER_TIMEOUT_MS)
+      metadata = { value: { ...value, isDefault: false }, checkedAt: Date.now() }
+    } catch (error) {
+      metadata = {
+        value: partial ?? unavailableProvider(provider.id, error), checkedAt: Date.now(),
+        timedOut: !partial && diagnostic(error) === 'AI_PROVIDER_TIMEOUT',
+      }
+    }
+    // Login, logout or replacement during an await must not repopulate a newer account's cache.
+    if (providers.get(provider.id) === provider && providerRevisions.get(provider.id) === revision) {
+      preflightCache.set(provider.id, metadata)
+    }
+    return metadata
+  })().finally(() => {
+    if (preflightInFlight.get(provider.id) === work) preflightInFlight.delete(provider.id)
+  })
+  preflightInFlight.set(provider.id, work)
+  return work
+}
+
+async function preflight(request: AiPreflightRequest, signal: AbortSignal): Promise<AiPreflightResult> {
+  throwIfAborted(signal)
+  const selection = preflightSelection(request)
+  const result: AiPreflightResult = {
+    status: 'unknown', reason: 'metadata_unavailable', checkedAt: Date.now(),
+    providerId: selection.providerId, agentId: selection.agentId, selectionKey: selection.key,
+  }
+  if (!selection.providerId) return { ...result, status: 'blocked', reason: 'provider_not_configured' }
+  const adapter = providers.get(selection.providerId)
+  if (!adapter) return { ...result, status: 'blocked', reason: 'provider_not_registered' }
+  let selectionChanged = false
+  const unwatchSelection = useAppStore.subscribe(() => {
+    if (preflightSelection(request).key !== selection.key) selectionChanged = true
+  })
+  let metadata: PreflightMetadata
+  try {
+    metadata = await withSignal(describeForPreflight(adapter, request.forceRefresh === true), signal)
+  } finally {
+    unwatchSelection()
+  }
+  result.checkedAt = metadata.checkedAt
+  if (selectionChanged || preflightSelection(request).key !== selection.key) return { ...result, reason: 'configuration_changed' }
+  const provider = metadata.value
+  result.providerName = provider.name
+  result.message = provider.statusMessage
+  const agent = selection.agentId != null
+    ? provider.agents.find((item) => item.id === selection.agentId)
+    : provider.agents.find((item) => item.isDefault) ?? provider.agents[0]
+  if (agent) {
+    result.agentId = agent.id
+    result.agentName = agent.name
+    result.effort = selection.effort && agent.supportedEfforts.includes(selection.effort)
+      ? selection.effort : agent.defaultEffort
+  }
+  result.selectionKey = JSON.stringify([selection.key, result.agentId, result.effort])
+  if (provider.status === 'login_required') return { ...result, status: 'blocked', reason: 'provider_login_required' }
+  if (provider.status === 'unavailable') {
+    if (provider.statusReason === 'desktop_required' || provider.statusReason === 'cli_missing') {
+      return { ...result, status: 'blocked', reason: provider.statusReason }
+    }
+    return { ...result, reason: metadata.timedOut ? 'metadata_timeout' : 'metadata_unavailable' }
+  }
+  if (provider.modelCatalog === 'fallback') return { ...result, reason: 'model_catalog_fallback' }
+  if (provider.modelCatalog === 'partial' && !agent) return { ...result, reason: 'model_catalog_incomplete' }
+  if (provider.modelCatalog !== 'complete' && provider.modelCatalog !== 'partial') return { ...result, reason: 'model_catalog_unknown' }
+  // A missing catalogue entry cannot prove that a selected model is unusable.
+  if (!agent) return { ...result, reason: 'agent_unknown' }
+  if (request.capabilities?.some((capability) => !provider.capabilities.includes(capability) || !agent.capabilities.includes(capability))) {
+    return { ...result, status: 'blocked', reason: 'capability_unavailable' }
+  }
+  if (request.inputModalities?.some((modality) => !agent.inputModalities.includes(modality))) {
+    return { ...result, status: 'blocked', reason: 'input_unavailable' }
+  }
+  return { ...result, status: 'ready', reason: 'configuration_ready' }
 }
 
 async function describeProviders(
@@ -99,16 +232,7 @@ async function describeProviders(
         isDefault: false,
       }
     } catch (error) {
-      description = partialDescription ?? {
-        id: provider.id,
-        kind: provider.id,
-        name: provider.id,
-        status: 'unavailable' as const,
-        statusMessage: error instanceof Error && error.message !== 'AI_PROVIDER_TIMEOUT' ? error.message : undefined,
-        capabilities: [],
-        agents: [],
-        isDefault: false,
-      }
+      description = partialDescription ?? unavailableProvider(provider.id, error)
     }
     providerCache.set(provider.id, { value: description, cachedAt: Date.now() })
     completed += 1
@@ -206,13 +330,13 @@ export function createPluginAi(
     const unwatchDefinition = definition ? pluginRegistry.subscribe(check) : undefined
     return () => { unwatchPermissions(); unwatchDefinition?.() }
   }
-  const withAi = async <T>(work: () => Promise<T>): Promise<T> => {
+  const withAi = async <T>(work: (signal: AbortSignal) => Promise<T>): Promise<T> => {
     requireAi()
     const controller = new AbortController()
     // Abort latches revocation even if permission is granted again before the await settles.
     const unwatch = watchAi((reason) => controller.abort(reason))
     try {
-      const result = await withSignal(work(), controller.signal)
+      const result = await withSignal(work(controller.signal), controller.signal)
       throwIfAborted(controller.signal)
       requireAi()
       return result
@@ -224,6 +348,39 @@ export function createPluginAi(
   return {
     async providers() {
       return withAi(() => describeProviders())
+    },
+
+    async preflight(request = {}) {
+      // Copy only metadata fields. Extra JS properties are never forwarded or retained.
+      return withAi((signal) => preflight({
+        providerId: request.providerId, agentId: request.agentId, effort: request.effort,
+        capabilities: request.capabilities?.slice(), inputModalities: request.inputModalities?.slice(),
+        forceRefresh: request.forceRefresh,
+      }, signal))
+    },
+
+    subscribePreflight(listener) {
+      const identity = () => {
+        let allowed = true
+        try { requireAi() } catch { allowed = false }
+        const settings = useAppStore.getState().settings
+        return JSON.stringify([settings.aiDefaultProviderId, settings.aiDefaultAgentId, settings.aiDefaultEffort, allowed])
+      }
+      let previous = identity()
+      const changed = () => {
+        const next = identity()
+        if (next === previous) return
+        previous = next
+        listener()
+      }
+      const unwatchSettings = useAppStore.subscribe(changed)
+      const unwatchPermissions = usePluginPermissionStore.subscribe(changed)
+      const unwatchRegistry = pluginRegistry.subscribe(changed)
+      preflightListeners.add(listener)
+      return () => {
+        unwatchSettings(); unwatchPermissions(); unwatchRegistry()
+        preflightListeners.delete(listener)
+      }
     },
 
     async *stream(request) {
@@ -423,14 +580,14 @@ export async function loginAiProvider(providerId: string): Promise<{ url?: strin
   const adapter = providers.get(providerId)
   if (!adapter?.login) throw new Error('This provider does not support login')
   invalidateProvider(providerId)
-  return adapter.login()
+  try { return await adapter.login() } finally { invalidateProvider(providerId) }
 }
 
 export async function logoutAiProvider(providerId: string): Promise<void> {
   const adapter = providers.get(providerId)
   if (!adapter?.logout) throw new Error('This provider does not support logout')
-  await adapter.logout()
   invalidateProvider(providerId)
+  try { await adapter.logout() } finally { invalidateProvider(providerId) }
 }
 
 export async function listAiProviders(
