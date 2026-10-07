@@ -38,7 +38,7 @@ import { createPluginLauncherApi, createPluginLauncherStorage } from './pluginAp
 import { createPluginNetwork } from '../pluginNetwork'
 import { createPluginAi } from '../ai/runtime'
 import { createPluginShell } from '../pluginShell'
-import { getPluginPermissionSnapshot } from '../pluginPermissions'
+import { getPluginPermissionSnapshot, missingPluginPermissions } from '../pluginPermissions'
 import { launcherPerfNow, logLauncherPerfDuration, measureLauncherPerf } from './perf'
 import { resolvePluginSettingsSource } from './pluginSource'
 import { adaptToolToLauncherItem } from './toolAdapter'
@@ -531,4 +531,35 @@ export function filterDynamicForSurface(
   surfaceId: LauncherSurfaceId,
 ): LauncherItem[] {
   return items.filter((item) => appearsOnSurface(item, surfaceId))
+}
+
+/** Strict discovery eligibility. Ordinary search keeps its existing permission/disabled rows. */
+export function filterAvailableLauncherItems(
+  items: readonly LauncherItem[],
+  surfaceId: LauncherSurfaceId,
+): LauncherItem[] {
+  return items.filter((item) => {
+    if (item.disabledReason || !appearsOnSurface(item, surfaceId)) return false
+    if (item.pluginId) {
+      if (!item.source || !pluginRegistry.getPluginDefinition(item.pluginId, item.source)) return false
+      const requested = pluginRegistry.getPluginPermissions(item.pluginId, item.source)
+      const snapshot = getPluginPermissionSnapshot(item.source, item.pluginId, requested)
+      if (missingPluginPermissions(snapshot, requested).length > 0) return false
+    }
+    if (item.systemKey.startsWith('plugin-surface:')) {
+      const parts = item.systemKey.split(':')
+      const [, source, pluginId, targetId] = parts
+      if (parts.length !== 4 || !pluginId || !targetId ||
+        (source !== 'builtin' && source !== 'installed' && source !== 'dev') ||
+        source !== item.source || pluginId !== item.pluginId) return false
+      const definition = pluginRegistry.getPluginDefinition(pluginId, source)
+      const surface = definition?.ui?.surfaces?.find((candidate) => candidate.id === targetId)
+      if (!surface || surface.entry?.launcher === false) return false
+      const currentSurfaces: LauncherSurfaceId[] = typeof surface.entry?.launcher === 'object'
+        ? surface.entry.launcher.surfaces ?? ['global-launcher']
+        : ['global-launcher']
+      if (!currentSurfaces.some((host) => normalizeLauncherSurfaceId(host) === normalizeLauncherSurfaceId(surfaceId))) return false
+    }
+    return true
+  })
 }
