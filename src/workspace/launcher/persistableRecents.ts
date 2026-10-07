@@ -130,7 +130,7 @@ export function buildPersistableRecentLauncherItems(options: {
         title: row.title,
         subtitle: row.subtitle,
         icon: row.icon,
-        aliases: [row.title, row.subtitle, ...(row.keywords ?? []), row.persistKey].filter(Boolean),
+        aliases: [row.title, row.subtitle, ...(row.keywords ?? []), row.persistKey].filter((value): value is string => Boolean(value)),
         kindLabel: pickLocale(locale, labels.zh, labels.en),
         kindLabelI18n: { en: labels.en, zh: labels.zh },
       },
