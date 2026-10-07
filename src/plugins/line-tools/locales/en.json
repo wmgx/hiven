@@ -10,6 +10,7 @@
   "group.stats": "Text statistics",
   "operation.label": "Line operation",
   "route.open": "Open in Text Tools",
+  "route.removeBlankLinesWorkbench": "Remove Blank Lines Workbench",
   "pane.input": "Input",
   "pane.output": "Output",
   "pane.sourceName": "Source text",
