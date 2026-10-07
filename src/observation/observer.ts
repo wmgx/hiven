@@ -73,7 +73,7 @@ export type ScreenshotObserverSettings = {
   /** Bumping this (e.g. Date.now()) forces a clean restart — the manual "retry" button. */
   retryNonce?: number
 }
-export const screenshotDefaults: ScreenshotObserverSettings = {
+export const screenshotDefaults: ScreenshotObserverSettings & { maxStorageMB: number; maxDays: number } = {
   enabled: false, intervalSeconds: 30, excludedApps: '', maxStorageMB: 500, maxDays: 5,
 }
 export const SCREENSHOT_STATE_KEY = 'observation-state'
