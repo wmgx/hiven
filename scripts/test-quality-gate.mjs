@@ -37,6 +37,8 @@ const commands = [
   ['npm', ['run', 'test:ai-provider-runtime']],
   ['npm', ['run', 'test:translate-plugin']],
   ['npm', ['run', 'test:ime-enter-confirmation']],
+  ['npm', ['run', 'test:automatic-learning-settings']],
+  ['npm', ['run', 'test:automatic-learning-lifecycle']],
   ['npm', ['run', 'test:self-learning-pr0']],
   ['npm', ['run', 'test:self-learning-pr1']],
   ['npm', ['run', 'test:self-learning-pr2']],
