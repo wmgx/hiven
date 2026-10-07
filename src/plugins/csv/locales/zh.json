@@ -1,6 +1,7 @@
 {
   "surface.title": "CSV Tools",
   "surface.subtitle": "表格转换",
+  "surface.loading": "正在加载表格工具…",
   "action.back": "返回",
   "action.detach": "独立窗口",
   "action.openFile": "打开文件",

@@ -3,9 +3,35 @@
  * Opens in launcher tool-shell (in-place), not a detached window.
  */
 
-import { definePlugin } from '@hiven/plugin'
-import { CsvSurface } from './CsvSurface'
+import { createElement, lazy, Suspense } from 'react'
+import { definePlugin, type PluginSurfaceProps } from '@hiven/plugin'
 import './style.css'
+
+const CsvSurface = lazy(async () => {
+  const module = await import('./CsvSurface')
+  return { default: module.CsvSurface }
+})
+
+function LazyCsvSurface(props: PluginSurfaceProps) {
+  // Import failures reach the host's localized surface error/back boundary.
+  // React caches a rejected lazy import; reopening alone does not retry it.
+  return createElement(
+    Suspense,
+    {
+      fallback: createElement(
+        'section',
+        { className: 'csv-tools-surface csv-tools-surface__empty--start', 'aria-busy': true },
+        createElement('p', { role: 'status' }, props.t('surface.loading')),
+        createElement('button', {
+          type: 'button',
+          className: 'csv-tools-surface__file-btn',
+          onClick: () => props.host.requestBack(),
+        }, props.t('action.back')),
+      ),
+    },
+    createElement(CsvSurface, props),
+  )
+}
 
 const WORKSPACE_SHELL = {
   defaultWidth: 920,
@@ -78,7 +104,7 @@ export const csvPlugin = definePlugin({
         icon: 'Table',
         aliases: ['csv', 'tsv', 'table convert', '表格转换'],
         textMatch: csvSurfaceTextMatch,
-        component: CsvSurface,
+        component: LazyCsvSurface,
         entry: { launcher: { surfaces: ['global-launcher'] }, shortcutBindable: true },
         shell: WORKSPACE_SHELL,
       },
@@ -87,7 +113,7 @@ export const csvPlugin = definePlugin({
         kind: 'custom-view' as const,
         title: 'CSV Tools',
         titleI18n: { zh: 'CSV Tools' },
-        component: CsvSurface,
+        component: LazyCsvSurface,
         entry: { launcher: false },
         shell: WORKSPACE_SHELL,
       })),

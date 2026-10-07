@@ -1,6 +1,7 @@
 {
   "surface.title": "CSV Tools",
   "surface.subtitle": "Table convert",
+  "surface.loading": "Loading table tools…",
   "action.back": "Back",
   "action.detach": "Open in window",
   "action.openFile": "Open file",

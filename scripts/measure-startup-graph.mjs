@@ -12,6 +12,7 @@ const options = { root: process.cwd() }
 for (let i = 2; i < process.argv.length; i++) {
   const flag = process.argv[i]
   if (flag === '--check') options.check = true
+  else if (flag === '--check-csv') options.checkCsv = true
   else if (['--root', '--dist', '--output'].includes(flag) && process.argv[i + 1]) options[flag.slice(2)] = process.argv[++i]
   else throw new Error(`Unknown or incomplete option: ${flag}`)
 }
@@ -120,10 +121,21 @@ const graphs = {
   quickEditorRoot: summarize([...entries, quickEditor]),
   quickEditorWithMonaco: summarize([...entries, quickEditor, selectedRoot('monacoRuntime')]),
 }
+const startupFiles = new Set(Object.values(graphs).flatMap(graph => graph.files))
+const csvRoots = [...new Set([...startupFiles].flatMap(file => modules.get(file).dynamic))]
+  .filter(file => path.posix.basename(file).startsWith('CsvSurface-'))
+const csvSurface = csvRoots.length === 1 ? summarize(csvRoots) : null
+const csvDeferredFiles = csvSurface?.files.filter(file => !startupFiles.has(file)) ?? []
 const report = {
   head: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
   method: 'AST static import/export closure, seeded by HTML entry and explicitly selected dynamic root. CSS, deferred imports, workers and runtime-dependent NLS excluded. Bytes are UTF-8 file sizes; gzip is sum of individually gzip level 9 compressed files. Source literal ablation replaces exact AST literal matches with empty strings in memory; it estimates contained payload, not an actual rebuilt bundle or timing.',
   graphs,
+  csvSurface: csvSurface && {
+    ...csvSurface,
+    deferredFiles: csvDeferredFiles,
+    deferredBytes: csvDeferredFiles.reduce((sum, file) => sum + modules.get(file).bytes, 0),
+    deferredGzipBytes: csvDeferredFiles.reduce((sum, file) => sum + modules.get(file).gzipBytes, 0),
+  },
   rawSourceCorpus: {
     files: rawSources.length, bytes: rawSources.reduce((sum, file) => sum + fs.statSync(file).size, 0),
     matchedFiles: matchedSources.size, unmatchedFiles: rawSources.map(file => relative(root, file)).filter(file => !matchedSources.has(file)),
@@ -146,7 +158,6 @@ if (options.check) {
   for (const [name, graph] of Object.entries(graphs)) {
     assert.equal(graph.rawSourceLiteralBytes, 0, `${name} eagerly includes release-only plugin source strings`)
   }
-  const startupFiles = new Set(Object.values(graphs).flatMap(graph => graph.files))
   const capsules = [...new Set([...startupFiles].flatMap(file => modules.get(file).dynamic))]
     .filter(file => path.posix.basename(file).startsWith('builtinPluginSources-'))
   assert.equal(capsules.length, 1, 'Startup graph must defer one builtin source capsule through dynamic import')
@@ -156,4 +167,9 @@ if (options.check) {
     assert.ok(deferredFiles.has(file), `Deferred source capsule lost ${file}`)
   }
   console.log('PASS built startup graphs defer all builtin release sources and retain the complete source corpus')
+}
+if (options.checkCsv) {
+  assert.equal(csvRoots.length, 1, 'Startup graph must expose one deferred CSV surface import')
+  assert.ok(!startupFiles.has(csvRoots[0]), 'CSV surface must not be statically reachable from startup')
+  console.log('PASS built startup graphs defer the CSV surface until it is opened')
 }
