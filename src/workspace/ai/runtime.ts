@@ -21,10 +21,15 @@ const providers = new Map<string, AiProviderAdapter>([
   [codexChatGptProvider.id, codexChatGptProvider],
   [xaiGrokProvider.id, xaiGrokProvider],
 ])
-const activeRuns = new Map<string, string>()
+const activeRuns = new Map<string, {
+  pluginId: string
+  pluginSource: AiUsageRecord['pluginSource']
+  cancel: () => Promise<void>
+}>()
 const BROWSER_USAGE_KEY = 'hiven-ai-usage'
 const PROVIDER_TIMEOUT_MS = 10_000
 const PROVIDER_CACHE_MS = 60_000
+const RUN_CLEANUP_TIMEOUT_MS = 1_000
 const providerCache = new Map<string, { value: AiProviderDescriptor; cachedAt: number }>()
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -34,6 +39,25 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
       (value) => { clearTimeout(timer); resolve(value) },
       (error) => { clearTimeout(timer); reject(error) },
     )
+  })
+}
+
+function throwIfAborted(signal: AbortSignal): void {
+  if (signal.aborted) throw signal.reason ?? new Error('AI request cancelled')
+}
+
+function withSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const abort = () => {
+      signal.removeEventListener('abort', abort)
+      reject(signal.reason ?? new Error('AI request cancelled'))
+    }
+    signal.addEventListener('abort', abort, { once: true })
+    promise.then(
+      (value) => { signal.removeEventListener('abort', abort); resolve(value) },
+      (error) => { signal.removeEventListener('abort', abort); reject(error) },
+    )
+    if (signal.aborted) abort()
   })
 }
 
@@ -51,7 +75,7 @@ async function describeProviders(
   onlyProviderId?: string,
 ): Promise<AiProviderDescriptor[]> {
   const settings = useAppStore.getState().settings
-  const adapters = [...providers.values()].filter((provider) => !onlyProviderId || provider.id === onlyProviderId)
+  const adapters = [...providers.values()].filter((provider) => onlyProviderId == null || provider.id === onlyProviderId)
   let completed = 0
   const descriptions = await Promise.all(adapters.map(async (provider, index) => {
     const cached = providerCache.get(provider.id)
@@ -114,8 +138,12 @@ async function persistUsage(record: AiUsageRecord): Promise<void> {
     })
     return
   }
-  const rows = readBrowserUsage().filter((item) => item.runId !== record.runId)
-  localStorage.setItem(BROWSER_USAGE_KEY, JSON.stringify([record, ...rows].slice(0, 1000)))
+  try {
+    const rows = readBrowserUsage().filter((item) => item.runId !== record.runId)
+    localStorage.setItem(BROWSER_USAGE_KEY, JSON.stringify([record, ...rows].slice(0, 1000)))
+  } catch (error) {
+    console.warn('[hiven] Failed to persist AI usage:', error)
+  }
 }
 
 function readBrowserUsage(): AiUsageRecord[] {
@@ -169,117 +197,172 @@ export function createPluginAi(
 
     async *stream(request) {
       requireAi()
-      const available = await describeProviders()
-      const explicitProvider = request.providerId != null
-      const descriptor = explicitProvider
-        ? available.find((item) => item.id === request.providerId)
-        : available.find((item) => item.isDefault && item.status === 'ready')
-      if (!descriptor || descriptor.status !== 'ready') {
-        const runId = crypto.randomUUID()
-        yield {
-          type: 'error',
-          runId,
-          code: descriptor?.status === 'login_required' ? 'provider_login_required' : 'provider_unavailable',
-          message: descriptor?.statusMessage ?? (descriptor?.status === 'login_required' ? 'The AI provider requires login' : 'No AI provider is available'),
-        }
-        return
-      }
-      const missingCapability = request.capabilities?.find((item) => !descriptor.capabilities.includes(item))
-      if (missingCapability) {
-        const runId = crypto.randomUUID()
-        yield { type: 'error', runId, code: 'capability_unavailable', message: `AI capability is not available: ${missingCapability}` }
-        return
-      }
-      const explicitAgent = request.agentId != null
-      const configuredAgent = useAppStore.getState().settings.aiDefaultAgentId
-      const agent = explicitAgent
-        ? descriptor.agents.find((item) => item.id === request.agentId)
-        : descriptor.agents.find((item) => item.id === configuredAgent)
-          ?? descriptor.agents.find((item) => item.isDefault)
-          ?? descriptor.agents[0]
-      if (!agent) {
-        const runId = crypto.randomUUID()
-        yield { type: 'error', runId, code: 'agent_unavailable', message: 'The requested AI agent is not available' }
-        return
-      }
-      if (request.input.length === 0) {
-        const runId = crypto.randomUUID()
-        yield { type: 'error', runId, code: 'invalid_request', message: 'AI input must not be empty' }
-        return
-      }
-      const unsupportedInput = request.input.find((item) => item.type !== 'file' && !agent.inputModalities.includes(item.type))
-      if (unsupportedInput) {
-        const runId = crypto.randomUUID()
-        yield { type: 'error', runId, code: 'input_unavailable', message: `AI input is not supported by this agent: ${unsupportedInput.type}` }
-        return
-      }
-
-      const adapter = providers.get(descriptor.id)
-      if (!adapter) return
       const runId = crypto.randomUUID()
-      const effort = resolveEffort(request, agent)
-      const input: AiProviderRequest['input'] = []
-      for (const item of request.input) {
-        if (item.type === 'text') input.push(item)
-        else input.push({
-          type: item.type === 'image' ? 'localImage' : item.type === 'audio' ? 'localAudio' : 'localFile',
-          path: await blobPath(pluginSource, pluginId, item.blobId),
-        })
+      const controller = new AbortController()
+      const signal = controller.signal
+      let adapter: AiProviderAdapter | undefined
+      let iterator: AsyncIterator<AiEvent> | undefined
+      let record: AiUsageRecord | undefined
+      let terminal = false
+      let providerStarted = false
+      let cancellation: Promise<void> | undefined
+      let usageWrite = Promise.resolve()
+      const persistRecord = () => {
+        if (!record) return usageWrite
+        const snapshot = { ...record, metrics: record.metrics.map((metric) => ({ ...metric })) }
+        // Keep a delayed running upsert from overwriting a newer terminal record.
+        usageWrite = usageWrite.then(() => persistUsage(snapshot))
+        return usageWrite
       }
-      const record: AiUsageRecord = {
-        runId,
-        pluginId,
-        pluginSource,
-        providerId: descriptor.id,
-        agentId: agent.id,
-        effort,
-        status: 'running',
-        startedAt: Date.now(),
-        metrics: [],
+      const cancelProvider = () => {
+        if (!providerStarted || !adapter) return Promise.resolve()
+        cancellation ??= withTimeout(
+          Promise.resolve().then(() => adapter!.cancel(runId)), RUN_CLEANUP_TIMEOUT_MS,
+        ).catch(() => undefined)
+        return cancellation
       }
-      activeRuns.set(runId, descriptor.id)
-      await persistUsage(record)
+      const abort = () => {
+        if (terminal) return
+        controller.abort(request.signal?.reason)
+        void cancelProvider()
+      }
+      request.signal?.addEventListener('abort', abort, { once: true })
+      if (request.signal?.aborted) abort()
+      const finish = async (status: AiUsageRecord['status']) => {
+        terminal = true
+        activeRuns.delete(runId)
+        if (record) {
+          record.status = status
+          record.finishedAt = Date.now()
+          const writing = persistRecord()
+          // Cancellation must not wait for an already pending storage operation.
+          if (!signal.aborted) await writing
+        }
+      }
       try {
-        for await (const event of adapter.stream({
-          runId,
-          agentId: agent.id,
-          effort,
-          input,
-          capabilities: request.capabilities,
-        })) {
+        throwIfAborted(signal)
+        const available = await withSignal(describeProviders(undefined, request.providerId), signal)
+        throwIfAborted(signal)
+        const explicitProvider = request.providerId != null
+        const descriptor = explicitProvider
+          ? available.find((item) => item.id === request.providerId)
+          : available.find((item) => item.isDefault && item.status === 'ready')
+        if (!descriptor || descriptor.status !== 'ready') {
+          await finish('failed')
+          yield {
+            type: 'error', runId,
+            code: descriptor?.status === 'login_required' ? 'provider_login_required' : 'provider_unavailable',
+            message: descriptor?.statusMessage ?? (descriptor?.status === 'login_required' ? 'The AI provider requires login' : 'No AI provider is available'),
+          }
+          return
+        }
+        const missingCapability = request.capabilities?.find((item) => !descriptor.capabilities.includes(item))
+        if (missingCapability) {
+          await finish('failed')
+          yield { type: 'error', runId, code: 'capability_unavailable', message: `AI capability is not available: ${missingCapability}` }
+          return
+        }
+        const configuredAgent = useAppStore.getState().settings.aiDefaultAgentId
+        const agent = request.agentId != null
+          ? descriptor.agents.find((item) => item.id === request.agentId)
+          : descriptor.agents.find((item) => item.id === configuredAgent)
+            ?? descriptor.agents.find((item) => item.isDefault)
+            ?? descriptor.agents[0]
+        if (!agent) {
+          await finish('failed')
+          yield { type: 'error', runId, code: 'agent_unavailable', message: 'The requested AI agent is not available' }
+          return
+        }
+        if (request.input.length === 0) {
+          await finish('failed')
+          yield { type: 'error', runId, code: 'invalid_request', message: 'AI input must not be empty' }
+          return
+        }
+        const unsupportedInput = request.input.find((item) => item.type !== 'file' && !agent.inputModalities.includes(item.type))
+        if (unsupportedInput) {
+          await finish('failed')
+          yield { type: 'error', runId, code: 'input_unavailable', message: `AI input is not supported by this agent: ${unsupportedInput.type}` }
+          return
+        }
+        adapter = providers.get(descriptor.id)
+        if (!adapter) throw new Error('The selected AI provider is no longer available')
+        const effort = resolveEffort(request, agent)
+        record = {
+          runId, pluginId, pluginSource, providerId: descriptor.id, agentId: agent.id,
+          effort, status: 'running', startedAt: Date.now(), metrics: [],
+        }
+        activeRuns.set(runId, {
+          pluginId, pluginSource,
+          cancel: () => {
+            abort()
+            return cancelProvider()
+          },
+        })
+        await withSignal(persistRecord(), signal)
+        const input: AiProviderRequest['input'] = []
+        for (const item of request.input) {
+          throwIfAborted(signal)
+          if (item.type === 'text') input.push(item)
+          else input.push({
+            type: item.type === 'image' ? 'localImage' : item.type === 'audio' ? 'localAudio' : 'localFile',
+            path: await withSignal(blobPath(pluginSource, pluginId, item.blobId), signal),
+          })
+        }
+        throwIfAborted(signal)
+        providerStarted = true
+        iterator = adapter.stream({ runId, agentId: agent.id, effort, input, capabilities: request.capabilities, signal })[Symbol.asyncIterator]()
+        while (true) {
+          throwIfAborted(signal)
+          const next = await withSignal(Promise.resolve(iterator.next()), signal)
+          throwIfAborted(signal)
+          if (next.done) {
+            await finish('failed')
+            void cancelProvider()
+            yield { type: 'error', runId, code: 'provider_incomplete', message: 'The AI stream ended without a terminal event' }
+            return
+          }
+          const event = next.value
+          if (event.runId !== runId) continue
           if (event.type === 'usage.updated') {
             record.metrics = event.metrics
-            await persistUsage(record)
-          } else if (event.type === 'completed') {
-            record.status = event.status === 'cancelled' ? 'cancelled' : 'completed'
-            record.finishedAt = Date.now()
-            await persistUsage(record)
-          } else if (event.type === 'error') {
-            record.status = 'failed'
-            record.finishedAt = Date.now()
-            await persistUsage(record)
+            await withSignal(persistRecord(), signal)
+            throwIfAborted(signal)
+          } else if (event.type === 'completed' || event.type === 'error') {
+            await finish(event.type === 'error' ? 'failed' : event.status)
+            if (record.status !== 'completed') void cancelProvider()
+            yield event
+            return
           }
           yield event
         }
       } catch (error) {
-        record.status = 'failed'
-        record.finishedAt = Date.now()
-        await persistUsage(record)
-        yield {
-          type: 'error',
-          runId,
-          code: 'provider_error',
-          message: error instanceof Error ? error.message : String(error),
-        } satisfies AiEvent
+        if (!terminal) {
+          const cancelled = signal.aborted
+          await finish(cancelled ? 'cancelled' : 'failed')
+          void cancelProvider()
+          yield cancelled
+            ? { type: 'completed', runId, status: 'cancelled' }
+            : { type: 'error', runId, code: 'provider_error', message: error instanceof Error ? error.message : String(error) }
+        }
       } finally {
+        request.signal?.removeEventListener('abort', abort)
+        if (!terminal) await finish('cancelled')
+        // Cancel before closing the iterator: return() alone can wait behind a pending next().
+        if (record?.status !== 'completed') {
+          controller.abort()
+          await cancelProvider()
+        }
+        try {
+          if (iterator?.return) await withTimeout(Promise.resolve(iterator.return()), RUN_CLEANUP_TIMEOUT_MS)
+        } catch { /* Cleanup must not replace a committed terminal result or block the caller indefinitely. */ }
         activeRuns.delete(runId)
       }
     },
 
     async cancel(runId) {
       requireAi()
-      const providerId = activeRuns.get(runId)
-      if (providerId) await providers.get(providerId)?.cancel(runId)
+      const active = activeRuns.get(runId)
+      if (active?.pluginId === pluginId && active.pluginSource === pluginSource) await active.cancel()
     },
 
     async usage(query) {
