@@ -204,7 +204,9 @@
     "test:launcher-explicit-text-flow": "node scripts/test-launcher-explicit-text-flow.mjs",
     "test:launcher-output-recovery": "node scripts/test-launcher-output-recovery.mjs",
     "test:automatic-learning-settings": "node scripts/test-automatic-learning-settings.mjs",
-    "test:automatic-learning-lifecycle": "node scripts/test-automatic-learning-lifecycle.mjs"
+    "test:automatic-learning-lifecycle": "node scripts/test-automatic-learning-lifecycle.mjs",
+    "test:builtin-plugin-release": "node scripts/test-builtin-plugin-release.mjs",
+    "test:startup-source-graph": "node scripts/measure-startup-graph.mjs --check"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
