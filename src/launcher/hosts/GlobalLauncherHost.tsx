@@ -25,6 +25,7 @@ import { executeRecommendedAction } from '../clipboard/actionExecutor'
 import { recommendActionsForBlock, type RecommendedAction, type RecommendedOutputTarget } from '../clipboard/actionRecommendation'
 import { createPluginClipboard, writeClipboardText } from '../../workspace/pluginClipboard'
 import { createGlobalLauncherPluginApi } from '../clipboard/globalLauncherApi'
+import type { LauncherExecuteResult } from '../../workspace/launcher/types'
 import { createPluginPaste } from '../../workspace/pluginPaste'
 import { createPluginPrivateStorage } from '../../workspace/pluginStorage'
 import { createQuickEditorPane } from '../../workspace/quickEditor/quickEditorRequests'
@@ -419,6 +420,12 @@ export function GlobalLauncherHost() {
 
   // Guard duplicate dismissals while the native window is hiding.
   const closingRef = useRef(false)
+  // Native paste closes/reset the launcher before its outcome arrives. Retain
+  // feedback for that closed session, only until another controller state/open.
+  const previewPasteCloseRef = useRef<{
+    isCurrent: () => boolean
+    isClosedCurrent?: () => boolean
+  } | null>(null)
 
   const resetLauncherSession = useCallback(() => {
     clipboardBlock.markBlockConsumed()
@@ -565,9 +572,17 @@ export function GlobalLauncherHost() {
       closingRef.current = false
     } else if (previous.globalLauncherOpen && !state.globalLauncherOpen && !closingRef.current) {
       closingRef.current = true
+      const pendingPaste = previewPasteCloseRef.current
+      const wasCurrentPaste = pendingPaste?.isCurrent()
       resetLauncherSession()
+      if (pendingPaste && wasCurrentPaste) {
+        const closedController = controllerRef.current
+        const closedState = closedController?.getState()
+        pendingPaste.isClosedCurrent = () => !useAppStore.getState().globalLauncherOpen &&
+          controllerRef.current === closedController && closedController?.getState() === closedState
+      }
     }
-  }), [resetLauncherSession])
+  }), [controllerRef, resetLauncherSession])
 
   const leaveActionBrowser = useCallback(() => {
     if (!browsingActions) return false
@@ -731,26 +746,28 @@ export function GlobalLauncherHost() {
     selectItem(item)
   }, [executeObjectAction, objectActions, selectItem])
 
-  const pastePreviewText = useCallback(async (text: string) => {
+  const pastePreviewText = useCallback(async (text: string, isCurrent: () => boolean): Promise<LauncherExecuteResult> => {
     const startedAt = telemetryNow()
     trackBehavior(TelemetryEvents.pasteText, { textLength: text.length, via: 'result-preview' })
+    const pendingPaste: { isCurrent: () => boolean; isClosedCurrent?: () => boolean } = { isCurrent }
+    previewPasteCloseRef.current = pendingPaste
     try {
-      const paste = createPluginPaste()
-      const result = await paste.pasteText(text)
+      const result = await createPluginPaste().pasteText(text)
       trackLatencyFrom(TelemetryEvents.pasteLatency, startedAt, {
         ok: result.ok,
         textLength: text.length,
         via: 'result-preview',
       })
       if (!result.ok) {
-        showToast(result.message || t(locale, 'palette.quickEntryError'), result.fallback === 'copied' ? 'info' : 'error')
-        if (result.fallback !== 'copied') return
+        const message = result.message || t(locale, 'palette.quickEntryError')
+        if (result.fallback !== 'copied') return { ok: false, message }
+        if (isCurrent() || pendingPaste.isClosedCurrent?.()) showToast(message, 'info')
       }
-      closeLauncherAfterAction()
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : String(error), 'error')
+      return { ok: true }
+    } finally {
+      if (previewPasteCloseRef.current === pendingPaste) previewPasteCloseRef.current = null
     }
-  }, [closeLauncherAfterAction, locale])
+  }, [locale])
 
   const beginDrag = useGlobalLauncherNativeDrag(standaloneLauncher)
 
