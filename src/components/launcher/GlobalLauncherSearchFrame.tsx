@@ -1,5 +1,5 @@
 import type { MouseEvent as ReactMouseEvent, MutableRefObject, RefObject } from 'react'
-import { Search } from 'lucide-react'
+import { ArrowLeft, Search, X } from 'lucide-react'
 import type { Locale } from '../../i18n'
 import { t } from '../../i18n'
 import { LauncherHintKey } from './LauncherFooterHints'
@@ -39,6 +39,13 @@ export function GlobalLauncherSearchFrame({
   clipboardBlock,
   clipboardHintSelected,
   isFavoriteSelected,
+  browsingActions = false,
+  onBrowseActions,
+  onLeaveActionBrowser,
+  truncateItems = true,
+  onToggleFavorite,
+  favoriteKeys,
+  pinnableItemKeys,
   onQueryChange,
   onSelectItem,
   onHoverIndex,
@@ -60,6 +67,13 @@ export function GlobalLauncherSearchFrame({
   clipboardHintSelected?: boolean
   /** Whether the focused row is currently pinned. */
   isFavoriteSelected?: boolean
+  browsingActions?: boolean
+  onBrowseActions?: () => void
+  onLeaveActionBrowser?: () => void
+  truncateItems?: boolean
+  onToggleFavorite?: (item: LauncherMixedItem) => void
+  favoriteKeys?: readonly string[]
+  pinnableItemKeys?: ReadonlySet<string>
   onQueryChange: (value: string) => void
   onSelectItem: (item: LauncherMixedItem) => void
   onHoverIndex: (index: number) => void
@@ -121,6 +135,21 @@ export function GlobalLauncherSearchFrame({
           }}
           placeholder={resolvedPlaceholder}
         />
+        {onBrowseActions && query.length > 0 && (
+          <button
+            type="button"
+            className="launcher-query-clear"
+            aria-label={t(locale, 'palette.clearQuery')}
+            title={t(locale, 'palette.clearQuery')}
+            onMouseDown={(event) => event.preventDefault()}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') event.stopPropagation()
+            }}
+            onClick={() => { onQueryChange(''); inputRef.current?.focus() }}
+          >
+            <X size={15} aria-hidden />
+          </button>
+        )}
         {!block && clipboardBlock && query.length > 0 && (
           <button
             type="button"
@@ -149,6 +178,23 @@ export function GlobalLauncherSearchFrame({
         data-launcher-scrollable
         onMouseMove={onMouseMove}
       >
+        {onBrowseActions && (browsingActions || !query.trim() || items.length === 0) && (
+          <div className="launcher-discovery-nav">
+            <button
+              type="button"
+              className="launcher-discovery-action"
+              onMouseDown={(event) => event.preventDefault()}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') event.stopPropagation()
+              }}
+              onClick={browsingActions ? onLeaveActionBrowser : onBrowseActions}
+            >
+              {browsingActions && <ArrowLeft size={14} aria-hidden />}
+              {t(locale, browsingActions ? 'palette.backToSearch' : 'palette.browseAllActions')}
+            </button>
+            {browsingActions && <span>{t(locale, 'palette.allActions')}</span>}
+          </div>
+        )}
         {hint && !block && (
           <RecentClipboardHint
             hint={hint}
@@ -157,7 +203,7 @@ export function GlobalLauncherSearchFrame({
             onAttach={() => clipboardBlock?.attachHintAsBlock()}
           />
         )}
-        {items.length === 0 && query ? (
+        {items.length === 0 && (query || browsingActions) ? (
           <LauncherEmptyWell
             title={t(locale, 'palette.noResults')}
             hint={t(locale, 'palette.noResultsHint')}
@@ -167,7 +213,10 @@ export function GlobalLauncherSearchFrame({
               items={items}
               selected={selectedItem}
               locale={locale}
-              truncate={!query}
+              truncate={truncateItems && !query}
+              onToggleFavorite={onToggleFavorite}
+              favoriteKeys={favoriteKeys}
+              pinnableItemKeys={pinnableItemKeys}
               onSelect={onSelectItem}
               onHoverIndex={onHoverIndex}
               isKeyboardNavRef={isKeyboardNavRef}
@@ -176,7 +225,7 @@ export function GlobalLauncherSearchFrame({
       </div>
       <div className="global-launcher-footer l-foot">
         <div className="l-foot-hints">
-          {selectedItem && (
+          {selectedItem && onToggleFavorite && pinnableItemKeys?.has(selectedItem.id) && (
             <LauncherHintKey
               keys={`${getPlatformShortcutMeta().label}P`}
               label={isFavoriteSelected ? t(locale, 'palette.actionUnpin') : t(locale, 'palette.actionPin')}
