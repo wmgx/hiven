@@ -44,6 +44,7 @@ import {
 import type { LauncherItem } from '../../workspace/launcher/types'
 import { getPluginPermissionSnapshot } from '../../workspace/pluginPermissions'
 import { showToast } from '../../workspace/toast'
+import { selectLauncherVisibleItems } from '../../workspace/launcher/visibleItems'
 
 export function GlobalLauncherHost() {
   const {
@@ -73,6 +74,8 @@ export function GlobalLauncherHost() {
   const panelRef = useRef<HTMLDivElement>(null)
   const visibleSelectionItemsRef = useRef<readonly LauncherItem[]>([])
   const [selectedObjectActionIndex, setSelectedObjectActionIndex] = useState(0)
+  const [browsingActions, setBrowsingActions] = useState(false)
+  const launcherFavoriteKeys = useAppStore((s) => s.launcherFavoriteKeys)
   const objectActionControllerRef = useRef<{ expand: () => void; execute: (keepOpen?: boolean) => void } | null>(null)
   const { isImeComposingRef, handleCompositionStart, handleCompositionEnd } = useGlobalLauncherImeComposition()
   const standaloneLauncher = isStandaloneLauncherWindow()
@@ -106,6 +109,7 @@ export function GlobalLauncherHost() {
     controllerRef,
     controllerState,
     rankedItems: rankedLauncherItems,
+    availableItems: availableLauncherItems,
     syncSelection,
     reset: resetSession,
   } = useLauncherSession({
@@ -120,7 +124,10 @@ export function GlobalLauncherHost() {
   })
   liveQueryRef.current = query
   // An explicit content handoff starts a new command search; ordinary Back keeps it.
-  useEffect(() => subscribePendingObjectBlock(() => setQuery('')), [setQuery])
+  useEffect(() => subscribePendingObjectBlock(() => {
+    setQuery('')
+    setBrowsingActions(false)
+  }), [setQuery])
   const trackQueryChangeRef = useRef(
     createDebouncedTracker(TelemetryEvents.launcherQueryChange, 280),
   )
@@ -364,7 +371,7 @@ export function GlobalLauncherHost() {
       })
   }, [clipboardBlock.block, locale, objectActions, rankingQuery])
 
-  const visibleFiltered = useMemo(() => {
+  const composedRankedItems = useMemo(() => {
     if (
       !objectBlockText
       || clipboardBlock.block?.source === 'history-item'
@@ -375,6 +382,19 @@ export function GlobalLauncherHost() {
     // The best content-aware recommendation should beat the generic editor fallback.
     return [rankedVisible[0], ...pinnedObjectActionItems, ...rankedVisible.slice(1)]
   }, [clipboardBlock.block?.source, objectBlockText, pinnedObjectActionItems, rankedVisible])
+  const availableItems = useMemo(() => [
+    ...pinnedObjectActionItems,
+    ...buildGlobalLauncherItems({ rankedLauncherItems: availableLauncherItems, query: rankingQuery, locale }),
+  ], [availableLauncherItems, locale, pinnedObjectActionItems, rankingQuery])
+  const availableItemKeys = useMemo(() => new Set(availableItems.map((item) => item.id)), [availableItems])
+  const visibleFiltered = useMemo(() => selectLauncherVisibleItems({
+    rankedItems: composedRankedItems,
+    availableItems,
+    favoriteKeys: launcherFavoriteKeys,
+    query: rankingQuery,
+    browse: browsingActions,
+    keyOf: (item: GlobalLauncherItem) => item.id,
+  }), [availableItems, browsingActions, composedRankedItems, launcherFavoriteKeys, rankingQuery])
   const visibleSelectionItems = useMemo(
     () => visibleFiltered.map((item) => item.domainItem),
     [visibleFiltered],
@@ -412,6 +432,7 @@ export function GlobalLauncherHost() {
       closeSettingsDialog()
     }
     setSelectedObjectActionIndex(0)
+    setBrowsingActions(false)
     isImeComposingRef.current = false
     resetSession()
   }, [clipboardBlock.markBlockConsumed, clearLauncherHostSurface, clearPluginSurfaceTool, closeSettingsDialog, isImeComposingRef, resetSession])
@@ -548,12 +569,21 @@ export function GlobalLauncherHost() {
     }
   }), [resetLauncherSession])
 
+  const leaveActionBrowser = useCallback(() => {
+    if (!browsingActions) return false
+    setBrowsingActions(false)
+    setSelectedIndex(0, { pin: false })
+    focusSearchInputAfterBack()
+    return true
+  }, [browsingActions, focusSearchInputAfterBack, setSelectedIndex])
+
   useGlobalLauncherHostEscape({
     open,
     isImeComposingRef,
     controllerRef,
     closeLauncher,
     focusSearchInputAfterBack,
+    onRootBack: leaveActionBrowser,
   })
 
 
@@ -797,7 +827,19 @@ export function GlobalLauncherHost() {
         hostSurfaceTarget={hostSurfaceTarget}
         clearLauncherHostSurface={clearLauncherHostSurface}
         query={query}
-        setQuery={setQuery}
+        setQuery={(value) => {
+          setBrowsingActions(false)
+          setQuery(value)
+        }}
+        browsingActions={browsingActions}
+        onBrowseActions={() => {
+          setQuery('')
+          setSelectedIndex(0, { pin: false })
+          setBrowsingActions(true)
+          focusSearchInputAfterBack()
+        }}
+        onLeaveActionBrowser={leaveActionBrowser}
+        availableItemKeys={availableItemKeys}
         locale={locale}
         searchPlaceholder={t(locale, 'palette.globalPlaceholder')}
         requestSurfaceBack={hostSurfaceTarget ? leaveHostSurface : requestSurfaceBack}
