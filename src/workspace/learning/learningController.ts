@@ -13,6 +13,7 @@
  * See doc/2026-08-12-direct-answer-workbench-design.md §8 (P2).
  */
 
+import { getAutomaticLearningSignal, useAppStore } from '../../store'
 import { TelemetryEvents, measureLatency, trackBehavior, trackPerf } from '../telemetry'
 import { scheduleIdleWork } from '../scheduleIdleWork'
 import { selectProposableCandidates, type RuleCandidate } from './cluster'
@@ -21,7 +22,6 @@ import { extractFeatures, featureSignature } from './features'
 import { refreshLearnedUrlRules } from './fire'
 import { buildPureTransformRunners, runLearnedChain } from './registryRunners'
 import { ruleFromCandidate, selectAutoLearnable, sourceScopedTemplateToCandidate, templateToCandidate } from './proposals'
-import { offerLearnedRule } from './ruleSink'
 import {
   addSuppression,
   countEventSigs,
@@ -39,7 +39,8 @@ import {
 } from './store'
 import { classifyTokenSlot, induceSourceScopedTemplates, induceUrlTemplates, type DiscoveredTemplate } from './urlTemplate'
 import { buildTemplateFromPositions, induceVariablePositions } from './positionVariance'
-import { getRecentPathSample } from './navigationSensor'
+import { getRecentPathSample, startNavigationSensor } from './navigationSensor'
+import { startLearningObserver } from './observer'
 
 /**
  * A discovered url-template is net-new only if a representative slot token isn't
@@ -60,7 +61,7 @@ function isCandidateNovel(candidate: RuleCandidate): boolean {
  * All candidates the observer currently has evidence for, strongest first,
  * minus the ones already learned or explicitly suppressed.
  */
-async function collectCandidates(): Promise<{
+async function collectCandidates(signal?: AbortSignal): Promise<{
   candidates: RuleCandidate[]
   learnedKeys: string[]
   suppressedKeys: string[]
@@ -72,6 +73,7 @@ async function collectCandidates(): Promise<{
     queryAllSuppressions(),
     queryNavigations(),
   ])
+  if (signal?.aborted) return { candidates: [], learnedKeys: [], suppressedKeys: [] }
   // Merge both discovery sources: verified transform clusters + navigation
   // templates (self-discovery), strongest evidence first.
   const candidates = [
@@ -171,54 +173,29 @@ export async function getPendingProposals(): Promise<RuleCandidate[]> {
  * and decay back out on their own if never used. Learning a cluster removes it
  * from the pool permanently, which is what stops the old repeat-forever loop.
  */
-export async function autoLearnNow(now: number = Date.now()): Promise<number> {
-  // The periodic pass also owns persisted-rule pruning, even when nothing new is learnable.
-  await refreshLearnedUrlRules()
-  const { candidates, learnedKeys, suppressedKeys } = await collectCandidates()
+export async function autoLearnNow(now: number = Date.now(), signal: AbortSignal = getAutomaticLearningSignal()): Promise<number> {
+  if (signal.aborted) return 0
+  const { candidates, learnedKeys, suppressedKeys } = await collectCandidates(signal)
+  if (signal.aborted) return 0
   const learnable = selectAutoLearnable(candidates, { learnedKeys, suppressedKeys })
   if (learnable.length === 0) return 0
 
+  let learnedCount = 0
   for (const candidate of learnable) {
-    // Offer it to whoever already owns this concept first (e.g. the web quick-open
-    // plugin owns "type this shape → open that page"). A claimed rule lives in
-    // that plugin's own list — visible and EDITABLE where the user already
-    // manages such rules — instead of a second, delete-only private store.
-    const claimedBy = await offerToSink(candidate)
-    if (!claimedBy) {
-      await putRule(ruleFromCandidate(candidate, now, { silent: true }))
-    }
+    if (signal.aborted) return learnedCount
+    // URL templates are already excluded by collectCandidates; automatic
+    // transform rules stay here, with explicit provenance and cancellation.
+    await putRule(ruleFromCandidate(candidate, now, { silent: true }), signal)
+    if (signal.aborted) return learnedCount
+    learnedCount += 1
     trackBehavior(TelemetryEvents.learningRuleAutoLearned, {
       transformKind: candidate.transform.kind,
       sampleCount: candidate.sampleCount,
       distinctInputs: candidate.distinctInputs,
-      claimedBy: claimedBy ?? undefined,
     })
   }
-  await refreshLearnedUrlRules()
-  return learnable.length
-}
-
-/**
- * Offer a url-template candidate to registered sinks. Only url-templates are
- * offerable today — a chain rule has no owner outside the learner.
- */
-async function offerToSink(candidate: RuleCandidate): Promise<string | null> {
-  if (candidate.transform.kind !== 'url-template') return null
-  // Source-scoped (L1/L2) candidates stay host-owned: the sink protocol only
-  // carries template + slotKind, so a claiming plugin would silently drop the
-  // sourceHost disambiguation on accept — the exact §3.6 failure mode (learns,
-  // never fires right) if it later collides with an unscoped rule of its own.
-  if (candidate.matcher.kind === 'token' && candidate.matcher.sourceHost) return null
-  return await offerLearnedRule({
-    kind: 'url-template',
-    template: candidate.transform.template,
-    slotKind: candidate.transform.slotKind,
-    clusterKey: candidate.clusterKey,
-    evidence: {
-      sampleCount: candidate.sampleCount,
-      distinctInputs: candidate.distinctInputs,
-    },
-  })
+  await refreshLearnedUrlRules(signal)
+  return learnedCount
 }
 
 /** Persist a user-accepted proposal as a learned rule. */
@@ -245,10 +222,14 @@ export async function rejectProposal(clusterKey: string): Promise<void> {
  * the exact rule the user just dismissed — the undo has to be a terminal state,
  * for the same reason "ignored" had to become one.
  */
-export async function undoLearnedRule(rule: LearnedRule): Promise<void> {
-  if (rule.id != null) await deleteRule(rule.id)
-  await addSuppression(rule.clusterKey)
-  await refreshLearnedUrlRules()
+export async function undoLearnedRule(rule: LearnedRule, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return
+  if (rule.id != null) await deleteRule(rule.id, signal)
+  if (signal?.aborted) return
+  await addSuppression(rule.clusterKey, Date.now(), signal)
+  if (signal?.aborted) return
+  await refreshLearnedUrlRules(signal)
+  if (signal?.aborted) return
   trackBehavior(TelemetryEvents.learningRuleUndone, {
     transformKind: rule.transform.kind,
     fireCount: rule.fireCount ?? 0,
@@ -287,31 +268,71 @@ const AUTO_LEARN_IDLE_TIMEOUT_MS = 5_000
  * it lands in a gap between keystrokes/renders instead of firing mid-interaction
  * on whatever main-thread tick the interval happens to land on.
  */
-export function startAutoLearnLoop(): () => void {
-  let stopped = false
+export function startAutoLearnLoop(parentSignal: AbortSignal = getAutomaticLearningSignal()): () => void {
+  if (parentSignal.aborted) return () => undefined
+  const controller = new AbortController()
+  const { signal } = controller
+  let running = false
   let cancelIdle: (() => void) | null = null
   const run = () => {
-    if (stopped) return
+    if (signal.aborted || running) return
     cancelIdle?.()
     cancelIdle = scheduleIdleWork(() => {
       cancelIdle = null
-      if (stopped) return
+      if (signal.aborted) return
+      running = true
       void measureLatency(
         TelemetryEvents.learningAutoLearnPass,
-        () => autoLearnNow(),
+        () => autoLearnNow(Date.now(), signal),
         (learnedCount) => ({ learnedCount }),
       ).catch(() => {
         // fail-soft: learning must never break the app
-      })
+      }).finally(() => { running = false })
     }, AUTO_LEARN_IDLE_TIMEOUT_MS)
   }
   const first = setTimeout(run, AUTO_LEARN_FIRST_DELAY_MS)
   const timer = setInterval(run, AUTO_LEARN_INTERVAL_MS)
-  return () => {
-    stopped = true
+  const stop = () => {
+    if (signal.aborted) return
+    controller.abort()
+    parentSignal.removeEventListener('abort', stop)
     clearTimeout(first)
     clearInterval(timer)
     cancelIdle?.()
+    cancelIdle = null
+  }
+  parentSignal.addEventListener('abort', stop, { once: true })
+  return stop
+}
+
+/** Own just the experimental background work; manual rules and normal usage stay independent. */
+export function startAutomaticLearning(): () => void {
+  let enabled = false
+  let stop = () => {}
+  const sync = () => {
+    const next = useAppStore.getState().settings.automaticLearningEnabled === true
+    if (next === enabled) return
+    stop()
+    enabled = next
+    if (!enabled) return
+    const controller = new AbortController()
+    const { signal } = controller
+    const stopObserver = startLearningObserver(signal)
+    const stopNavigation = startNavigationSensor(signal)
+    const stopLoop = startAutoLearnLoop(signal)
+    void refreshLearnedUrlRules(signal)
+    stop = () => {
+      controller.abort()
+      stopLoop()
+      stopNavigation()
+      stopObserver()
+    }
+  }
+  const unsubscribe = useAppStore.subscribe(sync)
+  sync()
+  return () => {
+    unsubscribe()
+    stop()
   }
 }
 
