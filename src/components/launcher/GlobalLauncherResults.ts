@@ -28,6 +28,7 @@ export function useGlobalLauncherResultFrame({
   }, [controller])
 
   const toggleResultChoice = useCallback((choice: LauncherResultChoice, frame: ResultFrame) => {
+    if (!controller || controller.getState().busy || controller.getState().frames.at(-1) !== frame) return
     const selection = frame.output.selection
     if (selection?.type !== 'multi') {
       activateResultChoice(choice)
