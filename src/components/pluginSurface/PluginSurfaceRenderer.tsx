@@ -22,7 +22,7 @@ import type {
   PluginPermissionSnapshot,
   PluginUiSurfaceContribution,
 } from '../../workspace/pluginTypes'
-import { createHistoryItemObjectBlock } from '../../launcher/clipboard/objectBlock'
+import { createPluginSurfaceObjectBlock } from './pluginSurfaceObjectBlock'
 import { setPendingObjectBlock } from '../../launcher/clipboard/pendingObjectBlock'
 import { showLauncherWindow } from '../../workspace/windowManager/launcherWindow'
 
@@ -216,28 +216,7 @@ export function PluginSurfaceRenderer({
             showToast: (message, level, options) => showToast(message, level, options),
             dismissToast,
             returnToLauncherWithObject: (input: PluginObjectBlockInput) => {
-              const block =
-                input.kind === 'text'
-                  ? createHistoryItemObjectBlock({
-                      kind: 'text',
-                      text: input.text,
-                      ageLabel: input.ageLabel,
-                    })
-                  : input.kind === 'image'
-                    ? createHistoryItemObjectBlock({
-                        kind: 'image',
-                        blobId: input.blobId,
-                        contentType: input.contentType,
-                        width: input.width,
-                        height: input.height,
-                        ageLabel: input.ageLabel,
-                      })
-                    : createHistoryItemObjectBlock({
-                        kind: 'files',
-                        paths: input.paths,
-                        fileNames: input.fileNames,
-                        ageLabel: input.ageLabel,
-                      })
+              const block = createPluginSurfaceObjectBlock(input)
 
               // Always persist: history is often a separate webview; hide/show races
               // used to drop in-memory-only pending before Global Launcher reopened.

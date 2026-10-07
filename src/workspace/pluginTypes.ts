@@ -690,7 +690,18 @@ export type PluginSurfaceShell = {
 
 /** Neutral input for returning a snapshot object into Global Launcher as Object Block. */
 export type PluginObjectBlockInput =
-  | { kind: 'text'; text: string; ageLabel?: string }
+  | {
+      kind: 'text'
+      text: string
+      ageLabel?: string
+      /**
+       * Omitted means history-item for compatibility. Declare tool-result only for
+       * processed output; Host reclassifies its text and ignores history age.
+       * This describes origin, not a promise to restore the previous material:
+       * restoration requires an unconsumed material in the same open session.
+       */
+      source?: 'history-item' | 'tool-result'
+    }
   | {
       kind: 'image'
       blobId: string

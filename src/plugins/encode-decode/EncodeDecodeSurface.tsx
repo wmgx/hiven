@@ -157,7 +157,7 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
                   {t('action.useAsInput')}
                 </Button>
               ) : null}
-              <IconButton type="button" label={t('action.continueProcessing')} disabled={!hasOutput || pasting} onClick={() => host.returnToLauncherWithObject({ kind: 'text', text: result.output })}>
+              <IconButton type="button" label={t('action.continueProcessing')} disabled={!hasOutput || pasting} onClick={() => host.returnToLauncherWithObject({ kind: 'text', text: result.output, source: 'tool-result' })}>
                 <CornerDownLeft size={14} />
               </IconButton>
               <IconButton type="button" label={t('action.pasteBack')} disabled={!hasOutput || pasting} onClick={() => void pasteOutput()}>

@@ -176,7 +176,7 @@ export function TextToolsSurface(props: PluginSurfaceProps) {
                 <strong>{t('pane.output')}</strong>
                 <div className="text-tools-pane-actions">
                   <Button type="button" variant="ghost" disabled={!lineOutput || pasting} onClick={useLineOutput}>{t('action.useAsInput')}</Button>
-                  <IconButton type="button" label={t('action.continueProcessing')} disabled={!lineOutput || pasting} onClick={() => host.returnToLauncherWithObject({ kind: 'text', text: lineOutput })}>
+                  <IconButton type="button" label={t('action.continueProcessing')} disabled={!lineOutput || pasting} onClick={() => host.returnToLauncherWithObject({ kind: 'text', text: lineOutput, source: 'tool-result' })}>
                     <CornerDownLeft size={14} />
                   </IconButton>
                   <IconButton type="button" label={t('action.pasteBack')} disabled={!lineOutput || pasting} onClick={() => void pasteOutput(lineOutput)}>
@@ -228,7 +228,7 @@ export function TextToolsSurface(props: PluginSurfaceProps) {
                     <small>{t('action.copy')}</small>
                   </button>
                   <div className="text-tools-pane-actions">
-                    <IconButton type="button" label={t('action.continueProcessing')} disabled={!result.output || pasting} onClick={() => host.returnToLauncherWithObject({ kind: 'text', text: result.output })}>
+                    <IconButton type="button" label={t('action.continueProcessing')} disabled={!result.output || pasting} onClick={() => host.returnToLauncherWithObject({ kind: 'text', text: result.output, source: 'tool-result' })}>
                       <CornerDownLeft size={14} />
                     </IconButton>
                     <IconButton type="button" label={t('action.pasteBack')} disabled={!result.output || pasting} onClick={() => void pasteOutput(result.output)}>

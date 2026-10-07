@@ -45,6 +45,7 @@ const commands = [
   ['npm', ['run', 'test:launcher-output-recovery']],
   ['npm', ['run', 'test:launcher-current-material']],
   ['npm', ['run', 'test:launcher-material-edit']],
+  ['npm', ['run', 'test:plugin-surface-object-origin']],
   ['npm', ['run', 'test:ai-provider-runtime']],
   ['npm', ['run', 'test:ai-preflight']],
   ['npm', ['run', 'test:translate-ai-readiness']],

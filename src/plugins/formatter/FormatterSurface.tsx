@@ -147,7 +147,7 @@ export function FormatterSurface(props: PluginSurfaceProps) {
               <Button type="button" variant="ghost" disabled={!hasOutput || pasting} onClick={() => setInputText(outputText)}>
                 {t('action.useAsInput')}
               </Button>
-              <IconButton type="button" label={t('action.continueProcessing')} disabled={!hasOutput || pasting} onClick={() => host.returnToLauncherWithObject({ kind: 'text', text: outputText })}>
+              <IconButton type="button" label={t('action.continueProcessing')} disabled={!hasOutput || pasting} onClick={() => host.returnToLauncherWithObject({ kind: 'text', text: outputText, source: 'tool-result' })}>
                 <CornerDownLeft size={14} />
               </IconButton>
               <IconButton type="button" label={t('action.pasteBack')} disabled={!hasOutput || pasting} onClick={() => void pasteOutput()}>
