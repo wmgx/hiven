@@ -235,13 +235,14 @@ function SettingsDialogBody({
   const requestedPermissions = useMemo(() => pluginRegistry.getPluginPermissions(pluginId, source), [pluginId, source])
   const permissions = getPluginPermissionSnapshot(source, pluginId, requestedPermissions)
   const settingsHost = useMemo(() => ({
+    t: pluginT,
     permissions,
     storage: createPluginPrivateStorage(source, pluginId, permissions),
     ai: createPluginAi(pluginId, source, permissions),
     showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error') {
       showToast(message, level ?? 'info')
     },
-  }), [source, pluginId, permissions])
+  }), [source, pluginId, permissions, pluginT])
 
   const settingsNetwork = useMemo(
     () => createPluginNetwork(permissions),
