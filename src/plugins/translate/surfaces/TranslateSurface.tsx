@@ -1,21 +1,36 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import { Button, IconButton, Select } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon, SettingsIcon } from '@hiven/plugin-ui/icons'
 import { AlertTriangle, ArrowRight, LoaderCircle } from 'lucide-react'
 import type { SourceLanguageCode, TargetLanguageCode, TranslateProfile, TranslateSettings } from '../settings/model'
 import { currentUsageMonth } from '../settings/model'
-import { estimateBilledChars, isAutoTranslateReady, resolveSmartTargetLang, translateText } from '../providers/adapters'
+import { AiTranslationError, estimateBilledChars, isAutoTranslateReady, resolveSmartTargetLang, translateText } from '../providers/adapters'
 
 const AUTO_TRANSLATE_DEBOUNCE_MS = 800
 
 type TranslateStatus =
   | { kind: 'idle' }
+  | { kind: 'unconfigured' }
   | { kind: 'waiting'; dueAt: number }
   | { kind: 'translating'; requestId: number }
   | { kind: 'success'; translatedAt: number }
-  | { kind: 'error'; message: string }
+  | { kind: 'stopped' }
+  | { kind: 'error'; message: string; messageKey?: string }
   | { kind: 'quota-exceeded'; usedChars: number; limitChars: number }
+
+type TranslationView = {
+  identity: string
+  outputText: string
+  status: TranslateStatus
+}
+
+type TranslationRun = {
+  id: number
+  identity: string
+  controller: AbortController
+  timer?: number
+}
 
 type CacheEntry = {
   text: string
@@ -63,12 +78,21 @@ function enabledProfiles(settings: TranslateSettings): TranslateProfile[] {
 }
 
 function selectInitialProfile(settings: TranslateSettings): TranslateProfile | undefined {
-  return enabledProfiles(settings).find((profile) => profile.id === settings.defaultProfileId) ?? enabledProfiles(settings)[0] ?? settings.profiles[0]
+  return enabledProfiles(settings).find((profile) => profile.id === settings.defaultProfileId) ?? enabledProfiles(settings)[0]
 }
 
 function resetUsageMonth(profile: TranslateProfile, month: string): TranslateProfile {
   if (profile.usedCharsMonth === month) return profile
   return { ...profile, usedCharsMonth: month, usedChars: 0 }
+}
+
+function profileExecutionKey(profile: TranslateProfile | undefined): string {
+  if (!profile) return ''
+  return JSON.stringify([
+    profile.id, profile.provider, profile.enabled, profile.appId, profile.secret,
+    profile.authKey, profile.secretId, profile.secretKey, profile.region, profile.endpoint,
+    profile.monthlyLimitChars, profile.aiProviderId, profile.aiAgentId, profile.aiEffort,
+  ])
 }
 
 function stateName(status: TranslateStatus): 'idle' | 'waiting' | 'translating' | 'failed' | 'quota' {
@@ -80,11 +104,13 @@ function stateName(status: TranslateStatus): 'idle' | 'waiting' | 'translating' 
 }
 
 function statusLabel(status: TranslateStatus, t: (key: string) => string): string {
-  if (status.kind === 'waiting') return localizedText(t, 'status.waiting', 'Waiting to translate...')
-  if (status.kind === 'translating') return localizedText(t, 'status.translating', 'Translating...')
+  if (status.kind === 'unconfigured') return t('status.noProfile')
+  if (status.kind === 'waiting') return t('status.waiting')
+  if (status.kind === 'translating') return t('status.translating')
   if (status.kind === 'success') return localizedText(t, 'status.success', 'Translated')
+  if (status.kind === 'stopped') return t('status.stopped')
   if (status.kind === 'error') {
-    return localizedText(t, 'status.error', 'Translation failed - {message}').replace('{message}', status.message)
+    return t('status.error').replace('{message}', status.messageKey ? t(status.messageKey) : status.message)
   }
   if (status.kind === 'quota-exceeded') return localizedText(t, 'status.quota', 'Monthly quota reached')
   return localizedText(t, 'status.idle', 'Idle')
@@ -145,6 +171,7 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
   const { host, settings, t } = props
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const requestIdRef = useRef(0)
+  const runRef = useRef<TranslationRun | null>(null)
   const cacheRef = useRef(new Map<string, CacheEntry>())
   const hostRef = useRef(host)
   hostRef.current = host
@@ -155,8 +182,7 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
   const [targetLang, setTargetLang] = useState<TargetLanguageCode>(initialProfile?.defaultTargetLang ?? settings.defaultTargetLang ?? 'smart')
   const initialText = props.initialText?.trim()
   const [inputText, setInputText] = useState(initialText ?? '')
-  const [outputText, setOutputText] = useState('')
-  const [status, setStatus] = useState<TranslateStatus>({ kind: 'idle' })
+  const [view, setView] = useState<TranslationView>({ identity: '', outputText: '', status: { kind: 'idle' } })
   const [usageByProfile, setUsageByProfile] = useState(() => new Map(settings.profiles.map((profile) => [profile.id, profile.usedChars])))
   const usageRef = useRef(usageByProfile)
   usageRef.current = usageByProfile
@@ -184,25 +210,37 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
     [profiles],
   )
   const activeProfile = useMemo(
-    () => settings.profiles.find((profile) => profile.id === profileId) ?? initialProfile,
-    [settings.profiles, profileId, initialProfile],
+    () => profiles.find((profile) => profile.id === profileId) ?? initialProfile,
+    [profiles, profileId, initialProfile],
   )
   const profileRef = useRef(activeProfile)
   profileRef.current = activeProfile
-  const translateProfileKey = activeProfile
-    ? [
-        activeProfile.id,
-        activeProfile.provider,
-        activeProfile.appId ?? '',
-        activeProfile.secret ?? '',
-        activeProfile.authKey ?? '',
-        activeProfile.secretId ?? '',
-        activeProfile.secretKey ?? '',
-        activeProfile.region ?? '',
-        activeProfile.endpoint ?? '',
-        String(activeProfile.monthlyLimitChars ?? 0),
-      ].join('\0')
-    : ''
+  const translateProfileKey = profileExecutionKey(activeProfile)
+  const requestIdentity = JSON.stringify([inputText, sourceLang, targetLang, translateProfileKey, settings.defaultTargetLang])
+  const identityRef = useRef(requestIdentity)
+  identityRef.current = requestIdentity
+  // Render-time identity also blocks stale success/copy before effect cleanup runs.
+  const outputText = view.identity === requestIdentity ? view.outputText : ''
+  const status: TranslateStatus = view.identity === requestIdentity
+    ? view.status
+    : !activeProfile
+      ? { kind: 'unconfigured' }
+      : isAutoTranslateReady(inputText)
+        ? { kind: 'waiting', dueAt: Date.now() + AUTO_TRANSLATE_DEBOUNCE_MS }
+        : { kind: 'idle' }
+  const copyableRef = useRef<{ identity: string; text: string; view: TranslationView } | null>(null)
+  copyableRef.current = status.kind === 'success' && outputText ? { identity: requestIdentity, text: outputText, view } : null
+
+  const cancelCurrentRun = useCallback(() => {
+    const run = runRef.current
+    runRef.current = null
+    copyableRef.current = null
+    if (!run) return
+    if (run.timer !== undefined) window.clearTimeout(run.timer)
+    run.controller.abort()
+  }, [])
+
+  useLayoutEffect(() => () => cancelCurrentRun(), [requestIdentity, cancelCurrentRun])
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => inputRef.current?.focus())
@@ -215,7 +253,10 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
     setTargetLang(activeProfile.defaultTargetLang === 'smart' ? settings.defaultTargetLang : activeProfile.defaultTargetLang)
   }, [activeProfile?.id, settings.defaultTargetLang])
 
-  const translateCurrentText = useCallback(async (requestId: number, profile: TranslateProfile, text: string, source: SourceLanguageCode, target: TargetLanguageCode) => {
+  const translateCurrentText = useCallback(async (run: TranslationRun, profile: TranslateProfile, text: string, source: SourceLanguageCode, target: TargetLanguageCode) => {
+    const isCurrent = () => runRef.current === run && identityRef.current === run.identity && !run.controller.signal.aborted
+    if (!isCurrent()) return
+    run.timer = undefined
     const month = currentUsageMonth()
     const normalizedProfile = resetUsageMonth(profile, month)
     const effectiveTarget = target === 'smart' ? resolveSmartTargetLang(text) : target
@@ -223,66 +264,96 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
     const currentUsed = usageRef.current.get(profile.id) ?? normalizedProfile.usedChars
     const monthlyLimit = Number(normalizedProfile.monthlyLimitChars) || 0
     if (monthlyLimit > 0 && currentUsed + billedChars > monthlyLimit) {
-      setStatus({ kind: 'quota-exceeded', usedChars: currentUsed, limitChars: monthlyLimit })
+      setView({ identity: run.identity, outputText: '', status: { kind: 'quota-exceeded', usedChars: currentUsed, limitChars: monthlyLimit } })
+      runRef.current = null
       return
     }
 
-    const cacheKey = `${profile.id}\0${source}\0${effectiveTarget}\0${text}`
-    const cached = cacheRef.current.get(cacheKey)
+    const cacheKey = JSON.stringify([profileExecutionKey(profile), source, effectiveTarget, text])
+    // The host can change an inherited AI provider/model without a plugin settings update.
+    const cached = profile.provider === 'ai' ? undefined : cacheRef.current.get(cacheKey)
     if (cached) {
-      setOutputText(cached.text)
-      setStatus({ kind: 'success', translatedAt: Date.now() })
+      setView({ identity: run.identity, outputText: cached.text, status: { kind: 'success', translatedAt: Date.now() } })
+      runRef.current = null
       return
     }
 
-    setStatus({ kind: 'translating', requestId })
+    let preview = ''
+    setView({ identity: run.identity, outputText: '', status: { kind: 'translating', requestId: run.id } })
     try {
-      const result = await translateText({ text, sourceLang: source, targetLang: effectiveTarget }, normalizedProfile, hostRef.current.network, hostRef.current.ai)
-      if (requestIdRef.current !== requestId) return
-      cacheRef.current.set(cacheKey, { text: result.text, billedChars: result.billedChars })
-      setOutputText(result.text)
+      const result = await translateText({ text, sourceLang: source, targetLang: effectiveTarget }, normalizedProfile, hostRef.current.network, hostRef.current.ai, {
+        signal: run.controller.signal,
+        onText: (text) => {
+          if (!isCurrent()) return
+          preview = text
+          setView({ identity: run.identity, outputText: text, status: { kind: 'translating', requestId: run.id } })
+        },
+      })
+      if (!isCurrent()) return
+      if (profile.provider !== 'ai') cacheRef.current.set(cacheKey, { text: result.text, billedChars: result.billedChars })
+      setView({ identity: run.identity, outputText: result.text, status: { kind: 'success', translatedAt: Date.now() } })
       setUsageByProfile((current) => {
         const next = new Map(current)
         next.set(profile.id, (next.get(profile.id) ?? normalizedProfile.usedChars) + result.billedChars)
         void hostRef.current.storage.kv.set('usage.currentMonth', Object.fromEntries(next)).catch(() => {})
         return next
       })
-      setStatus({ kind: 'success', translatedAt: Date.now() })
     } catch (error) {
-      if (requestIdRef.current !== requestId) return
-      setStatus({ kind: 'error', message: error instanceof Error ? error.message : 'Unknown error' })
+      if (!isCurrent()) return
+      const nextStatus: TranslateStatus = error instanceof Error && error.name === 'AbortError'
+        ? { kind: 'stopped' }
+        : { kind: 'error', message: error instanceof Error ? error.message : '', messageKey: error instanceof AiTranslationError ? `error.ai.${error.code}` : error instanceof Error ? undefined : 'error.unknown' }
+      setView({ identity: run.identity, outputText: preview, status: nextStatus })
+    } finally {
+      if (runRef.current === run) runRef.current = null
     }
   }, [])
 
   useEffect(() => {
     const trimmed = inputText.trim()
-    requestIdRef.current += 1
-    const requestId = requestIdRef.current
+    cancelCurrentRun()
     const profile = profileRef.current
 
     if (!profile || !isAutoTranslateReady(trimmed)) {
-      setOutputText('')
-      setStatus({ kind: 'idle' })
+      setView({ identity: requestIdentity, outputText: '', status: { kind: profile ? 'idle' : 'unconfigured' } })
       return
     }
 
-    setStatus({ kind: 'waiting', dueAt: Date.now() + AUTO_TRANSLATE_DEBOUNCE_MS })
-    const timer = window.setTimeout(() => {
-      void translateCurrentText(requestId, profile, trimmed, sourceLang, targetLang)
+    const run = { id: ++requestIdRef.current, identity: requestIdentity, controller: new AbortController() } as TranslationRun
+    runRef.current = run
+    setView({ identity: requestIdentity, outputText: '', status: { kind: 'waiting', dueAt: Date.now() + AUTO_TRANSLATE_DEBOUNCE_MS } })
+    run.timer = window.setTimeout(() => {
+      void translateCurrentText(run, profile, trimmed, sourceLang, targetLang)
     }, AUTO_TRANSLATE_DEBOUNCE_MS)
-    return () => window.clearTimeout(timer)
-  }, [inputText, translateProfileKey, sourceLang, targetLang, translateCurrentText])
+    return cancelCurrentRun
+  }, [requestIdentity, inputText, sourceLang, targetLang, translateCurrentText, cancelCurrentRun])
+
+  const stopTranslation = () => {
+    cancelCurrentRun()
+    setView((current) => ({ identity: requestIdentity, outputText: current.identity === requestIdentity ? current.outputText : '', status: { kind: 'stopped' } }))
+  }
+
+  const retryTranslation = () => {
+    cancelCurrentRun()
+    if (!activeProfile || !isAutoTranslateReady(inputText)) return
+    const run = { id: ++requestIdRef.current, identity: requestIdentity, controller: new AbortController() }
+    runRef.current = run
+    void translateCurrentText(run, activeProfile, inputText.trim(), sourceLang, targetLang)
+  }
 
   const copyOutput = useCallback(async () => {
-    if (!outputText) return
+    const output = copyableRef.current
+    if (!output || output.identity !== identityRef.current) return
     try {
-      await host.clipboard.writeText(outputText)
+      await host.clipboard.writeText(output.text)
+      if (copyableRef.current?.view !== output.view) return
       host.showMessage(localizedText(t, 'toast.copied', 'Copied'), 'success')
       host.complete()
     } catch {
+      if (copyableRef.current?.view !== output.view) return
       host.showMessage(localizedText(t, 'toast.copyFailed', 'Copy failed'), 'error')
     }
-  }, [host, outputText, t])
+  }, [host, t])
 
   const activeUsedChars = activeProfile ? (usageByProfile.get(activeProfile.id) ?? activeProfile.usedChars) : 0
   const monthlyLimit = activeProfile?.monthlyLimitChars ?? 0
@@ -294,31 +365,41 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
   return (
     <section className="translate-surface" aria-label={localizedText(t, 'surface.title', 'Translate')}>
       <header className="translate-surface__header">
-        <IconButton type="button" label={localizedText(t, 'action.back', 'Back')} onClick={() => host.requestBack()}>
+        <IconButton type="button" label={localizedText(t, 'action.back', 'Back')} onClick={() => { cancelCurrentRun(); host.requestBack() }}>
           <BackIcon size={14} strokeWidth={2} />
         </IconButton>
         <span className="translate-surface__title">{localizedText(t, 'surface.title', 'Translate')}</span>
         <div className="translate-surface__header-spacer" />
-        <Button type="button" variant="primary" disabled={!outputText} onClick={() => void copyOutput()}>
+        {activeProfile?.provider === 'ai' && (status.kind === 'waiting' || status.kind === 'translating') && (
+          <Button type="button" onClick={stopTranslation}>{t('action.stop')}</Button>
+        )}
+        {(status.kind === 'stopped' || status.kind === 'error') && (
+          <Button type="button" onClick={retryTranslation}>{t('action.retry')}</Button>
+        )}
+        <Button type="button" variant="primary" disabled={status.kind !== 'success' || !outputText} onClick={() => void copyOutput()}>
           {localizedText(t, 'action.copy', 'Copy')}
         </Button>
-        <IconButton type="button" label={localizedText(t, 'action.openSettings', 'Open Settings')} onClick={() => host.openSettings()}>
+        <IconButton type="button" label={localizedText(t, 'action.openSettings', 'Open Settings')} onClick={() => {
+          cancelCurrentRun()
+          setView({ identity: requestIdentity, outputText: '', status: { kind: 'idle' } })
+          host.openSettings()
+        }}>
           <SettingsIcon size={16} />
         </IconButton>
-        <IconButton type="button" label={localizedText(t, 'action.close', 'Close')} onClick={() => host.close()}>
+        <IconButton type="button" label={localizedText(t, 'action.close', 'Close')} onClick={() => { cancelCurrentRun(); host.close() }}>
           <CloseIcon size={14} strokeWidth={2} />
         </IconButton>
       </header>
 
       <div className="translate-surface__controls">
         <div className="translate-pair">
-          <SchemaSelect value={sourceLang} options={sourceOptions} onChange={setSourceLang} width={154} ariaLabel={localizedText(t, 'control.source', 'Source')} />
+          <SchemaSelect value={sourceLang} options={sourceOptions} onChange={(value) => { if (value !== sourceLang) { cancelCurrentRun(); setSourceLang(value) } }} width={154} ariaLabel={localizedText(t, 'control.source', 'Source')} />
           <span className="translate-pair__arrow"><ArrowRight size={15} strokeWidth={1.9} /></span>
-          <SchemaSelect value={targetLang} options={targetOptions} onChange={setTargetLang} width={136} ariaLabel={localizedText(t, 'control.target', 'Target')} />
+          <SchemaSelect value={targetLang} options={targetOptions} onChange={(value) => { if (value !== targetLang) { cancelCurrentRun(); setTargetLang(value) } }} width={136} ariaLabel={localizedText(t, 'control.target', 'Target')} />
         </div>
         <div className="grow" />
         <span className="translate-controls-label">{localizedText(t, 'control.profile', 'Profile')}</span>
-        <SchemaSelect value={profileId} options={profileOptions} onChange={setProfileId} width={222} ariaLabel={localizedText(t, 'control.profile', 'Profile')} />
+        <SchemaSelect value={activeProfile?.id ?? ''} options={profileOptions} onChange={(value) => { if (value !== profileId) { cancelCurrentRun(); setProfileId(value) } }} width={222} ariaLabel={localizedText(t, 'control.profile', 'Profile')} />
       </div>
 
       <div className="translate-surface__body">
@@ -331,7 +412,11 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
             ref={inputRef}
             className="translate-input"
             value={inputText}
-            onChange={(event) => setInputText(event.target.value)}
+            onChange={(event) => {
+              if (event.target.value === inputText) return
+              cancelCurrentRun()
+              setInputText(event.target.value)
+            }}
             placeholder={localizedText(t, 'input.placeholder', 'Type or paste text to translate...')}
             spellCheck={false}
           />
@@ -340,13 +425,15 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
           <div className="translate-pane__eyebrow">
             {localizedText(t, 'pane.translation', 'Translation')}
             <span className="detected">· {optionLabel(targetOptions, resolvedTarget)}</span>
+            {outputText && status.kind !== 'success' && <span className="detected">· {t('pane.incomplete')}</span>}
           </div>
           <textarea
-            className={`translate-output ${status.kind === 'translating' ? 'is-stale' : ''}`}
+            className={`translate-output ${status.kind !== 'success' ? 'is-stale' : ''}`}
             value={outputText}
             placeholder={localizedText(t, 'output.placeholder', 'Translation appears here.')}
             aria-label={localizedText(t, 'pane.translation', 'Translation')}
             aria-live="polite"
+            aria-busy={status.kind === 'translating'}
             readOnly
             spellCheck={false}
           />
