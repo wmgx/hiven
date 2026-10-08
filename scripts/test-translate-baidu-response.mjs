@@ -3,24 +3,9 @@
  * Baidu translate response parsing: 52000 is success, 54004 is quota, HTTP errors fail.
  */
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import vm from 'node:vm'
-import ts from 'typescript'
+import { adapters } from './translate-test-harness.mjs'
 
-const src = readFileSync(new URL('../src/plugins/translate/providers/adapters.ts', import.meta.url), 'utf8')
-  .replace(/import\s+type\s*\{[\s\S]*?\}\s*from\s*'[^']*'\s*;?\s*\n?/g, '')
-  .replace(/import\s+\{[^}]*\}\s*from\s*'\.\/tencent'\s*;?\s*\n?/g, '')
-const out = ts.transpileModule(src, {
-  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023 },
-}).outputText
-const moduleExports = {}
-vm.runInNewContext(out, {
-  exports: moduleExports,
-  module: { exports: moduleExports },
-  console,
-  TextEncoder,
-})
-const { baiduFailureMessage, isAutoTranslateReady, translateWithAi } = moduleExports
+const { baiduFailureMessage, isAutoTranslateReady, translateWithAi } = adapters
 
 assert.equal(typeof baiduFailureMessage, 'function', 'baiduFailureMessage must be exported')
 assert.equal(baiduFailureMessage(200, { trans_result: [{ src: 'hello', dst: '你好' }] }), null)

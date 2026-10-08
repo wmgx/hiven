@@ -79,16 +79,41 @@ export const usePluginSettingsStore = create<PluginSettingsStoreState>()(
         return get().pluginSettings[source][pluginId] ?? undefined
       },
 
-      setPluginSettings: (source, pluginId, value, version) =>
-        set((state) => ({
-          pluginSettings: {
-            ...state.pluginSettings,
-            [source]: {
-              ...state.pluginSettings[source],
-              [pluginId]: { version, value },
+      setPluginSettings: (source, pluginId, value, version) => {
+        const previousRecord = get().pluginSettings[source][pluginId]
+        const attemptedRecord = { version, value }
+        try {
+          set((state) => ({
+            pluginSettings: {
+              ...state.pluginSettings,
+              [source]: {
+                ...state.pluginSettings[source],
+                [pluginId]: attemptedRecord,
+              },
             },
-          },
-        })),
+          }))
+        } catch (error) {
+          // Persist writes after notifying subscribers; a newer record must survive.
+          if (get().pluginSettings[source][pluginId] === attemptedRecord) {
+            try {
+              set((state) => {
+                const next = { ...state.pluginSettings[source] }
+                if (previousRecord === undefined) delete next[pluginId]
+                else next[pluginId] = previousRecord
+                return {
+                  pluginSettings: {
+                    ...state.pluginSettings,
+                    [source]: next,
+                  },
+                }
+              })
+            } catch {
+              // Memory is restored before a second persistence failure; keep the original error.
+            }
+          }
+          throw error
+        }
+      },
 
       removePluginSettings: (source, pluginId) =>
         set((state) => {

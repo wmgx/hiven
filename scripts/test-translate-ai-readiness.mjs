@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict'
 import { load } from './ai-runtime-test-harness.mjs'
+import { adapters } from './translate-test-harness.mjs'
 
 const { AiTranslationReadiness, keepSelectedOption } = load('src/plugins/translate/ai/readiness.ts', {})
-const { translateWithAi, AiTranslationError } = load('src/plugins/translate/providers/adapters.ts', { './tencent': {} })
+const { translateWithAi, AiTranslationError } = adapters
 const settle = () => new Promise((resolve) => setImmediate(resolve))
 const explicit = { aiProviderId: 'provider-a', aiAgentId: 'model-a', aiEffort: 'medium' }
 const inherited = { aiProviderId: '', aiAgentId: '', aiEffort: 'inherit' }

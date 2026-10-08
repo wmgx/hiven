@@ -230,7 +230,9 @@
     "test:regex-match-extraction": "node --experimental-strip-types scripts/test-regex-match-extraction.mts",
     "test:text-diff-source-read-lifetime": "node scripts/test-text-diff-source-read-lifetime.mjs",
     "test:text-diff-copy-side": "node scripts/test-text-diff-copy-side.mjs",
-    "test:text-explode-output": "node scripts/test-text-explode-output-gate.mjs"
+    "test:text-explode-output": "node scripts/test-text-explode-output-gate.mjs",
+    "test:plugin-settings-save": "node scripts/test-plugin-settings-save.mjs",
+    "test:translate-ai-glossary": "node scripts/test-translate-ai-glossary.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

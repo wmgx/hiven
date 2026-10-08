@@ -78,6 +78,9 @@ export function PluginSurfaceRenderer({
   const appearance = useAppStore((s) => s.settings)
   const grantPluginPermissions = usePluginPermissionStore((s) => s.grantPermissions)
   const openSettingsDialog = usePluginSettingsStore((s) => s.openSettingsDialog)
+  // Settings dialogs can overlay a mounted surface. Observe just its record so
+  // saving applies immediately without remounting or discarding its local input.
+  usePluginSettingsStore((s) => s.pluginSettings[target.source][target.pluginId])
   const [surfaceState, setSurfaceState] = useState<PluginSurfaceRendererState>({ status: 'loading-runtime' })
   const activeTargetRef = useRef(target)
   activeTargetRef.current = target

@@ -1,5 +1,5 @@
 {
-  "version": 86,
+  "version": 87,
   "packages": [
     {
       "pluginId": "encode-decode",
@@ -44,7 +44,7 @@
     {
       "pluginId": "translate",
       "dir": "translate",
-      "version": "1.0.20"
+      "version": "1.0.21"
     },
     {
       "pluginId": "regex-tester",

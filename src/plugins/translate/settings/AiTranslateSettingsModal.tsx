@@ -1,10 +1,11 @@
-import { useState, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { PluginSettingsModalBodyProps } from '@hiven/plugin'
 import { Select } from '@hiven/plugin-ui'
-import type { TranslateProfile, TranslateSettings } from './model'
+import type { AiGlossary, TranslateProfile, TranslateSettings } from './model'
 import { keepSelectedOption } from '../ai/readiness'
 import { useAiTranslationReadiness } from '../ai/useReadiness'
 import { AiReadinessNotice } from '../ai/AiReadinessNotice'
+import { AiGlossaryEditor } from './AiGlossaryEditor'
 
 const EFFORTS = ['low', 'medium', 'high', 'xhigh'] as const
 
@@ -12,6 +13,10 @@ export function AiTranslateSettingsModal({ value, setValue, host, t }: PluginSet
   const profiles = value.profiles.filter((profile) => profile.provider === 'ai')
   const [profileId, setProfileId] = useState(profiles[0]?.id ?? '')
   const profile = profiles.find((item) => item.id === profileId) ?? profiles[0]
+  const currentRef = useRef({ value, profileId: profile?.id })
+  useLayoutEffect(() => {
+    currentRef.current = { value, profileId: profile?.id }
+  }, [value, profile?.id])
   const { controller, readiness } = useAiTranslationReadiness(host.ai, profile, true)
   const providers = readiness.providers
   const selectedProvider = providers.find((item) => item.id === (profile?.aiProviderId || readiness.result?.providerId))
@@ -22,6 +27,13 @@ export function AiTranslateSettingsModal({ value, setValue, host, t }: PluginSet
   const updateProfile = (patch: Partial<TranslateProfile>) => {
     if (!profile) return
     setValue({ ...value, profiles: value.profiles.map((item) => item.id === profile.id ? { ...item, ...patch } : item) })
+  }
+  const saveGlossary = (id: string, aiGlossary: AiGlossary | undefined) => {
+    const current = currentRef.current
+    if (current.profileId !== id || !current.value.profiles.some((item) => item.id === id && item.provider === 'ai')) {
+      throw new Error('Translation profile changed')
+    }
+    setValue({ ...current.value, profiles: current.value.profiles.map((item) => item.id === id ? { ...item, aiGlossary } : item) })
   }
 
   if (!profile) return <p className="text-[12px] text-muted-foreground">{t('ai.unavailable')}</p>
@@ -55,6 +67,7 @@ export function AiTranslateSettingsModal({ value, setValue, host, t }: PluginSet
         <Select value={profile.aiEffort ?? 'inherit'} options={effortOptions} onChange={(event) => updateProfile({ aiEffort: event.currentTarget.value as TranslateProfile['aiEffort'] })} />
       </Field>
       <AiReadinessNotice readiness={readiness} profile={profile} t={t} onRefresh={() => void controller.refresh(true)} />
+      <AiGlossaryEditor key={profile.id} saved={profile.aiGlossary} t={t} onCommit={(next) => saveGlossary(profile.id, next)} />
     </div>
   )
 }

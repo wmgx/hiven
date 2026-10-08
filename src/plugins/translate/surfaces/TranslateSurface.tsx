@@ -5,6 +5,8 @@ import { BackIcon, CloseIcon, SettingsIcon } from '@hiven/plugin-ui/icons'
 import { AlertTriangle, ArrowRight, LoaderCircle } from 'lucide-react'
 import type { SourceLanguageCode, TargetLanguageCode, TranslateProfile, TranslateSettings } from '../settings/model'
 import { currentUsageMonth } from '../settings/model'
+import { profileExecutionKey } from '../settings/executionKey'
+import { AiGlossaryValidationError, validateAiGlossary } from '../ai/glossary'
 import { useAiTranslationReadiness } from '../ai/useReadiness'
 import { AiReadinessNotice } from '../ai/AiReadinessNotice'
 import { AiTranslationError, estimateBilledChars, isAutoTranslateReady, resolveSmartTargetLang, translateText } from '../providers/adapters'
@@ -89,15 +91,6 @@ function selectInitialProfile(settings: TranslateSettings): TranslateProfile | u
 function resetUsageMonth(profile: TranslateProfile, month: string): TranslateProfile {
   if (profile.usedCharsMonth === month) return profile
   return { ...profile, usedCharsMonth: month, usedChars: 0 }
-}
-
-function profileExecutionKey(profile: TranslateProfile | undefined): string {
-  if (!profile) return ''
-  return JSON.stringify([
-    profile.id, profile.provider, profile.enabled, profile.appId, profile.secret,
-    profile.authKey, profile.secretId, profile.secretKey, profile.region, profile.endpoint,
-    profile.monthlyLimitChars, profile.aiProviderId, profile.aiAgentId, profile.aiEffort,
-  ])
 }
 
 function stateName(status: TranslateStatus): 'idle' | 'waiting' | 'translating' | 'failed' | 'quota' {
@@ -338,7 +331,7 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
       if (!isCurrent()) return
       const nextStatus: TranslateStatus = error instanceof Error && error.name === 'AbortError'
         ? { kind: 'stopped' }
-        : { kind: 'error', message: error instanceof Error ? error.message : '', messageKey: error instanceof AiTranslationError ? `error.ai.${error.code}` : error instanceof Error ? undefined : 'error.unknown' }
+        : { kind: 'error', message: error instanceof Error ? error.message : '', messageKey: error instanceof AiGlossaryValidationError ? 'ai.glossary.invalidSaved' : error instanceof AiTranslationError ? `error.ai.${error.code}` : error instanceof Error ? undefined : 'error.unknown' }
       setView({ identity: run.identity, outputText: preview, status: nextStatus })
     } finally {
       if (runRef.current === run) runRef.current = null
@@ -392,8 +385,10 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
   }
 
   const openSettings = () => {
+    const pauseAiTranslation = activeProfile?.provider === 'ai'
+    if (pauseAiTranslation) autoTranslatePausedRef.current = true
     cancelCurrentRun()
-    setView({ identity: requestIdentity, outputText: '', status: { kind: 'idle' } })
+    setView({ identity: requestIdentity, outputText: '', status: { kind: pauseAiTranslation ? 'settings-paused' : 'idle' } })
     host.openSettings()
   }
 
@@ -482,6 +477,7 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
   const quotaPercent = monthlyLimit > 0 ? Math.min(100, Math.round((activeUsedChars / monthlyLimit) * 100)) : 0
   const inputChars = estimateBilledChars(inputText)
   const resolvedTarget = targetLang === 'smart' ? resolveSmartTargetLang(inputText) : targetLang
+  const glossary = activeProfile?.provider === 'ai' ? validateAiGlossary(activeProfile.aiGlossary) : undefined
   const statusState = stateName(status)
 
   return (
@@ -525,6 +521,11 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
 
       {activeProfile?.provider === 'ai' && (
         <AiReadinessNotice readiness={readiness} profile={activeProfile} t={t} onRefresh={() => { cancelCurrentRun(); void readinessController.refresh(true) }} onSettings={openSettings} onAppSettings={host.openAppSettings ? () => { void openAiSettings() } : undefined} />
+      )}
+      {glossary && (!glossary.ok || glossary.value) && (
+        <p className="translate-glossary-notice" role="status">
+          {!glossary.ok ? t('ai.glossary.invalidSaved') : glossary.value && t(glossary.value.targetLang === resolvedTarget ? 'ai.glossary.applies' : 'ai.glossary.notApplied').replace('{language}', t(`language.${glossary.value.targetLang}`))}
+        </p>
       )}
 
       <div className="translate-surface__body">

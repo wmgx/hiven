@@ -521,6 +521,24 @@
 .translate-ai-readiness__actions { display: flex; flex-wrap: wrap; gap: 6px; flex-shrink: 0; }
 .translate-ai-readiness[data-state="blocked"] { color: var(--hiven-color-danger); }
 
+.translate-glossary-notice {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.translate-glossary-editor { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--hiven-color-border); padding-top: 14px; font-size: 12px; }
+.translate-glossary-editor p { margin: 0; color: var(--hiven-color-text-secondary); overflow-wrap: anywhere; }
+.translate-glossary-editor p[role="alert"] { color: var(--hiven-color-danger); }
+.translate-glossary-editor__entries { display: flex; flex-direction: column; gap: 10px; }
+.translate-glossary-editor__row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; gap: 8px; }
+.translate-glossary-editor__row label { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.translate-glossary-editor__row input { width: 100%; min-width: 0; }
+.translate-glossary-editor__actions { display: flex; flex-wrap: wrap; gap: 6px; }
+
 @media (max-width: 620px) {
   .translate-ai-readiness { align-items: flex-start; flex-direction: column; gap: 6px; }
 }

@@ -4,6 +4,11 @@ export type LanguageCode = 'zh' | 'en' | 'ja' | 'ko' | 'fr' | 'de' | 'es'
 export type SourceLanguageCode = 'auto' | LanguageCode
 export type TargetLanguageCode = 'smart' | LanguageCode
 
+export type AiGlossary = {
+  targetLang: LanguageCode
+  entries: Array<{ source: string; target: string }>
+}
+
 export type TranslateProfile = {
   id: string
   name: string
@@ -20,6 +25,8 @@ export type TranslateProfile = {
   aiProviderId?: string
   aiAgentId?: string
   aiEffort?: 'inherit' | 'low' | 'medium' | 'high' | 'xhigh'
+  /** Explicitly saved translation preferences, sent with text only to AI providers. */
+  aiGlossary?: AiGlossary
   defaultSourceLang: SourceLanguageCode
   defaultTargetLang: TargetLanguageCode
   monthlyLimitChars: number
