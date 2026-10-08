@@ -233,7 +233,8 @@
     "test:text-explode-output": "node scripts/test-text-explode-output-gate.mjs",
     "test:plugin-settings-save": "node scripts/test-plugin-settings-save.mjs",
     "test:translate-ai-glossary": "node scripts/test-translate-ai-glossary.mjs",
-    "test:launcher-selection-preserve": "node scripts/test-launcher-selection-preserve.mjs"
+    "test:launcher-selection-preserve": "node scripts/test-launcher-selection-preserve.mjs",
+    "test:saved-action-delete": "node scripts/test-saved-action-delete.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

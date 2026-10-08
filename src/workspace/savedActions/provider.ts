@@ -1,7 +1,7 @@
 import type { LauncherExecutionContext, LauncherItem } from '../launcher/types'
 import { selectHostOutputResult } from '../launcher/output'
 import { isGlobalLauncherSavedActionOutput, savedActionDisabledReason } from './compatibility'
-import { listSavedActions, setSavedActionDisabledReason } from './store'
+import { listSavedActions, savedActionSnapshot, setSavedActionDisabledReason } from './store'
 import type { SavedActionDisabledReason, SavedActionV1 } from './types'
 import type { Locale } from '../../i18n'
 import { describeSavedAction, savedActionDisabledMessage } from './display'
@@ -67,6 +67,7 @@ export function projectSavedAction(
     executionMode: baseAction?.executionMode,
     commitVia: 'saved-action',
     savedActionArtifactId: artifact.id,
+    savedActionSnapshot: savedActionSnapshot(artifact),
     disabledReason: disabledReason ? {
       code: disabledReason,
       message: subtitle,

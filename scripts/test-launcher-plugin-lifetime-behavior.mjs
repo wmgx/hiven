@@ -111,7 +111,7 @@ const launcherRegistry=load('src/workspace/launcher/registry.ts',{
 });
 const savedActions=load('src/workspace/savedActions/provider.ts',{
   '../launcher/output':output,'./compatibility':{isGlobalLauncherSavedActionOutput:()=>true,savedActionDisabledReason:()=>null},
-  './store':{listSavedActions:()=>[],setSavedActionDisabledReason:no},
+  './store':{listSavedActions:()=>[],setSavedActionDisabledReason:no,savedActionSnapshot:load('src/workspace/savedActions/store.ts').savedActionSnapshot},
   './display':{describeSavedAction:()=>({}),savedActionDisabledMessage:reason=>reason},
 });
 const disposals=[];
@@ -292,7 +292,7 @@ await check('pending provider cannot stamp stale items with a replacement regist
 });
 
 await check('saved-action projection retains the producer registration',async()=>{
-  const f=fixture('local','result');const artifact={id:'synthetic-saved',name:'Saved action',baseActionKey:f.item.systemKey,inputBinding:'prompt',savedParams:{},outputIntent:'copy'};
+  const f=fixture('local','result');const artifact={schemaVersion:1,id:'synthetic-saved',name:'Saved action',aliases:[],createdAt:1,baseActionKey:f.item.systemKey,inputBinding:'prompt',savedParams:{},outputIntent:'copy',contractFingerprint:'synthetic',actionPolicy:{effect:'pure',learnable:false}};
   const projected=savedActions.projectSavedAction(artifact,f.item,true,false,()=>[f.freshItem()]);
   assert.equal(projected.pluginLifetime,f.item.pluginLifetime);
   await f.controller.selectItem(projected);f.controller.setInputText('saved draft');

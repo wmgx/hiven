@@ -117,17 +117,62 @@ export function deleteSavedAction(id: string): SavedActionV1 | undefined {
   return removed
 }
 
-function readSavedActionsForRename(): SavedActionV1[] {
+/** Immutable row identity/configuration; invocation and derived availability are not edits. */
+export function savedActionSnapshot(action: SavedActionV1): string {
+  return JSON.stringify({
+    schemaVersion: action.schemaVersion,
+    id: action.id,
+    createdAt: action.createdAt,
+    name: action.name,
+    aliases: action.aliases,
+    baseActionKey: action.baseActionKey,
+    savedParams: Object.fromEntries(Object.keys(action.savedParams).sort().map((key) => [key, action.savedParams[key]])),
+    inputBinding: action.inputBinding,
+    outputIntent: action.outputIntent,
+    contractFingerprint: action.contractFingerprint,
+    actionPolicy: { effect: action.actionPolicy.effect, learnable: action.actionPolicy.learnable },
+  })
+}
+
+function readSavedActionsForEdit(validateAll = false): SavedActionV1[] {
   const target = storage()
   if (!target) throw new Error('Saved Action storage is unavailable')
   const parsed = JSON.parse(target.getItem(STORAGE_KEY) ?? '[]') as unknown
   if (!Array.isArray(parsed)) throw new Error('Saved Action storage is invalid')
+  // Explicit deletion must not drop an unrelated entry that discovery cannot read.
+  if (validateAll && !parsed.every(isSavedAction)) throw new Error('Saved Action storage is invalid')
   return parsed.filter(isSavedAction)
 }
 
 /** Unlike list discovery, an explicit edit must distinguish read failure from deletion. */
 export function getSavedActionForRename(id: string): SavedActionV1 | undefined {
-  return readSavedActionsForRename().find((action) => action.id === id)
+  return readSavedActionsForEdit().find((action) => action.id === id)
+}
+
+type SavedActionDeleteTarget = { status: 'ready'; action: SavedActionV1 } | { status: 'missing' | 'changed' }
+
+function savedActionDeleteTarget(actions: SavedActionV1[], id: string, expectedSnapshot: string): SavedActionDeleteTarget {
+  const matches = actions.filter((action) => action.id === id)
+  if (matches.length === 0) return { status: 'missing' }
+  if (matches.length !== 1 || savedActionSnapshot(matches[0]) !== expectedSnapshot) return { status: 'changed' }
+  return { status: 'ready', action: matches[0] }
+}
+
+/** Check the exact displayed row before presenting its confirmation. */
+export function getSavedActionForDelete(id: string, expectedSnapshot: string): SavedActionDeleteTarget {
+  return savedActionDeleteTarget(readSavedActionsForEdit(true), id, expectedSnapshot)
+}
+
+/** Recheck the approved configuration immediately before the synchronous write. */
+export function deleteSavedActionIfUnchanged(
+  id: string,
+  expectedSnapshot: string,
+): { status: 'deleted'; action: SavedActionV1 } | { status: 'missing' | 'changed' } {
+  const actions = readSavedActionsForEdit(true)
+  const target = savedActionDeleteTarget(actions, id, expectedSnapshot)
+  if (target.status !== 'ready') return target
+  write(actions.filter((action) => action !== target.action))
+  return { status: 'deleted', action: target.action }
 }
 
 /** Rename the chosen artifact without replacing its identity or execution settings. */
@@ -138,7 +183,7 @@ export function renameSavedAction(
 ): { status: 'renamed'; action: SavedActionV1 } | { status: 'missing' | 'changed' | 'invalid-name' } {
   const cleanName = name.trim()
   if (!cleanName || cleanName.length > 80) return { status: 'invalid-name' }
-  const actions = readSavedActionsForRename()
+  const actions = readSavedActionsForEdit()
   const index = actions.findIndex((action) => action.id === id)
   if (index < 0) return { status: 'missing' }
   const current = actions[index]

@@ -7,7 +7,7 @@ import { pinyin } from 'pinyin-pro'
 import { extractSaveableParams } from '../src/workspace/experience/saveableParams.ts'
 import { CONTENT_SOURCE_STORES } from '../src/workspace/contentBoundary.ts'
 import { getLastSaveableRun, setLastSaveableRun } from '../src/workspace/savedActions/lastSaveableRun.ts'
-import { createSavedAction, deleteSavedAction, listSavedActions, setSavedActionDisabledReason } from '../src/workspace/savedActions/store.ts'
+import { createSavedAction, deleteSavedAction, listSavedActions, savedActionSnapshot, setSavedActionDisabledReason } from '../src/workspace/savedActions/store.ts'
 import {
   isGlobalLauncherSavedActionOutput,
   savedActionDisabledReason,
@@ -243,6 +243,7 @@ const providerModule = loadModule('src/workspace/savedActions/provider.ts', {
   '../launcher/output': outputModule,
   './compatibility': { isGlobalLauncherSavedActionOutput, savedActionDisabledReason },
   './display': savedDisplayModule,
+  './store': { savedActionSnapshot },
 })
 const replay = providerModule.projectSavedAction(artifact, replayBase)
 assert.equal(replay.systemKey, `host:saved-action:${artifact.id}`)
@@ -361,7 +362,7 @@ const localizedSavedDisplay = loadModule('src/workspace/savedActions/display.ts'
   '../launcher/display': launcherDisplay,
   './compatibility': { isGlobalLauncherSavedActionOutput, savedActionDisabledReason },
 })
-const realSavedStore = { createSavedAction, deleteSavedAction, listSavedActions, setSavedActionDisabledReason }
+const realSavedStore = { createSavedAction, deleteSavedAction, listSavedActions, savedActionSnapshot, setSavedActionDisabledReason }
 const localizedProvider = loadModule('src/workspace/savedActions/provider.ts', {
   '../launcher/output': outputModule,
   './compatibility': { isGlobalLauncherSavedActionOutput, savedActionDisabledReason },

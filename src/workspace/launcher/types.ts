@@ -608,6 +608,8 @@ export type LauncherItem = {
   commitVia?: CommitVia
   /** Host-only artifact identity for Saved Action invocation facts. */
   savedActionArtifactId?: string
+  /** Host-only immutable row configuration used to reject stale management actions. */
+  savedActionSnapshot?: string
   /** Generic host-owned availability state; disabled items remain visible with an explanation. */
   disabledReason?: {
     code: string

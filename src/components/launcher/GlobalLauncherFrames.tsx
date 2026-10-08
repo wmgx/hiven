@@ -51,6 +51,7 @@ export function GlobalLauncherFrameSwitch({
   truncateSearchItems,
   onToggleSearchFavorite,
   onRenameSavedAction,
+  onDeleteSavedAction,
   favoriteKeys,
   pinnableItemKeys,
   onSettingsClose,
@@ -115,6 +116,7 @@ export function GlobalLauncherFrameSwitch({
   truncateSearchItems?: boolean
   onToggleSearchFavorite?: (item: LauncherMixedItem) => void
   onRenameSavedAction?: (item: LauncherMixedItem) => void
+  onDeleteSavedAction?: (item: LauncherMixedItem) => void
   favoriteKeys?: readonly string[]
   pinnableItemKeys?: ReadonlySet<string>
   onSettingsClose: () => void
@@ -325,6 +327,7 @@ export function GlobalLauncherFrameSwitch({
       truncateItems={truncateSearchItems}
       onToggleFavorite={onToggleSearchFavorite}
       onRenameSavedAction={onRenameSavedAction}
+      onDeleteSavedAction={onDeleteSavedAction}
       favoriteKeys={favoriteKeys}
       pinnableItemKeys={pinnableItemKeys}
       onQueryChange={onSearchQueryChange}

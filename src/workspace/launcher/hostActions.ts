@@ -14,7 +14,7 @@ import {
 } from '../experience/journal'
 import type { LastSaveableRunState } from '../savedActions/types'
 import { getLastSaveableRun } from '../savedActions/lastSaveableRun'
-import { createSavedAction, deleteSavedAction, getSavedActionForRename, listSavedActions, renameSavedAction } from '../savedActions/store'
+import { createSavedAction, deleteSavedAction, deleteSavedActionIfUnchanged, getSavedActionForDelete, getSavedActionForRename, listSavedActions, renameSavedAction } from '../savedActions/store'
 import { recordSavedActionEvent } from '../savedActions/events'
 import { isGlobalLauncherSavedActionOutput } from '../savedActions/compatibility'
 import { describeSavedAction } from '../savedActions/display'
@@ -336,6 +336,85 @@ export function createRenameSavedActionItem(artifactId: string): LauncherItem {
       }
     },
     execute: async (ctx) => ({ ok: false, message: translate(ctx.locale, 'palette', 'savedActionRenameMissing') }),
+  }
+  return item
+}
+
+/** Independent host management remains available when the saved tool cannot run. */
+export function createDeleteSavedActionItem(savedItem: LauncherItem): LauncherItem {
+  const artifactId = savedItem.savedActionArtifactId
+  const snapshot = savedItem.savedActionSnapshot
+  const name = savedItem.display.title
+  // Carry the same validated summary the user saw, including same-name distinctions.
+  const summary = {
+    subtitle: savedItem.display.subtitle,
+    subtitleI18n: { ...savedItem.display.subtitleI18n },
+  }
+  const item: LauncherItem = {
+    systemKey: `host:saved-action:delete:${artifactId ?? ''}`,
+    kind: 'host',
+    display: {
+      title: translate('en', 'palette', 'savedActionDeleteConfirm', { name }),
+      titleI18n: { zh: translate('zh', 'palette', 'savedActionDeleteConfirm', { name }) },
+      ...summary,
+      icon: 'BookmarkX',
+    },
+    surfaces: ['global-launcher'],
+    behavior: { type: 'perform' },
+    metadataInput: true,
+    experienceRecord: false,
+    recordUsage: false,
+    prepare: (ctx) => {
+      if (!artifactId || !snapshot) throw new Error(translate(ctx.locale, 'palette', 'savedActionDeleteChanged'))
+      let target
+      try {
+        target = getSavedActionForDelete(artifactId, snapshot)
+      } catch {
+        throw new Error(translate(ctx.locale, 'palette', 'savedActionDeleteReadFailed'))
+      }
+      if (target.status !== 'ready') {
+        throw new Error(translate(ctx.locale, 'palette', target.status === 'missing' ? 'savedActionDeleteMissing' : 'savedActionDeleteChanged'))
+      }
+      return {
+        ...item,
+        prepare: undefined,
+        execute: async (confirmCtx) => ({
+          ok: true,
+          output: {
+            // Two choices are essential: the controller immediately applies a single choice.
+            choices: [
+              {
+                id: `saved-action-row-delete-confirm-${artifactId}`,
+                title: item.display.title,
+                titleI18n: item.display.titleI18n,
+                ...summary,
+                tone: 'danger',
+                primaryAction: async () => {
+                  try {
+                    const result = deleteSavedActionIfUnchanged(artifactId, snapshot)
+                    if (result.status === 'deleted') return { ok: true, keepOpen: true }
+                    return {
+                      ok: false,
+                      message: translate(confirmCtx.locale, 'palette', result.status === 'missing' ? 'savedActionDeleteMissing' : 'savedActionDeleteChanged'),
+                    }
+                  } catch {
+                    return { ok: false, message: translate(confirmCtx.locale, 'palette', 'savedActionDeleteRetry') }
+                  }
+                },
+              },
+              {
+                id: `saved-action-row-delete-cancel-${artifactId}`,
+                title: translate('en', 'palette', 'savedActionDeleteCancel'),
+                titleI18n: { zh: translate('zh', 'palette', 'savedActionDeleteCancel') },
+                tone: 'muted',
+                primaryAction: async () => ({ ok: true, keepOpen: true }),
+              },
+            ],
+          },
+        }),
+      }
+    },
+    execute: async (ctx) => ({ ok: false, message: translate(ctx.locale, 'palette', 'savedActionDeleteChanged') }),
   }
   return item
 }

@@ -33,6 +33,7 @@ export function LauncherMixedList({
   isKeyboardNavRef,
   onToggleFavorite,
   onRenameSavedAction,
+  onDeleteSavedAction,
   favoriteKeys,
   pinnableItemKeys,
 }: {
@@ -50,6 +51,7 @@ export function LauncherMixedList({
   isKeyboardNavRef?: MutableRefObject<boolean>
   onToggleFavorite?: (item: LauncherMixedItem) => void
   onRenameSavedAction?: (item: LauncherMixedItem) => void
+  onDeleteSavedAction?: (item: LauncherMixedItem) => void
   favoriteKeys?: readonly string[]
   pinnableItemKeys?: ReadonlySet<string>
 }) {
@@ -80,6 +82,7 @@ export function LauncherMixedList({
             isKeyboardNavRef={isKeyboardNavRef}
             onToggleFavorite={pinnableItemKeys?.has(item.id) ? onToggleFavorite : undefined}
             onRenameSavedAction={item.domainItem.savedActionArtifactId ? onRenameSavedAction : undefined}
+            onDeleteSavedAction={item.domainItem.savedActionArtifactId && item.domainItem.savedActionSnapshot ? onDeleteSavedAction : undefined}
             favorite={favoriteKeys?.includes(item.id) ?? false}
           />
         )
@@ -103,6 +106,7 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
   isKeyboardNavRef,
   onToggleFavorite,
   onRenameSavedAction,
+  onDeleteSavedAction,
   favorite,
 }: {
   item: LauncherMixedItem
@@ -114,6 +118,7 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
   isKeyboardNavRef?: MutableRefObject<boolean>
   onToggleFavorite?: (item: LauncherMixedItem) => void
   onRenameSavedAction?: (item: LauncherMixedItem) => void
+  onDeleteSavedAction?: (item: LauncherMixedItem) => void
   favorite: boolean
 }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -223,6 +228,22 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
           }}
         >
           {t(locale, 'palette.savedActionRename')}
+        </button>
+      )}
+      {onDeleteSavedAction && (
+        <button
+          type="button"
+          className="launcher-discovery-action"
+          aria-label={`${t(locale, 'palette.savedActionDelete')}: ${item.title}`}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') event.stopPropagation()
+          }}
+          onClick={(event) => {
+            event.stopPropagation()
+            onDeleteSavedAction(item)
+          }}
+        >
+          {t(locale, 'palette.savedActionDelete')}
         </button>
       )}
       {onToggleFavorite && (
