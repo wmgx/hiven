@@ -805,14 +805,16 @@ fn show_launcher_window_for_hotkey_with_event(
             format!("wasVisible={}", was_visible),
         );
 
+        let mut requested_launcher_width = None;
         if !was_visible {
             let started_at = Instant::now();
             let (compact_width, compact_height) = launcher_default_window_size_for_window(&window);
-            if let Err(error) = window.set_size(LogicalSize::new(compact_width, compact_height)) {
-                eprintln!(
+            match window.set_size(LogicalSize::new(compact_width, compact_height)) {
+                Ok(()) => requested_launcher_width = Some(compact_width),
+                Err(error) => eprintln!(
                     "[hiven] Failed to compact launcher window before show: {}",
                     error
-                );
+                ),
             }
             log_launcher_perf(
                 "native:resize-before-show",
@@ -840,9 +842,11 @@ fn show_launcher_window_for_hotkey_with_event(
             // Position AFTER showing: on macOS a `set_position` on a hidden
             // window gets clobbered by the window's initial frame when it is
             // ordered front, leaving it at the OS default (bottom-right) spot.
-            let started_at = Instant::now();
-            center_launcher_window(&window);
-            log_launcher_perf("native:center-window", started_at, "");
+            if let Some(width) = requested_launcher_width {
+                let started_at = Instant::now();
+                center_launcher_window(&window, width);
+                log_launcher_perf("native:center-window", started_at, "");
+            }
             let started_at = Instant::now();
             let _ = window.emit(open_event, ());
             log_launcher_perf("native:emit-launcher-open", started_at, "");
@@ -908,7 +912,19 @@ fn quick_editor_default_window_size(window: &tauri::WebviewWindow) -> (f64, f64)
         .unwrap_or((QUICK_EDITOR_WINDOW_WIDTH, QUICK_EDITOR_WINDOW_HEIGHT))
 }
 
-fn center_launcher_window(window: &tauri::WebviewWindow) {
+fn launcher_centered_x(origin: i32, monitor_width: u32, scale: f64, logical_width: f64) -> Option<i32> {
+    if !scale.is_finite() || scale <= 0.0 || !logical_width.is_finite() || logical_width <= 0.0 {
+        return None;
+    }
+    let physical_width = (logical_width * scale).round();
+    if !physical_width.is_finite() || physical_width < 1.0 || physical_width > u32::MAX as f64 {
+        return None;
+    }
+    let offset = (i64::from(monitor_width) - physical_width as i64).max(0) / 2;
+    i32::try_from(i64::from(origin) + offset).ok()
+}
+
+fn center_launcher_window(window: &tauri::WebviewWindow, requested_logical_width: f64) {
     let monitor = monitor_under_cursor(window)
         .or_else(|| window.current_monitor().ok().flatten())
         .or_else(|| window.primary_monitor().ok().flatten());
@@ -917,20 +933,11 @@ fn center_launcher_window(window: &tauri::WebviewWindow) {
     let scale = monitor.scale_factor();
     let mon_pos = monitor.position();
     let mon_size = monitor.size();
-    // Read the current window size (already set by the compact-resize step
-    // before show) so we don't resize again and cause flicker.
-    let (win_w, _win_h) = window
-        .outer_size()
-        .map(|s| (s.width as i32, s.height as i32))
-        .unwrap_or_else(|_| {
-            let lw = launcher_logical_width_for_monitor(&monitor);
-            (
-                (lw * scale).round() as i32,
-                (LAUNCHER_MAX_HEIGHT * scale).round() as i32,
-            )
-        });
-
-    let x = mon_pos.x + ((mon_size.width as i32 - win_w) / 2).max(0);
+    // GTK can still report the hidden window's zero/old allocation immediately
+    // after set_size. Center using the size requested by this same open action.
+    let Some(x) = launcher_centered_x(mon_pos.x, mon_size.width, scale, requested_logical_width) else {
+        return;
+    };
     // Position in the upper portion of the screen (1/5 from top, Spotlight-style)
     let y = mon_pos.y + (mon_size.height as i32 / 5).max(0);
 
@@ -7504,6 +7511,31 @@ pub fn run() {
                 let _ = show_launcher_window_for_hotkey(app.clone());
             }
         });
+}
+
+#[cfg(test)]
+mod launcher_center_tests {
+    use super::launcher_centered_x;
+
+    #[test]
+    fn requested_width_is_centered_in_physical_monitor_coordinates() {
+        assert_eq!(launcher_centered_x(0, 1364, 1.0, 660.0), Some(352));
+        assert_eq!(launcher_centered_x(0, 2560, 2.0, 660.0), Some(620));
+        assert_eq!(launcher_centered_x(-1920, 1920, 1.0, 660.0), Some(-1290));
+        assert_eq!(launcher_centered_x(-1600, 1600, 1.25, 660.0), Some(-1213));
+        assert_eq!(launcher_centered_x(-500, 500, 1.0, 660.0), Some(-500));
+    }
+
+    #[test]
+    fn unknown_or_invalid_geometry_does_not_produce_a_position() {
+        for width in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            assert_eq!(launcher_centered_x(0, 1364, 1.0, width), None);
+        }
+        for scale in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            assert_eq!(launcher_centered_x(0, 1364, scale, 660.0), None);
+        }
+        assert_eq!(launcher_centered_x(i32::MAX, 1000, 1.0, 660.0), None);
+    }
 }
 
 #[cfg(test)]

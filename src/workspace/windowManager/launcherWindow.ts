@@ -72,6 +72,9 @@ export async function onCurrentLauncherWindowMoved(
 let latestLauncherResize = 0
 
 export async function resizeCurrentLauncherWindow(size: { width: number; height: number }): Promise<void> {
+  if (!Number.isFinite(size.width) || size.width <= 0 || !Number.isFinite(size.height) || size.height <= 0) {
+    throw new RangeError('Launcher window dimensions must be finite and positive')
+  }
   if (!isNativeDesktopRuntime()) return
   const resize = ++latestLauncherResize
   const { getCurrentWindow, LogicalPosition, LogicalSize } = await import('@tauri-apps/api/window')
@@ -86,15 +89,9 @@ export async function resizeCurrentLauncherWindow(size: { width: number; height:
   if (sameWidth && Math.abs(currentSize.height - size.height) < 0.5) return
 
   window.dispatchEvent(new CustomEvent(LAUNCHER_PROGRAMMATIC_MOVE_EVENT))
-  if (sameWidth) {
-    await win.setSize(new LogicalSize(size.width, size.height))
-    return
-  }
-
-  await Promise.all([
-    win.setSize(new LogicalSize(size.width, size.height)),
-    win.setPosition(new LogicalPosition(position.x + (currentSize.width - size.width) / 2, position.y)),
-  ])
+  await win.setSize(new LogicalSize(size.width, size.height))
+  if (sameWidth || resize !== latestLauncherResize) return
+  await win.setPosition(new LogicalPosition(position.x + (currentSize.width - size.width) / 2, position.y))
 }
 
 /**

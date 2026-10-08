@@ -673,7 +673,7 @@ check('native launcher opens centered only when there is no persisted window pos
   assert.ok(launcherOpen, 'LauncherWindowApp should define an openLauncher handler')
   const restoreBranchIndex = launcherOpen.indexOf('if (!saved || !isLauncherPositionFresh(saved)) return')
   const restoreIndex = launcherOpen.indexOf('setCurrentLauncherWindowPosition({ x: saved.x, y: saved.y })')
-  const centerIndex = files.tauriLib.indexOf('center_launcher_window(&window)')
+  const centerIndex = files.tauriLib.indexOf('center_launcher_window(&window, width)')
   assert.ok(restoreBranchIndex >= 0, 'openLauncher should branch on the persisted launcher window position')
   assert.ok(restoreIndex >= 0, 'openLauncher should restore the persisted launcher position')
   assert.ok(centerIndex >= 0, 'native launcher path should center the launcher when no persisted position exists')

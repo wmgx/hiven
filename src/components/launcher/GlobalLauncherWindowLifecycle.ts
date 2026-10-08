@@ -245,14 +245,21 @@ export function useStandaloneLauncherResize({
   useLayoutEffect(() => {
     if (!open || !standaloneLauncher) return
     if (!isTauriRuntime()) return
-    const initialWindowWidth = initialWindowWidthRef.current ?? window.innerWidth
-    initialWindowWidthRef.current = initialWindowWidth
 
     let disposed = false
-    // One rAF is enough after layout: frame switches (e.g. diff → 2 choices)
+    let frameId: number
+    // One rAF normally suffices after layout: frame switches (e.g. diff → 2 choices)
     // used to wait a fixed 80ms and felt like a full expand even for tiny lists.
-    const frameId = window.requestAnimationFrame(() => {
+    const resizeAfterLayout = () => {
       if (disposed) return
+      const initialWindowWidth = initialWindowWidthRef.current ?? window.innerWidth
+      // A hidden webview can report zero until its first visible layout. Do not
+      // keep that width for the whole open session or record an invalid size.
+      if (!Number.isFinite(initialWindowWidth) || initialWindowWidth <= 0) {
+        frameId = window.requestAnimationFrame(resizeAfterLayout)
+        return
+      }
+      initialWindowWidthRef.current = initialWindowWidth
       const panel = panelRef.current
       if (!panel) return
       const geometry = computeStandaloneLauncherGeometry({
@@ -270,9 +277,11 @@ export function useStandaloneLauncherResize({
       logLauncherPerf('resize:native-window', { width: geometry.width, height: geometry.height })
       void resizeCurrentLauncherWindow({ width: geometry.width, height: geometry.height })
         .catch((error) => {
+          if (!disposed && lastSizeKeyRef.current === sizeKey) lastSizeKeyRef.current = ''
           console.warn('[hiven] Failed to resize launcher window:', error)
         })
-    })
+    }
+    frameId = window.requestAnimationFrame(resizeAfterLayout)
 
     return () => {
       disposed = true

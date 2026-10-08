@@ -136,61 +136,159 @@ assert.match(
   'standalone launcher resize lifecycle should use a single geometry calculation for CSS and native size',
 )
 
-const launcherWindowModule = { exports: {} }
-const nativeCalls = []
-const nativeBounds = { x: 100, y: 80, width: 600, height: 400 }
-const nativeWindow = {
-  scaleFactor: async () => 2,
-  outerPosition: async () => ({ toLogical: () => ({ x: nativeBounds.x, y: nativeBounds.y }) }),
-  outerSize: async () => ({ toLogical: () => ({ width: nativeBounds.width, height: nativeBounds.height }) }),
-  setSize: async (size) => {
-    nativeCalls.push(['size', size.width, size.height])
-    nativeBounds.width = size.width
-    nativeBounds.height = size.height
-  },
-  setPosition: async (position) => {
-    nativeCalls.push(['position', position.x, position.y])
-    nativeBounds.x = position.x
-    nativeBounds.y = position.y
-  },
-}
 const transpiledLauncherWindow = ts.transpileModule(files.launcherWindow, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText
-vm.runInNewContext(transpiledLauncherWindow, {
-  module: launcherWindowModule,
-  exports: launcherWindowModule.exports,
-  require(specifier) {
-    if (specifier === '@tauri-apps/api/window') {
-      return {
-        getCurrentWindow: () => nativeWindow,
-        LogicalPosition: class { constructor(x, y) { this.x = x; this.y = y } },
-        LogicalSize: class { constructor(width, height) { this.width = width; this.height = height } },
-      }
-    }
-    if (specifier.endsWith('webNativeBridge')) return { isNativeDesktopRuntime: () => true }
-    return new Proxy({}, { get: () => () => {} })
-  },
-  window: { dispatchEvent: () => nativeCalls.push(['programmatic-move']) },
-  CustomEvent: class {},
-  console,
-})
 
-await launcherWindowModule.exports.resizeCurrentLauncherWindow({ width: 900, height: 600 })
+function loadNativeLauncherWindow(bounds = { x: 100, y: 80, width: 600, height: 400 }, scale = 2) {
+  const launcherWindowModule = { exports: {} }
+  const calls = []
+  const reads = []
+  const nativeBounds = { ...bounds }
+  const nativeWindow = {
+    scaleFactor: async () => { reads.push('scaleFactor'); return scale },
+    outerPosition: async () => {
+      reads.push('outerPosition')
+      const { x, y } = nativeBounds
+      return { toLogical: (factor) => ({ x: x * scale / factor, y: y * scale / factor }) }
+    },
+    outerSize: async () => {
+      reads.push('outerSize')
+      const { width, height } = nativeBounds
+      return { toLogical: (factor) => ({ width: width * scale / factor, height: height * scale / factor }) }
+    },
+    setSize: async (size) => {
+      calls.push(['size', size.width, size.height])
+      nativeBounds.width = size.width
+      nativeBounds.height = size.height
+    },
+    setPosition: async (position) => {
+      calls.push(['position', position.x, position.y])
+      nativeBounds.x = position.x
+      nativeBounds.y = position.y
+    },
+  }
+  vm.runInNewContext(transpiledLauncherWindow, {
+    module: launcherWindowModule,
+    exports: launcherWindowModule.exports,
+    require(specifier) {
+      if (specifier === '@tauri-apps/api/window') {
+        reads.push('importWindow')
+        return {
+          getCurrentWindow: () => { reads.push('getCurrentWindow'); return nativeWindow },
+          LogicalPosition: class { constructor(x, y) { this.x = x; this.y = y } },
+          LogicalSize: class { constructor(width, height) { this.width = width; this.height = height } },
+        }
+      }
+      if (specifier.endsWith('webNativeBridge')) return { isNativeDesktopRuntime: () => true }
+      return new Proxy({}, { get: () => () => {} })
+    },
+    window: { dispatchEvent: () => calls.push(['programmatic-move']) },
+    CustomEvent: class {},
+    console,
+  })
+  return { resize: launcherWindowModule.exports.resizeCurrentLauncherWindow, calls, reads, nativeWindow, nativeBounds }
+}
+
+function deferred() {
+  let resolve
+  const promise = new Promise((done) => { resolve = done })
+  return { promise, resolve }
+}
+
+const ordinary = loadNativeLauncherWindow()
+await ordinary.resize({ width: 900, height: 600 })
 assert.deepEqual(
-  nativeCalls,
+  ordinary.calls,
   [['programmatic-move'], ['size', 900, 600], ['position', -50, 80]],
   'native resize should preserve the launcher top center while widening',
 )
-nativeCalls.length = 0
-await launcherWindowModule.exports.resizeCurrentLauncherWindow({ width: 900, height: 600 })
-assert.deepEqual(nativeCalls, [], 'an unchanged native launcher size should not resize or move again')
-
-assert.match(
-  files.globalLauncherWindowLifecycle,
-  /const\s+initialWindowWidth\s*=\s*initialWindowWidthRef\.current\s*\?\?\s*window\.innerWidth[\s\S]*currentWindowWidth:\s*initialWindowWidth/,
-  'ordinary launcher frames should restore the width captured for the current open session',
+ordinary.calls.length = 0
+await ordinary.resize({ width: 900, height: 600 })
+assert.deepEqual(ordinary.calls, [], 'an unchanged native launcher size should not resize or move again')
+await ordinary.resize({ width: 900, height: 500 })
+assert.deepEqual(
+  ordinary.calls,
+  [['programmatic-move'], ['size', 900, 500]],
+  'a height-only resize should never move the launcher',
 )
+
+const negativeOrigin = loadNativeLauncherWindow({ x: -1100, y: -80, width: 660, height: 318 }, 1.5)
+await negativeOrigin.resize({ width: 728, height: 400 })
+assert.deepEqual(
+  negativeOrigin.calls,
+  [['programmatic-move'], ['size', 728, 400], ['position', -1134, -80]],
+  '660→728 widening should preserve the actual-scale center and negative monitor origin',
+)
+
+for (const invalid of [0, -1, NaN, Infinity, -Infinity]) {
+  for (const size of [{ width: invalid, height: 400 }, { width: 660, height: invalid }]) {
+    const rejected = loadNativeLauncherWindow()
+    await assert.rejects(rejected.resize(size), /finite and positive/)
+    assert.deepEqual(rejected.reads, [], 'invalid dimensions must be rejected before any native operation')
+    assert.deepEqual(rejected.calls, [], 'invalid dimensions must not resize, move, or signal a move')
+  }
+}
+
+const failed = loadNativeLauncherWindow({ x: 100, y: 80, width: 660, height: 318 })
+failed.nativeWindow.setSize = async (size) => {
+  failed.calls.push(['size', size.width, size.height])
+  throw new Error('native resize failed')
+}
+await assert.rejects(failed.resize({ width: 728, height: 400 }), /native resize failed/)
+assert.deepEqual(
+  failed.calls,
+  [['programmatic-move'], ['size', 728, 400]],
+  'a failed native resize must never issue the compensating move',
+)
+assert.deepEqual(failed.nativeBounds, { x: 100, y: 80, width: 660, height: 318 })
+
+const staleSize = loadNativeLauncherWindow({ x: 100, y: 80, width: 660, height: 318 })
+const firstSizeStarted = deferred()
+const firstSizeReply = deferred()
+const setSize = staleSize.nativeWindow.setSize
+staleSize.nativeWindow.setSize = async (size) => {
+  await setSize(size)
+  if (size.width === 728) {
+    firstSizeStarted.resolve()
+    await firstSizeReply.promise
+  }
+}
+const oldSize = staleSize.resize({ width: 728, height: 400 })
+await firstSizeStarted.promise
+assert.deepEqual(
+  staleSize.calls,
+  [['programmatic-move'], ['size', 728, 400]],
+  'movement must wait until native resizing reports success',
+)
+await staleSize.resize({ width: 800, height: 500 })
+const callsBeforeOldReply = [...staleSize.calls]
+firstSizeReply.resolve()
+await oldSize
+assert.deepEqual(staleSize.calls, callsBeforeOldReply, 'a superseded setSize reply must not move the window')
+assert.deepEqual(staleSize.nativeBounds, { x: 64, y: 80, width: 800, height: 500 })
+
+const staleBounds = loadNativeLauncherWindow({ x: 100, y: 80, width: 660, height: 318 })
+const oldBoundsStarted = deferred()
+const oldBoundsReply = deferred()
+const outerPosition = staleBounds.nativeWindow.outerPosition
+let firstBounds = true
+staleBounds.nativeWindow.outerPosition = async () => {
+  const position = await outerPosition()
+  if (firstBounds) {
+    firstBounds = false
+    oldBoundsStarted.resolve()
+    await oldBoundsReply.promise
+  }
+  return position
+}
+const oldBounds = staleBounds.resize({ width: 728, height: 400 })
+await oldBoundsStarted.promise
+await staleBounds.resize({ width: 800, height: 500 })
+const callsBeforeOldBounds = [...staleBounds.calls]
+oldBoundsReply.resolve()
+await oldBounds
+assert.deepEqual(staleBounds.calls, callsBeforeOldBounds, 'superseded bounds must not resize or move the window')
 
 assert.match(
   files.globalLauncherGeometry,
