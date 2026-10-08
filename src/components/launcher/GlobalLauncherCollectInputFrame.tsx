@@ -4,6 +4,7 @@ import { CornerDownLeft, History } from 'lucide-react'
 import type { Locale } from '../../i18n'
 import { t } from '../../i18n'
 import { getHostOutputIntent } from '../../workspace/launcher/output'
+import { showToast } from '../../workspace/toast'
 import type { CollectInputFrame, LauncherControllerState } from '../../workspace/launcher/controller'
 import { resolveDisplayTitle } from '../../workspace/launcher/display'
 import type { IconRef, LauncherOutput, LauncherResultChoice } from '../../workspace/launcher/types'
@@ -200,6 +201,16 @@ export function GlobalLauncherCollectInputFrame({
 
   const runDestination = async (destId: OutputDestinationId) => {
     if (busy) return
+    if (destId === 'paste-foreground') {
+      // Preserve the explicit paste intent; a stale preview must neither paste
+      // old text nor fall through to the primary action (commonly Copy).
+      if (!previewChoice || !livePreviewText || !previewFresh) {
+        showToast(t(locale, 'palette.outputPastePreviewPending'), 'info')
+        return
+      }
+      await onPastePreviewText?.(previewChoice)
+      return
+    }
     // No fresh preview for current input → full submit (fresh execute).
     if (!previewChoice || !livePreviewText || !previewFresh) {
       onSubmitPrimary?.()
@@ -207,10 +218,6 @@ export function GlobalLauncherCollectInputFrame({
     }
     if (destId === 'copy' || destId === 'primary') {
       await onActivateChoice(previewChoice)
-      return
-    }
-    if (destId === 'paste-foreground') {
-      await onPastePreviewText?.(previewChoice)
       return
     }
     if (destId === 'return-to-launcher') {

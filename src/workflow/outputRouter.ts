@@ -20,7 +20,8 @@ export function createDefaultOutputRouterContext(): OutputRouterContext {
   return {
     copy: (text) => launcherApi.copyText(text),
     pasteToForegroundApp: async (text) => {
-      await createPluginPaste().pasteText(text)
+      const result = await createPluginPaste().pasteText(text)
+      if (!result.ok && result.fallback === 'none') throw new Error(result.message)
     },
     replaceEditorSelection: async (text) => { await createQuickEditorPane({ text }) },
     insertIntoEditor: async (text) => { await createQuickEditorPane({ text }) },

@@ -2,7 +2,8 @@
  * Plugin Paste API — Host Implementation
  *
  * Provides controlled paste semantics: write to clipboard, then attempt to simulate Cmd/Ctrl+V.
- * Falls back to "copied to clipboard" if accessibility/simulation unavailable.
+ * Known unavailable paste is rejected before changing the clipboard or window.
+ * A failed native attempt falls back to "copied to clipboard".
  */
 
 import type { PluginPasteApi, PluginPasteResult, PluginPermission, PluginPermissionSnapshot, PluginPrivateStorageApi } from './pluginTypes'
@@ -10,8 +11,14 @@ import { requirePluginPermissions } from './pluginPermissions'
 import { writeClipboardImageBytes } from './pluginClipboard'
 import { t } from '../i18n'
 import { useAppStore } from '../store'
+import { pasteAvailabilityMessageKey, readPasteAvailability } from './pasteAvailability'
 
 const pasteMessage = (key: string) => t(useAppStore.getState().locale, `workspace.${key}`)
+
+async function blockedPasteResult(): Promise<PluginPasteResult | undefined> {
+  const key = pasteAvailabilityMessageKey(await readPasteAvailability())
+  if (key) return { ok: false, fallback: 'none', message: t(useAppStore.getState().locale, key) }
+}
 
 async function writeTextToClipboard(text: string): Promise<void> {
   try {
@@ -59,6 +66,8 @@ export function createPluginPaste(
   return {
     async pasteText(text: string): Promise<PluginPasteResult> {
       requirePermissions(['clipboard.write', 'accessibility.paste'])
+      const blocked = await blockedPasteResult()
+      if (blocked) return blocked
       try {
         await writeTextToClipboard(text)
       } catch {
@@ -70,6 +79,8 @@ export function createPluginPaste(
 
     async pasteImage(blobId: string): Promise<PluginPasteResult> {
       requirePermissions(['clipboard.write', 'clipboard.image', 'storage.blob', 'accessibility.paste'])
+      const blocked = await blockedPasteResult()
+      if (blocked) return blocked
       if (!storage) {
         return { ok: false, fallback: 'none', message: pasteMessage('paste.imageStorageRequired') }
       }
@@ -88,6 +99,8 @@ export function createPluginPaste(
 
     async pasteFiles(paths: string[]): Promise<PluginPasteResult> {
       requirePermissions(['clipboard.write', 'clipboard.files', 'accessibility.paste'])
+      const blocked = await blockedPasteResult()
+      if (blocked) return blocked
       try {
         await writeTextToClipboard(paths.join('\n'))
       } catch {

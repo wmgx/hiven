@@ -1620,6 +1620,33 @@ fn show_and_focus_plugin_surface_window(
     rx.recv().map_err(|error| error.to_string())?
 }
 
+#[derive(Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
+enum PasteAvailability {
+    Unsupported,
+    AccessibilityRequired,
+    CanAttempt,
+}
+
+fn paste_availability_for(platform: &str, accessibility_trusted: bool) -> PasteAvailability {
+    match platform {
+        "macos" if !accessibility_trusted => PasteAvailability::AccessibilityRequired,
+        "macos" | "windows" => PasteAvailability::CanAttempt,
+        _ => PasteAvailability::Unsupported,
+    }
+}
+
+// This check must never prompt, write the clipboard, or change window focus.
+// Permission/focus can change after preflight; the actual paste still may fail.
+#[tauri::command]
+fn get_paste_availability() -> PasteAvailability {
+    #[cfg(target_os = "macos")]
+    let accessibility_trusted = ax_is_trusted(false);
+    #[cfg(not(target_os = "macos"))]
+    let accessibility_trusted = true;
+    paste_availability_for(std::env::consts::OS, accessibility_trusted)
+}
+
 #[tauri::command]
 async fn simulate_paste() -> Result<(), String> {
     // CGEventPost needs to run on a dedicated thread (not tokio's worker pool)
@@ -7361,6 +7388,7 @@ pub fn run() {
             open_devtools,
             open_system_url,
             hide_launcher_window,
+            get_paste_availability,
             hide_launcher_and_paste,
             hide_launcher_and_capture_selection,
             show_quick_editor_window,
@@ -7411,6 +7439,37 @@ pub fn run() {
                 let _ = show_launcher_window_for_hotkey(app.clone());
             }
         });
+}
+
+#[cfg(test)]
+mod paste_availability_tests {
+    use super::*;
+
+    #[test]
+    fn classifies_supported_platforms_and_accessibility() {
+        assert_eq!(paste_availability_for("linux", true), PasteAvailability::Unsupported);
+        assert_eq!(paste_availability_for("other", true), PasteAvailability::Unsupported);
+        assert_eq!(paste_availability_for("macos", false), PasteAvailability::AccessibilityRequired);
+        assert_eq!(paste_availability_for("macos", true), PasteAvailability::CanAttempt);
+        assert_eq!(paste_availability_for("windows", false), PasteAvailability::CanAttempt);
+    }
+
+    #[test]
+    fn serializes_the_frontend_contract() {
+        for (availability, expected) in [
+            (PasteAvailability::Unsupported, "unsupported"),
+            (PasteAvailability::AccessibilityRequired, "accessibility-required"),
+            (PasteAvailability::CanAttempt, "can-attempt"),
+        ] {
+            assert_eq!(serde_json::to_value(availability).unwrap(), expected);
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_command_reports_unsupported_without_desktop_io() {
+        assert_eq!(get_paste_availability(), PasteAvailability::Unsupported);
+    }
 }
 
 #[cfg(test)]

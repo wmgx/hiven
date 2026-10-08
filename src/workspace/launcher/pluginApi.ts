@@ -196,7 +196,8 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
       await writeClipboardText(text, writeOptions)
     },
     pasteToForegroundApp: async (text: string) => {
-      await createPluginPaste().pasteText(text)
+      const result = await createPluginPaste().pasteText(text)
+      if (!result.ok && result.fallback === 'none') throw new Error(result.message)
     },
     openUrl: async (url: string) => {
       await openExternalUrl(url)

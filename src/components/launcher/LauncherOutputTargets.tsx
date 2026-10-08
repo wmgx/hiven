@@ -3,11 +3,13 @@
  * Used by collect-input live preview and single-text result frames.
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import type { Locale } from '../../i18n'
 import { t } from '../../i18n'
 import { getPlatformShortcutMeta } from './launcherParamShortcuts'
 import { LauncherHintKey } from './LauncherFooterHints'
+import { usePasteAvailability } from '../usePasteAvailability'
+import { pasteAvailabilityMessageKey } from '../../workspace/pasteAvailability'
 
 export type OutputDestinationId = 'primary' | 'copy' | 'paste-foreground' | 'return-to-launcher'
 
@@ -53,30 +55,47 @@ export function LauncherOutputTargetsBar({
   onSelect: (id: OutputDestinationId) => void
   disabled?: boolean
 }) {
+  const hasPaste = destinations.some((destination) => destination.id === 'paste-foreground')
+  const pasteAvailability = usePasteAvailability(hasPaste)
+  const pasteStatusId = useId()
+  const blockedMessageKey = pasteAvailabilityMessageKey(pasteAvailability)
+  const pasteMessage = hasPaste ? t(locale, blockedMessageKey ?? (
+    pasteAvailability === 'can-attempt' ? 'palette.outputPasteCanAttempt' : 'palette.outputPasteUnknown'
+  )) : undefined
   if (destinations.length === 0) return null
   return (
-    <div
-      className="launcher-output-targets"
-      data-testid="launcher-output-targets"
-      role="listbox"
-      aria-label={t(locale, 'palette.outputSwitchTarget')}
-    >
-      {destinations.map((dest) => (
-        <button
-          key={dest.id}
-          type="button"
-          role="option"
-          disabled={disabled}
-          aria-selected={activeId === dest.id}
-          className={`launcher-output-target${activeId === dest.id ? ' is-active' : ''}`}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => onSelect(dest.id)}
-        >
-          {dest.keys ? <kbd>{dest.keys}</kbd> : null}
-          <span>{t(locale, `palette.${dest.labelKey}`)}</span>
-        </button>
-      ))}
-    </div>
+    <>
+      <div
+        className="launcher-output-targets"
+        data-testid="launcher-output-targets"
+        role="listbox"
+        aria-label={t(locale, 'palette.outputSwitchTarget')}
+      >
+        {destinations.map((dest) => (
+          <button
+            key={dest.id}
+            type="button"
+            role="option"
+            disabled={disabled || (dest.id === 'paste-foreground' && Boolean(blockedMessageKey))}
+            aria-selected={activeId === dest.id}
+            aria-describedby={dest.id === 'paste-foreground' ? pasteStatusId : undefined}
+            className={`launcher-output-target disabled:opacity-50 disabled:cursor-not-allowed${activeId === dest.id ? ' is-active' : ''}`}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => onSelect(dest.id)}
+          >
+            {dest.keys ? <kbd>{dest.keys}</kbd> : null}
+            <span>{t(locale, `palette.${dest.labelKey}`)}</span>
+          </button>
+        ))}
+      </div>
+      {pasteMessage && (
+        // Reserve room while preflight completes: native frame sizing does not
+        // run again just because this status changes from unknown to blocked.
+        <div id={pasteStatusId} role="status" aria-live="polite" className="min-h-14 px-3.5 pb-2 text-[11px] leading-4" style={{ color: 'var(--color-text-secondary)' }}>
+          {pasteMessage}
+        </div>
+      )}
+    </>
   )
 }
 
@@ -139,6 +158,8 @@ export function useOutputDestinationState(params: {
       return params.destinations.find((d) => d.id === 'return-to-launcher')?.id ?? activeDest?.id ?? 'copy'
     }
     if (event.shiftKey) {
+      // Keep blocked paste destinations in the list: this shortcut must retain
+      // paste intent and let execution check again, never silently become Copy.
       return params.destinations.find((d) => d.id === 'paste-foreground')?.id ?? activeDest?.id ?? 'copy'
     }
     return activeDest?.id ?? 'copy'

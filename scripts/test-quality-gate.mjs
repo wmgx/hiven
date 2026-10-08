@@ -49,6 +49,7 @@ const commands = [
   ['npm', ['run', 'test:launcher-explicit-text-flow']],
   ['npm', ['run', 'test:launcher-input-drafts']],
   ['npm', ['run', 'test:launcher-output-recovery']],
+  ['npm', ['run', 'test:plugin-paste-behavior']],
   ['npm', ['run', 'test:launcher-current-material']],
   ['npm', ['run', 'test:launcher-material-edit']],
   ['npm', ['run', 'test:plugin-surface-object-origin']],
