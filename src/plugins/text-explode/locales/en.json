@@ -6,6 +6,7 @@
   "action.selectAll": "Select all",
   "action.invert": "Invert",
   "action.copy": "Copy",
+  "action.continueProcessing": "Continue processing",
   "action.confirm": "Insert",
   "input.placeholder": "Paste or type some text…",
   "input.clear": "Clear text",
@@ -20,5 +21,6 @@
   "footer.hint": "Click or drag fragments · Shift+drag toggles selection",
   "message.copied": "Copied",
   "error.copyFailed": "Copy failed",
-  "error.pasteFailed": "Could not insert text"
+  "error.pasteFailed": "Could not insert text",
+  "error.continueFailed": "Could not continue processing. Try again."
 }

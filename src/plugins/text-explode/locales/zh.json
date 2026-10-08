@@ -6,6 +6,7 @@
   "action.selectAll": "全选",
   "action.invert": "反选",
   "action.copy": "复制",
+  "action.continueProcessing": "继续处理",
   "action.confirm": "上屏",
   "input.placeholder": "粘贴或输入一段文本…",
   "input.clear": "清空文本",
@@ -20,5 +21,6 @@
   "footer.hint": "点击或拖拽选择片段 · Shift 拖拽切换选中",
   "message.copied": "已复制",
   "error.copyFailed": "复制失败",
-  "error.pasteFailed": "上屏失败"
+  "error.pasteFailed": "上屏失败",
+  "error.continueFailed": "继续处理失败，请重试"
 }

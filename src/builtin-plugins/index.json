@@ -1,5 +1,5 @@
 {
-  "version": 85,
+  "version": 86,
   "packages": [
     {
       "pluginId": "encode-decode",
@@ -84,7 +84,7 @@
     {
       "pluginId": "text-explode",
       "dir": "text-explode",
-      "version": "1.0.6"
+      "version": "1.0.7"
     },
     {
       "pluginId": "user-commands",

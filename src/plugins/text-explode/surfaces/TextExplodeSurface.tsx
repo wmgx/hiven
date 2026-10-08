@@ -4,13 +4,16 @@ import { Button, IconButton, ToolbarButton, useImeKeyboard } from '@hiven/plugin
 import { CloseIcon } from '@hiven/plugin-ui/icons'
 import { Bomb } from 'lucide-react'
 import { assembleFromSelection, isSelectableToken, tokenize, type ExplodeToken } from '../tokenize'
+import { createExplodeOutputGate } from '../outputActionGate'
 
 /** Matches the launcher's own query_change debounce so the explode replay doesn't fire per keystroke. */
 const COMMIT_DEBOUNCE_MS = 280
+const EMPTY_SELECTION = new Set<number>()
 
 type ChipAnim = { dx: number; dy: number; rot: number; delay: number }
 
 type DragState = {
+  tokens: ExplodeToken[]
   startX: number
   startY: number
   originLeft: number
@@ -36,21 +39,47 @@ function buildAnims(tokens: ExplodeToken[]): ChipAnim[] {
 export function TextExplodeSurface(props: PluginSurfaceProps) {
   const { t, host } = props
   const initial = props.initialText?.trim() ?? ''
-  const [inputValue, setInputValue] = useState(initial)
-  const [committedText, setCommittedText] = useState(initial)
-  const [selected, setSelected] = useState<Set<number>>(new Set())
+  // Carry the input identity through debounce, including edits from A to B to A.
+  const [input, setInput] = useState({ text: initial })
+  const [committedInput, setCommittedInput] = useState(input)
+  const inputValue = input.text
+  const committedText = committedInput.text.trim()
+  const [outputGate] = useState(createExplodeOutputGate)
+  const [outputRevision, setOutputRevision] = useState(outputGate.getRevision)
+  const [outputPending, setOutputPending] = useState(false)
+  const [handedOffRevision, setHandedOffRevision] = useState<number | null>(null)
+  const activeRef = useRef(true)
   const [exploded, setExploded] = useState(false)
   const [copyFeedback, setCopyFeedback] = useState<{ text: string; error: boolean } | null>(null)
   const ime = useImeKeyboard()
 
+  const invalidateOutput = useCallback(() => {
+    setOutputRevision(outputGate.invalidate())
+  }, [outputGate])
+
+  useEffect(() => {
+    activeRef.current = true
+    return () => { activeRef.current = false }
+  }, [])
+
   // Live typing feel: input reacts every keystroke, explode/re-tokenize settles
   // after a short pause so the canvas doesn't re-burst on every character.
   useEffect(() => {
-    const timer = window.setTimeout(() => setCommittedText(inputValue.trim()), COMMIT_DEBOUNCE_MS)
+    const timer = window.setTimeout(() => setCommittedInput(input), COMMIT_DEBOUNCE_MS)
     return () => window.clearTimeout(timer)
-  }, [inputValue])
+  }, [input])
 
   const tokens = useMemo(() => (committedText ? tokenize(committedText) : []), [committedText])
+  const [selection, setSelection] = useState(() => ({ tokens, indexes: new Set<number>() }))
+  // A selection belongs to the exact token array it was made from.
+  const selected = selection.tokens === tokens ? selection.indexes : EMPTY_SELECTION
+  const setSelected = useCallback((next: React.SetStateAction<Set<number>>) => {
+    invalidateOutput()
+    setSelection((previous) => {
+      const indexes = previous.tokens === tokens ? previous.indexes : EMPTY_SELECTION
+      return { tokens, indexes: typeof next === 'function' ? next(indexes) : next }
+    })
+  }, [invalidateOutput, tokens])
   const anims = useMemo(() => buildAnims(tokens), [tokens])
 
   const groups = useMemo(() => {
@@ -66,7 +95,6 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
 
   const chipAnimCleanup = useRef<(() => void) | null>(null)
   useEffect(() => {
-    setSelected(new Set())
     setExploded(false)
     if (!tokens.length) return
     const raf1 = requestAnimationFrame(() => {
@@ -90,6 +118,19 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
   // preview always matches what release will actually do.
   const [dragShiftMode, setDragShiftMode] = useState(false)
 
+  const cancelDrag = useCallback(() => {
+    dragRef.current = null
+    setRubberBox(null)
+    setRubberPreview(new Set())
+    setDragShiftMode(false)
+  }, [])
+
+  const updateInput = useCallback((text: string) => {
+    invalidateOutput()
+    cancelDrag()
+    setInput({ text })
+  }, [cancelDrag, invalidateOutput])
+
   const assembled = useMemo(() => assembleFromSelection(tokens, selected), [tokens, selected])
   const selectableIndexes = useMemo(
     () => tokens.flatMap((token, idx) => (isSelectableToken(token.type) ? [idx] : [])),
@@ -103,7 +144,7 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
       else next.add(idx)
       return next
     })
-  }, [])
+  }, [setSelected])
 
   const toggleGroup = useCallback((groupId: string) => {
     const idxs = groups.get(groupId)
@@ -114,15 +155,15 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
       idxs.forEach((i) => (allSelected ? next.delete(i) : next.add(i)))
       return next
     })
-  }, [groups])
+  }, [groups, setSelected])
 
   const selectAll = useCallback(() => {
     setSelected(new Set(selectableIndexes))
-  }, [selectableIndexes])
+  }, [selectableIndexes, setSelected])
 
   const invertSelection = useCallback(() => {
     setSelected((prev) => new Set(selectableIndexes.filter((idx) => !prev.has(idx))))
-  }, [selectableIndexes])
+  }, [selectableIndexes, setSelected])
 
   const handlePointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 || !canvasRef.current) return
@@ -133,6 +174,7 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
     const chipEl = (event.target as HTMLElement).closest<HTMLElement>('[data-chip-idx]')
     const groupEl = !chipEl ? (event.target as HTMLElement).closest<HTMLElement>('[data-group-id]') : null
     dragRef.current = {
+      tokens,
       startX: event.clientX,
       startY: event.clientY,
       // Expressed in canvas content-space (adds scrollTop/scrollLeft) rather
@@ -145,11 +187,12 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
       downGroupId: groupEl ? (groupEl.dataset.groupId ?? null) : null,
     }
     canvas.setPointerCapture(event.pointerId)
-  }, [])
+  }, [tokens])
 
   const handlePointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current
     if (!drag || !canvasRef.current) return
+    if (drag.tokens !== tokens) { cancelDrag(); return }
     const canvas = canvasRef.current
     const dx = event.clientX - drag.startX
     const dy = event.clientY - drag.startY
@@ -175,11 +218,12 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
     })
     setRubberPreview(preview)
     setDragShiftMode(event.shiftKey)
-  }, [])
+  }, [cancelDrag, tokens])
 
   const handlePointerUp = useCallback((event: PointerEvent) => {
     const drag = dragRef.current
     if (!drag) return
+    if (drag.tokens !== tokens) { cancelDrag(); return }
     if (drag.moved) {
       const toggleMode = event.shiftKey
       setSelected((prev) => {
@@ -199,17 +243,25 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
     }
     setRubberBox(null)
     dragRef.current = null
-  }, [rubberPreview, toggleChip, toggleGroup])
+  }, [rubberPreview, toggleChip, toggleGroup, setSelected, cancelDrag, tokens])
 
   useEffect(() => {
     window.addEventListener('pointerup', handlePointerUp)
     return () => window.removeEventListener('pointerup', handlePointerUp)
   }, [handlePointerUp])
 
-  const confirmPaste = useCallback(async () => {
-    if (!assembled) return
+  const output = { text: assembled, revision: outputRevision }
+  const outputReady = committedInput === input && selection.tokens === tokens && Boolean(assembled)
+  const outputDisabled = !outputReady || outputPending || handedOffRevision === outputRevision
+
+  const confirmPaste = async () => {
+    if (!activeRef.current || !outputReady || !outputGate.begin(output)) return
+    setOutputPending(true)
     try {
-      const result = await host.paste.pasteText(assembled)
+      const result = await host.paste.pasteText(output.text)
+      // Native paste hides this surface before settling; preserve its fallback
+      // feedback unless an explicit edit or navigation revoked the output.
+      if (!outputGate.isCurrent(output)) return
       if (!result.ok) {
         host.showMessage(result.message, result.fallback === 'copied' ? 'info' : 'error')
         if (result.fallback === 'copied') host.complete()
@@ -217,22 +269,52 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
       }
       host.complete()
     } catch {
-      host.showMessage(t('error.pasteFailed'), 'error')
+      if (outputGate.isCurrent(output)) host.showMessage(t('error.pasteFailed'), 'error')
+    } finally {
+      outputGate.finish(output)
+      if (activeRef.current) setOutputPending(false)
     }
-  }, [assembled, host, t])
+  }
 
-  const copySelection = useCallback(async () => {
-    if (!assembled) return
+  const copySelection = async () => {
+    if (!activeRef.current || !outputReady || !outputGate.begin(output)) return
+    setOutputPending(true)
     try {
-      await host.clipboard.writeText(assembled)
-      setCopyFeedback({ text: assembled, error: false })
+      await host.clipboard.writeText(output.text)
+      if (!activeRef.current || !outputGate.isCurrent(output)) return
+      setCopyFeedback({ text: output.text, error: false })
       host.complete()
     } catch {
-      setCopyFeedback({ text: assembled, error: true })
+      if (activeRef.current && outputGate.isCurrent(output)) setCopyFeedback({ text: output.text, error: true })
+    } finally {
+      outputGate.finish(output)
+      if (activeRef.current) setOutputPending(false)
     }
-  }, [assembled, host, t])
+  }
 
-  const handleInputKeyDown = useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
+  const continueProcessing = () => {
+    if (!activeRef.current || !outputReady || !outputGate.begin(output)) return
+    try {
+      host.returnToLauncherWithObject({ kind: 'text', text: output.text, source: 'tool-result' })
+      outputGate.finish(output, true)
+      if (activeRef.current) setHandedOffRevision(output.revision)
+    } catch {
+      outputGate.finish(output)
+      if (activeRef.current && outputGate.isCurrent(output)) host.showMessage(t('error.continueFailed'), 'error')
+    }
+  }
+
+  const requestBack = useCallback(() => {
+    invalidateOutput()
+    host.requestBack()
+  }, [host, invalidateOutput])
+
+  const close = () => {
+    invalidateOutput()
+    host.close()
+  }
+
+  const handleInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter') {
       if (ime.shouldIgnoreKeyDown(event)) return
       event.preventDefault()
@@ -242,16 +324,16 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
     // Token-input convention: ⌫ on an empty field removes the command token (= back).
     if (event.key === 'Backspace' && inputValue === '') {
       event.preventDefault()
-      host.requestBack()
+      requestBack()
     }
-  }, [confirmPaste, host, ime, inputValue])
+  }
 
   const handleKeyDown = useCallback((event: React.KeyboardEvent) => {
     if (event.key === 'Escape') {
       event.stopPropagation()
-      host.requestBack()
+      requestBack()
     }
-  }, [host])
+  }, [requestBack])
 
   const hasTokens = tokens.length > 0
 
@@ -265,7 +347,7 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
             type="button"
             className="tx-token-remove"
             aria-label={t('token.remove')}
-            onClick={() => host.requestBack()}
+            onClick={requestBack}
           >
             <CloseIcon size={11} />
           </button>
@@ -280,17 +362,17 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
           autoCorrect="off"
           spellCheck={false}
           placeholder={t('input.placeholder')}
-          onChange={(event) => setInputValue(event.target.value)}
+          onChange={(event) => updateInput(event.target.value)}
           onKeyDown={handleInputKeyDown}
           onCompositionStart={ime.onCompositionStart}
           onCompositionEnd={ime.onCompositionEnd}
         />
         {inputValue && (
-          <IconButton label={t('input.clear')} className="tx-chrome-btn" onClick={() => setInputValue('')}>
+          <IconButton label={t('input.clear')} className="tx-chrome-btn" onClick={() => updateInput('')}>
             <CloseIcon size={14} />
           </IconButton>
         )}
-        <IconButton label={t('action.close')} className="tx-chrome-btn" onClick={() => host.close()}>
+        <IconButton label={t('action.close')} className="tx-chrome-btn" onClick={close}>
           <CloseIcon size={15} />
         </IconButton>
       </div>
@@ -359,12 +441,15 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
 
       <div className="tx-footer">
         <span className="tx-footer-hint">{t('footer.hint')}</span>
-        <Button disabled={!assembled} onClick={() => void copySelection()}>
+        <Button disabled={outputDisabled} onClick={() => void copySelection()}>
           {copyFeedback?.text === assembled
             ? t(copyFeedback.error ? 'error.copyFailed' : 'message.copied')
             : t('action.copy')}
         </Button>
-        <Button variant="primary" disabled={!assembled} onClick={() => void confirmPaste()}>
+        <Button disabled={outputDisabled} onClick={continueProcessing}>
+          {t('action.continueProcessing')}
+        </Button>
+        <Button variant="primary" disabled={outputDisabled} onClick={() => void confirmPaste()}>
           {t('action.confirm')}
         </Button>
       </div>
