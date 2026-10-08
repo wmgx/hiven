@@ -18,6 +18,7 @@ const PRODUCT_CATALOG: PluginProductMetadata[] = [
   product('regex-tester', 'Regex Tester', ['regex-tester'], '正则测试器'),
   product('clipboard-history', 'Clipboard History', ['clipboard-history'], '剪贴板历史'),
   product('translate', 'Translate', ['translate'], '翻译'),
+  product('ai-writing', 'AI Writing', ['ai-writing'], 'AI 写作'),
   product('csv-tools', 'CSV Tools', ['csv'], 'CSV 工具'),
   product('encode-decode-tools', 'Encode / Decode Tools', ['encode-decode', 'base64', 'url', 'html', 'slashes'], '编解码工具'),
   product('query-string-tools', 'Query String Tools', ['query-string'], '查询字符串工具'),

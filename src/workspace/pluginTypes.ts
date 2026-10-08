@@ -785,6 +785,8 @@ export type PluginSurfaceOpenContext<TSettings = unknown> = {
 
 export type PluginUiSurfaceContribution<TSettings = unknown> = {
   id: string
+  /** Pass visible material literally instead of resolving file paths before opening. */
+  initialTextMode?: 'literal'
   kind: PluginUiSurfaceKind
   title: string
   titleI18n?: Partial<Record<Locale, string>>

@@ -234,12 +234,17 @@ for (const interrupt of ['cancel', 'remove', 'replace', 'close-reopen', 'unmount
 
 // Both existing surface routes must pass file contents through, even if path-shaped.
 const actionExecutor = load('src/launcher/clipboard/actionExecutor.ts', { './clipboardSnapshot': snapshot })
+const legacySurfaceReads = []
+const literalSurface = { initialTextMode: 'literal' }
+const literalTarget = { source: 'builtin', pluginId: 'literal-surface', surfaceId: 'main' }
 const surfaceModule = load('src/components/launcher/useGlobalLauncherSelectionController.ts', {
-  react: { useCallback: noop, useState: noop }, './GlobalLauncherSelection': {},
+  '@tauri-apps/api/core': { invoke: async (_command, { path }) => { legacySurfaceReads.push(path); return 'legacy file content' } },
+  react: { useCallback: (callback) => callback, useState: (initial) => [initial, noop] },
+  './GlobalLauncherSelection': { resolvePluginSurfaceTarget: () => literalTarget, getPluginSurfaceDefinition: () => ({ definition: { ui: { surfaces: [literalSurface] } }, surface: literalSurface }) },
   '../../launcher/clipboard/clipboardSnapshot': snapshot,
-  '../../workspace/launcherBlurGuard': {}, '../../workspace/windowManager/pluginSurfaceWindows': {},
+  '../../workspace/launcherBlurGuard': {}, '../../workspace/windowManager/pluginSurfaceWindows': { getPluginSurfaceShortcutPresentation: () => 'launcher' },
   '../../workspace/webNativeBridge': {}, '../../workspace/toast': {}, '../../i18n': {},
-  '../../workspace/telemetry': {},
+  '../../workspace/telemetry': { trackBehavior: noop, TelemetryEvents: {}, measureLatency: (_name, action) => action() },
 })
 for (const text of ['', ' \r\n ', '/synthetic/second.json']) {
   const loaded = fileText.createFileTextMaterial('/synthetic/first.txt', text)
@@ -253,6 +258,33 @@ for (const text of ['', ' \r\n ', '/synthetic/second.json']) {
   assert.deepEqual(opened, [text])
   assert.equal(await surfaceModule.resolveSurfaceInitialText(text, true), text)
 }
+// Literal surfaces opt out at both entry paths, including path-shaped and empty material.
+for (const text of ['', ' \r\n ', '/synthetic/second.json']) {
+  assert.equal(await surfaceModule.resolveSurfaceInitialText(text, false, 'literal'), text)
+  const opened = []
+  const result = await actionExecutor.executeRecommendedAction({
+    block: { source: 'clipboard', payloadText: text }, action: { id: 'open', pluginId: 'literal-surface' }, target: 'open-plugin-surface',
+  }, {
+    getPluginSurfaceInitialTextMode: () => 'literal',
+    readLocalFileText: forbiddenRead,
+    openPluginSurface: async (_id, options) => opened.push(options.initialText),
+  })
+  assert.equal(result.ok, true)
+  assert.deepEqual(opened, [text])
+}
+const selectedTargets = []
+const selection = surfaceModule.useGlobalLauncherSelectionController({
+  controllerRef: { current: null }, clearPluginSurfaceTool: noop, locale: 'en',
+  objectBlockText: '/synthetic/selected.json', objectBlockTextIsFileContent: false,
+  openPluginSurface: async (target) => selectedTargets.push(target), focusSearchInputAfterBack: noop,
+})
+selection.selectItem({ kind: 'domain', domainItem: { systemKey: 'plugin-surface:builtin:literal-surface:main' } })
+await new Promise((resolve) => setImmediate(resolve))
+assert.equal(selectedTargets.length, 1)
+assert.equal(selectedTargets[0].initialText, '/synthetic/selected.json', 'real selection callback uses the nested surface declaration')
+assert.deepEqual(legacySurfaceReads, [])
+assert.equal(await surfaceModule.resolveSurfaceInitialText('/synthetic/legacy.json'), 'legacy file content')
+assert.deepEqual(legacySurfaceReads, ['/synthetic/legacy.json'], 'undeclared surfaces keep their existing path resolution')
 assert.equal(hiddenReads, 0, 'no hidden clipboard/editor/file source was read')
 pending.clearPendingObjectBlock()
 console.log('File text material passed: explicit scope, exact text, restore/edit provenance, duplicate/stale/cancel/session races, stable failures and both surface routes')

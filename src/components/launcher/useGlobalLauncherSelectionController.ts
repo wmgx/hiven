@@ -42,8 +42,8 @@ type UseGlobalLauncherSelectionControllerInput = {
 }
 
 /** Resolve Object Block / clipboard text into surface initialText (load file when payload is a path). */
-export async function resolveSurfaceInitialText(raw: string | undefined, alreadyRead = false): Promise<string | undefined> {
-  if (alreadyRead) return raw
+export async function resolveSurfaceInitialText(raw: string | undefined, alreadyRead = false, mode?: 'literal'): Promise<string | undefined> {
+  if (alreadyRead || mode === 'literal') return raw
   if (!raw?.trim()) return undefined
   const text = raw
   const filePath = detectClipboardFilePath(text)
@@ -91,14 +91,15 @@ export function useGlobalLauncherSelectionController({
       const pluginSurfaceTarget = resolvePluginSurfaceTarget(item.domainItem)
       if (pluginSurfaceTarget) {
         void (async () => {
-          if (!getPluginSurfaceDefinition(pluginSurfaceTarget)) {
+          const surface = getPluginSurfaceDefinition(pluginSurfaceTarget)
+          if (!surface) {
             showToast(
               `Surface unavailable: ${pluginSurfaceTarget.pluginId}/${pluginSurfaceTarget.surfaceId}`,
               'error',
             )
             return
           }
-          const initialText = await resolveSurfaceInitialText(objectBlockText, objectBlockTextIsFileContent)
+          const initialText = await resolveSurfaceInitialText(objectBlockText, objectBlockTextIsFileContent, surface.surface.initialTextMode)
           const target: PluginSurfaceTarget = {
             ...pluginSurfaceTarget,
             initialText,

@@ -219,6 +219,10 @@ export function useGlobalLauncherHostEscape({
     if (document.querySelector('[role="dialog"][data-open]')) return
     // Let an open tooltip consume Escape before the host leaves its page.
     if (document.querySelector('[role="tooltip"][data-open]')) return
+    // A visible Select portal owns Escape before its containing surface.
+    const openSelect = Array.from(document.querySelectorAll('.hiven-ui-select-menu[data-open]'))
+      .some((popup) => popup.getClientRects().length > 0 && getComputedStyle(popup).visibility === 'visible')
+    if (openSelect) return
 
     // Clear any stuck IME composition flag so Esc can never be permanently dead.
     // (compositionend can be missed after remount / webview rekey / focus thrash.)

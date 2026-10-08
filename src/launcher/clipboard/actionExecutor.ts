@@ -36,6 +36,7 @@ export type ActionExecutionHandlers = {
   setRenderer?: (actionId: string, text: string) => Promise<void>
   /** Resolve a local file path to its text content when the clipboard holds a path. */
   readLocalFileText?: (path: string) => Promise<string>
+  getPluginSurfaceInitialTextMode?: (pluginId: string) => 'literal' | undefined
   /** Paste plain text into the app that was foreground before launcher. */
   pasteText?: (text: string) => Promise<void>
   pasteImage?: (blobId: string) => Promise<void>
@@ -113,7 +114,7 @@ export async function executeRecommendedAction(
       case 'open-plugin-surface': {
         if (action.pluginId) {
           let initialText = text
-          const filePath = block.meta?.textOrigin === 'file-content' ? null : detectClipboardFilePath(text)
+          const filePath = block.meta?.textOrigin === 'file-content' || handlers.getPluginSurfaceInitialTextMode?.(action.pluginId) === 'literal' ? null : detectClipboardFilePath(text)
           if (filePath && handlers.readLocalFileText) {
             try {
               initialText = await handlers.readLocalFileText(filePath.path)
