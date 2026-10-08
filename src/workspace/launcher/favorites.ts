@@ -19,18 +19,22 @@ export function isLauncherFavorite(
 }
 
 /**
- * Toggle pin for `itemKey`. Immutable, with new pins at the front.
+ * Toggle pin for `itemKey`, or apply an explicit pin/unpin intent.
+ * Immutable, with new pins at the front; repeating a pin keeps its position.
  * Explicit pins remain until the user removes them; the UI owns list sizing.
  */
 export function toggleLauncherFavorite(
   favorites: readonly SystemLauncherItemKey[],
   itemKey: SystemLauncherItemKey,
+  pinned?: boolean,
 ): SystemLauncherItemKey[] {
   const key = itemKey.trim()
   if (!key) return [...favorites]
-  if (favorites.includes(key)) {
+  const wasPinned = favorites.includes(key)
+  if (!(pinned ?? !wasPinned)) {
     return favorites.filter((k) => k !== key)
   }
+  if (wasPinned) return [...favorites]
   return [key, ...favorites.filter((k) => k !== key)]
 }
 

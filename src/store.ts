@@ -144,7 +144,7 @@ interface AppState {
    * Boosted on empty open via ranking favoriteBoost; toggle with ⌘P.
    */
   launcherFavoriteKeys: SystemLauncherItemKey[]
-  toggleLauncherFavorite: (itemKey: SystemLauncherItemKey) => void
+  toggleLauncherFavorite: (itemKey: SystemLauncherItemKey, pinned?: boolean) => void
 
   /**
    * Plugin-opted durable content recents (contacts / chats / docs snapshots).
@@ -250,6 +250,26 @@ function appSearchAliasesEqual(left: AppSearchAliases, right: AppSearchAliases):
   )
 }
 
+// Preserve the newest pins when a stale window saves another field. Only an
+// explicit pin/unpin writes this window's list; nested subscribers share it.
+let launcherFavoritesWrite = false
+function readPersistedLauncherFavorites(): SystemLauncherItemKey[] {
+  const raw = localStorage.getItem('hiven-settings')
+  return normalizeLauncherFavorites(raw ? JSON.parse(raw)?.state?.launcherFavoriteKeys : undefined)
+}
+
+function persistedLauncherFavorites(fallback: SystemLauncherItemKey[]): SystemLauncherItemKey[] {
+  try {
+    return readPersistedLauncherFavorites()
+  } catch {
+    return fallback
+  }
+}
+
+function launcherFavoritesEqual(left: SystemLauncherItemKey[], right: SystemLauncherItemKey[]): boolean {
+  return left.length === right.length && left.every((key, index) => key === right[index])
+}
+
 export const useAppStore = create<AppState>()(persist((set, get) => ({
   // Editor command bar
   editorCommandBarOpen: false,
@@ -318,9 +338,32 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
   })),
 
   launcherFavoriteKeys: emptyLauncherFavorites(),
-  toggleLauncherFavorite: (itemKey: SystemLauncherItemKey) => set((state) => ({
-    launcherFavoriteKeys: toggleLauncherFavorite(state.launcherFavoriteKeys, itemKey),
-  })),
+  toggleLauncherFavorite: (itemKey, pinned) => {
+    if (!useAppStore.persist?.getOptions().storage) throw new Error('Application settings storage is unavailable.')
+    const before = get().launcherFavoriteKeys
+    // Synchronous subscribers run before persist writes. Build nested edits on
+    // the pending local list so they cannot discard the outer pin/unpin.
+    const base = launcherFavoritesWrite ? before : readPersistedLauncherFavorites()
+    const next = toggleLauncherFavorite(base, itemKey, pinned)
+    const previousWrite = launcherFavoritesWrite
+    launcherFavoritesWrite = true
+    try {
+      set({ launcherFavoriteKeys: next })
+    } catch (error) {
+      // Restore a failed edit only if no subscriber has made a newer one.
+      if (get().launcherFavoriteKeys === next) {
+        launcherFavoritesWrite = previousWrite
+        try {
+          set({ launcherFavoriteKeys: before })
+        } catch {
+          // Persist publishes first, so memory is restored even if this fails.
+        }
+      }
+      throw error
+    } finally {
+      launcherFavoritesWrite = previousWrite
+    }
+  },
 
   launcherPersistableRecents: emptyPersistableRecents(),
   recordPersistableLauncherSelection: (payload: PersistableLauncherPayload) => set((state) => ({
@@ -466,7 +509,9 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
     locale: state.locale,
     savedActionParams: state.savedActionParams,
     launcherUsageBySurface: state.launcherUsageBySurface,
-    launcherFavoriteKeys: state.launcherFavoriteKeys,
+    launcherFavoriteKeys: launcherFavoritesWrite
+      ? state.launcherFavoriteKeys
+      : persistedLauncherFavorites(state.launcherFavoriteKeys),
     launcherPersistableRecents: state.launcherPersistableRecents,
   }),
   merge: (persisted, current) => {
@@ -598,6 +643,10 @@ if (typeof window !== 'undefined') {
         || !appSearchAliasesEqual(
           persistedAppSearchAliases(useAppStore.getState().settings.appSearchAliases),
           useAppStore.getState().settings.appSearchAliases,
+        )
+        || !launcherFavoritesEqual(
+          persistedLauncherFavorites(useAppStore.getState().launcherFavoriteKeys),
+          useAppStore.getState().launcherFavoriteKeys,
         ))) {
       // Rehydrate does not persist a stale snapshot back to the other window.
       void useAppStore.persist.rehydrate()

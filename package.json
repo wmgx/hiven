@@ -117,7 +117,7 @@
     "test:launcher-host-capability-routing-behavior": "node scripts/test-launcher-host-capability-routing-behavior.mjs",
     "test:launcher-usage": "node scripts/test-launcher-usage.mjs",
     "test:launcher-ranking": "node scripts/test-launcher-ranking.mjs",
-    "test:launcher-favorites": "node scripts/test-launcher-favorites.mjs",
+    "test:launcher-favorites": "node scripts/test-launcher-favorites.mjs && node scripts/test-launcher-favorites-store.mjs",
     "test:launcher-r2-clipboard-follow-through": "node scripts/test-launcher-r2-clipboard-follow-through.mjs",
     "test:user-commands-model": "node scripts/test-user-commands-model.mjs",
     "test:app-hotkeys": "node scripts/test-app-hotkeys.mjs",

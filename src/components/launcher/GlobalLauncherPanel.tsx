@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, type RefObject } from 'react'
-import type { Locale } from '../../i18n'
+import { t, type Locale } from '../../i18n'
 import type { LauncherHostSurfaceTarget, PluginSurfaceOpenTarget } from '../../store'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
 import type { CollectInputFrame, LauncherController, LauncherControllerState, ResultFrame } from '../../workspace/launcher/controller'
@@ -16,6 +16,7 @@ import type { ClipboardObjectBlockState } from '../../launcher/clipboard/useClip
 import type { RecommendedAction, RecommendedOutputTarget } from '../../launcher/clipboard/actionRecommendation'
 import { GLOBAL_LAUNCHER_SETTINGS_HEIGHT, STANDALONE_SURFACE_MAX_HEIGHT } from './GlobalLauncherLayout'
 import { useAppStore } from '../../store'
+import { showToast } from '../../workspace/toast'
 
 type GlobalLauncherPanelProps = {
   panelRef: RefObject<HTMLDivElement | null>
@@ -162,8 +163,14 @@ export function GlobalLauncherPanel({
     if (!key || !availableItemKeys.has(key)) return
     const index = visibleFiltered.findIndex((candidate) => candidate.id === item.id)
     if (index >= 0) setSelectedIndex(index)
-    toggleLauncherFavorite(key)
-  }, [availableItemKeys, setSelectedIndex, toggleLauncherFavorite, visibleFiltered])
+    try {
+      // Preserve the Add/Remove intent shown in this render, even if another
+      // window has already changed the same key before its storage event arrives.
+      toggleLauncherFavorite(key, !launcherFavoriteKeys.includes(key))
+    } catch {
+      showToast(t(locale, 'palette.favoriteSaveFailed'), 'error')
+    }
+  }, [availableItemKeys, launcherFavoriteKeys, locale, setSelectedIndex, toggleLauncherFavorite, visibleFiltered])
   const isFavoriteSelected = Boolean(
     selectedItem
       && launcherFavoriteKeys.includes(

@@ -37,6 +37,13 @@ keys = asArr(fav.toggleLauncherFavorite(keys, 'plugin:x:launcher:a'))
 assert.deepEqual(keys, ['plugin:x:launcher:b'], 'toggle off removes')
 assert.ok(fav.isLauncherFavorite(['plugin:x:launcher:b'], 'plugin:x:launcher:b'))
 
+const ordered = ['b', 'a']
+assert.deepEqual(asArr(fav.toggleLauncherFavorite(ordered, 'a', true)), ordered, 'repeated pin preserves its existing position')
+assert.deepEqual(asArr(fav.toggleLauncherFavorite(ordered, 'c', true)), ['c', ...ordered], 'explicit pin prepends only a new key')
+assert.deepEqual(asArr(fav.toggleLauncherFavorite(ordered, 'a', false)), ['b'], 'explicit unpin removes only the target')
+assert.deepEqual(asArr(fav.toggleLauncherFavorite(ordered, 'c', false)), ordered, 'repeated unpin leaves other keys untouched')
+assert.deepEqual(ordered, ['b', 'a'], 'explicit intents are immutable')
+
 // An explicit choice must survive later pins and a persisted-state reload.
 let many = []
 for (let i = 0; i < 200; i++) {

@@ -122,6 +122,7 @@ export default {
     'actionUnpin': 'Unpin',
     'quickSelectHint': 'quick select',
     'favoritePinned': 'Pinned',
+    'favoriteSaveFailed': 'Could not save your pins. Please try again.',
     // Self-learning proposal card (P2c)
     'learnProposalTitle': 'Turn this into a direct answer?',
     'learnProposalBody': 'You often {transform} this kind of content ({shape}).',
@@ -325,6 +326,7 @@ export default {
     'actionUnpin': '取消固定',
     'quickSelectHint': '快捷选择',
     'favoritePinned': '已固定',
+    'favoriteSaveFailed': '固定状态保存失败，请重试。',
     // Self-learning proposal card (P2c)
     'learnProposalTitle': '把它设为直答?',
     'learnProposalBody': '你常把这种内容({shape}){transform}。',
