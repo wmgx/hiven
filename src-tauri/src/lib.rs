@@ -28,6 +28,8 @@ pub mod hotkeys;
 pub mod keyboard_observation;
 #[cfg(target_os = "linux")]
 mod linux_app_launch;
+#[cfg(target_os = "linux")]
+mod linux_x11_paste;
 
 const LAUNCHER_COMPACT_WIDTH: f64 = 660.0;
 const LAUNCHER_COMPACT_HEIGHT: f64 = 318.0;
@@ -725,6 +727,8 @@ async fn show_launcher_window(app: tauri::AppHandle, resume: Option<bool>) -> Re
                     // Resume the current command at its existing size and position.
                     // Capture consumed the remembered target; retain it for a later paste.
                     remember_previous_foreground_app();
+                    #[cfg(target_os = "linux")]
+                    linux_x11_paste::remember_target("launcher", false);
                     remember_previous_key_window_label(None);
                     if let Err(error) = show_launcher_window_without_app_activation(&window) {
                         eprintln!("[hiven] Failed to resume launcher window: {}", error);
@@ -758,6 +762,8 @@ fn show_launcher_window_for_hotkey_with_event(
         if !was_visible {
             let started_at = Instant::now();
             remember_previous_foreground_app();
+            #[cfg(target_os = "linux")]
+            linux_x11_paste::remember_target("launcher", false);
             // The launcher is a global search/paste surface: its paste target
             // is always whatever external app was previously in the
             // foreground, never a hiven window — clear any key-window label
@@ -1172,16 +1178,37 @@ async fn hide_launcher_and_paste(
     app: tauri::AppHandle,
     keep_open: Option<bool>,
 ) -> Result<(), String> {
-    let (target_pid, target_is_self) =
-        hide_window_and_resolve_foreground_target(window, app, keep_open.unwrap_or(false))?;
+    #[cfg(target_os = "linux")]
+    {
+        // Snapshot before hiding. Ordinary launcher close notifications may
+        // race this command, and must not erase or replace the intended target.
+        let target = linux_x11_paste::snapshot(window.label())?;
+        if !keep_open.unwrap_or(false) {
+            let (tx, rx) = std::sync::mpsc::channel();
+            app.run_on_main_thread(move || {
+                let _ = tx.send(window.hide().map_err(|error| error.to_string()));
+            })
+            .map_err(|error| error.to_string())?;
+            rx.recv().map_err(|error| error.to_string())??;
+        }
+        return tokio::task::spawn_blocking(move || linux_x11_paste::restore_and_paste(target))
+            .await
+            .map_err(|error| format!("spawn_blocking failed: {error}"))?;
+    }
 
-    // Phase 2 (blocking thread): the launcher WebView is throttled once hidden, so
-    // the focus-handoff wait and the synthetic Cmd/Ctrl+V must run natively.
-    tokio::task::spawn_blocking(move || {
-        wait_for_foreground_handoff_then_paste(target_pid, target_is_self)
-    })
-    .await
-    .map_err(|e| format!("spawn_blocking failed: {}", e))?
+    #[cfg(not(target_os = "linux"))]
+    {
+        let (target_pid, target_is_self) =
+            hide_window_and_resolve_foreground_target(window, app, keep_open.unwrap_or(false))?;
+
+        // Phase 2 (blocking thread): the launcher WebView is throttled once hidden, so
+        // the focus-handoff wait and the synthetic Cmd/Ctrl+V must run natively.
+        tokio::task::spawn_blocking(move || {
+            wait_for_foreground_handoff_then_paste(target_pid, target_is_self)
+        })
+        .await
+        .map_err(|e| format!("spawn_blocking failed: {}", e))?
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -1222,7 +1249,7 @@ fn wait_for_foreground_handoff_then_paste(
     simulate_paste_impl()
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 fn wait_for_foreground_handoff_then_paste(
     _target_pid: Option<u32>,
     _target_is_self: bool,
@@ -1385,6 +1412,8 @@ async fn show_plugin_surface_window(
         // the launcher's show path) so hide_launcher_and_paste can hand
         // activation back to it once the surface window is hidden again.
         remember_previous_foreground_app();
+        #[cfg(target_os = "linux")]
+        linux_x11_paste::remember_target(&label, true);
         // But that "foreground app" may not actually be the real paste
         // target: a non-activating panel (the launcher, or quick editor
         // rendered inside it) can hold macOS keyboard focus (isKeyWindow)
@@ -1628,6 +1657,7 @@ enum PasteAvailability {
     CanAttempt,
 }
 
+#[cfg(any(not(target_os = "linux"), test))]
 fn paste_availability_for(platform: &str, accessibility_trusted: bool) -> PasteAvailability {
     match platform {
         "macos" if !accessibility_trusted => PasteAvailability::AccessibilityRequired,
@@ -1640,20 +1670,42 @@ fn paste_availability_for(platform: &str, accessibility_trusted: bool) -> PasteA
 // Permission/focus can change after preflight; the actual paste still may fail.
 #[tauri::command]
 fn get_paste_availability() -> PasteAvailability {
-    #[cfg(target_os = "macos")]
-    let accessibility_trusted = ax_is_trusted(false);
-    #[cfg(not(target_os = "macos"))]
-    let accessibility_trusted = true;
-    paste_availability_for(std::env::consts::OS, accessibility_trusted)
+    #[cfg(target_os = "linux")]
+    {
+        return if linux_x11_paste::can_attempt() {
+            PasteAvailability::CanAttempt
+        } else {
+            PasteAvailability::Unsupported
+        };
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        #[cfg(target_os = "macos")]
+        let accessibility_trusted = ax_is_trusted(false);
+        #[cfg(not(target_os = "macos"))]
+        let accessibility_trusted = true;
+        paste_availability_for(std::env::consts::OS, accessibility_trusted)
+    }
 }
 
 #[tauri::command]
-async fn simulate_paste() -> Result<(), String> {
-    // CGEventPost needs to run on a dedicated thread (not tokio's worker pool)
-    // to ensure the event is properly delivered via HID.
-    tokio::task::spawn_blocking(simulate_paste_impl)
-        .await
-        .map_err(|e| format!("spawn_blocking failed: {}", e))?
+async fn simulate_paste(window: tauri::WebviewWindow) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        let target = linux_x11_paste::snapshot(window.label())?;
+        return tokio::task::spawn_blocking(move || linux_x11_paste::restore_and_paste(target))
+            .await
+            .map_err(|error| format!("spawn_blocking failed: {error}"))?;
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = window;
+        // CGEventPost needs to run on a dedicated thread (not tokio's worker pool)
+        // to ensure the event is properly delivered via HID.
+        tokio::task::spawn_blocking(simulate_paste_impl)
+            .await
+            .map_err(|e| format!("spawn_blocking failed: {}", e))?
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -1747,7 +1799,7 @@ fn simulate_paste_impl() -> Result<(), String> {
     }
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 fn simulate_paste_impl() -> Result<(), String> {
     Err("Paste simulation is not supported on this platform".to_string())
 }
@@ -2101,6 +2153,8 @@ fn apply_restore_foreground_mode(mode: RestoreForegroundMode) {
 /// Drop remembered "previous app" so hide_launcher does not undo an intentional switch
 /// (focus window / launch app). Call after successfully activating a new frontmost target.
 fn clear_previous_foreground_app() {
+    #[cfg(target_os = "linux")]
+    linux_x11_paste::clear_targets();
     if let Ok(mut stored) = previous_foreground_process_id().lock() {
         *stored = None;
     }
@@ -7463,12 +7517,6 @@ mod paste_availability_tests {
         ] {
             assert_eq!(serde_json::to_value(availability).unwrap(), expected);
         }
-    }
-
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn linux_command_reports_unsupported_without_desktop_io() {
-        assert_eq!(get_paste_availability(), PasteAvailability::Unsupported);
     }
 }
 
