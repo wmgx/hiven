@@ -626,7 +626,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       return (
         <div className="clipboard-history-state">
           <span>{t('state.disabled')}</span>
-          <ToolbarButton type="button" onClick={() => host.openSettings()}>
+          <ToolbarButton type="button" onClick={() => host.openSettings({ preserveSurface: true })}>
             {t('action.openSettings')}
           </ToolbarButton>
         </div>
@@ -819,7 +819,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         <IconButton
           type="button"
           label={t('action.openSettings')}
-          onClick={() => host.openSettings()}
+          onClick={() => host.openSettings({ preserveSurface: true })}
         >
           <SettingsIcon size={17} />
         </IconButton>

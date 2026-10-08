@@ -385,11 +385,10 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
   }
 
   const openSettings = () => {
-    const pauseAiTranslation = activeProfile?.provider === 'ai'
-    if (pauseAiTranslation) autoTranslatePausedRef.current = true
+    autoTranslatePausedRef.current = true
     cancelCurrentRun()
-    setView({ identity: requestIdentity, outputText: '', status: { kind: pauseAiTranslation ? 'settings-paused' : 'idle' } })
-    host.openSettings()
+    setView({ identity: requestIdentity, outputText: '', status: { kind: 'settings-paused' } })
+    host.openSettings({ preserveSurface: true })
   }
 
   const openAiSettings = async () => {

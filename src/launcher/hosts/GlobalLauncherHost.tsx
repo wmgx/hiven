@@ -462,7 +462,8 @@ export function GlobalLauncherHost() {
     useAppStore.setState({ previousLauncherHostSurfaceTarget: null })
     setSurfaceFrame(null)
     setItemPermissionFrame(null)
-    if (usePluginSettingsStore.getState().settingsDialogTarget?.presentation === 'global-launcher') {
+    const settingsTarget = usePluginSettingsStore.getState().settingsDialogTarget
+    if (settingsTarget?.presentation === 'global-launcher' || settingsTarget?.context?.surfaceId === 'global-launcher') {
       closeSettingsDialog()
     }
     setSelectedObjectActionIndex(0)

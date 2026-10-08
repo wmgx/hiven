@@ -53,7 +53,7 @@
   "action.openSettings": "Open Settings",
   "action.translationSettings": "Translation settings",
   "action.appAiSettings": "App AI settings",
-  "status.settingsPaused": "Translation paused after opening AI settings. Retry or edit the text to translate.",
+  "status.settingsPaused": "Translation paused after opening settings. Retry or edit the text to translate.",
   "ai.settingsOpenFailed": "Could not open app AI settings. Try again.",
   "action.close": "Close",
   "toast.copied": "Translation copied",

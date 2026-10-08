@@ -4,7 +4,7 @@ import { localized, useAppStore, type PluginSurfaceOpenTarget } from '../../stor
 import { t, pickLocale, type Locale } from '../../i18n'
 import { makePluginT } from '../../i18n/pluginI18nRegistry'
 import { pluginRegistry, usePluginRegistryVersion } from '../../workspace/pluginRegistry'
-import { resolvePluginSettings, usePluginSettingsStore } from '../../workspace/pluginSettingsStore'
+import { resolvePluginSettings, usePluginSettingsStore, type PluginSettingsDialogTarget } from '../../workspace/pluginSettingsStore'
 import { getPluginPermissionSnapshot, missingPluginPermissions, describePluginPermission, usePluginPermissionStore } from '../../workspace/pluginPermissions'
 import { restartPluginBackground } from '../../workspace/pluginBackgroundManager'
 import { createPluginPrivateStorage } from '../../workspace/pluginStorage'
@@ -88,6 +88,7 @@ export function PluginSurfaceRenderer({
   activeStateRef.current = surfaceState
   const mountedRef = useRef(false)
   const hiddenRef = useRef(false)
+  const ownedSettingsTargetRef = useRef<PluginSettingsDialogTarget>(null)
   const sessionRef = useRef<AppSettingsSession | null>(null)
   const [appSettingsSession, setAppSettingsSession] = useState<AppSettingsSession | null>(null)
   const finishAppSettings = useCallback((session: AppSettingsSession | null, completed = false) => {
@@ -98,19 +99,32 @@ export function PluginSurfaceRenderer({
     else session.reject(settingsInterrupted())
   }, [])
 
+  const closeOwnedSettings = useCallback(() => {
+    const ownedTarget = ownedSettingsTargetRef.current
+    ownedSettingsTargetRef.current = null
+    const store = usePluginSettingsStore.getState()
+    // An unrelated opener may already have replaced this surface's dialog.
+    if (ownedTarget && store.settingsDialogTarget === ownedTarget) store.closeSettingsDialog()
+  }, [])
+  const interruptSettings = useCallback(() => {
+    closeOwnedSettings()
+    finishAppSettings(sessionRef.current)
+  }, [closeOwnedSettings, finishAppSettings])
+
   useLayoutEffect(() => {
     mountedRef.current = true
     return () => {
       mountedRef.current = false
-      finishAppSettings(sessionRef.current)
+      interruptSettings()
     }
-  }, [finishAppSettings])
+  }, [interruptSettings])
 
-  useLayoutEffect(() => () => finishAppSettings(sessionRef.current), [target, surfaceState, finishAppSettings])
+  // External tool shortcuts replace target without resetting the launcher session.
+  useLayoutEffect(() => () => interruptSettings(), [target, surfaceState, interruptSettings])
 
   useEffect(() => {
     hiddenRef.current = false
-    const interrupt = () => finishAppSettings(sessionRef.current)
+    const interrupt = interruptSettings
     const onVisibilityChange = () => { if (document.visibilityState === 'hidden') interrupt() }
     window.addEventListener('pagehide', interrupt)
     document.addEventListener('visibilitychange', onVisibilityChange)
@@ -142,7 +156,7 @@ export function PluginSurfaceRenderer({
       window.removeEventListener('pagehide', interrupt)
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
-  }, [target, presentation, finishAppSettings])
+  }, [target, presentation, interruptSettings])
 
   useEffect(() => {
     let disposed = false
@@ -242,7 +256,7 @@ export function PluginSurfaceRenderer({
   const isCurrentSurface = () => mountedRef.current && activeTargetRef.current === target && activeStateRef.current === surfaceState && !hiddenRef.current
   const leaveSurface = (action: () => void) => {
     if (!isCurrentSurface()) return
-    finishAppSettings(sessionRef.current)
+    interruptSettings()
     action()
   }
 
@@ -252,7 +266,7 @@ export function PluginSurfaceRenderer({
       locale={locale}
       onBack={onBack}
       onError={() => {
-        finishAppSettings(sessionRef.current)
+        interruptSettings()
         setSurfaceState({ status: 'error', title: t(locale, 'palette.surfaceCrashed'), message: '' })
       }}
     >
@@ -282,19 +296,22 @@ export function PluginSurfaceRenderer({
               if (presentation === 'global-launcher') leaveSurface(onClose)
             },
             requestBack: () => leaveSurface(onBack),
-            openSettings: () => {
+            openSettings: (options) => {
               if (!isCurrentSurface()) return
-              finishAppSettings(sessionRef.current)
-              openSettingsDialog({
+              interruptSettings()
+              const settingsTarget: NonNullable<PluginSettingsDialogTarget> = {
                 pluginId: target.pluginId,
                 source: target.source,
-                presentation: presentation === 'editor-panel' ? 'dialog' : presentation,
+                presentation: presentation === 'editor-panel' || (presentation === 'global-launcher' && options?.preserveSurface === true) ? 'dialog' : presentation,
                 context: { surfaceId: contextSurfaceId as never },
-              })
+              }
+              if (settingsTarget.presentation === 'dialog') ownedSettingsTargetRef.current = settingsTarget
+              openSettingsDialog(settingsTarget)
             },
             openAppSettings: ({ section }) => {
               if (section !== 'ai' || !isCurrentSurface() || document.visibilityState === 'hidden') return Promise.reject(settingsInterrupted())
               if (sessionRef.current) return sessionRef.current.promise
+              closeOwnedSettings()
               let resolve!: () => void
               let reject!: (error: Error) => void
               const promise = new Promise<void>((done, fail) => { resolve = done; reject = fail })
@@ -305,7 +322,7 @@ export function PluginSurfaceRenderer({
             },
             detachToWindow: (initialText?: string) => {
               if (!isCurrentSurface()) return
-              finishAppSettings(sessionRef.current)
+              interruptSettings()
               const windowTarget = { ...target, initialText: initialText ?? target.initialText }
               import('../../workspace/windowManager/pluginSurfaceWindows').then(({ showPluginSurfaceWindow }) => {
                 void showPluginSurfaceWindow(windowTarget)
@@ -319,7 +336,7 @@ export function PluginSurfaceRenderer({
             dismissToast,
             returnToLauncherWithObject: (input: PluginObjectBlockInput) => {
               if (!isCurrentSurface()) return
-              finishAppSettings(sessionRef.current)
+              interruptSettings()
               const block = createPluginSurfaceObjectBlock(input)
 
               // Always persist: history is often a separate webview; hide/show races

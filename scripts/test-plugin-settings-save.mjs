@@ -74,6 +74,17 @@ test('successful save immediately updates memory and persisted value/version', (
   assert.equal(storage.attempts, 1)
 })
 
+test('storage failure during transient dismissal clears the dialog without interrupting its owner', () => {
+  const { store, storage } = fixture()
+  const settings = store.getState().pluginSettings
+  store.getState().openSettingsDialog({ pluginId: 'translate', source: 'builtin', presentation: 'dialog', context: { surfaceId: 'global-launcher' } })
+  storage.failWrite = () => new Error('Synthetic dismissal storage failure')
+  assert.doesNotThrow(() => store.getState().closeSettingsDialog())
+  assert.equal(store.getState().settingsDialogTarget, null)
+  assert.equal(store.getState().pluginSettings, settings)
+  assert.deepEqual(storage.persisted(), initialSettings())
+})
+
 test('failed save restores the previous record and rethrows the original storage error', () => {
   const { store, storage } = fixture()
   const previous = store.getState().getPluginSettings('builtin', 'translate')

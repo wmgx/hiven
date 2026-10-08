@@ -128,7 +128,15 @@ export const usePluginSettingsStore = create<PluginSettingsStoreState>()(
         }),
 
       openSettingsDialog: (target) => set({ settingsDialogTarget: target }),
-      closeSettingsDialog: () => set({ settingsDialogTarget: null }),
+      closeSettingsDialog: () => {
+        try {
+          set({ settingsDialogTarget: null })
+        } catch (error) {
+          // The transient target is already cleared before persist writes.
+          // Storage failure must not interrupt dismissal or its owner's cleanup.
+          console.warn('[hiven] Could not persist plugin settings dismissal:', error)
+        }
+      },
     }),
     {
       name: 'hiven-plugin-settings',
