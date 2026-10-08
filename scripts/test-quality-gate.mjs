@@ -38,6 +38,7 @@ const commands = [
   ['npm', ['run', 'test:intent-content-recommend']],
   ['npm', ['run', 'test:launcher-intent-ranking']],
   ['npm', ['run', 'test:launcher-visible-items']],
+  ['npm', ['run', 'test:launcher-selection-preserve']],
   ['npm', ['run', 'test:launcher-favorites']],
   ['npm', ['run', 'test:launcher-discovery-availability']],
   ['npm', ['run', 'test:app-launch-feedback']],

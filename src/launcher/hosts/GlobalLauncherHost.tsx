@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '../../store'
 import { useShallow } from 'zustand/react/shallow'
 import { t, pickLocale } from '../../i18n'
@@ -9,6 +9,7 @@ import { buildGlobalLauncherItems, type GlobalLauncherItem } from '../../compone
 import { buildGlobalLauncherPanelStyle } from '../../components/launcher/GlobalLauncherLayout'
 import { usePluginPermissionStore } from '../../workspace/pluginPermissions'
 import { useLauncherSession } from '../../workspace/launcher/useLauncherSession'
+import type { SelectableExtraRow } from '../../workspace/launcher/selectionPreserve'
 import { useGlobalLauncherSurfaceRegistry } from '../../components/launcher/GlobalLauncherSurfaceRegistry'
 import { useAutoCloseStandaloneLauncherOnBackgroundIdle, useCloseStandaloneLauncherOnBlur, useFocusGlobalLauncherSurfaceShell, useGlobalLauncherNativeDrag, useStandaloneLauncherResize } from '../../components/launcher/GlobalLauncherWindowLifecycle'
 import { isStandaloneLauncherWindow, useGlobalLauncherCollectInputPreview, useGlobalLauncherFocusSession, useGlobalLauncherHostEscape, useGlobalLauncherImeComposition } from '../../components/launcher/GlobalLauncherHostLifecycle'
@@ -74,6 +75,7 @@ export function GlobalLauncherHost() {
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const visibleSelectionItemsRef = useRef<readonly LauncherItem[]>([])
+  const extraSelectionRowsRef = useRef<readonly SelectableExtraRow[]>([])
   const [selectedObjectActionIndex, setSelectedObjectActionIndex] = useState(0)
   const [browsingActions, setBrowsingActions] = useState(false)
   const launcherFavoriteKeys = useAppStore((s) => s.launcherFavoriteKeys)
@@ -123,6 +125,7 @@ export function GlobalLauncherHost() {
     foregroundApp,
     makeApi: createGlobalLauncherPluginApi,
     visibleSelectionItemsRef,
+    extraSelectionRowsRef,
   })
   const nearbySaveItem = useMemo(() => nearbySaveDomainItem ? buildGlobalLauncherItems({
     rankedLauncherItems: [nearbySaveDomainItem], query: '', locale,
@@ -427,8 +430,20 @@ export function GlobalLauncherHost() {
     () => visibleFiltered.map((item) => item.domainItem),
     [visibleFiltered],
   )
-  visibleSelectionItemsRef.current = visibleSelectionItems
-  useEffect(() => syncSelection(), [syncSelection, visibleSelectionItems])
+  // Presentation age / tracker lastSeenAt can change without changing this material.
+  const clipboardHintKey = clipboardBlock.hint && !clipboardBlock.block
+    ? `clipboard-hint:${clipboardBlock.hint.snapshot.hash}:${clipboardBlock.hint.snapshot.changedAt}`
+    : null
+  const extraSelectionRows = useMemo<readonly SelectableExtraRow[]>(
+    () => clipboardHintKey ? [{ index: -1, systemKey: clipboardHintKey }] : [],
+    [clipboardHintKey],
+  )
+  // Drop a vanished/replaced hint pin before the next keyboard event can target its replacement.
+  useLayoutEffect(() => {
+    visibleSelectionItemsRef.current = visibleSelectionItems
+    extraSelectionRowsRef.current = extraSelectionRows
+    syncSelection()
+  }, [extraSelectionRows, syncSelection, visibleSelectionItems])
 
   /**
    * Primitive resize trigger — controllerState object identity changes every setState.

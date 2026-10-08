@@ -117,7 +117,60 @@ const { resolvePreservedSelection } = await import(pathToFileURL(out).href)
   assert.equal(r.key, 'a')
 }
 
-// 4) Empty list
+// 4) Extra host row identity survives ranked results, including an empty list.
+{
+  const extraRows = [{ index: -1, systemKey: 'host-extra:a' }]
+  for (const items of [[], [{ systemKey: 'late-app' }, { systemKey: 'late-document' }]]) {
+    const r = resolvePreservedSelection({
+      selectedKey: 'host-extra:a',
+      selectedIndex: -1,
+      items,
+      extraRows,
+    })
+    assert.deepEqual(r, { index: -1, key: 'host-extra:a' })
+  }
+}
+
+// 5) Removed or replaced extra rows cannot transfer the old pin to another row.
+{
+  for (const extraRows of [[], [{ index: -1, systemKey: 'host-extra:b' }]]) {
+    const r = resolvePreservedSelection({
+      selectedKey: 'host-extra:a',
+      selectedIndex: -1,
+      items: [{ systemKey: 'top' }],
+      extraRows,
+    })
+    assert.deepEqual(r, { index: 0, key: null })
+  }
+}
+
+// 6) Extra rows do not pin defaults or interfere with an ordinary pinned item.
+{
+  const extraRows = [{ index: -1, systemKey: 'host-extra:a' }]
+  assert.deepEqual(resolvePreservedSelection({
+    selectedKey: null,
+    selectedIndex: -1,
+    items: [{ systemKey: 'new-top' }, { systemKey: 'chosen' }],
+    extraRows,
+  }), { index: 0, key: null })
+  assert.deepEqual(resolvePreservedSelection({
+    selectedKey: 'chosen',
+    selectedIndex: 0,
+    items: [{ systemKey: 'new-top' }, { systemKey: 'chosen' }],
+    extraRows,
+  }), { index: 1, key: 'chosen' })
+}
+
+// 7) An undeclared negative index has no sticky identity.
+{
+  assert.deepEqual(resolvePreservedSelection({
+    selectedKey: null,
+    selectedIndex: -1,
+    items: [{ systemKey: 'top' }],
+  }), { index: 0, key: null })
+}
+
+// 8) Empty list
 {
   const r = resolvePreservedSelection({
     selectedKey: 'a',

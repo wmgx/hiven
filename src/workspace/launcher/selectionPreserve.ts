@@ -10,10 +10,15 @@ export type SelectableKeyItem = {
   systemKey: string
 }
 
+/** Host-owned selectable rows outside the ranked item array. */
+export type SelectableExtraRow = SelectableKeyItem & {
+  index: number
+}
+
 /**
  * Resolve the index to highlight after `items` changes.
  *
- * - If `selectedKey` is set (user-pinned) and still in the list → follow that item.
+ * - If `selectedKey` is set (user-pinned) and still in items / extraRows → follow that row.
  * - If the pinned key is gone → fall back to default (index 0, no pin).
  * - If no key (default selection) → always index 0; do not adopt a sticky key.
  */
@@ -21,17 +26,16 @@ export function resolvePreservedSelection(options: {
   selectedKey: string | null
   selectedIndex: number
   items: readonly SelectableKeyItem[]
+  extraRows?: readonly SelectableExtraRow[]
 }): { index: number; key: string | null } {
-  const { selectedKey, items } = options
-  if (items.length === 0) {
-    return { index: 0, key: null }
-  }
-
+  const { selectedKey, items, extraRows } = options
   if (selectedKey) {
     const found = items.findIndex((item) => item.systemKey === selectedKey)
     if (found >= 0) {
       return { index: found, key: selectedKey }
     }
+    const extraRow = extraRows?.find((row) => row.systemKey === selectedKey)
+    if (extraRow) return { index: extraRow.index, key: selectedKey }
     // User's item left the list — drop pin, show new ranking top.
     return { index: 0, key: null }
   }

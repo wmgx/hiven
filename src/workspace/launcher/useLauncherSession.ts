@@ -25,7 +25,7 @@ import {
   filterDynamicForSurface,
   filterAvailableLauncherItems,
 } from './registry'
-import { resolvePreservedSelection } from './selectionPreserve'
+import { resolvePreservedSelection, type SelectableExtraRow } from './selectionPreserve'
 import {
   buildPersistableRecentLauncherItems,
   payloadFromLauncherItem,
@@ -74,6 +74,8 @@ type UseLauncherSessionOptions = {
   objectBlockText?: string
   /** Rendered list identity when the host prepends rows outside ranking. */
   visibleSelectionItemsRef?: MutableRefObject<readonly LauncherItem[]>
+  /** Host-owned rows outside the visible item array (for example, index -1). */
+  extraSelectionRowsRef?: MutableRefObject<readonly SelectableExtraRow[]>
   /** Foreground application name when host can resolve it (contextBoost). */
   foregroundApp?: string
   makeApi?: (api: PluginLauncherApi, item?: LauncherItem) => PluginLauncherApi
@@ -172,6 +174,7 @@ export function useLauncherSession({
   collectDynamicWhenEmpty = false,
   objectBlockText,
   visibleSelectionItemsRef,
+  extraSelectionRowsRef,
   foregroundApp,
   makeApi,
 }: UseLauncherSessionOptions): LauncherSession {
@@ -285,25 +288,28 @@ export function useLauncherSession({
       selectedIndexRef.current = next
       if (pin) {
         const item = (visibleSelectionItemsRef?.current ?? rankedItemsRef.current)[next]
-        selectedKeyRef.current = item?.systemKey ?? null
+        selectedKeyRef.current = item?.systemKey
+          ?? extraSelectionRowsRef?.current.find((row) => row.index === next)?.systemKey
+          ?? null
       } else {
         selectedKeyRef.current = null
       }
       return next
     })
-  }, [visibleSelectionItemsRef])
+  }, [extraSelectionRowsRef, visibleSelectionItemsRef])
 
   const syncSelection = useCallback(() => {
     const resolved = resolvePreservedSelection({
       selectedKey: selectedKeyRef.current,
       selectedIndex: selectedIndexRef.current,
       items: visibleSelectionItemsRef?.current ?? rankedItemsRef.current,
+      extraRows: extraSelectionRowsRef?.current,
     })
     selectedKeyRef.current = resolved.key
     if (resolved.index === selectedIndexRef.current) return
     selectedIndexRef.current = resolved.index
     setSelectedIndexState(resolved.index)
-  }, [visibleSelectionItemsRef])
+  }, [extraSelectionRowsRef, visibleSelectionItemsRef])
 
   /** Typing starts a new result generation — drop sticky key so highlight tracks ranking top. */
   const setQuery = useCallback((value: string) => {

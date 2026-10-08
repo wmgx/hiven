@@ -356,13 +356,14 @@ export function useClipboardObjectBlock(params: {
     return true
   }, [block, isExiting, removeBlock])
 
+  const renderedGeneration = materialGenerationRef.current
   const attachHintAsBlock = useCallback(() => {
-    if (!hint) return
-    const snapshot = getLastClipboardSnapshot()
-    if (!snapshot) return
+    // A queued hint click must not replace newer explicit material or another session.
+    if (!hint || !mountedRef.current || !openRef.current || userDismissedRef.current ||
+      materialRef.current !== material || materialGenerationRef.current !== renderedGeneration) return
     // Force-create block bypassing freshness, preserving original changedAt for accurate age display
     const now = Date.now()
-    const forcedBlock = createClipboardObjectBlock(snapshot, now, { forceAttach: true })
+    const forcedBlock = createClipboardObjectBlock(hint.snapshot, now, { forceAttach: true })
     if (forcedBlock) {
       trackBehavior(TelemetryEvents.clipboardHintAttach, {
         kind: forcedBlock.kind,
@@ -375,7 +376,7 @@ export function useClipboardObjectBlock(params: {
       userDismissedRef.current = false
       setHint(null)
     }
-  }, [hint, clearExitTimer, publishMaterial])
+  }, [hint, clearExitTimer, publishMaterial, material, renderedGeneration])
 
   const restoreMaterial = useCallback(() => {
     // A queued click from a removed token/session cannot restore newer work.
@@ -392,7 +393,6 @@ export function useClipboardObjectBlock(params: {
     setPendingObjectBlock(next.block, { persist: true, silent: true })
   }, [clearExitTimer, publishMaterial, material])
 
-  const renderedGeneration = materialGenerationRef.current
   const beginTextEdit = useCallback(() => {
     const isCurrent = () => mountedRef.current && openRef.current && !userDismissedRef.current &&
       materialRef.current === material && materialGenerationRef.current === renderedGeneration

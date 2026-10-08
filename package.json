@@ -232,7 +232,8 @@
     "test:text-diff-copy-side": "node scripts/test-text-diff-copy-side.mjs",
     "test:text-explode-output": "node scripts/test-text-explode-output-gate.mjs",
     "test:plugin-settings-save": "node scripts/test-plugin-settings-save.mjs",
-    "test:translate-ai-glossary": "node scripts/test-translate-ai-glossary.mjs"
+    "test:translate-ai-glossary": "node scripts/test-translate-ai-glossary.mjs",
+    "test:launcher-selection-preserve": "node scripts/test-launcher-selection-preserve.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
