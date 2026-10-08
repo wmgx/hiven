@@ -7,9 +7,6 @@
 
 import type { SystemLauncherItemKey } from './types'
 
-/** Soft cap so the empty-open favorites section stays scannable. */
-export const LAUNCHER_FAVORITES_MAX = 24
-
 export function emptyLauncherFavorites(): SystemLauncherItemKey[] {
   return []
 }
@@ -22,8 +19,8 @@ export function isLauncherFavorite(
 }
 
 /**
- * Toggle pin for `itemKey`. Immutable. Caps at {@link LAUNCHER_FAVORITES_MAX}
- * (new pins at the front; oldest overflow dropped when over cap).
+ * Toggle pin for `itemKey`. Immutable, with new pins at the front.
+ * Explicit pins remain until the user removes them; the UI owns list sizing.
  */
 export function toggleLauncherFavorite(
   favorites: readonly SystemLauncherItemKey[],
@@ -34,7 +31,7 @@ export function toggleLauncherFavorite(
   if (favorites.includes(key)) {
     return favorites.filter((k) => k !== key)
   }
-  return [key, ...favorites.filter((k) => k !== key)].slice(0, LAUNCHER_FAVORITES_MAX)
+  return [key, ...favorites.filter((k) => k !== key)]
 }
 
 /** Sanitize persisted favorites (drop non-strings / empty). */
@@ -48,7 +45,6 @@ export function normalizeLauncherFavorites(raw: unknown): SystemLauncherItemKey[
     if (!key || seen.has(key)) continue
     seen.add(key)
     out.push(key)
-    if (out.length >= LAUNCHER_FAVORITES_MAX) break
   }
   return out
 }

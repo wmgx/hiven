@@ -37,13 +37,21 @@ keys = asArr(fav.toggleLauncherFavorite(keys, 'plugin:x:launcher:a'))
 assert.deepEqual(keys, ['plugin:x:launcher:b'], 'toggle off removes')
 assert.ok(fav.isLauncherFavorite(['plugin:x:launcher:b'], 'plugin:x:launcher:b'))
 
-// Cap
-let capped = []
-for (let i = 0; i < fav.LAUNCHER_FAVORITES_MAX + 5; i++) {
-  capped = asArr(fav.toggleLauncherFavorite(capped, `k${i}`))
+// An explicit choice must survive later pins and a persisted-state reload.
+let many = []
+for (let i = 0; i < 200; i++) {
+  const previous = many
+  many = asArr(fav.toggleLauncherFavorite(previous, `k${i}`))
+  assert.deepEqual(many.slice(1), previous, 'a new pin preserves every earlier pin in order')
 }
-assert.equal(capped.length, fav.LAUNCHER_FAVORITES_MAX, 'favorites hard-capped')
-assert.equal(capped[0], `k${fav.LAUNCHER_FAVORITES_MAX + 4}`, 'newest pin at front when capped')
+assert.equal(many.length, 200)
+assert.equal(many[0], 'k199', 'newest pin remains first')
+assert.equal(many.at(-1), 'k0', 'the oldest explicit pin remains available')
+assert.deepEqual(asArr(fav.normalizeLauncherFavorites(JSON.parse(JSON.stringify(many)))), many, 'reload does not truncate explicit pins')
+const removed = asArr(fav.toggleLauncherFavorite(many, 'k25'))
+assert.deepEqual(removed, many.filter((key) => key !== 'k25'), 'unpin removes only the chosen item')
+assert.deepEqual(asArr(fav.toggleLauncherFavorite(removed, 'k25')), ['k25', ...removed], 'repin keeps the established newest-first order')
+assert.deepEqual(asArr(fav.normalizeLauncherFavorites([...many, ' k0 ', '', null, 1])), many, 'sanitizing larger lists only removes invalid or duplicate keys')
 
 assert.deepEqual(asArr(fav.normalizeLauncherFavorites([' a ', '', 1, 'a', 'b', 'a'])), ['a', 'b'])
 assert.deepEqual(asArr(fav.normalizeLauncherFavorites(null)), [])
