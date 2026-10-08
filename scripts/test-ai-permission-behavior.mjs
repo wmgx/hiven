@@ -67,6 +67,8 @@ function harness({ native, source = 'installed', pluginId = 'owner', registered 
     '../telemetry': { measureLatency: (_label, work) => work() },
     './codexProvider': { codexChatGptProvider: { id: 'unused-codex', async describe() { return { ...descriptor('unused-codex'), status: 'unavailable' } } } },
     './xaiProvider': { xaiGrokProvider: { id: 'unused-xai', async describe() { return { ...descriptor('unused-xai'), status: 'unavailable' } } } },
+    './ollamaProvider': { ollamaLocalProvider: { id: 'unused-ollama', async describe() { return { ...descriptor('unused-ollama'), status: 'unavailable' } } } },
+    '../../i18n': { translate: (_locale, _namespace, key) => key },
   }, { localStorage: p.storage, ...(native ? { window: { __TAURI_INTERNALS__: {} } } : {}) })
   const h = {
     ...p, runtime, registry, calls, records, source, pluginId, registerPlugin,

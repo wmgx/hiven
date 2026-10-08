@@ -20,6 +20,8 @@ use tauri_plugin_clipboard_manager::ClipboardExt;
 use zip::ZipArchive;
 
 pub mod ai_codex;
+mod ai_run_registry;
+mod ai_ollama;
 pub mod ai_xai;
 mod clipboard_privacy;
 mod text_material;
@@ -7431,6 +7433,9 @@ pub fn run() {
             ai_xai::ai_xai_response_stream,
             ai_xai::ai_xai_cancel,
             ai_xai::ai_xai_logout,
+            ai_ollama::ai_ollama_describe,
+            ai_ollama::ai_ollama_chat_stream,
+            ai_ollama::ai_ollama_cancel,
             usage_journal_append,
             usage_journal_prune,
             ai_usage_record_upsert,

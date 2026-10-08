@@ -48,6 +48,8 @@ function runtimeHarness(nativeInvoke) {
     '../telemetry': { measureLatency: (_label, work) => work() },
     './codexProvider': { codexChatGptProvider: inactive('openai-chatgpt') },
     './xaiProvider': { xaiGrokProvider: inactive('xai-grok') },
+    './ollamaProvider': { ollamaLocalProvider: inactive('ollama-local') },
+    '../../i18n': { translate: (_locale, _namespace, key) => key },
   }, { ...(nativeInvoke ? { window: { __TAURI_INTERNALS__: {} } } : {}), localStorage: permissionState.storage })
   permissionState.grant('installed', 'translate')
   const owner = runtime.createPluginAi('translate', 'installed', permissionState.snapshot('installed', 'translate'))

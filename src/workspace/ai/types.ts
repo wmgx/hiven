@@ -44,10 +44,15 @@ export type AiProviderDescriptor = {
   id: string
   kind: string
   name: string
+  /** Omitted means the existing account-based connection controls apply. */
+  authentication?: 'none' | 'account'
+  /** A configured selection must fail closed instead of choosing another provider/model. */
+  fallbackPolicy?: 'never'
   status: AiProviderStatus
   statusMessage?: string
   /** Evidence from describe(), never a model inference or quota guarantee. */
   statusReason?: 'desktop_required' | 'cli_missing' | 'metadata_unavailable'
+    | 'service_unreachable' | 'metadata_timeout' | 'metadata_invalid' | 'models_empty' | 'models_unsupported'
   /** partial confirms listed live models only; fallback entries are not discovery evidence. */
   modelCatalog?: 'complete' | 'partial' | 'fallback' | 'unknown'
   isDefault: boolean
@@ -181,6 +186,10 @@ export type AiProviderRequest = Omit<AiRequest, 'providerId' | 'agentId' | 'effo
 
 export interface AiProviderAdapter {
   readonly id: string
+  readonly authentication?: 'none' | 'account'
+  readonly fallbackPolicy?: 'never'
+  /** Enforce declared modalities even for file inputs handled specially by older adapters. */
+  readonly strictInputModalities?: boolean
   describe(onUpdate?: (provider: Omit<AiProviderDescriptor, 'isDefault'>) => void): Promise<Omit<AiProviderDescriptor, 'isDefault'>>
   stream(request: AiProviderRequest): AsyncIterable<AiEvent>
   cancel(runId: string): Promise<void>

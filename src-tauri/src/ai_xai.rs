@@ -10,7 +10,8 @@ use tauri::{ipc::Channel, AppHandle, Manager};
 
 #[path = "ai_xai_stream.rs"]
 mod stream;
-use stream::{forward_response_stream, RunRegistry};
+use stream::forward_response_stream;
+use crate::ai_run_registry::RunRegistry;
 
 const CLIENT_ID: &str = "b1a00492-073a-47ea-816f-4c329264a828";
 const SCOPE: &str = "openid profile email offline_access grok-cli:access api:access";

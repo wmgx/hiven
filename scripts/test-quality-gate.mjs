@@ -57,6 +57,8 @@ const commands = [
   ['npm', ['run', 'test:plugin-surface-object-origin']],
   ['npm', ['run', 'test:ai-provider-runtime']],
   ['npm', ['run', 'test:ai-preflight']],
+  ['npm', ['run', 'test:ollama-provider']],
+  ['npm', ['run', 'test:ollama-runtime']],
   ['npm', ['run', 'test:translate-ai-readiness']],
   ['npm', ['run', 'test:translate-ai-glossary']],
   ['npm', ['run', 'test:translate-output-eligibility']],

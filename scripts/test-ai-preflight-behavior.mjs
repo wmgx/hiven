@@ -72,6 +72,8 @@ function harness({ source = 'installed' } = {}) {
     '../pluginRegistry': registry, '../telemetry': { measureLatency: (_label, work) => work() },
     './codexProvider': { codexChatGptProvider: { id: 'codex-unused', async describe() { calls.push(['other-describe']); return descriptor({ id: 'codex-unused' }) } } },
     './xaiProvider': { xaiGrokProvider: { id: 'xai-unused', async describe() { calls.push(['other-describe']); return descriptor({ id: 'xai-unused' }) } } },
+    './ollamaProvider': { ollamaLocalProvider: { id: 'ollama-unused', async describe() { calls.push(['other-describe']); return descriptor({ id: 'ollama-unused' }) } } },
+    '../../i18n': { translate: (_locale, _namespace, key) => key },
   }, {
     localStorage: p.storage,
     Date: class extends Date { static now() { return time } },

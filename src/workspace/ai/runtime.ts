@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import { translate } from '../../i18n'
 import { useAppStore } from '../../store'
 import { getPluginPermissionSnapshot, requirePluginPermissions, usePluginPermissionStore } from '../pluginPermissions'
 import { pluginRegistry } from '../pluginRegistry'
@@ -6,6 +7,7 @@ import type { PluginPermissionSnapshot } from '../pluginTypes'
 import { measureLatency } from '../telemetry'
 import { codexChatGptProvider } from './codexProvider'
 import { xaiGrokProvider } from './xaiProvider'
+import { ollamaLocalProvider } from './ollamaProvider'
 import type {
   AiEvent,
   AiPreflightRequest,
@@ -23,7 +25,38 @@ import type {
 const providers = new Map<string, AiProviderAdapter>([
   [codexChatGptProvider.id, codexChatGptProvider],
   [xaiGrokProvider.id, xaiGrokProvider],
+  [ollamaLocalProvider.id, ollamaLocalProvider],
 ])
+type ProviderBoundary = Pick<AiProviderAdapter, 'authentication' | 'fallbackPolicy' | 'strictInputModalities'>
+// Built-in local-routing intent outlives a replaceable adapter or its registration.
+const builtinProviderBoundaries = new Map<string, Readonly<ProviderBoundary>>(
+  [...providers.values()].filter((provider) => provider.fallbackPolicy === 'never').map((provider) => [provider.id, Object.freeze({
+    authentication: provider.authentication,
+    fallbackPolicy: provider.fallbackPolicy,
+    strictInputModalities: provider.strictInputModalities,
+  })] as const),
+)
+
+function providerBoundary(providerId: string, adapter: ProviderBoundary | undefined = providers.get(providerId)): ProviderBoundary {
+  return builtinProviderBoundaries.get(providerId) ?? {
+    authentication: adapter?.authentication,
+    fallbackPolicy: adapter?.fallbackPolicy,
+    strictInputModalities: adapter?.strictInputModalities,
+  }
+}
+
+function neverFallback(providerId: string | undefined, adapter?: ProviderBoundary): boolean {
+  return providerId != null && providerBoundary(providerId, adapter).fallbackPolicy === 'never'
+}
+
+function providerDescriptor(adapter: AiProviderAdapter, value: Omit<AiProviderDescriptor, 'isDefault'>): AiProviderDescriptor {
+  const boundary = providerBoundary(adapter.id, adapter)
+  return {
+    ...value, id: adapter.id, isDefault: false,
+    ...(boundary.authentication != null ? { authentication: boundary.authentication } : {}),
+    ...(boundary.fallbackPolicy != null ? { fallbackPolicy: boundary.fallbackPolicy } : {}),
+  }
+}
 const activeRuns = new Map<string, {
   pluginId: string
   pluginSource: AiUsageRecord['pluginSource']
@@ -44,14 +77,18 @@ function diagnostic(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function unavailableProvider(providerId: string, error: unknown): AiProviderDescriptor {
+function unavailableProvider(adapter: ProviderBoundary & { id: string }, error: unknown): AiProviderDescriptor {
   const message = diagnostic(error)
+  const providerId = adapter.id
+  const boundary = providerBoundary(providerId, adapter)
   return {
     id: providerId, kind: providerId, name: providerId, status: 'unavailable',
+    authentication: boundary.authentication, fallbackPolicy: boundary.fallbackPolicy,
     // Native startup failures can mix missing files, permission failures and other causes.
     // Preserve the diagnostic, but only classify evidence with an unambiguous meaning.
     statusReason: message === 'Codex App Server requires the desktop app' ? 'desktop_required' : 'metadata_unavailable',
-    statusMessage: message,
+    statusMessage: boundary.authentication === 'none'
+      ? translate(useAppStore.getState().locale, 'settings', 'aiProviderUnavailable') : message,
     capabilities: [], agents: [], isDefault: false,
   }
 }
@@ -106,10 +143,13 @@ export function registerAiProvider(provider: AiProviderAdapter): () => void {
 function preflightSelection(request: AiPreflightRequest) {
   const settings = useAppStore.getState().settings
   const providerId = request.providerId ?? settings.aiDefaultProviderId
-  const agentId = request.agentId ?? settings.aiDefaultAgentId
+  const requiresBinding = neverFallback(providerId)
+  const overridesProvider = request.providerId != null && request.providerId !== settings.aiDefaultProviderId
+  const agentId = request.agentId ?? (requiresBinding && overridesProvider ? undefined : settings.aiDefaultAgentId)
+  const requiresExplicitAgent = requiresBinding && agentId == null
   const effort = request.effort && request.effort !== 'inherit' ? request.effort : settings.aiDefaultEffort
-  const key = JSON.stringify([providerId, agentId, effort, providerRevisions.get(providerId ?? '') ?? 0])
-  return { providerId, agentId, effort, key }
+  const key = JSON.stringify([providerId, agentId, effort, providerRevisions.get(providerId ?? '') ?? 0, requiresExplicitAgent])
+  return { providerId, agentId, effort, requiresExplicitAgent, key }
 }
 
 /** This cache is exclusively for metadata preflight. Running a model always rechecks describe(). */
@@ -126,13 +166,13 @@ function describeForPreflight(provider: AiProviderAdapter, forceRefresh: boolean
     try {
       const value = await withTimeout(measureLatency(
         'latency:ai.provider.preflight',
-        () => provider.describe((update) => { partial = { ...update, isDefault: false } }),
+        () => provider.describe((update) => { partial = providerDescriptor(provider, update) }),
         { providerId: provider.id },
       ), PROVIDER_TIMEOUT_MS)
-      metadata = { value: { ...value, isDefault: false }, checkedAt: Date.now() }
+      metadata = { value: providerDescriptor(provider, value), checkedAt: Date.now() }
     } catch (error) {
       metadata = {
-        value: partial ?? unavailableProvider(provider.id, error), checkedAt: Date.now(),
+        value: partial ?? unavailableProvider(provider, error), checkedAt: Date.now(),
         timedOut: !partial && diagnostic(error) === 'AI_PROVIDER_TIMEOUT',
       }
     }
@@ -158,6 +198,12 @@ async function preflight(request: AiPreflightRequest, signal: AbortSignal): Prom
   if (!selection.providerId) return { ...result, status: 'blocked', reason: 'provider_not_configured' }
   const adapter = providers.get(selection.providerId)
   if (!adapter) return { ...result, status: 'blocked', reason: 'provider_not_registered' }
+  if (selection.requiresExplicitAgent) {
+    return {
+      ...result, status: 'blocked', reason: 'agent_unknown',
+      message: translate(useAppStore.getState().locale, 'settings', 'aiAgentRequired'),
+    }
+  }
   let selectionChanged = false
   const unwatchSelection = useAppStore.subscribe(() => {
     if (preflightSelection(request).key !== selection.key) selectionChanged = true
@@ -188,13 +234,16 @@ async function preflight(request: AiPreflightRequest, signal: AbortSignal): Prom
     if (provider.statusReason === 'desktop_required' || provider.statusReason === 'cli_missing') {
       return { ...result, status: 'blocked', reason: provider.statusReason }
     }
-    return { ...result, reason: metadata.timedOut ? 'metadata_timeout' : 'metadata_unavailable' }
+    return {
+      ...result, status: neverFallback(adapter.id, adapter) ? 'blocked' : 'unknown',
+      reason: metadata.timedOut || provider.statusReason === 'metadata_timeout' ? 'metadata_timeout' : 'metadata_unavailable',
+    }
   }
   if (provider.modelCatalog === 'fallback') return { ...result, reason: 'model_catalog_fallback' }
   if (provider.modelCatalog === 'partial' && !agent) return { ...result, reason: 'model_catalog_incomplete' }
   if (provider.modelCatalog !== 'complete' && provider.modelCatalog !== 'partial') return { ...result, reason: 'model_catalog_unknown' }
   // A missing catalogue entry cannot prove that a selected model is unusable.
-  if (!agent) return { ...result, reason: 'agent_unknown' }
+  if (!agent) return { ...result, status: neverFallback(adapter.id, adapter) ? 'blocked' : 'unknown', reason: 'agent_unknown' }
   if (request.capabilities?.some((capability) => !provider.capabilities.includes(capability) || !agent.capabilities.includes(capability))) {
     return { ...result, status: 'blocked', reason: 'capability_unavailable' }
   }
@@ -208,7 +257,9 @@ async function describeProviders(
   onProvider?: (provider: AiProviderDescriptor, completed: number, total: number, index: number) => void,
   onlyProviderId?: string,
 ): Promise<AiProviderDescriptor[]> {
-  const settings = useAppStore.getState().settings
+  const configuredProviderId = useAppStore.getState().settings.aiDefaultProviderId
+  // Registry changes during discovery cannot erase the selected provider's policy.
+  const configuredNeverFallback = neverFallback(configuredProviderId)
   const adapters = [...providers.values()].filter((provider) => onlyProviderId == null || provider.id === onlyProviderId)
   let completed = 0
   const descriptions = await Promise.all(adapters.map(async (provider, index) => {
@@ -218,30 +269,39 @@ async function describeProviders(
     let partialDescription: AiProviderDescriptor | undefined
     try {
       const publish = (partial: Omit<AiProviderDescriptor, 'isDefault'>) => {
-        const value = { ...partial, isDefault: false }
+        const value = providerDescriptor(provider, partial)
         partialDescription = value
         providerCache.set(provider.id, { value, cachedAt: Date.now() })
         onProvider?.(value, completed, adapters.length, index)
       }
-      description = {
-        ...await withTimeout(measureLatency(
+      description = providerDescriptor(provider, await withTimeout(measureLatency(
           'latency:ai.provider.describe',
           () => provider.describe(publish),
           { providerId: provider.id },
-        ), PROVIDER_TIMEOUT_MS),
-        isDefault: false,
-      }
+        ), PROVIDER_TIMEOUT_MS))
     } catch (error) {
-      description = partialDescription ?? unavailableProvider(provider.id, error)
+      description = partialDescription ?? unavailableProvider(provider, error)
     }
-    providerCache.set(provider.id, { value: description, cachedAt: Date.now() })
+    const current = providers.get(provider.id) === provider
+    if (!current && neverFallback(provider.id, provider)) description = unavailableProvider(provider, 'AI_PROVIDER_CHANGED')
+    if (current) providerCache.set(provider.id, { value: description, cachedAt: Date.now() })
     completed += 1
     onProvider?.(description, completed, adapters.length, index)
     return description
   }))
-  const effectiveDefault = descriptions.find((item) => item.id === settings.aiDefaultProviderId && item.status === 'ready')
-    ?? descriptions.find((item) => item.status === 'ready')
-    ?? descriptions.find((item) => item.id === settings.aiDefaultProviderId)
+  // Keep a removed built-in local provider visible, including its configured selection.
+  for (const providerId of builtinProviderBoundaries.keys()) {
+    if (descriptions.some((item) => item.id === providerId) || (onlyProviderId != null && providerId !== onlyProviderId)) continue
+    const missing = unavailableProvider({ id: providerId }, 'AI_PROVIDER_NOT_REGISTERED')
+    descriptions.push(missing)
+    onProvider?.(missing, descriptions.length, descriptions.length, descriptions.length - 1)
+  }
+  const configured = descriptions.find((item) => item.id === configuredProviderId)
+  const effectiveDefault = configuredNeverFallback
+    ? configured
+    : descriptions.find((item) => item.id === configuredProviderId && item.status === 'ready')
+      ?? descriptions.find((item) => item.status === 'ready' && !neverFallback(item.id))
+      ?? configured
   return descriptions.map((item) => ({ ...item, isDefault: item.id === effectiveDefault?.id }))
 }
 
@@ -446,36 +506,78 @@ export function createPluginAi(
       }
       try {
         checkPermission()
+        const initialConfiguredProviderId = useAppStore.getState().settings.aiDefaultProviderId
+        const selection = preflightSelection(request)
+        const initialProviderId = selection.providerId
+        const initialAgentId = selection.agentId
+        const initialAdapter = providers.get(initialProviderId ?? '')
+        // A missing configured provider cannot authorize a different provider.
+        if (initialProviderId != null && !initialAdapter) {
+          await finish('failed')
+          yield { type: 'error', runId, code: 'provider_unavailable', message: translate(useAppStore.getState().locale, 'settings', 'aiProviderUnavailable') }
+          return
+        }
+        const pinnedAdapter = neverFallback(initialProviderId, initialAdapter) ? initialAdapter : undefined
+        if (selection.requiresExplicitAgent) {
+          await finish('failed')
+          yield { type: 'error', runId, code: 'agent_required', message: translate(useAppStore.getState().locale, 'settings', 'aiAgentRequired') }
+          return
+        }
+        const discoveryAdapters = new Map(providers)
         const available = await withSignal(describeProviders(undefined, request.providerId), signal)
         checkPermission()
+        if (pinnedAdapter && providers.get(pinnedAdapter.id) !== pinnedAdapter) {
+          await finish('failed')
+          yield { type: 'error', runId, code: 'provider_unavailable', message: translate(useAppStore.getState().locale, 'settings', 'aiProviderUnavailable') }
+          return
+        }
         const explicitProvider = request.providerId != null
-        const descriptor = explicitProvider
+        const descriptor = pinnedAdapter
+          ? available.find((item) => item.id === pinnedAdapter.id)
+          : explicitProvider
           ? available.find((item) => item.id === request.providerId)
-          : available.find((item) => item.isDefault && item.status === 'ready')
+          : available.find((item) => item.isDefault)
         if (!descriptor || descriptor.status !== 'ready') {
           await finish('failed')
           yield {
             type: 'error', runId,
             code: descriptor?.status === 'login_required' ? 'provider_login_required' : 'provider_unavailable',
-            message: descriptor?.statusMessage ?? (descriptor?.status === 'login_required' ? 'The AI provider requires login' : 'No AI provider is available'),
+            message: descriptor?.statusMessage ?? (descriptor?.status === 'login_required'
+              ? 'The AI provider requires login' : translate(useAppStore.getState().locale, 'settings', 'aiProviderUnavailable')),
           }
           return
         }
-        const missingCapability = request.capabilities?.find((item) => !descriptor.capabilities.includes(item))
-        if (missingCapability) {
+        adapter = providers.get(descriptor.id)
+        if (!adapter) throw new Error('The selected AI provider is no longer available')
+        const requiresModelBinding = neverFallback(descriptor.id, adapter)
+        if (requiresModelBinding && discoveryAdapters.get(descriptor.id) !== adapter) {
           await finish('failed')
-          yield { type: 'error', runId, code: 'capability_unavailable', message: `AI capability is not available: ${missingCapability}` }
+          yield { type: 'error', runId, code: 'provider_unavailable', message: translate(useAppStore.getState().locale, 'settings', 'aiProviderUnavailable') }
           return
         }
-        const configuredAgent = useAppStore.getState().settings.aiDefaultAgentId
-        const agent = request.agentId != null
-          ? descriptor.agents.find((item) => item.id === request.agentId)
+        const configuredAgent = requiresModelBinding
+          ? descriptor.id === initialConfiguredProviderId ? initialAgentId : undefined
+          : useAppStore.getState().settings.aiDefaultAgentId
+        const selectedAgent = request.agentId ?? configuredAgent
+        if (requiresModelBinding && selectedAgent == null) {
+          await finish('failed')
+          yield { type: 'error', runId, code: 'agent_required', message: translate(useAppStore.getState().locale, 'settings', 'aiAgentRequired') }
+          return
+        }
+        const agent = request.agentId != null || requiresModelBinding
+          ? descriptor.agents.find((item) => item.id === selectedAgent)
           : descriptor.agents.find((item) => item.id === configuredAgent)
             ?? descriptor.agents.find((item) => item.isDefault)
             ?? descriptor.agents[0]
         if (!agent) {
           await finish('failed')
-          yield { type: 'error', runId, code: 'agent_unavailable', message: 'The requested AI agent is not available' }
+          yield { type: 'error', runId, code: 'agent_unavailable', message: translate(useAppStore.getState().locale, 'settings', 'aiAgentUnavailable') }
+          return
+        }
+        const missingCapability = request.capabilities?.find((item) => !descriptor.capabilities.includes(item) || !agent.capabilities.includes(item))
+        if (missingCapability) {
+          await finish('failed')
+          yield { type: 'error', runId, code: 'capability_unavailable', message: translate(useAppStore.getState().locale, 'settings', 'aiCapabilityUnavailable') }
           return
         }
         if (request.input.length === 0) {
@@ -483,14 +585,14 @@ export function createPluginAi(
           yield { type: 'error', runId, code: 'invalid_request', message: 'AI input must not be empty' }
           return
         }
-        const unsupportedInput = request.input.find((item) => item.type !== 'file' && !agent.inputModalities.includes(item.type))
+        const strictInputModalities = providerBoundary(adapter.id, adapter).strictInputModalities
+        const unsupportedInput = request.input.find((item) => (item.type !== 'file' || strictInputModalities)
+          && !agent.inputModalities.includes(item.type))
         if (unsupportedInput) {
           await finish('failed')
-          yield { type: 'error', runId, code: 'input_unavailable', message: `AI input is not supported by this agent: ${unsupportedInput.type}` }
+          yield { type: 'error', runId, code: 'input_unavailable', message: translate(useAppStore.getState().locale, 'settings', 'aiInputUnavailable') }
           return
         }
-        adapter = providers.get(descriptor.id)
-        if (!adapter) throw new Error('The selected AI provider is no longer available')
         const effort = resolveEffort(request, agent)
         record = {
           runId, pluginId, pluginSource, providerId: descriptor.id, agentId: agent.id,

@@ -146,7 +146,7 @@ export function AiSubscriptionsContent() {
   const [providers, setProviders] = useState<AiProviderDescriptor[]>([])
   const providerOrderRef = useRef(new Map<string, number>())
   const [initialLoading, setInitialLoading] = useState(true)
-  const [pendingProviderCount, setPendingProviderCount] = useState(2)
+  const [pendingProviderCount, setPendingProviderCount] = useState(3)
   const [loading, setLoading] = useState(false)
   const [pendingProviderId, setPendingProviderId] = useState<string | null>(null)
   const [refreshingProviderId, setRefreshingProviderId] = useState<string | null>(null)
@@ -210,10 +210,41 @@ export function AiSubscriptionsContent() {
   }, [pendingProviderId])
 
   const readyProviders = providers.filter((item) => item.status === 'ready')
-  const defaultProvider = readyProviders.find((item) => item.id === settings.aiDefaultProviderId)
-    ?? readyProviders.find((item) => item.isDefault)
-    ?? readyProviders[0]
+  const automaticProviders = readyProviders.filter((item) => item.fallbackPolicy !== 'never')
+  const configuredProvider = providers.find((item) => item.id === settings.aiDefaultProviderId)
+  const keepConfiguredDefault = configuredProvider?.fallbackPolicy === 'never'
+    || (initialLoading && settings.aiDefaultProviderId != null)
+  const defaultProvider = keepConfiguredDefault
+    ? configuredProvider
+    : automaticProviders.find((item) => item.id === settings.aiDefaultProviderId)
+      ?? automaticProviders.find((item) => item.isDefault)
+      ?? automaticProviders[0]
+  const providerOptions = readyProviders.map((item) => ({ value: item.id, label: item.name }))
+  if (!keepConfiguredDefault && !defaultProvider && readyProviders.length) {
+    providerOptions.unshift({ value: '', label: t('aiChooseProvider') })
+  }
+  if (keepConfiguredDefault && settings.aiDefaultProviderId && !providerOptions.some((item) => item.value === settings.aiDefaultProviderId)) {
+    providerOptions.unshift({
+      value: settings.aiDefaultProviderId,
+      label: `${configuredProvider?.name ?? settings.aiDefaultProviderId} · ${t(initialLoading && !configuredProvider ? 'aiSelectionLoading' : 'aiSelectionUnavailable')}`,
+    })
+  }
   const agents = defaultProvider?.agents ?? []
+  const selectedAgentId = settings.aiDefaultAgentId
+    ?? (keepConfiguredDefault ? '' : agents.find((item) => item.isDefault)?.id ?? agents[0]?.id ?? '')
+  const selectedAgent = agents.find((item) => item.id === selectedAgentId)
+  const agentOptions = agents.map((item) => ({
+    value: item.id,
+    label: item.contextWindow
+      ? `${item.name} · ${t('aiContextWindow', { tokens: formatTokenCount(item.contextWindow) })}`
+      : item.name,
+  }))
+  if (selectedAgentId && !selectedAgent && keepConfiguredDefault) {
+    agentOptions.unshift({ value: selectedAgentId, label: `${selectedAgentId} · ${t('aiSelectionUnavailable')}` })
+  }
+  const effortUnsupported = selectedAgent?.supportedEfforts.length === 0
+  const effortUnknown = !selectedAgent
+  const effortDisabled = effortUnsupported || effortUnknown
 
   const connect = async (providerId: string) => {
     setLoading(true)
@@ -249,13 +280,16 @@ export function AiSubscriptionsContent() {
           const ready = provider.status === 'ready'
           const waiting = pendingProviderId === provider.id
           const refreshing = refreshingProviderId === provider.id
+          const requiresAccount = provider.authentication !== 'none'
           const subscription = [provider.subscription?.accountName, provider.subscription?.plan].filter(Boolean).join(' · ')
           return (
             <div className="ai-subscription-provider" key={provider.id}>
               <SettingsListRow
-                icon={ready ? <Check size={15} strokeWidth={2} style={{ color: 'var(--color-success-text)' }} /> : <LogIn size={15} strokeWidth={2} />}
+                icon={ready ? <Check size={15} strokeWidth={2} style={{ color: 'var(--color-success-text)' }} /> : requiresAccount ? <LogIn size={15} strokeWidth={2} /> : <BrainCircuit size={15} strokeWidth={2} />}
                 name={provider.name}
-                desc={waiting
+                desc={!requiresAccount
+                  ? t(`ollamaStatus_${provider.statusReason ?? (ready ? 'ready' : 'metadata_unavailable')}`)
+                  : waiting
                   ? t('aiSubscriptionWaiting')
                   : ready
                     ? t('aiSubscriptionReady', { plan: subscription })
@@ -264,17 +298,19 @@ export function AiSubscriptionsContent() {
                 <div className="flex items-center gap-2">
                   {ready && (
                     <span className="flex items-center gap-1 text-[11px]" style={{ color: 'var(--color-success-text)' }}>
-                      <Check size={11} /> {t('aiConnected')}
+                      <Check size={11} /> {t(requiresAccount ? 'aiConnected' : 'aiLocalReady')}
                     </span>
                   )}
-                  {ready
+                  {requiresAccount && (ready
                     ? <button type="button" className="scripts-btn" disabled={loading} onClick={() => void disconnect(provider.id)}><LogOut size={11} /> {t('aiDisconnect')}</button>
-                    : <button type="button" className="scripts-btn scripts-btn-primary" disabled={loading || waiting || provider.status === 'unavailable'} onClick={() => void connect(provider.id)}>{waiting ? <RefreshCw size={11} className="animate-spin" /> : <LogIn size={11} />} {t(waiting ? 'aiConnecting' : 'aiConnect')}</button>}
-                  <button type="button" className="scripts-btn" disabled={loading || waiting || refreshing} onClick={() => void refreshProvider(provider.id)} aria-label={t('aiRefresh')}>
+                    : <button type="button" className="scripts-btn scripts-btn-primary" disabled={loading || waiting || provider.status === 'unavailable'} onClick={() => void connect(provider.id)}>{waiting ? <RefreshCw size={11} className="animate-spin" /> : <LogIn size={11} />} {t(waiting ? 'aiConnecting' : 'aiConnect')}</button>)}
+                  <button type="button" className="scripts-btn" disabled={loading || waiting || refreshing} onClick={() => void refreshProvider(provider.id)} aria-label={t(requiresAccount ? 'aiRefresh' : 'aiRefreshLocal')}>
                     <RefreshCw size={11} className={refreshing ? 'animate-spin' : ''} />
+                    {!requiresAccount && t('aiRefreshLocal')}
                   </button>
                 </div>
               </SettingsListRow>
+              {!requiresAccount && <p className="px-4 pb-3 text-xs" style={{ color: 'var(--color-text-secondary)' }}>{t('ollamaLocalBoundary')}</p>}
               {ready && <AiQuotaUsage provider={provider} locale={locale} t={t} />}
             </div>
           )
@@ -285,12 +321,22 @@ export function AiSubscriptionsContent() {
       <SettingGroup title={t('aiDefaults')}>
         <SettingsListRow icon={<BrainCircuit size={15} strokeWidth={2} />} name={t('aiDefaultProvider')} desc={t('aiDefaultProviderInfo')}>
           <LocaleSelect
-            value={defaultProvider?.id ?? ''}
-            options={readyProviders.map((item) => ({ value: item.id, label: item.name }))}
+            value={(keepConfiguredDefault ? settings.aiDefaultProviderId : defaultProvider?.id) ?? ''}
+            options={providerOptions}
             wide
             disabled={readyProviders.length === 0}
             emptyLabel={t('aiNoProviders')}
             onChange={(value) => {
+              if (!value) return
+              const selectedProvider = providers.find((item) => item.id === value)
+              if (selectedProvider?.fallbackPolicy === 'never') {
+                // An explicit provider choice binds the model shown now; refresh never rebinds it.
+                if (settings.aiDefaultProviderId === value) return
+                const selectedModel = selectedProvider.agents.find((item) => item.isDefault) ?? selectedProvider.agents[0]
+                updateSetting('aiDefaultProviderId', value)
+                updateSetting('aiDefaultAgentId', selectedModel?.id)
+                return
+              }
               updateSetting('aiDefaultProviderId', value)
               updateSetting('aiDefaultAgentId', undefined)
             }}
@@ -298,13 +344,8 @@ export function AiSubscriptionsContent() {
         </SettingsListRow>
         <SettingsListRow icon={<BrainCircuit size={15} strokeWidth={2} />} name={t('aiDefaultAgent')} desc={t('aiDefaultAgentInfo')}>
           <LocaleSelect
-            value={settings.aiDefaultAgentId ?? agents.find((item) => item.isDefault)?.id ?? agents[0]?.id ?? ''}
-            options={agents.map((item) => ({
-              value: item.id,
-              label: item.contextWindow
-                ? `${item.name} · ${t('aiContextWindow', { tokens: formatTokenCount(item.contextWindow) })}`
-                : item.name,
-            }))}
+            value={selectedAgentId}
+            options={agentOptions}
             wide
             searchable
             searchPlaceholder={t('aiSearchAgents')}
@@ -314,11 +355,13 @@ export function AiSubscriptionsContent() {
             onChange={(value) => updateSetting('aiDefaultAgentId', value)}
           />
         </SettingsListRow>
-        <SettingsListRow icon={<BrainCircuit size={15} strokeWidth={2} />} name={t('aiDefaultEffort')} desc={t('aiDefaultEffortInfo')}>
+        <SettingsListRow icon={<BrainCircuit size={15} strokeWidth={2} />} name={t('aiDefaultEffort')} desc={t(effortUnknown ? 'aiEffortSelectModel' : effortUnsupported ? 'aiEffortUnsupported' : 'aiDefaultEffortInfo')}>
           <LocaleSelect
-            value={settings.aiDefaultEffort}
+            value={effortDisabled ? '' : settings.aiDefaultEffort}
             wide
-            options={(['low', 'medium', 'high', 'xhigh'] as AiReasoningEffort[]).map((value) => ({
+            disabled={effortDisabled}
+            emptyLabel={t(effortUnknown ? 'aiSelectionUnavailable' : 'aiEffortNotApplicable')}
+            options={effortDisabled ? [] : (['low', 'medium', 'high', 'xhigh'] as AiReasoningEffort[]).map((value) => ({
               value,
               label: t(`aiEffort_${value}`),
             }))}
