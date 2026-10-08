@@ -110,6 +110,9 @@ export function LauncherParamStep({
   const params = frame.item.params ?? []
   const param = params[frame.paramIndex]
   const label = param ? localized(param.label, param.labelI18n, locale) : ''
+  const isPreviewEdit = Boolean(frame.previewEdit)
+  const editingLabel = t(locale, 'palette.editPreviewParam', { label })
+  const cancelPreviewLabel = t(locale, 'palette.cancelPreviewParam')
   const isTextParam = param?.type === 'text' || param?.type === 'number'
   const isMultiParam = param?.type === 'multi-select'
   const options = param ? filterParamOptions(paramOptions(param, locale), frame.query, locale) : []
@@ -144,6 +147,12 @@ export function LauncherParamStep({
     onCommit()
   }
 
+  function commitSelectedParam() {
+    if (isTextParam) commitTextParam()
+    else if (isMultiParam) submitMultiParam()
+    else if (options[selectedIndex]) commitOption(options[selectedIndex].value)
+  }
+
   function handleCompositionStart() {
     startImeComposition(isImeComposingRef)
   }
@@ -153,7 +162,7 @@ export function LauncherParamStep({
   }
 
   const breadcrumbChips: { label: string; value: string }[] = []
-  for (let i = 0; i < frame.paramIndex; i++) {
+  for (let i = 0; !isPreviewEdit && i < frame.paramIndex; i++) {
     const p = params[i]
     if (!p) break
     const val = frame.params[p.key]
@@ -162,17 +171,21 @@ export function LauncherParamStep({
 
   if (!param) return null
   const hint = param.hint ? localized(param.hint, param.hintI18n, locale) : ''
-  const stepTag = params.length > 1 ? `${frame.paramIndex + 1}/${params.length}` : ''
+  const stepTag = !isPreviewEdit && params.length > 1 ? `${frame.paramIndex + 1}/${params.length}` : ''
   const placeholder = isTextParam
     ? [label, hint || (param.type === 'number' ? t(locale, 'palette.inputNumber') : t(locale, 'palette.inputText'))]
         .filter(Boolean)
         .join(' — ')
     : [label, t(locale, 'palette.filterOptions')].filter(Boolean).join(' — ')
-  const countLabel = isMultiParam
-    ? t(locale, 'palette.selectedCountMax', { count: selectedCount, max: maxSelect })
-    : stepTag
-      ? `${stepTag} · ${label}`
-      : label
+  const countLabel = isPreviewEdit
+    ? isMultiParam
+      ? `${editingLabel} · ${t(locale, 'palette.selectedCountMax', { count: selectedCount, max: maxSelect })}`
+      : editingLabel
+    : isMultiParam
+      ? t(locale, 'palette.selectedCountMax', { count: selectedCount, max: maxSelect })
+      : stepTag
+        ? `${stepTag} · ${label}`
+        : label
 
   const commandTitle = resolveDisplayTitle(frame.item.display, locale)
 
@@ -190,6 +203,7 @@ export function LauncherParamStep({
           ref={inputRef}
           className={[isTextParam ? 'mono' : '', param.type === 'number' ? 'l-number-input' : ''].filter(Boolean).join(' ')}
           placeholder={placeholder}
+          aria-label={isPreviewEdit ? editingLabel : label}
           value={frame.query}
           type={param.type === 'number' ? 'number' : 'text'}
           onChange={(event) => onQueryChange(event.target.value)}
@@ -208,9 +222,7 @@ export function LauncherParamStep({
             if (event.key === 'Enter') {
               event.preventDefault()
               event.stopPropagation()
-              if (isTextParam) commitTextParam()
-              else if (isMultiParam) submitMultiParam()
-              else if (options[selectedIndex]) commitOption(options[selectedIndex].value)
+              commitSelectedParam()
             }
             if (event.key === ' ' && isMultiParam) {
               event.preventDefault()
@@ -252,10 +264,11 @@ export function LauncherParamStep({
             const optionKey = String(option.value)
             const isChecked = currentMultiValue.includes(optionKey)
             const isSelected = selectedIndex === index
-            const disabled = isMultiParam && reachedMax && !isChecked
+            const disabled = busy || (isMultiParam && reachedMax && !isChecked)
             return (
               <button
                 key={optionKey}
+                type="button"
                 className={`l-option-row ${isSelected ? 'sel selected' : ''} ${disabled ? 'disabled' : ''}`}
                 onClick={() => { if (!disabled) commitOption(option.value) }}
                 onMouseEnter={() => onSelectedIndexChange(index)}
@@ -281,11 +294,36 @@ export function LauncherParamStep({
       {error && (
         <div className="px-3.5 py-1.5 text-[11px]" style={{ color: 'var(--color-error)' }}>{error}</div>
       )}
-      <div className={footerClassName} style={{ borderTop: '1px solid var(--border)' }}>
+      <div className={footerClassName} style={{ borderTop: '1px solid var(--border)', flexWrap: isPreviewEdit ? 'wrap' : undefined }}>
         {!isTextParam && <HintKey keys="↑↓" label={t(locale, 'palette.navigate')} />}
         {isMultiParam && <HintKey keys="␣" label={t(locale, 'palette.select')} />}
-        <HintKey keys="↵" label={isMultiParam ? t(locale, 'palette.submit') : t(locale, 'palette.select')} />
-        <HintKey keys="esc" label={t(locale, 'palette.back')} />
+        {isPreviewEdit ? (
+          <>
+            <button
+              type="button"
+              className="launcher-footer-back-btn disabled:cursor-not-allowed disabled:opacity-50"
+              data-testid="launcher-preview-param-apply"
+              disabled={busy || (!isTextParam && !isMultiParam && options.length === 0)}
+              onClick={commitSelectedParam}
+            >
+              <HintKey keys="↵" label={t(locale, 'palette.applyPreviewParam')} />
+            </button>
+            <button
+              type="button"
+              className="launcher-footer-back-btn disabled:cursor-not-allowed disabled:opacity-50"
+              data-testid="launcher-preview-param-cancel"
+              disabled={busy}
+              onClick={onBack}
+            >
+              <HintKey keys="esc" label={cancelPreviewLabel} />
+            </button>
+          </>
+        ) : (
+          <>
+            <HintKey keys="↵" label={isMultiParam ? t(locale, 'palette.submit') : t(locale, 'palette.select')} />
+            <HintKey keys="esc" label={t(locale, 'palette.back')} />
+          </>
+        )}
       </div>
     </>
   )

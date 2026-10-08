@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, type RefObject } from 'react'
 import { t, type Locale } from '../../i18n'
 import type { LauncherHostSurfaceTarget, PluginSurfaceOpenTarget } from '../../store'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
-import type { CollectInputFrame, LauncherController, LauncherControllerState, ResultFrame } from '../../workspace/launcher/controller'
+import type { CollectInputFrame, LauncherController, LauncherControllerState, ParamInputFrame, ResultFrame } from '../../workspace/launcher/controller'
 import type { LauncherExecuteResult, LauncherResultChoice } from '../../workspace/launcher/types'
 import { createDeleteSavedActionItem, createRenameSavedActionItem } from '../../workspace/launcher/hostActions'
 import type { GlobalLauncherActiveSurfaceFrame } from './GlobalLauncherFrames'
@@ -334,16 +334,16 @@ export function GlobalLauncherPanel({
         onSurfaceClose={requestSurfaceClose}
         onPermissionBack={cancelItemPermissionPrompt}
         onPermissionGrant={grantItemPermissionsAndRun}
-        onParamQueryChange={(value) => controllerRef.current?.setParamQuery(value)}
-        onParamSelectedIndexChange={(index) => controllerRef.current?.setParamSelectedIndex(index)}
-        onParamCommit={(value) => { void controllerRef.current?.commitCurrentParam(value) }}
-        onParamMultiToggle={(value) => controllerRef.current?.toggleCurrentMultiParamValue(value)}
+        onParamQueryChange={(value, frame) => controllerRef.current?.setParamQuery(value, frame)}
+        onParamSelectedIndexChange={(index, frame) => controllerRef.current?.setParamSelectedIndex(index, frame)}
+        onParamCommit={(value, frame) => { void controllerRef.current?.commitCurrentParam(value, frame) }}
+        onParamMultiToggle={(value, frame) => controllerRef.current?.toggleCurrentMultiParamValue(value, frame)}
         onFrameBack={(frame) => {
           const handled = controllerRef.current?.back(frame)
           if (handled || !frame) focusSearchInputAfterBack()
         }}
         onExitCommand={(frame) => {
-          const ctl = controllerRef.current as { exitCommand?: (frame?: CollectInputFrame) => boolean; back?: (frame?: CollectInputFrame) => boolean } | null
+          const ctl = controllerRef.current as { exitCommand?: (frame?: CollectInputFrame | ParamInputFrame) => boolean; back?: (frame?: CollectInputFrame | ParamInputFrame) => boolean } | null
           const handled = ctl?.exitCommand ? ctl.exitCommand(frame) : ctl?.back?.(frame)
           if (handled || !frame) focusSearchInputAfterBack()
         }}
@@ -351,6 +351,8 @@ export function GlobalLauncherPanel({
         onActivateResultChoice={activateResultChoice}
         onSecondaryAction={activateSecondaryAction}
         onPastePreviewText={activatePreviewPaste}
+        canEditPreviewParam={(key, frame) => Boolean(controllerRef.current?.canEditPreviewParam(key, frame))}
+        onEditPreviewParam={(key, frame) => controllerRef.current?.editPreviewParam(key, frame)}
         onSubmitCollectInput={(frame) => { void controllerRef.current?.submitInput?.(frame) }}
         onCaptureSelection={() => { void controllerRef.current?.captureInput() }}
         onHoverResultChoice={setResultSelectedIndex}

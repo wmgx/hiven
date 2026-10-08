@@ -72,6 +72,7 @@ type UseLauncherSessionOptions = {
   staticItemFilter?: (items: LauncherItem[]) => LauncherItem[]
   collectDynamicWhenEmpty?: boolean
   objectBlockText?: string
+  getMaterialGeneration?: () => number | undefined
   /** Rendered list identity when the host prepends rows outside ranking. */
   visibleSelectionItemsRef?: MutableRefObject<readonly LauncherItem[]>
   /** Host-owned rows outside the visible item array (for example, index -1). */
@@ -173,12 +174,15 @@ export function useLauncherSession({
   staticItemFilter,
   collectDynamicWhenEmpty = false,
   objectBlockText,
+  getMaterialGeneration,
   visibleSelectionItemsRef,
   extraSelectionRowsRef,
   foregroundApp,
   makeApi,
 }: UseLauncherSessionOptions): LauncherSession {
   const normalizedHostId = normalizeLauncherSurfaceId(hostId)
+  const materialGenerationGetterRef = useRef(getMaterialGeneration)
+  materialGenerationGetterRef.current = getMaterialGeneration
   const locale = useAppStore((s) => s.locale)
   const automaticLearningEnabled = useAppStore((s) => s.settings.automaticLearningEnabled)
   const appSearchAliases = useAppStore((s) => s.settings.appSearchAliases)
@@ -366,6 +370,7 @@ export function useLauncherSession({
       if (!controllerRef.current) {
         const nextController = new LauncherController({
           surfaceId: normalizedHostId,
+          getMaterialGeneration: materialGenerationGetterRef.current ? () => materialGenerationGetterRef.current?.() : undefined,
           api: makeApi?.(createPluginLauncherApi()) ?? createPluginLauncherApi(),
           makeApi: (item) => {
             const requestedPermissions = item.pluginId && item.source

@@ -8,6 +8,7 @@ import type { Locale } from '../../i18n'
 import { t } from '../../i18n'
 import type { IconRef } from '../../workspace/launcher/types'
 import { resolveIcon } from '../../utils/resolveIcon'
+import { shouldIgnoreImeKeyDown } from '../../utils/imeKeyboard'
 
 export function LauncherCommandTag({
   title,
@@ -51,28 +52,62 @@ export function LauncherCommandTag({
 export function LauncherParamValueChip({
   label,
   value,
+  onEdit,
+  editLabel,
+  disabled = false,
+  paramKey,
 }: {
   label: string
   value: string
+  onEdit?: () => void
+  editLabel?: string
+  disabled?: boolean
+  paramKey?: string
 }) {
   const text = label ? `${label}: ${value}` : value
+  const contents = label ? (
+    <>
+      <span className="launcher-param-chip-label" style={onEdit ? { maxWidth: 'none' } : undefined}>{label}</span>
+      <span className="launcher-param-chip-sep" aria-hidden>:</span>
+      <span className="launcher-param-chip-value">{value}</span>
+    </>
+  ) : value
+  if (onEdit) {
+    return (
+      <button
+        type="button"
+        className="launcher-param-chip cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+        data-testid="launcher-preview-param"
+        data-preview-param-key={paramKey}
+        data-no-drag
+        style={{ maxWidth: '100%', flexShrink: 0 }}
+        title={text}
+        aria-label={editLabel ? `${editLabel}: ${value}` : text}
+        disabled={disabled}
+        onClick={(event) => {
+          event.stopPropagation()
+          if (!disabled) onEdit()
+        }}
+        onKeyDown={(event) => {
+          // Preserve native button activation and focus navigation without
+          // letting the result frame treat them as Copy / Return shortcuts.
+          if (event.key === 'Tab' || event.key === 'Enter' || event.key === ' ' || event.code === 'Space') {
+            event.stopPropagation()
+            if (shouldIgnoreImeKeyDown(event, { current: false })) event.preventDefault()
+          }
+        }}
+      >
+        {contents}
+      </button>
+    )
+  }
   return (
     <span
       className="launcher-param-chip"
       data-testid="launcher-param-chip"
       title={text}
     >
-      {label ? (
-        <>
-          <span className="launcher-param-chip-label">{label}</span>
-          <span className="launcher-param-chip-sep" aria-hidden>
-            :
-          </span>
-          <span className="launcher-param-chip-value">{value}</span>
-        </>
-      ) : (
-        value
-      )}
+      {contents}
     </span>
   )
 }

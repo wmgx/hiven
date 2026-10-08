@@ -35,7 +35,7 @@ import type {
 import type { PluginNetworkApi, PluginPrivateStorageApi, PluginShellApi } from '../pluginTypes'
 import type { PluginAiApi } from '../ai/types'
 import { appendUsageJournal } from '../usageJournal'
-import { getHostOutputIntent, isOutputResult } from './output'
+import { explicitTextPreviewResult, getHostOutputIntent, isOutputResult, selectHostOutputResult } from './output'
 import { captureForegroundSelectionText } from './foregroundSelectionCapture'
 import { translate, type Locale } from '../../i18n'
 import {
@@ -94,7 +94,18 @@ export type ParamInputFrame = {
   inputText?: string
   /** Unsubmitted text/number edits; normalization happens only on commit. */
   paramDrafts?: Record<string, string>
+  /** One parameter of an existing preview; Back restores this run without executing it. */
+  previewEdit?: { originalResult: ResultFrame; generation: number }
   recordUsage: boolean
+}
+
+export type PreviewEditSnapshot = {
+  item: LauncherItem
+  /** Complete runtime values, including parameters that cannot be saved. */
+  params: Record<string, unknown>
+  inputText: string
+  generation: number
+  materialGeneration?: number
 }
 
 export type ResultFrame = {
@@ -109,6 +120,8 @@ export type ResultFrame = {
   pendingUsage?: { item: LauncherItem; recordUsage: boolean }
   /** A failed automatic action can only retry that same primary action. */
   retryOnly?: boolean
+  /** Session-local input and full parameters; never stored in LastRun or an artifact. */
+  previewEdit?: PreviewEditSnapshot
 }
 
 export type LauncherFrame = ListFrame | CollectInputFrame | ParamInputFrame | ResultFrame
@@ -145,6 +158,8 @@ export type LauncherControllerDeps = {
   requestClose: () => void
   /** Clear search after a successful host return/save, preserving attached material. */
   onReturnToRoot?: () => void
+  /** Synchronous attached-material epoch. An installed getter returning undefined is inactive. */
+  getMaterialGeneration?: () => number | undefined
   /** Notify subscribers of a state change. */
   onChange: (state: LauncherControllerState) => void
   /** Test/alternate sink injection; production defaults to the native journal. */
@@ -362,6 +377,107 @@ export class LauncherController {
     return this.deps.surfaceId === 'global-launcher' && item.executionMode === 'explicit-text-preview'
   }
 
+  private copyParams(params: Record<string, unknown>): Record<string, unknown> {
+    return Object.fromEntries(Object.entries(params).map(([key, value]) => [key, Array.isArray(value) ? [...value] : value]))
+  }
+
+  private previewSnapshotIsCurrent(snapshot: PreviewEditSnapshot, generation = snapshot.generation): boolean {
+    const { item } = snapshot
+    return generation === this.flowGeneration &&
+      this.isExplicitTextPreview(item) && item.actionPolicy?.effect === 'pure' &&
+      item.pluginLifetime?.active !== false &&
+      item.isExplicitTextPreviewAvailable?.() !== false &&
+      (!this.deps.getMaterialGeneration || (snapshot.materialGeneration !== undefined &&
+        snapshot.materialGeneration === this.deps.getMaterialGeneration()))
+  }
+
+  private recoverPreviewInput(snapshot: PreviewEditSnapshot, recordUsage: boolean): void {
+    this.invalidatePendingActions()
+    this.setState({
+      frames: [this.state.frames[0], this.collectInputFrameFor(snapshot.item, this.copyParams(snapshot.params), recordUsage, snapshot.inputText)],
+      busy: false,
+      error: translate(this.deps.locale as Locale, 'palette', 'previewParametersChanged'),
+    })
+  }
+
+  /** Current-frame guard also rejects retained UI callbacks after a different preview appears. */
+  canEditPreviewParam(key: string, expectedFrame?: ResultFrame): boolean {
+    const top = this.topFrame()
+    return !this.state.busy && !this.activeDelivery && top.kind === 'result' &&
+      (!expectedFrame || top === expectedFrame) && !top.retryOnly && Boolean(top.previewEdit &&
+        this.hasCustomizableParams(top.previewEdit.item) &&
+        top.previewEdit.item.params?.some((param) => param.key === key) &&
+        this.previewSnapshotIsCurrent(top.previewEdit))
+  }
+
+  editPreviewParam(key: string, expectedFrame?: ResultFrame): void {
+    const top = this.topFrame()
+    if (this.state.busy || top.kind !== 'result' || (expectedFrame && top !== expectedFrame) || !top.previewEdit) return
+    if (!this.previewSnapshotIsCurrent(top.previewEdit)) {
+      this.recoverPreviewInput(top.previewEdit, top.pendingUsage?.recordUsage ?? false)
+      return
+    }
+    if (!this.canEditPreviewParam(key, top)) return
+    const snapshot = top.previewEdit
+    const paramIndex = snapshot.item.params!.findIndex((param) => param.key === key)
+    // Revoke every existing choice before exposing the editable draft.
+    this.invalidatePendingActions()
+    const frame = this.paramFrameFor(snapshot.item, this.copyParams(snapshot.params), paramIndex,
+      undefined, top.pendingUsage?.recordUsage ?? false, snapshot.inputText)
+    frame.previewEdit = { originalResult: top, generation: this.flowGeneration }
+    this.setState({ frames: [...this.state.frames.slice(0, -1), frame], error: null })
+  }
+
+  private cancelPreviewParamEdit(frame: ParamInputFrame): void {
+    const edit = frame.previewEdit!
+    const original = edit.originalResult
+    const snapshot = original.previewEdit!
+    if (!this.previewSnapshotIsCurrent(snapshot, edit.generation)) {
+      this.recoverPreviewInput(snapshot, frame.recordUsage)
+      return
+    }
+    // Fresh host builders retain the private output-intent marks. Re-registering
+    // old objects would revive callbacks captured before editing began.
+    const choice = original.output.choices[0]
+    const intent = choice && getHostOutputIntent(choice)
+    const fresh = choice && explicitTextPreviewResult(choice.preview ?? choice.title, this.apiFor(snapshot.item), this.deps.locale as Locale)
+    const result = fresh && (intent === 'copy' || intent === 'return-to-launcher')
+      ? selectHostOutputResult(fresh, intent) : null
+    if (!result || !isOutputResult(result)) {
+      this.recoverPreviewInput(snapshot, frame.recordUsage)
+      return
+    }
+    this.invalidatePendingActions()
+    this.setState({
+      frames: [...this.state.frames.slice(0, -1), {
+        ...original,
+        output: result.output,
+        previewEdit: { ...snapshot, generation: this.flowGeneration },
+      }],
+      error: null,
+    })
+  }
+
+  private async commitPreviewParamEdit(frame: ParamInputFrame, params: Record<string, unknown>): Promise<void> {
+    const edit = frame.previewEdit!
+    const snapshot = edit.originalResult.previewEdit!
+    if (!this.previewSnapshotIsCurrent(snapshot, edit.generation)) {
+      this.recoverPreviewInput(snapshot, frame.recordUsage)
+      return
+    }
+    const { item, inputText } = snapshot
+    const param = this.currentParam(frame)
+    if (!param || !item.executeWithParams) return
+    const nextParams = { ...this.copyParams(snapshot.params), [param.key]: params[param.key] }
+    const error = this.validateParams(item, nextParams)
+    if (error) { this.setState({ error }); return }
+    await this.commitResolvedAction({
+      item, via: item.commitVia ?? 'execute', params: nextParams, inputBinding: 'prompt', inputText,
+      sourceTitle: this.itemTitle(item), recordUsage: frame.recordUsage, replacePreview: true,
+      execute: () => Promise.resolve(item.executeWithParams!(this.buildExecutionContext(item, inputText), nextParams)),
+    })
+  }
+
   private inputBindingFor(item: LauncherItem): InputBinding | undefined {
     if (this.isExplicitTextPreview(item)) return 'prompt'
     const mode = item.inputPolicy?.mode
@@ -557,7 +673,7 @@ export class LauncherController {
     })
     const recordUsage = this.shouldRecord(item, options)
 
-    if ((options.customizeParams || this.isExplicitTextPreview(item)) && this.hasCustomizableParams(item)) {
+    if ((options.customizeParams || (this.isExplicitTextPreview(item) && item.commitVia !== 'saved-action')) && this.hasCustomizableParams(item)) {
       trackBehavior(TelemetryEvents.launcherEnterParamInput, itemTelemetryProps(item))
       this.setState({
         frames: [...this.state.frames, this.paramFrameFor(item, undefined, 0, options.objectBlockText, recordUsage)],
@@ -623,25 +739,30 @@ export class LauncherController {
     })
   }
 
-  setParamQuery(query: string): void {
+  private matchesParamFrame(top: ParamInputFrame, expectedFrame?: ParamInputFrame): boolean {
+    return !expectedFrame || (top.item === expectedFrame.item && top.paramIndex === expectedFrame.paramIndex &&
+      (top.previewEdit || expectedFrame.previewEdit ? top.previewEdit === expectedFrame.previewEdit : true))
+  }
+
+  setParamQuery(query: string, expectedFrame?: ParamInputFrame): void {
     const top = this.topFrame()
-    if (top.kind !== 'param-input') return
+    if (top.kind !== 'param-input' || !this.matchesParamFrame(top, expectedFrame)) return
     const frames = this.state.frames.slice(0, -1)
     frames.push({ ...top, query, selectedIndex: 0 })
     this.setState({ frames })
   }
 
-  setParamSelectedIndex(selectedIndex: number): void {
+  setParamSelectedIndex(selectedIndex: number, expectedFrame?: ParamInputFrame): void {
     const top = this.topFrame()
-    if (top.kind !== 'param-input') return
+    if (top.kind !== 'param-input' || !this.matchesParamFrame(top, expectedFrame)) return
     const frames = this.state.frames.slice(0, -1)
     frames.push({ ...top, selectedIndex: Math.max(0, selectedIndex) })
     this.setState({ frames })
   }
 
-  toggleCurrentMultiParamValue(value: unknown): void {
+  toggleCurrentMultiParamValue(value: unknown, expectedFrame?: ParamInputFrame): void {
     const top = this.topFrame()
-    if (top.kind !== 'param-input') return
+    if (top.kind !== 'param-input' || !this.matchesParamFrame(top, expectedFrame)) return
     const param = this.currentParam(top)
     if (!param || param.type !== 'multi-select') return
     const currentValue = top.params[param.key]
@@ -712,11 +833,15 @@ export class LauncherController {
     return null
   }
 
-  async commitCurrentParam(value: unknown): Promise<void> {
-    if (this.invalidateUnavailablePlugin()) return
+  async commitCurrentParam(value: unknown, expectedFrame?: ParamInputFrame): Promise<void> {
     const top = this.topFrame()
-    if (top.kind !== 'param-input') return
+    if (top.kind !== 'param-input' || !this.matchesParamFrame(top, expectedFrame)) return
     if (this.state.busy) return
+    if (top.previewEdit && !this.previewSnapshotIsCurrent(top.previewEdit.originalResult.previewEdit!, top.previewEdit.generation)) {
+      this.recoverPreviewInput(top.previewEdit.originalResult.previewEdit!, top.recordUsage)
+      return
+    }
+    if (this.invalidateUnavailablePlugin()) return
     const param = this.currentParam(top)
     if (!param) {
       await this.submitParams()
@@ -732,6 +857,11 @@ export class LauncherController {
     const error = this.validateParam(param, params)
     if (error) {
       this.setState({ error })
+      return
+    }
+
+    if (top.previewEdit) {
+      await this.commitPreviewParamEdit(top, params)
       return
     }
 
@@ -753,10 +883,14 @@ export class LauncherController {
 
   /** Submit the active parameter input frame. */
   async submitParams(): Promise<void> {
-    if (this.invalidateUnavailablePlugin()) return
     const top = this.topFrame()
     if (top.kind !== 'param-input' || !top.item.executeWithParams) return
     if (this.state.busy) return
+    if (top.previewEdit) {
+      await this.commitPreviewParamEdit(top, top.params)
+      return
+    }
+    if (this.invalidateUnavailablePlugin()) return
 
     const error = this.validateParams(top.item, top.params)
     if (error) {
@@ -1106,9 +1240,13 @@ export class LauncherController {
   }
 
   private canActivateChoice(choice: LauncherResultChoice): boolean {
-    if (this.invalidateUnavailablePlugin() || this.state.busy || this.activeDelivery) return false
-    if (this.choiceGenerations.get(choice) !== this.flowGeneration) return false
     const top = this.topFrame()
+    if (this.state.busy || this.activeDelivery) return false
+    if (top.kind === 'result' && top.previewEdit && !this.previewSnapshotIsCurrent(top.previewEdit)) {
+      this.recoverPreviewInput(top.previewEdit, top.pendingUsage?.recordUsage ?? false)
+      return false
+    }
+    if (this.invalidateUnavailablePlugin() || this.choiceGenerations.get(choice) !== this.flowGeneration) return false
     if (top.kind === 'result') return top.output.choices.includes(choice)
     return top.kind === 'collect-input' && Boolean(top.previewOutput?.choices.includes(choice)) &&
       (Boolean(top.item.suggest) || top.previewInputText === top.inputText)
@@ -1192,9 +1330,15 @@ export class LauncherController {
    * - otherwise → pop one frame (list keeps launcher open)
    * From the base list frame, returns false so the host can close the launcher.
    */
-  back(expectedFrame?: CollectInputFrame): boolean {
+  back(expectedFrame?: CollectInputFrame | ParamInputFrame): boolean {
     const current = this.topFrame()
-    if (expectedFrame && (current.kind !== 'collect-input' || current.item !== expectedFrame.item)) return false
+    if (expectedFrame && (expectedFrame.kind === 'param-input'
+      ? current.kind !== 'param-input' || !this.matchesParamFrame(current, expectedFrame)
+      : current.kind !== 'collect-input' || current.item !== expectedFrame.item)) return false
+    if (current.kind === 'param-input' && current.previewEdit) {
+      this.cancelPreviewParamEdit(current)
+      return true
+    }
     this.invalidatePendingActions()
     this.prepareGeneration += 1
     if (this.state.frames.length <= 1) return false
@@ -1239,9 +1383,11 @@ export class LauncherController {
    * Command-tag × : leave the whole command and return to search list in one step.
    * Does not step through intermediate params (unlike empty ⌫ / Esc).
    */
-  exitCommand(expectedFrame?: CollectInputFrame): boolean {
+  exitCommand(expectedFrame?: CollectInputFrame | ParamInputFrame): boolean {
     const current = this.topFrame()
-    if (expectedFrame && (current.kind !== 'collect-input' || current.item !== expectedFrame.item)) return false
+    if (expectedFrame && (expectedFrame.kind === 'param-input'
+      ? current.kind !== 'param-input' || !this.matchesParamFrame(current, expectedFrame)
+      : current.kind !== 'collect-input' || current.item !== expectedFrame.item)) return false
     this.invalidatePendingActions()
     this.prepareGeneration += 1
     if (this.state.frames.length <= 1) return false
@@ -1372,13 +1518,13 @@ export class LauncherController {
         console.warn('[hiven] Failed to update Saved Action usage:', error)
       }
     }
-    if (updateLastRun && run.via !== 'saved-action') {
+    if (updateLastRun && (run.via !== 'saved-action' || run.saveActionKey)) {
       const completedAt = Date.now()
       if (run.saveSnapshot) {
         setLastSaveableRun({
           status: 'ready',
           runId: run.runId,
-          actionKey: run.actionKey,
+          actionKey: run.saveActionKey ?? run.actionKey,
           ...run.saveSnapshot,
           outputIntent,
           completedAt,
@@ -1387,7 +1533,7 @@ export class LauncherController {
         setLastSaveableRun({
           status: 'blocked',
           runId: run.runId,
-          actionKey: run.actionKey,
+          actionKey: run.saveActionKey ?? run.actionKey,
           ...run.saveBlocked,
           completedAt,
         })
@@ -1405,15 +1551,24 @@ export class LauncherController {
     recordUsage: boolean
     execute?: () => Promise<LauncherExecuteResult>
     resolvedChoice?: LauncherResultChoice
+    /** Successful single-parameter edits replace the existing preview level. */
+    replacePreview?: boolean
   }): Promise<void> {
     if (this.invalidateUnavailablePlugin()) return
     const { item, via, sourceTitle, execute, resolvedChoice } = input
     const flowGeneration = this.flowGeneration
+    const previewEdit: PreviewEditSnapshot | undefined = this.isExplicitTextPreview(item) &&
+      item.actionPolicy?.effect === 'pure' && this.hasCustomizableParams(item) && input.inputText !== undefined
+      ? { item, params: this.copyParams(input.params), inputText: input.inputText,
+          generation: flowGeneration, materialGeneration: this.deps.getMaterialGeneration?.() }
+      : undefined
     const committedRun = this.committedRunFor(item, via)
+    const saveActionKey = via === 'saved-action' && input.replacePreview ? item.savedActionBaseKey : undefined
+    if (committedRun && saveActionKey) committedRun.saveActionKey = saveActionKey
     let miningSnapshot: Promise<MiningRunSnapshot | null> | undefined
     if (
       committedRun &&
-      via !== 'saved-action' &&
+      (via !== 'saved-action' || saveActionKey) &&
       input.inputBinding &&
       item.contractFingerprint &&
       item.actionPolicy?.learnable === true &&
@@ -1436,7 +1591,7 @@ export class LauncherController {
               ? api.getActiveText()
               : ''
         )
-        miningSnapshot = createMiningFingerprints(inputText, saveable.params)
+        if (via !== 'saved-action') miningSnapshot = createMiningFingerprints(inputText, saveable.params)
       } else {
         committedRun.saveBlocked = {
           blockedKeys: saveable.blockedKeys,
@@ -1461,9 +1616,19 @@ export class LauncherController {
     let result: LauncherExecuteResult
     try {
       result = await execute()
-      if (flowGeneration !== this.flowGeneration || this.invalidateUnavailablePlugin()) return
+      if (flowGeneration !== this.flowGeneration) return
+      if (previewEdit && (result.ok || input.replacePreview) && !this.previewSnapshotIsCurrent(previewEdit)) {
+        this.recoverPreviewInput(previewEdit, input.recordUsage)
+        return
+      }
+      if (this.invalidateUnavailablePlugin()) return
     } catch (error) {
-      if (flowGeneration !== this.flowGeneration || this.invalidateUnavailablePlugin()) return
+      if (flowGeneration !== this.flowGeneration) return
+      if (previewEdit && input.replacePreview && !this.previewSnapshotIsCurrent(previewEdit)) {
+        this.recoverPreviewInput(previewEdit, input.recordUsage)
+        return
+      }
+      if (this.invalidateUnavailablePlugin()) return
       const failure = classifyExperienceError(error, 'provider-failed')
       if (committedRun) this.recordRunFinished(committedRun, failure.status, failure.errorType)
       trackLatencyFrom(TelemetryEvents.launcherItemExecute, startedAt, {
@@ -1493,7 +1658,7 @@ export class LauncherController {
     await this.applyResult(result, sourceTitle, committedRun, {
       item,
       recordUsage: input.recordUsage,
-    })
+    }, undefined, previewEdit, input.replacePreview)
   }
 
   private async runChoiceAction(
@@ -1585,6 +1750,8 @@ export class LauncherController {
     committedRun?: CommittedRunContext,
     pendingUsage?: ResultFrame['pendingUsage'],
     appliedOutputIntent?: OutputIntent,
+    previewEdit?: PreviewEditSnapshot,
+    replacePreview = false,
   ): Promise<void> {
     if (this.invalidateUnavailablePlugin()) return
     if (!result.ok) {
@@ -1609,16 +1776,22 @@ export class LauncherController {
         return
       }
       // Success with output: enter result-choice mode (keep open).
+      const frames = replacePreview ? this.state.frames.slice(0, -1) : [...this.state.frames]
+      const previous = frames[frames.length - 1]
+      if (replacePreview && previewEdit && (previous?.kind === 'collect-input' || previous?.kind === 'param-input')) {
+        frames[frames.length - 1] = { ...previous, params: this.copyParams(previewEdit.params) }
+      }
       this.setState({
         busy: false,
         error: null,
-        frames: [...this.state.frames, {
+        frames: [...frames, {
           kind: 'result',
           executionMode: explicitPreview ? 'explicit-text-preview' : undefined,
           output: result.output,
           sourceTitle,
           committedRun,
           pendingUsage,
+          previewEdit,
         }],
       })
       return

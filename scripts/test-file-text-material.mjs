@@ -130,6 +130,10 @@ const exact = '\ufeff  {"hello":"世界"}\r\n\r\n  '
 {
   const test = session()
   let state = test.render()
+  const getGeneration = state.getMaterialGeneration
+  const initialGeneration = getGeneration()
+  assert.equal(typeof initialGeneration, 'number')
+  assert.equal(test.render().getMaterialGeneration(), initialGeneration, 'render alone keeps material identity')
   assert.equal(explicitReads.length, 0, 'attaching never reads automatically')
   assert.equal(state.canReadFileText, true)
   const staleButton = state.readFileText
@@ -150,7 +154,9 @@ const exact = '\ufeff  {"hello":"世界"}\r\n\r\n  '
   staleButton()
   assert.equal(test.reads.length, 1, 'stale file button cannot read replacement material')
   const loaded = state.block
+  const loadedGeneration = getGeneration()
   pending.setPendingObjectBlock(blocks.createToolResultObjectBlock('processed text'))
+  assert.notEqual(getGeneration(), loadedGeneration, 'explicit material changes invalidate synchronously before render')
   state = test.render()
   assert.equal(state.block.meta.textOrigin, 'file-content', 'processing keeps literal content provenance')
   state.restorePreviousMaterial()
@@ -162,10 +168,15 @@ const exact = '\ufeff  {"hello":"世界"}\r\n\r\n  '
   state = test.render()
   assert.equal(state.block.meta.textOrigin, 'file-content', 'editing cannot re-enable hidden path reads')
   assert.equal(state.canReadFileText, false)
-  test.close(); state = test.reopen()
+  const beforeClose = getGeneration()
+  test.close()
+  assert.equal(getGeneration(), undefined, 'closed material session cannot validate a preview')
+  state = test.reopen()
+  assert.notEqual(getGeneration(), beforeClose, 'reopening cannot revive the prior material identity')
   assert.equal(state.block.payloadText, '/synthetic/looks-like-another-file.json')
   assert.equal(state.block.meta.textOrigin, 'file-content', 'handoff backup preserves provenance across sessions')
   test.unmount()
+  assert.equal(getGeneration(), undefined, 'unmounted material session cannot validate a preview')
 }
 {
   const test = session()

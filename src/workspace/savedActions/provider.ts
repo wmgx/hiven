@@ -1,4 +1,4 @@
-import type { LauncherExecutionContext, LauncherItem } from '../launcher/types'
+import type { LauncherExecuteWithParamsHandler, LauncherExecutionContext, LauncherItem } from '../launcher/types'
 import { selectHostOutputResult } from '../launcher/output'
 import { isGlobalLauncherSavedActionOutput, savedActionDisabledReason } from './compatibility'
 import { listSavedActions, savedActionSnapshot, setSavedActionDisabledReason } from './store'
@@ -39,6 +39,22 @@ export function projectSavedAction(
     )) return { action: null, reason: 'contract-changed' }
     return { action, reason: disabledReason ?? savedActionDisabledReason(artifact, action) }
   }
+  const editablePreview = artifact.inputBinding === 'prompt' && baseAction?.executionMode === 'explicit-text-preview' && baseAction.actionPolicy?.effect === 'pure'
+  const defaultParams = { ...baseAction?.defaultParams, ...artifact.savedParams }
+  const executeWithParams: LauncherExecuteWithParamsHandler = async (ctx, params) => {
+    const current = currentBase()
+    if (current.reason || !current.action) return unavailable(current.reason ?? 'missing-action', ctx.locale)
+    const text = boundInput(artifact, ctx)
+    if (text == null) return unavailable('input-unavailable', ctx.locale)
+    const baseContext = { ...ctx, input: { text } }
+    const result = current.action.executeWithParams
+      ? await current.action.executeWithParams(baseContext, params)
+      : await current.action.execute(baseContext)
+    const afterRun = currentBase()
+    if (afterRun.reason || !afterRun.action) return unavailable(afterRun.reason ?? 'missing-action', ctx.locale)
+    if (!result.ok) return result
+    return selectHostOutputResult(result, artifact.outputIntent) ?? unavailable('output-unavailable', ctx.locale)
+  }
   return {
     systemKey: `host:saved-action:${artifact.id}`,
     kind: 'host',
@@ -65,6 +81,19 @@ export function projectSavedAction(
       : { type: 'perform' },
     surfaces: ['global-launcher'],
     executionMode: baseAction?.executionMode,
+    ...(editablePreview ? {
+      params: baseAction.params,
+      defaultParams,
+      actionPolicy: baseAction.actionPolicy,
+      contractFingerprint: baseAction.contractFingerprint,
+      savedActionBaseKey: artifact.baseActionKey,
+      isExplicitTextPreviewAvailable: () => {
+        const current = currentBase()
+        return !current.reason && Boolean(current.action && current.action.pluginLifetime?.active !== false &&
+          current.action.isExplicitTextPreviewAvailable?.())
+      },
+      executeWithParams: baseAction.executeWithParams ? executeWithParams : undefined,
+    } : {}),
     commitVia: 'saved-action',
     savedActionArtifactId: artifact.id,
     savedActionSnapshot: savedActionSnapshot(artifact),
@@ -74,20 +103,7 @@ export function projectSavedAction(
       messageI18n: subtitleI18n,
     } : undefined,
     recordUsage: true,
-    execute: async (ctx) => {
-      const current = currentBase()
-      if (current.reason || !current.action) return unavailable(current.reason ?? 'missing-action', ctx.locale)
-      const text = boundInput(artifact, ctx)
-      if (text == null) return unavailable('input-unavailable', ctx.locale)
-      const baseContext = { ...ctx, input: { text } }
-      const result = current.action.executeWithParams
-        ? await current.action.executeWithParams(baseContext, artifact.savedParams)
-        : await current.action.execute(baseContext)
-      const afterRun = currentBase()
-      if (afterRun.reason || !afterRun.action) return unavailable(afterRun.reason ?? 'missing-action', ctx.locale)
-      if (!result.ok) return result
-      return selectHostOutputResult(result, artifact.outputIntent) ?? unavailable('output-unavailable', ctx.locale)
-    },
+    execute: (ctx) => executeWithParams(ctx, editablePreview ? defaultParams : artifact.savedParams),
   }
 }
 

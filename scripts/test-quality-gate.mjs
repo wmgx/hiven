@@ -62,6 +62,7 @@ const commands = [
   ['npm', ['run', 'test:ai-writing-summary']],
   ['npm', ['run', 'test:line-list-cleanup']],
   ['npm', ['run', 'test:text-list-extraction']],
+  ['npm', ['run', 'test:launcher-preview-parameter-edit']],
   ['npm', ['run', 'test:translate-ai-readiness']],
   ['npm', ['run', 'test:translate-ai-glossary']],
   ['npm', ['run', 'test:translate-output-eligibility']],

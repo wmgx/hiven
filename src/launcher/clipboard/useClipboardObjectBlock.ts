@@ -72,6 +72,8 @@ export type ClipboardObjectBlockState = {
   fileTextError: FileTextErrorCode | null
   readFileText: () => void
   cancelFileTextRead: () => void
+  /** Synchronous identity for the currently attached material session. */
+  getMaterialGeneration: () => number | undefined
 }
 
 /** Blocks handed in from history / tools — re-stash on hide so ⌘↵ is not lost mid-transition. */
@@ -471,6 +473,9 @@ export function useClipboardObjectBlock(params: {
     setPendingObjectBlock(createQueryObjectBlock({ query: text }))
   }, [])
 
+  const getMaterialGeneration = useCallback(() => mountedRef.current && openRef.current
+    ? materialGenerationRef.current : undefined, [])
+
   // Keep object-action until unmount so ranking/list do not re-render mid-exit (jank source).
   const mode: ClipboardObjectBlockMode = block ? 'object-action' : 'search-only'
 
@@ -494,5 +499,6 @@ export function useClipboardObjectBlock(params: {
     fileTextError,
     readFileText,
     cancelFileTextRead,
+    getMaterialGeneration,
   }
 }

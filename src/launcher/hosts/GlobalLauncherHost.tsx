@@ -122,6 +122,7 @@ export function GlobalLauncherHost() {
     requestClose: () => closeAfterActionRef.current(),
     collectDynamicWhenEmpty: true,
     objectBlockText,
+    getMaterialGeneration: clipboardBlock.getMaterialGeneration,
     foregroundApp,
     makeApi: createGlobalLauncherPluginApi,
     visibleSelectionItemsRef,

@@ -149,6 +149,28 @@ export function adaptToolToLauncherItem(
   const hasPreviewDeclaration = tool.explicitTextPreview !== undefined
   const previewRunner = resolveBundledTextPreviewRunner(options.pluginId, options.source, options.definition, tool)
   const executionMode = previewRunner ? 'explicit-text-preview' as const : undefined
+  const contractFingerprint = computeContractFingerprint({
+    systemKey: options.systemKey,
+    inputPolicy: tool.inputPolicy,
+    executionMode,
+    params: tool.params,
+  })
+  // Runtime edit/cancel must also reject saveability and validation changes,
+  // which intentionally do not alter the persisted behavior fingerprint.
+  const currentPreviewContract = () => JSON.stringify({
+    policy: tool.policy,
+    defaults: tool.defaultParams,
+    params: tool.params?.map(({ key, type, required, default: value, options, minSelect, maxSelect, saveable, saveableMaxLength }) => ({
+      key, type, required, default: value,
+      options: options?.map((option) => typeof option === 'string' ? option : option.value),
+      minSelect, maxSelect, saveable, saveableMaxLength,
+    })),
+  })
+  const previewContract = currentPreviewContract()
+  const isExplicitTextPreviewAvailable = () => Boolean(previewRunner &&
+    resolveBundledTextPreviewRunner(options.pluginId, options.source, options.definition, tool) === previewRunner &&
+    computeContractFingerprint({ systemKey: options.systemKey, inputPolicy: tool.inputPolicy, executionMode, params: tool.params }) === contractFingerprint &&
+    currentPreviewContract() === previewContract)
   const defaultParams = { ...(tool.defaultParams ?? {}) }
   for (const param of tool.params ?? []) {
     if (defaultParams[param.key] === undefined && param.default !== undefined) {
@@ -166,7 +188,7 @@ export function adaptToolToLauncherItem(
     if (isGlobalLauncher && hasPreviewDeclaration) {
       // No fallback to the full tool context: a replaced/unregistered bundle
       // invalidates already collected items as well as future discovery.
-      if (!previewRunner || resolveBundledTextPreviewRunner(options.pluginId, options.source, options.definition, tool) !== previewRunner) {
+      if (!previewRunner || !isExplicitTextPreviewAvailable()) {
         return errorResult(translate(ctx.locale, 'palette', 'savedActionMissing'))
       }
       const text = ctx.input?.text
@@ -176,7 +198,7 @@ export function adaptToolToLauncherItem(
       const result = await previewRunner({ input: { text }, params, locale: ctx.locale, t: ctx.t })
       // A registration change while an async pure runner was pending also
       // invalidates its output before any delivery actions can be produced.
-      if (resolveBundledTextPreviewRunner(options.pluginId, options.source, options.definition, tool) !== previewRunner) {
+      if (!isExplicitTextPreviewAvailable()) {
         return errorResult(translate(ctx.locale, 'palette', 'savedActionMissing'))
       }
       return result.ok
@@ -235,13 +257,9 @@ export function adaptToolToLauncherItem(
       : launcherOptions?.surfaces,
     inputPolicy: tool.inputPolicy,
     executionMode,
+    isExplicitTextPreviewAvailable: previewRunner ? isExplicitTextPreviewAvailable : undefined,
     actionPolicy: tool.policy ?? DEFAULT_TOOL_ACTION_POLICY,
-    contractFingerprint: computeContractFingerprint({
-      systemKey: options.systemKey,
-      inputPolicy: tool.inputPolicy,
-      executionMode,
-      params: tool.params,
-    }),
+    contractFingerprint,
     params: tool.params,
     defaultParams,
     requireParamSelection: tool.requireParamSelection,

@@ -69,6 +69,8 @@ export function GlobalLauncherFrameSwitch({
   onActivateResultChoice,
   onSecondaryAction,
   onPastePreviewText,
+  canEditPreviewParam,
+  onEditPreviewParam,
   onSubmitCollectInput,
   onCaptureSelection,
   onHoverResultChoice,
@@ -124,19 +126,21 @@ export function GlobalLauncherFrameSwitch({
   onSurfaceClose: () => void
   onPermissionBack: () => void
   onPermissionGrant: () => void
-  onParamQueryChange: (value: string) => void
-  onParamSelectedIndexChange: (index: number) => void
-  onParamCommit: (value: unknown) => void
-  onParamMultiToggle: (value: unknown) => void
-  onFrameBack: (frame?: CollectInputFrame) => void
+  onParamQueryChange: (value: string, frame?: ParamInputFrame) => void
+  onParamSelectedIndexChange: (index: number, frame?: ParamInputFrame) => void
+  onParamCommit: (value: unknown, frame?: ParamInputFrame) => void
+  onParamMultiToggle: (value: unknown, frame?: ParamInputFrame) => void
+  onFrameBack: (frame?: CollectInputFrame | ParamInputFrame) => void
   /** Command-tag × — pop entire command stack to list. */
-  onExitCommand?: (frame?: CollectInputFrame) => void
+  onExitCommand?: (frame?: CollectInputFrame | ParamInputFrame) => void
   onCollectInputChange: (value: string, frame?: CollectInputFrame) => void
   onActivateResultChoice: (choice: LauncherResultChoice) => void
   /** Collect-input / result secondary actions (id is plugin-defined). */
   onSecondaryAction?: (choice: LauncherResultChoice, actionId: string) => void
   /** Package 4: paste live-preview text into the foreground app. */
   onPastePreviewText?: (choice: LauncherResultChoice) => void | Promise<void>
+  canEditPreviewParam?: (key: string, frame: ResultFrame) => boolean
+  onEditPreviewParam?: (key: string, frame: ResultFrame) => void
   /** Package 4: default collect-input submit when no destination chrome. */
   onSubmitCollectInput?: (frame?: CollectInputFrame) => void
   onCaptureSelection?: () => void
@@ -229,12 +233,12 @@ export function GlobalLauncherFrameSwitch({
           headerClassName="global-launcher-header l-search"
           bodyClassName="global-launcher-body l-list opt"
           footerClassName="global-launcher-footer l-foot"
-          onQueryChange={onParamQueryChange}
-          onSelectedIndexChange={onParamSelectedIndexChange}
-          onCommit={onParamCommit}
-          onMultiToggle={onParamMultiToggle}
-          onBack={onFrameBack}
-          onExitCommand={onExitCommand}
+          onQueryChange={(value) => onParamQueryChange(value, frame)}
+          onSelectedIndexChange={(index) => onParamSelectedIndexChange(index, frame)}
+          onCommit={(value) => onParamCommit(value, frame)}
+          onMultiToggle={(value) => onParamMultiToggle(value, frame)}
+          onBack={() => onFrameBack(frame)}
+          onExitCommand={onExitCommand ? () => onExitCommand(frame) : undefined}
         />
       </LauncherFlowFrame>
     )
@@ -293,6 +297,8 @@ export function GlobalLauncherFrameSwitch({
           onToggleChoice={onToggleResultChoice}
           onSecondaryAction={onSecondaryAction}
           onPastePreviewText={onPastePreviewText}
+          canEditPreviewParam={canEditPreviewParam}
+          onEditPreviewParam={onEditPreviewParam}
         />
       </LauncherFlowFrame>
     )

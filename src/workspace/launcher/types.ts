@@ -62,6 +62,8 @@ export type CommittedRunContext = {
   inputBinding?: InputBinding
   miningSnapshot?: MiningRunSnapshot
   saveSnapshot?: SaveableRunSnapshot
+  /** An edited Saved Action saves the new settings under its underlying action. */
+  saveActionKey?: string
   saveBlocked?: BlockedSaveableRunSnapshot
   artifactId?: string
 }
@@ -594,6 +596,8 @@ export type LauncherItem = {
   inputPolicy?: TextInputPolicy
   /** Host-owned global execution path with explicit text and deferred delivery. */
   executionMode?: 'explicit-text-preview'
+  /** Host-only read check for the current bundled preview registration and contract. */
+  isExplicitTextPreviewAvailable?: () => boolean
   /** Host-owned input form for action metadata; never seed it from an Object Block. */
   metadataInput?: boolean
   /** Host-only current-material draft: multiline, with explicit confirmation. */
@@ -608,6 +612,8 @@ export type LauncherItem = {
   commitVia?: CommitVia
   /** Host-only artifact identity for Saved Action invocation facts. */
   savedActionArtifactId?: string
+  /** Host-only base identity for saving a newly edited preview, without changing its artifact. */
+  savedActionBaseKey?: string
   /** Host-only immutable row configuration used to reject stale management actions. */
   savedActionSnapshot?: string
   /** Generic host-owned availability state; disabled items remain visible with an explanation. */

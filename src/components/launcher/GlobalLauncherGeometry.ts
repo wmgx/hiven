@@ -76,6 +76,31 @@ export function computeStandaloneLauncherGeometry({
 }
 
 export function measureLauncherPanelParts(panel: HTMLElement) {
+  const textResult = panel.querySelector<HTMLElement>('.launcher-result-text-frame')
+  const preview = textResult?.querySelector<HTMLElement>('.launcher-preview-well')
+  if (textResult && preview) {
+    // A text result has several fixed rows, including optional parameters and
+    // delivery status. Its constrained panel rect cannot tell us their total.
+    const previewStyle = getComputedStyle(preview)
+    const previewMargins = cssPixels(previewStyle.marginTop) + cssPixels(previewStyle.marginBottom)
+    const chromeHeight = Array.from(textResult.children).reduce((height, child) => {
+      if (!(child instanceof HTMLElement) || child === preview) return height
+      const style = getComputedStyle(child)
+      return height + child.offsetHeight + cssPixels(style.marginTop) + cssPixels(style.marginBottom)
+    }, panel.offsetHeight - panel.clientHeight + previewMargins)
+    const text = preview.querySelector<HTMLElement>('pre')
+    // Measure the text, not the scrollport: a previous longer result may have
+    // left an explicit scrollport height that must be allowed to shrink again.
+    const contentHeight = (text?.offsetHeight ?? preview.scrollHeight)
+      + cssPixels(previewStyle.paddingTop) + cssPixels(previewStyle.paddingBottom)
+      + cssPixels(previewStyle.borderTopWidth) + cssPixels(previewStyle.borderBottomWidth)
+    const availableHeight = Math.max(0,
+      STANDALONE_LAUNCHER_MAX_HEIGHT - STANDALONE_LAUNCHER_VERTICAL_PADDING - chromeHeight,
+    )
+    const bodyMaxHeight = Math.min(Math.max(112, contentHeight), 320, availableHeight)
+    return { panelHeight: chromeHeight + bodyMaxHeight, bodyMaxHeight }
+  }
+
   const header = panel.querySelector<HTMLElement>('.global-launcher-header')
   const body = panel.querySelector<HTMLElement>('.global-launcher-body')
   const footer = panel.querySelector<HTMLElement>('.global-launcher-footer')
@@ -99,6 +124,10 @@ export function measureLauncherPanelParts(panel: HTMLElement) {
     panelHeight: header.offsetHeight + bodyMaxHeight + footer.offsetHeight,
     bodyMaxHeight,
   }
+}
+
+function cssPixels(value: string): number {
+  return Number.parseFloat(value) || 0
 }
 
 export function applyStandaloneLauncherGeometry(panel: HTMLElement, geometry: StandaloneLauncherGeometry) {

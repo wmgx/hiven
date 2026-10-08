@@ -1,10 +1,13 @@
+import { useEffect, useRef } from 'react'
 import type { Locale } from '../../i18n'
 import { t } from '../../i18n'
+import { localized } from '../../store'
 import type { LauncherControllerState, ResultFrame } from '../../workspace/launcher/controller'
 import type { LauncherResultChoice } from '../../workspace/launcher/types'
 import { LauncherHintKey, LauncherHintText } from './LauncherFooterHints'
 import { LauncherResultChoiceRow } from './LauncherResultChoiceRow'
-import { LauncherCommandTag } from './LauncherCommandTag'
+import { LauncherCommandTag, LauncherParamValueChip } from './LauncherCommandTag'
+import { resolveParamValueLabel } from './LauncherParamStep'
 import { getHostOutputIntent } from '../../workspace/launcher/output'
 import { shouldIgnoreImeKeyDown } from '../../utils/imeKeyboard'
 import {
@@ -37,6 +40,8 @@ export function GlobalLauncherResultFrame({
   onToggleChoice,
   onSecondaryAction,
   onPastePreviewText,
+  canEditPreviewParam,
+  onEditPreviewParam,
 }: {
   frame: ResultFrame
   busy?: boolean
@@ -50,7 +55,10 @@ export function GlobalLauncherResultFrame({
   onToggleChoice: (choice: LauncherResultChoice, frame: ResultFrame) => void
   onSecondaryAction?: (choice: LauncherResultChoice, actionId: string) => void
   onPastePreviewText?: (choice: LauncherResultChoice) => void | Promise<void>
+  canEditPreviewParam?: (key: string, frame: ResultFrame) => boolean
+  onEditPreviewParam?: (key: string, frame: ResultFrame) => void
 }) {
+  const resultRef = useRef<HTMLDivElement>(null)
   const choices = frame.output.choices
   const selection = frame.output.selection
   const clampedSelectedIndex = Math.min(selectedIndex, Math.max(0, choices.length - 1))
@@ -63,6 +71,15 @@ export function GlobalLauncherResultFrame({
   const explicitPreview = frame.executionMode === 'explicit-text-preview'
   const singleText = selection?.type !== 'multi' && (frame.retryOnly || isSingleTextResult(choices, explicitPreview))
   const textChoice = singleText ? choices[0] : undefined
+  const previewEdit = explicitPreview && !frame.retryOnly ? frame.previewEdit : undefined
+  const previewParams = onEditPreviewParam ? previewEdit?.item.params ?? [] : []
+  const hasPreviewParams = previewParams.length > 0
+
+  useEffect(() => {
+    if (!hasPreviewParams) return
+    const request = requestAnimationFrame(() => resultRef.current?.focus({ preventScroll: true }))
+    return () => cancelAnimationFrame(request)
+  }, [frame, hasPreviewParams])
   const rawPreviewText = textChoice ? (textChoice.preview ?? textChoice.title ?? '') : ''
   const previewText = explicitPreview ? rawPreviewText : rawPreviewText.trim()
   const primaryIntent = textChoice ? getHostOutputIntent(textChoice) : null
@@ -114,10 +131,21 @@ export function GlobalLauncherResultFrame({
   if (singleText && textChoice) {
     return (
       <div
+        ref={resultRef}
         className="launcher-result-text-frame"
         tabIndex={-1}
         onKeyDown={(event) => {
           if (shouldIgnoreImeKeyDown(event, { current: false })) return
+          if (hasPreviewParams && (
+            event.key === 'Tab'
+            || ((event.key === 'Enter' || event.key === ' ' || event.code === 'Space')
+              && event.target instanceof HTMLElement && event.target.closest('button'))
+          )) {
+            // Every parameter and output remains reachable by native Tab;
+            // focused buttons own Enter / Space instead of executing output.
+            event.stopPropagation()
+            return
+          }
           if (event.key === 'Tab' && !event.metaKey && !event.ctrlKey && !event.altKey) {
             event.preventDefault()
             event.stopPropagation()
@@ -143,6 +171,30 @@ export function GlobalLauncherResultFrame({
             onRemove={onBack}
           />
         </div>
+        {hasPreviewParams && previewEdit && (
+          <div
+            className="flex flex-wrap items-center gap-2 px-4 py-2"
+            data-testid="launcher-preview-params"
+            data-no-drag
+            role="group"
+            aria-label={t(locale, 'palette.customizeParamsLabel')}
+          >
+            {previewParams.map((param) => {
+              const label = localized(param.label, param.labelI18n, locale)
+              return (
+                <LauncherParamValueChip
+                  key={param.key}
+                  paramKey={param.key}
+                  label={label}
+                  value={resolveParamValueLabel(param, previewEdit.params[param.key], locale)}
+                  editLabel={t(locale, 'palette.editPreviewParam', { label })}
+                  disabled={busy || !canEditPreviewParam?.(param.key, frame)}
+                  onEdit={() => onEditPreviewParam?.(param.key, frame)}
+                />
+              )
+            })}
+          </div>
+        )}
         <div
           className="launcher-preview-well"
           data-testid="launcher-result-preview-well"
@@ -208,7 +260,11 @@ export function GlobalLauncherResultFrame({
           </div>
         )}
         <div className="global-launcher-footer l-foot">
-          {frame.retryOnly ? <LauncherHintKey keys="↵" label={t(locale, 'palette.outputRetry')} /> : <LauncherOutputTargetsFooter destinations={destinations} locale={locale} />}
+          {frame.retryOnly
+            ? <LauncherHintKey keys="↵" label={t(locale, 'palette.outputRetry')} />
+            : hasPreviewParams
+              ? <LauncherHintKey keys="⇥" label={t(locale, 'palette.previewParamNavigation')} />
+              : <LauncherOutputTargetsFooter destinations={destinations} locale={locale} />}
           <LauncherHintKey keys="esc" label={t(locale, 'palette.back')} />
         </div>
       </div>

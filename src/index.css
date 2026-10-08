@@ -5774,6 +5774,26 @@ body[data-theme='dark'] .launcher-empty-well {
   scrollbar-gutter: stable;
 }
 
+/* Text results reserve room for parameters and delivery controls. Only the
+   preview shrinks, and its cap is independent of native window resize. */
+.global-launcher-panel .launcher-result-text-frame {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.global-launcher-panel .launcher-result-text-frame > * {
+  flex-shrink: 0;
+}
+
+.global-launcher-panel .launcher-result-text-frame > .launcher-preview-well {
+  flex-shrink: 1;
+  min-height: 0;
+  height: var(--launcher-body-max-height, auto);
+  max-height: 320px;
+}
+
 .launcher-empty-well {
   display: flex;
   flex-direction: column;
