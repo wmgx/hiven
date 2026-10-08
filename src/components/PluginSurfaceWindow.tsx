@@ -75,6 +75,8 @@ export function PluginSurfaceWindow() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
+      // A settings overlay owns Escape before the independent window hides.
+      if (document.querySelector('[role="dialog"][data-open]')) return
       if (document.querySelector('[role="tooltip"][data-open]')) return
       if (isImeComposingRef.current || event.isComposing || (event as unknown as { keyCode: number }).keyCode === 229) return
       event.preventDefault()

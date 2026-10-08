@@ -215,7 +215,8 @@ export function useGlobalLauncherHostEscape({
 }) {
   const handleHostEscape = useCallback((event: KeyboardEvent) => {
     if (event.key !== 'Escape') return
-    if (event.target instanceof Element && event.target.closest('[role="dialog"][data-open]')) return
+    // Dialog menus may portal beside the popup, outside its DOM ancestry.
+    if (document.querySelector('[role="dialog"][data-open]')) return
     // Let an open tooltip consume Escape before the host leaves its page.
     if (document.querySelector('[role="tooltip"][data-open]')) return
 

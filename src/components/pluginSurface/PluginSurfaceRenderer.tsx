@@ -1,4 +1,4 @@
-import { Component, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from 'react'
+import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { localized, useAppStore, type PluginSurfaceOpenTarget } from '../../store'
 import { t, pickLocale, type Locale } from '../../i18n'
@@ -25,8 +25,11 @@ import type {
 import { createPluginSurfaceObjectBlock } from './pluginSurfaceObjectBlock'
 import { setPendingObjectBlock } from '../../launcher/clipboard/pendingObjectBlock'
 import { showLauncherWindow } from '../../workspace/windowManager/launcherWindow'
+import { pluginSurfaceInstanceId } from '../../workspace/pluginSurfaceWindows'
+import { PluginAppSettingsDialog } from './PluginAppSettingsDialog'
 
 type ResolvedPluginSurface = {
+  target: PluginSurfaceOpenTarget
   definition: PluginDefinition<unknown>
   surface: PluginUiSurfaceContribution<unknown>
   permissions: PluginPermissionSnapshot
@@ -40,6 +43,18 @@ type PluginSurfaceRendererState =
   | ({ status: 'before-open' } & ResolvedPluginSurface)
   | ({ status: 'ready' } & ResolvedPluginSurface)
   | { status: 'error'; title: string; message: string }
+
+type AppSettingsSession = {
+  target: PluginSurfaceOpenTarget
+  owner: PluginSurfaceRendererState
+  promise: Promise<void>
+  resolve: () => void
+  reject: (error: Error) => void
+}
+
+function settingsInterrupted(): Error {
+  return Object.assign(new Error('App settings surface interrupted'), { name: 'AbortError' })
+}
 
 export type PluginSurfaceRendererProps = {
   target: PluginSurfaceOpenTarget
@@ -66,11 +81,65 @@ export function PluginSurfaceRenderer({
   const [surfaceState, setSurfaceState] = useState<PluginSurfaceRendererState>({ status: 'loading-runtime' })
   const activeTargetRef = useRef(target)
   activeTargetRef.current = target
+  const activeStateRef = useRef(surfaceState)
+  activeStateRef.current = surfaceState
   const mountedRef = useRef(false)
-  useEffect(() => {
-    mountedRef.current = true
-    return () => { mountedRef.current = false }
+  const hiddenRef = useRef(false)
+  const sessionRef = useRef<AppSettingsSession | null>(null)
+  const [appSettingsSession, setAppSettingsSession] = useState<AppSettingsSession | null>(null)
+  const finishAppSettings = useCallback((session: AppSettingsSession | null, completed = false) => {
+    if (!session || sessionRef.current !== session) return
+    sessionRef.current = null
+    if (mountedRef.current) setAppSettingsSession(null)
+    if (completed) session.resolve()
+    else session.reject(settingsInterrupted())
   }, [])
+
+  useLayoutEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      finishAppSettings(sessionRef.current)
+    }
+  }, [finishAppSettings])
+
+  useLayoutEffect(() => () => finishAppSettings(sessionRef.current), [target, surfaceState, finishAppSettings])
+
+  useEffect(() => {
+    hiddenRef.current = false
+    const interrupt = () => finishAppSettings(sessionRef.current)
+    const onVisibilityChange = () => { if (document.visibilityState === 'hidden') interrupt() }
+    window.addEventListener('pagehide', interrupt)
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    let disposed = false
+    let unlisten: (() => void) | undefined
+    // Native independent windows can hide without unmounting or a DOM visibility event.
+    // Only their existing registry lifecycle is observed; blur during OAuth is not hide.
+    if (presentation === 'plugin-surface-window' && '__TAURI_INTERNALS__' in window) {
+      const id = pluginSurfaceInstanceId(target)
+      type Mutation = { type?: string; id?: string; state?: string; surface?: { id?: string; state?: string } }
+      void import('@tauri-apps/api/event').then(({ listen }) => listen<Mutation>('hiven://surface-registry-sync', ({ payload }) => {
+        if (disposed || activeTargetRef.current !== target || !payload) return
+        const matches = payload.type === 'upsert' ? payload.surface?.id === id : payload.id === id
+        if (!matches) return
+        const state = payload.type === 'upsert' ? payload.surface?.state : payload.state
+        if (state === 'visible') hiddenRef.current = false
+        if (state === 'hidden' || state === 'destroyed' || payload.type === 'remove') {
+          hiddenRef.current = true
+          interrupt()
+        }
+      })).then((stop) => {
+        if (disposed) stop()
+        else unlisten = stop
+      }).catch((error) => console.warn('[hiven] Could not observe plugin settings window lifecycle:', error))
+    }
+    return () => {
+      disposed = true
+      unlisten?.()
+      window.removeEventListener('pagehide', interrupt)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [target, presentation, finishAppSettings])
 
   useEffect(() => {
     let disposed = false
@@ -93,6 +162,7 @@ export function PluginSurfaceRenderer({
         const permissions = getPluginPermissionSnapshot(target.source, target.pluginId, requestedPermissions)
         const missingPermissions = missingPluginPermissions(permissions, requestedPermissions)
         const resolved: ResolvedPluginSurface = {
+          target,
           definition,
           surface,
           permissions,
@@ -148,7 +218,7 @@ export function PluginSurfaceRenderer({
     return () => { disposed = true }
   }, [target, pluginRegistryVersion, permissionVersion, locale])
 
-  if (surfaceState.status === 'loading-runtime') {
+  if (surfaceState.status === 'loading-runtime' || ('target' in surfaceState && surfaceState.target !== target)) {
     return <PluginSurfaceMessage title={t(locale, 'palette.surfaceLoading')} />
   }
   if (surfaceState.status === 'error') {
@@ -166,9 +236,23 @@ export function PluginSurfaceRenderer({
   const pluginT = makePluginT(target.pluginId, locale)
   const hostStorage = createPluginPrivateStorage(target.source, target.pluginId, surfaceState.permissions)
   const SurfaceComponent = surfaceState.surface.component
+  const isCurrentSurface = () => mountedRef.current && activeTargetRef.current === target && activeStateRef.current === surfaceState && !hiddenRef.current
+  const leaveSurface = (action: () => void) => {
+    if (!isCurrentSurface()) return
+    finishAppSettings(sessionRef.current)
+    action()
+  }
 
   return (
-    <PluginSurfaceErrorBoundary pluginId={target.pluginId} locale={locale} onBack={onBack}>
+    <PluginSurfaceErrorBoundary
+      pluginId={target.pluginId}
+      locale={locale}
+      onBack={onBack}
+      onError={() => {
+        finishAppSettings(sessionRef.current)
+        setSurfaceState({ status: 'error', title: t(locale, 'palette.surfaceCrashed'), message: '' })
+      }}
+    >
       {surfaceState.status === 'permission-gate' ? (
         <PluginSurfacePermissionGate
           permissions={surfaceState.missingPermissions}
@@ -190,12 +274,14 @@ export function PluginSurfaceRenderer({
           permissions={surfaceState.permissions}
           initialText={target.initialText}
           host={{
-            close: onClose,
+            close: () => leaveSurface(onClose),
             complete: () => {
-              if (presentation === 'global-launcher' && mountedRef.current && activeTargetRef.current === target) onClose()
+              if (presentation === 'global-launcher') leaveSurface(onClose)
             },
-            requestBack: onBack,
+            requestBack: () => leaveSurface(onBack),
             openSettings: () => {
+              if (!isCurrentSurface()) return
+              finishAppSettings(sessionRef.current)
               openSettingsDialog({
                 pluginId: target.pluginId,
                 source: target.source,
@@ -203,7 +289,20 @@ export function PluginSurfaceRenderer({
                 context: { surfaceId: contextSurfaceId as never },
               })
             },
+            openAppSettings: ({ section }) => {
+              if (section !== 'ai' || !isCurrentSurface() || document.visibilityState === 'hidden') return Promise.reject(settingsInterrupted())
+              if (sessionRef.current) return sessionRef.current.promise
+              let resolve!: () => void
+              let reject!: (error: Error) => void
+              const promise = new Promise<void>((done, fail) => { resolve = done; reject = fail })
+              const session: AppSettingsSession = { target, owner: surfaceState, promise, resolve, reject }
+              sessionRef.current = session
+              setAppSettingsSession(session)
+              return promise
+            },
             detachToWindow: (initialText?: string) => {
+              if (!isCurrentSurface()) return
+              finishAppSettings(sessionRef.current)
               const windowTarget = { ...target, initialText: initialText ?? target.initialText }
               import('../../workspace/windowManager/pluginSurfaceWindows').then(({ showPluginSurfaceWindow }) => {
                 void showPluginSurfaceWindow(windowTarget)
@@ -216,6 +315,8 @@ export function PluginSurfaceRenderer({
             showToast: (message, level, options) => showToast(message, level, options),
             dismissToast,
             returnToLauncherWithObject: (input: PluginObjectBlockInput) => {
+              if (!isCurrentSurface()) return
+              finishAppSettings(sessionRef.current)
               const block = createPluginSurfaceObjectBlock(input)
 
               // Always persist: history is often a separate webview; hide/show races
@@ -245,6 +346,9 @@ export function PluginSurfaceRenderer({
             ai: createPluginAi(target.pluginId, target.source, surfaceState.permissions),
           }}
         />
+      )}
+      {appSettingsSession && appSettingsSession.target === target && appSettingsSession.owner === surfaceState && (
+        <PluginAppSettingsDialog locale={locale} onClose={() => finishAppSettings(appSettingsSession, isCurrentSurface() && document.visibilityState !== 'hidden')} />
       )}
     </PluginSurfaceErrorBoundary>
   )
@@ -306,6 +410,7 @@ type SurfaceErrorBoundaryProps = {
   pluginId: string
   locale: Locale
   onBack: () => void
+  onError: () => void
   children: ReactNode
 }
 
@@ -323,6 +428,7 @@ class PluginSurfaceErrorBoundary extends Component<SurfaceErrorBoundaryProps, Su
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error(`[hiven] Plugin surface crashed (${this.props.pluginId}):`, error, info)
+    this.props.onError()
   }
 
   render() {

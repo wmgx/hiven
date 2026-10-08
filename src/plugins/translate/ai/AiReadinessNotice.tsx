@@ -2,12 +2,13 @@ import { Button } from '@hiven/plugin-ui'
 import type { TranslateProfile } from '../settings/model'
 import type { AiReadinessSnapshot } from './readiness'
 
-export function AiReadinessNotice({ readiness, profile, t, onRefresh, onSettings }: {
+export function AiReadinessNotice({ readiness, profile, t, onRefresh, onSettings, onAppSettings }: {
   readiness: AiReadinessSnapshot
   profile: TranslateProfile
   t: (key: string) => string
   onRefresh: () => void
   onSettings?: () => void
+  onAppSettings?: () => void
 }) {
   const result = readiness.result
   const provider = result?.providerName || result?.providerId || profile.aiProviderId || t('ai.unresolvedDefault')
@@ -24,7 +25,8 @@ export function AiReadinessNotice({ readiness, profile, t, onRefresh, onSettings
       </div>
       <div className="translate-ai-readiness__actions">
         <Button type="button" onClick={onRefresh} disabled={readiness.status === 'checking'}>{t('ai.recheck')}</Button>
-        {onSettings && <Button type="button" onClick={onSettings}>{t('action.openSettings')}</Button>}
+        {onSettings && <Button type="button" onClick={onSettings}>{t('action.translationSettings')}</Button>}
+        {onAppSettings && <Button type="button" onClick={onAppSettings}>{t('action.appAiSettings')}</Button>}
       </div>
     </div>
   )

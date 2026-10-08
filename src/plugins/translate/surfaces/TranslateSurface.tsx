@@ -19,6 +19,7 @@ type TranslateStatus =
   | { kind: 'translating'; requestId: number }
   | { kind: 'success'; translatedAt: number }
   | { kind: 'stopped' }
+  | { kind: 'settings-paused' }
   | { kind: 'error'; message: string; messageKey?: string }
   | { kind: 'quota-exceeded'; usedChars: number; limitChars: number }
 
@@ -113,6 +114,7 @@ function statusLabel(status: TranslateStatus, t: (key: string) => string): strin
   if (status.kind === 'translating') return t('status.translating')
   if (status.kind === 'success') return localizedText(t, 'status.success', 'Translated')
   if (status.kind === 'stopped') return t('status.stopped')
+  if (status.kind === 'settings-paused') return t('status.settingsPaused')
   if (status.kind === 'error') {
     return t('status.error').replace('{message}', status.messageKey ? t(status.messageKey) : status.message)
   }
@@ -179,6 +181,18 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
   const cacheRef = useRef(new Map<string, CacheEntry>())
   const hostRef = useRef(host)
   hostRef.current = host
+  const mountedRef = useRef(false)
+  const settingsVisitRef = useRef<object | null>(null)
+  const autoTranslatePausedRef = useRef(false)
+  const [appSettingsOpen, setAppSettingsOpen] = useState(false)
+
+  useLayoutEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      settingsVisitRef.current = null
+    }
+  }, [])
 
   const initialProfile = useMemo(() => selectInitialProfile(settings), [settings])
   const [profileId, setProfileId] = useState(initialProfile?.id ?? '')
@@ -228,13 +242,15 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
   const outputText = view.identity === requestIdentity ? view.outputText : ''
   const status: TranslateStatus = view.identity === requestIdentity
     ? view.status
-    : !activeProfile
-      ? { kind: 'unconfigured' }
-      : activeProfile.provider === 'ai' && !readinessController.execution(host.ai, activeProfile)
-        ? { kind: 'idle' }
-        : isAutoTranslateReady(inputText)
-        ? { kind: 'waiting', dueAt: Date.now() + AUTO_TRANSLATE_DEBOUNCE_MS }
-        : { kind: 'idle' }
+    : autoTranslatePausedRef.current
+      ? { kind: 'settings-paused' }
+      : !activeProfile
+        ? { kind: 'unconfigured' }
+        : activeProfile.provider === 'ai' && !readinessController.execution(host.ai, activeProfile)
+          ? { kind: 'idle' }
+          : isAutoTranslateReady(inputText)
+            ? { kind: 'waiting', dueAt: Date.now() + AUTO_TRANSLATE_DEBOUNCE_MS }
+            : { kind: 'idle' }
   const availableOutput: TranslationOutput | null = status.kind === 'success' && outputText.trim()
     ? { view, aiRevision: activeProfile?.provider === 'ai' ? readiness.revision : undefined }
     : null
@@ -266,7 +282,7 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
   }, [activeProfile?.id, settings.defaultTargetLang])
 
   const translateCurrentText = useCallback(async (run: TranslationRun, profile: TranslateProfile, text: string, source: SourceLanguageCode, target: TargetLanguageCode) => {
-    const isCurrent = () => runRef.current === run && identityRef.current === run.identity && !run.controller.signal.aborted
+    const isCurrent = () => !autoTranslatePausedRef.current && !settingsVisitRef.current && runRef.current === run && identityRef.current === run.identity && !run.controller.signal.aborted
       && (profile.provider !== 'ai' || (readinessController.getSnapshot().revision === run.aiRevision && readinessController.matches(hostRef.current.ai, profile)))
     if (!isCurrent()) return
     run.timer = undefined
@@ -334,6 +350,11 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
     cancelCurrentRun()
     const profile = profileRef.current
 
+    if (autoTranslatePausedRef.current || settingsVisitRef.current) {
+      setView({ identity: requestIdentity, outputText: '', status: { kind: 'settings-paused' } })
+      return
+    }
+
     if (!profile || !isAutoTranslateReady(trimmed)) {
       setView({ identity: requestIdentity, outputText: '', status: { kind: profile ? 'idle' : 'unconfigured' } })
       return
@@ -359,10 +380,12 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
   }
 
   const retryTranslation = () => {
+    if (settingsVisitRef.current || identityRef.current !== requestIdentity) return
     if (activeProfile?.provider === 'ai' && readinessController.getSnapshot().revision !== readiness.revision) return
     cancelCurrentRun()
     if (!activeProfile || !isAutoTranslateReady(inputText)) return
     if (activeProfile.provider === 'ai' && !readinessController.execution(hostRef.current.ai, activeProfile)) return
+    autoTranslatePausedRef.current = false
     const run: TranslationRun = { id: ++requestIdRef.current, identity: requestIdentity, controller: new AbortController(), aiRevision: readiness.revision }
     runRef.current = run
     void translateCurrentText(run, activeProfile, inputText.trim(), sourceLang, targetLang)
@@ -374,7 +397,43 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
     host.openSettings()
   }
 
-  const canRetry = activeProfile?.provider !== 'ai' || Boolean(readinessController.execution(host.ai, activeProfile))
+  const openAiSettings = async () => {
+    const open = hostRef.current.openAppSettings
+    if (!open || settingsVisitRef.current || !mountedRef.current) return
+    const visit = {}
+    settingsVisitRef.current = visit
+    autoTranslatePausedRef.current = true
+    cancelCurrentRun()
+    setAppSettingsOpen(true)
+    setView({ identity: identityRef.current, outputText: '', status: { kind: 'settings-paused' } })
+    try {
+      await open({ section: 'ai' })
+      if (!mountedRef.current || settingsVisitRef.current !== visit) return
+      settingsVisitRef.current = null
+      setAppSettingsOpen(false)
+      // Returning only checks metadata. A new account/default must not receive
+      // the retained text until Retry or a real input/selection edit.
+      await readinessController.refresh(true)
+    } catch (error) {
+      if (mountedRef.current && settingsVisitRef.current === visit && !(error instanceof Error && error.name === 'AbortError')) {
+        hostRef.current.showMessage(t('ai.settingsOpenFailed'), 'error')
+      }
+    } finally {
+      if (mountedRef.current && settingsVisitRef.current === visit) {
+        settingsVisitRef.current = null
+        setAppSettingsOpen(false)
+      }
+    }
+  }
+
+  const beginInputEdit = () => {
+    if (settingsVisitRef.current) return false
+    autoTranslatePausedRef.current = false
+    cancelCurrentRun()
+    return true
+  }
+
+  const canRetry = !appSettingsOpen && (activeProfile?.provider !== 'ai' || Boolean(readinessController.execution(host.ai, activeProfile)))
 
   const canUseOutput = (output: TranslationOutput | null): output is TranslationOutput =>
     isCurrentTranslationOutput(output, outputRef.current, identityRef.current, readinessController.getSnapshot().revision)
@@ -436,7 +495,7 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
         {activeProfile?.provider === 'ai' && (status.kind === 'waiting' || status.kind === 'translating') && (
           <Button type="button" onClick={stopTranslation}>{t('action.stop')}</Button>
         )}
-        {(status.kind === 'stopped' || status.kind === 'error') && (
+        {(status.kind === 'stopped' || status.kind === 'settings-paused' || status.kind === 'error') && (
           <Button type="button" onClick={retryTranslation} disabled={!canRetry}>{t('action.retry')}</Button>
         )}
         <IconButton type="button" label={t('action.continueProcessing')} disabled={!availableOutput || outputActionView === view} onClick={continueProcessing}>
@@ -445,7 +504,7 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
         <Button type="button" variant="primary" disabled={!availableOutput || outputActionView === view} onClick={() => void copyOutput()}>
           {localizedText(t, 'action.copy', 'Copy')}
         </Button>
-        <IconButton type="button" label={localizedText(t, 'action.openSettings', 'Open Settings')} onClick={openSettings}>
+        <IconButton type="button" label={t('action.translationSettings')} onClick={openSettings}>
           <SettingsIcon size={16} />
         </IconButton>
         <IconButton type="button" label={localizedText(t, 'action.close', 'Close')} onClick={() => { cancelCurrentRun(); host.close() }}>
@@ -455,17 +514,17 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
 
       <div className="translate-surface__controls">
         <div className="translate-pair">
-          <SchemaSelect value={sourceLang} options={sourceOptions} onChange={(value) => { if (value !== sourceLang) { cancelCurrentRun(); setSourceLang(value) } }} width={154} ariaLabel={localizedText(t, 'control.source', 'Source')} />
+          <SchemaSelect value={sourceLang} options={sourceOptions} onChange={(value) => { if (value !== sourceLang && beginInputEdit()) setSourceLang(value) }} width={154} ariaLabel={localizedText(t, 'control.source', 'Source')} />
           <span className="translate-pair__arrow"><ArrowRight size={15} strokeWidth={1.9} /></span>
-          <SchemaSelect value={targetLang} options={targetOptions} onChange={(value) => { if (value !== targetLang) { cancelCurrentRun(); setTargetLang(value) } }} width={136} ariaLabel={localizedText(t, 'control.target', 'Target')} />
+          <SchemaSelect value={targetLang} options={targetOptions} onChange={(value) => { if (value !== targetLang && beginInputEdit()) setTargetLang(value) }} width={136} ariaLabel={localizedText(t, 'control.target', 'Target')} />
         </div>
         <div className="grow" />
         <span className="translate-controls-label">{localizedText(t, 'control.profile', 'Profile')}</span>
-        <SchemaSelect value={activeProfile?.id ?? ''} options={profileOptions} onChange={(value) => { if (value !== profileId) { cancelCurrentRun(); setProfileId(value) } }} width={222} ariaLabel={localizedText(t, 'control.profile', 'Profile')} />
+        <SchemaSelect value={activeProfile?.id ?? ''} options={profileOptions} onChange={(value) => { if (value !== profileId && beginInputEdit()) setProfileId(value) }} width={222} ariaLabel={localizedText(t, 'control.profile', 'Profile')} />
       </div>
 
       {activeProfile?.provider === 'ai' && (
-        <AiReadinessNotice readiness={readiness} profile={activeProfile} t={t} onRefresh={() => { cancelCurrentRun(); void readinessController.refresh(true) }} onSettings={openSettings} />
+        <AiReadinessNotice readiness={readiness} profile={activeProfile} t={t} onRefresh={() => { cancelCurrentRun(); void readinessController.refresh(true) }} onSettings={openSettings} onAppSettings={host.openAppSettings ? () => { void openAiSettings() } : undefined} />
       )}
 
       <div className="translate-surface__body">
@@ -480,7 +539,7 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
             value={inputText}
             onChange={(event) => {
               if (event.target.value === inputText) return
-              cancelCurrentRun()
+              if (!beginInputEdit()) return
               setInputText(event.target.value)
             }}
             placeholder={localizedText(t, 'input.placeholder', 'Type or paste text to translate...')}

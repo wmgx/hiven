@@ -723,6 +723,12 @@ export type PluginSurfaceHostApi = {
   complete(): void
   requestBack(): void
   openSettings(): void
+  /**
+   * Open app AI settings over this surface, retaining its local state.
+   * Resolves after dismissal; rejects with AbortError when interrupted by the
+   * host surface lifecycle. Older hosts may omit this capability.
+   */
+  openAppSettings?(options: { section: 'ai' }): Promise<void>
   detachToWindow(initialText?: string): void
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
   showToast(message: string, level?: 'info' | 'success' | 'warning' | 'error', options?: { action?: { label: string; onClick: () => void }; duration?: number }): string

@@ -757,7 +757,7 @@ check('standalone launcher closes on Escape without bubbling to the app', () => 
     const at = (needle) => body.indexOf(needle)
     assert.ok(at("if (event.key !== 'Escape') return") === 0 || at("if (event.key !== 'Escape') return") > 0, 'handleHostEscape should ignore non-Escape keys first')
     assert.ok(
-      at("closest('[role=\"dialog\"][data-open]')") > 0 && at("closest('[role=\"dialog\"][data-open]')") < at('runLauncherEscapeInterceptor(event)'),
+      at("document.querySelector('[role=\"dialog\"][data-open]')") > 0 && at("document.querySelector('[role=\"dialog\"][data-open]')") < at('runLauncherEscapeInterceptor(event)'),
       'an open modal dialog must own Escape before launcher surfaces or controller frames',
     )
     assert.ok(
