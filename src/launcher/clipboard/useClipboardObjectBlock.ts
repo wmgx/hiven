@@ -43,6 +43,7 @@ import {
   restorePreviousMaterial,
   type CurrentMaterial,
 } from './currentMaterial'
+import { getAttachedTextFilePath, readAttachedTextFile, startFileTextMaterialRead, type FileTextErrorCode } from './fileTextMaterial'
 
 /** Keep token mounted for compositor-only exit (opacity + transform). */
 export const OBJECT_BLOCK_EXIT_MS = 130
@@ -66,6 +67,11 @@ export type ClipboardObjectBlockState = {
   canEditText: boolean
   /** Bound to the displayed material/session; null for a stale entry button. */
   beginTextEdit: () => { text: string; commit: (text: string) => boolean } | null
+  canReadFileText: boolean
+  isReadingFileText: boolean
+  fileTextError: FileTextErrorCode | null
+  readFileText: () => void
+  cancelFileTextRead: () => void
 }
 
 /** Blocks handed in from history / tools — re-stash on hide so ⌘↵ is not lost mid-transition. */
@@ -89,6 +95,9 @@ export function useClipboardObjectBlock(params: {
   const block = material.block
   const [isExiting, setIsExiting] = useState(false)
   const [hint, setHint] = useState<RecentClipboardHint | null>(null)
+  const [isReadingFileText, setIsReadingFileText] = useState(false)
+  const [fileTextError, setFileTextError] = useState<FileTextErrorCode | null>(null)
+  const fileReadRef = useRef<ReturnType<typeof startFileTextMaterialRead> | null>(null)
   const didReadRef = useRef(false)
   const exitTimerRef = useRef<number | null>(null)
   const exitFrameRef = useRef<number | null>(null)
@@ -115,11 +124,19 @@ export function useClipboardObjectBlock(params: {
     }
   }, [])
 
+  const cancelFileTextRead = useCallback(() => {
+    fileReadRef.current?.cancel()
+    fileReadRef.current = null
+    setIsReadingFileText(false)
+    setFileTextError(null)
+  }, [])
+
   const publishMaterial = useCallback((next: CurrentMaterial) => {
+    cancelFileTextRead()
     materialGenerationRef.current += 1
     materialRef.current = next
     setMaterial(next)
-  }, [])
+  }, [cancelFileTextRead])
 
   const applyHandoffBlock = useCallback((pending: LauncherObjectBlock) => {
     // The in-flight open read may settle before React commits material below.
@@ -280,6 +297,8 @@ export function useClipboardObjectBlock(params: {
     return () => {
       mountedRef.current = false
       materialGenerationRef.current += 1
+      fileReadRef.current?.cancel()
+      fileReadRef.current = null
       clearExitTimer()
     }
   }, [clearExitTimer])
@@ -402,7 +421,12 @@ export function useClipboardObjectBlock(params: {
       commit: (text: string) => {
         if (!isCurrent()) return false
         // Editing deliberately replaces material; it is not another processing handoff.
-        const next = replaceCurrentMaterial(createQueryObjectBlock({ query: text }))
+        const edited = createQueryObjectBlock({ query: text })
+        // Once read, editing its contents must never re-enable path resolution.
+        if (material.block?.meta?.textOrigin === 'file-content') {
+          edited.meta = { ...edited.meta, textOrigin: 'file-content', fileName: material.block.meta.fileName }
+        }
+        const next = replaceCurrentMaterial(edited)
         clearExitTimer()
         publishMaterial(next)
         setIsExiting(false)
@@ -412,6 +436,34 @@ export function useClipboardObjectBlock(params: {
         return true
       },
     }
+  }, [clearExitTimer, publishMaterial, material, renderedGeneration])
+
+  const readFileText = useCallback(() => {
+    const isCurrent = () => mountedRef.current && openRef.current && !userDismissedRef.current &&
+      materialRef.current === material && materialGenerationRef.current === renderedGeneration
+    if (!isCurrent() || !material.block || !getAttachedTextFilePath(material.block) || fileReadRef.current) return
+    setFileTextError(null)
+    setIsReadingFileText(true)
+    const request = startFileTextMaterialRead({ block: material.block, read: readAttachedTextFile, isCurrent })
+    fileReadRef.current = request
+    void request.result.then((result) => {
+      if (fileReadRef.current !== request || !isCurrent()) return
+      fileReadRef.current = null
+      setIsReadingFileText(false)
+      if (result.status === 'error') {
+        setFileTextError(result.code)
+        return
+      }
+      if (result.status !== 'ready') return
+      const next = acceptMaterialHandoff(materialRef.current, result.block, true)
+      clearExitTimer()
+      publishMaterial(next)
+      setIsExiting(false)
+      setHint(null)
+      didReadRef.current = true
+      // Preserve command search intent and use the usual handoff backup/restore.
+      setPendingObjectBlock(result.block, { persist: true, silent: true })
+    })
   }, [clearExitTimer, publishMaterial, material, renderedGeneration])
 
   const attachQueryAsBlock = useCallback((text: string) => {
@@ -437,5 +489,10 @@ export function useClipboardObjectBlock(params: {
     restorePreviousMaterial: restoreMaterial,
     canEditText: open && !isExiting && canEditMaterialText(block),
     beginTextEdit,
+    canReadFileText: open && !isExiting && Boolean(getAttachedTextFilePath(block)),
+    isReadingFileText,
+    fileTextError,
+    readFileText,
+    cancelFileTextRead,
   }
 }

@@ -22,6 +22,7 @@ use zip::ZipArchive;
 pub mod ai_codex;
 pub mod ai_xai;
 mod clipboard_privacy;
+mod text_material;
 pub mod desktop_bridge;
 pub mod desktop_capture;
 pub mod hotkeys;
@@ -4689,6 +4690,15 @@ fn read_file(path: String) -> Result<String, String> {
     fs::read_to_string(&file_path).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn read_text_material_file(path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        text_material::read_text_file(std::path::Path::new(&path))
+    })
+    .await
+    .map_err(|_| "read_failed".to_owned())?
+}
+
 #[derive(serde::Deserialize)]
 struct ProxyHttpRequest {
     url: String,
@@ -7381,6 +7391,7 @@ pub fn run() {
             init_config_dir,
             read_scripts_dir,
             read_file,
+            read_text_material_file,
             read_clipboard_file_paths,
             fetch_url,
             plugin_http_request,

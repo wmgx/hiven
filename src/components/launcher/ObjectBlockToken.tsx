@@ -60,7 +60,11 @@ export function ObjectBlockToken({
       data-state={selected ? 'selected-for-deletion' : block.state}
       aria-hidden={exiting ? true : undefined}
     >
-      {!block.secretMasked && block.source === 'query' ? (
+      {!block.secretMasked && block.meta?.textOrigin === 'file-content' ? (
+        <span className="object-block-content" title={block.meta.fileName}>
+          {t(locale, 'palette.fileTextMaterial', { name: truncatePreview(block.meta.fileName ?? '', 24) })}
+        </span>
+      ) : !block.secretMasked && block.source === 'query' ? (
         <span className="object-block-content">{t(locale,
           lineCount > 1 ? 'palette.inputContentLines' : 'palette.inputContentChars',
           { count: lineCount > 1 ? lineCount : block.meta?.charCount ?? 0 },

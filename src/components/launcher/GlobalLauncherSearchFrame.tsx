@@ -10,6 +10,7 @@ import { RecentClipboardHint } from './RecentClipboardHint'
 import type { RecommendedAction, RecommendedOutputTarget } from '../../launcher/clipboard/actionRecommendation'
 import { LauncherEmptyWell } from './LauncherEmptyWell'
 import { getPlatformShortcutMeta } from './launcherParamShortcuts'
+import { FILE_TEXT_ERROR_KEYS } from '../../launcher/clipboard/fileTextMaterial'
 
 function primaryActionLabel(item: LauncherMixedItem | undefined, locale: Locale): string {
   if (!item || item.kind !== 'domain') return t(locale, 'palette.actionRun')
@@ -184,6 +185,38 @@ export function GlobalLauncherSearchFrame({
           </button>
         )}
       </div>
+      {clipboardBlock?.canReadFileText && (
+        <div className="launcher-discovery-nav" role="group" aria-label={t(locale, 'palette.fileTextRead')}>
+          <button
+            type="button"
+            className="launcher-discovery-action"
+            disabled={busy || clipboardBlock.isReadingFileText}
+            onMouseDown={(event) => event.preventDefault()}
+            onKeyDown={(event) => event.stopPropagation()}
+            onKeyUp={(event) => event.stopPropagation()}
+            onClick={clipboardBlock.readFileText}
+          >
+            {t(locale, clipboardBlock.isReadingFileText ? 'palette.fileTextReading' : 'palette.fileTextRead')}
+          </button>
+          {clipboardBlock.isReadingFileText && (
+            <button
+              type="button"
+              className="launcher-discovery-action"
+              onMouseDown={(event) => event.preventDefault()}
+              onKeyDown={(event) => event.stopPropagation()}
+              onKeyUp={(event) => event.stopPropagation()}
+              onClick={clipboardBlock.cancelFileTextRead}
+            >
+              {t(locale, 'palette.fileTextCancel')}
+            </button>
+          )}
+        </div>
+      )}
+      {clipboardBlock?.fileTextError && (
+        <div className="px-3.5 py-1.5 text-[12px]" role="alert" style={{ color: 'var(--color-error)' }}>
+          {t(locale, FILE_TEXT_ERROR_KEYS[clipboardBlock.fileTextError])}
+        </div>
+      )}
       {error && (
         <div className="px-3.5 py-1.5 text-[12px]" style={{ color: 'var(--color-error)', borderBottom: 'var(--hairline) solid var(--color-border-tertiary)' }}>
           {error}

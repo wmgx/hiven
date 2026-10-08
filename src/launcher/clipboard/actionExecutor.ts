@@ -113,7 +113,7 @@ export async function executeRecommendedAction(
       case 'open-plugin-surface': {
         if (action.pluginId) {
           let initialText = text
-          const filePath = detectClipboardFilePath(text)
+          const filePath = block.meta?.textOrigin === 'file-content' ? null : detectClipboardFilePath(text)
           if (filePath && handlers.readLocalFileText) {
             try {
               initialText = await handlers.readLocalFileText(filePath.path)

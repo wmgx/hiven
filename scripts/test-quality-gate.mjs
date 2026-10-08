@@ -52,6 +52,7 @@ const commands = [
   ['npm', ['run', 'test:plugin-paste-behavior']],
   ['npm', ['run', 'test:launcher-current-material']],
   ['npm', ['run', 'test:launcher-material-edit']],
+  ['npm', ['run', 'test:file-text-material']],
   ['npm', ['run', 'test:plugin-surface-object-origin']],
   ['npm', ['run', 'test:ai-provider-runtime']],
   ['npm', ['run', 'test:ai-preflight']],

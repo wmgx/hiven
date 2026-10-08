@@ -606,6 +606,7 @@ export function GlobalLauncherHost() {
     grantPluginPermissions: grantPluginPermissions as never,
     focusSearchInputAfterBack,
     objectBlockText: clipboardBlock.block?.payloadText ?? undefined,
+    objectBlockTextIsFileContent: clipboardBlock.block?.meta?.textOrigin === 'file-content',
     locale,
   })
 
@@ -768,6 +769,7 @@ export function GlobalLauncherHost() {
   }, [clipboardBlock.block, clipboardBlock.markBlockConsumed, closeLauncherAfterAction, locale, openPluginSurface, setQuery])
 
   const selectItemWithObjectActions = useCallback((item: GlobalLauncherItem) => {
+    clipboardBlock.cancelFileTextRead()
     // Support both current prefix and the retired history-only prefix.
     const objectActionId = item.id.startsWith('object-action:')
       ? item.id.slice('object-action:'.length)
@@ -787,7 +789,7 @@ export function GlobalLauncherHost() {
       return
     }
     selectItem(item)
-  }, [executeObjectAction, objectActions, selectItem])
+  }, [clipboardBlock.cancelFileTextRead, executeObjectAction, objectActions, selectItem])
 
   const pastePreviewText = useCallback(async (text: string, isCurrent: () => boolean): Promise<LauncherExecuteResult> => {
     const startedAt = telemetryNow()

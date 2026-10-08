@@ -37,11 +37,13 @@ type UseGlobalLauncherSelectionControllerInput = {
   grantPluginPermissions: (pluginId: string, permissions: string[]) => void
   focusSearchInputAfterBack: () => void
   objectBlockText?: string
+  objectBlockTextIsFileContent?: boolean
   locale: Locale
 }
 
 /** Resolve Object Block / clipboard text into surface initialText (load file when payload is a path). */
-async function resolveSurfaceInitialText(raw: string | undefined): Promise<string | undefined> {
+export async function resolveSurfaceInitialText(raw: string | undefined, alreadyRead = false): Promise<string | undefined> {
+  if (alreadyRead) return raw
   if (!raw?.trim()) return undefined
   const text = raw
   const filePath = detectClipboardFilePath(text)
@@ -67,6 +69,7 @@ export function useGlobalLauncherSelectionController({
   grantPluginPermissions,
   focusSearchInputAfterBack,
   objectBlockText,
+  objectBlockTextIsFileContent,
   locale,
 }: UseGlobalLauncherSelectionControllerInput) {
   const [itemPermissionFrame, setItemPermissionFrame] = useState<LauncherItemPermissionFrame | null>(null)
@@ -95,7 +98,7 @@ export function useGlobalLauncherSelectionController({
             )
             return
           }
-          const initialText = await resolveSurfaceInitialText(objectBlockText)
+          const initialText = await resolveSurfaceInitialText(objectBlockText, objectBlockTextIsFileContent)
           const target: PluginSurfaceTarget = {
             ...pluginSurfaceTarget,
             initialText,
@@ -143,7 +146,7 @@ export function useGlobalLauncherSelectionController({
       executeDomainItem(item.domainItem, customizeParams)
       return
     }
-  }, [clearPluginSurfaceTool, controllerRef, executeDomainItem, focusSearchInputAfterBack, locale, objectBlockText, openPluginSurface])
+  }, [clearPluginSurfaceTool, controllerRef, executeDomainItem, focusSearchInputAfterBack, locale, objectBlockText, objectBlockTextIsFileContent, openPluginSurface])
 
   const grantItemPermissionsAndRun = useCallback(() => {
     if (!itemPermissionFrame) return

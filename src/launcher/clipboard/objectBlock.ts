@@ -57,6 +57,9 @@ export type ObjectBlockMeta = {
   editorWindowId?: string
   snapshotAt?: number
   contentProvider?: 'live' | 'snapshot'
+  /** The payload is already file contents, even when its text looks like another path. */
+  textOrigin?: 'file-content'
+  fileName?: string
   leftTitle?: string
   rightTitle?: string
 }
