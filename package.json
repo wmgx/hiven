@@ -239,7 +239,8 @@
     "test:ollama-provider": "node scripts/test-ollama-provider.mjs",
     "test:ollama-runtime": "node scripts/test-ollama-runtime.mjs",
     "test:ai-writing-summary": "node scripts/test-ai-writing-summary.mjs",
-    "test:line-list-cleanup": "node scripts/test-line-list-cleanup.mjs"
+    "test:line-list-cleanup": "node scripts/test-line-list-cleanup.mjs",
+    "test:text-list-extraction": "node scripts/test-text-list-extraction.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

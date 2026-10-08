@@ -1,7 +1,7 @@
 import type { JsonOperation } from './jsonCore'
 
 export const operationRoutes: { id: JsonOperation; titleKey: string; aliases: string[] }[] = [
-  { id: 'format', titleKey: 'json.prettify.title', aliases: ['json format', 'format json', 'json pretty', 'pretty json', 'pretty-json', 'json-format', 'json格式化', 'json 格式化', '格式化', 'fmt'] },
+  { id: 'format', titleKey: 'json.prettify.title', aliases: ['json format', 'format json', '格式化 JSON', 'json pretty', 'pretty json', 'pretty-json', 'json-format', 'json格式化', 'json 格式化', '格式化', 'fmt'] },
   { id: 'compact', titleKey: 'json.compact.title', aliases: ['json compact', 'json minify', 'json compress', 'json压缩', 'json 压缩', '压缩'] },
   { id: 'sort', titleKey: 'sortJson.title', aliases: ['json sort', 'sort json keys', 'json排序', 'json 排序', '排序'] },
   { id: 'expression', titleKey: 'route.expression', aliases: ['json expression', 'json filter', 'js filter', 'jq', 'expression', '表达式', 'json表达式', 'json 表达式'] },

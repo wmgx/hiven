@@ -64,6 +64,25 @@ try {
   })
   editorReads.selection = 0
   editorReads.activeText = 0
+  const { itemMatchesQuery } = await vite.ssrLoadModule('/src/workspace/launcher/ranking.ts')
+  const naturalQueries = [
+    ['remove duplicates', 'plugin:line-tools:launcher:open-line-dedup', 'plugin:line-tools:tool:line-tools.dedup'],
+    ['删除重复行', 'plugin:line-tools:launcher:open-line-dedup', 'plugin:line-tools:tool:line-tools.dedup'],
+    ['格式化 JSON', 'plugin:json-tools:launcher:open-format', 'plugin:json-tools:tool:json.prettify'],
+  ]
+  for (const locale of ['en', 'zh']) {
+    for (const [query, workbenchKey, toolKey] of naturalQueries) {
+      for (const surfaceId of ['global-launcher', 'editor-command-bar']) {
+        const candidates = collectStaticCandidates(surfaceId)
+        const workbenchItem = candidates.find((candidate) => candidate.systemKey === workbenchKey)
+        if (surfaceId === 'global-launcher') assert.ok(workbenchItem && itemMatchesQuery(workbenchItem, query, locale), `${locale} ${surfaceId} should discover ${workbenchKey} using ${query}`)
+        const toolItem = candidates.find((candidate) => candidate.systemKey === toolKey)
+        if (surfaceId === 'editor-command-bar' || toolKey === key) {
+          assert.ok(toolItem && itemMatchesQuery(toolItem, query, locale), `${locale} ${surfaceId} should discover ${toolKey} using ${query}`)
+        }
+      }
+    }
+  }
   const items = collectStaticCandidates('global-launcher')
   assert.deepEqual(editorReads, { selection: 0, activeText: 0 }, 'fresh JSON discovery must not read the editor')
   const item = items.find((candidate) => candidate.systemKey === key)
@@ -71,7 +90,7 @@ try {
   assert.equal(item.executionMode, 'explicit-text-preview')
   assert.equal(item.display.title, 'JSON Prettify')
   assert.equal(item.display.titleI18n.zh, 'JSON 格式化')
-  assert.deepEqual(items.filter((candidate) => candidate.executionMode).map((candidate) => candidate.systemKey).sort(), [key, 'plugin:encode-decode:tool:base64.decode', 'plugin:line-tools:tool:line-tools.remove-blank-lines', 'plugin:line-tools:tool:line-tools.clean-list'].sort(), 'only the explicitly declared bundled tools opt in')
+  assert.deepEqual(items.filter((candidate) => candidate.executionMode).map((candidate) => candidate.systemKey).sort(), [key, 'plugin:encode-decode:tool:base64.decode', 'plugin:line-tools:tool:line-tools.remove-blank-lines', 'plugin:line-tools:tool:line-tools.clean-list', 'plugin:line-tools:tool:line-tools.extract-list'].sort(), 'only the explicitly declared bundled tools opt in')
   assert.ok(collectStaticCandidates('editor-command-bar').some((candidate) => candidate.systemKey === key), 'editor entry remains')
   const workbench = items.find((candidate) => candidate.systemKey === 'plugin:json-tools:launcher:open-format')
   assert.equal(workbench.display.title, 'JSON Prettify Workbench')

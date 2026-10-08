@@ -1,4 +1,4 @@
-import { definePlugin, type PluginToolContext, type PluginToolSurfaces } from '@hiven/plugin'
+import { definePlugin, type PluginToolContext, type PluginToolExplicitTextPreviewContext, type PluginToolTextPreviewResult, type PluginToolSurfaces } from '@hiven/plugin'
 import { TextToolsSurface } from './TextToolsSurface'
 import {
   appendLines,
@@ -19,6 +19,7 @@ import {
   type CaseOperation,
 } from './core'
 import { textToolRoutes } from './routes'
+import { extractTextList } from './extractTextList'
 import './style.css'
 
 const LEARNABLE_PURE = { effect: 'pure', learnable: true } as const
@@ -58,6 +59,15 @@ function cleanListText(text: string, params: Record<string, unknown>): string {
     removeBlank: params.removeBlank !== false,
     dedup: params.dedup === true,
   })
+}
+
+function extractListText(ctx: PluginToolExplicitTextPreviewContext): PluginToolTextPreviewResult {
+  const kind = ctx.params.kind ?? 'urls'
+  if (kind !== 'urls' && kind !== 'emails') return { ok: false, message: ctx.t('extractList.invalidKind') }
+  const matches = extractTextList(ctx.input.text, kind, ctx.params.dedup !== false)
+  return matches.length > 0
+    ? { ok: true, text: matches.join('\n') }
+    : { ok: false, message: ctx.t(kind === 'urls' ? 'extractList.noUrls' : 'extractList.noEmails') }
 }
 
 export const lineToolsPlugin = definePlugin({
@@ -107,6 +117,21 @@ export const lineToolsPlugin = definePlugin({
   },
   tools: [
     {
+      id: 'line-tools.extract-list', title: 'extractList.title', subtitle: 'extractList.description', icon: 'ListFilter',
+      aliases: ['extract links', 'extract urls', 'extract emails', 'extract email addresses', '提取链接', '提取网址', '提取邮箱', '提取邮件地址'],
+      inputPolicy: { mode: 'auto' }, policy: LEARNABLE_PURE, requireParamSelection: true,
+      params: [
+        { key: 'kind', label: 'param.extractList.kind', hint: 'param.extractList.kindHint', type: 'single-select', options: [{ label: 'param.extractList.urls', value: 'urls' }, { label: 'param.extractList.emails', value: 'emails' }], default: 'urls', saveable: true },
+        { key: 'dedup', label: 'param.extractList.dedup', hint: 'param.extractList.dedupHint', type: 'boolean', default: true, saveable: true },
+      ],
+      explicitTextPreview: { run: extractListText },
+      run(ctx) {
+        const result = extractListText(ctx)
+        return result.ok ? ctx.output.text(result.text) : ctx.output.error(result.message)
+      },
+      surfaces: EDITOR_TOOL_SURFACES,
+    },
+    {
       id: 'line-tools.clean-list', title: 'cleanList.title', subtitle: 'cleanList.description', icon: 'RemoveFormatting',
       aliases: ['clean line list', 'clean list', 'list cleanup', '清理行列表', '清理名单', '整理列表'],
       inputPolicy: { mode: 'auto' }, policy: LEARNABLE_PURE, requireParamSelection: true,
@@ -131,7 +156,7 @@ export const lineToolsPlugin = definePlugin({
     },
     {
       id: 'line-tools.dedup', title: 'dedup.title', subtitle: 'dedup.description', icon: 'Copy',
-      aliases: ['unique', 'distinct', '行去重', 'dedup', 'remove duplicate lines', '去重'], inputPolicy: { mode: 'auto' }, policy: LEARNABLE_PURE,
+      aliases: ['unique', 'distinct', '行去重', 'dedup', 'remove duplicate lines', 'remove duplicates', '删除重复行', '去重'], inputPolicy: { mode: 'auto' }, policy: LEARNABLE_PURE,
       params: [{ key: 'ignoreCase', label: 'param.ignoreCase', type: 'boolean', default: false, saveable: true }],
       run(ctx) { return ctx.output.text(dedupLines(ctx.input.text, ctx.params.ignoreCase as boolean)) }, surfaces: EDITOR_TOOL_SURFACES,
     },

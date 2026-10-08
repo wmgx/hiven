@@ -137,7 +137,7 @@ export const jsonToolsPlugin = definePlugin({
       title: 'json.prettify.title',
       subtitle: 'json.prettify.description',
       icon: 'Braces',
-      aliases: ['fmt', '格式化', 'pretty', 'json format', 'json格式化', 'pretty json', 'json beautify', 'format json'],
+      aliases: ['fmt', '格式化', 'pretty', 'json format', 'json格式化', 'pretty json', 'json beautify', 'format json', '格式化 JSON'],
       inputPolicy: { mode: 'auto' },
       policy: LEARNABLE_PURE,
       explicitTextPreview: { run: prettifyText },

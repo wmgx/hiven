@@ -10,7 +10,7 @@ export type TextToolRoute = {
 
 export const lineOperationRoutes: TextToolRoute[] = [
   { surfaceId: 'line-sort', titleKey: 'sort.title', group: 'lines', operation: 'sort', aliases: ['sort lines', 'order lines', '行排序', '排序', 'hangpaixu'] },
-  { surfaceId: 'line-dedup', titleKey: 'dedup.title', group: 'lines', operation: 'dedup', aliases: ['unique lines', 'dedup lines', 'remove duplicate lines', '行去重', '去重', 'quchong', 'hangquchong'] },
+  { surfaceId: 'line-dedup', titleKey: 'dedup.title', group: 'lines', operation: 'dedup', aliases: ['unique lines', 'dedup lines', 'remove duplicate lines', 'remove duplicates', '删除重复行', '行去重', '去重', 'quchong', 'hangquchong'] },
   { surfaceId: 'line-reverse', titleKey: 'reverse.title', group: 'lines', operation: 'reverse', aliases: ['reverse lines', 'flip lines', '行反转', '倒序'] },
   { surfaceId: 'text-reverse', titleKey: 'reverseText.title', group: 'lines', operation: 'reverse-text', aliases: ['reverse text', 'flip text', '文本反转', '字符反转'] },
   { surfaceId: 'line-remove-blank', titleKey: 'removeBlankLines.title', group: 'lines', operation: 'remove-blank-lines', aliases: ['remove blank lines', 'delete empty lines', '删除空行', '去除空行'] },
