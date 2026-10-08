@@ -228,7 +228,8 @@
     "test:translate-ai-readiness": "node scripts/test-translate-ai-readiness.mjs",
     "test:translate-output-eligibility": "node scripts/test-translate-output-eligibility.mjs",
     "test:regex-match-extraction": "node --experimental-strip-types scripts/test-regex-match-extraction.mts",
-    "test:text-diff-source-read-lifetime": "node scripts/test-text-diff-source-read-lifetime.mjs"
+    "test:text-diff-source-read-lifetime": "node scripts/test-text-diff-source-read-lifetime.mjs",
+    "test:text-diff-copy-side": "node scripts/test-text-diff-copy-side.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import { Menu } from '@hiven/plugin-ui'
 import { getPluginDiffHost, type DiffSource } from '@hiven/plugin-diff'
 import { canUseSemanticJsonDiff } from './autoDiffMode'
 import { useDiffSourceText } from './useDiffSourceText'
 import { createDiffSourceReader } from './sourceReadLifetime'
+import { createDiffSideCopier, type DiffCopySide } from './copySideText'
 
 type DiffMode = 'text' | 'json'
 
@@ -89,6 +90,13 @@ const IconDetach = () => (
   </svg>
 )
 
+const IconCopy = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+    <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+    <path d="M4 16V4a2 2 0 0 1 2-2h12" />
+  </svg>
+)
+
 const IconClose = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <path d="M18 6 6 18" /><path d="m6 6 12 12" />
@@ -125,20 +133,46 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
   const [modifiedText, writeModifiedText] = useDiffSourceText(modifiedSource)
   const [originalReader] = useState(createDiffSourceReader)
   const [modifiedReader] = useState(createDiffSourceReader)
+  const [sideCopier] = useState(createDiffSideCopier)
+  const [copyRevision, setCopyRevision] = useState(sideCopier.getRevision)
+  const [copyingSide, setCopyingSide] = useState<DiffCopySide | null>(null)
+  const copyMounted = useRef(true)
+  const invalidateCopy = useCallback(() => {
+    setCopyRevision(sideCopier.invalidate())
+  }, [sideCopier])
   const setOriginalText = useCallback((text: string) => {
+    invalidateCopy()
     originalReader.invalidate()
     writeOriginalText(text)
-  }, [originalReader, writeOriginalText])
+  }, [invalidateCopy, originalReader, writeOriginalText])
   const setModifiedText = useCallback((text: string) => {
+    invalidateCopy()
     modifiedReader.invalidate()
     writeModifiedText(text)
-  }, [modifiedReader, writeModifiedText])
+  }, [invalidateCopy, modifiedReader, writeModifiedText])
   const invalidateSourceReads = useCallback(() => {
     originalReader.invalidate()
     modifiedReader.invalidate()
   }, [originalReader, modifiedReader])
   // Revoke existing reads without locking a hidden/reopened window or effect replay.
   useEffect(() => invalidateSourceReads, [invalidateSourceReads])
+  // Also cover source imports and bound-source updates that bypass editor callbacks.
+  useLayoutEffect(() => {
+    invalidateCopy()
+  }, [invalidateCopy, originalText, modifiedText, originalSource, modifiedSource, initialText, surfaceId])
+  useEffect(() => {
+    copyMounted.current = true
+    // Effect replay and native hide/reopen must leave newly rendered buttons usable.
+    setCopyRevision(sideCopier.getRevision())
+    return () => {
+      copyMounted.current = false
+      sideCopier.invalidate()
+    }
+  }, [sideCopier])
+  const leaveSurface = useCallback(() => {
+    invalidateCopy()
+    invalidateSourceReads()
+  }, [invalidateCopy, invalidateSourceReads])
   const [diffMode, setDiffMode] = useState<DiffMode>(surfaceId === 'json' ? 'json' : 'text')
 
   const sourceOptions = payload.sources?.length ? payload.sources : [
@@ -229,10 +263,10 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
   }, [parseJson, diffMode, originalText, modifiedText])
 
   const handleDetach = useCallback(() => {
-    invalidateSourceReads()
+    leaveSurface()
     const p = JSON.stringify({ original: { text: originalText }, modified: { text: modifiedText } })
     host.detachToWindow(p)
-  }, [originalText, modifiedText, host, invalidateSourceReads])
+  }, [originalText, modifiedText, host, leaveSurface])
 
   const handlePrevHunk = useCallback(() => {
     if (totalHunks === 0) return
@@ -251,7 +285,7 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
     <div className="td-surface">
       {/* Header — breadcrumb left, mode center-right, actions right */}
       <div className="td-hdr">
-        <button type="button" className="td-bc-back" onClick={() => { invalidateSourceReads(); host.requestBack() }}>
+        <button type="button" className="td-bc-back" onClick={() => { leaveSurface(); host.requestBack() }}>
           <IconBack /><span className="td-bc-root">hiven</span>
         </button>
         <span className="td-bc-sep">/</span>
@@ -294,7 +328,7 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
           <button type="button" className="td-ib" onClick={handleDetach} title={t('diff.detach')} aria-label={t('diff.detach')}>
             <IconDetach />
           </button>
-          <button type="button" className="td-ib td-ib--close" onClick={() => { invalidateSourceReads(); host.close() }} title={t('diff.close')} aria-label={t('diff.close')}>
+          <button type="button" className="td-ib td-ib--close" onClick={() => { leaveSurface(); host.close() }} title={t('diff.close')} aria-label={t('diff.close')}>
             <IconClose />
           </button>
         </div>
@@ -302,11 +336,28 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
 
       <div className="td-pane-labels">
         {([
-          ['original', originalSource, setOriginalSource, originalReader],
-          ['modified', modifiedSource, setModifiedSource, modifiedReader],
-        ] as const).map(([side, source, setSource, reader]) => (
+          ['original', originalSource, setOriginalSource, originalReader, originalText],
+          ['modified', modifiedSource, setModifiedSource, modifiedReader, modifiedText],
+        ] as const).map(([side, source, setSource, reader, text]) => (
           <div className="td-pane-label" key={side}>
             <span>{t(`surface.${side}`)}</span>
+            <button
+              type="button"
+              className="td-nav-b td-copy"
+              disabled={text.length === 0 || copyingSide !== null}
+              aria-label={t('diff.copySideLabel', { side: t(`surface.${side}`) })}
+              aria-busy={copyingSide === side}
+              onClick={() => {
+                void sideCopier.copy({ side, text, revision: copyRevision },
+                  (snapshot) => host.clipboard.writeText(snapshot),
+                  (pendingSide) => { if (copyMounted.current) setCopyingSide(pendingSide) },
+                  (success) => host.showToast(t(success ? 'diff.copySuccess' : 'diff.copyFailed', {
+                    side: t(`surface.${side}`),
+                  }), success ? 'success' : 'error'))
+              }}
+            >
+              <IconCopy />{t(copyingSide === side ? 'diff.copyPending' : 'diff.copySide')}
+            </button>
             <Menu
               header={t('source.snapshotHint')}
               trigger={<button type="button" className="td-source" aria-label={t('source.choose', { side: t(`surface.${side}`) })}>{source.title || t('source.chooseShort')} ▾</button>}
@@ -314,7 +365,11 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
                 key: option.sourceId,
                 label: option.kind === 'empty' ? t('source.empty') : option.title,
                 onSelect: () => {
-                  void reader.select(option, () => host.clipboard.readText(), setSource,
+                  invalidateCopy()
+                  void reader.select(option, () => host.clipboard.readText(), (nextSource) => {
+                    invalidateCopy()
+                    setSource(nextSource)
+                  },
                     () => host.showToast(t('source.readFailed'), 'error'))
                 },
               }))}
