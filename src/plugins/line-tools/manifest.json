@@ -4,7 +4,7 @@
   "displayNameI18n": {
     "zh": "文本整理"
   },
-  "version": "3.0.5",
+  "version": "3.0.6",
   "capabilities": [
     "command",
     "surface"

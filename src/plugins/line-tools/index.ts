@@ -2,6 +2,7 @@ import { definePlugin, type PluginToolContext, type PluginToolSurfaces } from '@
 import { TextToolsSurface } from './TextToolsSurface'
 import {
   appendLines,
+  cleanLineList,
   convertText,
   dedupLines,
   getTextStats,
@@ -51,6 +52,14 @@ function formatStats(ctx: PluginToolContext): string {
   ].join('\n')
 }
 
+function cleanListText(text: string, params: Record<string, unknown>): string {
+  return cleanLineList(text, {
+    trim: params.trim === true,
+    removeBlank: params.removeBlank !== false,
+    dedup: params.dedup === true,
+  })
+}
+
 export const lineToolsPlugin = definePlugin({
   ui: {
     surfaces: [
@@ -97,6 +106,19 @@ export const lineToolsPlugin = definePlugin({
     })),
   },
   tools: [
+    {
+      id: 'line-tools.clean-list', title: 'cleanList.title', subtitle: 'cleanList.description', icon: 'RemoveFormatting',
+      aliases: ['clean line list', 'clean list', 'list cleanup', '清理行列表', '清理名单', '整理列表'],
+      inputPolicy: { mode: 'auto' }, policy: LEARNABLE_PURE, requireParamSelection: true,
+      params: [
+        { key: 'trim', label: 'param.cleanList.trim', hint: 'param.cleanList.trimHint', type: 'boolean', default: false, saveable: true },
+        { key: 'removeBlank', label: 'param.cleanList.removeBlank', hint: 'param.cleanList.removeBlankHint', type: 'boolean', default: true, saveable: true },
+        { key: 'dedup', label: 'param.cleanList.dedup', hint: 'param.cleanList.dedupHint', type: 'boolean', default: false, saveable: true },
+      ],
+      explicitTextPreview: { run: (ctx) => ({ ok: true, text: cleanListText(ctx.input.text, ctx.params) }) },
+      run(ctx) { return ctx.output.text(cleanListText(ctx.input.text, ctx.params)) },
+      surfaces: EDITOR_TOOL_SURFACES,
+    },
     {
       id: 'line-tools.sort', title: 'sort.title', subtitle: 'sort.description', icon: 'ArrowUpDown',
       aliases: ['sort lines', 'order', '行排序', '排序'], inputPolicy: { mode: 'auto' }, policy: LEARNABLE_PURE,

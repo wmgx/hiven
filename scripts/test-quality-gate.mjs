@@ -60,6 +60,7 @@ const commands = [
   ['npm', ['run', 'test:ollama-provider']],
   ['npm', ['run', 'test:ollama-runtime']],
   ['npm', ['run', 'test:ai-writing-summary']],
+  ['npm', ['run', 'test:line-list-cleanup']],
   ['npm', ['run', 'test:translate-ai-readiness']],
   ['npm', ['run', 'test:translate-ai-glossary']],
   ['npm', ['run', 'test:translate-output-eligibility']],

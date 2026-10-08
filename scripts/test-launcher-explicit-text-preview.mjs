@@ -71,7 +71,7 @@ try {
   assert.equal(item.executionMode, 'explicit-text-preview')
   assert.equal(item.display.title, 'JSON Prettify')
   assert.equal(item.display.titleI18n.zh, 'JSON 格式化')
-  assert.deepEqual(items.filter((candidate) => candidate.executionMode).map((candidate) => candidate.systemKey).sort(), [key, 'plugin:encode-decode:tool:base64.decode', 'plugin:line-tools:tool:line-tools.remove-blank-lines'].sort(), 'only the three declared tools opt in')
+  assert.deepEqual(items.filter((candidate) => candidate.executionMode).map((candidate) => candidate.systemKey).sort(), [key, 'plugin:encode-decode:tool:base64.decode', 'plugin:line-tools:tool:line-tools.remove-blank-lines', 'plugin:line-tools:tool:line-tools.clean-list'].sort(), 'only the explicitly declared bundled tools opt in')
   assert.ok(collectStaticCandidates('editor-command-bar').some((candidate) => candidate.systemKey === key), 'editor entry remains')
   const workbench = items.find((candidate) => candidate.systemKey === 'plugin:json-tools:launcher:open-format')
   assert.equal(workbench.display.title, 'JSON Prettify Workbench')

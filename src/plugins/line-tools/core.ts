@@ -82,6 +82,51 @@ export function trimLineWhitespace(text: string): string {
   return text.split('\n').map((line) => line.trim()).join('\n')
 }
 
+export type LineListCleanupOptions = {
+  trim: boolean
+  removeBlank: boolean
+  dedup: boolean
+}
+
+/**
+ * Clean in a fixed order: trim edges, remove blank lines, then exact deduplication.
+ * Each retained line owns its original LF/CRLF/CR separator; removing a line
+ * removes that separator too. The final retained line keeps its separator only
+ * when the input ended with one. A trailing separator is not a phantom empty row.
+ * Trimming a final whitespace-only row can expose the preceding separator
+ * ("Ada\n  " becomes "Ada\n"); keep that empty row when removeBlank is off.
+ * If new neighbors would join a lone CR with an empty row's LF, extend that CR
+ * to CRLF before appending the LF, so the two separators cannot swallow a row.
+ */
+export function cleanLineList(text: string, options: Partial<LineListCleanupOptions> = {}): string {
+  const { trim = false, removeBlank = true, dedup = false } = options
+  if (!trim && !removeBlank && !dedup) return text
+
+  const output: string[] = []
+  const seen = new Set<string>()
+  const keepLine = (rawLine: string, separator: string) => {
+    const line = trim ? rawLine.trim() : rawLine
+    if (removeBlank && line.trim() === '') return
+    if (dedup && seen.has(line)) return
+    if (dedup) seen.add(line)
+    output.push(line, separator)
+  }
+  let offset = 0
+  for (const match of text.matchAll(/\r\n|\r|\n/g)) {
+    keepLine(text.slice(offset, match.index), match[0])
+    offset = match.index + match[0].length
+  }
+  const hasTrailingSeparator = offset > 0 && offset === text.length
+  if (offset < text.length) keepLine(text.slice(offset), '')
+  if (!hasTrailingSeparator && output.length > 0) output[output.length - 1] = ''
+  for (let index = 2; index < output.length; index += 2) {
+    if (output[index] === '' && output[index - 1] === '\r' && output[index + 1] === '\n') {
+      output[index - 1] = '\r\n'
+    }
+  }
+  return output.join('')
+}
+
 export function joinLines(text: string, separator: string): string {
   return text.split('\n').join(separator.replace(/\\n/g, '\n').replace(/\\t/g, '\t'))
 }

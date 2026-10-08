@@ -115,9 +115,9 @@ for (const name of promptBeforeRunPlugins) {
 }
 
 // Plugins that support default-run (no requireParamSelection)
+// line-tools per-tool defaults are checked against the real registry in test-line-list-cleanup.mjs.
 const defaultRunPlugins = [
   'date-time-assistant',
-  'line-tools',
   'encode-decode',
   'formatter',
   'text-utils',

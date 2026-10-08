@@ -1,5 +1,5 @@
 {
-  "version": 89,
+  "version": 90,
   "packages": [
     {
       "pluginId": "encode-decode",
@@ -19,7 +19,7 @@
     {
       "pluginId": "line-tools",
       "dir": "line-tools",
-      "version": "3.0.5"
+      "version": "3.0.6"
     },
     {
       "pluginId": "crypto",
