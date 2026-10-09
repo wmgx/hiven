@@ -182,6 +182,9 @@ const emptyStorage: PluginPrivateStorageApi = {
     get: async () => undefined,
     delete: async () => {},
     url: async () => '',
+    savePng: async () => {
+      throw new Error('Plugin storage is not available for this launcher item')
+    },
   },
   quota: {
     usage: async () => ({ bytes: 0, itemCount: 0 }),

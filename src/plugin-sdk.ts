@@ -96,6 +96,7 @@ export type {
   // Plugin Storage types
   PluginPrivateStorageApi,
   PluginBlobRef,
+  PluginBlobSaveResult,
   PluginStoragePrunePolicy,
   // Plugin Network types
   PluginNetworkApi,

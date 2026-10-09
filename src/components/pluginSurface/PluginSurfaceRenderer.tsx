@@ -91,6 +91,7 @@ export function PluginSurfaceRenderer({
   activeStateRef.current = surfaceState
   const mountedRef = useRef(false)
   const hiddenRef = useRef(false)
+  const exportSessionRef = useRef(0)
   const ownedSettingsTargetRef = useRef<PluginSettingsDialogTarget>(null)
   const sessionRef = useRef<AppSettingsSession | null>(null)
   const handoffRef = useRef<{ controller: AbortController; promise: Promise<boolean> } | null>(null)
@@ -112,6 +113,8 @@ export function PluginSurfaceRenderer({
     if (ownedTarget && store.settingsDialogTarget === ownedTarget) store.closeSettingsDialog()
   }, [])
   const interruptSettings = useCallback(() => {
+    // A closed/replaced surface cannot resume an old native save dialog after reopening.
+    exportSessionRef.current += 1
     handoffRef.current?.controller.abort()
     handoffRef.current = null
     deliveredHandoffRef.current = null
@@ -203,7 +206,10 @@ export function PluginSurfaceRenderer({
 
         const settingsContribution = definition.settings
         const settings = settingsContribution ? resolvePluginSettings(target.source, target.pluginId, settingsContribution).value : {}
-        const storage = createPluginPrivateStorage(target.source, target.pluginId, permissions)
+        const storage = createPluginPrivateStorage(target.source, target.pluginId, permissions, {
+          // Preparation has no presented surface owner for an interactive save.
+          capture: () => () => false,
+        })
         const pluginT = makePluginT(target.pluginId, locale)
 
         await surface.beforeOpen?.({
@@ -259,9 +265,14 @@ export function PluginSurfaceRenderer({
   const settingsContribution = surfaceState.definition.settings
   const settings = settingsContribution ? resolvePluginSettings(target.source, target.pluginId, settingsContribution).value : {}
   const pluginT = makePluginT(target.pluginId, locale)
-  const hostStorage = createPluginPrivateStorage(target.source, target.pluginId, surfaceState.permissions)
   const SurfaceComponent = surfaceState.surface.component
   const isCurrentSurface = () => mountedRef.current && activeTargetRef.current === target && activeStateRef.current === surfaceState && !hiddenRef.current
+  const hostStorage = createPluginPrivateStorage(target.source, target.pluginId, surfaceState.permissions, {
+    capture: () => {
+      const exportSession = exportSessionRef.current
+      return () => isCurrentSurface() && exportSessionRef.current === exportSession
+    },
+  })
   const leaveSurface = (action: () => void) => {
     if (!isCurrentSurface()) return
     interruptSettings()
@@ -338,6 +349,7 @@ export function PluginSurfaceRenderer({
               onClose()
             },
             showMessage: (message, level) => {
+              if (!isCurrentSurface()) return
               showToast(message, level ?? 'info')
             },
             showToast: (message, level, options) => showToast(message, level, options),

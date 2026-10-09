@@ -515,6 +515,9 @@ export type PluginBlobRef = {
   contentType: string
 }
 
+/** A successful save is returned only after the native file write completes. */
+export type PluginBlobSaveResult = { status: 'saved' } | { status: 'cancelled' }
+
 export type PluginStoragePrunePolicy = {
   maxItems?: number
   maxBytes?: number
@@ -533,6 +536,8 @@ export type PluginPrivateStorageApi = {
     get(blobId: string): Promise<Uint8Array | undefined>
     delete(blobId: string): Promise<void>
     url(blobId: string): Promise<string>
+    /** Save this plugin's PNG through a desktop dialog. Requires an active owner, not a surface preparation hook. No output path is accepted or exposed. Errors reject. */
+    savePng(blobId: string, options?: { suggestedFilename?: string }): Promise<PluginBlobSaveResult>
   }
   quota: {
     usage(): Promise<{ bytes: number; itemCount: number }>

@@ -24,6 +24,7 @@ mod ai_run_registry;
 mod ai_ollama;
 pub mod ai_xai;
 mod clipboard_privacy;
+mod plugin_png_export;
 mod text_material;
 pub mod desktop_bridge;
 pub mod desktop_capture;
@@ -5444,10 +5445,33 @@ fn plugin_blob_paths(
     plugin_id: &str,
     blob_id: &str,
 ) -> Result<(PathBuf, PluginBlobMetadata), String> {
+    plugin_blob_paths_with_metadata_limit(source, plugin_id, blob_id, None)
+}
+
+fn plugin_blob_paths_with_metadata_limit(
+    source: &str,
+    plugin_id: &str,
+    blob_id: &str,
+    metadata_limit: Option<usize>,
+) -> Result<(PathBuf, PluginBlobMetadata), String> {
     validate_storage_segment(blob_id, "Plugin blob id")?;
     let dir = plugin_blob_dir(source, plugin_id)?;
     let meta_path = dir.join(format!("{}.json", blob_id));
-    let raw = fs::read_to_string(&meta_path).map_err(|e| e.to_string())?;
+    let raw = match metadata_limit {
+        Some(limit) => {
+            let mut raw = String::new();
+            fs::File::open(&meta_path)
+                .map_err(|e| e.to_string())?
+                .take(limit.saturating_add(1) as u64)
+                .read_to_string(&mut raw)
+                .map_err(|e| e.to_string())?;
+            if raw.len() > limit {
+                return Err("Plugin blob metadata is too large".into());
+            }
+            raw
+        }
+        None => fs::read_to_string(&meta_path).map_err(|e| e.to_string())?,
+    };
     let metadata: PluginBlobMetadata = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
     let data_path = dir.join(format!("{}.{}", blob_id, metadata.extension));
     let canonical_dir = dir.canonicalize().map_err(|e| e.to_string())?;
@@ -7476,6 +7500,9 @@ pub fn run() {
             plugin_blob_delete,
             plugin_blob_path,
             plugin_blob_clear,
+            plugin_png_export::plugin_blob_prepare_png_export,
+            plugin_png_export::plugin_blob_commit_png_export,
+            plugin_png_export::plugin_blob_discard_png_export,
             install_plugin_dir,
             install_plugin_zip,
             install_plugin_zip_url,

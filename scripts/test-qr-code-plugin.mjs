@@ -103,7 +103,7 @@ assert.equal(core.dataUrlToBase64('data:image/png;base64,abcd'), 'abcd')
 assert.match(read('src/plugins/qr-code/QrSurface.tsx'), /copyPngBlobToClipboard/)
 assert.match(read('src/plugins/qr-code/QrSurface.tsx'), /clipboard\.writeImage/)
 assert.match(read('src/plugins/qr-code/QrSurface.tsx'), /action.copyImage/)
-assert.match(read('src/plugins/qr-code/QrSurface.tsx'), /action.copyBase64/)
+assert.match(read('src/plugins/qr-code/QrSurface.tsx'), /action.copyDataUrl/)
 assert.match(read('src/plugins/qr-code/QrSurface.tsx'), /copyText\(dataUrl/)
 assert.doesNotMatch(read('src/plugins/qr-code/QrSurface.tsx'), /copyText\(dataUrlToBase64/)
 assert.match(read('src/plugins/qr-code/style.css'), /hiven-ui-button:hover/)
@@ -113,8 +113,8 @@ assert.match(
   /:hover:not\(:disabled\):not\(\.hiven-ui-button-primary\)/,
 )
 assert.match(read('src/plugins/qr-code/style.css'), /-webkit-appearance:\s*none/)
-assert.ok(en['action.copyBase64'])
-assert.ok(zh['action.copyBase64'])
+assert.ok(en['action.copyDataUrl'])
+assert.ok(zh['action.copyDataUrl'])
 assert.equal(core.normalizeQrErrorCorrection('H'), 'H')
 assert.equal(core.normalizeQrErrorCorrection('nope'), 'M')
 assert.equal(core.normalizeQrSize(320), 320)
@@ -127,6 +127,51 @@ const builtin = JSON.parse(read('src/builtin-plugins/index.json'))
 const packed = builtin.packages.find((pkg) => pkg.pluginId === 'qr-code')
 assert.ok(packed, 'builtin index should include qr-code')
 assert.equal(packed.version, manifest.version)
+
+// The exact generated PNG survives the private-blob save path and decodes back
+// to the same payload. Cancellation/errors clean up only that temporary blob.
+const { saveQrImage } = loadTs('src/plugins/qr-code/saveQrImage.ts', { './qrCore': core })
+const payload = 'Hiven QA123'
+const generated = await core.generateQrDataUrl(payload)
+const { PNG } = nodeRequire('pngjs')
+for (const outcome of ['saved', 'cancelled', 'error']) {
+  const calls = []
+  let bytes
+  const storage = { blob: {
+    async put(input) {
+      calls.push('put')
+      assert.equal(input.contentType, 'image/png')
+      assert.equal(input.extension, 'png')
+      bytes = input.bytes.slice()
+      return { blobId: 'our-temporary-png' }
+    },
+    async savePng(blobId, options) {
+      calls.push('save')
+      assert.equal(blobId, 'our-temporary-png')
+      assert.equal(options.suggestedFilename, 'qr-code.png')
+      if (outcome === 'error') throw new Error('write failed')
+      return { status: outcome }
+    },
+    async delete(blobId) {
+      calls.push('delete')
+      assert.equal(blobId, 'our-temporary-png')
+    },
+  } }
+  if (outcome === 'error') await assert.rejects(saveQrImage(storage, generated), /write failed/)
+  else assert.equal((await saveQrImage(storage, generated)).status, outcome)
+  assert.deepEqual(calls, ['put', 'save', 'delete'])
+  const decoded = PNG.sync.read(Buffer.from(bytes))
+  assert.equal(core.decodeQrFromImageData(decoded), payload)
+}
+
+const surface = read('src/plugins/qr-code/QrSurface.tsx')
+assert.doesNotMatch(surface, /document\.createElement\(['"]a['"]\)|link\.download|toast\.downloaded/)
+assert.match(surface, /result\.status === 'saved'/)
+assert.match(surface, /savingRef\.current/)
+assert.equal(en['action.saveImage'], 'Save image…')
+assert.equal(en['action.copyDataUrl'], 'Copy Data URL')
+assert.match(en['scan.hint'], /\{shortcut\}/)
+assert.match(zh['scan.hint'], /\{shortcut\}/)
 
 const catalog = read('src/workspace/pluginProductCatalog.ts')
 assert.match(catalog, /product\('qr-code', 'QR Code'[\s\S]*?二维码/)

@@ -74,7 +74,7 @@
     {
       "pluginId": "qr-code",
       "dir": "qr-code",
-      "version": "1.0.8"
+      "version": "1.0.9"
     },
     {
       "pluginId": "feishu",

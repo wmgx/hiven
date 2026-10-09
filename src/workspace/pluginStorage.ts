@@ -9,6 +9,7 @@
 import type { PluginPrivateStorageApi, PluginBlobRef, PluginStoragePrunePolicy, PluginPermissionSnapshot } from './pluginTypes'
 import type { PluginSettingsSource } from './pluginSettingsStore'
 import { requirePluginPermissions } from './pluginPermissions'
+import { createPluginPngSaver, type PluginStorageOwner } from './pluginBlobExport'
 
 const KV_PREFIX = 'hiven-plugin-kv:'
 const KV_META_PREFIX = 'hiven-plugin-kv-meta:'
@@ -110,6 +111,7 @@ export function createPluginPrivateStorage(
   source: PluginSettingsSource,
   pluginId: string,
   permissions?: PluginPermissionSnapshot,
+  owner?: PluginStorageOwner,
 ): PluginPrivateStorageApi {
   clearLegacyBlobLocalStorage(source, pluginId)
 
@@ -185,6 +187,7 @@ export function createPluginPrivateStorage(
     },
 
     blob: {
+      savePng: createPluginPngSaver(source, pluginId, permissions, owner),
       async put(input: { bytes: Uint8Array; contentType: string; extension?: string }): Promise<PluginBlobRef> {
         requireBlob()
         if (!isTauri()) {

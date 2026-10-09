@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import { Button, ContextMenu, IconButton, SegmentedControl, Select, TextArea } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
+import { saveQrImage } from './saveQrImage'
 import {
   DEFAULT_QR_ERROR_LEVEL,
   DEFAULT_QR_SIZE,
@@ -50,7 +51,15 @@ export function QrSurface(props: PluginSurfaceProps) {
   const [scanError, setScanError] = useState('')
   const [dragOver, setDragOver] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const savingRef = useRef(false)
+  const mountedRef = useRef(false)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
 
   useEffect(() => {
     const payload = text.trim()
@@ -145,9 +154,9 @@ export function QrSurface(props: PluginSurfaceProps) {
     }
   }, [host, t])
 
-  const copyBase64 = useCallback(async () => {
+  const copyDataUrl = useCallback(async () => {
     if (!dataUrl) return
-    await copyText(dataUrl, 'toast.copiedBase64')
+    await copyText(dataUrl, 'toast.copiedDataUrl')
   }, [copyText, dataUrl])
 
   const copyImage = useCallback(async () => {
@@ -185,13 +194,21 @@ export function QrSurface(props: PluginSurfaceProps) {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [copyImage, dataUrl, mode])
 
-  const downloadImage = useCallback(() => {
-    if (!dataUrl) return
-    const link = document.createElement('a')
-    link.href = dataUrl
-    link.download = 'qr-code.png'
-    link.click()
-    host.showMessage(t('toast.downloaded'), 'success')
+  const saveImage = useCallback(async () => {
+    if (!dataUrl || savingRef.current) return
+    savingRef.current = true
+    setSaving(true)
+    try {
+      const result = await saveQrImage(host.storage, dataUrl)
+      if (mountedRef.current && result.status === 'saved') host.showMessage(t('toast.saved'), 'success')
+    } catch (error) {
+      if (mountedRef.current) {
+        host.showMessage(t(error instanceof Error && error.name === 'NotSupportedError' ? 'toast.saveUnavailable' : 'toast.saveFailed'), 'error')
+      }
+    } finally {
+      savingRef.current = false
+      if (mountedRef.current) setSaving(false)
+    }
   }, [dataUrl, host, t])
 
   return (
@@ -276,16 +293,16 @@ export function QrSurface(props: PluginSurfaceProps) {
               }
               items={[
                 { key: 'copy-image', label: t('action.copyImage'), onSelect: () => void copyImage() },
-                { key: 'copy-base64', label: t('action.copyBase64'), onSelect: () => void copyBase64() },
-                { key: 'download', label: t('action.download'), onSelect: downloadImage },
+                { key: 'copy-data-url', label: t('action.copyDataUrl'), onSelect: () => void copyDataUrl() },
+                { key: 'save-image', label: t(saving ? 'action.saving' : 'action.saveImage'), onSelect: () => void saveImage() },
               ]}
             />
             <div className="qr-surface__actions">
-              <Button type="button" disabled={!dataUrl} onClick={() => void copyBase64()}>
-                {t('action.copyBase64')}
+              <Button type="button" disabled={!dataUrl} onClick={() => void copyDataUrl()}>
+                {t('action.copyDataUrl')}
               </Button>
-              <Button type="button" disabled={!dataUrl} onClick={downloadImage}>
-                {t('action.download')}
+              <Button type="button" disabled={!dataUrl || saving} onClick={() => void saveImage()}>
+                {t(saving ? 'action.saving' : 'action.saveImage')}
               </Button>
             </div>
           </div>
@@ -316,7 +333,7 @@ export function QrSurface(props: PluginSurfaceProps) {
             >
               {scanPreview ? <img src={scanPreview} alt={t('mode.scan')} /> : null}
               <div className="qr-surface__drop-title">{t('scan.drop')}</div>
-              <div className="qr-surface__drop-hint">{t('scan.hint')}</div>
+              <div className="qr-surface__drop-hint">{t('scan.hint').replace('{shortcut}', /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘V' : 'Ctrl+V')}</div>
               <Button
                 type="button"
                 onClick={(event) => {

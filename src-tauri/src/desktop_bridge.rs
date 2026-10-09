@@ -582,6 +582,18 @@ fn route_validation_request(
                     400,
                     r#"{"error":"id and command are required"}"#.to_string(),
                 )
+            } else if matches!(
+                request.command.as_str(),
+                "plugin_blob_prepare_png_export"
+                    | "plugin_blob_commit_png_export"
+                    | "plugin_blob_discard_png_export"
+            ) {
+                // Browser tabs share the relay's native webview, so they cannot
+                // own its dialog leases. PNG export is desktop-only.
+                (
+                    403,
+                    r#"{"error":"command requires a native webview"}"#.to_string(),
+                )
             } else {
                 guard.touch_client(&request.client_id, now);
                 guard.requests.push_back(request);
@@ -1225,6 +1237,33 @@ pub fn set_desktop_bridge_source_config(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn png_export_commands_cannot_be_relayed_from_browser_tabs() {
+        let token = super::validation_state().lock().unwrap().token.clone();
+        for command in [
+            "plugin_blob_prepare_png_export",
+            "plugin_blob_commit_png_export",
+            "plugin_blob_discard_png_export",
+        ] {
+            let body = serde_json::json!({
+                "id": "png-export-denied",
+                "clientId": "browser-tab",
+                "command": command,
+                "args": {},
+            })
+            .to_string();
+            let response = super::route_validation_request(
+                "POST",
+                &format!("/v1/validation/invoke?token={token}"),
+                &body,
+                Some("http://localhost:1420"),
+            )
+            .unwrap()
+            .unwrap();
+            assert_eq!(response.0, 403);
+        }
+    }
 
     #[test]
     fn parse_content_length_header() {
