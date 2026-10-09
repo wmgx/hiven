@@ -74,6 +74,8 @@ export type ClipboardObjectBlockState = {
   cancelFileTextRead: () => void
   /** Synchronous identity for the currently attached material session. */
   getMaterialGeneration: () => number | undefined
+  /** Synchronous receipt check when retrying presentation of an already delivered block. */
+  hasMaterial: (block: LauncherObjectBlock) => boolean
 }
 
 /** Blocks handed in from history / tools — re-stash on hide so ⌘↵ is not lost mid-transition. */
@@ -141,22 +143,28 @@ export function useClipboardObjectBlock(params: {
   }, [cancelFileTextRead])
 
   const applyHandoffBlock = useCallback((pending: LauncherObjectBlock) => {
+    if (!openRef.current) return false
     // The in-flight open read may settle before React commits material below.
     // Publish explicit material synchronously so that older clipboard read cannot replace it.
     const next = acceptMaterialHandoff(materialRef.current, pending, openRef.current && !userDismissedRef.current)
-    if (next === materialRef.current) return
+    if (next === materialRef.current) return false
     publishMaterial(next)
     clearExitTimer()
     setIsExiting(false)
     setHint(null)
     didReadRef.current = true
     userDismissedRef.current = false
+    return true
   }, [clearExitTimer, publishMaterial])
 
   // Live deliver pending blocks while launcher stays open (history stack → list).
   useEffect(() => {
     return subscribePendingObjectBlock((pending) => {
-      applyHandoffBlock(pending)
+      const accepted = applyHandoffBlock(pending)
+      if (!accepted) {
+        if (openRef.current) clearPendingObjectBlock(pending)
+        return false
+      }
       // Re-persist without re-notifying so hide/show races can still recover.
       const current = materialRef.current.block
       if (current && !userDismissedRef.current) {
@@ -164,6 +172,7 @@ export function useClipboardObjectBlock(params: {
       } else {
         clearPendingObjectBlock()
       }
+      return true
     })
   }, [applyHandoffBlock])
 
@@ -475,6 +484,11 @@ export function useClipboardObjectBlock(params: {
 
   const getMaterialGeneration = useCallback(() => mountedRef.current && openRef.current
     ? materialGenerationRef.current : undefined, [])
+  const hasMaterial = useCallback((expected: LauncherObjectBlock) => {
+    const current = materialRef.current.block
+    return Boolean(mountedRef.current && openRef.current && current && current.id === expected.id &&
+      current.source === expected.source && current.createdAt === expected.createdAt)
+  }, [])
 
   // Keep object-action until unmount so ranking/list do not re-render mid-exit (jank source).
   const mode: ClipboardObjectBlockMode = block ? 'object-action' : 'search-only'
@@ -500,5 +514,6 @@ export function useClipboardObjectBlock(params: {
     readFileText,
     cancelFileTextRead,
     getMaterialGeneration,
+    hasMaterial,
   }
 }

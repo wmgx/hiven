@@ -736,9 +736,11 @@ export type PluginSurfaceHostApi = {
   dismissToast(id: string): void
   /**
    * Attach a snapshot Object Block and return to Global Launcher (leave surface / open launcher).
+   * Resolves true after delivery, false on interruption/failure. Legacy hosts may
+   * return void. Hosts report delivery errors; plugins keep drafts when false.
    * Host owns factory + pending bridge; plugins must not import launcher private modules.
    */
-  returnToLauncherWithObject(block: PluginObjectBlockInput): void
+  returnToLauncherWithObject(block: PluginObjectBlockInput, options?: { signal?: AbortSignal }): void | Promise<boolean>
   storage: PluginPrivateStorageApi
   clipboard: PluginClipboardApi
   paste: PluginPasteApi

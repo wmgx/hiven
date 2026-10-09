@@ -21,7 +21,9 @@ import { GlobalLauncherPanel } from '../../components/launcher/GlobalLauncherPan
 import { useGlobalLauncherSelectionController } from '../../components/launcher/useGlobalLauncherSelectionController'
 import { useClipboardObjectBlock } from '../clipboard/useClipboardObjectBlock'
 import { getObjectBlockRecommendationText } from '../clipboard/objectBlock'
-import { subscribePendingObjectBlock } from '../clipboard/pendingObjectBlock'
+import { setPendingObjectBlock, subscribePendingObjectBlock } from '../clipboard/pendingObjectBlock'
+import { subscribeLauncherObjectHandoff } from '../clipboard/launcherObjectHandoff'
+import { isNativeDesktopRuntime } from '../../workspace/webNativeBridge'
 import { executeRecommendedAction } from '../clipboard/actionExecutor'
 import { recommendActionsForBlock, type RecommendedAction, type RecommendedOutputTarget } from '../clipboard/actionRecommendation'
 import { createPluginClipboard, writeClipboardText } from '../../workspace/pluginClipboard'
@@ -278,6 +280,35 @@ export function GlobalLauncherHost() {
     // ESC/back pops the tool surface; keep the launcher open and refocus search.
     onReturnedToList: () => focusSearchInputAfterBackRef.current(),
   })
+
+  useEffect(() => {
+    if (!standaloneLauncher || !isNativeDesktopRuntime()) return
+    let disposed = false
+    let stop: (() => void) | undefined
+    void subscribeLauncherObjectHandoff({
+      prepare: () => useAppStore.getState().openGlobalLauncherOverlay(),
+      getGeneration: clipboardBlock.getMaterialGeneration,
+      accept: (block) => {
+        const generation = clipboardBlock.getMaterialGeneration()
+        if (generation === undefined) return false
+        if (!clipboardBlock.hasMaterial(block)) {
+          setPendingObjectBlock(block, { persist: true })
+          if (clipboardBlock.getMaterialGeneration() === generation) return false
+        }
+        useAppStore.getState().clearPluginSurfaceTool()
+        useAppStore.getState().clearLauncherHostSurface()
+        useAppStore.setState({ previousLauncherHostSurfaceTarget: null })
+        setSurfaceFrame(null)
+        controllerRef.current?.reset()
+        const settings = usePluginSettingsStore.getState()
+        if (settings.settingsDialogTarget?.presentation === 'global-launcher') settings.closeSettingsDialog()
+        return true
+      },
+    }).then((unlisten) => { if (disposed) unlisten(); else stop = unlisten }).catch((error) => {
+      console.warn('[hiven] Could not listen for launcher object handoffs:', error)
+    })
+    return () => { disposed = true; stop?.() }
+  }, [standaloneLauncher, clipboardBlock.getMaterialGeneration, clipboardBlock.hasMaterial, setSurfaceFrame, controllerRef])
 
   // Root list + collect-input keep the caret; result/param/surface own their own focus.
   const retainSearchFocus = useMemo(() => {

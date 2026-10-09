@@ -808,3 +808,251 @@ body[data-theme='dark'] .clipboard-history-surface {
 .clipboard-history-topbar .hiven-ui-icon-button:hover:not(:disabled) {
   background: var(--bg-surface-2, var(--hiven-color-bg-secondary));
 }
+
+/* Transient text combination uses the shared modal's focus and Escape behavior. */
+.clipboard-history-merge-dialog {
+  width: min(1000px, calc(100vw - 24px));
+  height: min(720px, calc(100dvh - 24px));
+  min-height: 0;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.clipboard-history-merge-dialog > .hiven-ui-dialog-title {
+  flex: 0 0 auto;
+  padding: 13px 16px 0;
+  font-size: 13px;
+}
+
+.clipboard-history-merge-dialog > .clipboard-history-surface {
+  flex: 1;
+  height: auto;
+  --clipboard-history-list-width: 310px;
+}
+
+.clipboard-history-merge-instruction {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 2px 5px;
+  color: var(--hiven-color-text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.clipboard-history-merge-instruction strong {
+  color: var(--hiven-color-text-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.clipboard-history-item-row.is-merge-option .clipboard-history-item {
+  padding-right: 10px;
+}
+
+.clipboard-history-merge-check {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--hiven-color-text-tertiary);
+  border-radius: 5px;
+  color: var(--hiven-color-text-secondary);
+  background: var(--bg-surface);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.is-merge-selected .clipboard-history-merge-check {
+  border-color: var(--hiven-color-accent);
+  color: var(--hiven-color-accent);
+  background: var(--accent-soft);
+}
+
+.clipboard-history-merge-panel {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+}
+
+.clipboard-history-merge-selection {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 42%;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px 10px;
+}
+
+.clipboard-history-merge-section-heading {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 9px;
+  color: var(--hiven-color-text-secondary);
+  font-size: 11px;
+}
+
+.clipboard-history-merge-section-heading h3 {
+  margin: 0;
+  color: var(--hiven-color-text-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.clipboard-history-merge-help {
+  margin: 5px 0;
+  color: var(--hiven-color-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.clipboard-history-merge-order {
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.clipboard-history-merge-order li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 35px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.clipboard-history-merge-position {
+  width: 20px;
+  flex: 0 0 20px;
+  text-align: center;
+  color: var(--hiven-color-text-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.clipboard-history-merge-source {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--hiven-color-text-primary);
+  font-size: 12px;
+}
+
+.clipboard-history-merge-order-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 2px;
+}
+
+.clipboard-history-merge-order-actions .hiven-ui-icon-button {
+  width: 25px;
+  height: 25px;
+  min-width: 25px;
+}
+
+.clipboard-history-merge-order-actions .hiven-ui-icon-button:disabled {
+  opacity: 0.3;
+}
+
+.clipboard-history-merge-separator {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  color: var(--hiven-color-text-secondary);
+  font-size: 12px;
+}
+
+.clipboard-history-merge-separator .hiven-ui-segmented-item {
+  min-height: 27px;
+  padding: 4px 10px;
+  font-size: 11px;
+}
+
+.clipboard-history-merge-preview {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px;
+}
+
+.clipboard-history-merge-preview .clipboard-history-preview-text {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.clipboard-history-merge-preview .hiven-ui-surface-empty {
+  flex: 1;
+  min-height: 65px;
+  text-align: center;
+  font-size: 12px;
+}
+
+.clipboard-history-merge-error {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--hiven-color-danger);
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.clipboard-history-merge-error p {
+  margin: 0;
+}
+
+.clipboard-history-merge-item-error {
+  color: var(--hiven-color-danger);
+  font-size: 10px;
+}
+
+@media (max-width: 720px) {
+  .clipboard-history-surface.is-combining .clipboard-history-main {
+    grid-template-columns: minmax(160px, 38%) minmax(0, 1fr);
+  }
+
+  .clipboard-history-surface.is-combining .clipboard-history-list-pane {
+    border-right: 1px solid var(--border);
+  }
+
+  .clipboard-history-surface.is-combining .clipboard-history-topbar {
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 10px;
+  }
+
+  .clipboard-history-surface.is-combining .clipboard-history-topbar .hiven-ui-search {
+    min-width: 120px;
+  }
+
+  .clipboard-history-merge-selection,
+  .clipboard-history-merge-preview {
+    padding: 10px;
+  }
+
+  .clipboard-history-merge-separator {
+    padding: 8px 10px;
+    gap: 5px;
+    flex-wrap: wrap;
+  }
+}

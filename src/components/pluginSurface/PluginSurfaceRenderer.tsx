@@ -23,8 +23,11 @@ import type {
   PluginUiSurfaceContribution,
 } from '../../workspace/pluginTypes'
 import { createPluginSurfaceObjectBlock } from './pluginSurfaceObjectBlock'
-import { setPendingObjectBlock } from '../../launcher/clipboard/pendingObjectBlock'
-import { showLauncherWindow } from '../../workspace/windowManager/launcherWindow'
+import { clearPendingObjectBlock, setPendingObjectBlock } from '../../launcher/clipboard/pendingObjectBlock'
+import { requestLauncherObjectHandoff, showLauncherAfterObjectHandoff } from '../../launcher/clipboard/launcherObjectHandoff'
+import { isNativeDesktopRuntime } from '../../workspace/webNativeBridge'
+import { getCurrentWindow } from '@tauri-apps/api/window'
+import { LAUNCHER_WINDOW_LABEL } from '../../workspace/windowManager/windowLabels'
 import { pluginSurfaceInstanceId } from '../../workspace/pluginSurfaceWindows'
 import { PluginAppSettingsDialog } from './PluginAppSettingsDialog'
 
@@ -90,6 +93,8 @@ export function PluginSurfaceRenderer({
   const hiddenRef = useRef(false)
   const ownedSettingsTargetRef = useRef<PluginSettingsDialogTarget>(null)
   const sessionRef = useRef<AppSettingsSession | null>(null)
+  const handoffRef = useRef<{ controller: AbortController; promise: Promise<boolean> } | null>(null)
+  const deliveredHandoffRef = useRef<{ owner: PluginSurfaceRendererState; input: string; block: ReturnType<typeof createPluginSurfaceObjectBlock> } | null>(null)
   const [appSettingsSession, setAppSettingsSession] = useState<AppSettingsSession | null>(null)
   const finishAppSettings = useCallback((session: AppSettingsSession | null, completed = false) => {
     if (!session || sessionRef.current !== session) return
@@ -107,6 +112,9 @@ export function PluginSurfaceRenderer({
     if (ownedTarget && store.settingsDialogTarget === ownedTarget) store.closeSettingsDialog()
   }, [])
   const interruptSettings = useCallback(() => {
+    handoffRef.current?.controller.abort()
+    handoffRef.current = null
+    deliveredHandoffRef.current = null
     closeOwnedSettings()
     finishAppSettings(sessionRef.current)
   }, [closeOwnedSettings, finishAppSettings])
@@ -334,27 +342,86 @@ export function PluginSurfaceRenderer({
             },
             showToast: (message, level, options) => showToast(message, level, options),
             dismissToast,
-            returnToLauncherWithObject: (input: PluginObjectBlockInput) => {
-              if (!isCurrentSurface()) return
+            returnToLauncherWithObject: (input: PluginObjectBlockInput, options?: { signal?: AbortSignal }) => {
+              if (!isCurrentSurface() || options?.signal?.aborted) return Promise.resolve(false)
+              if (handoffRef.current) return handoffRef.current.promise
+              const inputKey = JSON.stringify(input)
+              const delivered = deliveredHandoffRef.current?.owner === surfaceState && deliveredHandoffRef.current.input === inputKey
+                ? deliveredHandoffRef.current : null
               interruptSettings()
-              const block = createPluginSurfaceObjectBlock(input)
-
-              // Always persist: history is often a separate webview; hide/show races
-              // used to drop in-memory-only pending before Global Launcher reopened.
-              setPendingObjectBlock(block, { persist: true })
-
-              // Leave tool surface / clear host target but keep launcher session when possible
-              useAppStore.getState().clearPluginSurfaceTool()
-              onBack()
-
-              useAppStore.getState().openGlobalLauncherOverlay()
-              void showLauncherWindow().catch((error) => {
-                console.warn('[hiven] Failed to show launcher after returnToLauncherWithObject:', error)
-                showToast(
-                  pickLocale(locale, '无法带回 Launcher', 'Could not return to Launcher'),
-                  'error',
-                )
+              const block = delivered?.block ?? createPluginSurfaceObjectBlock(input)
+              const controller = new AbortController()
+              const handoff = { controller, promise: Promise.resolve(false) }
+              handoffRef.current = handoff
+              const abortHandoff = () => {
+                controller.abort()
+                if (handoffRef.current === handoff) handoffRef.current = null
+              }
+              options?.signal?.addEventListener('abort', abortHandoff, { once: true })
+              handoff.promise = (async () => {
+                try {
+                  const crossWindow = isNativeDesktopRuntime() && getCurrentWindow().label !== LAUNCHER_WINDOW_LABEL
+                  if (crossWindow) {
+                    const accepted = await requestLauncherObjectHandoff(block, {
+                      signal: controller.signal,
+                      isCurrent: () => isCurrentSurface() && handoffRef.current === handoff,
+                    })
+                    if (!accepted) return false
+                  } else if (!crossWindow) {
+                    useAppStore.getState().openGlobalLauncherOverlay()
+                    // Let a previously closed in-app launcher mount its receiver.
+                    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+                    if (!isCurrentSurface() || controller.signal.aborted || handoffRef.current !== handoff) return false
+                    // Only the material hook can confirm synchronous acceptance.
+                    if (!setPendingObjectBlock(block, { persist: true })) {
+                      clearPendingObjectBlock(block)
+                      return false
+                    }
+                  }
+                  if (!isCurrentSurface() || controller.signal.aborted || handoffRef.current !== handoff) return false
+                  handoffRef.current = null
+                  hiddenRef.current = true
+                  const stillOwned = () => mountedRef.current && activeTargetRef.current === target && activeStateRef.current === surfaceState && !controller.signal.aborted
+                  // After delivery, native blur-hide is expected. Do not explicitly
+                  // leave or clear the source draft until visibility is confirmed.
+                  if (crossWindow && !await showLauncherAfterObjectHandoff(stillOwned)) {
+                    if (!stillOwned()) return false
+                    if (presentation === 'plugin-surface-window') {
+                      try {
+                        if (!await getCurrentWindow().isVisible()) {
+                          const { showPluginSurfaceWindow } = await import('../../workspace/windowManager/pluginSurfaceWindows')
+                          await showPluginSurfaceWindow(target)
+                        }
+                      } catch (error) {
+                        console.warn('[hiven] Could not restore the source after launcher show failed:', error)
+                      }
+                    }
+                    if (!stillOwned()) return false
+                    hiddenRef.current = false
+                    deliveredHandoffRef.current = { owner: surfaceState, input: inputKey, block }
+                    showToast(pickLocale(locale, '材料已带回，但无法显示 Launcher，请重试', 'Material delivered, but Launcher could not be shown. Please retry.'), 'error')
+                    return false
+                  }
+                  if (!stillOwned()) return false
+                  useAppStore.getState().clearPluginSurfaceTool()
+                  useAppStore.setState({ previousLauncherHostSurfaceTarget: null })
+                  onBack()
+                  return true
+                } catch (error) {
+                  console.warn('[hiven] Failed to return object to launcher:', error)
+                  return false
+                }
+              })().then((accepted) => {
+                options?.signal?.removeEventListener('abort', abortHandoff)
+                if (handoffRef.current === handoff) {
+                  handoffRef.current = null
+                  if (!accepted && isCurrentSurface() && !controller.signal.aborted) {
+                    showToast(pickLocale(locale, '无法带回 Launcher，请重试', 'Could not return to Launcher. Please retry.'), 'error')
+                  }
+                }
+                return accepted
               })
+              return handoff.promise
             },
             storage: hostStorage,
             clipboard: createPluginClipboard(target.pluginId, surfaceState.permissions, hostStorage),

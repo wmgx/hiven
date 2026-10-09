@@ -192,7 +192,7 @@ export function setupBackgroundSettingsWatcher(): () => void {
       const previous = prevState.pluginSettings[source]
       if (current === previous) continue
 
-      for (const pluginId of Object.keys(current)) {
+      for (const pluginId of new Set([...Object.keys(current), ...Object.keys(previous)])) {
         if (current[pluginId] !== previous[pluginId]) {
           // Settings for this plugin changed — restart background if active
           if (activeBackgrounds.has(backgroundKey(source, pluginId))) {

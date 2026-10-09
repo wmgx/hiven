@@ -14,7 +14,7 @@ type PendingRecord = {
   createdAt: number
 }
 
-type PendingListener = (block: LauncherObjectBlock) => void
+type PendingListener = (block: LauncherObjectBlock) => boolean | void
 
 let memoryPending: PendingRecord | null = null
 const listeners = new Set<PendingListener>()
@@ -39,7 +39,7 @@ export function setPendingObjectBlock(
     /** Skip live listeners (re-stash / persist-only; avoid notify loops). */
     silent?: boolean
   },
-): void {
+): boolean {
   const record: PendingRecord = { block, createdAt: Date.now() }
   memoryPending = record
   if (options?.persist) {
@@ -48,65 +48,65 @@ export function setPendingObjectBlock(
     } catch (error) {
       console.warn('[hiven] Failed to persist pending object block:', error)
     }
+  } else {
+    // A new in-memory handoff supersedes this window's previous persisted backup.
+    try { localStorage.removeItem(PENDING_KEY) } catch { /* memory remains usable */ }
   }
-  if (options?.silent) return
+  if (options?.silent) return false
+  let accepted = false
   // Notify already-mounted launcher hooks (stack path keeps open=true)
   for (const listener of listeners) {
     try {
-      listener(block)
+      if (listener(block) === true) accepted = true
     } catch (error) {
       console.warn('[hiven] Pending object block listener failed:', error)
     }
   }
+  return accepted
 }
 
 export function consumePendingObjectBlock(ttlMs: number = DEFAULT_TTL_MS): LauncherObjectBlock | null {
-  // Memory first (same webview / stack path)
-  if (memoryPending) {
-    const record = memoryPending
-    memoryPending = null
-    try {
-      localStorage.removeItem(PENDING_KEY)
-    } catch {
-      // ignore
-    }
-    return isFresh(record, ttlMs) ? record.block : null
-  }
-
-  // Cross-webview fallback
+  const memory = memoryPending
+  memoryPending = null
+  // Another webview can replace the shared record while this window retains an
+  // older silent backup. Read shared storage before clearing either candidate.
   try {
     const raw = localStorage.getItem(PENDING_KEY)
-    if (!raw) return null
-    localStorage.removeItem(PENDING_KEY)
+    if (!raw) return memory && isFresh(memory, ttlMs) ? memory.block : null
+    if (localStorage.getItem(PENDING_KEY) === raw) localStorage.removeItem(PENDING_KEY)
     const parsed = JSON.parse(raw) as PendingRecord
     if (!parsed?.block || typeof parsed.createdAt !== 'number') return null
     if (!isFresh(parsed, ttlMs)) return null
-    return parsed.block
+    return memory && JSON.stringify(memory) === raw ? memory.block : parsed.block
   } catch (error) {
     console.warn('[hiven] Failed to consume pending object block:', error)
-    return null
+    return memory && isFresh(memory, ttlMs) ? memory.block : null
   }
 }
 
-export function clearPendingObjectBlock(): void {
-  memoryPending = null
+export function clearPendingObjectBlock(expected?: LauncherObjectBlock): void {
+  const matches = (block: LauncherObjectBlock | undefined) => !expected || Boolean(block &&
+    block.id === expected.id && block.source === expected.source && block.createdAt === expected.createdAt)
+  if (matches(memoryPending?.block)) memoryPending = null
   try {
-    localStorage.removeItem(PENDING_KEY)
+    const raw = localStorage.getItem(PENDING_KEY)
+    if (!raw) return
+    const record = JSON.parse(raw) as PendingRecord
+    if (matches(record?.block) && localStorage.getItem(PENDING_KEY) === raw) localStorage.removeItem(PENDING_KEY)
   } catch {
     // ignore
   }
 }
 
 export function peekPendingObjectBlock(ttlMs: number = DEFAULT_TTL_MS): LauncherObjectBlock | null {
-  if (memoryPending && isFresh(memoryPending, ttlMs)) return memoryPending.block
   try {
     const raw = localStorage.getItem(PENDING_KEY)
-    if (!raw) return null
+    if (!raw) return memoryPending && isFresh(memoryPending, ttlMs) ? memoryPending.block : null
     const parsed = JSON.parse(raw) as PendingRecord
     if (!parsed?.block || typeof parsed.createdAt !== 'number') return null
     if (!isFresh(parsed, ttlMs)) return null
-    return parsed.block
+    return memoryPending && JSON.stringify(memoryPending) === raw ? memoryPending.block : parsed.block
   } catch {
-    return null
+    return memoryPending && isFresh(memoryPending, ttlMs) ? memoryPending.block : null
   }
 }

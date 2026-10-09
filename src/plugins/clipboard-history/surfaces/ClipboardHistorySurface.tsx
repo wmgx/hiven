@@ -33,6 +33,18 @@ import type { ClipboardHistoryItem } from '../storage/clipboardHistoryTypes'
 import { subscribeCachedIndex } from '../storage/clipboardHistoryCache'
 import { createClipboardHistoryRepository, indexToListItems } from '../storage/clipboardHistoryRepository'
 import { getTextSearchCandidateIds, matchesClipboardHistorySearch } from '../storage/clipboardHistorySearch'
+import {
+  CLIPBOARD_TEXT_MERGE_MIN_ITEMS,
+  CLIPBOARD_TEXT_MERGE_MAX_ITEMS,
+  createClipboardTextMergeReader,
+  toggleClipboardTextMergeSelection,
+  removeClipboardTextMergeSelection,
+  moveClipboardTextMergeSelection,
+  type ClipboardTextMergePreview,
+  type ClipboardTextMergeError,
+  type ClipboardTextMergeSeparator,
+} from '../merge/clipboardTextMerge'
+import { ClipboardTextMergePanel } from './ClipboardTextMergePanel'
 
 type FilterKind = 'all' | 'text' | 'image' | 'files' | 'frequent' | 'favorite'
 type SurfaceStorage = PluginSurfaceProps<ClipboardHistorySettings>['host']['storage']
@@ -80,6 +92,167 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const pendingDeleteRef = useRef<{ timerId: ReturnType<typeof setTimeout>; id: string; toastId: string } | null>(null)
   const unreadableTextIdsRef = useRef(new Set<string>())
   const frequentThreshold = settings.frequentPasteThreshold ?? 3
+  const [mergeReader] = useState(createClipboardTextMergeReader)
+  const [combining, setCombining] = useState(false)
+  const [mergeIds, setMergeIds] = useState<readonly string[]>([])
+  // The selection owns its order and labels; searches and background index refreshes do not.
+  const mergeItemsRef = useRef(new Map<string, ClipboardHistoryItem>())
+  const [mergeSeparator, setMergeSeparator] = useState<ClipboardTextMergeSeparator>('newline')
+  const [mergePreview, setMergePreview] = useState<ClipboardTextMergePreview | null>(null)
+  const [mergeError, setMergeError] = useState<ClipboardTextMergeError | null>(null)
+  const [mergeLoading, setMergeLoading] = useState(false)
+  const [mergeRetry, setMergeRetry] = useState(0)
+  const [mergeSuspended, setMergeSuspended] = useState(false)
+  const mergeSuspendedRef = useRef(false)
+  const mergeSubmissionRef = useRef<AbortController | null>(null)
+
+  const invalidateMerge = useCallback((cancelSubmission = true) => {
+    if (cancelSubmission) {
+      mergeSubmissionRef.current?.abort()
+      mergeSubmissionRef.current = null
+    }
+    mergeReader.invalidate()
+    setMergePreview(null)
+    setMergeError(null)
+  }, [mergeReader])
+
+  const cancelMerge = useCallback(() => {
+    invalidateMerge()
+    setCombining(false)
+    setMergeIds([])
+    mergeItemsRef.current.clear()
+    setMergeLoading(false)
+    mergeSuspendedRef.current = false
+    setMergeSuspended(false)
+    searchRef.current?.focus()
+  }, [invalidateMerge])
+
+  const startMerge = useCallback(() => {
+    invalidateMerge()
+    setMergeIds([])
+    mergeItemsRef.current.clear()
+    setMergeSeparator('newline')
+    mergeSuspendedRef.current = document.visibilityState === 'hidden'
+    setMergeSuspended(mergeSuspendedRef.current)
+    setCombining(true)
+    searchRef.current?.focus()
+  }, [invalidateMerge])
+
+  const toggleMergeItem = useCallback((item: ClipboardHistoryItem) => {
+    const result = toggleClipboardTextMergeSelection(mergeIds, item)
+    if (result.error) {
+      host.showMessage(t(result.error === 'limit' ? 'merge.limit' : 'merge.textOnly', { max: CLIPBOARD_TEXT_MERGE_MAX_ITEMS }), 'info')
+      return
+    }
+    invalidateMerge()
+    if (result.ids.includes(item.id)) mergeItemsRef.current.set(item.id, item)
+    else mergeItemsRef.current.delete(item.id)
+    setMergeIds(result.ids)
+  }, [mergeIds, invalidateMerge, host, t])
+
+  const removeMergeItem = useCallback((id: string) => {
+    invalidateMerge()
+    mergeItemsRef.current.delete(id)
+    setMergeIds((current) => removeClipboardTextMergeSelection(current, id))
+  }, [invalidateMerge])
+
+  const moveMergeItem = useCallback((id: string, direction: -1 | 1) => {
+    invalidateMerge()
+    setMergeIds((current) => moveClipboardTextMergeSelection(current, id, direction))
+  }, [invalidateMerge])
+
+  const changeMergeSeparator = useCallback((separator: ClipboardTextMergeSeparator) => {
+    if (separator === mergeSeparator) return
+    invalidateMerge()
+    setMergeSeparator(separator)
+  }, [invalidateMerge, mergeSeparator])
+
+  useEffect(() => {
+    if (!combining || mergeSuspended || mergeSuspendedRef.current || !settings.enabled || mergeIds.length < CLIPBOARD_TEXT_MERGE_MIN_ITEMS) {
+      setMergeLoading(false)
+      return
+    }
+    setMergeLoading(true)
+    void mergeReader.read(repository, mergeIds, mergeSeparator, (preview) => {
+      setMergePreview(preview)
+      setMergeError(null)
+      setMergeLoading(false)
+    }, (error) => {
+      setMergePreview(null)
+      setMergeError(error)
+      setMergeLoading(false)
+    })
+    return () => mergeReader.invalidate()
+  }, [combining, settings.enabled, mergeIds, mergeSeparator, mergeReader, repository, mergeRetry, mergeSuspended])
+
+  useEffect(() => {
+    if (!settings.enabled) cancelMerge()
+  }, [settings.enabled, cancelMerge])
+
+  useEffect(() => () => {
+    mergeSubmissionRef.current?.abort()
+    mergeSubmissionRef.current = null
+    mergeReader.invalidate()
+  }, [mergeReader])
+
+  useEffect(() => {
+    if (!combining) return
+    const suspend = () => {
+      mergeSuspendedRef.current = true
+      // Showing Launcher blurs this window. Keep the submitted preview until its
+      // receipt arrives; explicit draft edits/cancel still revoke the submission.
+      if (!mergeSubmissionRef.current) {
+        invalidateMerge(false)
+        setMergeLoading(false)
+      }
+      setMergeSuspended(true)
+    }
+    const resume = () => {
+      if (document.visibilityState === 'hidden' || !mergeSuspendedRef.current) return
+      mergeSuspendedRef.current = false
+      setMergeSuspended(false)
+      // A quick blur/focus can batch back to the previous false state. A new
+      // read revision ensures the invalidated preview is rebuilt even then.
+      setMergeRetry((current) => current + 1)
+    }
+    const onVisibilityChange = () => document.visibilityState === 'hidden' ? suspend() : resume()
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('pagehide', suspend)
+    window.addEventListener('pageshow', resume)
+    window.addEventListener('blur', suspend)
+    window.addEventListener('focus', resume)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('pagehide', suspend)
+      window.removeEventListener('pageshow', resume)
+      window.removeEventListener('blur', suspend)
+      window.removeEventListener('focus', resume)
+    }
+  }, [combining, invalidateMerge])
+
+  const continueMerge = useCallback(async () => {
+    if (mergeSubmissionRef.current || !settings.enabled || !combining || mergeSuspended || mergeSuspendedRef.current || !mergePreview || !mergeReader.isCurrent(mergePreview)) return
+    const text = mergePreview.text
+    const submission = new AbortController()
+    mergeSubmissionRef.current = submission
+    setMergeLoading(true)
+    try {
+      const accepted = await host.returnToLauncherWithObject({ kind: 'text', text, source: 'tool-result' }, { signal: submission.signal })
+      if (mergeSubmissionRef.current !== submission || submission.signal.aborted) return
+      mergeSubmissionRef.current = null
+      if (accepted !== false) cancelMerge()
+      else {
+        setMergeLoading(false)
+        setMergeRetry((current) => current + 1)
+      }
+    } catch {
+      if (mergeSubmissionRef.current !== submission || submission.signal.aborted) return
+      mergeSubmissionRef.current = null
+      setMergeLoading(false)
+      host.showMessage(t('error.returnFailed'), 'error')
+      setMergeRetry((current) => current + 1)
+    }
+  }, [settings.enabled, combining, mergePreview, mergeReader, host, cancelMerge, t, mergeSuspended])
 
   const applyListItems = useCallback((listItems: ClipboardHistoryItem[]) => {
     setItems(listItems)
@@ -181,7 +354,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     if (loading || !settings.enabled) return
     const frame = requestAnimationFrame(() => searchRef.current?.focus())
     return () => cancelAnimationFrame(frame)
-  }, [loading, settings.enabled])
+  }, [loading, settings.enabled, combining])
 
   // Flush pending soft-delete on unmount
   useEffect(() => {
@@ -196,8 +369,10 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }, [repository])
 
   const filteredItems = useMemo(() => {
-    let result = items
-    if (filter === 'frequent') {
+    let result = combining ? items.filter((item) => item.kind === 'text') : items
+    if (combining) {
+      // Combining always shows text, while preserving the ordinary browser's filter.
+    } else if (filter === 'frequent') {
       result = result
         .filter((item) => (item.pasteCount ?? 0) >= frequentThreshold)
         .slice()
@@ -218,7 +393,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       result = result.filter((item) => matchesClipboardHistorySearch(item, query))
     }
     return result
-  }, [items, filter, query, frequentThreshold])
+  }, [items, filter, query, frequentThreshold, combining])
 
   useEffect(() => {
     setSelectedId((current) => {
@@ -247,17 +422,17 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         setSelectedFullItem(item)
         setItems((current) => current.map((entry) => entry.id === item.id ? item : entry))
       }
-    })
+    }).catch(() => { /* The current row can still be retried by its explicit action. */ })
     return () => { cancelled = true }
   }, [selectedId, repository])
 
   const groupedItems = useMemo(() => {
     // Frequent / favorite use their own sort; do not re-bucket by day.
-    if (filter === 'frequent' || filter === 'favorite') {
+    if (!combining && (filter === 'frequent' || filter === 'favorite')) {
       return [{ label: '', items: filteredItems }]
     }
     return groupItemsByDay(filteredItems, locale, t)
-  }, [filteredItems, filter, locale, t])
+  }, [filteredItems, filter, locale, t, combining])
 
   type VirtualRow =
     | { type: 'group-header'; label: string }
@@ -294,6 +469,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   })
 
   const handlePaste = useCallback(async (item: ClipboardHistoryItem) => {
+    if (combining) return
     try {
       // For list items from index, load full item for paste
       let fullItem = item
@@ -331,7 +507,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     } catch {
       host.showMessage(t('error.pasteFailed'), 'error')
     }
-  }, [host, t, repository, resetBrowser])
+  }, [host, t, repository, resetBrowser, combining])
 
   const resolveFullItem = useCallback(async (item: ClipboardHistoryItem) => {
     if ((item.kind === 'text' && !item.text) || (item.kind === 'image' && !item.blobId) || (item.kind === 'files' && item.paths.length === 0)) {
@@ -556,6 +732,28 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }, [host, repository, t])
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.defaultPrevented || titleDialog) return
+    if (combining) {
+      if (imeKeyDown.shouldIgnoreKeyDown(e)) return
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopPropagation()
+        cancelMerge()
+        return
+      }
+      // Focused controls retain native keyboard activation. Enter in search/the list
+      // selects a text item; it never invokes the ordinary paste shortcut.
+      if (e.target instanceof HTMLElement && e.target.closest('button, .clipboard-history-merge-panel')) return
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        e.stopPropagation()
+        if (selectedItem && !e.metaKey && !e.ctrlKey && !e.altKey) toggleMergeItem(selectedItem)
+        return
+      }
+      if (e.key === 'Delete' || e.key === 'Backspace') return
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'c') return
+    }
+    if (e.target instanceof HTMLElement && e.target.closest('button') && !e.target.closest('.clipboard-history-item')) return
     if (!selectedItem) return
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       if (imeKeyDown.shouldIgnoreKeyDown(e)) return
@@ -598,7 +796,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         if (flatIndex >= 0) virtualizer.scrollToIndex(flatIndex, { align: 'auto' })
       }
     }
-  }, [selectedItem, selectedId, filteredItems, flatRows, virtualizer, handlePaste, handleReturnToLauncher, handleDelete, handleCopy, host, t, imeKeyDown])
+  }, [selectedItem, selectedId, filteredItems, flatRows, virtualizer, handlePaste, handleReturnToLauncher, handleDelete, handleCopy, host, t, imeKeyDown, combining, cancelMerge, toggleMergeItem, titleDialog])
 
   const renderContent = () => {
     if (loading) {
@@ -638,7 +836,12 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         <div className="clipboard-history-main">
           <div className="clipboard-history-list-pane">
             <div className="clipboard-history-list-toolbar">
-              <SegmentedControl
+              {combining ? (
+                <div className="clipboard-history-merge-instruction">
+                  <strong>{t('merge.chooseText')}</strong>
+                  <span>{t('merge.instruction', { min: CLIPBOARD_TEXT_MERGE_MIN_ITEMS, max: CLIPBOARD_TEXT_MERGE_MAX_ITEMS })}</span>
+                </div>
+              ) : <SegmentedControl
                 className="clipboard-history-filter"
                 value={filter}
                 onChange={(value) => setFilter(value as FilterKind)}
@@ -652,7 +855,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                   { value: 'image', label: t('filter.image') },
                   { value: 'files', label: t('filter.files') },
                 ]}
-              />
+              />}
             </div>
             <div ref={listRef} className="clipboard-history-list" data-launcher-scrollable aria-busy={fullTextSearchState === 'loading'} style={{ overflow: 'auto', flex: 1 }}>
               <SurfaceList aria-label={t('surface.main.title')} data-launcher-scrollable>
@@ -712,7 +915,11 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                             onPaste={handlePaste}
                             onDelete={handleDelete}
                             onFavorite={handleFavoriteClick}
-                            menuItems={itemContextMenuItems(row.item)}
+                            menuItems={combining ? [] : itemContextMenuItems(row.item)}
+                            combining={combining}
+                            mergePosition={mergeIds.indexOf(row.item.id)}
+                            mergeLimitReached={mergeIds.length >= CLIPBOARD_TEXT_MERGE_MAX_ITEMS}
+                            onToggleMerge={toggleMergeItem}
                           />
                         </div>
                       )
@@ -723,7 +930,24 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
             </div>
           </div>
 
-          <ContextMenu
+          {combining ? (
+            <ClipboardTextMergePanel
+              ids={mergeIds}
+              items={mergeItemsRef.current}
+              separator={mergeSeparator}
+              preview={mergePreview}
+              error={mergeError}
+              loading={mergeLoading}
+              t={t}
+              onMove={moveMergeItem}
+              onRemove={removeMergeItem}
+              onSeparatorChange={changeMergeSeparator}
+              onRetry={() => {
+                invalidateMerge()
+                setMergeRetry((current) => current + 1)
+              }}
+            />
+          ) : <ContextMenu
             disabled={!selectedItem}
             items={selectedItem ? itemContextMenuItems(selectedFullItem ?? selectedItem) : []}
             trigger={
@@ -762,13 +986,19 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                 )}
               </SurfacePreview>
             }
-          />
+          />}
         </div>
 
         <SurfaceFooterHints className="clipboard-history-footer">
+          {combining ? <>
+            <span>{t('merge.selectionCount', { count: mergeIds.length, max: CLIPBOARD_TEXT_MERGE_MAX_ITEMS })}</span>
+            <span>↵ {t('merge.toggleSelection')}</span>
+            <span>Esc {t('merge.cancel')}</span>
+          </> : <>
           <span>↵ {t('hint.paste')}</span>
           <span>{typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'}↵ {t('hint.returnToLauncher')}</span>
           <span>⌫ {t('hint.delete')}</span>
+          </>}
         </SurfaceFooterHints>
       </>
     )
@@ -780,10 +1010,10 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     return () => cancelAnimationFrame(frame)
   }, [titleDialog])
 
-  return (
+  const surfaceContent = (
     <div
       ref={containerRef}
-      className="clipboard-history-surface"
+      className={`clipboard-history-surface${combining ? ' is-combining' : ''}`}
       onKeyDown={handleKeyDown}
       tabIndex={-1}
     >
@@ -792,6 +1022,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
           type="button"
           label={t('action.back')}
           onClick={() => {
+            if (combining) { cancelMerge(); return }
             setQuery('')
             host.requestBack()
           }}
@@ -808,25 +1039,32 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
           placeholder={t('search.placeholder')}
           disabled={loading || !settings.enabled}
         />
+        {settings.enabled && !loading && (
+          <Button type="button" onClick={combining ? cancelMerge : startMerge}>
+            {t(combining ? 'merge.cancel' : 'merge.start')}
+          </Button>
+        )}
         <Button
           type="button"
           variant="primary"
-          disabled={!selectedItem || loading || !settings.enabled}
-          onClick={() => selectedItem && void handlePaste(selectedItem)}
+          disabled={combining ? !mergePreview || mergeLoading || mergeSuspended || !settings.enabled : !selectedItem || loading || !settings.enabled}
+          onClick={() => combining ? continueMerge() : selectedItem && void handlePaste(selectedItem)}
         >
-          {t('action.paste')}
+          {t(combining ? 'merge.continue' : 'action.paste')}
         </Button>
-        <IconButton
+        {!combining && <IconButton
           type="button"
           label={t('action.openSettings')}
           onClick={() => host.openSettings({ preserveSurface: true })}
         >
           <SettingsIcon size={17} />
-        </IconButton>
+        </IconButton>}
         <IconButton
           type="button"
           label={t('action.close')}
           onClick={() => {
+            if (combining) { cancelMerge(); return }
+            mergeReader.invalidate()
             setQuery('')
             host.close()
           }}
@@ -875,6 +1113,19 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       </Dialog>
     </div>
   )
+
+  // A real modal owns focus and Escape through the shared surface contract in
+  // both Launcher and independent windows. The history underneath is unchanged.
+  return combining ? (
+    <Dialog
+      open
+      onOpenChange={(open) => { if (!open) cancelMerge() }}
+      title={t('merge.dialogTitle')}
+      className="clipboard-history-merge-dialog"
+    >
+      {surfaceContent}
+    </Dialog>
+  ) : surfaceContent
 }
 
 const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
@@ -888,6 +1139,10 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
   onDelete,
   onFavorite,
   menuItems,
+  combining,
+  mergePosition,
+  mergeLimitReached,
+  onToggleMerge,
 }: {
   item: ClipboardHistoryItem
   selected: boolean
@@ -899,6 +1154,10 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
   onDelete: (id: string) => void
   onFavorite: (item: ClipboardHistoryItem) => void
   menuItems: MenuItemSpec[]
+  combining: boolean
+  mergePosition: number
+  mergeLimitReached: boolean
+  onToggleMerge: (item: ClipboardHistoryItem) => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
 
@@ -912,20 +1171,30 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
 
   return (
     <ContextMenu
+      disabled={combining}
       items={menuItems}
       trigger={
         <div
           ref={ref}
-          className={`clipboard-history-item-row${selected ? ' is-selected' : ''}${item.isFavorite ? ' is-favorite' : ''}`}
+          className={`clipboard-history-item-row${selected ? ' is-selected' : ''}${item.isFavorite ? ' is-favorite' : ''}${combining ? ' is-merge-option' : ''}${mergePosition >= 0 ? ' is-merge-selected' : ''}`}
         >
           <SurfaceListItem
             type="button"
             selected={selected}
             className="clipboard-history-item"
-            onClick={() => onSelect(item.id)}
-            onDoubleClick={() => void onPaste(item)}
+            aria-pressed={combining ? mergePosition >= 0 : undefined}
+            aria-disabled={combining && mergeLimitReached && mergePosition < 0 ? true : undefined}
+            onClick={(event) => {
+              onSelect(item.id)
+              if (combining && event.detail < 2) onToggleMerge(item)
+            }}
+            onDoubleClick={() => { if (!combining) void onPaste(item) }}
           >
-            {renderItemMedia(item, storage)}
+            {combining ? (
+              <span className="clipboard-history-merge-check" aria-hidden="true">
+                {mergePosition >= 0 ? mergePosition + 1 : ''}
+              </span>
+            ) : renderItemMedia(item, storage)}
             <span className="clipboard-history-item-text">
               <span className="clipboard-history-item-title">{getItemTitle(item, t)}</span>
               <span className="clipboard-history-item-subtitle">
@@ -934,6 +1203,7 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
               </span>
             </span>
           </SurfaceListItem>
+          {!combining && <>
           <IconButton
             type="button"
             label={item.isFavorite ? t('action.unfavorite') : t('action.favorite')}
@@ -950,6 +1220,7 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
           >
             <CloseIcon size={14} />
           </IconButton>
+          </>}
         </div>
       }
     />
