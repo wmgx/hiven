@@ -167,6 +167,46 @@ try {
   }
   assert.deepEqual(await getLastSaveableRun(), completed, 'previews leave the previously completed run untouched')
 
+  // Object Block skips collect-input, so Back exposes the retained last parameter.
+  // Its Enter selection must come from the confirmed preview, not the old run.
+  async function objectBlockPreview(item, material, params) {
+    controller.reset()
+    await controller.selectItem(item, { objectBlockText: material })
+    for (const param of item.params) await controller.commitCurrentParam(params[param.key])
+    assert.equal(top().kind, 'result')
+    assert.equal(controller.getState().frames.at(-2).kind, 'param-input')
+  }
+  await objectBlockPreview(cleaner, 'a\na', { trim: false, removeBlank: true, dedup: false })
+  const oldParameter = controller.getState().frames.at(-2)
+  assert.equal(top().output.choices[0].preview, 'a\na')
+  controller.editPreviewParam('dedup', top())
+  await controller.commitCurrentParam(true)
+  assert.equal(top().output.choices[0].preview, 'a')
+  controller.back()
+  const restoredParameter = top()
+  assert.equal(restoredParameter.paramIndex, 2)
+  assert.equal(restoredParameter.params.dedup, true)
+  assert.equal(restoredParameter.query, '')
+  assert.equal(restoredParameter.selectedIndex, 0, 'Back highlights the newly confirmed Yes option')
+  controller.setParamQuery('No', oldParameter)
+  controller.setParamSelectedIndex(1, oldParameter)
+  await controller.commitCurrentParam(false, oldParameter)
+  assert.equal(controller.back(oldParameter), false)
+  assert.equal(controller.exitCommand(oldParameter), false)
+  assert.equal(top(), restoredParameter, 'old ordinary parameter callbacks cannot change the restored page')
+  await controller.commitCurrentParam([true, false][top().selectedIndex], top())
+  assert.equal(top().output.choices[0].preview, 'a', 'Enter retains the confirmed deduplication')
+
+  await objectBlockPreview(formatter, input, { indent: 2, sortKeys: false, transient: 'original value' })
+  controller.editPreviewParam('transient', top())
+  await controller.commitCurrentParam('confirmed value')
+  controller.back()
+  assert.equal(top().query, 'confirmed value', 'Back restores a text field from its confirmed preview value')
+  assert.equal(top().objectBlockText, input, 'restoring the parameter page retains its original material')
+  await controller.commitCurrentParam(top().query, top())
+  assert.equal(runs.at(-1).params.transient, 'confirmed value', 'Enter cannot restore a stale text value')
+  assert.deepEqual(await getLastSaveableRun(), completed)
+
   const artifact = createSavedAction({ ...completed, outputIntent: 'return-to-launcher' }, 'Saved return', [])
   const saved = projectSavedAction(artifact, formatter)
   const savedBefore = JSON.stringify(listSavedActions())

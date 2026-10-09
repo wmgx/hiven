@@ -83,6 +83,8 @@ export type CollectInputFrame = {
 
 export type ParamInputFrame = {
   kind: 'param-input'
+  /** A new visit rejects old callbacks; query/selection updates keep this identity. */
+  generation: number
   item: LauncherItem
   params: Record<string, unknown>
   paramIndex: number
@@ -227,6 +229,7 @@ export class LauncherController {
   private pluginUnavailable = false
   private flowGeneration = 0
   private prepareGeneration = 0
+  private paramFrameGeneration = 0
   private readonly choiceGenerations = new WeakMap<LauncherResultChoice, number>()
   private activeDelivery: symbol | null = null
   private pendingItemKey: string | null = null
@@ -527,6 +530,7 @@ export class LauncherController {
     }
     return {
       kind: 'param-input',
+      generation: ++this.paramFrameGeneration,
       item,
       params,
       paramIndex,
@@ -740,7 +744,8 @@ export class LauncherController {
   }
 
   private matchesParamFrame(top: ParamInputFrame, expectedFrame?: ParamInputFrame): boolean {
-    return !expectedFrame || (top.item === expectedFrame.item && top.paramIndex === expectedFrame.paramIndex &&
+    return !expectedFrame || (top.generation === expectedFrame.generation &&
+      top.item === expectedFrame.item && top.paramIndex === expectedFrame.paramIndex &&
       (top.previewEdit || expectedFrame.previewEdit ? top.previewEdit === expectedFrame.previewEdit : true))
   }
 
@@ -1779,7 +1784,13 @@ export class LauncherController {
       const frames = replacePreview ? this.state.frames.slice(0, -1) : [...this.state.frames]
       const previous = frames[frames.length - 1]
       if (replacePreview && previewEdit && (previous?.kind === 'collect-input' || previous?.kind === 'param-input')) {
-        frames[frames.length - 1] = { ...previous, params: this.copyParams(previewEdit.params) }
+        const params = this.copyParams(previewEdit.params)
+        // Back must expose the confirmed value in both the field and Enter's
+        // selection. Rebuild the step to discard old filters/drafts/callbacks.
+        frames[frames.length - 1] = previous.kind === 'param-input'
+          ? this.paramFrameFor(previous.item, params, previous.paramIndex,
+              previous.objectBlockText, previous.recordUsage, previous.inputText)
+          : { ...previous, params }
       }
       this.setState({
         busy: false,

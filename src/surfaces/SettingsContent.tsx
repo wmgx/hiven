@@ -6,6 +6,7 @@ import { getVersion } from '@tauri-apps/api/app'
 import { invoke } from '@tauri-apps/api/core'
 import { BrainCircuit, Check, Command, Copy, Download, ExternalLink, Hash, Languages, LogIn, LogOut, Moon, RefreshCw, Save, Type, WrapText } from 'lucide-react'
 import { useAppStore } from '../store'
+import { changeApplicationLocale } from '../changeApplicationLocale'
 import { useT } from '../i18n'
 import { pickLocale } from '../i18n/pickLocale'
 import { ShortcutRecorder } from '../components/ShortcutRecorder'
@@ -24,6 +25,7 @@ export function SettingsContent() {
   const t = useT('settings')
   const [appVersion, setAppVersion] = useState('')
   const [switchingLocale, setSwitchingLocale] = useState<string | null>(null)
+  const switchingLocaleRef = useRef(false)
 
   useEffect(() => {
     getVersion().then((v) => setAppVersion(v)).catch(() => setAppVersion('dev'))
@@ -62,9 +64,15 @@ export function SettingsContent() {
               { value: 'zh', label: t('langZh') },
             ]}
             onChange={(value) => {
-              updateSetting('locale', value)
+              if (switchingLocaleRef.current || value === locale || (value !== 'en' && value !== 'zh')) return
+              switchingLocaleRef.current = true
               setSwitchingLocale(value)
-              setTimeout(() => window.location.reload(), 300)
+              void changeApplicationLocale(value).catch((error) => {
+                console.warn('[hiven] Failed to switch language:', error)
+                switchingLocaleRef.current = false
+                setSwitchingLocale(null)
+                showToast(t('languageSwitchFailed'), 'error')
+              })
             }}
           />
         </SettingsListRow>
@@ -785,6 +793,9 @@ function formatHotkeyRegistrationStatus(
   if (!shortcut) return t('hotkeyStatusPending')
   if (shortcut.registrationError) {
     if (shortcut.registrationError.includes('Accessibility permission is required')) return t('hotkeyAccessibilityRequired')
+    if (shortcut.registrationError === 'Could not release previous shortcut') {
+      return t('hotkeyRegistrationFailed', { message: t('hotkeyReleaseFailed') })
+    }
     if (shortcut.registrationError === 'Shortcut is already registered' ||
         shortcut.registrationError === 'Shortcut is already used by Global Launcher') {
       return t('hotkeyRegistrationFailed', { message: t('hotkeyShortcutConflict') })

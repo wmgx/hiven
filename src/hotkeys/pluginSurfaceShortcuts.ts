@@ -1,4 +1,5 @@
 import { usePluginPermissionStore, getPluginPermissionSnapshot, missingPluginPermissions } from '../workspace/pluginPermissions'
+import { registerHotkeyReloadParticipant } from './pageReload'
 import { pluginRegistry } from '../workspace/pluginRegistry'
 import { requestOpenPluginSurfaceTool } from '../workspace/pluginSurfaceOpenRequest'
 import { getPluginSurfaceShortcutPresentation, showPluginSurfaceWindow } from '../workspace/windowManager/pluginSurfaceWindows'
@@ -17,6 +18,7 @@ let unsubscribeShortcutStore: (() => void) | null = null
 let unsubscribeRegistry: (() => void) | null = null
 let unsubscribePermissions: (() => void) | null = null
 const currentAccelerators = new Map<string, string>()
+const currentRegistrations = new Map<string, { generation: number }>()
 let syncGeneration = 0
 let syncQueue: Promise<void> = Promise.resolve()
 
@@ -35,17 +37,24 @@ export function installPluginSurfaceShortcutHotkeys(): () => void {
     if (state.permissions !== previous.permissions) void enqueueSync()
   })
 
-  return () => {
-    installed = false
-    syncGeneration += 1
-    unsubscribeShortcutStore?.()
-    unsubscribeShortcutStore = null
-    unsubscribeRegistry?.()
-    unsubscribeRegistry = null
-    unsubscribePermissions?.()
-    unsubscribePermissions = null
-    void unregisterAllPluginSurfaceShortcuts()
-  }
+  return registerHotkeyReloadParticipant('plugin-surfaces', {
+    resume: installPluginSurfaceShortcutHotkeys,
+    stop: () => {
+      installed = false
+      syncGeneration += 1
+      unsubscribeShortcutStore?.()
+      unsubscribeShortcutStore = null
+      unsubscribeRegistry?.()
+      unsubscribeRegistry = null
+      unsubscribePermissions?.()
+      unsubscribePermissions = null
+      syncQueue = syncQueue.catch(() => undefined).then(async () => {
+        await unregisterAllPluginSurfaceShortcuts()
+        if (currentAccelerators.size) throw new Error('Could not release plugin surface shortcuts')
+      })
+      return syncQueue
+    },
+  })
 }
 
 function enqueueSync(): Promise<void> {
@@ -116,16 +125,20 @@ async function registerShortcut(
   accelerator: string,
   generation: number,
 ): Promise<void> {
-  const current = currentAccelerators.get(key)
   try {
     const { register, isRegistered } = await loadGlobalShortcutApi()
-    if (current === accelerator) {
-      await unregisterAccelerator(accelerator)
-      currentAccelerators.delete(key)
-    } else {
-      await unregisterKey(key)
-    }
+    await unregisterKey(key)
 
+    if (currentAccelerators.has(key)) {
+      const registration = currentRegistrations.get(key)
+      if (currentAccelerators.get(key) !== accelerator || !registration) throw new Error('Could not release previous shortcut')
+      if (generation !== syncGeneration) return
+      registration.generation = generation
+      usePluginSurfaceShortcutStore.getState().updateRegistration(key, {
+        registrationStatus: 'registered', registrationError: undefined,
+      })
+      return
+    }
     const occupied = await isRegistered(accelerator)
     if (generation !== syncGeneration) return
     if (occupied) {
@@ -136,17 +149,19 @@ async function registerShortcut(
       })
       return
     }
+    const registration = { generation }
     await register(accelerator, (event) => {
-      if (!installed || generation !== syncGeneration || event.state !== 'Pressed') return
+      if (!installed || currentRegistrations.get(key) !== registration || registration.generation !== syncGeneration || event.state !== 'Pressed') return
       const latest = usePluginSurfaceShortcutStore.getState().shortcuts[key]
       if (!latest || !latest.enabled || normalizeAccelerator(latest.accelerator) !== accelerator) return
       void openSurfaceForShortcut(shortcut.target)
     })
+    currentAccelerators.set(key, accelerator)
+    currentRegistrations.set(key, registration)
     if (generation !== syncGeneration) {
-      await unregisterAccelerator(accelerator)
+      await unregisterKey(key)
       return
     }
-    currentAccelerators.set(key, accelerator)
     usePluginSurfaceShortcutStore.getState().updateRegistration(key, {
       registrationStatus: 'registered',
       registrationError: undefined,
@@ -180,8 +195,10 @@ async function unregisterRemovedOrChanged(shortcuts: Record<string, PluginSurfac
 async function unregisterKey(key: string): Promise<void> {
   const accelerator = currentAccelerators.get(key)
   if (!accelerator || !isTauriRuntime()) return
-  await unregisterAccelerator(accelerator)
-  currentAccelerators.delete(key)
+  if (await unregisterAccelerator(accelerator)) {
+    currentAccelerators.delete(key)
+    currentRegistrations.delete(key)
+  }
 }
 
 async function unregisterAllPluginSurfaceShortcuts(): Promise<void> {
@@ -190,12 +207,14 @@ async function unregisterAllPluginSurfaceShortcuts(): Promise<void> {
   }
 }
 
-async function unregisterAccelerator(accelerator: string): Promise<void> {
+async function unregisterAccelerator(accelerator: string): Promise<boolean> {
   try {
     const { unregister } = await loadGlobalShortcutApi()
     await unregister(accelerator)
+    return true
   } catch (error) {
     console.warn('[hiven] Failed to unregister plugin surface shortcut:', error)
+    return false
   }
 }
 

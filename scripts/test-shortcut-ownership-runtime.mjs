@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Actual registrars, stores, plugin registry and translations share one native owner table.
-// This checks a fresh application lifecycle, without using OS shortcuts or user data.
+// This checks ownership and controlled page reloads, without using OS shortcuts or user data.
 import assert from 'node:assert/strict'
 import { mkdtemp, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -22,7 +22,8 @@ const routeMocks = {
 }
 const entry = join(scratch, 'entry.ts')
 await writeFile(entry, [
-  ...['appHotkeys', 'quickEditor', 'pluginSurfaceShortcuts'].map((name) => `export * from '${resolve('src/hotkeys', name + '.ts')}';`),
+  ...['appHotkeys', 'quickEditor', 'pluginSurfaceShortcuts', 'globalPinnedLauncher'].map((name) => `export * from '${resolve('src/hotkeys', name + '.ts')}';`),
+  `export { changeApplicationLocale } from '${resolve('src/changeApplicationLocale.ts')}';`,
   `export { useAppStore } from '${resolve('src/store.ts')}';`,
   `export { usePluginSurfaceShortcutStore, pluginSurfaceShortcutKey } from '${resolve('src/workspace/pluginSurfaceShortcuts.ts')}';`,
   `export { usePluginPermissionStore } from '${resolve('src/workspace/pluginPermissions.ts')}';`,
@@ -54,10 +55,11 @@ try {
         if (id === '@tauri-apps/plugin-global-shortcut') {
           const owner = importer?.includes('/hotkeys/appHotkeys') ? 'app'
             : importer?.includes('/hotkeys/quickEditor') ? 'quick'
-              : importer?.includes('/hotkeys/pluginSurfaceShortcuts') ? 'surface' : 'unexpected'
+              : importer?.includes('/hotkeys/pluginSurfaceShortcuts') ? 'surface' : importer?.includes('/hotkeys/globalPinnedLauncher') ? 'launcher' : 'unexpected'
           return '\0shortcut:' + owner
         }
         if (id === '@tauri-apps/api/core') return '\0core'
+        if (id === '@tauri-apps/api/event') return '\0event'
         const resolved = importer && id.startsWith('.') ? resolve(importer, '..', id).replace(/\.(tsx?|jsx?)$/, '') : ''
         const route = Object.keys(routeMocks).find((key) => resolved.endsWith(key))
         if (route) return '\0route:' + route
@@ -69,7 +71,10 @@ try {
             export const unregister = (...args) => globalThis.__ownerNative.unregister(${owner}, ...args);
             export const isRegistered = (...args) => globalThis.__ownerNative.isRegistered(${owner}, ...args);`
         }
+        if (id === '\0event') return `export const listen = async () => () => {};`
         if (id === '\0core') return `export const invoke = async (command, args) => {
+          if (command === 'unregister_double_modifier_hotkey') return;
+          if (command === 'show_launcher_window') { globalThis.__ownerNative.routes.push('launcher'); return; }
           if (command !== 'toggle_installed_app') throw new Error(command);
           globalThis.__ownerNative.routes.push('app:' + args.appId);
         }; export class Channel { constructor() { throw new Error('Unexpected native channel'); } }`
@@ -86,7 +91,7 @@ try {
     storage.clear()
     globalThis.window = Object.assign(new EventTarget(), { localStorage, __TAURI_INTERNALS__: {} })
     const native = globalThis.__ownerNative = {
-      owners: new Map(), calls: [], routes: [], gate: null,
+      owners: new Map(), calls: [], routes: [], gate: null, failUnregister: null, reloads: 0,
       async wait(owner, key, action) {
         if (this.gate?.owner !== owner || this.gate.key !== key || this.gate.action !== action) return
         const gate = this.gate
@@ -105,11 +110,14 @@ try {
         this.owners.set(key.toLowerCase(), { owner, callback })
       },
       async unregister(owner, key) {
+        await this.wait(owner, key, 'unregister')
+        if (this.failUnregister === owner) throw new Error('Synthetic persistent unregister failure')
         this.calls.push({ action: 'unregister', caller: owner, key,
           previousOwner: this.owners.get(key.toLowerCase())?.owner ?? null })
         this.owners.delete(key.toLowerCase())
       },
     }
+    window.location = { reload: () => { native.reloads += 1 } }
     const api = await import(`${pathToFileURL(join(scratch, 'runtime.mjs')).href}?fixture=${++fixtureId}`)
     api.useAppStore.getState().updateSetting('globalPinnedLauncherShortcut', { kind: 'disabled' })
     api.useAppStore.getState().updateSetting('quickEditorShortcut', { kind: 'disabled' })
@@ -121,7 +129,7 @@ try {
       id: target.pluginId, ui: { surfaces: [{ id: target.surfaceId, entry: { shortcutBindable: true } }] },
     }, requestedPermissions)
     const stops = {
-      app: api.installAppHotkeys(), quick: api.installQuickEditorHotkeys(), surface: api.installPluginSurfaceShortcutHotkeys(),
+      launcher: api.installGlobalPinnedLauncherHotkeys(), app: api.installAppHotkeys(), quick: api.installQuickEditorHotkeys(), surface: api.installPluginSurfaceShortcutHotkeys(),
     }
     const owner = (key) => native.owners.get(key.toLowerCase())
     const quick = () => api.useAppStore.getState().settings.quickEditorShortcut
@@ -136,6 +144,14 @@ try {
     await until(() => owner(A)?.owner === 'app' && quick().registrationStatus === 'Disabled')
     await tick()
     return { ...api, native, owner, quick, surface, set, waitStatus, stop,
+      async reopenPage() {
+        const next = await import(`${pathToFileURL(join(scratch, 'runtime.mjs')).href}?fixture=${++fixtureId}`)
+        next.pluginRegistry.registerDevPlugin(target.pluginId, [], [], [], [], {
+          id: target.pluginId, ui: { surfaces: [{ id: target.surfaceId, entry: { shortcutBindable: true } }] },
+        }, requestedPermissions)
+        const nextStops = [next.installGlobalPinnedLauncherHotkeys(), next.installAppHotkeys(), next.installQuickEditorHotkeys(), next.installPluginSurfaceShortcutHotkeys()]
+        return { ...next, stop: () => nextStops.forEach((stop) => stop()) }
+      },
       async press(key) { assert.ok(owner(key), 'key must remain registered'); owner(key).callback({ state: 'Pressed' }); await tick() },
       async setAndWait(who, key, expected = who === 'quick' ? 'Registered' : 'registered') {
         set(who, key)
@@ -403,6 +419,141 @@ try {
     await f.finish()
   }
 
+  const G = 'Shift+Command+Space'
+  async function enableAll(f) {
+    f.useAppStore.getState().updateSetting('globalPinnedLauncherShortcut', { kind: 'accelerator', accelerator: 'Shift+Cmd+Space' })
+    await f.setAndWait('quick', B)
+    await f.setAndWait('surface', C)
+    await until(() => f.owner(G)?.owner === 'launcher')
+    await tick()
+  }
+
+  // Real page modules are recreated after each controlled locale reload; native state survives.
+  {
+    const f = await fixture()
+    await enableAll(f)
+    const foreign = { owner: 'global-launcher', callback: () => {} }
+    f.native.owners.set(D.toLowerCase(), foreign)
+    let page = f
+    for (const locale of ['zh', 'en', 'zh']) {
+      await page.changeApplicationLocale(locale)
+      assert.equal(page.useAppStore.getState().locale, locale)
+      assert.deepEqual([...f.native.owners.values()], [foreign], 'reload releases only page-owned native keys')
+      page = await f.reopenPage()
+      await until(() => f.owner(A) && f.owner(B) && f.owner(C) && f.owner(G))
+      assert.equal(page.useAppStore.getState().locale, locale)
+      f.native.routes.length = 0
+      for (const key of [A, B, C, G]) await f.press(key)
+      assert.deepEqual(f.native.routes, ['app:app-a', 'quick', 'window:owner-test', 'launcher'])
+    }
+    assert.equal(f.native.reloads, 3)
+    page.stop()
+    await until(() => f.native.owners.size === 1)
+    await f.finish()
+  }
+
+  // Reload waits for late native registration and suppresses old callbacks while cleanup waits.
+  for (const who of ['quick', 'surface']) {
+    const f = await fixture()
+    const gate = f.gate(who, B)
+    f.set(who, B)
+    await gate.started.promise
+    const reload = f.changeApplicationLocale('zh')
+    await tick()
+    assert.equal(f.native.reloads, 0)
+    assert.equal(f.useAppStore.getState().locale, 'en', 'locale commits after all cleanup succeeds')
+    await assert.rejects(f.changeApplicationLocale('zh'), /already being prepared/)
+    gate.release.resolve()
+    await reload
+    assert.equal(f.native.reloads, 1)
+    assert.equal(f.native.owners.size, 0, 'late successful registration is released before reload')
+    await f.finish()
+  }
+  {
+    const f = await fixture()
+    await enableAll(f)
+    const retired = f.owner(G)
+    const gate = f.gate('launcher', G, 'unregister')
+    const reload = f.changeApplicationLocale('zh')
+    await gate.started.promise
+    retired.callback({ state: 'Pressed' })
+    await tick()
+    assert.deepEqual(f.native.routes, [])
+    assert.equal(f.native.reloads, 0)
+    gate.release.resolve()
+    await reload
+    await f.finish()
+  }
+
+  // Even persistent native cleanup failure preserves this page and all working owned routes.
+  for (const failing of ['app', 'quick', 'surface', 'launcher']) {
+    const f = await fixture()
+    await enableAll(f)
+    const key = { app: A, quick: B, surface: C, launcher: G }[failing]
+    const retained = f.owner(key)
+    f.native.failUnregister = failing
+    const warn = console.warn
+    console.warn = () => {}
+    try {
+      await assert.rejects(f.changeApplicationLocale('zh'), /Could not release/)
+      await until(() => [A, B, C, G].every((key) => f.owner(key)))
+      await tick()
+      assert.equal(f.native.reloads, 0)
+      assert.equal(f.useAppStore.getState().locale, 'en')
+      assert.equal(JSON.parse(storage.get('hiven-settings')).state.locale, 'en')
+      assert.equal(f.owner(key), retained, 'failed cleanup retains the exact native owner callback')
+      for (const shortcut of [A, B, C, G]) await f.press(shortcut)
+      assert.deepEqual(f.native.routes, ['app:app-a', 'quick', 'window:owner-test', 'launcher'])
+      f.native.failUnregister = null
+      await f.changeApplicationLocale('zh')
+      assert.equal(f.native.reloads, 1, 'the next attempt may reload after native cleanup recovers')
+      await f.finish()
+    } finally { console.warn = warn }
+  }
+
+  // Failed persistence or navigation rolls back this change and restores live callbacks.
+  for (const failure of ['storage', 'reload']) {
+    const f = await fixture()
+    await enableAll(f)
+    const write = localStorage.setItem
+    if (failure === 'storage') {
+      localStorage.setItem = (key, value) => {
+        if (key === 'hiven-settings' && JSON.parse(value).state.locale === 'zh') throw new Error('Synthetic locale storage failure')
+        write(key, value)
+      }
+    } else {
+      window.location.reload = () => { throw new Error('Synthetic reload failure') }
+    }
+    try {
+      await assert.rejects(f.changeApplicationLocale('zh'), /Synthetic/)
+      assert.equal(f.native.reloads, 0)
+      assert.equal(f.useAppStore.getState().locale, 'en')
+      assert.equal(JSON.parse(storage.get('hiven-settings')).state.locale, 'en')
+      await until(() => [A, B, C, G].every((key) => f.owner(key)))
+      await tick()
+      for (const key of [A, B, C, G]) await f.press(key)
+      assert.deepEqual(f.native.routes, ['app:app-a', 'quick', 'window:owner-test', 'launcher'])
+      // These are the original React cleanup functions, from before recovery installed new owners.
+      await f.finish()
+    } finally { localStorage.setItem = write }
+  }
+
+  // A newer locale chosen while cleanup is pending is never overwritten by the older request.
+  {
+    const f = await fixture()
+    const gate = f.gate('app', A, 'unregister')
+    const reload = f.changeApplicationLocale('zh')
+    const rejected = assert.rejects(reload, /Language changed/)
+    await gate.started.promise
+    f.useAppStore.getState().updateSetting('locale', 'zh')
+    gate.release.resolve()
+    await rejected
+    assert.equal(f.native.reloads, 0)
+    assert.equal(f.useAppStore.getState().locale, 'zh')
+    await until(() => f.owner(A))
+    await f.finish()
+  }
+
   // Both UI consumers use these actual locale mappings, including native-race failures.
   {
     const f = await fixture()
@@ -416,7 +567,7 @@ try {
     }
     await f.finish()
   }
-  console.log('✓ shortcut-ownership-runtime: shared registrars, original routes, conflicts, disposal, retired callbacks, races, owned cleanup and locales passed')
+  console.log('✓ shortcut-ownership-runtime: shared registrars, original routes, conflicts, disposal, retired callbacks, races, owned cleanup, controlled reloads, persistent cleanup failure recovery and locales passed')
 } finally {
   await rm(scratch, { recursive: true, force: true })
 }

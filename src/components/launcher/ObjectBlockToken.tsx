@@ -118,6 +118,8 @@ export function ObjectBlockToken({
       <button
         type="button"
         className="object-block-remove"
+        onKeyDown={(event) => event.stopPropagation()}
+        onKeyUp={(event) => event.stopPropagation()}
         onClick={(e) => { e.stopPropagation(); onRemove() }}
         aria-label={t(locale, 'palette.objectBlockRemove')}
       >

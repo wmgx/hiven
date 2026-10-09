@@ -1,4 +1,5 @@
 /** Register per-app global shortcuts → native toggle_installed_app. */
+import { registerHotkeyReloadParticipant } from './pageReload'
 import { useAppStore } from '../store'
 import { translate } from '../i18n'
 import { showToast } from '../workspace/toast'
@@ -33,16 +34,20 @@ export function installAppHotkeys(): () => void {
   const unsubscribe = useAppStore.subscribe((state, prev) => {
     if (state.settings.appHotkeys !== prev.settings.appHotkeys) sync()
   })
-  return () => {
-    if (lifecycle !== owner) return
-    installed = false
-    lifecycle += 1
-    unsubscribe()
-    // Queue cleanup behind pending native calls, and before a subsequent install.
-    void enqueue(async () => {
-      for (const [key, registration] of registrations) await release(key, registration)
-    })
-  }
+  return registerHotkeyReloadParticipant('apps', {
+    resume: installAppHotkeys,
+    stop: () => {
+      if (lifecycle !== owner) return Promise.resolve()
+      installed = false
+      lifecycle += 1
+      unsubscribe()
+      // Queue cleanup behind pending native calls, and before a subsequent install.
+      return enqueue(async () => {
+        for (const [key, registration] of registrations) await release(key, registration)
+        if (registrations.size) throw new Error('Could not release application shortcuts')
+      })
+    },
+  })
 }
 
 /** Settings commit only after registration succeeds; failed attempts never touch persistence. */
@@ -131,7 +136,11 @@ async function acquire(
   if (existing) {
     await release(key, existing)
     if (!current()) return 'cancelled'
-    if (registrations.has(key)) return 'failed'
+    if (registrations.get(key) === existing) {
+      // An unsuccessful unregister keeps our native route; restore its lifecycle.
+      existing.lifecycle = lifecycle
+      return existing
+    }
   }
   try {
     const { register, isRegistered } = await loadGlobalShortcutApi()
@@ -142,10 +151,10 @@ async function acquire(
     const owner = lifecycle
     const registration: Registration = { accelerator, appId: null, lifecycle: owner }
     await register(accelerator, (event) => {
-      if (event.state !== 'Pressed' || !installed || lifecycle !== owner ||
+      if (event.state !== 'Pressed' || !installed || lifecycle !== registration.lifecycle ||
           registrations.get(key) !== registration || !registration.appId) return
       const appId = registration.appId
-      const active = () => installed && lifecycle === owner && registrations.get(key) === registration &&
+      const active = () => installed && lifecycle === registration.lifecycle && registrations.get(key) === registration &&
         registration.appId === appId && useAppStore.getState().settings.appHotkeys.some(
           (binding) => binding.appId === appId && binding.enabled !== false,
         )
@@ -166,6 +175,7 @@ async function acquire(
 
 async function release(key: string, registration: Registration): Promise<void> {
   // Suppress a queued native callback even while unregister is still pending.
+  const appId = registration.appId
   registration.appId = null
   try {
     const { unregister } = await loadGlobalShortcutApi()
@@ -173,6 +183,7 @@ async function release(key: string, registration: Registration): Promise<void> {
     if (registrations.get(key) === registration) registrations.delete(key)
   } catch (error) {
     // Keep ownership so the next sync / lifecycle cleanup can retry safely.
+    if (registrations.get(key) === registration) registration.appId = appId
     console.warn('[hiven] app hotkey unregister failed', registration.accelerator, error)
   }
 }

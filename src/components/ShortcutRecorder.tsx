@@ -25,6 +25,7 @@ type ShortcutRecorderProps = {
 type HotkeyPlatformLabels = {
   isMac: boolean
   command: string
+  meta: string
   option: string
 }
 
@@ -168,6 +169,9 @@ export function getHotkeyPlatformLabels(): HotkeyPlatformLabels {
   return {
     isMac,
     command: isMac ? 'Cmd' : 'Ctrl',
+    // Tauri's Cmd/Command accelerator always means the physical Meta key.
+    // The native double-Command detector uses Ctrl on non-macOS instead.
+    meta: isMac ? 'Cmd' : /Win/i.test(platformIdentity()) ? 'Win' : 'Super',
     option: isMac ? 'Option' : 'Alt',
   }
 }
@@ -229,11 +233,15 @@ function isModifierKey(key: string): boolean {
 }
 
 function isMacPlatform(): boolean {
+  return /Mac|iPhone|iPad|iPod/i.test(platformIdentity())
+}
+
+function platformIdentity(): string {
   const nav = typeof navigator === 'undefined' ? undefined : navigator
   const platform = nav?.platform || ''
   const userAgent = nav?.userAgent || ''
   const userAgentDataPlatform = (nav as Navigator & { userAgentData?: { platform?: string } } | undefined)?.userAgentData?.platform || ''
-  return /Mac|iPhone|iPad|iPod/i.test(`${platform} ${userAgentDataPlatform} ${userAgent}`)
+  return `${platform} ${userAgentDataPlatform} ${userAgent}`
 }
 
 function modifierLabel(modifier: GlobalPinnedLauncherDoubleModifier, platformLabels: HotkeyPlatformLabels): string {
@@ -243,9 +251,9 @@ function modifierLabel(modifier: GlobalPinnedLauncherDoubleModifier, platformLab
 }
 
 function formatAcceleratorLabel(accelerator: string, platformLabels: HotkeyPlatformLabels): string {
-  // Always map internal names (Cmd/Alt) to platform-friendly labels.
-  // This makes Option+Space show as "Option+Space" on macOS instead of "Alt+Space".
   return accelerator
-    .replace(/\bCmd\b/g, platformLabels.command)
-    .replace(/\bAlt\b/g, platformLabels.option)
+    .replace(/\b(?:CmdOrCtrl|CommandOrControl)\b/gi, platformLabels.command)
+    .replace(/\b(?:Cmd|Command|Meta|Super)\b/gi, platformLabels.meta)
+    .replace(/\bControl\b/gi, 'Ctrl')
+    .replace(/\b(?:Alt|Option)\b/gi, platformLabels.option)
 }

@@ -2,6 +2,7 @@
  * Global shortcut to summon Quick Editor from settings.
  * Supports accelerator + disabled (same shape as globalPinnedLauncherShortcut).
  */
+import { registerHotkeyReloadParticipant } from './pageReload'
 import { useAppStore, type GlobalPinnedLauncherShortcut } from '../store'
 import { showQuickEditorSurface } from '../workspace/quickEditor/quickEditorRequests'
 
@@ -10,6 +11,7 @@ type GlobalShortcutApi = typeof import('@tauri-apps/plugin-global-shortcut')
 let installed = false
 let unsubscribeStore: (() => void) | null = null
 let currentAccelerator: string | null = null
+let currentRegistration: { generation: number } | null = null
 let syncGeneration = 0
 let syncQueue: Promise<void> = Promise.resolve()
 
@@ -26,13 +28,20 @@ export function installQuickEditorHotkeys(): () => void {
     }
   })
 
-  return () => {
-    installed = false
-    syncGeneration += 1
-    unsubscribeStore?.()
-    unsubscribeStore = null
-    void unregisterCurrentAccelerator()
-  }
+  return registerHotkeyReloadParticipant('quick-editor', {
+    resume: installQuickEditorHotkeys,
+    stop: () => {
+      installed = false
+      syncGeneration += 1
+      unsubscribeStore?.()
+      unsubscribeStore = null
+      syncQueue = syncQueue.catch(() => undefined).then(async () => {
+        await unregisterCurrentAccelerator()
+        if (currentAccelerator) throw new Error('Could not release Quick Editor shortcut')
+      })
+      return syncQueue
+    },
+  })
 }
 
 function syncShortcut(shortcut: GlobalPinnedLauncherShortcut) {
@@ -47,6 +56,15 @@ async function syncShortcutNow(shortcut: GlobalPinnedLauncherShortcut, generatio
 
   await unregisterCurrentAccelerator()
   if (generation !== syncGeneration) return
+  if (currentAccelerator) {
+    if (shortcut.kind === 'accelerator' && normalizeAccelerator(shortcut.accelerator) === currentAccelerator && currentRegistration) {
+      currentRegistration.generation = generation
+      updateShortcutStatus(shortcut, 'Registered')
+    } else {
+      updateShortcutStatus(shortcut, 'Registration failed', 'Could not release previous shortcut')
+    }
+    return
+  }
 
   if (shortcut.kind === 'disabled') {
     updateShortcutStatus(shortcut, 'Disabled')
@@ -90,13 +108,15 @@ async function registerAccelerator(
       return
     }
 
+    const registration = { generation }
     await register(accelerator, (event) => {
-      if (!installed || generation !== syncGeneration || event.state !== 'Pressed') return
+      if (!installed || currentRegistration !== registration || registration.generation !== syncGeneration || event.state !== 'Pressed') return
       const current = useAppStore.getState().settings.quickEditorShortcut
       if (shortcutIdentity(current) !== shortcutIdentity(shortcut)) return
       void routeQuickEditorShortcut()
     })
     currentAccelerator = accelerator
+    currentRegistration = registration
     if (generation !== syncGeneration) {
       await unregisterCurrentAccelerator()
       return
@@ -126,7 +146,10 @@ async function unregisterCurrentAccelerator() {
   try {
     const { unregister } = await loadGlobalShortcutApi()
     await unregister(accelerator)
-    if (currentAccelerator === accelerator) currentAccelerator = null
+    if (currentAccelerator === accelerator) {
+      currentAccelerator = null
+      currentRegistration = null
+    }
   } catch (error) {
     console.warn('[hiven] Failed to unregister Quick Editor shortcut:', error)
   }

@@ -1,4 +1,5 @@
 import { useAppStore, type GlobalPinnedLauncherShortcut } from '../store'
+import { registerHotkeyReloadParticipant } from './pageReload'
 import { suppressStandaloneLauncherBlur } from '../workspace/launcherBlurGuard'
 
 type GlobalShortcutApi = typeof import('@tauri-apps/plugin-global-shortcut')
@@ -10,6 +11,7 @@ let unsubscribeStore: (() => void) | null = null
 let unsubscribeDoubleModifierError: (() => void) | null = null
 let unsubscribeDoubleModifierReady: (() => void) | null = null
 let currentAccelerator: string | null = null
+let currentRegistration: { generation: number } | null = null
 let syncGeneration = 0
 let syncQueue: Promise<void> = Promise.resolve()
 
@@ -31,18 +33,25 @@ export function installGlobalPinnedLauncherHotkeys() {
     }
   })
 
-  return () => {
-    installed = false
-    syncGeneration += 1
-    unsubscribeStore?.()
-    unsubscribeStore = null
-    unsubscribeDoubleModifierError?.()
-    unsubscribeDoubleModifierError = null
-    unsubscribeDoubleModifierReady?.()
-    unsubscribeDoubleModifierReady = null
-    void unregisterCurrentAccelerator()
-    void unregisterDoubleModifier()
-  }
+  return registerHotkeyReloadParticipant('global-launcher', {
+    resume: installGlobalPinnedLauncherHotkeys,
+    stop: () => {
+      installed = false
+      syncGeneration += 1
+      unsubscribeStore?.()
+      unsubscribeStore = null
+      unsubscribeDoubleModifierError?.()
+      unsubscribeDoubleModifierError = null
+      unsubscribeDoubleModifierReady?.()
+      unsubscribeDoubleModifierReady = null
+      syncQueue = syncQueue.catch(() => undefined).then(async () => {
+        await unregisterCurrentAccelerator()
+        const modifierStopped = await unregisterDoubleModifier()
+        if (currentAccelerator || !modifierStopped) throw new Error('Could not release Global Launcher shortcut')
+      })
+      return syncQueue
+    },
+  })
 }
 
 async function listenForDoubleModifierErrors() {
@@ -86,6 +95,16 @@ async function syncShortcutNow(shortcut: GlobalPinnedLauncherShortcut, generatio
   await unregisterCurrentAccelerator()
   await unregisterDoubleModifier()
   if (generation !== syncGeneration) return
+  if (currentAccelerator) {
+    if (shortcut.kind === 'accelerator' && normalizeAccelerator(shortcut.accelerator) === currentAccelerator && currentRegistration) {
+      // Failed native cleanup still leaves this exact registration owned by us.
+      currentRegistration.generation = generation
+      updateShortcutStatus(shortcut, 'Registered')
+    } else {
+      updateShortcutStatus(shortcut, 'Registration failed', 'Could not release previous shortcut')
+    }
+    return
+  }
 
   if (
     useAppStore.getState().globalLauncherOpen &&
@@ -116,15 +135,17 @@ async function registerAccelerator(
 ) {
   try {
     const accelerator = normalizeAccelerator(shortcut.accelerator)
+    const registration = { generation }
     const { register, isRegistered } = await loadGlobalShortcutApi()
     await register(accelerator, (event) => {
-      if (event.state !== 'Pressed') return
+      if (!installed || currentRegistration !== registration || registration.generation !== syncGeneration || event.state !== 'Pressed') return
       if (shortcutIdentity(useAppStore.getState().settings.globalPinnedLauncherShortcut) !== shortcutIdentity(shortcut)) return
       void (async () => {
         await routeGlobalPinnedLauncherShortcut()
       })()
     })
     currentAccelerator = accelerator
+    currentRegistration = registration
     if (generation !== syncGeneration) {
       await unregisterCurrentAccelerator()
       return
@@ -160,7 +181,10 @@ async function unregisterCurrentAccelerator() {
   const accelerator = currentAccelerator
   try {
     await unregisterAccelerator(accelerator)
-    if (currentAccelerator === accelerator) currentAccelerator = null
+    if (currentAccelerator === accelerator) {
+      currentAccelerator = null
+      currentRegistration = null
+    }
   } catch (error) {
     console.warn('[hiven] Failed to unregister global shortcut:', error)
   }
@@ -171,13 +195,15 @@ async function unregisterAccelerator(accelerator: string) {
   await unregister(accelerator)
 }
 
-async function unregisterDoubleModifier() {
-  if (!isTauriRuntime()) return
+async function unregisterDoubleModifier(): Promise<boolean> {
+  if (!isTauriRuntime()) return true
   try {
     const { invoke } = await loadTauriCoreApi()
     await invoke('unregister_double_modifier_hotkey')
+    return true
   } catch (error) {
     console.warn('[hiven] Failed to unregister double modifier hook:', error)
+    return false
   }
 }
 
