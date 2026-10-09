@@ -182,7 +182,12 @@ export function CalculatorSurface({ host, initialText, t, calculate, calculateVa
           <output>{displayedResult ?? '—'}</output>
         </div>
 
-        <p className="calculator-surface__keyboard-hint">{t('surface.keyboardHint')}</p>
+        <p className="calculator-surface__keyboard-hint">
+          {t('surface.keyboardHint')}{' · '}
+          <button type="button" disabled={!displayedResult} onClick={() => void copyResult()}>
+            {t('surface.copyResult')}
+          </button>
+        </p>
         <Tooltip.Root>
           <Tooltip.Trigger className="calculator-surface__syntax-trigger" aria-describedby={syntaxId} delay={150}>
             {t('surface.syntax')}

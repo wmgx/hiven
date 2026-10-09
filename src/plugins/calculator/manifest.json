@@ -2,7 +2,7 @@
   "pluginId": "calculator",
   "displayName": "Calculator",
   "displayNameI18n": { "zh": "计算器" },
-  "version": "1.6.3",
+  "version": "1.6.4",
   "capabilities": ["command", "instant-suggestion", "surface"],
   "permissions": ["storage.private", "clipboard.write"]
 }

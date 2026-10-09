@@ -168,32 +168,67 @@ function multi(count: number, gen: () => string): string {
   return lines.join('\n')
 }
 
-function generateSurfaceValues(mode: RandomSurfaceMode, config: RandomSurfaceConfig): string[] {
+function normalizeSurfaceParameters(mode: RandomSurfaceMode, config: RandomSurfaceConfig) {
   const count = parseCount(config.count)
-  let generate: () => string
   switch (mode) {
-    case 'integer':
+    case 'integer': {
       if (config.max < config.min) throw new Error('RANGE')
-      generate = () => String(randomInt(asInt(config.min, 0), asInt(config.max, 100)))
-      break
+      const min = asInt(config.min, 0)
+      const max = asInt(config.max, 100)
+      return { mode, count, min: Math.min(min, max), max: Math.max(min, max) }
+    }
     case 'float':
       if (config.max < config.min) throw new Error('RANGE')
-      generate = () => randomFloat(config.min, config.max, config.decimals)
-      break
+      if (!Number.isFinite(config.min) || !Number.isFinite(config.max)) throw new Error('Invalid range')
+      return {
+        mode, count, min: config.min, max: config.max,
+        decimals: Math.max(0, Math.min(12, Math.floor(config.decimals))) || 0,
+      }
     case 'string':
       if (config.length < 1 || config.length > 1024) throw new Error('LENGTH')
-      generate = () => randomString(asInt(config.length, 16), config.charset)
+      return {
+        mode, count, length: asInt(config.length, 16),
+        charset: CHARSETS[config.charset] === undefined ? 'alphanumeric' : config.charset,
+      }
+    case 'uuid':
+      return { mode, count }
+    case 'password':
+      if (config.length < 1 || config.length > 1024) throw new Error('LENGTH')
+      return { mode, count, length: asInt(config.length, 16) }
+    case 'hex':
+      if (config.bytes < 1 || config.bytes > 1024) throw new Error('BYTES')
+      return { mode, count, bytes: asInt(config.bytes, 16) }
+    case 'color':
+    case 'boolean':
+      return { mode, count }
+  }
+}
+
+export function getSurfaceGenerationKey(mode: RandomSurfaceMode, config: RandomSurfaceConfig): string {
+  return JSON.stringify(normalizeSurfaceParameters(mode, config))
+}
+
+export function generateSurfaceValues(mode: RandomSurfaceMode, config: RandomSurfaceConfig): string[] {
+  const params = normalizeSurfaceParameters(mode, config)
+  let generate: () => string
+  switch (params.mode) {
+    case 'integer':
+      generate = () => String(randomInt(params.min, params.max))
+      break
+    case 'float':
+      generate = () => randomFloat(params.min, params.max, params.decimals)
+      break
+    case 'string':
+      generate = () => randomString(params.length, params.charset)
       break
     case 'uuid':
       generate = randomUuid
       break
     case 'password':
-      if (config.length < 1 || config.length > 1024) throw new Error('LENGTH')
-      generate = () => randomPassword(asInt(config.length, 16))
+      generate = () => randomPassword(params.length)
       break
     case 'hex':
-      if (config.bytes < 1 || config.bytes > 1024) throw new Error('BYTES')
-      generate = () => randomHex(asInt(config.bytes, 16))
+      generate = () => randomHex(params.bytes)
       break
     case 'color':
       generate = randomColor
@@ -202,12 +237,12 @@ function generateSurfaceValues(mode: RandomSurfaceMode, config: RandomSurfaceCon
       generate = randomBoolean
       break
   }
-  return Array.from({ length: count }, generate)
+  return Array.from({ length: params.count }, generate)
 }
 
 function RandomWorkspace(props: PluginSurfaceProps) {
   const { react: React } = getPluginHostSdk()
-  return React.createElement(RandomSurface, { ...props, generate: generateSurfaceValues })
+  return React.createElement(RandomSurface, { ...props, generate: generateSurfaceValues, getGenerationKey: getSurfaceGenerationKey })
 }
 
 // ─── Plugin Definition ────────────────────────────────────────────────────────

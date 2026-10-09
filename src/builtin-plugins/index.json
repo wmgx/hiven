@@ -1,5 +1,5 @@
 {
-  "version": 97,
+  "version": 98,
   "packages": [
     {
       "pluginId": "encode-decode",
@@ -34,7 +34,7 @@
     {
       "pluginId": "calculator",
       "dir": "calculator",
-      "version": "1.6.3"
+      "version": "1.6.4"
     },
     {
       "pluginId": "date-time-assistant",
@@ -84,7 +84,7 @@
     {
       "pluginId": "random",
       "dir": "random",
-      "version": "1.2.1"
+      "version": "1.2.2"
     },
     {
       "pluginId": "text-explode",

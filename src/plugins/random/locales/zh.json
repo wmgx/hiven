@@ -37,6 +37,7 @@
   "surface.type": "生成类型",
   "surface.generate": "生成",
   "surface.resultCount": "已生成 {count} 个",
+  "surface.resultCountChanged": "上次生成 {count} 个 · 参数已修改，尚未重新生成",
   "surface.copy": "复制",
   "surface.copyOne": "复制 {value}",
   "surface.copyAll": "复制全部",

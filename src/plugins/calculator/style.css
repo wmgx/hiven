@@ -99,6 +99,29 @@
   text-align: right;
 }
 
+.calculator-surface__keyboard-hint button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--hiven-color-text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.calculator-surface__keyboard-hint button:hover:not(:disabled) {
+  color: var(--hiven-color-text-primary);
+}
+
+.calculator-surface__keyboard-hint button:focus-visible {
+  outline: 2px solid var(--hiven-color-accent);
+  outline-offset: 3px;
+}
+
+.calculator-surface__keyboard-hint button:disabled {
+  color: inherit;
+  cursor: default;
+}
+
 .calculator-surface__history {
   flex: 1;
   min-height: 0;

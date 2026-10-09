@@ -37,6 +37,7 @@
   "surface.type": "Generator type",
   "surface.generate": "Generate",
   "surface.resultCount": "{count} generated",
+  "surface.resultCountChanged": "{count} previous results · Parameters changed; not regenerated",
   "surface.copy": "Copy",
   "surface.copyOne": "Copy {value}",
   "surface.copyAll": "Copy all",

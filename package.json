@@ -221,6 +221,7 @@
     "test:current-text-delivery": "node scripts/test-current-text-delivery.mjs",
     "test:launcher-root-query-errors": "node scripts/test-launcher-root-query-errors.mjs",
     "test:formatter-xml": "node --experimental-strip-types scripts/test-formatter-xml.mts",
+    "test:random-surface-parameters": "node scripts/test-random-surface-parameters.mjs",
     "test:launcher-material-edit": "node scripts/test-launcher-material-edit.mjs",
     "test:plugin-surface-object-origin": "node scripts/test-plugin-surface-object-origin.mjs",
     "test:automatic-learning-settings": "node scripts/test-automatic-learning-settings.mjs",

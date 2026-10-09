@@ -17,6 +17,7 @@ export type RandomSurfaceConfig = {
 
 type RandomSurfaceProps = PluginSurfaceProps & {
   generate: (mode: RandomSurfaceMode, config: RandomSurfaceConfig) => string[]
+  getGenerationKey: (mode: RandomSurfaceMode, config: RandomSurfaceConfig) => string
 }
 
 const MODES: RandomSurfaceMode[] = ['integer', 'float', 'string', 'uuid', 'password', 'hex', 'color', 'boolean']
@@ -40,12 +41,24 @@ function errorKey(error: unknown): string {
   return 'surface.generateFailed'
 }
 
-export function RandomSurface({ host, t, generate, surfaceId }: RandomSurfaceProps) {
+export function RandomSurface({ host, t, generate, getGenerationKey, surfaceId }: RandomSurfaceProps) {
   const initialMode = MODES.includes(surfaceId as RandomSurfaceMode) ? surfaceId as RandomSurfaceMode : 'integer'
   const [mode, setMode] = useState<RandomSurfaceMode>(initialMode)
   const [config, setConfig] = useState(DEFAULT_CONFIG)
-  const [results, setResults] = useState<string[]>(() => generate(initialMode, DEFAULT_CONFIG))
+  const [batch, setBatch] = useState(() => ({
+    mode: initialMode,
+    results: generate(initialMode, DEFAULT_CONFIG),
+    generationKey: getGenerationKey(initialMode, DEFAULT_CONFIG),
+  }))
+  const { results } = batch
   const [error, setError] = useState('')
+  const parametersChanged = useMemo(() => {
+    try {
+      return getGenerationKey(mode, config) !== batch.generationKey
+    } catch {
+      return true
+    }
+  }, [mode, config, batch.generationKey, getGenerationKey])
   const charsetOptions = useMemo(() => [
     'alphanumeric', 'alpha', 'numeric', 'hex', 'base64url', 'symbols', 'lower', 'upper',
   ].map((value) => ({ value, label: t(`param.charset.${value}`) })), [t])
@@ -54,26 +67,25 @@ export function RandomSurface({ host, t, generate, surfaceId }: RandomSurfacePro
     setConfig((current) => ({ ...current, [key]: Number(raw) }))
   }
 
-  const run = (event?: FormEvent) => {
-    event?.preventDefault()
+  const generateBatch = (nextMode: RandomSurfaceMode) => {
     try {
-      setResults(generate(mode, config))
+      const generationKey = getGenerationKey(nextMode, config)
+      const nextResults = generate(nextMode, config)
+      setBatch({ mode: nextMode, results: nextResults, generationKey })
       setError('')
     } catch (cause) {
-      setResults([])
       setError(t(errorKey(cause)))
     }
   }
 
+  const run = (event?: FormEvent) => {
+    event?.preventDefault()
+    generateBatch(mode)
+  }
+
   const chooseMode = (next: RandomSurfaceMode) => {
     setMode(next)
-    try {
-      setResults(generate(next, config))
-      setError('')
-    } catch (cause) {
-      setResults([])
-      setError(t(errorKey(cause)))
-    }
+    generateBatch(next)
   }
 
   const copy = async (value: string) => {
@@ -170,18 +182,17 @@ export function RandomSurface({ host, t, generate, surfaceId }: RandomSurfacePro
 
           <div className="random-surface__result-heading">
             <div>
-              <strong>{t(`${mode}.title`)}</strong>
-              <span>{t('surface.resultCount', { count: results.length })}</span>
+              <strong>{t(`${batch.mode}.title`)}</strong>
+              <span aria-live="polite">{t(parametersChanged ? 'surface.resultCountChanged' : 'surface.resultCount', { count: results.length })}</span>
             </div>
             <Button type="button" disabled={results.length === 0} onClick={() => void copy(results.join('\n'))}>{t('surface.copyAll')}</Button>
           </div>
 
           <div className="random-surface__results" aria-live="polite">
-            {error ? (
-              <p className="random-surface__error" role="alert">{error}</p>
-            ) : results.map((result, index) => (
+            {error && <p className="random-surface__error" role="alert">{error}</p>}
+            {results.map((result, index) => (
               <div className="random-surface__result" key={`${index}:${result}`}>
-                {mode === 'color' && <i style={{ backgroundColor: result }} aria-hidden="true" />}
+                {batch.mode === 'color' && <i style={{ backgroundColor: result }} aria-hidden="true" />}
                 <code>{result}</code>
                 <button type="button" aria-label={t('surface.copyOne', { value: result })} onClick={() => void copy(result)}>{t('surface.copy')}</button>
               </div>
