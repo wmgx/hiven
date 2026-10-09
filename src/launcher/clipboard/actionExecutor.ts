@@ -8,7 +8,6 @@
 
 import type { RecommendedAction, RecommendedOutputTarget } from './actionRecommendation'
 import type { LauncherObjectBlock } from './objectBlock'
-import { detectClipboardFilePath } from './clipboardSnapshot'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -34,9 +33,6 @@ export type ActionExecutionHandlers = {
   insertBelow?: (text: string) => Promise<void>
   openBottomPanel?: (actionId: string, text: string) => Promise<void>
   setRenderer?: (actionId: string, text: string) => Promise<void>
-  /** Resolve a local file path to its text content when the clipboard holds a path. */
-  readLocalFileText?: (path: string) => Promise<string>
-  getPluginSurfaceInitialTextMode?: (pluginId: string) => 'literal' | undefined
   /** Paste plain text into the app that was foreground before launcher. */
   pasteText?: (text: string) => Promise<void>
   pasteImage?: (blobId: string) => Promise<void>
@@ -113,17 +109,9 @@ export async function executeRecommendedAction(
       }
       case 'open-plugin-surface': {
         if (action.pluginId) {
-          let initialText = text
-          const filePath = block.meta?.textOrigin === 'file-content' || handlers.getPluginSurfaceInitialTextMode?.(action.pluginId) === 'literal' ? null : detectClipboardFilePath(text)
-          if (filePath && handlers.readLocalFileText) {
-            try {
-              initialText = await handlers.readLocalFileText(filePath.path)
-            } catch {
-              // Keep path text; surface can still show / retry load.
-              initialText = text
-            }
-          }
-          await handlers.openPluginSurface(action.pluginId, { initialText })
+          // A tool action is not authorization to dereference path-shaped text.
+          // The explicit file-read action already replaces material with its contents.
+          await handlers.openPluginSurface(action.pluginId, { initialText: text })
           return { ok: true }
         }
         return { ok: false, error: 'No plugin surface available' }

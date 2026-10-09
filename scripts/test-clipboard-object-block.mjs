@@ -121,7 +121,9 @@ assert.equal(attachPolicy.isStrongClipboardAttachEligible('https://example.com')
 assert.equal(attachPolicy.isStrongClipboardAttachEligible('1710000000'), true, 'timestamp is strong')
 assert.equal(attachPolicy.isStrongClipboardAttachEligible('hello world plain text'), false, 'plain text is not strong')
 assert.equal(attachPolicy.isStrongClipboardAttachEligible('42'), false, 'short number not strong')
-assert.equal(attachPolicy.isStrongClipboardAttachEligible('/Users/me/export.csv'), true, 'file path strong via ext')
+assert.equal(attachPolicy.isStrongClipboardAttachEligible('/Users/me/export.csv'), true, 'absolute path retains an explicit read affordance')
+assert.equal(attachPolicy.findStrongClipboardAttachHits('/Users/me/export.csv')[0].kind, 'text', 'path spelling is not structured file content')
+assert.equal(attachPolicy.isStrongClipboardAttachEligible('export.csv'), false, 'bare filenames do not imply local files')
 
 // Soft operands
 assert.equal(snapshot.isSoftClipboardOperand('42'), true, 'integer is soft operand')
@@ -140,19 +142,16 @@ assert.equal(snapshot.detectClipboardType('Bearer token123'), 'secret-like')
 assert.equal(snapshot.detectClipboardType('hello world plain text'), 'text')
 assert.equal(snapshot.detectClipboardType('   '), 'unknown')
 
-// File-path extension recommendations (clipboard holds a path, not contents)
-assert.equal(snapshot.detectClipboardType('/Users/me/export.csv'), 'csv')
-assert.equal(snapshot.detectClipboardType('/tmp/data.tsv'), 'csv')
-assert.equal(snapshot.detectClipboardType('file:///Users/me/report.json'), 'json')
-assert.equal(snapshot.detectClipboardType('C:\\Users\\me\\query.sql'), 'sql')
-assert.equal(snapshot.detectClipboardType('~/notes/readme.md'), 'markdown')
-// Bare filename (Finder often pastes only the name in the text flavor)
-assert.equal(snapshot.detectClipboardType('export.csv'), 'csv', 'bare .csv filename should be detected as csv')
-assert.equal(snapshot.detectClipboardType('status_3_pay_time_delay_over_30d.csv'), 'csv')
-assert.ok(snapshot.detectClipboardFilePath('export.csv'), 'bare filename should still yield a file-path hit for kind mapping')
-assert.ok(snapshot.detectClipboardFilePath('/Users/me/export.csv'))
+// Path text remains literal; extension checks exist only for explicit file actions.
+for (const text of ['/Users/me/export.csv', '/tmp/data.tsv', 'file:///Users/me/report.json',
+  'C:\\Users\\me\\query.sql', '~/notes/readme.md', 'export.csv', 'status_3_pay_time_delay_over_30d.csv']) {
+  assert.equal(snapshot.detectClipboardType(text), 'text')
+}
+assert.ok(snapshot.detectClipboardFilePath('export.csv'))
 assert.equal(snapshot.detectClipboardFilePath('/Users/me/export.csv')?.ext, 'csv')
 assert.equal(snapshot.fileNameFromPath('/Users/me/export.csv'), 'export.csv')
+assert.equal(snapshot.detectClipboardFilePath('https://example.test/export.csv'), null)
+assert.equal(snapshot.detectClipboardType('https://example.test/export.csv'), 'url')
 
 // readLauncherClipboard prefers native file paths over plain text
 const readClip = readFileSync('src/launcher/clipboard/readLauncherClipboard.ts', 'utf8')

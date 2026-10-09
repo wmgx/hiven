@@ -79,6 +79,7 @@
     "test:tauri-plugin-dir-commands": "cargo test --manifest-path src-tauri/Cargo.toml plugin_dir_command_tests -- --test-threads=1",
     "test:clipboard-text-merge": "node scripts/test-clipboard-text-merge.mjs",
     "test:launcher-object-handoff": "node scripts/test-launcher-object-handoff.mjs",
+    "test:clipboard-file-classification": "node scripts/test-clipboard-file-classification.mjs",
     "test:clipboard-history-storage": "node scripts/test-clipboard-history-storage.mjs",
     "test:clipboard-history-boundary": "node scripts/test-clipboard-history-boundary.mjs",
     "test:clipboard-history-settings": "node scripts/test-clipboard-history-settings.mjs",

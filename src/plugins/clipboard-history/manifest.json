@@ -4,7 +4,7 @@
   "displayNameI18n": {
     "zh": "剪贴板历史"
   },
-  "version": "1.4.2",
+  "version": "1.4.4",
   "capabilities": ["settings", "ui", "background"],
   "permissions": [
     "clipboard.read",

@@ -112,8 +112,8 @@ const IMAGE_HISTORY_ACTIONS: RecommendedAction[] = [
 const FILES_HISTORY_ACTIONS: RecommendedAction[] = [
   {
     id: 'paste-history-files',
-    title: 'Paste Files',
-    titleZh: '粘贴文件',
+    title: 'Paste File Paths',
+    titleZh: '粘贴文件路径',
     provider: 'Clipboard History',
     defaultOutput: 'copy',
   },

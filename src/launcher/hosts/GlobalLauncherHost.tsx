@@ -14,7 +14,7 @@ import { useGlobalLauncherSurfaceRegistry } from '../../components/launcher/Glob
 import { useAutoCloseStandaloneLauncherOnBackgroundIdle, useCloseStandaloneLauncherOnBlur, useFocusGlobalLauncherSurfaceShell, useGlobalLauncherNativeDrag, useStandaloneLauncherResize } from '../../components/launcher/GlobalLauncherWindowLifecycle'
 import { isStandaloneLauncherWindow, useGlobalLauncherCollectInputPreview, useGlobalLauncherFocusSession, useGlobalLauncherHostEscape, useGlobalLauncherImeComposition } from '../../components/launcher/GlobalLauncherHostLifecycle'
 import { closeGlobalLauncherWindow } from '../../components/launcher/GlobalLauncherClose'
-import { getPluginSurfaceDefinition, isWorkflowObjectLauncherItem } from '../../components/launcher/GlobalLauncherSelection'
+import { isWorkflowObjectLauncherItem } from '../../components/launcher/GlobalLauncherSelection'
 import { useGlobalLauncherSurfaceFrame } from '../../components/launcher/GlobalLauncherSurfaceFrame'
 import { readLauncherClipboard } from '../clipboard/readLauncherClipboard'
 import { GlobalLauncherPanel } from '../../components/launcher/GlobalLauncherPanel'
@@ -752,11 +752,6 @@ export function GlobalLauncherHost() {
           surfaceId: 'main',
           initialText: options?.initialText,
         })
-      },
-      getPluginSurfaceInitialTextMode: (pluginId) => getPluginSurfaceDefinition({ source: 'builtin', pluginId, surfaceId: 'main' })?.surface.initialTextMode,
-      readLocalFileText: async (path) => {
-        const { invoke } = await import('@tauri-apps/api/core')
-        return invoke<string>('read_file', { path })
       },
       openUrl: async (url) => {
         await openExternalUrl(url)

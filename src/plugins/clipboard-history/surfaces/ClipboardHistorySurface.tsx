@@ -46,11 +46,12 @@ import {
 } from '../merge/clipboardTextMerge'
 import { ClipboardTextMergePanel } from './ClipboardTextMergePanel'
 
-type FilterKind = 'all' | 'text' | 'image' | 'files' | 'frequent' | 'favorite'
+type FilterKind = 'all' | 'text' | 'image' | 'frequent' | 'favorite'
 type SurfaceStorage = PluginSurfaceProps<ClipboardHistorySettings>['host']['storage']
 
 function initialFilter(surfaceId: string): FilterKind {
-  if (surfaceId === 'text' || surfaceId === 'image' || surfaceId === 'files' || surfaceId === 'frequent' || surfaceId === 'favorite') return surfaceId
+  if (surfaceId === 'files') return 'text'
+  if (surfaceId === 'text' || surfaceId === 'image' || surfaceId === 'frequent' || surfaceId === 'favorite') return surfaceId
   return 'all'
 }
 type ImageHistoryItem = Extract<ClipboardHistoryItem, { kind: 'image' }>
@@ -387,7 +388,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         .slice()
         .sort((a, b) => (b.favoritedAt ?? 0) - (a.favoritedAt ?? 0))
     } else if (filter !== 'all') {
-      result = result.filter((item) => item.kind === filter)
+      result = result.filter((item) => item.kind === filter || (filter === 'text' && item.kind === 'files'))
     }
     if (query.trim()) {
       result = result.filter((item) => matchesClipboardHistorySearch(item, query))
@@ -667,8 +668,8 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }, [items, repository, t])
 
   const itemContextMenuItems = useCallback((item: ClipboardHistoryItem): MenuItemSpec[] => [
-    { key: 'paste', label: t('action.paste'), onSelect: () => void handlePaste(item) },
-    { key: 'copy', label: t('action.copy'), onSelect: () => void handleCopy(item) },
+    { key: 'paste', label: t(item.kind === 'files' ? 'action.pastePaths' : 'action.paste'), onSelect: () => void handlePaste(item) },
+    { key: 'copy', label: t(item.kind === 'files' ? 'action.copyPaths' : 'action.copy'), onSelect: () => void handleCopy(item) },
     { key: 'delete', label: t('action.delete'), danger: true, onSelect: () => handleDelete(item.id) },
   ], [handlePaste, handleCopy, handleDelete, t])
 
@@ -853,7 +854,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                   { value: 'frequent', label: t('filter.frequent') },
                   { value: 'text', label: t('filter.text') },
                   { value: 'image', label: t('filter.image') },
-                  { value: 'files', label: t('filter.files') },
                 ]}
               />}
             </div>
@@ -990,7 +990,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         </div>
 
         {!combining && <SurfaceFooterHints className="clipboard-history-footer">
-          <span>↵ {t('hint.paste')}</span>
+          <span>↵ {t(selectedItem?.kind === 'files' ? 'action.pastePaths' : 'hint.paste')}</span>
           <span>{typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'}↵ {t('hint.returnToLauncher')}</span>
           <span>⌫ {t('hint.delete')}</span>
         </SurfaceFooterHints>}
@@ -1043,7 +1043,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
           disabled={!selectedItem || loading || !settings.enabled}
           onClick={() => selectedItem && void handlePaste(selectedItem)}
         >
-          {t('action.paste')}
+          {t(selectedItem?.kind === 'files' ? 'action.pastePaths' : 'action.paste')}
         </Button>}
         {!combining && <IconButton
           type="button"
@@ -1361,7 +1361,8 @@ function getItemTitle(item: ClipboardHistoryItem, t: (key: string) => string) {
 }
 
 function getItemSubtitle(item: ClipboardHistoryItem, locale: string, t: (key: string) => string) {
-  const base = `${getContentTypeLabel(item, t)} · ${formatBytes(item.byteSize)} · ${formatDateTime(item.lastCopiedAt, locale)}`
+  const size = item.kind === 'files' ? '' : ` · ${formatBytes(item.byteSize)}`
+  const base = `${getContentTypeLabel(item, t)}${size} · ${formatDateTime(item.lastCopiedAt, locale)}`
   if (item.favoriteTitle?.trim() && item.kind === 'text' && item.preview) {
     return `${item.preview} · ${base}`
   }
@@ -1369,6 +1370,12 @@ function getItemSubtitle(item: ClipboardHistoryItem, locale: string, t: (key: st
 }
 
 function getMetaRows(item: ClipboardHistoryItem, locale: string, t: (key: string) => string): MetaRow[] {
+  // Legacy entries store path text, not file metadata. Their old byteSize is a
+  // character count, not the file's size; keep the paths themselves prominent.
+  if (item.kind === 'files') return [
+    { label: t('meta.contentType'), value: t('filter.files') },
+    { label: t('meta.files'), value: String(item.paths.length || item.fileNames.length) },
+  ]
   const rows: MetaRow[] = [
     { label: t('meta.contentType'), value: getContentTypeLabel(item, t) },
     { label: t('meta.byteSize'), value: formatBytes(item.byteSize) },
@@ -1388,9 +1395,6 @@ function getMetaRows(item: ClipboardHistoryItem, locale: string, t: (key: string
   }
   if (item.kind === 'image' && item.width && item.height) {
     rows.splice(1, 0, { label: t('meta.dimensions'), value: `${item.width}×${item.height}` })
-  }
-  if (item.kind === 'files') {
-    rows.splice(1, 0, { label: t('meta.files'), value: String(item.paths.length) })
   }
   if (item.sourceApp) {
     rows.splice(rows.length - 2, 0, { label: t('meta.sourceApp'), value: item.sourceApp })

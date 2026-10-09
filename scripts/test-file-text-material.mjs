@@ -472,19 +472,21 @@ for (const text of ['', ' \r\n ', '/synthetic/second.json']) {
   assert.deepEqual(opened, [text])
   assert.equal(await surfaceModule.resolveSurfaceInitialText(text, true), text)
 }
-// Literal surfaces opt out at both entry paths, including path-shaped and empty material.
+// Both default and literal surfaces preserve path-shaped and empty material.
+for (const mode of [undefined, 'literal']) {
 for (const text of ['', ' \r\n ', '/synthetic/second.json']) {
   assert.equal(await surfaceModule.resolveSurfaceInitialText(text, false, 'literal'), text)
   const opened = []
   const result = await actionExecutor.executeRecommendedAction({
     block: { source: 'clipboard', payloadText: text }, action: { id: 'open', pluginId: 'literal-surface' }, target: 'open-plugin-surface',
   }, {
-    getPluginSurfaceInitialTextMode: () => 'literal',
+    getPluginSurfaceInitialTextMode: () => mode,
     readLocalFileText: forbiddenRead,
     openPluginSurface: async (_id, options) => opened.push(options.initialText),
   })
   assert.equal(result.ok, true)
   assert.deepEqual(opened, [text])
+}
 }
 const selectedTargets = []
 const selection = surfaceModule.useGlobalLauncherSelectionController({
@@ -497,8 +499,8 @@ await new Promise((resolve) => setImmediate(resolve))
 assert.equal(selectedTargets.length, 1)
 assert.equal(selectedTargets[0].initialText, '/synthetic/selected.json', 'real selection callback uses the nested surface declaration')
 assert.deepEqual(legacySurfaceReads, [])
-assert.equal(await surfaceModule.resolveSurfaceInitialText('/synthetic/legacy.json'), 'legacy file content')
-assert.deepEqual(legacySurfaceReads, ['/synthetic/legacy.json'], 'undeclared surfaces keep their existing path resolution')
+assert.equal(await surfaceModule.resolveSurfaceInitialText('/synthetic/legacy.json'), '/synthetic/legacy.json')
+assert.deepEqual(legacySurfaceReads, [], 'opening any surface preserves literal material; file reads require the explicit action')
 assert.equal(hiddenReads, 0, 'no hidden clipboard/editor/file source was read')
 pending.clearPendingObjectBlock()
 console.log('File picker and text material passed: explicit scope, exact text, restore/edit provenance, duplicate/stale/cancel/session races, stable failures and both surface routes')

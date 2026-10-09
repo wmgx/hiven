@@ -8,7 +8,7 @@
  * the extra file-path IPC when the text is empty or actually looks like a bare
  * filename / path — the exact case where the text flavor is ambiguous and the real
  * Finder path is worth resolving. `detectClipboardFilePath` already recognizes that
- * shape from text, so no detection is lost.
+ * shape from text; this lookup yields path text, never file contents.
  *
  * Each await is timed under `clipboard-read:<step>` so a single repro pinpoints cost.
  */
@@ -27,8 +27,9 @@ async function readClipboardFilePath(): Promise<string | null> {
       count: Array.isArray(paths) ? paths.length : 0,
     })
     if (Array.isArray(paths) && paths.length > 0) {
-      const first = paths[0]?.trim()
-      if (first) return first
+      // Never silently discard all but the first copied file.
+      const validPaths = paths.filter((path) => typeof path === 'string' && path.length > 0)
+      if (validPaths.length) return validPaths.join('\n')
     }
   } catch {
     // Not in Tauri, or command unavailable.

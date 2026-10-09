@@ -89,7 +89,7 @@ assert.match(indexContent, /schema:\s*\{/, 'Clipboard history must declare a set
 assert.match(indexContent, /key:\s*['"]enabled['"]/, 'Settings schema must include enabled')
 assert.match(indexContent, /key:\s*['"]recordText['"]/, 'Settings schema must include recordText')
 assert.match(indexContent, /key:\s*['"]recordImages['"]/, 'Settings schema must include recordImages')
-assert.match(indexContent, /key:\s*['"]recordFiles['"]/, 'Settings schema must include recordFiles')
+assert.doesNotMatch(indexContent, /key:\s*['"]recordFiles['"]/, 'Path text follows text recording')
 assert.match(indexContent, /key:\s*['"]maxItems['"]/, 'Settings schema must include maxItems')
 assert.match(indexContent, /key:\s*['"]retentionDays['"]/, 'Settings schema must include retentionDays')
 assert.match(indexContent, /key:\s*['"]maxTextBytes['"]/, 'Settings schema must include maxTextBytes')

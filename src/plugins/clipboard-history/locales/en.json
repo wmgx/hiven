@@ -1,6 +1,6 @@
 {
   "plugin.name": "Clipboard History",
-  "plugin.description": "Clipboard history manager with text, image, and file path support",
+  "plugin.description": "Clipboard history for text and images",
   "settings.enabled": "Enable clipboard history",
   "settings.recordText": "Record text",
   "settings.recordImages": "Record images",
@@ -21,7 +21,7 @@
   "settings.permissionsAllGranted": "All granted",
   "settings.permissionsAll": "All permissions",
   "settings.permissionsMissing": "{count} required",
-  "settings.privacyNotice": "hiven does not automatically detect passwords, tokens, or private keys. Pause recording, delete items, clear history, or disable image/file recording when needed.",
+  "settings.privacyNotice": "hiven does not automatically detect passwords, tokens, or private keys. Pause recording, delete items, clear history, or disable image recording when needed.",
   "permission.clipboard.read": "Read clipboard text",
   "permission.clipboard.write": "Write to clipboard",
   "permission.clipboard.watch": "Watch clipboard changes",
@@ -44,7 +44,7 @@
   "filter.favorite": "Favorites",
   "filter.text": "Text",
   "filter.image": "Image",
-  "filter.files": "Files",
+  "filter.files": "File paths",
   "filter.label": "Type filter",
   "group.today": "Today",
   "group.yesterday": "Yesterday",
@@ -86,7 +86,7 @@
   "meta.byteSize": "Size",
   "meta.dimensions": "Dimensions",
   "meta.sourceApp": "Source app",
-  "meta.files": "Files",
+  "meta.files": "Paths",
   "meta.timesCopied": "Times copied",
   "meta.timesPasted": "Times pasted",
   "meta.favorite": "Favorite title",
@@ -128,5 +128,7 @@
   "merge.retry": "Retry",
   "merge.limit": "You can combine up to {max} text items.",
   "merge.textOnly": "Only text items can be combined.",
-  "merge.toggleSelection": "Select / deselect"
+  "merge.toggleSelection": "Select / deselect",
+  "action.copyPaths": "Copy paths",
+  "action.pastePaths": "Paste paths"
 }

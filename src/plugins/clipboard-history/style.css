@@ -439,9 +439,9 @@
 
 .clipboard-history-preview-path {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
   padding: 5px 8px;
   border-radius: 4px;
   color: var(--hiven-color-text-primary);

@@ -2,7 +2,7 @@
  * Hard-attach policy for clipboard → Object Block.
  *
  * Product rule: only attach when content is a high-confidence structured object
- * that has real tool recommendations — not generic "maybe encode this" text.
+ * that has real tool recommendations, or a local path with an explicit read action.
  *
  * Age/freshness stays in clipboardSnapshot; this file owns content eligibility.
  */
@@ -47,29 +47,33 @@ export type StrongAttachHit = {
 
 /**
  * Pure content gate: soft operands / plain text stay silent;
- * only strong detections (or known file paths) qualify for hard-attach.
+ * absolute text-file paths may attach as literal text for the explicit read action.
  */
 export function findStrongClipboardAttachHits(text: string): StrongAttachHit[] {
   const trimmed = text.trim()
   if (!trimmed) return []
   if (isSoftClipboardOperand(trimmed)) return []
 
-  // Clipboard holds a path with a known structured extension (csv/json/…).
-  const filePath = detectClipboardFilePath(trimmed)
-  if (filePath) {
-    return [{ kind: filePath.kind as ContentKind, confidence: 0.95 }]
-  }
-
-  if (typeof detectContent !== 'function') return []
-
-  const detections: ContentDetection[] = detectContent(trimmed)
+  // Content signals, especially sensitive material, take precedence over path spelling.
+  const detections: ContentDetection[] = typeof detectContent === 'function' ? detectContent(trimmed) : []
   const hits: StrongAttachHit[] = []
   for (const d of detections) {
     if (!STRONG_ATTACH_CONTENT_KINDS.has(d.kind)) continue
     if (d.confidence < STRONG_ATTACH_MIN_CONFIDENCE) continue
     hits.push({ kind: d.kind, confidence: d.confidence })
   }
-  return hits
+  const sensitive = hits.filter((hit) => hit.kind === 'secret' || hit.kind === 'secret-like')
+  if (sensitive.length) return sensitive
+  if (hits.length) return hits
+
+  // Keep the explicit read affordance for a copied local path, but never infer
+  // JSON/CSV contents or read it here. A bare filename is not enough.
+  const filePath = detectClipboardFilePath(trimmed)
+  if (filePath) {
+    const absolute = (filePath.path.startsWith('/') && !filePath.path.startsWith('//')) || /^[A-Za-z]:[\\/]/.test(filePath.path)
+    if (absolute) return [{ kind: 'text', confidence: 0.95 }]
+  }
+  return []
 }
 
 /**

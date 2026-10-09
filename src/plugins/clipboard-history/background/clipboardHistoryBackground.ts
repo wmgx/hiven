@@ -2,7 +2,7 @@
  * Clipboard History Plugin — Background Lifecycle
  *
  * Starts clipboard watching when settings.enabled is true.
- * Handles text/image/files based on settings toggles.
+ * Records text/images based on settings toggles; old file-path records remain readable.
  * Persists items to plugin storage via repository.
  * Returns a stop function for cleanup.
  */
@@ -22,7 +22,8 @@ function buildWatchOptions(settings: ClipboardHistorySettings): ClipboardWatchOp
   return {
     text: settings.recordText,
     images: settings.recordImages,
-    files: settings.recordFiles,
+    // Paths copied as text stay text. Existing files records remain readable.
+    files: false,
     maxTextBytes: settings.maxTextBytes,
     maxImageBytes: settings.maxImageBytes,
   }
@@ -88,7 +89,7 @@ export function createClipboardHistoryBackground(): PluginBackgroundContribution
             // Filter based on settings
             if (change.kind === 'text' && !ctx.settings.recordText) return
             if (change.kind === 'image' && !ctx.settings.recordImages) return
-            if (change.kind === 'files' && !ctx.settings.recordFiles) return
+            if (change.kind === 'files') return
 
             const input = buildAddItemInput(change)
             if (!input) return

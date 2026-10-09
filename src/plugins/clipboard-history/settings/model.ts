@@ -6,6 +6,7 @@ export type ClipboardHistorySettings = {
   enabled: boolean
   recordText: boolean
   recordImages: boolean
+  /** Legacy saved setting; file-path text now follows recordText. */
   recordFiles: boolean
   maxItems: number
   retentionDays: number

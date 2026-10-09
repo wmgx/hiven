@@ -1,6 +1,6 @@
 {
   "plugin.name": "剪贴板历史",
-  "plugin.description": "支持文本、图片和文件路径的剪贴板历史管理工具",
+  "plugin.description": "文本和图片的剪贴板历史管理工具",
   "settings.enabled": "启用剪贴板历史",
   "settings.recordText": "记录文本",
   "settings.recordImages": "记录图片",
@@ -21,7 +21,7 @@
   "settings.permissionsAllGranted": "全部已授权",
   "settings.permissionsAll": "全部权限",
   "settings.permissionsMissing": "{count} 项待授权",
-  "settings.privacyNotice": "hiven 不会自动识别密码、token 或私钥。需要时请暂停记录、删除单条、清空历史，或关闭图片/文件记录。",
+  "settings.privacyNotice": "hiven 不会自动识别密码、token 或私钥。需要时请暂停记录、删除单条、清空历史，或关闭图片记录。",
   "permission.clipboard.read": "读取剪贴板文本",
   "permission.clipboard.write": "写入剪贴板",
   "permission.clipboard.watch": "监听剪贴板变化",
@@ -44,7 +44,7 @@
   "filter.favorite": "收藏",
   "filter.text": "文本",
   "filter.image": "图片",
-  "filter.files": "文件",
+  "filter.files": "文件路径",
   "filter.label": "类型筛选",
   "group.today": "今天",
   "group.yesterday": "昨天",
@@ -128,5 +128,7 @@
   "merge.retry": "重试",
   "merge.limit": "最多可合并 {max} 条文本。",
   "merge.textOnly": "只能合并文本记录。",
-  "merge.toggleSelection": "勾选 / 取消勾选"
+  "merge.toggleSelection": "勾选 / 取消勾选",
+  "action.copyPaths": "复制路径",
+  "action.pastePaths": "粘贴路径"
 }

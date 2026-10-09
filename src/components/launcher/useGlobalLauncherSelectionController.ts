@@ -11,7 +11,6 @@ import {
   type LauncherItemPermissionFrame,
   type PluginSurfaceTarget,
 } from './GlobalLauncherSelection'
-import { detectClipboardFilePath } from '../../launcher/clipboard/clipboardSnapshot'
 import { suppressStandaloneLauncherBlur } from '../../workspace/launcherBlurGuard'
 import {
   getPluginSurfaceShortcutPresentation,
@@ -42,21 +41,9 @@ type UseGlobalLauncherSelectionControllerInput = {
   locale: Locale
 }
 
-/** Resolve Object Block / clipboard text into surface initialText (load file when payload is a path). */
-export async function resolveSurfaceInitialText(raw: string | undefined, alreadyRead = false, mode?: 'literal'): Promise<string | undefined> {
-  if (alreadyRead || mode === 'literal') return raw
-  if (!raw?.trim()) return undefined
-  const text = raw
-  const filePath = detectClipboardFilePath(text)
-  if (!filePath) return text
-  try {
-    const { invoke } = await import('@tauri-apps/api/core')
-    return await invoke<string>('read_file', { path: filePath.path })
-  } catch (error) {
-    console.warn('[hiven] Failed to read clipboard file path for plugin surface:', filePath.path, error)
-    // Fall back to path string so surface can still show / allow manual open
-    return text
-  }
+/** Opening a tool uses the current material verbatim; only explicit file actions read files. */
+export async function resolveSurfaceInitialText(raw: string | undefined, _alreadyRead = false, _mode?: 'literal'): Promise<string | undefined> {
+  return raw
 }
 
 export function useGlobalLauncherSelectionController({

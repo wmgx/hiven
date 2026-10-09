@@ -44,13 +44,6 @@ const FILTER_ROUTES = [
     titleKey: 'route.image',
     aliases: ['clipboard images', 'clipboard image', 'image clipboard', '剪贴板图片', '图片剪贴板'],
   },
-  {
-    id: 'files',
-    title: 'Clipboard Files',
-    titleZh: '剪贴板文件',
-    titleKey: 'route.files',
-    aliases: ['clipboard files', 'clipboard file', 'file clipboard', '剪贴板文件', '文件剪贴板'],
-  },
 ] as const
 
 const CLIPBOARD_HISTORY_SHELL = {
@@ -106,14 +99,6 @@ export default definePlugin<ClipboardHistorySettings>({
               label: 'Record images',
               labelI18n: { zh: '记录图片' },
               requires: ['clipboard.image', 'clipboard.watch', 'storage.blob'],
-            },
-            {
-              kind: 'switch',
-              key: 'recordFiles',
-              icon: 'Folder',
-              label: 'Record file paths',
-              labelI18n: { zh: '记录文件路径' },
-              requires: ['clipboard.files', 'clipboard.watch'],
             },
             {
               kind: 'number',
@@ -218,6 +203,17 @@ export default definePlugin<ClipboardHistorySettings>({
           recommendedShortcut: 'CmdOrCtrl+Shift+V',
           shortcutPresentation: 'window',
         },
+        shell: CLIPBOARD_HISTORY_SHELL,
+      },
+      // Existing saved shortcuts may still target this surface. Keep the route,
+      // but show the text view instead of reviving a separate file category.
+      {
+        id: 'files',
+        kind: 'custom-view',
+        title: 'Clipboard Text',
+        titleI18n: { zh: '剪贴板文本' },
+        component: ClipboardHistorySurface,
+        entry: { launcher: false },
         shell: CLIPBOARD_HISTORY_SHELL,
       },
       ...FILTER_ROUTES.map((route) => ({

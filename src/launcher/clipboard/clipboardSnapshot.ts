@@ -110,6 +110,10 @@ export function detectClipboardFilePath(text: string): { path: string; ext: stri
     }
   }
 
+  // A URL ending in a known extension is not a local file.
+  if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(path) && !/^[A-Za-z]:[\\/]/.test(path)) return null
+  if (/[\x00-\x1f\x7f]/.test(path)) return null
+
   const extMatch = path.match(/\.([A-Za-z0-9]+)$/)
   if (!extMatch) return null
   const ext = extMatch[1].toLowerCase()
@@ -180,14 +184,14 @@ export function detectClipboardType(text: string): ClipboardDetectedType {
   const trimmed = text.trim()
   if (!trimmed) return 'unknown'
 
-  // File path with known extension (e.g. user copied /tmp/export.csv)
-  const filePath = detectClipboardFilePath(trimmed)
-  if (filePath) return filePath.kind
-
   // Delegate content classification to content-kit (confidence-ordered multi-label).
   // `typeof` guards isolated test harnesses that strip ESM imports before transpile.
   if (typeof detectContent === 'function') {
     const results = detectContent(text)
+    // Filename spelling (and higher-confidence URL/JSON detections) must not
+    // suppress an existing sensitive-content signal in the clipboard UI.
+    const sensitive = results.find((result) => result.kind === 'secret' || result.kind === 'secret-like')
+    if (sensitive?.kind === 'secret' || sensitive?.kind === 'secret-like') return sensitive.kind
     for (const result of results) {
       const mapped = mapContentKindToClipboard(result.kind)
       if (mapped) return mapped

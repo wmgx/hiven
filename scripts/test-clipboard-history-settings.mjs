@@ -57,7 +57,7 @@ assert.match(bgFile, /storage|repository|addItem/, 'Background must use storage/
 
 assert.match(bgFile, /recordText|text.*settings|settings.*text/, 'Background must reference text recording setting')
 assert.match(bgFile, /recordImages|image.*settings|settings.*image/, 'Background must reference image recording setting')
-assert.match(bgFile, /recordFiles|files.*settings|settings.*file/, 'Background must reference files recording setting')
+assert.match(bgFile, /files:\s*false/, 'Background must not infer files from ordinary text')
 
 // ─── 6. Settings schema is the source of truth ───────────────────────────────
 
@@ -67,7 +67,7 @@ assert.match(pluginIndex, /schema:\s*\{/, 'Clipboard history settings must be sc
 assert.match(pluginIndex, /key:\s*['"]enabled['"]/, 'Settings schema must expose enabled toggle')
 assert.match(pluginIndex, /key:\s*['"]recordText['"]/, 'Settings schema must expose text recording toggle')
 assert.match(pluginIndex, /key:\s*['"]recordImages['"]/, 'Settings schema must expose image recording toggle')
-assert.match(pluginIndex, /key:\s*['"]recordFiles['"]/, 'Settings schema must expose file recording toggle')
+assert.doesNotMatch(pluginIndex, /key:\s*['"]recordFiles['"]/, 'Path text follows text recording; no misleading file toggle')
 assert.match(pluginIndex, /key:\s*['"]maxItems['"]/, 'Settings schema must expose max item limit')
 assert.match(pluginIndex, /key:\s*['"]retentionDays['"]/, 'Settings schema must expose retention limit')
 assert.match(pluginIndex, /key:\s*['"]frequentPasteThreshold['"]/, 'Settings schema must expose frequent paste threshold')
