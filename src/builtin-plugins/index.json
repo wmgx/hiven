@@ -1,5 +1,5 @@
 {
-  "version": 99,
+  "version": 100,
   "packages": [
     {
       "pluginId": "encode-decode",
@@ -69,7 +69,7 @@
     {
       "pluginId": "web-open",
       "dir": "web-open",
-      "version": "1.12.8"
+      "version": "1.12.9"
     },
     {
       "pluginId": "qr-code",

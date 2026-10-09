@@ -487,93 +487,11 @@ export default definePlugin<WebQuickOpenSettings>({
           ],
         },
         {
-          id: 'cache',
-          title: 'Cache',
-          titleI18n: { zh: '缓存' },
-          description: 'Plugin-internal caches used by quick-open results.',
-          descriptionI18n: { zh: '快开规则使用的插件内缓存。' },
-          fields: [
-            {
-              kind: 'modal',
-              id: 'favicon-cache',
-              modalId: 'favicon-cache',
-              icon: 'Image',
-              label: 'Favicon cache',
-              labelI18n: { zh: '网站图标缓存' },
-              description: 'View, remove, or clear cached site icons stored by this plugin.',
-              descriptionI18n: { zh: '查看、删除或清空本插件缓存的网站图标。' },
-              buttonLabel: 'Manage',
-              buttonLabelI18n: { zh: '管理' },
-              requires: ['storage.private', 'storage.blob'],
-            },
-          ],
-        },
-        {
-          id: 'browser',
-          title: 'Browser',
-          titleI18n: { zh: '浏览器' },
-          description: 'Optional: connect a live Chromium browser to search tabs / history and focus already-open pages instead of opening duplicates. Works only with the companion extension; quick-open above needs none.',
-          descriptionI18n: {
-            zh: '可选：连接实时 Chromium 浏览器，搜索标签 / 历史，并对已打开的页面直接聚焦而非重复打开。需配套扩展；上面的快开规则无需扩展。',
-          },
-          fields: [
-            {
-              kind: 'action',
-              id: 'browser-history-learning',
-              icon: 'History',
-              label: 'Browser history learning',
-              labelI18n: { zh: '浏览器历史学习' },
-              description: 'Import matching parameters from existing browser history into all quick-open rules.',
-              descriptionI18n: { zh: '从已有浏览器历史中，为全部快开规则导入匹配的参数。' },
-              buttonLabel: 'Learn now',
-              buttonLabelI18n: { zh: '主动学习' },
-              requires: ['storage.private'],
-              async run({ value, host, t, reportProgress }) {
-                try {
-                  let count = 0
-                  reportProgress({ current: 0, total: 5_000, label: t('queryHistory.learningProgress', { read: 0, learned: 0 }) })
-                  await getPluginHostSdk().desktopTargets.bridge.importHistory(
-                    CHROMIUM_SOURCE_ID,
-                    async (history, received) => {
-                      count += await importBrowserQueryHistory(host.storage, value.entries ?? [], history)
-                      reportProgress({
-                        current: received,
-                        total: 5_000,
-                        label: t('queryHistory.learningProgress', { read: received, learned: count }),
-                      })
-                    },
-                  )
-                  host.showMessage(
-                    count > 0 ? t('queryHistory.learned', { count }) : t('queryHistory.noneLearned'),
-                    count > 0 ? 'success' : 'info',
-                  )
-                } catch (error) {
-                  host.showMessage(t('queryHistory.learnFailedDetail', {
-                    error: error instanceof Error ? error.message : String(error),
-                  }), 'error')
-                }
-              },
-            },
-            {
-              kind: 'modal',
-              id: 'browser-connection',
-              modalId: 'browser-connection',
-              icon: 'Globe',
-              label: 'Browser connection & tabs',
-              labelI18n: { zh: '浏览器连接与标签' },
-              description: 'Connection status, browsing history, idle auto-close, and extension install.',
-              descriptionI18n: { zh: '连接状态、浏览历史、不活跃自动关闭、扩展安装。' },
-              buttonLabel: 'Open',
-              buttonLabelI18n: { zh: '打开' },
-            },
-          ],
-        },
-        {
           id: 'entries',
-          title: 'Rules',
-          titleI18n: { zh: '网址规则' },
-          description: 'Configure quick-open rules that appear in the launcher.',
-          descriptionI18n: { zh: '每条规则拥有自己的触发词、地址模板和打开方式。' },
+          title: 'Quick-open rules',
+          titleI18n: { zh: '快开规则' },
+          description: 'Open websites or search with trigger words.',
+          descriptionI18n: { zh: '用触发词打开网站或搜索内容。' },
           fields: [
             {
               kind: 'object-list',
@@ -710,6 +628,88 @@ export default definePlugin<WebQuickOpenSettings>({
                   groupI18n: { zh: '高级' },
                 },
               ],
+            },
+          ],
+        },
+        {
+          id: 'browser',
+          title: 'Optional browser connection',
+          titleI18n: { zh: '可选浏览器连接' },
+          description: 'Quick-open rules work without an extension. Connect the companion extension to search Chromium tabs and history, and focus pages that are already open.',
+          descriptionI18n: {
+            zh: '快开规则无需扩展。连接配套扩展后，可搜索 Chromium 浏览器的实时标签和历史，并聚焦已打开的页面。',
+          },
+          fields: [
+            {
+              kind: 'modal',
+              id: 'browser-connection',
+              modalId: 'browser-connection',
+              icon: 'Globe',
+              label: 'Browser connection settings',
+              labelI18n: { zh: '浏览器连接设置' },
+              description: 'Check connection status, install the extension, and configure tab search, history sharing, and idle tab closing.',
+              descriptionI18n: { zh: '查看连接状态、安装扩展，设置标签搜索、历史共享和不活跃标签自动关闭。' },
+              buttonLabel: 'Configure',
+              buttonLabelI18n: { zh: '设置' },
+            },
+            {
+              kind: 'action',
+              id: 'browser-history-learning',
+              icon: 'History',
+              label: 'Import parameters from browser history',
+              labelI18n: { zh: '从浏览历史导入参数' },
+              description: 'Read browser history and import matching parameters into rules with query history enabled.',
+              descriptionI18n: { zh: '读取浏览历史，为已开启「记录参数历史」的规则导入匹配参数。' },
+              buttonLabel: 'Read and import',
+              buttonLabelI18n: { zh: '读取并导入' },
+              requires: ['storage.private'],
+              async run({ value, host, t, reportProgress }) {
+                try {
+                  let count = 0
+                  reportProgress({ current: 0, total: 5_000, label: t('queryHistory.learningProgress', { read: 0, learned: 0 }) })
+                  await getPluginHostSdk().desktopTargets.bridge.importHistory(
+                    CHROMIUM_SOURCE_ID,
+                    async (history, received) => {
+                      count += await importBrowserQueryHistory(host.storage, value.entries ?? [], history)
+                      reportProgress({
+                        current: received,
+                        total: 5_000,
+                        label: t('queryHistory.learningProgress', { read: received, learned: count }),
+                      })
+                    },
+                  )
+                  host.showMessage(
+                    count > 0 ? t('queryHistory.learned', { count }) : t('queryHistory.noneLearned'),
+                    count > 0 ? 'success' : 'info',
+                  )
+                } catch (error) {
+                  host.showMessage(t('queryHistory.learnFailedDetail', {
+                    error: error instanceof Error ? error.message : String(error),
+                  }), 'error')
+                }
+              },
+            },
+          ],
+        },
+        {
+          id: 'cache',
+          title: 'Cache',
+          titleI18n: { zh: '缓存' },
+          description: 'Plugin-internal caches used by quick-open results.',
+          descriptionI18n: { zh: '快开规则使用的插件内缓存。' },
+          fields: [
+            {
+              kind: 'modal',
+              id: 'favicon-cache',
+              modalId: 'favicon-cache',
+              icon: 'Image',
+              label: 'Favicon cache',
+              labelI18n: { zh: '网站图标缓存' },
+              description: 'View, remove, or clear cached site icons stored by this plugin.',
+              descriptionI18n: { zh: '查看、删除或清空本插件缓存的网站图标。' },
+              buttonLabel: 'Manage',
+              buttonLabelI18n: { zh: '管理' },
+              requires: ['storage.private', 'storage.blob'],
             },
           ],
         },
