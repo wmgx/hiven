@@ -7,6 +7,7 @@
 import { definePlugin, getPluginHostSdk, type PluginToolSurfaces } from '@hiven/plugin'
 import { FormatterSurface } from './FormatterSurface'
 import { formatterErrorMessage, formatterRoutes, formatText } from './core'
+import { XmlFormatterError } from './xml'
 import './style.css'
 
 function matchesContentKind(text: string, kind: 'css' | 'sql' | 'xml'): boolean {
@@ -134,7 +135,14 @@ export const formatterPlugin = definePlugin({
       inputPolicy: { mode: 'auto' },
       accepts: { kinds: ['xml'] },
       textMatch: (text) => matchesContentKind(text, 'xml'),
-      run(ctx) { return ctx.output.text(formatText('xml', 'format', ctx.input.text)) },
+      run(ctx) {
+        try { return ctx.output.text(formatText('xml', 'format', ctx.input.text)) }
+        catch (error) {
+          return ctx.output.error(error instanceof XmlFormatterError
+            ? ctx.t(`error.${error.code}`)
+            : ctx.t('error.format', { message: formatterErrorMessage(error) }))
+        }
+      },
       surfaces: EDITOR_TOOL_SURFACES,
     },
     {
@@ -146,7 +154,14 @@ export const formatterPlugin = definePlugin({
       inputPolicy: { mode: 'auto' },
       accepts: { kinds: ['xml'] },
       textMatch: (text) => matchesContentKind(text, 'xml'),
-      run(ctx) { return ctx.output.text(formatText('xml', 'compact', ctx.input.text)) },
+      run(ctx) {
+        try { return ctx.output.text(formatText('xml', 'compact', ctx.input.text)) }
+        catch (error) {
+          return ctx.output.error(error instanceof XmlFormatterError
+            ? ctx.t(`error.${error.code}`)
+            : ctx.t('error.format', { message: formatterErrorMessage(error) }))
+        }
+      },
       surfaces: EDITOR_TOOL_SURFACES,
     },
   ],

@@ -979,7 +979,13 @@ export function CsvSurface(props: PluginSurfaceProps) {
           <IconButton
             type="button"
             className="csv-tools-surface__ib"
-            label={localizedText(t, 'action.copy', 'Copy')}
+            label={mainView === 'table' && (selectedCell || selectedColumns.size > 0 || cellBlock)
+              ? t('action.copySelection')
+              : mainView === 'source'
+                ? t('source.copyRaw')
+                : needsFullProcess && !fullJobReady
+                  ? t('action.copyPreviewOutput')
+                  : t('action.copyFullOutput')}
             disabled={
               !canCopyOutput &&
               selectedColumns.size === 0 &&
@@ -1383,12 +1389,8 @@ export function CsvSurface(props: PluginSurfaceProps) {
                       ) : null}
                     </div>
                   )}
-                  <span className="csv-tools-surface__table-hint">
-                    {localizedText(
-                      t,
-                      'table.selectionHint',
-                      'Drag cells · click header = column · sort icon',
-                    )}
+                  <span className="csv-tools-surface__table-hint" title={t('table.filterScope')}>
+                    {t('table.previewScope')}
                   </span>
                   {(selectedColumns.size > 0 ||
                     cellBlock ||
@@ -1468,7 +1470,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
 
         {mainView === 'output' ? (
           <div className="csv-tools-surface__output-wrap">
-            {(filterMode === 'text' ? globalFilter : sqlFilter).trim() ? (
+            {sortColumns.length > 0 || (filterMode === 'text' ? globalFilter : sqlFilter).trim() ? (
               <div className="csv-tools-surface__output-hint">{t('table.filterScope')}</div>
             ) : null}
             {fullJobReady ? (

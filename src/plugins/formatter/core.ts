@@ -1,4 +1,5 @@
 import { format as sqlFormat } from 'sql-formatter'
+import { formatXml, XmlFormatterError, type XmlFormatterErrorCode } from './xml.ts'
 
 export type FormatterLanguage = 'sql' | 'css' | 'xml'
 export type FormatterOperation = 'format' | 'compact'
@@ -6,7 +7,7 @@ export type FormatterRouteId = `${FormatterLanguage}-${FormatterOperation}`
 
 export type FormatterResult =
   | { ok: true; output: string }
-  | { ok: false; message: string }
+  | { ok: false; message: string; code?: XmlFormatterErrorCode }
 
 export const formatterRoutes: {
   id: FormatterRouteId
@@ -46,26 +47,10 @@ function sqlCompact(text: string): string {
   return text.replace(/--[^\n]*/g, '').replace(/\s+/g, ' ').trim()
 }
 
-function xmlPrettify(text: string): string {
-  let formatted = ''
-  let indent = 0
-  const nodes = text.replace(/>\s+</g, '><').trim().split(/(<[^>]+>)/g).filter(Boolean)
-  for (const node of nodes) {
-    if (node.match(/^<\/\w/)) indent--
-    formatted += '  '.repeat(Math.max(indent, 0)) + node.trim() + '\n'
-    if (node.match(/^<\w[^>]*[^/]>$/)) indent++
-  }
-  return formatted.trim()
-}
-
-function xmlCompact(text: string): string {
-  return text.replace(/>\s+</g, '><').replace(/\s+/g, ' ').trim()
-}
-
 export function formatText(language: FormatterLanguage, operation: FormatterOperation, text: string): string {
   if (language === 'sql') return operation === 'format' ? sqlFormat(text) : sqlCompact(text)
   if (language === 'css') return operation === 'format' ? cssPrettify(text) : cssCompact(text)
-  return operation === 'format' ? xmlPrettify(text) : xmlCompact(text)
+  return formatXml(text, operation)
 }
 
 export function formatterErrorMessage(error: unknown): string {
@@ -77,6 +62,7 @@ export function processFormatter(language: FormatterLanguage, operation: Formatt
   try {
     return { ok: true, output: formatText(language, operation, text) }
   } catch (error) {
+    if (error instanceof XmlFormatterError) return { ok: false, message: error.message, code: error.code }
     return { ok: false, message: formatterErrorMessage(error) }
   }
 }

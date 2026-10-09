@@ -31,7 +31,7 @@ export function FormatterSurface(props: PluginSurfaceProps) {
   const [pasting, setPasting] = useState(false)
   const result = useMemo(() => processFormatter(language, operation, inputText), [inputText, language, operation])
   const outputText = result.ok ? result.output : ''
-  const hasOutput = result.ok && inputText.length > 0
+  const hasOutput = result.ok && outputText.length > 0
   const editorAppearance = {
     theme: getEditorTheme(props.appearance.theme),
     fontSize: props.appearance.fontSize,
@@ -176,7 +176,7 @@ export function FormatterSurface(props: PluginSurfaceProps) {
             {!result.ok ? (
               <div className="formatter-error" role="alert">
                 <strong>{t('surface.invalidTitle')}</strong>
-                <span>{t('error.format', { message: result.message })}</span>
+                <span>{result.code ? t(`error.${result.code}`) : t('error.format', { message: result.message })}</span>
               </div>
             ) : null}
           </div>
