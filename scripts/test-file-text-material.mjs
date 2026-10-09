@@ -446,7 +446,10 @@ for (const outcome of ['success', 'cancel', 'failure']) {
 }
 
 // Both existing surface routes must pass file contents through, even if path-shaped.
-const actionExecutor = load('src/launcher/clipboard/actionExecutor.ts', { './clipboardSnapshot': snapshot })
+const currentTextDelivery = load('src/launcher/clipboard/currentTextDelivery.ts', { './currentMaterial': material })
+const actionExecutor = load('src/launcher/clipboard/actionExecutor.ts', {
+  './clipboardSnapshot': snapshot, './currentTextDelivery': currentTextDelivery,
+})
 const legacySurfaceReads = []
 const literalSurface = { initialTextMode: 'literal' }
 const literalTarget = { source: 'builtin', pluginId: 'literal-surface', surfaceId: 'main' }

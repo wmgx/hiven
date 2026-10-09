@@ -6,7 +6,7 @@
  *   tools/items with accepts (+ optional match filter) + textMatch.
  *
  * This module only returns host pins that ranking cannot express cleanly:
- *   - clipboard-history paste/copy for history items (incl. image/files)
+ *   - explicit current-text paste/copy, plus history image/file delivery
  *   - Open in Quick Editor for text-bearing blocks
  *
  * B2 (2026-08-09): removed the hard-coded product transform catalog and
@@ -14,6 +14,8 @@
  */
 
 import type { LauncherObjectBlock } from './objectBlock'
+import { getCurrentTextPayload } from './currentTextDelivery'
+import { t } from '../../i18n'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -92,6 +94,21 @@ const TEXT_HISTORY_ACTIONS: RecommendedAction[] = [
   },
 ]
 
+const CURRENT_TEXT_ACTIONS: RecommendedAction[] = [
+  {
+    id: 'paste-current-text',
+    title: t('en', 'palette.pasteCurrentText'),
+    titleZh: t('zh', 'palette.pasteCurrentText'),
+    defaultOutput: 'copy',
+  },
+  {
+    id: 'copy-current-text',
+    title: t('en', 'palette.copyCurrentText'),
+    titleZh: t('zh', 'palette.copyCurrentText'),
+    defaultOutput: 'copy',
+  },
+]
+
 const IMAGE_HISTORY_ACTIONS: RecommendedAction[] = [
   {
     id: 'paste-history-image',
@@ -134,15 +151,15 @@ export function recommendActionsForBlock(block: LauncherObjectBlock): Recommende
   if (block.source === 'history-item') {
     if (block.kind === 'image') return IMAGE_HISTORY_ACTIONS
     if (block.kind === 'files') return FILES_HISTORY_ACTIONS
-    return TEXT_HISTORY_ACTIONS
+    return getCurrentTextPayload(block) !== null ? TEXT_HISTORY_ACTIONS : TEXT_HISTORY_ACTIONS.slice(2)
   }
 
   const hasText = block.payloadText != null || block.preview != null
   const isMedia = block.kind === 'image' || block.kind === 'files'
   if (hasText && !isMedia) {
     // Prefer the open-clipboard-editor id for clipboard sources (legacy filter in host).
-    if (block.source === 'clipboard') return [OPEN_CLIPBOARD_EDITOR]
-    return [OPEN_QUICK_EDITOR]
+    const openEditor = block.source === 'clipboard' ? OPEN_CLIPBOARD_EDITOR : OPEN_QUICK_EDITOR
+    return getCurrentTextPayload(block) !== null ? [...CURRENT_TEXT_ACTIONS, openEditor] : [openEditor]
   }
 
   return []

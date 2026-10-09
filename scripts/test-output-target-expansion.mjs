@@ -25,7 +25,10 @@ function transpileAndRun(path, globals = {}) {
   return sandbox.module.exports
 }
 
+const materialText = transpileAndRun('src/launcher/clipboard/currentMaterial.ts')
+const currentTextSupport = transpileAndRun('src/launcher/clipboard/currentTextDelivery.ts', materialText)
 const executor = transpileAndRun('src/launcher/clipboard/actionExecutor.ts', {
+  ...currentTextSupport,
   btoa: (value) => Buffer.from(value, 'binary').toString('base64'),
   atob: (value) => Buffer.from(value, 'base64').toString('binary'),
 })

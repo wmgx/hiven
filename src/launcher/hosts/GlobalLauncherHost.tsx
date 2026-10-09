@@ -23,7 +23,8 @@ import { useClipboardObjectBlock } from '../clipboard/useClipboardObjectBlock'
 import { chooseTextMaterialFile } from '../clipboard/fileTextMaterial'
 import { captureRootFileTextSession } from '../clipboard/fileTextInputSession'
 import { acquireLauncherNativeDialogFocus } from '../../workspace/launcherBlurGuard'
-import { getObjectBlockRecommendationText } from '../clipboard/objectBlock'
+import { getObjectBlockRecommendationText, type LauncherObjectBlock } from '../clipboard/objectBlock'
+import { captureCurrentTextDeliveryScope, createCurrentTextDelivery, isCurrentTextDeliveryAction, type CurrentTextDeliveryAction } from '../clipboard/currentTextDelivery'
 import { setPendingObjectBlock, subscribePendingObjectBlock } from '../clipboard/pendingObjectBlock'
 import { subscribeLauncherObjectHandoff } from '../clipboard/launcherObjectHandoff'
 import { isNativeDesktopRuntime } from '../../workspace/webNativeBridge'
@@ -52,6 +53,8 @@ import type { LauncherItem } from '../../workspace/launcher/types'
 import { getPluginPermissionSnapshot } from '../../workspace/pluginPermissions'
 import { showToast } from '../../workspace/toast'
 import { selectLauncherVisibleItems } from '../../workspace/launcher/visibleItems'
+
+type CurrentTextActionScope = { block: LauncherObjectBlock } & ReturnType<typeof captureCurrentTextDeliveryScope>
 
 export function GlobalLauncherHost() {
   const {
@@ -83,6 +86,9 @@ export function GlobalLauncherHost() {
   const extraSelectionRowsRef = useRef<readonly SelectableExtraRow[]>([])
   const [selectedObjectActionIndex, setSelectedObjectActionIndex] = useState(0)
   const [browsingActions, setBrowsingActions] = useState(false)
+  const [currentTextBusy, setCurrentTextBusy] = useState(false)
+  const currentTextDeliveryRef = useRef(createCurrentTextDelivery(setCurrentTextBusy))
+  const currentTextScopesRef = useRef(new WeakMap<LauncherItem, CurrentTextActionScope>())
   const launcherFavoriteKeys = useAppStore((s) => s.launcherFavoriteKeys)
   const objectActionControllerRef = useRef<{ expand: () => void; execute: (keepOpen?: boolean) => void } | null>(null)
   const { isImeComposingRef, handleCompositionStart, handleCompositionEnd } = useGlobalLauncherImeComposition()
@@ -382,9 +388,8 @@ export function GlobalLauncherHost() {
    * Object Block host rows pinned near the top of the composed list.
    *
    * Ranking / textMatch no longer shows static recommendActionsForBlock entries
-   * (RecommendedActionRow UI is disabled). History keeps paste/copy/open rows;
-   * any other text-bearing block always pins "Open in Quick Editor" so overwrite
-   * is one Enter away.
+   * (RecommendedActionRow UI is disabled). Text delivery follows the attached
+   * payload, including after editing, and keeps the existing search filtering.
    */
   const pinnedObjectActionItems = useMemo((): GlobalLauncherItem[] => {
     const block = clipboardBlock.block
@@ -398,10 +403,8 @@ export function GlobalLauncherHost() {
     if (block.source === 'history-item') {
       actions = objectActions
     } else if (hasText && !isMedia) {
-      // Prefer catalog open-editor actions; fall back to a host-owned pin.
-      const openEditorActions = objectActions.filter((action) => action.defaultOutput === 'open-editor')
-      actions = openEditorActions.length > 0
-        ? openEditorActions
+      actions = objectActions.length > 0
+        ? objectActions
         : [{
             id: 'open-in-quick-editor',
             title: 'Open in Quick Editor',
@@ -422,7 +425,26 @@ export function GlobalLauncherHost() {
             ? { en: 'History', zh: '历史' }
             : block.source === 'tool-result'
               ? { en: 'Result', zh: '结果' }
-              : { en: 'Clipboard', zh: '剪贴板' }
+              : block.source === 'query'
+                ? { en: t('en', 'palette.currentTextSourceInput'), zh: t('zh', 'palette.currentTextSourceInput') }
+                : { en: 'Clipboard', zh: '剪贴板' }
+
+    const textScope: CurrentTextActionScope = {
+      block,
+      ...captureCurrentTextDeliveryScope({
+        block,
+        getMaterialGeneration: clipboardBlock.getMaterialGeneration,
+        hasMaterial: clipboardBlock.hasMaterial,
+        getController: () => controllerRef.current,
+        isOpen: () => useAppStore.getState().globalLauncherOpen,
+        isRootVisible: () => {
+          const state = useAppStore.getState()
+          return fileTextRootVisibleRef.current &&
+            !state.pluginSurfaceToolTarget && !state.launcherHostSurfaceTarget &&
+            usePluginSettingsStore.getState().settingsDialogTarget?.presentation !== 'global-launcher'
+        },
+      }),
+    }
 
     return actions
       .filter((action) => {
@@ -448,6 +470,7 @@ export function GlobalLauncherHost() {
           behavior: { type: 'perform' },
           execute: async () => ({ ok: true }),
         }
+        if (isCurrentTextDeliveryAction(action.id)) currentTextScopesRef.current.set(domainItem, textScope)
         return {
           kind: 'domain' as const,
           id: domainItem.systemKey,
@@ -456,7 +479,7 @@ export function GlobalLauncherHost() {
           domainItem,
         }
       })
-  }, [clipboardBlock.block, locale, objectActions, rankingQuery])
+  }, [clipboardBlock.block, clipboardBlock.getMaterialGeneration, clipboardBlock.hasMaterial, controllerRef, controllerState, locale, objectActions, rankingQuery])
 
   const composedRankedItems = useMemo(() => {
     if (
@@ -522,6 +545,7 @@ export function GlobalLauncherHost() {
   // feedback for that closed session, only until another controller state/open.
   const previewPasteCloseRef = useRef<{
     isCurrent: () => boolean
+    isClosingCurrent?: () => boolean
     isClosedCurrent?: () => boolean
   } | null>(null)
 
@@ -678,7 +702,7 @@ export function GlobalLauncherHost() {
     } else if (previous.globalLauncherOpen && !state.globalLauncherOpen && !closingRef.current) {
       closingRef.current = true
       const pendingPaste = previewPasteCloseRef.current
-      const wasCurrentPaste = pendingPaste?.isCurrent()
+      const wasCurrentPaste = pendingPaste?.isClosingCurrent?.() ?? pendingPaste?.isCurrent()
       resetLauncherSession()
       if (pendingPaste && wasCurrentPaste) {
         const closedController = controllerRef.current
@@ -711,9 +735,54 @@ export function GlobalLauncherHost() {
   })
 
 
+  const pastePreviewText = useCallback(async (text: string, isCurrent: () => boolean, options?: { historyText?: boolean; via?: string; isClosingCurrent?: () => boolean }): Promise<LauncherExecuteResult> => {
+    const startedAt = telemetryNow()
+    trackBehavior(TelemetryEvents.pasteText, { textLength: text.length, via: options?.via ?? 'result-preview' })
+    const pendingPaste: { isCurrent: () => boolean; isClosingCurrent?: () => boolean; isClosedCurrent?: () => boolean } = {
+      isCurrent, isClosingCurrent: options?.isClosingCurrent,
+    }
+    previewPasteCloseRef.current = pendingPaste
+    try {
+      const permissions = options?.historyText
+        ? getPluginPermissionSnapshot('builtin', 'clipboard-history', ['clipboard.write', 'accessibility.paste'])
+        : undefined
+      const result = await createPluginPaste(permissions).pasteText(text)
+      trackLatencyFrom(TelemetryEvents.pasteLatency, startedAt, {
+        ok: result.ok,
+        textLength: text.length,
+        via: options?.via ?? 'result-preview',
+      })
+      if (!result.ok) {
+        const message = result.message || t(locale, 'palette.quickEntryError')
+        if (result.fallback !== 'copied') return { ok: false, message }
+        if (isCurrent() || pendingPaste.isClosedCurrent?.()) showToast(message, 'info')
+      }
+      return { ok: true }
+    } finally {
+      if (previewPasteCloseRef.current === pendingPaste) previewPasteCloseRef.current = null
+    }
+  }, [locale])
+
+
+  const executeCurrentTextAction = useCallback(async (scope: CurrentTextActionScope, action: CurrentTextDeliveryAction) => {
+    const result = await currentTextDeliveryRef.current({
+      ...scope,
+      action,
+      copyText: writeClipboardText,
+      pasteText: (text, isCurrent) => pastePreviewText(text, isCurrent, {
+        historyText: scope.block.source === 'history-item', via: 'current-material', isClosingCurrent: scope.isClosingCurrent,
+      }),
+    })
+    if (!result || !scope.isCurrent()) return
+    if (!result.ok) showToast(result.message, 'error')
+    else closeLauncherAfterAction()
+  }, [closeLauncherAfterAction, pastePreviewText])
+
   const executeObjectAction = useCallback(async (action: RecommendedAction, target: RecommendedOutputTarget) => {
     const block = clipboardBlock.block
     if (!block) return
+    // Text rows must use their captured material/session scope below.
+    if (isCurrentTextDeliveryAction(action.id)) return
     const startedAt = telemetryNow()
     trackBehavior(TelemetryEvents.objectActionExecute, {
       actionId: action.id,
@@ -835,13 +904,20 @@ export function GlobalLauncherHost() {
   }, [clipboardBlock.block, clipboardBlock.markBlockConsumed, closeLauncherAfterAction, locale, openPluginSurface, setQuery])
 
   const selectItemWithObjectActions = useCallback((item: GlobalLauncherItem) => {
-    clipboardBlock.cancelFileTextRead()
     // Support both current prefix and the retired history-only prefix.
     const objectActionId = item.id.startsWith('object-action:')
       ? item.id.slice('object-action:'.length)
       : item.id.startsWith('history-object-action:')
         ? item.id.slice('history-object-action:'.length)
         : null
+    if (objectActionId && isCurrentTextDeliveryAction(objectActionId)) {
+      const scope = item.kind === 'domain' ? currentTextScopesRef.current.get(item.domainItem) : undefined
+      if (!scope?.isCurrent()) return
+      clipboardBlock.cancelFileTextRead()
+      void executeCurrentTextAction(scope, objectActionId)
+      return
+    }
+    clipboardBlock.cancelFileTextRead()
     if (objectActionId != null) {
       const fromCatalog = objectActions.find((entry) => entry.id === objectActionId)
       const action: RecommendedAction = fromCatalog ?? {
@@ -855,30 +931,8 @@ export function GlobalLauncherHost() {
       return
     }
     selectItem(item)
-  }, [clipboardBlock.cancelFileTextRead, executeObjectAction, objectActions, selectItem])
+  }, [clipboardBlock.cancelFileTextRead, executeCurrentTextAction, executeObjectAction, objectActions, selectItem])
 
-  const pastePreviewText = useCallback(async (text: string, isCurrent: () => boolean): Promise<LauncherExecuteResult> => {
-    const startedAt = telemetryNow()
-    trackBehavior(TelemetryEvents.pasteText, { textLength: text.length, via: 'result-preview' })
-    const pendingPaste: { isCurrent: () => boolean; isClosedCurrent?: () => boolean } = { isCurrent }
-    previewPasteCloseRef.current = pendingPaste
-    try {
-      const result = await createPluginPaste().pasteText(text)
-      trackLatencyFrom(TelemetryEvents.pasteLatency, startedAt, {
-        ok: result.ok,
-        textLength: text.length,
-        via: 'result-preview',
-      })
-      if (!result.ok) {
-        const message = result.message || t(locale, 'palette.quickEntryError')
-        if (result.fallback !== 'copied') return { ok: false, message }
-        if (isCurrent() || pendingPaste.isClosedCurrent?.()) showToast(message, 'info')
-      }
-      return { ok: true }
-    } finally {
-      if (previewPasteCloseRef.current === pendingPaste) previewPasteCloseRef.current = null
-    }
-  }, [locale])
 
   const beginDrag = useGlobalLauncherNativeDrag(standaloneLauncher)
 
@@ -925,7 +979,7 @@ export function GlobalLauncherHost() {
         controllerRef={controllerRef}
         isImeComposingRef={isImeComposingRef}
         isKeyboardNavRef={isKeyboardNavRef}
-        busy={controllerState?.busy ?? false}
+        busy={currentTextBusy || (controllerState?.busy ?? false)}
         panelStyle={panelStyle}
         beginDrag={beginDrag as never}
         launcherSettingsTarget={launcherSettingsTarget}

@@ -218,6 +218,7 @@
     "test:launcher-explicit-text-flow": "node scripts/test-launcher-explicit-text-flow.mjs",
     "test:launcher-output-recovery": "node scripts/test-launcher-output-recovery.mjs",
     "test:launcher-current-material": "node scripts/test-launcher-current-material.mjs",
+    "test:current-text-delivery": "node scripts/test-current-text-delivery.mjs",
     "test:launcher-material-edit": "node scripts/test-launcher-material-edit.mjs",
     "test:plugin-surface-object-origin": "node scripts/test-plugin-surface-object-origin.mjs",
     "test:automatic-learning-settings": "node scripts/test-automatic-learning-settings.mjs",

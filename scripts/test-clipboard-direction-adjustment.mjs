@@ -53,7 +53,14 @@ const objectBlock = transpileAndRun('src/launcher/clipboard/objectBlock.ts', {
   detectClipboardFilePath: snapshot.detectClipboardFilePath,
   fileNameFromPath: snapshot.fileNameFromPath,
 })
-const recommendation = transpileAndRun('src/launcher/clipboard/actionRecommendation.ts')
+const materialText = transpileAndRun('src/launcher/clipboard/currentMaterial.ts')
+const currentTextSupport = transpileAndRun('src/launcher/clipboard/currentTextDelivery.ts', materialText)
+const paletteMessages = transpileAndRun('src/i18n/locales/palette.ts').default
+const currentTextGlobals = {
+  ...currentTextSupport,
+  t: (locale, key) => paletteMessages[locale][key.replace(/^palette\./, '')],
+}
+const recommendation = transpileAndRun('src/launcher/clipboard/actionRecommendation.ts', currentTextGlobals)
 
 const contextBroker = readFileSync('src/launcher/context/contextBroker.ts', 'utf8')
 const globalLauncherHost = readFileSync('src/launcher/hosts/GlobalLauncherHost.tsx', 'utf8')

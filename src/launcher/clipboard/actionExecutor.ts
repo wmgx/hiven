@@ -9,6 +9,7 @@
 import type { RecommendedAction, RecommendedOutputTarget } from './actionRecommendation'
 import type { LauncherObjectBlock } from './objectBlock'
 import { detectClipboardFilePath } from './clipboardSnapshot'
+import { getCurrentTextPayload, isCurrentTextDeliveryAction } from './currentTextDelivery'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -55,18 +56,18 @@ export async function executeRecommendedAction(
   const text = block.payloadText ?? block.preview ?? ''
 
   try {
-    // History object actions (bypass text transform pipeline)
-    if (action.id === 'paste-history-text') {
-      if (!text) return { ok: false, error: 'Text payload missing' }
-      if (!handlers.pasteText) return { ok: false, error: 'Paste text handler unavailable' }
-      await handlers.pasteText(text)
+    if (isCurrentTextDeliveryAction(action.id)) {
+      const payload = getCurrentTextPayload(block)
+      if (payload === null) return { ok: false, error: 'Text payload missing' }
+      if (action.id === 'paste-current-text' || action.id === 'paste-history-text') {
+        if (!handlers.pasteText) return { ok: false, error: 'Paste text handler unavailable' }
+        await handlers.pasteText(payload)
+      } else {
+        await handlers.copyText(payload)
+      }
       return { ok: true }
     }
-    if (action.id === 'copy-history-text') {
-      if (!text) return { ok: false, error: 'Text payload missing' }
-      await handlers.copyText(text)
-      return { ok: true, message: '已复制' }
-    }
+    // History media actions retain their private blob/permission boundary.
     if (action.id === 'paste-history-image') {
       const blobId = block.payloadImage?.blobId
       if (!blobId) return { ok: false, error: 'Image payload missing' }

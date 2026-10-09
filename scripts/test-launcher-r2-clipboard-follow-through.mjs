@@ -60,10 +60,19 @@ const objectBlock = loadTs('src/launcher/clipboard/objectBlock.ts', {
   detectClipboardType: snapshot.detectClipboardType,
   fileNameFromPath: snapshot.fileNameFromPath,
 })
+const materialText = loadTs('src/launcher/clipboard/currentMaterial.ts')
+const currentTextSupport = loadTs('src/launcher/clipboard/currentTextDelivery.ts', materialText)
+const paletteMessages = loadTs('src/i18n/locales/palette.ts').default
+const currentTextGlobals = {
+  ...currentTextSupport,
+  t: (locale, key) => paletteMessages[locale][key.replace(/^palette\./, '')],
+}
 const recommendation = loadTs('src/launcher/clipboard/actionRecommendation.ts', {
+  ...currentTextGlobals,
   discoverActionsForBlock: () => [],
 })
 const executor = loadTs('src/launcher/clipboard/actionExecutor.ts', {
+  ...currentTextSupport,
   detectClipboardFilePath: snapshot.detectClipboardFilePath,
 })
 const pending = loadTs('src/launcher/clipboard/pendingObjectBlock.ts')

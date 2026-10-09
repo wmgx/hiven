@@ -54,7 +54,14 @@ const objectBlock = transpileAndRun('src/launcher/clipboard/objectBlock.ts', {
   fileNameFromPath: snapshot.fileNameFromPath,
   detectClipboardType: snapshot.detectClipboardType,
 })
-const recommendation = transpileAndRun('src/launcher/clipboard/actionRecommendation.ts')
+const materialText = transpileAndRun('src/launcher/clipboard/currentMaterial.ts')
+const currentTextSupport = transpileAndRun('src/launcher/clipboard/currentTextDelivery.ts', materialText)
+const paletteMessages = transpileAndRun('src/i18n/locales/palette.ts').default
+const currentTextGlobals = {
+  ...currentTextSupport,
+  t: (locale, key) => paletteMessages[locale][key.replace(/^palette\./, '')],
+}
+const recommendation = transpileAndRun('src/launcher/clipboard/actionRecommendation.ts', currentTextGlobals)
 
 // ─── §11.1 Clipboard freshness ────────────────────────────────────────────────
 
