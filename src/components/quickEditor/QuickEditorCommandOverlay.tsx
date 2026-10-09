@@ -3,6 +3,7 @@ import { useAppStore } from '../../store'
 import { useLauncherSession } from '../../workspace/launcher/useLauncherSession'
 import { filterEditorCommandBarItems } from '../../workspace/launcher/types'
 import { createQuickEditorLauncherApi } from '../../workspace/quickEditor/quickEditorActions'
+import { useQuickEditorStore } from '../../workspace/quickEditor/quickEditorStore'
 import { GlobalLauncherFrameSwitch } from '../launcher/GlobalLauncherFrames'
 import { useGlobalLauncherResultFrame } from '../launcher/GlobalLauncherResults'
 import { buildGlobalLauncherItems, type GlobalLauncherItem } from '../launcher/GlobalLauncherItems'
@@ -20,6 +21,7 @@ export function QuickEditorCommandOverlay() {
   const initialQuery = useAppStore((s) => s.quickEditorCommandInitialQuery)
   const closeCommand = useAppStore((s) => s.closeQuickEditorCommand)
   const locale = useAppStore((s) => s.locale)
+  const activePaneIndex = useQuickEditorStore((s) => s.paneOrder.indexOf(s.activePaneId))
   const tQuickEditor = useT('quickEditor')
   const panelRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -303,6 +305,7 @@ export function QuickEditorCommandOverlay() {
         inputRef={inputRef}
         query={query}
         searchPlaceholder={tQuickEditor('commandPlaceholder')}
+        searchContext={activePaneIndex >= 0 ? tQuickEditor('commandScope', { index: activePaneIndex + 1 }) : undefined}
         visibleFiltered={visibleFiltered}
         selectedItem={selectedItem}
         locale={locale}

@@ -228,6 +228,8 @@ export class LauncherController {
   private activePluginLifetime?: LauncherItem['pluginLifetime']
   private pluginUnavailable = false
   private flowGeneration = 0
+  /** Root search edits retire failure messages without cancelling an active action. */
+  private rootQueryGeneration = 0
   private prepareGeneration = 0
   private paramFrameGeneration = 0
   private readonly choiceGenerations = new WeakMap<LauncherResultChoice, number>()
@@ -253,6 +255,17 @@ export class LauncherController {
 
   getState(): LauncherControllerState {
     return this.state
+  }
+
+  /** The session calls this synchronously, only when the raw search text changes. */
+  onRootQueryChanged(): void {
+    if (this.state.frames.length !== 1 || this.topFrame().kind !== 'list') return
+    this.rootQueryGeneration += 1
+    if (this.state.error === null) return
+    // Only dismiss the visible root error, including unavailable-plugin errors;
+    // setState also enforces plugin lifetime and could restore the same message.
+    this.state = { ...this.state, error: null }
+    this.deps.onChange(this.state)
   }
 
   private setState(patch: Partial<LauncherControllerState>): void {
@@ -638,6 +651,7 @@ export class LauncherController {
     this.pluginUnavailable = false
     this.invalidatePendingActions()
     const prepareGeneration = ++this.prepareGeneration
+    const rootQueryGeneration = this.rootQueryGeneration
     // A first-level selection starts a new command, never a nested draft session.
     this.setState({ frames: [{ kind: 'list' }], error: null })
     if (item.prepare) {
@@ -652,7 +666,7 @@ export class LauncherController {
         }
       } catch (error) {
         if (prepareGeneration === this.prepareGeneration && !this.invalidateUnavailablePlugin()) {
-          this.setState({ busy: false, error: error instanceof Error ? error.message : String(error) })
+          this.setActionFailure(error instanceof Error ? error.message : String(error), rootQueryGeneration)
         }
         return
       }
@@ -664,9 +678,11 @@ export class LauncherController {
       item = { ...item, initialInputText: undefined }
     }
     if (item.disabledReason) {
-      this.setState({
-        error: item.disabledReason.messageI18n?.[this.deps.locale as Locale] ?? item.disabledReason.message,
-      })
+      if (rootQueryGeneration === this.rootQueryGeneration) {
+        this.setState({
+          error: item.disabledReason.messageI18n?.[this.deps.locale as Locale] ?? item.disabledReason.message,
+        })
+      }
       return
     }
     trackBehavior(TelemetryEvents.launcherItemSelect, {
@@ -689,6 +705,7 @@ export class LauncherController {
       if (item.initialInputText === undefined && this.hasObjectBlockText(options.objectBlockText)) {
         await this.commitResolvedAction({
           item,
+          rootQueryGeneration,
           via: item.commitVia ?? 'execute',
           params: this.defaultParamsFor(item),
           inputBinding: 'prompt',
@@ -712,6 +729,7 @@ export class LauncherController {
       if (item.initialInputText === undefined && this.hasObjectBlockText(options.objectBlockText)) {
         await this.commitResolvedAction({
           item,
+          rootQueryGeneration,
           via: item.commitVia ?? 'execute',
           params: this.defaultParamsFor(item),
           inputBinding: 'prompt',
@@ -733,6 +751,7 @@ export class LauncherController {
     const inputText = item.initialInputText ?? options.objectBlockText
     await this.commitResolvedAction({
       item,
+      rootQueryGeneration,
       via: item.commitVia ?? 'execute',
       params: this.defaultParamsFor(item),
       sourceTitle: this.itemTitle(item),
@@ -1558,6 +1577,8 @@ export class LauncherController {
     resolvedChoice?: LauncherResultChoice
     /** Successful single-parameter edits replace the existing preview level. */
     replacePreview?: boolean
+    /** The root search that selected this action, captured before any preparation. */
+    rootQueryGeneration?: number
   }): Promise<void> {
     if (this.invalidateUnavailablePlugin()) return
     const { item, via, sourceTitle, execute, resolvedChoice } = input
@@ -1641,7 +1662,7 @@ export class LauncherController {
         via,
         failed: true,
       })
-      this.setState({ busy: false, error: error instanceof Error ? error.message : String(error) })
+      this.setActionFailure(error instanceof Error ? error.message : String(error), input.rootQueryGeneration)
       return
     }
 
@@ -1660,10 +1681,22 @@ export class LauncherController {
       keepOpen: 'keepOpen' in result ? Boolean(result.keepOpen) : undefined,
       hasOutput: isOutputResult(result),
     })
+    if (!result.ok) {
+      this.setActionFailure(result.message, input.rootQueryGeneration)
+      return
+    }
     await this.applyResult(result, sourceTitle, committedRun, {
       item,
       recordUsage: input.recordUsage,
     }, undefined, previewEdit, input.replacePreview)
+  }
+
+  /** Call only after the action's flow/prepare ownership checks have passed. */
+  private setActionFailure(error: string, rootQueryGeneration?: number): void {
+    this.setState({
+      busy: false,
+      ...(rootQueryGeneration === undefined || rootQueryGeneration === this.rootQueryGeneration ? { error } : {}),
+    })
   }
 
   private async runChoiceAction(

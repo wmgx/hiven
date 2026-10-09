@@ -30,6 +30,7 @@ export function GlobalLauncherSearchFrame({
   bindSearchInputRef,
   query,
   placeholder,
+  searchContext,
   error,
   items,
   nearbySaveItem,
@@ -62,6 +63,7 @@ export function GlobalLauncherSearchFrame({
   bindSearchInputRef?: (node: HTMLInputElement | HTMLTextAreaElement | null) => void
   query: string
   placeholder: string
+  searchContext?: string
   error?: string | null
   items: LauncherMixedItem[]
   nearbySaveItem?: LauncherMixedItem
@@ -196,6 +198,7 @@ export function GlobalLauncherSearchFrame({
           }}
           placeholder={resolvedPlaceholder}
         />
+        {searchContext ? <span className="meta whitespace-nowrap">{searchContext}</span> : null}
         {onBrowseActions && query.length > 0 && (
           <button
             type="button"

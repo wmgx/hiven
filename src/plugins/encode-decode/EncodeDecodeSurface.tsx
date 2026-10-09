@@ -185,7 +185,7 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
       <footer className="encode-status" aria-live="polite">
         <span>{t('meta.characters', { count: inputText.length })}</span>
         <span className={!result.ok ? 'is-error' : ''}>
-          {!result.ok ? t('status.error') : hasOutput ? t('status.ready') : t('status.waiting')}
+          {!result.ok ? t('status.error') : format === 'url' ? t(`hint.url.${direction}`) : hasOutput ? t('status.ready') : t('status.waiting')}
         </span>
         <span>{t('meta.characters', { count: result.output.length })}</span>
       </footer>

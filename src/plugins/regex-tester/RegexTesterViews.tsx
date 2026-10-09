@@ -290,7 +290,7 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
             {extraction.status === 'empty-matches' ? <p role="status">{t('surface.emptyMatches')}</p> : null}
             {failedResult === result ? <p role="alert">{t('error.continueFailed')}</p> : null}
             <Button type="button" disabled={extraction.status !== 'ready' || handedOffResult === result} onClick={continueProcessing}>
-              {t('surface.extractMatches')}
+              {t('surface.extractMatches', { count: result.matches.length })}
             </Button>
           </footer>
         </div>

@@ -230,6 +230,7 @@ export function useLauncherSession({
     return open && normalizedHostId === 'global-launcher' ? getNearbySaveRunItem(lastSaveableRun) : null
   }, [lastSaveableRun, normalizedHostId, open, pluginRegistryVersion, pluginSettings, pluginPermissions, savedActionVersion])
   const [query, setQueryState] = useState('')
+  const queryRef = useRef('')
   const [selectedIndex, setSelectedIndexState] = useState(0)
   const [controllerState, setControllerState] = useState<LauncherControllerState | null>(null)
   const [controller, setController] = useState<LauncherController | null>(null)
@@ -317,17 +318,17 @@ export function useLauncherSession({
 
   /** Typing starts a new result generation — drop sticky key so highlight tracks ranking top. */
   const setQuery = useCallback((value: string) => {
-    setQueryState((prev) => {
-      if (prev !== value) {
-        selectedKeyRef.current = null
-        selectedIndexRef.current = 0
-        setSelectedIndexState(0)
-      }
-      return value
-    })
+    if (queryRef.current === value) return
+    queryRef.current = value
+    controllerRef.current?.onRootQueryChanged()
+    selectedKeyRef.current = null
+    selectedIndexRef.current = 0
+    setSelectedIndexState(0)
+    setQueryState(value)
   }, [])
 
   const reset = useCallback(() => {
+    queryRef.current = ''
     setQueryState('')
     selectedKeyRef.current = null
     selectedIndexRef.current = 0
@@ -433,7 +434,10 @@ export function useLauncherSession({
             }
           },
           requestClose: () => requestCloseRef.current(),
-          onReturnToRoot: () => setQueryState(''),
+          onReturnToRoot: () => {
+            queryRef.current = ''
+            setQueryState('')
+          },
           onChange: (state) => {
             const prev = prevControllerStateRef.current
             if (prev && prev.busy === state.busy && prev.deliveryIntent === state.deliveryIntent && prev.error === state.error && prev.frames === state.frames) {

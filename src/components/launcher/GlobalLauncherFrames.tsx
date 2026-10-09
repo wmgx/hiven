@@ -34,6 +34,7 @@ export function GlobalLauncherFrameSwitch({
   bindSearchInputRef,
   query,
   searchPlaceholder,
+  searchContext,
   visibleFiltered,
   nearbySaveItem,
   selectedItem,
@@ -100,6 +101,7 @@ export function GlobalLauncherFrameSwitch({
   bindSearchInputRef?: (node: HTMLInputElement | HTMLTextAreaElement | null) => void
   query: string
   searchPlaceholder: string
+  searchContext?: string
   visibleFiltered: LauncherMixedItem[]
   nearbySaveItem?: LauncherMixedItem
   selectedItem?: LauncherMixedItem
@@ -314,6 +316,7 @@ export function GlobalLauncherFrameSwitch({
       bindSearchInputRef={bindSearchInputRef}
       query={query}
       placeholder={searchPlaceholder}
+      searchContext={searchContext}
       clipboardBlock={clipboardBlock}
       onEditMaterial={onEditMaterial}
       clipboardHintSelected={clipboardHintSelected}

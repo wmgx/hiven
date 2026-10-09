@@ -30,8 +30,8 @@
   "surface.revealMatch": "Reveal match at line {line}, column {col}",
   "surface.noMatchesHint": "Adjust the expression, flags, or sample text.",
   "surface.enterPatternHint": "Enter an expression above to begin.",
-  "surface.extractMatches": "Extract current matches and continue",
-  "surface.extractHint": "Extract up to {limit} current whole matches, joined with new lines. Keeps order, duplicates and whitespace.",
+  "surface.extractMatches": "Extract all {count} matches and continue",
+  "surface.extractHint": "Extract all whole matches (up to {limit}), joined with new lines. Keeps order, duplicates and whitespace. Highlighting only locates a match.",
   "surface.emptyMatches": "All matches are zero-length. There is no matched text to extract.",
   "error.continueFailed": "Could not return to Launcher. Your text and matches are still here. Try again.",
   "error.invalid": "Invalid pattern or flags. Check the expression and try again."

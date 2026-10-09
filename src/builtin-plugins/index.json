@@ -1,10 +1,10 @@
 {
-  "version": 95,
+  "version": 96,
   "packages": [
     {
       "pluginId": "encode-decode",
       "dir": "encode-decode",
-      "version": "2.5.4"
+      "version": "2.5.5"
     },
     {
       "pluginId": "formatter",
@@ -54,12 +54,12 @@
     {
       "pluginId": "regex-tester",
       "dir": "regex-tester",
-      "version": "1.2.2"
+      "version": "1.2.3"
     },
     {
       "pluginId": "text-diff",
       "dir": "textDiff",
-      "version": "3.3.2"
+      "version": "3.3.3"
     },
     {
       "pluginId": "clipboard-history",

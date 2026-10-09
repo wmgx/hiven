@@ -364,6 +364,11 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
               items={sourceOptions.map((option) => ({
                 key: option.sourceId,
                 label: option.kind === 'empty' ? t('source.empty') : option.title,
+                description: option.kind === 'editor-pane' ? t('source.paneDescription', {
+                  language: !option.language || option.language === 'plaintext' ? t('source.plainText') : option.language,
+                  lines: option.text ? option.text.split(/\r\n|\r|\n/).length : 0,
+                  chars: option.text?.length ?? 0,
+                }) : undefined,
                 onSelect: () => {
                   invalidateCopy()
                   void reader.select(option, () => host.clipboard.readText(), (nextSource) => {

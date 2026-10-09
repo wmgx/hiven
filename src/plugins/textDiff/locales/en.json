@@ -43,5 +43,7 @@
   "source.chooseShort": "Choose source",
   "source.readFailed": "Could not read source",
   "source.paneTitle": "Pane {index}",
+  "source.paneDescription": "{language} · {lines} lines · {chars} chars",
+  "source.plainText": "Plain text",
   "source.snapshotHint": "Load a copy of the text"
 }
