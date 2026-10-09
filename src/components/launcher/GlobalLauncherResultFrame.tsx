@@ -173,9 +173,10 @@ export function GlobalLauncherResultFrame({
         </div>
         {hasPreviewParams && previewEdit && (
           <div
-            className="flex flex-wrap items-center gap-2 px-4 py-2"
+            className="launcher-preview-params"
             data-testid="launcher-preview-params"
             data-no-drag
+            data-launcher-scrollable
             role="group"
             aria-label={t(locale, 'palette.customizeParamsLabel')}
           >

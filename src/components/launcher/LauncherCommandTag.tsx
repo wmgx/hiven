@@ -3,7 +3,7 @@
  * Visual cousin of ObjectBlockToken; not clipboard semantics.
  */
 
-import { X } from 'lucide-react'
+import { Pencil, X } from 'lucide-react'
 import type { Locale } from '../../i18n'
 import { t } from '../../i18n'
 import type { IconRef } from '../../workspace/launcher/types'
@@ -48,7 +48,7 @@ export function LauncherCommandTag({
   )
 }
 
-/** Lightweight gray chip for committed params — shows param name + value. */
+/** Compact parameter summary, with an editable button variant for previews. */
 export function LauncherParamValueChip({
   label,
   value,
@@ -67,7 +67,7 @@ export function LauncherParamValueChip({
   const text = label ? `${label}: ${value}` : value
   const contents = label ? (
     <>
-      <span className="launcher-param-chip-label" style={onEdit ? { maxWidth: 'none' } : undefined}>{label}</span>
+      <span className="launcher-param-chip-label">{label}</span>
       <span className="launcher-param-chip-sep" aria-hidden>:</span>
       <span className="launcher-param-chip-value">{value}</span>
     </>
@@ -76,11 +76,10 @@ export function LauncherParamValueChip({
     return (
       <button
         type="button"
-        className="launcher-param-chip cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+        className="launcher-param-chip launcher-param-chip-editable cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
         data-testid="launcher-preview-param"
         data-preview-param-key={paramKey}
         data-no-drag
-        style={{ maxWidth: '100%', flexShrink: 0 }}
         title={text}
         aria-label={editLabel ? `${editLabel}: ${value}` : text}
         disabled={disabled}
@@ -97,7 +96,8 @@ export function LauncherParamValueChip({
           }
         }}
       >
-        {contents}
+        <span className="launcher-param-chip-content">{contents}</span>
+        <Pencil className="launcher-param-chip-edit-icon" size={12} aria-hidden="true" />
       </button>
     )
   }
