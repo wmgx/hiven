@@ -20,13 +20,16 @@ function ToggleRow({ checked, onCheckedChange, text }: { checked: boolean; onChe
 }
 
 export function FeishuSettingsBody(props: PluginSettingsBodyProps<FeishuSettings>) {
-  const { value, setValue, locale, t, openExternal } = props
+  const { value, setValue, locale, t, openExternal, host } = props
   const sdk = getPluginHostSdk()
   const React = sdk.react
   const { ui } = sdk
-  const { useCallback, useEffect, useState } = React
+  const { useCallback, useEffect, useRef, useState } = React
 
   const zh = (locale ?? '').toLowerCase().startsWith('zh')
+  const shellPermissionGranted = host.permissions['shell.run']?.granted === true
+  const statusRequest = useRef(0)
+  const currentRefresh = useRef<(() => Promise<void>) | null>(null)
 
   const [cliSummary, setCliSummary] = useState<string | null>(null)
   const [cliOk, setCliOk] = useState<boolean | null>(null)
@@ -47,13 +50,17 @@ export function FeishuSettingsBody(props: PluginSettingsBodyProps<FeishuSettings
   }
 
   const refresh = useCallback(async () => {
+    const request = ++statusRequest.current
+    setCliOk(null)
+    setCliSummary(null)
+    setAuthSummary(null)
+    setLoggedIn(null)
+    if (!shellPermissionGranted) return
+
     const runtime = getFeishuRuntime()
     const shell = runtime.shell
     if (!shell) {
-      setCliOk(null)
-      setCliSummary(label('error.shellMissing', 'Shell permission required', '需要 shell.run 权限'))
-      setAuthSummary(null)
-      setLoggedIn(null)
+      setCliSummary(label('settings.cliUnavailable', 'CLI status unavailable. Refresh to check again.', '暂时无法读取 CLI 状态，请刷新重试。'))
       return
     }
 
@@ -62,6 +69,7 @@ export function FeishuSettingsBody(props: PluginSettingsBodyProps<FeishuSettings
         shell,
         binaryPath: value.binaryPath || undefined,
       })
+      if (request !== statusRequest.current) return
       setCliOk(detect.installed)
       setCliSummary(
         detect.summary ?? label(
@@ -78,24 +86,33 @@ export function FeishuSettingsBody(props: PluginSettingsBodyProps<FeishuSettings
       }
 
       const auth = await getAuthStatus(shell, value.binaryPath || undefined)
+      if (request !== statusRequest.current) return
       setLoggedIn(auth.loggedIn)
       setAuthSummary(auth.summary)
     } catch (error) {
+      if (request !== statusRequest.current) return
       setCliOk(false)
       setCliSummary(error instanceof Error ? error.message : String(error))
     }
-  }, [value.binaryPath, zh])
+  }, [value.binaryPath, zh, shellPermissionGranted])
 
   useEffect(() => {
+    currentRefresh.current = refresh
     void refresh()
+    return () => {
+      currentRefresh.current = null
+      statusRequest.current += 1
+    }
   }, [refresh])
 
   const statusColor =
     !value.enabled
       ? 'var(--text-3)'
-      : cliOk && loggedIn
-        ? 'var(--color-success, #3d9a5f)'
-        : 'var(--text-2)'
+      : !shellPermissionGranted
+        ? 'var(--color-warning, #b58900)'
+        : cliOk && loggedIn
+          ? 'var(--color-success, #3d9a5f)'
+          : 'var(--text-2)'
 
   return (
     <ui.Stack gap={14}>
@@ -106,7 +123,10 @@ export function FeishuSettingsBody(props: PluginSettingsBodyProps<FeishuSettings
         <ui.Text style={{ fontSize: 12, color: statusColor }}>
           {!value.enabled
             ? label('settings.disabled', 'Disabled', '已关闭')
-            : [
+            : !shellPermissionGranted
+              ? label('settings.permissionMissing', 'Enabled in settings, but not ready: command execution permission (shell.run) is missing.', '配置已启用，但尚未就绪：缺少命令执行权限（shell.run）。')
+              : [
+                label('settings.enabledConfiguration', 'Enabled in settings', '配置已启用'),
                 cliSummary
                   ? `${label('settings.cli', 'CLI', 'CLI')}: ${cliSummary}`
                   : label('settings.cliUnknown', 'CLI: unknown', 'CLI：未知'),
@@ -324,7 +344,7 @@ export function FeishuSettingsBody(props: PluginSettingsBodyProps<FeishuSettings
                       ? done.message || label('settings.loginDone', 'Login completed', '登录完成')
                       : done.message || label('settings.loginIncomplete', 'Login incomplete', '登录尚未完成'),
                   )
-                  void refresh()
+                  void currentRefresh.current?.()
                 })
                 .catch((error: unknown) => {
                   setMessage(error instanceof Error ? error.message : String(error))

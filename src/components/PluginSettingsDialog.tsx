@@ -197,11 +197,12 @@ function SettingsDialogBody({
   const setPluginSettings = usePluginSettingsStore((s) => s.setPluginSettings)
   // Subscribe to the store record reactively so UI updates on setValue
   const storedRecord = usePluginSettingsStore((s) => s.pluginSettings[source][pluginId])
-  const pluginPermissionVersion = usePluginPermissionStore((s) => s.version)
+  // Observe the record itself so persisted/rehydrated grants update the body too.
+  const pluginPermissions = usePluginPermissionStore((s) => s.permissions[source][pluginId])
   const [settingsModalTarget, setSettingsModalTarget] = useState<ResolvedPluginSettingsModal<unknown> | null>(null)
   const [renderedSettingsModalTarget, setRenderedSettingsModalTarget] = useState<ResolvedPluginSettingsModal<unknown> | null>(null)
   const [isSettingsModalClosing, setIsSettingsModalClosing] = useState(false)
-  void pluginPermissionVersion
+  void pluginPermissions
 
   const currentVersion = contribution.version ?? 1
 

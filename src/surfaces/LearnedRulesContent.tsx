@@ -24,9 +24,11 @@ import type { LearnedRule, Suppression } from '../workspace/learning/store'
 export function LearnedRulesContent() {
   const t = useT('systemSettings')
   const locale = useAppStore((s) => s.locale)
+  const automaticLearningEnabled = useAppStore((s) => s.settings.automaticLearningEnabled === true)
   const [rules, setRules] = useState<LearnedRule[]>([])
   const [suppressions, setSuppressions] = useState<Suppression[]>([])
   const [loaded, setLoaded] = useState(false)
+  const emptyDescription = t(automaticLearningEnabled ? 'learnedRulesEmpty' : 'learnedRulesEmptyDisabled')
 
   const refresh = useCallback(() => {
     void getLearningManagementState()
@@ -69,8 +71,8 @@ export function LearnedRulesContent() {
       <div className="sscroll">
         <div className="learned-rules-empty">
           <Sparkles size={24} strokeWidth={1.7} aria-hidden="true" />
-          <strong>{t('learnedRulesEmptyTitle')}</strong>
-          <span>{t('learnedRulesEmpty')}</span>
+          <strong>{t(automaticLearningEnabled ? 'learnedRulesEmptyTitle' : 'learnedRulesDisabledTitle')}</strong>
+          <span>{emptyDescription}</span>
         </div>
       </div>
     )
@@ -80,7 +82,7 @@ export function LearnedRulesContent() {
     <div className="sscroll">
       <SettingGroup title={t('learnedRules')}>
         {rules.length === 0 ? (
-          <div className="learned-rules-empty-inline">{t('learnedRulesEmpty')}</div>
+          <div className="learned-rules-empty-inline">{emptyDescription}</div>
         ) : (
           rules.map((rule) => (
             <SettingsListRow

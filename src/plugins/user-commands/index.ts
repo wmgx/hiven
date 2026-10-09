@@ -124,7 +124,7 @@ export default definePlugin<UserCommandsSettings>({
               label: 'settings.enabled',
               labelI18n: { zh: '启用自定义命令' },
               description: 'settings.enabled.desc',
-              descriptionI18n: { zh: '关闭后命令不再出现在 Launcher。' },
+              descriptionI18n: { zh: '仅控制命令是否出现在 Launcher，启用不代表已获得执行权限。' },
             },
           ],
         },
@@ -169,7 +169,7 @@ export default definePlugin<UserCommandsSettings>({
                   labelI18n: { zh: 'Shell 命令' },
                   description: 'field.command.desc',
                   descriptionI18n: {
-                    zh: '确认后经 host shell.run 执行。请先在插件权限中授予 shell.run。',
+                    zh: '每次运行都需确认，并且需要命令执行权限（shell.run）；授权状态见插件权限。',
                   },
                 },
                 {
