@@ -45,6 +45,12 @@ import {
   type ClipboardTextMergeSeparator,
 } from '../merge/clipboardTextMerge'
 import { ClipboardTextMergePanel } from './ClipboardTextMergePanel'
+import {
+  getClipboardHistoryShortcuts,
+  observeClipboardHistoryShortcutFocus,
+  readClipboardHistoryShortcutFocus,
+  type ClipboardHistoryShortcutFocus,
+} from './clipboardHistoryShortcuts'
 
 type FilterKind = 'all' | 'text' | 'image' | 'files' | 'frequent' | 'favorite'
 type SurfaceStorage = PluginSurfaceProps<ClipboardHistorySettings>['host']['storage']
@@ -85,6 +91,9 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const [loading, setLoading] = useState(!hasInitialCache)
   const [fullTextSearchState, setFullTextSearchState] = useState<'idle' | 'loading' | 'error'>('idle')
   const [titleDialog, setTitleDialog] = useState<FavoriteTitleDialogState | null>(null)
+  const [shortcutFocus, setShortcutFocus] = useState<ClipboardHistoryShortcutFocus>({
+    withinSurface: false, nativeButton: false, editing: false,
+  })
   const containerRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
@@ -105,6 +114,11 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const [mergeSuspended, setMergeSuspended] = useState(false)
   const mergeSuspendedRef = useRef(false)
   const mergeSubmissionRef = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    const surface = containerRef.current
+    if (surface) return observeClipboardHistoryShortcutFocus(surface, setShortcutFocus)
+  }, [combining])
 
   const invalidateMerge = useCallback((cancelSubmission = true) => {
     if (cancelSubmission) {
@@ -407,6 +421,14 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     () => filteredItems.find((i) => i.id === selectedId) ?? null,
     [filteredItems, selectedId]
   )
+
+  const shortcutHints = getClipboardHistoryShortcuts({
+    hasSelection: Boolean(selectedItem),
+    loading,
+    enabled: settings.enabled,
+    blocked: combining || Boolean(titleDialog),
+    focus: shortcutFocus,
+  })
 
   const [selectedFullItem, setSelectedFullItem] = useState<ClipboardHistoryItem | null>(null)
 
@@ -753,18 +775,28 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       if (e.key === 'Delete' || e.key === 'Backspace') return
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'c') return
     }
-    if (e.target instanceof HTMLElement && e.target.closest('button') && !e.target.closest('.clipboard-history-item')) return
+    const focus = readClipboardHistoryShortcutFocus(e.currentTarget as HTMLElement, e.target instanceof Element ? e.target : null, document.activeElement)
+    if (focus.nativeButton) return
     if (!selectedItem) return
+    const shortcuts = getClipboardHistoryShortcuts({
+      hasSelection: true,
+      loading,
+      enabled: settings.enabled,
+      blocked: combining || Boolean(titleDialog),
+      focus,
+    })
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      if (!shortcuts.returnToLauncher) return
       if (imeKeyDown.shouldIgnoreKeyDown(e)) return
       e.preventDefault()
       void handleReturnToLauncher(selectedItem)
     } else if (e.key === 'Enter') {
+      if (!shortcuts.paste) return
       if (imeKeyDown.shouldIgnoreKeyDown(e)) return
       e.preventDefault()
       void handlePaste(selectedItem)
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
-      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'SELECT') return
+      if (!shortcuts.delete) return
       e.preventDefault()
       handleDelete(selectedItem.id)
     } else if ((e.metaKey || e.ctrlKey) && e.key === 'c') {
@@ -796,7 +828,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         if (flatIndex >= 0) virtualizer.scrollToIndex(flatIndex, { align: 'auto' })
       }
     }
-  }, [selectedItem, selectedId, filteredItems, flatRows, virtualizer, handlePaste, handleReturnToLauncher, handleDelete, handleCopy, host, t, imeKeyDown, combining, cancelMerge, toggleMergeItem, titleDialog])
+  }, [selectedItem, selectedId, filteredItems, flatRows, virtualizer, handlePaste, handleReturnToLauncher, handleDelete, handleCopy, host, t, imeKeyDown, combining, cancelMerge, toggleMergeItem, titleDialog, loading, settings.enabled])
 
   const renderContent = () => {
     if (loading) {
@@ -990,9 +1022,9 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         </div>
 
         {!combining && <SurfaceFooterHints className="clipboard-history-footer">
-          <span>↵ {t('hint.paste')}</span>
-          <span>{typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'}↵ {t('hint.returnToLauncher')}</span>
-          <span>⌫ {t('hint.delete')}</span>
+          {shortcutHints.paste && <span>↵ {t('hint.paste')}</span>}
+          {shortcutHints.returnToLauncher && <span>{typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'}↵ {t('hint.returnToLauncher')}</span>}
+          {shortcutHints.delete && <span>⌫ {t('hint.delete')}</span>}
         </SurfaceFooterHints>}
       </>
     )
