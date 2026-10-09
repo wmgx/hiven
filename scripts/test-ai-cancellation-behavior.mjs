@@ -218,6 +218,7 @@ await check('an adapter whose cleanup never settles cannot hold a completed run 
 function codexHarness(hooks = {}) {
   const calls = []; let listener; let currentConnection = 'connection-1'
   const api = load('src/workspace/ai/codexProvider.ts', {
+    './loginSession': load('src/workspace/ai/loginSession.ts', {}, { URL }),
     '@tauri-apps/api/core': { async invoke(command, args) {
       calls.push([command, args])
       const connection = currentConnection

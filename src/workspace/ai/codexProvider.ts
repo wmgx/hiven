@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import { isSafeCodexLoginUrl } from './loginSession'
 import type {
   AiAgent,
   AiCapability,
@@ -17,6 +18,7 @@ type RpcResult = Record<string, unknown>
 
 const subscribers = new Set<(event: RpcEvent) => void>()
 const activeTurns = new Map<string, () => Promise<void>>()
+const loginConnections = new Map<string, string>()
 let listenerPromise: Promise<void> | undefined
 let bridgePromise: Promise<string> | undefined
 let bridgeConnectionId: string | undefined
@@ -69,6 +71,13 @@ async function ensureBridge(signal?: AbortSignal): Promise<string> {
     if (payload.method === 'hiven/transport/closed' && payload._hivenConnectionId) {
       closedConnections.add(payload._hivenConnectionId)
       invalidateBridge(payload._hivenConnectionId)
+      for (const [loginId, id] of loginConnections) {
+        if (id === payload._hivenConnectionId) loginConnections.delete(loginId)
+      }
+    }
+    if (payload.method === 'account/login/completed' && typeof payload.params?.loginId === 'string'
+      && loginConnections.get(payload.params.loginId) === payload._hivenConnectionId) {
+      loginConnections.delete(payload.params.loginId)
     }
     for (const subscriber of subscribers) subscriber(payload)
   }).then(() => undefined).catch((error) => {
@@ -141,6 +150,19 @@ async function rpc(
 function subscribe(subscriber: (event: RpcEvent) => void): () => void {
   subscribers.add(subscriber)
   return () => subscribers.delete(subscriber)
+}
+
+async function cancelCodexLogin(loginId: string): Promise<void> {
+  const id = loginConnections.get(loginId)
+  if (!id) return
+  try {
+    // Never re-initialize or replay an old cancellation in a replacement process.
+    await rpc('account/login/cancel', { loginId }, true, undefined, id)
+  } catch {
+    throw new Error('HIVEN_CODEX_LOGIN_CANCEL_FAILED')
+  } finally {
+    if (loginConnections.get(loginId) === id) loginConnections.delete(loginId)
+  }
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -429,14 +451,27 @@ export const codexChatGptProvider: AiProviderAdapter = {
   },
 
   async login() {
-    await ensureBridge()
-    const result = await rpc('account/login/start', {
-      type: 'chatgpt',
-      useHostedLoginSuccessPage: true,
-      appBrand: 'chatgpt',
-    })
-    return { url: typeof result.authUrl === 'string' ? result.authUrl : undefined }
+    try {
+      const id = await ensureBridge()
+      const result = await rpc('account/login/start', {
+        type: 'chatgpt',
+        useHostedLoginSuccessPage: true,
+        appBrand: 'chatgpt',
+      }, true, undefined, id)
+      const loginId = typeof result.loginId === 'string' && result.loginId ? result.loginId : undefined
+      if (loginId) loginConnections.set(loginId, id)
+      if (!loginId || !isSafeCodexLoginUrl(result.authUrl)) {
+        if (loginId) void cancelCodexLogin(loginId).catch(() => {})
+        throw new Error('HIVEN_CODEX_LOGIN_RESPONSE_INVALID')
+      }
+      return { url: result.authUrl, loginId }
+    } catch {
+      // Never include app-server response/error payloads in a login diagnostic.
+      throw new Error('HIVEN_CODEX_LOGIN_FAILED')
+    }
   },
+
+  cancelLogin: cancelCodexLogin,
 
   async logout() {
     await rpc('account/logout')

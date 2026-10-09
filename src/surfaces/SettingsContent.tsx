@@ -3,13 +3,15 @@ import type { ReactNode } from 'react'
 import { check } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { getVersion } from '@tauri-apps/api/app'
-import { BrainCircuit, Check, Command, Download, Hash, Languages, LogIn, LogOut, Moon, RefreshCw, Save, Type, WrapText } from 'lucide-react'
+import { invoke } from '@tauri-apps/api/core'
+import { BrainCircuit, Check, Command, Copy, Download, ExternalLink, Hash, Languages, LogIn, LogOut, Moon, RefreshCw, Save, Type, WrapText } from 'lucide-react'
 import { useAppStore } from '../store'
 import { useT } from '../i18n'
 import { pickLocale } from '../i18n/pickLocale'
 import { ShortcutRecorder } from '../components/ShortcutRecorder'
 import { AppHotkeysSettings } from '../components/AppHotkeysSettings'
-import { listAiProviders, loginAiProvider, logoutAiProvider, refreshAiProvider } from '../workspace/ai/runtime'
+import { cancelAiProviderLogin, listAiProviders, loginAiProvider, logoutAiProvider, refreshAiProvider } from '../workspace/ai/runtime'
+import { createAiLoginSession, type AiLoginSessionSnapshot } from '../workspace/ai/loginSession'
 import type { AiProviderDescriptor, AiReasoningEffort } from '../workspace/ai/types'
 import { JEV_PRESETS, JevRequestError, testJevConnection, validJevEndpoint, validJevSettings, type JevSettings } from '../workspace/ai/jev'
 import { openExternalUrl } from '../workspace/effectRunner'
@@ -150,6 +152,52 @@ export function AiSubscriptionsContent() {
   const [loading, setLoading] = useState(false)
   const [pendingProviderId, setPendingProviderId] = useState<string | null>(null)
   const [refreshingProviderId, setRefreshingProviderId] = useState<string | null>(null)
+  const [chatGptLogin, setChatGptLogin] = useState<AiLoginSessionSnapshot>({ generation: 0, phase: 'idle' })
+  const chatGptSessionRef = useRef<ReturnType<typeof createAiLoginSession> | null>(null)
+  const [chatGptAction, setChatGptAction] = useState<'open' | 'copy' | null>(null)
+  const chatGptActionRef = useRef<object | null>(null)
+  const chatGptOpenRef = useRef<AbortController | null>(null)
+  const chatGptConnectRef = useRef<HTMLButtonElement | null>(null)
+  const [chatGptFeedback, setChatGptFeedback] = useState<{ key: string; error?: boolean } | null>(null)
+
+  useEffect(() => () => {
+    const session = chatGptSessionRef.current
+    chatGptSessionRef.current = null
+    chatGptActionRef.current = null
+    chatGptOpenRef.current?.abort()
+    session?.dispose()
+  }, [])
+
+  useEffect(() => {
+    if (chatGptLogin.reason === 'cancelled') chatGptConnectRef.current?.focus()
+  }, [chatGptLogin.reason, chatGptLogin.generation])
+
+  useEffect(() => {
+    if (chatGptLogin.phase !== 'pending') return
+    const session = chatGptSessionRef.current
+    const generation = chatGptLogin.generation
+    let disposed = false
+    let checking = false
+    const check = async () => {
+      if (checking) return
+      checking = true
+      try {
+        const provider = await refreshAiProvider('openai-chatgpt')
+        if (disposed || session !== chatGptSessionRef.current || session?.getSnapshot().generation !== generation) return
+        if (provider) setProviders((current) => current.map((item) => item.id === provider.id ? provider : item))
+        if (provider?.status === 'ready') session.finish(generation)
+      } catch {
+        // Keep the pending sign-in available through transient status failures.
+      } finally {
+        checking = false
+      }
+    }
+    const interval = window.setInterval(() => void check(), 1500)
+    return () => {
+      disposed = true
+      window.clearInterval(interval)
+    }
+  }, [chatGptLogin.phase, chatGptLogin.generation])
 
   const refresh = async () => {
     try {
@@ -246,7 +294,94 @@ export function AiSubscriptionsContent() {
   const effortUnknown = !selectedAgent
   const effortDisabled = effortUnsupported || effortUnknown
 
+  const performChatGptLinkAction = async (action: 'open' | 'copy', expectedGeneration?: number) => {
+    const session = chatGptSessionRef.current
+    const snapshot = session?.getSnapshot()
+    if (!session || snapshot?.phase !== 'pending' || !snapshot.url || chatGptActionRef.current
+      || (expectedGeneration !== undefined && snapshot.generation !== expectedGeneration)) return
+    const operation = {}
+    chatGptActionRef.current = operation
+    setChatGptAction(action)
+    setChatGptFeedback(null)
+    const isCurrent = () => chatGptSessionRef.current === session
+      && session.getSnapshot().generation === snapshot.generation
+      && session.getSnapshot().phase === 'pending'
+    try {
+      if (action === 'copy') {
+        // The native command excludes this link from this Hiven session's history.
+        // Never fall back to an ordinary write if its privacy guard fails.
+        await invoke('clipboard_write_login_link', { text: snapshot.url })
+      } else {
+        const controller = new AbortController()
+        chatGptOpenRef.current = controller
+        await openExternalUrl(snapshot.url, controller.signal, { sensitive: true })
+      }
+      if (isCurrent()) setChatGptFeedback({ key: action === 'copy' ? 'aiSignInLinkCopied' : 'aiSignInOpenRequested' })
+    } catch {
+      // Native errors can contain the URL; only display localized, fixed text.
+      if (isCurrent()) setChatGptFeedback({ key: action === 'copy' ? 'aiSignInCopyFailed' : 'aiSignInOpenFailed', error: true })
+    } finally {
+      if (chatGptActionRef.current === operation) {
+        chatGptActionRef.current = null
+        chatGptOpenRef.current = null
+        setChatGptAction(null)
+      }
+    }
+  }
+
+  const connectChatGpt = async () => {
+    if (chatGptSessionRef.current && chatGptSessionRef.current.getSnapshot().phase !== 'idle') return
+    if (!chatGptSessionRef.current) {
+      const session = createAiLoginSession({
+        start: () => loginAiProvider('openai-chatgpt'),
+        cancel: (loginId) => cancelAiProviderLogin('openai-chatgpt', loginId),
+        onChange: (snapshot) => {
+          if (chatGptSessionRef.current !== session) return
+          setChatGptLogin(snapshot)
+          if (snapshot.phase !== 'pending') {
+            chatGptOpenRef.current?.abort()
+            chatGptOpenRef.current = null
+            chatGptActionRef.current = null
+            setChatGptAction(null)
+            setChatGptFeedback(snapshot.reason === 'timeout'
+              ? { key: 'aiSignInTimedOut', error: true }
+              : snapshot.reason === 'error'
+                ? { key: 'aiSignInStartFailed', error: true }
+                : snapshot.reason === 'cancelled'
+                  ? { key: 'aiSignInCancelled' }
+                  : null)
+          }
+        },
+      })
+      chatGptSessionRef.current = session
+    }
+    try {
+      const snapshot = await chatGptSessionRef.current.start()
+      if (snapshot?.phase === 'pending') await performChatGptLinkAction('open', snapshot.generation)
+    } catch {
+      // The session reports a safe error state without exposing login data.
+    }
+  }
+
+  const cancelChatGpt = async () => {
+    const session = chatGptSessionRef.current
+    if (!session) return
+    const cancellation = session.cancel()
+    const generation = session.getSnapshot().generation
+    try {
+      await cancellation
+    } catch {
+      if (chatGptSessionRef.current === session && session.getSnapshot().generation === generation) {
+        setChatGptFeedback({ key: 'aiSignInCancelFailed', error: true })
+      }
+    }
+  }
+
   const connect = async (providerId: string) => {
+    if (providerId === 'openai-chatgpt') {
+      await connectChatGpt()
+      return
+    }
     setLoading(true)
     try {
       const result = await loginAiProvider(providerId)
@@ -278,7 +413,9 @@ export function AiSubscriptionsContent() {
       <SettingGroup title={t('aiSubscriptionManagement')}>
         {providers.map((provider) => {
           const ready = provider.status === 'ready'
-          const waiting = pendingProviderId === provider.id
+          const isChatGpt = provider.id === 'openai-chatgpt'
+          const chatGptPending = isChatGpt && chatGptLogin.phase !== 'idle'
+          const waiting = pendingProviderId === provider.id || chatGptPending
           const refreshing = refreshingProviderId === provider.id
           const requiresAccount = provider.authentication !== 'none'
           const subscription = [provider.subscription?.accountName, provider.subscription?.plan].filter(Boolean).join(' · ')
@@ -289,27 +426,55 @@ export function AiSubscriptionsContent() {
                 name={provider.name}
                 desc={!requiresAccount
                   ? t(`ollamaStatus_${provider.statusReason ?? (ready ? 'ready' : 'metadata_unavailable')}`)
+                  : chatGptPending
+                  ? t(chatGptLogin.phase === 'starting' ? 'aiSignInStarting' : 'aiSignInPending')
                   : waiting
                   ? t('aiSubscriptionWaiting')
                   : ready
                     ? t('aiSubscriptionReady', { plan: subscription })
                     : provider.statusMessage ?? t(provider.status === 'unavailable' ? 'aiProviderUnavailable' : 'aiSubscriptionLoginRequired')}
               >
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {ready && (
                     <span className="flex items-center gap-1 text-[11px]" style={{ color: 'var(--color-success-text)' }}>
                       <Check size={11} /> {t(requiresAccount ? 'aiConnected' : 'aiLocalReady')}
                     </span>
                   )}
-                  {requiresAccount && (ready
+                  {requiresAccount && !chatGptPending && (ready
                     ? <button type="button" className="scripts-btn" disabled={loading} onClick={() => void disconnect(provider.id)}><LogOut size={11} /> {t('aiDisconnect')}</button>
-                    : <button type="button" className="scripts-btn scripts-btn-primary" disabled={loading || waiting || provider.status === 'unavailable'} onClick={() => void connect(provider.id)}>{waiting ? <RefreshCw size={11} className="animate-spin" /> : <LogIn size={11} />} {t(waiting ? 'aiConnecting' : 'aiConnect')}</button>)}
+                    : <button ref={isChatGpt ? chatGptConnectRef : undefined} type="button" className="scripts-btn scripts-btn-primary" disabled={loading || waiting || provider.status === 'unavailable'} onClick={() => void connect(provider.id)}>{waiting ? <RefreshCw size={11} className="animate-spin" /> : <LogIn size={11} />} {t(waiting ? 'aiConnecting' : 'aiConnect')}</button>)}
                   <button type="button" className="scripts-btn" disabled={loading || waiting || refreshing} onClick={() => void refreshProvider(provider.id)} aria-label={t(requiresAccount ? 'aiRefresh' : 'aiRefreshLocal')}>
                     <RefreshCw size={11} className={refreshing ? 'animate-spin' : ''} />
                     {!requiresAccount && t('aiRefreshLocal')}
                   </button>
                 </div>
               </SettingsListRow>
+              {chatGptPending && (
+                <div className="ai-sign-in-handoff">
+                  <p id="chatgpt-sign-in-help" role="status" aria-live="polite">
+                    {t(chatGptLogin.phase === 'starting' ? 'aiSignInPreparing' : 'aiSignInInstructions')}
+                  </p>
+                  {chatGptLogin.phase === 'pending' && <p id="chatgpt-sign-in-clipboard-info">{t('aiSignInCopyPrivacy')}</p>}
+                  <div className="ai-sign-in-actions" aria-describedby="chatgpt-sign-in-help">
+                    {chatGptLogin.phase === 'pending' && <>
+                      <button type="button" className="scripts-btn scripts-btn-primary" disabled={chatGptAction !== null} onClick={() => void performChatGptLinkAction('open')}>
+                        {chatGptAction === 'open' ? <RefreshCw size={12} className="animate-spin" aria-hidden="true" /> : <ExternalLink size={12} aria-hidden="true" />}
+                        {t(chatGptAction === 'open' ? 'aiSignInOpening' : 'aiSignInOpen')}
+                      </button>
+                      <button type="button" className="scripts-btn" disabled={chatGptAction !== null} aria-describedby="chatgpt-sign-in-clipboard-info" onClick={() => void performChatGptLinkAction('copy')}>
+                        {chatGptAction === 'copy' ? <RefreshCw size={12} className="animate-spin" aria-hidden="true" /> : <Copy size={12} aria-hidden="true" />}
+                        {t(chatGptAction === 'copy' ? 'aiSignInCopying' : 'aiSignInCopy')}
+                      </button>
+                    </>}
+                    <button type="button" className="scripts-btn" onClick={() => void cancelChatGpt()}>{t('aiSignInCancel')}</button>
+                  </div>
+                </div>
+              )}
+              {isChatGpt && chatGptFeedback && (
+                <p className="ai-sign-in-feedback" role="status" aria-live="polite" style={{ color: chatGptFeedback.error ? 'var(--color-error-text)' : 'var(--color-text-secondary)' }}>
+                  {t(chatGptFeedback.key)}
+                </p>
+              )}
               {!requiresAccount && <p className="px-4 pb-3 text-xs" style={{ color: 'var(--color-text-secondary)' }}>{t('ollamaLocalBoundary')}</p>}
               {ready && <AiQuotaUsage provider={provider} locale={locale} t={t} />}
             </div>

@@ -14,6 +14,7 @@ import type {
   AiPreflightResult,
   AiProviderAdapter,
   AiProviderDescriptor,
+  AiProviderLogin,
   AiProviderRequest,
   AiReasoningEffort,
   AiRequest,
@@ -678,11 +679,18 @@ export function createPluginAi(
   }
 }
 
-export async function loginAiProvider(providerId: string): Promise<{ url?: string; verificationCode?: string }> {
+export async function loginAiProvider(providerId: string): Promise<AiProviderLogin> {
   const adapter = providers.get(providerId)
   if (!adapter?.login) throw new Error('This provider does not support login')
   invalidateProvider(providerId)
   try { return await adapter.login() } finally { invalidateProvider(providerId) }
+}
+
+export async function cancelAiProviderLogin(providerId: string, loginId: string): Promise<void> {
+  const adapter = providers.get(providerId)
+  if (!adapter?.cancelLogin) return
+  invalidateProvider(providerId)
+  try { await adapter.cancelLogin(loginId) } finally { invalidateProvider(providerId) }
 }
 
 export async function logoutAiProvider(providerId: string): Promise<void> {

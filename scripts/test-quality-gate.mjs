@@ -56,6 +56,7 @@ const commands = [
   ['npm', ['run', 'test:file-text-material']],
   ['npm', ['run', 'test:plugin-surface-object-origin']],
   ['npm', ['run', 'test:ai-provider-runtime']],
+  ['npm', ['run', 'test:ai-login-fallback']],
   ['npm', ['run', 'test:ai-preflight']],
   ['npm', ['run', 'test:ollama-provider']],
   ['npm', ['run', 'test:ollama-runtime']],

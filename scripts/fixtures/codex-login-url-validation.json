@@ -1,0 +1,257 @@
+[
+  {
+    "name": "normal authorization-code request",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256",
+    "valid": true
+  },
+  {
+    "name": "official optional parameters",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256&id_token_add_organizations=true&codex_cli_simplified_flow=true&originator=codex_cli_rs&allowed_workspace_id=dummy-workspace",
+    "valid": true
+  },
+  {
+    "name": "optional flags false",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256&id_token_add_organizations=false&codex_cli_simplified_flow=false",
+    "valid": true
+  },
+  {
+    "name": "explicit default HTTPS port",
+    "url": "https://auth.openai.com:443/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256",
+    "valid": true
+  },
+  {
+    "name": "minimal authorization-code request",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code",
+    "valid": true
+  },
+  {
+    "name": "encoded approved key",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code&client%5Fid=dummy",
+    "valid": true
+  },
+  {
+    "name": "empty input",
+    "url": "",
+    "valid": false
+  },
+  {
+    "name": "HTTP transport",
+    "url": "http://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256",
+    "valid": false
+  },
+  {
+    "name": "lookalike host",
+    "url": "https://auth.openai.com.evil.test/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256",
+    "valid": false
+  },
+  {
+    "name": "host normalization rejected",
+    "url": "https://%61uth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256",
+    "valid": false
+  },
+  {
+    "name": "host casing outside narrow contract",
+    "url": "https://AUTH.OPENAI.COM/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256",
+    "valid": false
+  },
+  {
+    "name": "uppercase scheme outside narrow contract",
+    "url": "HTTPS://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256",
+    "valid": false
+  },
+  {
+    "name": "empty userinfo",
+    "url": "https://@auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256",
+    "valid": false
+  },
+  {
+    "name": "userinfo",
+    "url": "https://dummy@auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256",
+    "valid": false
+  },
+  {
+    "name": "password userinfo",
+    "url": "https://dummy:dummy@auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256",
+    "valid": false
+  },
+  {
+    "name": "nondefault port",
+    "url": "https://auth.openai.com:8443/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256",
+    "valid": false
+  },
+  {
+    "name": "token endpoint",
+    "url": "https://auth.openai.com/oauth/token?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256",
+    "valid": false
+  },
+  {
+    "name": "callback endpoint",
+    "url": "https://auth.openai.com/auth/callback?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256",
+    "valid": false
+  },
+  {
+    "name": "trailing endpoint slash",
+    "url": "https://auth.openai.com/oauth/authorize/?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256",
+    "valid": false
+  },
+  {
+    "name": "fragment",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256#dummy",
+    "valid": false
+  },
+  {
+    "name": "empty fragment",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256#",
+    "valid": false
+  },
+  {
+    "name": "raw whitespace",
+    "url": " https://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256",
+    "valid": false
+  },
+  {
+    "name": "raw newline",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256\n",
+    "valid": false
+  },
+  {
+    "name": "raw non-ASCII",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256&originator=\u4e2d\u6587",
+    "valid": false
+  },
+  {
+    "name": "backslash",
+    "url": "https://auth.openai.com\\oauth\\authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256",
+    "valid": false
+  },
+  {
+    "name": "implicit token response",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=token&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256",
+    "valid": false
+  },
+  {
+    "name": "missing response type",
+    "url": "https://auth.openai.com/oauth/authorize?state=dummy",
+    "valid": false
+  },
+  {
+    "name": "duplicate response type",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256&response_type=code",
+    "valid": false
+  },
+  {
+    "name": "duplicate encoded key",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256&st%61te=dummy",
+    "valid": false
+  },
+  {
+    "name": "plain PKCE method",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=plain",
+    "valid": false
+  },
+  {
+    "name": "invalid organizations flag",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256&id_token_add_organizations=dummy",
+    "valid": false
+  },
+  {
+    "name": "invalid simplified flow flag",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256&codex_cli_simplified_flow=1",
+    "valid": false
+  },
+  {
+    "name": "empty query key",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256&=dummy",
+    "valid": false
+  },
+  {
+    "name": "reject query key access_token",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256&access_token=dummy",
+    "valid": false
+  },
+  {
+    "name": "reject query key id_token",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256&id_token=dummy",
+    "valid": false
+  },
+  {
+    "name": "reject query key refresh_token",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256&refresh_token=dummy",
+    "valid": false
+  },
+  {
+    "name": "reject query key token",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256&token=dummy",
+    "valid": false
+  },
+  {
+    "name": "reject query key client_secret",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256&client_secret=dummy",
+    "valid": false
+  },
+  {
+    "name": "reject query key password",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256&password=dummy",
+    "valid": false
+  },
+  {
+    "name": "reject query key passwd",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256&passwd=dummy",
+    "valid": false
+  },
+  {
+    "name": "reject query key api_key",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256&api_key=dummy",
+    "valid": false
+  },
+  {
+    "name": "reject query key code",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256&code=dummy",
+    "valid": false
+  },
+  {
+    "name": "reject query key code_verifier",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256&code_verifier=dummy",
+    "valid": false
+  },
+  {
+    "name": "reject query key credential",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256&credential=dummy",
+    "valid": false
+  },
+  {
+    "name": "reject query key authorization",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256&authorization=dummy",
+    "valid": false
+  },
+  {
+    "name": "reject query key cookie",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256&cookie=dummy",
+    "valid": false
+  },
+  {
+    "name": "reject query key assertion",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256&assertion=dummy",
+    "valid": false
+  },
+  {
+    "name": "reject query key accesskey",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256&accesskey=dummy",
+    "valid": false
+  },
+  {
+    "name": "reject query key access%5Ftoken",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256&access%5Ftoken=dummy",
+    "valid": false
+  },
+  {
+    "name": "reject query key ACCESS_TOKEN",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256&ACCESS_TOKEN=dummy",
+    "valid": false
+  },
+  {
+    "name": "reject query key unknown",
+    "url": "https://auth.openai.com/oauth/authorize?response_type=code&client_id=dummy-client&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&scope=openid+profile+offline_access&state=dummy-state&code_challenge=dummy-challenge&code_challenge_method=S256&unknown=dummy",
+    "valid": false
+  }
+]

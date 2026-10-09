@@ -301,10 +301,27 @@ function applyAppEffect(effect: AppEffect) {
   }
 }
 
-export async function openExternalUrl(url: string, signal?: AbortSignal): Promise<void> {
+export async function openExternalUrl(url: string, signal?: AbortSignal, options?: { sensitive?: boolean }): Promise<void> {
   if (signal?.aborted) return
   const target = url.trim()
   if (!target) return
+
+  if (options?.sensitive) {
+    try {
+      const { routeHostOpenUrl } = await import('./urlSchemeRegistry')
+      if (signal?.aborted) return
+      if (routeHostOpenUrl(target) !== 'shell-open') throw new Error('Sensitive URL route unavailable')
+      const { open } = await import('@tauri-apps/plugin-shell')
+      if (signal?.aborted) return
+      await open(target)
+    } catch {
+      if (signal?.aborted) return
+      // Authorization URLs and even native error payloads must stay out of logs/UI.
+      // open_system_url inherits child output; leave manual handoff to the sign-in UI.
+      throw new Error('HIVEN_SENSITIVE_URL_OPEN_FAILED')
+    }
+    return
+  }
 
   // Host-layer routing: plugins register custom schemes; do not expand Tauri shell scope.
   const { routeHostOpenUrl, canHostOpenUrl, extractUrlScheme } = await import('./urlSchemeRegistry')

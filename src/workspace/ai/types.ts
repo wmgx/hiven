@@ -184,6 +184,8 @@ export type AiProviderRequest = Omit<AiRequest, 'providerId' | 'agentId' | 'effo
   >
 }
 
+export type AiProviderLogin = { url?: string; verificationCode?: string; loginId?: string }
+
 export interface AiProviderAdapter {
   readonly id: string
   readonly authentication?: 'none' | 'account'
@@ -193,6 +195,8 @@ export interface AiProviderAdapter {
   describe(onUpdate?: (provider: Omit<AiProviderDescriptor, 'isDefault'>) => void): Promise<Omit<AiProviderDescriptor, 'isDefault'>>
   stream(request: AiProviderRequest): AsyncIterable<AiEvent>
   cancel(runId: string): Promise<void>
-  login?(): Promise<{ url?: string; verificationCode?: string }>
+  login?(): Promise<AiProviderLogin>
+  /** Cancels only this pending sign-in; it must not log out an existing account. */
+  cancelLogin?(loginId: string): Promise<void>
   logout?(): Promise<void>
 }

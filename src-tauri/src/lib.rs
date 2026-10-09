@@ -1878,11 +1878,9 @@ fn capture_foreground_selection_text_impl(app: &tauri::AppHandle) -> Result<Opti
         return Ok(None);
     }
 
-    let selected = clipboard_privacy::with_clipboard(app, |app| {
-        app.clipboard().read_text().map_err(|error| error.to_string())
-    })?
-    .trim()
-    .to_string();
+    let selected = clipboard_privacy::read_public_clipboard_text(app)?
+        .trim()
+        .to_string();
     if let Some(previous) = before {
         let _ = clipboard_privacy::with_clipboard(app, move |app| {
             app.clipboard()
@@ -7407,6 +7405,7 @@ pub fn run() {
             plugin_shell_run,
             clipboard_privacy::clipboard_read_public_text,
             clipboard_privacy::clipboard_write_sensitive_text,
+            clipboard_privacy::clipboard_write_login_link,
             clipboard_privacy::clipboard_write_text,
             clipboard_privacy::clipboard_read_image,
             clipboard_privacy::clipboard_write_image,

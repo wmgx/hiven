@@ -339,6 +339,7 @@ await check('actual stream rechecks metadata after a ready preflight and keeps l
 await check('actual Codex metadata calls flag pagination and send no turn or prompt', async () => {
   const calls = []
   const { codexChatGptProvider } = load('src/workspace/ai/codexProvider.ts', {
+    './loginSession': load('src/workspace/ai/loginSession.ts', {}, { URL }),
     '@tauri-apps/api/core': { async invoke(command, args) {
       calls.push([command, args])
       const value = args.method === 'account/read' ? { account: { type: 'chatgpt' } }

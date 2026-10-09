@@ -7639,6 +7639,38 @@ body[data-theme='dark'] .srow .s-ico,
   border-top: 1px solid var(--border-subtle, var(--border));
 }
 
+.ai-sign-in-handoff,
+.ai-sign-in-feedback {
+  margin: 0;
+  padding: 0 16px 12px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.ai-sign-in-handoff p {
+  margin: 0 0 10px;
+}
+
+.ai-sign-in-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-sign-in-actions .scripts-btn {
+  min-height: 32px;
+  height: auto;
+  max-width: 100%;
+  padding: 6px 12px;
+}
+
+.ai-sign-in-actions .scripts-btn svg {
+  flex-shrink: 0;
+}
+
 @keyframes ai-provider-skeleton-pulse {
   0%, 100% { opacity: 0.45; }
   50% { opacity: 0.9; }

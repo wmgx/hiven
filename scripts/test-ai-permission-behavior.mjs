@@ -342,6 +342,7 @@ for (const kind of ['Codex', 'xAI']) {
     let adapter
     if (kind === 'Codex') {
       const module = load('src/workspace/ai/codexProvider.ts', {
+        './loginSession': load('src/workspace/ai/loginSession.ts', {}, { URL }),
         '@tauri-apps/api/core': { async invoke(command, args) {
           calls.push([command, args])
           const result = args.method === 'thread/start' ? { thread: { id: 'thread' } }

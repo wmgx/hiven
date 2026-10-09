@@ -1,18 +1,34 @@
 use tauri::{image::JsImage, Manager};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
+#[path = "login_link_clipboard.rs"]
+mod login_link_clipboard;
+use login_link_clipboard::{ClipboardPrivacy, LoginLinkGuard};
+
+static CLIPBOARD_PRIVACY: ClipboardPrivacy = ClipboardPrivacy::new();
+
 // NSPasteboard's cache is shared with WebKit and our privacy/file readers.
 // The clipboard plugin's own mutex cannot protect those other callers.
 pub(crate) fn with_clipboard<T: Send + 'static>(
     app: &tauri::AppHandle,
     operation: impl FnOnce(tauri::AppHandle) -> Result<T, String> + Send + 'static,
 ) -> Result<T, String> {
+    with_clipboard_privacy(app, move |app, _| operation(app))
+}
+
+fn with_clipboard_privacy<T: Send + 'static>(
+    app: &tauri::AppHandle,
+    operation: impl FnOnce(tauri::AppHandle, &mut LoginLinkGuard) -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
     let handle = app.clone();
+    // Acquire only after dispatching to the main thread on macOS, never while
+    // waiting for it. All native writes and public reads share this boundary.
+    let operation = move || CLIPBOARD_PRIVACY.with(|guard| operation(handle, guard));
     #[cfg(target_os = "macos")]
     {
         let run = move || {
             debug_assert!(objc2::MainThreadMarker::new().is_some());
-            objc2::rc::autoreleasepool(|_| operation(handle))
+            objc2::rc::autoreleasepool(|_| operation())
         };
         if objc2::MainThreadMarker::new().is_some() {
             return run();
@@ -25,7 +41,7 @@ pub(crate) fn with_clipboard<T: Send + 'static>(
         rx.recv().map_err(|error| error.to_string())?
     }
     #[cfg(not(target_os = "macos"))]
-    operation(handle)
+    operation()
 }
 
 #[tauri::command]
@@ -68,19 +84,56 @@ pub async fn clipboard_write_image(webview: tauri::Webview, image: JsImage) -> R
 // A separate JS check followed by readText could capture a newly copied secret.
 #[tauri::command]
 pub async fn clipboard_read_public_text(app: tauri::AppHandle) -> Result<String, String> {
-    with_clipboard(&app, |app| {
+    read_public_clipboard_text(&app)
+}
+
+pub(crate) fn read_public_clipboard_text(app: &tauri::AppHandle) -> Result<String, String> {
+    with_clipboard_privacy(app, |app, guard| {
         #[cfg(target_os = "macos")]
-        unsafe {
+        let text = unsafe {
             let _ = app;
             use objc2::{class, msg_send, runtime::AnyObject};
             let board: *mut AnyObject = msg_send![class!(NSPasteboard), generalPasteboard];
-            read_public_text(board)
-        }
+            read_public_text(board)?
+        };
         #[cfg(not(target_os = "macos"))]
-        app.clipboard()
+        let text = app
+            .clipboard()
             .read_text()
-            .map_err(|_| "Clipboard read failed".into())
+            .map_err(|_| "Clipboard read failed".to_string())?;
+        Ok(guard.public_text(text))
     })
+}
+
+// This is only for an explicit login-link copy button. Generic secrets retain
+// the stricter macOS-only clipboard_write_sensitive_text contract below.
+#[tauri::command]
+pub async fn clipboard_write_login_link(app: tauri::AppHandle, text: String) -> Result<(), String> {
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        with_clipboard_privacy(&app, move |app, guard| {
+            guard.write_login_link(text, |text| {
+                #[cfg(target_os = "macos")]
+                unsafe {
+                    let _ = app;
+                    use objc2::{class, msg_send, runtime::AnyObject};
+                    let board: *mut AnyObject = msg_send![class!(NSPasteboard), generalPasteboard];
+                    write_sensitive_text(board, text.to_owned())
+                }
+                #[cfg(target_os = "linux")]
+                {
+                    app.clipboard()
+                        .write_text(text.to_owned())
+                        .map_err(|_| "Login link copy failed".to_string())
+                }
+            })
+        })
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        let _ = (app, text);
+        Err("Login link copy is unsupported on this platform".into())
+    }
 }
 
 #[tauri::command]
