@@ -831,6 +831,31 @@ body[data-theme='dark'] .clipboard-history-surface {
   --clipboard-history-list-width: 310px;
 }
 
+.clipboard-history-merge-footer {
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.clipboard-history-merge-footer-hints,
+.clipboard-history-merge-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.clipboard-history-merge-footer-hints {
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  color: var(--hiven-color-text-secondary);
+  font-size: 11px;
+}
+
+.clipboard-history-merge-footer-actions {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
 .clipboard-history-merge-instruction {
   display: flex;
   flex-direction: column;

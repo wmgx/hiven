@@ -57,6 +57,7 @@ const commands = [
   ['npm', ['run', 'test:launcher-current-material']],
   ['npm', ['run', 'test:launcher-material-edit']],
   ['npm', ['run', 'test:file-text-material']],
+  ['npm', ['run', 'test:launcher-native-dialog-focus']],
   ['npm', ['run', 'test:plugin-surface-object-origin']],
   ['npm', ['run', 'test:ai-provider-runtime']],
   ['npm', ['run', 'test:ai-login-fallback']],

@@ -20,6 +20,9 @@ import { readLauncherClipboard } from '../clipboard/readLauncherClipboard'
 import { GlobalLauncherPanel } from '../../components/launcher/GlobalLauncherPanel'
 import { useGlobalLauncherSelectionController } from '../../components/launcher/useGlobalLauncherSelectionController'
 import { useClipboardObjectBlock } from '../clipboard/useClipboardObjectBlock'
+import { chooseTextMaterialFile } from '../clipboard/fileTextMaterial'
+import { captureRootFileTextSession } from '../clipboard/fileTextInputSession'
+import { acquireLauncherNativeDialogFocus } from '../../workspace/launcherBlurGuard'
 import { getObjectBlockRecommendationText } from '../clipboard/objectBlock'
 import { setPendingObjectBlock, subscribePendingObjectBlock } from '../clipboard/pendingObjectBlock'
 import { subscribeLauncherObjectHandoff } from '../clipboard/launcherObjectHandoff'
@@ -91,6 +94,7 @@ export function GlobalLauncherHost() {
 
   // Live query for suppress gate (session is declared below; ref stays current each render).
   const liveQueryRef = useRef('')
+  const fileTextRootVisibleRef = useRef(false)
   const clipboardBlock = useClipboardObjectBlock({
     open,
     readClipboard: readLauncherClipboard,
@@ -99,6 +103,26 @@ export function GlobalLauncherHost() {
       Boolean(liveQueryRef.current.trim())
       || Boolean(inputRef.current?.value?.trim())
     ),
+    filePicker: isNativeDesktopRuntime() ? {
+      choose: () => chooseTextMaterialFile({
+        title: t(locale, 'palette.fileTextPickerTitle'),
+        filterName: t(locale, 'palette.fileTextPickerFilter'),
+      }),
+      acquireFocusLease: acquireLauncherNativeDialogFocus,
+      onComplete: () => {
+        try { inputRef.current?.focus({ preventScroll: true }) } catch { /* best-effort caret restore */ }
+      },
+      beginSession: () => captureRootFileTextSession({
+        getController: () => controllerRef.current,
+        isRootVisible: () => {
+          const state = useAppStore.getState()
+          const settings = usePluginSettingsStore.getState().settingsDialogTarget
+          return state.globalLauncherOpen && fileTextRootVisibleRef.current &&
+            !state.pluginSurfaceToolTarget && !state.launcherHostSurfaceTarget &&
+            settings?.presentation !== 'global-launcher'
+        },
+      }),
+    } : undefined,
   })
   // Recommendations while block is mounted (exit keeps mode stable to avoid ranking jank).
   const objectBlockText = getObjectBlockRecommendationText(clipboardBlock.block)
@@ -618,7 +642,7 @@ export function GlobalLauncherHost() {
     launcherSettingsTarget,
     surfaceShell: activeSurfaceFrame?.surface.shell,
     visibleFilteredLength: visibleFiltered.length,
-    controllerResizeKey,
+    controllerResizeKey: `${controllerResizeKey}:${locale}:${clipboardBlock.canPickTextFile}:${clipboardBlock.isPickingTextFile}:${clipboardBlock.canReadFileText}:${clipboardBlock.isReadingFileText}:${clipboardBlock.fileTextError ?? ''}`,
   })
 
   const {
@@ -641,9 +665,14 @@ export function GlobalLauncherHost() {
     objectBlockTextIsFileContent: clipboardBlock.block?.meta?.textOrigin === 'file-content',
     locale,
   })
+  fileTextRootVisibleRef.current = !surfaceFrame && !itemPermissionFrame
 
   // Reset synchronously on external closes, before the hidden WebView can throttle React.
   useEffect(() => useAppStore.subscribe((state, previous) => {
+    if ((state.pluginSurfaceToolTarget && state.pluginSurfaceToolTarget !== previous.pluginSurfaceToolTarget) ||
+      (state.launcherHostSurfaceTarget && state.launcherHostSurfaceTarget !== previous.launcherHostSurfaceTarget)) {
+      clipboardBlock.cancelFileTextRead()
+    }
     if (!previous.globalLauncherOpen && state.globalLauncherOpen) {
       closingRef.current = false
     } else if (previous.globalLauncherOpen && !state.globalLauncherOpen && !closingRef.current) {
@@ -658,7 +687,11 @@ export function GlobalLauncherHost() {
           controllerRef.current === closedController && closedController?.getState() === closedState
       }
     }
-  }), [controllerRef, resetLauncherSession])
+  }), [clipboardBlock.cancelFileTextRead, controllerRef, resetLauncherSession])
+
+  useEffect(() => usePluginSettingsStore.subscribe((state) => {
+    if (state.settingsDialogTarget?.presentation === 'global-launcher') clipboardBlock.cancelFileTextRead()
+  }), [clipboardBlock.cancelFileTextRead])
 
   const leaveActionBrowser = useCallback(() => {
     if (!browsingActions) return false

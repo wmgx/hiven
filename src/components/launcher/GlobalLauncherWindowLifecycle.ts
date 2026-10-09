@@ -1,7 +1,7 @@
 import { useCallback, useLayoutEffect, useRef, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
 import type { LauncherHostSurfaceTarget } from '../../store'
 import { onCurrentLauncherWindowFocusChanged, resizeCurrentLauncherWindow, startCurrentLauncherWindowDrag } from '../../workspace/windowManager/launcherWindow'
-import { clearStandaloneLauncherBlurDevtoolsSuppress, shouldKeepLauncherOpenOnBlur } from '../../workspace/launcherBlurGuard'
+import { clearStandaloneLauncherBlurDevtoolsSuppress, launcherNativeDialogFocus, shouldKeepLauncherOpenOnBlur } from '../../workspace/launcherBlurGuard'
 import { applyStandaloneLauncherGeometry, computeStandaloneLauncherGeometry } from './GlobalLauncherLayout'
 import { logLauncherPerf } from '../../workspace/launcher/perf'
 
@@ -71,17 +71,27 @@ export function useCloseStandaloneLauncherOnBlur({
     let disposed = false
     let unlisten: (() => void) | undefined
     let blurGeneration = 0
-    onCurrentLauncherWindowFocusChanged((focused) => {
-      if (focused) return
+    const checkBlur = () => {
+      if (launcherNativeDialogFocus.isActive()) return
       if (closeOnBlurRef.current === false) return
       // Smart blur: keep open when focus moves to clipboard history / other hiven windows.
       const generation = ++blurGeneration
       void shouldKeepLauncherOpenOnBlur().then((keepOpen) => {
         if (disposed || generation !== blurGeneration) return
         if (keepOpen) return
+        if (launcherNativeDialogFocus.isActive()) return
         if (closeOnBlurRef.current === false) return
         closeLauncherRef.current()
       })
+    }
+    const stopDialogFocus = launcherNativeDialogFocus.subscribe(() => {
+      // Invalidate a blur check that began before the chooser acquired focus.
+      blurGeneration += 1
+      if (!launcherNativeDialogFocus.isActive()) checkBlur()
+    })
+    onCurrentLauncherWindowFocusChanged((focused) => {
+      blurGeneration += 1
+      if (!focused) checkBlur()
     })
       .then((cleanup) => {
         if (disposed) cleanup()
@@ -92,6 +102,7 @@ export function useCloseStandaloneLauncherOnBlur({
       })
     return () => {
       disposed = true
+      stopDialogFocus()
       unlisten?.()
     }
   }, [open, standaloneLauncher])
@@ -109,10 +120,12 @@ export function useAutoCloseCurrentWindowOnBackgroundIdle({
   enabled,
   onClose,
   idleMs = STANDALONE_SURFACE_BACKGROUND_IDLE_MS,
+  focusLease,
 }: {
   enabled: boolean
   onClose: () => void
   idleMs?: number
+  focusLease?: { isActive: () => boolean; subscribe: (listener: () => void) => () => void }
 }) {
   const onCloseRef = useRef(onClose)
   const idleMsRef = useRef(idleMs)
@@ -133,6 +146,7 @@ export function useAutoCloseCurrentWindowOnBackgroundIdle({
     let timerId: number | null = null
     let unfocusedAt: number | null = null
     let unlisten: (() => void) | undefined
+    let focusGeneration = 0
 
     const clearTimer = () => {
       if (timerId != null) {
@@ -143,11 +157,13 @@ export function useAutoCloseCurrentWindowOnBackgroundIdle({
 
     const armTimer = (from: number) => {
       clearTimer()
+      if (focusLease?.isActive()) { unfocusedAt = null; return }
       unfocusedAt = from
       const remaining = Math.max(0, idleMsRef.current - (Date.now() - from))
       timerId = window.setTimeout(() => {
         timerId = null
         if (disposed) return
+        if (focusLease?.isActive()) { unfocusedAt = null; return }
         if (isStandaloneSurfaceBackgroundIdle(unfocusedAt, Date.now(), idleMsRef.current)) {
           onCloseRef.current()
         }
@@ -156,6 +172,7 @@ export function useAutoCloseCurrentWindowOnBackgroundIdle({
 
     const onFocusChanged = (focused: boolean) => {
       if (disposed) return
+      focusGeneration += 1
       if (focused) {
         unfocusedAt = null
         clearTimer()
@@ -163,6 +180,27 @@ export function useAutoCloseCurrentWindowOnBackgroundIdle({
       }
       armTimer(Date.now())
     }
+
+    const probeFocus = async () => {
+      const generation = ++focusGeneration
+      try {
+        const { getCurrentWindow } = await import('@tauri-apps/api/window')
+        if (disposed || focusLease?.isActive()) return
+        const focused = await getCurrentWindow().isFocused()
+        if (disposed || generation !== focusGeneration || focusLease?.isActive()) return
+        if (!focused && unfocusedAt == null) armTimer(Date.now())
+      } catch {
+        // Focus probe is best-effort; subsequent focus events still arm.
+      }
+    }
+    const stopFocusLease = focusLease?.subscribe(() => {
+      focusGeneration += 1
+      clearTimer()
+      unfocusedAt = null
+      // A long chooser does not count as background idle. Start a fresh clock
+      // only if its dismissal really leaves this window in the background.
+      if (!focusLease.isActive()) void probeFocus()
+    })
 
     // Name is historical; implementation is getCurrentWindow().onFocusChanged.
     onCurrentLauncherWindowFocusChanged(onFocusChanged)
@@ -174,15 +212,7 @@ export function useAutoCloseCurrentWindowOnBackgroundIdle({
         unlisten = cleanup
         // If the window is already backgrounded when we attach (e.g. surface
         // kept open with closeOnBlur:false), start the idle clock immediately.
-        try {
-          const { getCurrentWindow } = await import('@tauri-apps/api/window')
-          if (disposed) return
-          const focused = await getCurrentWindow().isFocused()
-          if (disposed) return
-          if (!focused && unfocusedAt == null) armTimer(Date.now())
-        } catch {
-          // Focus probe is best-effort; subsequent focus events still arm.
-        }
+        await probeFocus()
       })
       .catch((error) => {
         console.warn('[hiven] Failed to listen for window background idle:', error)
@@ -191,9 +221,10 @@ export function useAutoCloseCurrentWindowOnBackgroundIdle({
     return () => {
       disposed = true
       clearTimer()
+      stopFocusLease?.()
       unlisten?.()
     }
-  }, [enabled])
+  }, [enabled, focusLease])
 }
 
 /**
@@ -214,6 +245,7 @@ export function useAutoCloseStandaloneLauncherOnBackgroundIdle({
     enabled: open && standaloneLauncher,
     onClose: closeLauncher,
     idleMs,
+    focusLease: launcherNativeDialogFocus,
   })
 }
 

@@ -10,6 +10,28 @@
 
 let suppressStandaloneLauncherBlurUntil = 0
 
+const nativeDialogLeases = new Set<symbol>()
+const nativeDialogLeaseListeners = new Set<() => void>()
+
+/** A native dialog owns focus for its actual lifetime, including slow user selection. */
+export const launcherNativeDialogFocus = {
+  isActive: () => nativeDialogLeases.size > 0,
+  subscribe: (listener: () => void) => {
+    nativeDialogLeaseListeners.add(listener)
+    return () => { nativeDialogLeaseListeners.delete(listener) }
+  },
+}
+
+export function acquireLauncherNativeDialogFocus(): () => void {
+  const lease = Symbol('native-dialog')
+  nativeDialogLeases.add(lease)
+  for (const listener of nativeDialogLeaseListeners) listener()
+  return () => {
+    if (!nativeDialogLeases.delete(lease)) return
+    for (const listener of nativeDialogLeaseListeners) listener()
+  }
+}
+
 export function suppressStandaloneLauncherBlur(durationMs = 600): void {
   suppressStandaloneLauncherBlurUntil = Math.max(
     suppressStandaloneLauncherBlurUntil,
@@ -81,6 +103,7 @@ export async function isHivenCompanionWindowActive(): Promise<boolean> {
 export async function shouldKeepLauncherOpenOnBlur(
   options?: { handoffDelayMs?: number },
 ): Promise<boolean> {
+  if (launcherNativeDialogFocus.isActive()) return true
   if (devtoolsBlurSuppressActive) return true
   if (shouldSuppressStandaloneLauncherBlur()) return true
 
@@ -91,7 +114,7 @@ export async function shouldKeepLauncherOpenOnBlur(
     })
   }
 
-  if (shouldSuppressStandaloneLauncherBlur()) return true
+  if (shouldSuppressStandaloneLauncherBlur() || launcherNativeDialogFocus.isActive()) return true
 
   // User clicked back onto the launcher during the handoff.
   try {

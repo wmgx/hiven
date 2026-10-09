@@ -43,7 +43,7 @@ import {
   restorePreviousMaterial,
   type CurrentMaterial,
 } from './currentMaterial'
-import { getAttachedTextFilePath, readAttachedTextFile, startFileTextMaterialRead, type FileTextErrorCode } from './fileTextMaterial'
+import { getAttachedTextFilePath, readAttachedTextFile, startFileTextMaterialRead, startPickedTextMaterialRead, type FileTextErrorCode } from './fileTextMaterial'
 
 /** Keep token mounted for compositor-only exit (opacity + transform). */
 export const OBJECT_BLOCK_EXIT_MS = 130
@@ -68,6 +68,9 @@ export type ClipboardObjectBlockState = {
   /** Bound to the displayed material/session; null for a stale entry button. */
   beginTextEdit: () => { text: string; commit: (text: string) => boolean } | null
   canReadFileText: boolean
+  canPickTextFile: boolean
+  isPickingTextFile: boolean
+  pickTextFile: () => void
   isReadingFileText: boolean
   fileTextError: FileTextErrorCode | null
   readFileText: () => void
@@ -93,21 +96,35 @@ export function useClipboardObjectBlock(params: {
    * forceAttach / history pending still work.
    */
   suppressAutoAttach?: () => boolean
+  filePicker?: {
+    choose: () => Promise<string | string[] | null>
+    /** Captures the host's root controller identity before opening the native dialog. */
+    beginSession: () => (() => boolean) | null
+    acquireFocusLease: () => () => void
+    onComplete?: () => void
+  }
 }): ClipboardObjectBlockState {
-  const { open, readClipboard, suppressAutoAttach } = params
+  const { open, readClipboard, suppressAutoAttach, filePicker } = params
   const [material, setMaterial] = useState(() => replaceCurrentMaterial(null))
   const block = material.block
   const [isExiting, setIsExiting] = useState(false)
   const [hint, setHint] = useState<RecentClipboardHint | null>(null)
   const [isReadingFileText, setIsReadingFileText] = useState(false)
+  const [isPickingTextFile, setIsPickingTextFile] = useState(false)
   const [fileTextError, setFileTextError] = useState<FileTextErrorCode | null>(null)
   const fileReadRef = useRef<ReturnType<typeof startFileTextMaterialRead> | null>(null)
+  // A discarded request may still have a native modal open. Keep its focus
+  // ownership separate from the material result so handoffs cannot close it.
+  const filePickerLeasesRef = useRef(new Set<() => void>())
   const didReadRef = useRef(false)
   const exitTimerRef = useRef<number | null>(null)
   const exitFrameRef = useRef<number | null>(null)
   const materialRef = useRef(material)
   materialRef.current = material
   const materialGenerationRef = useRef(0)
+  // Explicit selection must invalidate an older automatic clipboard read even
+  // on chooser cancellation, without replacing material or its restore slot.
+  const clipboardReadGenerationRef = useRef(0)
   const mountedRef = useRef(false)
   const openRef = useRef(open)
   openRef.current = open
@@ -116,6 +133,8 @@ export function useClipboardObjectBlock(params: {
   // Host often passes an inline suppress fn — keep in ref so open effect is stable.
   const suppressAutoAttachRef = useRef(suppressAutoAttach)
   suppressAutoAttachRef.current = suppressAutoAttach
+  const filePickerRef = useRef(filePicker)
+  filePickerRef.current = filePicker
 
   const clearExitTimer = useCallback(() => {
     if (exitFrameRef.current != null) {
@@ -128,10 +147,15 @@ export function useClipboardObjectBlock(params: {
     }
   }, [])
 
+  const releaseFilePickerFocus = useCallback(() => {
+    for (const release of filePickerLeasesRef.current) release()
+  }, [])
+
   const cancelFileTextRead = useCallback(() => {
     fileReadRef.current?.cancel()
     fileReadRef.current = null
     setIsReadingFileText(false)
+    setIsPickingTextFile(filePickerLeasesRef.current.size > 0)
     setFileTextError(null)
   }, [])
 
@@ -199,7 +223,9 @@ export function useClipboardObjectBlock(params: {
 
     let cancelled = false
     const generation = materialGenerationRef.current
-    const isReadCurrent = () => mountedRef.current && !cancelled && generation === materialGenerationRef.current
+    const clipboardGeneration = clipboardReadGenerationRef.current
+    const isReadCurrent = () => mountedRef.current && !cancelled && generation === materialGenerationRef.current &&
+      clipboardGeneration === clipboardReadGenerationRef.current
     const readAfterFirstPaint = async () => {
       if (!isReadCurrent() || userDismissedRef.current) return
       const startedAt = launcherPerfNow()
@@ -292,6 +318,7 @@ export function useClipboardObjectBlock(params: {
   // When launcher closes: re-stash handoff blocks so ⌘↵ is not lost if hide races show.
   useEffect(() => {
     if (!open) {
+      releaseFilePickerFocus()
       clearExitTimer()
       const current = materialRef.current.block
       if (!userDismissedRef.current && isHandoffBlock(current) && current) {
@@ -301,7 +328,7 @@ export function useClipboardObjectBlock(params: {
       setIsExiting(false)
       setHint(null)
     }
-  }, [open, clearExitTimer, publishMaterial])
+  }, [open, clearExitTimer, publishMaterial, releaseFilePickerFocus])
 
   useEffect(() => {
     mountedRef.current = true
@@ -310,9 +337,10 @@ export function useClipboardObjectBlock(params: {
       materialGenerationRef.current += 1
       fileReadRef.current?.cancel()
       fileReadRef.current = null
+      releaseFilePickerFocus()
       clearExitTimer()
     }
-  }, [clearExitTimer])
+  }, [clearExitTimer, releaseFilePickerFocus])
 
   /**
    * Dismiss snapshot immediately (no re-attach), keep token mounted for exit CSS, then unmount.
@@ -477,6 +505,63 @@ export function useClipboardObjectBlock(params: {
     })
   }, [clearExitTimer, publishMaterial, material, renderedGeneration])
 
+  const pickTextFile = useCallback(() => {
+    const picker = filePickerRef.current
+    const isMaterialCurrent = () => mountedRef.current && openRef.current &&
+      materialRef.current === material && materialGenerationRef.current === renderedGeneration
+    if (!picker || !isMaterialCurrent() || isExiting || fileReadRef.current || filePickerLeasesRef.current.size > 0) return
+    const isHostCurrent = picker.beginSession()
+    if (!isHostCurrent || !isHostCurrent()) return
+    const isCurrent = () => isMaterialCurrent() && isHostCurrent()
+    clipboardReadGenerationRef.current += 1
+    didReadRef.current = true
+    setFileTextError(null)
+    setIsPickingTextFile(true)
+    const request = startPickedTextMaterialRead({
+      choose: picker.choose,
+      read: readAttachedTextFile,
+      isCurrent,
+      acquireFocusLease: () => {
+        const releaseNativeFocus = picker.acquireFocusLease()
+        const release = () => {
+          if (!filePickerLeasesRef.current.delete(release)) return
+          releaseNativeFocus()
+          if (mountedRef.current && filePickerLeasesRef.current.size === 0) setIsPickingTextFile(false)
+        }
+        filePickerLeasesRef.current.add(release)
+        return release
+      },
+      onReading: () => {
+        if (!isCurrent()) return
+        setIsPickingTextFile(false)
+        setIsReadingFileText(true)
+      },
+    })
+    fileReadRef.current = request
+    void request.result.then((result) => {
+      if (fileReadRef.current !== request) return
+      fileReadRef.current = null
+      if (!mountedRef.current) return
+      setIsPickingTextFile(false)
+      setIsReadingFileText(false)
+      if (!isCurrent()) return
+      picker.onComplete?.()
+      if (result.status === 'error') {
+        setFileTextError(result.code)
+        return
+      }
+      if (result.status !== 'ready') return
+      const next = acceptMaterialHandoff(materialRef.current, result.block, true)
+      clearExitTimer()
+      publishMaterial(next)
+      userDismissedRef.current = false
+      setIsExiting(false)
+      setHint(null)
+      // Silent backup preserves the current search and offers one restore.
+      setPendingObjectBlock(result.block, { persist: true, silent: true })
+    })
+  }, [clearExitTimer, publishMaterial, material, renderedGeneration, isExiting])
+
   const attachQueryAsBlock = useCallback((text: string) => {
     if (text.length === 0) return
     setPendingObjectBlock(createQueryObjectBlock({ query: text }))
@@ -509,6 +594,9 @@ export function useClipboardObjectBlock(params: {
     canEditText: open && !isExiting && canEditMaterialText(block),
     beginTextEdit,
     canReadFileText: open && !isExiting && Boolean(getAttachedTextFilePath(block)),
+    canPickTextFile: open && Boolean(filePicker),
+    isPickingTextFile,
+    pickTextFile,
     isReadingFileText,
     fileTextError,
     readFileText,

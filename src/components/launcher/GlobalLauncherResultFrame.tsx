@@ -13,7 +13,6 @@ import { shouldIgnoreImeKeyDown } from '../../utils/imeKeyboard'
 import {
   type OutputDestinationId,
   LauncherOutputTargetsBar,
-  LauncherOutputTargetsFooter,
   useOutputDestinations,
 } from './LauncherOutputTargets'
 
@@ -170,6 +169,11 @@ export function GlobalLauncherResultFrame({
             locale={locale}
             onRemove={onBack}
           />
+          {previewEdit && (
+            <span className="launcher-preview-source">
+              {t(locale, 'palette.previewInputSummary', { count: previewEdit.inputText.length })}
+            </span>
+          )}
         </div>
         {hasPreviewParams && previewEdit && (
           <div
@@ -229,45 +233,46 @@ export function GlobalLauncherResultFrame({
             ) : null}
           </pre>
         </div>
-        {frame.retryOnly ? (
-          <button
-            type="button"
-            className="launcher-output-target"
-            disabled={busy}
-            onMouseDown={(event) => event.preventDefault()}
-            onKeyDown={(event) => {
-              if (event.key !== 'Enter' && event.key !== ' ') return
-              event.stopPropagation()
-              if (event.shiftKey || event.altKey || event.metaKey || event.ctrlKey) event.preventDefault()
-            }}
-            onClick={() => onToggleChoice(textChoice, frame)}
-          >
-            {t(locale, 'palette.outputRetry')}
-          </button>
-        ) : <LauncherOutputTargetsBar
-          disabled={busy}
-          destinations={destinations}
-          activeId={activeDest?.id ?? 'copy'}
-          locale={locale}
-          onSelect={(id) => {
-            selectId(id)
-            void runDestination(id)
-          }}
-        />}
         {busy && <span role="status" aria-live="polite">{t(locale, deliveryIntent === 'copy' ? 'palette.outputCopying' : 'palette.outputDelivering')}</span>}
         {error && (
           <div role="alert" className="px-3.5 py-2 text-[12px]" style={{ color: 'var(--color-error)' }}>
             {error}
           </div>
         )}
-        <div className="global-launcher-footer l-foot">
-          {frame.retryOnly
-            ? <LauncherHintKey keys="↵" label={t(locale, 'palette.outputRetry')} />
-            : hasPreviewParams
+        {frame.retryOnly ? (
+          <div className="global-launcher-footer l-foot launcher-output-actionbar">
+            <LauncherHintKey keys="esc" label={t(locale, 'palette.back')} />
+            <button
+              type="button"
+              className="l-foot-primary"
+              disabled={busy}
+              onMouseDown={(event) => event.preventDefault()}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return
+                event.stopPropagation()
+                if (event.shiftKey || event.altKey || event.metaKey || event.ctrlKey) event.preventDefault()
+              }}
+              onClick={() => onToggleChoice(textChoice, frame)}
+            >
+              <LauncherHintKey keys="↵" label={t(locale, 'palette.outputRetry')} />
+            </button>
+          </div>
+        ) : <LauncherOutputTargetsBar
+          disabled={busy}
+          destinations={destinations}
+          activeId={activeDest?.id ?? 'copy'}
+          locale={locale}
+          footerHints={<>
+            {hasPreviewParams
               ? <LauncherHintKey keys="⇥" label={t(locale, 'palette.previewParamNavigation')} />
-              : <LauncherOutputTargetsFooter destinations={destinations} locale={locale} />}
-          <LauncherHintKey keys="esc" label={t(locale, 'palette.back')} />
-        </div>
+              : destinations.length > 1 && <LauncherHintKey keys="⇥" label={t(locale, 'palette.outputSwitchTarget')} />}
+            <LauncherHintKey keys="esc" label={t(locale, 'palette.back')} />
+          </>}
+          onSelect={(id) => {
+            selectId(id)
+            void runDestination(id)
+          }}
+        />}
       </div>
     )
   }

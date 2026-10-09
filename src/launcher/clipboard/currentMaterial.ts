@@ -20,11 +20,12 @@ export function acceptMaterialHandoff(
   // Silent backups and repeated delivery are the same handoff, including after
   // restoration. They must neither replace the original nor offer a redo.
   if (current.lastHandoffKey === key) return current
-  // A processing result derived from loaded text stays literal through repeated
-  // handoffs. A path-shaped result must not silently read another file.
+  // Preserve the literal-text safety boundary through repeated handoffs. The
+  // incoming result may be independent (for example merged history), so this
+  // does not establish that it came from the previous file.
   const textOrigin = current.block?.meta?.textOrigin
   const nextBlock = block.source === 'tool-result' && textOrigin === 'file-content' && !block.meta?.textOrigin
-    ? { ...block, meta: { ...block.meta, textOrigin, fileName: current.block?.meta?.fileName } }
+    ? { ...block, meta: { ...block.meta, textOrigin } }
     : block
   return {
     block: nextBlock,

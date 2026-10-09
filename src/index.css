@@ -5770,8 +5770,8 @@ body[data-theme='dark'] .l-search {
   outline-offset: 2px;
 }
 
-/* Only preview controls wrap. Keep this row bounded so long parameters cannot
-   push the scrollable output and delivery controls out of a short window. */
+/* Common parameter chips stay readable on one line. Extra chips can wrap in a
+   bounded row without pushing output actions out of a short window. */
 .launcher-preview-params {
   display: flex;
   flex-wrap: wrap;
@@ -5788,20 +5788,21 @@ body[data-theme='dark'] .l-search {
 }
 
 .launcher-preview-params .launcher-param-chip-content {
-  display: block;
-  overflow: visible;
-  white-space: normal;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
-.launcher-preview-params .launcher-param-chip-label,
-.launcher-preview-params .launcher-param-chip-value {
+.launcher-preview-params .launcher-param-chip-label {
   max-width: none;
-  overflow: visible;
 }
 
-.launcher-preview-params .launcher-param-chip-sep {
-  margin-inline: 3px;
+.launcher-preview-source {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Command tag + chips must not starve the text input */
@@ -5984,6 +5985,42 @@ body[data-theme='dark'] .launcher-preview-well {
 
 .launcher-output-target.is-active kbd {
   color: var(--accent);
+}
+
+.launcher-output-actionbar .launcher-output-hints {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  min-width: 0;
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.launcher-output-actionbar .launcher-output-targets {
+  justify-content: flex-end;
+  margin-left: auto;
+  min-height: 0;
+  padding: 0;
+}
+
+.launcher-output-actionbar .launcher-output-target {
+  min-height: 28px;
+  border-radius: 8px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.launcher-output-actionbar .launcher-output-target.is-active {
+  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  font-weight: 600;
+}
+
+.launcher-output-actionbar > [role='status'] {
+  flex-basis: 100%;
+  padding-inline: 0;
 }
 
 .l-search .title {
@@ -6216,6 +6253,69 @@ body[data-theme='dark'] .launcher-preview-well {
 .launcher-discovery-action:hover,
 .launcher-discovery-action:focus-visible {
   background: var(--accent-soft);
+}
+
+.launcher-file-material-action {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.launcher-file-material-action:disabled {
+  color: var(--text-3);
+  background: transparent;
+  cursor: default;
+}
+
+.launcher-file-material-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  padding: 4px 18px;
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+.launcher-file-material-status .launcher-discovery-action {
+  min-width: 0;
+  max-width: 100%;
+  padding: 2px 0;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.launcher-file-material-status .launcher-discovery-action:disabled {
+  color: var(--text-2);
+  background: transparent;
+  cursor: default;
+}
+
+.launcher-file-material-error {
+  overflow-wrap: anywhere;
+}
+
+.l-list[data-control-focused='true'] .l-row.sel {
+  background: var(--surface);
+}
+
+.l-list[data-control-focused='true'] .l-row.sel .r-quick-select,
+.l-list[data-control-focused='true'] .l-row.sel .r-quick-select-inline {
+  opacity: 0.5;
+}
+
+.l-foot .launcher-focused-action {
+  min-width: 0;
+  max-width: 75%;
+}
+
+.launcher-focused-action > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.l-foot .l-foot-primary[data-secondary='true'] {
+  color: var(--text-2);
+  font-weight: 500;
 }
 
 /* Light hover: readable surface grey (not near-invisible ink wash). */

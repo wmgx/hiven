@@ -65,15 +65,8 @@ assert.match(
   'standalone launcher focus listener should refresh the closeOnBlur ref when mode changes',
 )
 
-// The condition became early returns rather than one combined boolean, and grew a
-// "smart blur" step in between: focus can move to clipboard history or another
-// hiven window without closing the launcher, checked async via
-// shouldKeepLauncherOpenOnBlur before the latest close callback runs.
-assert.match(
-  lifecycle,
-  /if \(focused\) return[\s\S]{0,200}if \(closeOnBlurRef\.current === false\) return[\s\S]{0,520}closeLauncherRef\.current\(\)/,
-  'standalone launcher focus listener should read closeOnBlur from the ref inside the native callback',
-)
+// Blur decisions now also run when a native dialog releases focus. Their actual
+// callback behavior is exercised in test-launcher-native-dialog-focus.mjs.
 
 // shouldSuppressStandaloneLauncherBlur (short-lived suppression for internal Quick
 // Editor shortcuts) is no longer called directly from the lifecycle listener — it

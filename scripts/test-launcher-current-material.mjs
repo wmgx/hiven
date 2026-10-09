@@ -44,6 +44,18 @@ check('repeated handoff does not replace original with processed material', () =
   assert.equal(state.previousBlock, original)
 })
 
+check('independent tool output keeps literal safety without borrowing an old filename', () => {
+  const original = block('query', { meta: { textOrigin: 'file-content', fileName: 'sample.json' } })
+  const result = block('tool-result', { payloadText: '/synthetic/another.json', meta: { charCount: 23 } })
+  const state = acceptMaterialHandoff(replaceCurrentMaterial(original), result, true)
+  assert.equal(state.block.meta.textOrigin, 'file-content', 'path-shaped output stays literal')
+  assert.equal(state.block.meta.fileName, undefined, 'an unrelated result must not claim the previous file')
+  assert.equal(state.block.meta.charCount, 23)
+  assert.equal(restorePreviousMaterial(state).block, original, 'restore retains the actual file identity')
+  const named = block('tool-result', { meta: { textOrigin: 'file-content', fileName: 'explicit.txt' } })
+  assert.equal(acceptMaterialHandoff(state, named, true).block, named, 'explicit new provenance is unchanged')
+})
+
 check('sequential processing retains only the immediately preceding material', () => {
   const original = block('query'), first = block('tool-result'), second = block('tool-result')
   const state = acceptMaterialHandoff(acceptMaterialHandoff(replaceCurrentMaterial(original), first, true), second, true)

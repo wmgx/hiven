@@ -3,7 +3,7 @@
  * Used by collect-input live preview and single-text result frames.
  */
 
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState, type ReactNode } from 'react'
 import type { Locale } from '../../i18n'
 import { t } from '../../i18n'
 import { getPlatformShortcutMeta } from './launcherParamShortcuts'
@@ -48,12 +48,14 @@ export function LauncherOutputTargetsBar({
   locale,
   onSelect,
   disabled = false,
+  footerHints,
 }: {
   destinations: OutputDestination[]
   activeId: OutputDestinationId
   locale: Locale
   onSelect: (id: OutputDestinationId) => void
   disabled?: boolean
+  footerHints?: ReactNode
 }) {
   const hasPaste = destinations.some((destination) => destination.id === 'paste-foreground')
   const pasteAvailability = usePasteAvailability(hasPaste)
@@ -62,16 +64,21 @@ export function LauncherOutputTargetsBar({
   const pasteMessage = hasPaste ? t(locale, blockedMessageKey ?? (
     pasteAvailability === 'can-attempt' ? 'palette.outputPasteCanAttempt' : 'palette.outputPasteUnknown'
   )) : undefined
-  if (destinations.length === 0) return null
-  return (
+  if (destinations.length === 0 && footerHints == null) return null
+  // Keep the default Enter action trailing without moving focused controls when
+  // the active keyboard destination changes. Other callers keep their layout.
+  const visibleDestinations = footerHints == null || destinations.length < 2
+    ? destinations
+    : [...destinations.slice(1), destinations[0]]
+  const targets = (
     <>
-      <div
+      {visibleDestinations.length > 0 && <div
         className="launcher-output-targets"
         data-testid="launcher-output-targets"
         role="listbox"
         aria-label={t(locale, 'palette.outputSwitchTarget')}
       >
-        {destinations.map((dest) => (
+        {visibleDestinations.map((dest) => (
           <button
             key={dest.id}
             type="button"
@@ -87,7 +94,7 @@ export function LauncherOutputTargetsBar({
             <span>{t(locale, `palette.${dest.labelKey}`)}</span>
           </button>
         ))}
-      </div>
+      </div>}
       {pasteMessage && (
         // Reserve room while preflight completes: native frame sizing does not
         // run again just because this status changes from unknown to blocked.
@@ -96,6 +103,13 @@ export function LauncherOutputTargetsBar({
         </div>
       )}
     </>
+  )
+  if (footerHints == null) return targets
+  return (
+    <div className="global-launcher-footer l-foot launcher-output-actionbar">
+      <div className="launcher-output-hints">{footerHints}</div>
+      {targets}
+    </div>
   )
 }
 

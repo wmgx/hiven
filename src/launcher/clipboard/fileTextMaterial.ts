@@ -37,6 +37,7 @@ export function createFileTextMaterial(path: string, text: string): LauncherObje
 }
 
 export const FILE_TEXT_ERROR_KEYS = {
+  picker_failed: 'palette.fileTextPickerFailed',
   unsupported_file: 'palette.fileTextUnsupported',
   not_found: 'palette.fileTextNotFound',
   permission_denied: 'palette.fileTextPermissionDenied',
@@ -83,4 +84,59 @@ export function startFileTextMaterialRead(params: {
 export async function readAttachedTextFile(path: string): Promise<string> {
   const { invoke } = await import('@tauri-apps/api/core')
   return invoke<string>('read_text_material_file', { path })
+}
+
+/** Explicit native selection is a separate input boundary, never a query-path fallback. */
+export async function chooseTextMaterialFile(labels: { title: string; filterName: string }): Promise<string | null> {
+  const { open } = await import('@tauri-apps/plugin-dialog')
+  return open({
+    title: labels.title,
+    multiple: false,
+    directory: false,
+    filters: [{ name: labels.filterName, extensions: [...TEXT_EXTENSIONS] }],
+  })
+}
+
+/** Cancellation discards results; the native chooser owns focus until it actually settles. */
+export function startPickedTextMaterialRead(params: {
+  choose: () => Promise<string | string[] | null>
+  read: (path: string) => Promise<string>
+  isCurrent: () => boolean
+  acquireFocusLease: () => () => void
+  onReading: () => void
+}): { result: Promise<FileTextReadResult>; cancel: () => void } {
+  let cancelled = false
+  let releaseFocus = () => {}
+  const isCurrent = () => !cancelled && params.isCurrent()
+  const result = (async (): Promise<FileTextReadResult> => {
+    if (!isCurrent()) return { status: 'cancelled' }
+    let path: string | string[] | null
+    try {
+      // Synchronous acquisition must precede native open and its blur event.
+      const release = params.acquireFocusLease()
+      let released = false
+      releaseFocus = () => { if (!released) { released = true; release() } }
+      path = await params.choose()
+    } catch {
+      return isCurrent() ? { status: 'error', code: 'picker_failed' } : { status: 'cancelled' }
+    } finally {
+      releaseFocus()
+    }
+    if (!isCurrent() || path == null) return { status: 'cancelled' }
+    if (typeof path !== 'string' || !supportedLocalPath(path)) return { status: 'error', code: 'unsupported_file' }
+    params.onReading()
+    if (!isCurrent()) return { status: 'cancelled' }
+    try {
+      const text = await params.read(path)
+      if (!isCurrent()) return { status: 'cancelled' }
+      return { status: 'ready', block: createFileTextMaterial(path, text) }
+    } catch (error) {
+      if (!isCurrent()) return { status: 'cancelled' }
+      const message = error instanceof Error ? error.message : error
+      const code = typeof message === 'string' && Object.hasOwn(FILE_TEXT_ERROR_KEYS, message)
+        ? message as FileTextErrorCode : 'read_failed'
+      return { status: 'error', code }
+    }
+  })()
+  return { result, cancel: () => { cancelled = true } }
 }

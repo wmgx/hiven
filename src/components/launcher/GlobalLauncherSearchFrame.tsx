@@ -1,5 +1,5 @@
-import type { MouseEvent as ReactMouseEvent, MutableRefObject, RefObject } from 'react'
-import { ArrowLeft, BookmarkPlus, Search, X } from 'lucide-react'
+import { useLayoutEffect, useState, type FocusEvent as ReactFocusEvent, type MouseEvent as ReactMouseEvent, type MutableRefObject, type RefObject } from 'react'
+import { ArrowLeft, BookmarkPlus, FilePlus2, Search, X } from 'lucide-react'
 import type { Locale } from '../../i18n'
 import { t } from '../../i18n'
 import { LauncherHintKey } from './LauncherFooterHints'
@@ -99,6 +99,44 @@ export function GlobalLauncherSearchFrame({
   const block = clipboardBlock?.block ?? null
   const blockExiting = Boolean(clipboardBlock?.isExiting)
   const hint = clipboardBlock?.hint ?? null
+  const fileTextBusy = Boolean(clipboardBlock?.isPickingTextFile || clipboardBlock?.isReadingFileText)
+  const fileActionLabel = t(locale, block ? 'palette.fileTextReplace' : 'palette.fileTextPick')
+  const [focusedControl, setFocusedControl] = useState<{
+    element: HTMLButtonElement
+    label: string
+    action?: string
+    itemId?: string
+  } | null>(null)
+  const updateFocusedControl = (target: EventTarget | null) => {
+    const button = target instanceof HTMLElement ? target.closest('button') : null
+    const favoriteButton = button?.classList.contains('launcher-row-pin')
+    const rowIndex = button?.closest<HTMLElement>('[data-launcher-row-index]')?.dataset.launcherRowIndex
+    setFocusedControl(button ? {
+      element: button,
+      label: button.getAttribute('aria-label') ?? button.textContent?.trim() ?? '',
+      action: button.hasAttribute('data-launcher-primary-action') ? 'primary'
+        : favoriteButton ? 'favorite' : button.dataset.launcherFocusAction,
+      itemId: favoriteButton && rowIndex !== undefined ? items[Number(rowIndex)]?.id : undefined,
+    } : null)
+  }
+  const handleFocus = (event: ReactFocusEvent<HTMLElement>) => updateFocusedControl(event.target)
+  const handleBlur = (event: ReactFocusEvent<HTMLElement>) => {
+    const target = event.relatedTarget
+    updateFocusedControl(target instanceof Node && event.currentTarget.parentElement?.contains(target) ? target : null)
+  }
+  useLayoutEffect(() => {
+    // Async file completion can remove a focused read/cancel button without
+    // firing blur. Restore the query before leaving a stale Enter hint behind.
+    if (focusedControl && !focusedControl.element.isConnected) inputRef.current?.focus()
+  })
+  const focusedActionLabel = focusedControl?.action === 'file'
+    ? fileActionLabel
+    : focusedControl?.action === 'browse'
+      ? t(locale, browsingActions ? 'palette.backToSearch' : 'palette.browseAllActions')
+      : focusedControl?.action === 'favorite'
+        ? t(locale, focusedControl.itemId && favoriteKeys?.includes(focusedControl.itemId) ? 'palette.actionUnpin' : 'palette.actionPin')
+        : focusedControl?.label
+  const showListHints = !focusedControl && !fileTextBusy
   // Keep placeholder stable during exit to avoid input layout shift mid-animation.
   const resolvedPlaceholder = block
     ? t(locale, 'palette.contentActionPlaceholder')
@@ -109,6 +147,8 @@ export function GlobalLauncherSearchFrame({
       <div
         className="global-launcher-header l-search"
         data-launcher-drag-handle
+        onFocusCapture={handleFocus}
+        onBlurCapture={handleBlur}
         style={{ borderBottom: '1px solid var(--border)' }}
         title={undefined}
       >
@@ -118,7 +158,10 @@ export function GlobalLauncherSearchFrame({
             block={block}
             locale={locale}
             exiting={blockExiting}
-            onRemove={() => clipboardBlock?.removeBlock()}
+            onRemove={() => {
+              clipboardBlock?.removeBlock()
+              inputRef.current?.focus()
+            }}
             onRestore={clipboardBlock?.canRestorePreviousMaterial ? () => {
               clipboardBlock.restorePreviousMaterial()
               inputRef.current?.focus()
@@ -184,55 +227,85 @@ export function GlobalLauncherSearchFrame({
             {t(locale, 'palette.useQueryAsContent')}
           </button>
         )}
-      </div>
-      {clipboardBlock?.canReadFileText && (
-        <div className="launcher-discovery-nav" role="group" aria-label={t(locale, 'palette.fileTextRead')}>
+        {clipboardBlock?.canPickTextFile && (
           <button
             type="button"
-            className="launcher-discovery-action"
-            disabled={busy || clipboardBlock.isReadingFileText}
+            className="launcher-query-clear launcher-file-material-action"
+            data-launcher-focus-action="file"
+            aria-label={fileActionLabel}
+            title={fileActionLabel}
+            disabled={busy || fileTextBusy}
             onMouseDown={(event) => event.preventDefault()}
             onKeyDown={(event) => event.stopPropagation()}
             onKeyUp={(event) => event.stopPropagation()}
-            onClick={clipboardBlock.readFileText}
+            onClick={clipboardBlock.pickTextFile}
           >
-            {t(locale, clipboardBlock.isReadingFileText ? 'palette.fileTextReading' : 'palette.fileTextRead')}
+            <FilePlus2 size={16} aria-hidden />
           </button>
-          {clipboardBlock.isReadingFileText && (
-            <button
-              type="button"
-              className="launcher-discovery-action"
-              onMouseDown={(event) => event.preventDefault()}
-              onKeyDown={(event) => event.stopPropagation()}
-              onKeyUp={(event) => event.stopPropagation()}
-              onClick={clipboardBlock.cancelFileTextRead}
-            >
-              {t(locale, 'palette.fileTextCancel')}
-            </button>
-          )}
-        </div>
-      )}
-      {clipboardBlock?.fileTextError && (
-        <div className="px-3.5 py-1.5 text-[12px]" role="alert" style={{ color: 'var(--color-error)' }}>
-          {t(locale, FILE_TEXT_ERROR_KEYS[clipboardBlock.fileTextError])}
-        </div>
-      )}
-      {error && (
-        <div className="px-3.5 py-1.5 text-[12px]" style={{ color: 'var(--color-error)', borderBottom: 'var(--hairline) solid var(--color-border-tertiary)' }}>
-          {error}
-        </div>
-      )}
+        )}
+      </div>
       <div
         className="global-launcher-body l-list"
         data-no-drag
         data-launcher-scrollable
+        data-control-focused={focusedControl && focusedControl.action !== 'primary' ? 'true' : undefined}
+        onFocusCapture={handleFocus}
+        onBlurCapture={handleBlur}
         onMouseMove={onMouseMove}
       >
+        {clipboardBlock && (clipboardBlock.canReadFileText || fileTextBusy) && (
+          <div
+            className="launcher-file-material-status"
+            aria-busy={fileTextBusy}
+          >
+            {fileTextBusy && (
+              <span role="status">
+                {t(locale, clipboardBlock.isPickingTextFile ? 'palette.fileTextPicking' : 'palette.fileTextReading')}
+              </span>
+            )}
+            {clipboardBlock.canReadFileText && !clipboardBlock.isReadingFileText && (
+              <button
+                type="button"
+                className="launcher-discovery-action"
+                disabled={busy || fileTextBusy}
+                onMouseDown={(event) => event.preventDefault()}
+                onKeyDown={(event) => event.stopPropagation()}
+                onKeyUp={(event) => event.stopPropagation()}
+                onClick={clipboardBlock.readFileText}
+              >
+                {t(locale, 'palette.fileTextRead')}
+              </button>
+            )}
+            {clipboardBlock.isReadingFileText && (
+                <button
+                  type="button"
+                  className="launcher-discovery-action"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onKeyDown={(event) => event.stopPropagation()}
+                  onKeyUp={(event) => event.stopPropagation()}
+                  onClick={clipboardBlock.cancelFileTextRead}
+                >
+                  {t(locale, 'palette.fileTextCancel')}
+                </button>
+            )}
+          </div>
+        )}
+        {clipboardBlock?.fileTextError && (
+          <div className="launcher-file-material-error px-3.5 py-1.5 text-[12px]" role="alert" style={{ color: 'var(--color-error)' }}>
+            {t(locale, FILE_TEXT_ERROR_KEYS[clipboardBlock.fileTextError])}
+          </div>
+        )}
+        {error && (
+          <div className="px-3.5 py-1.5 text-[12px]" style={{ color: 'var(--color-error)', borderBottom: 'var(--hairline) solid var(--color-border-tertiary)' }}>
+            {error}
+          </div>
+        )}
         {onBrowseActions && (browsingActions || !query.trim() || items.length === 0) && (
           <div className="launcher-discovery-nav">
             <button
               type="button"
               className="launcher-discovery-action"
+              data-launcher-focus-action="browse"
               onMouseDown={(event) => event.preventDefault()}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' || event.key === ' ') event.stopPropagation()
@@ -292,26 +365,34 @@ export function GlobalLauncherSearchFrame({
             />
         )}
       </div>
-      <div className="global-launcher-footer l-foot">
+      <div className="global-launcher-footer l-foot" onFocusCapture={handleFocus} onBlurCapture={handleBlur}>
         <div className="l-foot-hints">
-          {selectedItem && onToggleFavorite && pinnableItemKeys?.has(selectedItem.id) && (
+          {showListHints && selectedItem && onToggleFavorite && pinnableItemKeys?.has(selectedItem.id) && (
             <LauncherHintKey
               keys={`${getPlatformShortcutMeta().label}P`}
               label={isFavoriteSelected ? t(locale, 'palette.actionUnpin') : t(locale, 'palette.actionPin')}
             />
           )}
-          {showCustomizeHint && (
+          {showListHints && showCustomizeHint && (
             <LauncherHintKey keys={`${customizeShortcutLabel}↵`} label={t(locale, 'palette.customizeParamsLabel')} />
           )}
-          {showWorkflowObjectHint && (
+          {showListHints && showWorkflowObjectHint && (
             <LauncherHintKey keys="tab" label={t(locale, 'palette.select')} />
           )}
           <LauncherHintKey keys="esc" label={t(locale, 'palette.back')} />
+          {focusedControl && focusedControl.action !== 'primary' &&
+            focusedActionLabel && !(focusedControl.action === 'file' && fileTextBusy) && (
+            <span className="launcher-focused-action grp" title={focusedActionLabel}>
+              <kbd>↵</kbd>
+              <span>{focusedActionLabel}</span>
+            </span>
+          )}
         </div>
-        {/* SuperCmd/Tinycast action capsule: primary action + ↵, not a keycap manual */}
         <button
           type="button"
           className="l-foot-primary grp"
+          data-launcher-primary-action
+          data-secondary={!showListHints && focusedControl?.action !== 'primary' ? 'true' : undefined}
           disabled={!selectedItem || selectedItem.disabled}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => {
@@ -319,7 +400,7 @@ export function GlobalLauncherSearchFrame({
           }}
         >
           <span className="l-foot-primary-label">{primaryActionLabel(selectedItem, locale)}</span>
-          <kbd>↵</kbd>
+          {(showListHints || focusedControl?.action === 'primary') && <kbd>↵</kbd>}
         </button>
       </div>
     </>

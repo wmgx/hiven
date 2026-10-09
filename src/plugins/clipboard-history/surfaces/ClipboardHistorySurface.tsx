@@ -989,17 +989,11 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
           />}
         </div>
 
-        <SurfaceFooterHints className="clipboard-history-footer">
-          {combining ? <>
-            <span>{t('merge.selectionCount', { count: mergeIds.length, max: CLIPBOARD_TEXT_MERGE_MAX_ITEMS })}</span>
-            <span>↵ {t('merge.toggleSelection')}</span>
-            <span>Esc {t('merge.cancel')}</span>
-          </> : <>
+        {!combining && <SurfaceFooterHints className="clipboard-history-footer">
           <span>↵ {t('hint.paste')}</span>
           <span>{typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'}↵ {t('hint.returnToLauncher')}</span>
           <span>⌫ {t('hint.delete')}</span>
-          </>}
-        </SurfaceFooterHints>
+        </SurfaceFooterHints>}
       </>
     )
   }
@@ -1018,17 +1012,16 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       tabIndex={-1}
     >
       <div className="clipboard-history-topbar">
-        <IconButton
+        {!combining && <IconButton
           type="button"
           label={t('action.back')}
           onClick={() => {
-            if (combining) { cancelMerge(); return }
             setQuery('')
             host.requestBack()
           }}
         >
           <BackIcon size={18} />
-        </IconButton>
+        </IconButton>}
         <SearchField
           ref={searchRef}
           data-plugin-surface-autofocus
@@ -1039,19 +1032,19 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
           placeholder={t('search.placeholder')}
           disabled={loading || !settings.enabled}
         />
-        {settings.enabled && !loading && (
-          <Button type="button" onClick={combining ? cancelMerge : startMerge}>
-            {t(combining ? 'merge.cancel' : 'merge.start')}
+        {!combining && settings.enabled && !loading && (
+          <Button type="button" onClick={startMerge}>
+            {t('merge.start')}
           </Button>
         )}
-        <Button
+        {!combining && <Button
           type="button"
           variant="primary"
-          disabled={combining ? !mergePreview || mergeLoading || mergeSuspended || !settings.enabled : !selectedItem || loading || !settings.enabled}
-          onClick={() => combining ? continueMerge() : selectedItem && void handlePaste(selectedItem)}
+          disabled={!selectedItem || loading || !settings.enabled}
+          onClick={() => selectedItem && void handlePaste(selectedItem)}
         >
-          {t(combining ? 'merge.continue' : 'action.paste')}
-        </Button>
+          {t('action.paste')}
+        </Button>}
         {!combining && <IconButton
           type="button"
           label={t('action.openSettings')}
@@ -1059,21 +1052,40 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         >
           <SettingsIcon size={17} />
         </IconButton>}
-        <IconButton
+        {!combining && <IconButton
           type="button"
           label={t('action.close')}
           onClick={() => {
-            if (combining) { cancelMerge(); return }
             mergeReader.invalidate()
             setQuery('')
             host.close()
           }}
         >
           <CloseIcon size={18} />
-        </IconButton>
+        </IconButton>}
       </div>
 
       {renderContent()}
+
+      {combining && (
+        <SurfaceFooterHints className="clipboard-history-footer clipboard-history-merge-footer">
+          <div className="clipboard-history-merge-footer-hints">
+            <span>↵ {t('merge.toggleSelection')}</span>
+            <span>Esc {t('merge.cancel')}</span>
+          </div>
+          <div className="clipboard-history-merge-footer-actions">
+            <Button type="button" onClick={cancelMerge}>{t('merge.cancel')}</Button>
+            <Button
+              type="button"
+              variant="primary"
+              disabled={!mergePreview || mergeLoading || mergeSuspended || !settings.enabled}
+              onClick={continueMerge}
+            >
+              {t('merge.continue')}
+            </Button>
+          </div>
+        </SurfaceFooterHints>
+      )}
 
       <Dialog
         open={Boolean(titleDialog)}

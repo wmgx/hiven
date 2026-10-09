@@ -240,6 +240,7 @@
     "test:launcher-selection-preserve": "node scripts/test-launcher-selection-preserve.mjs",
     "test:saved-action-delete": "node scripts/test-saved-action-delete.mjs",
     "test:file-text-material": "node scripts/test-file-text-material.mjs",
+    "test:launcher-native-dialog-focus": "node scripts/test-launcher-native-dialog-focus.mjs",
     "test:ollama-provider": "node scripts/test-ollama-provider.mjs",
     "test:ollama-runtime": "node scripts/test-ollama-runtime.mjs",
     "test:ai-writing-summary": "node scripts/test-ai-writing-summary.mjs",

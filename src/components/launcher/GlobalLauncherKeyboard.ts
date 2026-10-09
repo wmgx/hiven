@@ -199,6 +199,12 @@ export function handleGlobalLauncherKeyDown({
     }
   }
 
+  // Native controls own their activation and Tab traversal. Keep the list's
+  // remembered selection, but never run it from a focused header/row button.
+  const onSearchRoot = !controllerState || controllerState.frames.length <= 1
+  const keyTarget = event.target as HTMLElement | null
+  if (onSearchRoot && keyTarget?.closest?.('button')) return
+
   if (hasObjectActions && event.key === 'ArrowDown') {
     event.preventDefault()
     isKeyboardNavRef.current = true
@@ -221,10 +227,6 @@ export function handleGlobalLauncherKeyDown({
     executeSelectedObjectAction?.(event.metaKey || event.ctrlKey)
     return
   }
-
-  // Search frame only (no multi-frame controller stack above).
-  const onSearchRoot =
-    !controllerState || controllerState.frames.length <= 1
 
   // ⌘1–8 / Ctrl+1–8: select and immediately run the Nth visible row (SuperCmd-style).
   if (onSearchRoot && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey) {

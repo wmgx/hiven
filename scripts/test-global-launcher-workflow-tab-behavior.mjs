@@ -159,4 +159,22 @@ assert.equal(isWorkflowObjectLauncherItem(nonDomainItem), false, 'non-domain row
   assert.deepEqual(JSON.parse(JSON.stringify(calls.selectedItems)), [{ item: normalDomainItem, customizeParams: true }], 'Enter must preserve customize-params behavior for normal items')
 }
 
-console.log('global launcher workflow Tab behavior checks passed')
+// A native control can have focus while a workflow row remains selected.
+// Its default click/Tab behavior must not execute or change that remembered row.
+for (const key of ['Enter', ' ', 'Tab', 'ArrowDown', 'ArrowUp', 'Backspace']) {
+  const { event, calls: eventCalls } = makeEvent(key, {
+    target: { closest: (selector) => selector === 'button' ? {} : null },
+  })
+  let materialRemoved = false
+  const { args, calls } = makeArgs({
+    selectedItem: workflowObjectItem,
+    handleClipboardBackspace: () => { materialRemoved = true; return true },
+  })
+  handleGlobalLauncherKeyDown({ event, ...args })
+  assert.equal(eventCalls.prevented, 0, `${key} on a native button preserves browser behavior`)
+  assert.deepEqual(calls.selectedItems, [], `${key} on a native button must not execute the selected row`)
+  assert.deepEqual(calls.selectedIndexes, [], `${key} on a native button must preserve list selection`)
+  assert.equal(materialRemoved, false, 'Backspace outside the query must not remove current material')
+}
+
+console.log('global launcher workflow Tab and native control focus behavior checks passed')

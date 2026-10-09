@@ -60,7 +60,7 @@ export function ObjectBlockToken({
       data-state={selected ? 'selected-for-deletion' : block.state}
       aria-hidden={exiting ? true : undefined}
     >
-      {!block.secretMasked && block.meta?.textOrigin === 'file-content' ? (
+      {!block.secretMasked && block.meta?.textOrigin === 'file-content' && block.meta.fileName ? (
         <span className="object-block-content" title={block.meta.fileName}>
           {t(locale, 'palette.fileTextMaterial', { name: truncatePreview(block.meta.fileName ?? '', 24) })}
         </span>
