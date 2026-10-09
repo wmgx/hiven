@@ -215,7 +215,7 @@ assert.match(files.pluginSurfaceWindowComponent, /upsertSurfaceInstance\([\s\S]*
 assert.match(files.pluginSurfaceWindowComponent, /markSurfaceInstanceState\([\s\S]*['"]hidden['"]/, 'Plugin surface window component must mark its surface hidden on teardown')
 assert.match(files.windowManagerEditor, /function\s+showEditorWindow\(\)[\s\S]*requestOpenEditorWindow\(\)/, 'window manager must expose editor window open operations through a facade')
 assert.match(files.windowManagerEditor, /function\s+closeEditorWindow\([\s\S]*requestCloseEditorWindow\(/, 'window manager must expose editor window close operations through a facade')
-assert.match(files.windowManagerPluginSurfaces, /function\s+showPluginSurfaceWindow\(target:[\s\S]*requestOpenPluginSurfaceWindow\(target\)/, 'window manager must expose plugin surface window operations through a facade')
+assert.match(files.windowManagerPluginSurfaces, /function\s+showPluginSurfaceWindow\(target:[\s\S]*requestOpenPluginSurfaceWindow\(target, options\)/, 'window manager must expose plugin surface window operations through a facade')
 assert.match(files.windowManagerPluginSurfaces, /function\s+hidePluginSurfaceWindow\(target:[\s\S]*requestHidePluginSurfaceWindow\(target\)/, 'window manager must expose plugin surface window hide operations through a facade')
 assert.match(files.windowManagerLauncher, /showLauncherWindow/, 'window manager must expose launcher window operations')
 assert.match(files.windowLabels, /EDITOR_WINDOW_LABEL/, 'window manager must centralize window labels')

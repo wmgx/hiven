@@ -5,6 +5,7 @@ import {
   pluginSurfaceWindowLabel,
   requestHidePluginSurfaceWindow,
   requestOpenPluginSurfaceWindow,
+  type PluginSurfaceWindowOpenOptions,
 } from '../pluginSurfaceWindows'
 
 export {
@@ -13,8 +14,8 @@ export {
   pluginSurfaceWindowLabel,
 }
 
-export async function showPluginSurfaceWindow(target: PluginSurfaceOpenTarget): Promise<void> {
-  await requestOpenPluginSurfaceWindow(target)
+export async function showPluginSurfaceWindow(target: PluginSurfaceOpenTarget, options?: PluginSurfaceWindowOpenOptions): Promise<void> {
+  await requestOpenPluginSurfaceWindow(target, options)
 }
 
 export async function hidePluginSurfaceWindow(target: PluginSurfaceOpenTarget): Promise<void> {

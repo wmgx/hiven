@@ -21,8 +21,18 @@ static TARGETS: OnceLock<Mutex<HashMap<String, Arc<PasteTarget>>>> = OnceLock::n
 // Serialize the short synthetic chords, including calls from different surfaces.
 static PASTE_LOCK: Mutex<()> = Mutex::new(());
 
-pub(crate) struct PasteTarget {
+// A surface opening has its own identity. Several openings can share one
+// captured window and its original DestroyNotify observer without retargeting
+// each other when another surface opens again.
+pub(crate) struct SurfaceTarget<T> {
     surface: String,
+    captured: Arc<T>,
+}
+
+type SurfaceTargets<T> = HashMap<String, Arc<SurfaceTarget<T>>>;
+pub(crate) type PasteTarget = SurfaceTarget<CapturedWindow>;
+
+pub(crate) struct CapturedWindow {
     session: Mutex<Session>,
     window: Window,
 }
@@ -287,6 +297,39 @@ fn is_confirmed_external_pid(pid: Option<u32>, own_pid: u32) -> bool {
 
 /// Replace even on capture failure, so an earlier session cannot leak through.
 pub(crate) fn remember_target(surface: &str, allow_hiven: bool) {
+    capture_target(surface, allow_hiven, false);
+}
+
+/// A visible Launcher can be summoned again from a new external app. Keep its
+/// existing target only when the active window is confirmed to be hiven (for
+/// example when returning from a companion). An unknown PID is not evidence.
+pub(crate) fn refresh_launcher_target() {
+    capture_target("launcher", false, true);
+}
+
+#[derive(Debug, PartialEq)]
+enum CaptureAction {
+    Capture,
+    Preserve,
+    Reject,
+}
+
+fn capture_action(
+    allow_hiven: bool,
+    preserve_hiven: bool,
+    pid: Option<u32>,
+    own_pid: u32,
+) -> CaptureAction {
+    if allow_hiven || is_confirmed_external_pid(pid, own_pid) {
+        CaptureAction::Capture
+    } else if preserve_hiven && pid == Some(own_pid) {
+        CaptureAction::Preserve
+    } else {
+        CaptureAction::Reject
+    }
+}
+
+fn capture_target(surface: &str, allow_hiven: bool, preserve_hiven: bool) {
     let captured = (|| {
         let session = Session::connect()?;
         let window = session
@@ -305,10 +348,14 @@ pub(crate) fn remember_target(surface: &str, allow_hiven: bool) {
                     .value32()
                     .and_then(|mut values| values.next())
             };
-            if !is_confirmed_external_pid(pid, std::process::id()) {
-                return Err(error(
-                    "the global launcher target is not confirmed as an external process",
-                ));
+            match capture_action(allow_hiven, preserve_hiven, pid, std::process::id()) {
+                CaptureAction::Preserve => return Ok(None),
+                CaptureAction::Reject => {
+                    return Err(error(
+                        "the global launcher target is not confirmed as an external process",
+                    ));
+                }
+                CaptureAction::Capture => {}
             }
         }
         session
@@ -324,19 +371,67 @@ pub(crate) fn remember_target(surface: &str, allow_hiven: bool) {
         if !session.focused(window)? {
             return Err(error("the active target does not hold keyboard focus"));
         }
-        Ok(Arc::new(PasteTarget {
+        Ok(Some(Arc::new(PasteTarget {
             surface: surface.to_string(),
-            session: Mutex::new(session),
-            window,
-        }))
+            captured: Arc::new(CapturedWindow {
+                session: Mutex::new(session),
+                window,
+            }),
+        })))
     })();
     if let Ok(mut targets) = targets().lock() {
-        targets.remove(surface);
-        match captured {
-            Ok(target) => {
-                targets.insert(surface.to_string(), target);
-            }
-            Err(error) => log::debug!("Cannot remember Linux paste target: {error}"),
+        if let Err(error) = store_capture(&mut targets, surface, captured) {
+            log::debug!("Cannot remember Linux paste target: {error}");
+        }
+    }
+}
+
+fn store_capture<T>(
+    targets: &mut SurfaceTargets<T>,
+    surface: &str,
+    captured: PasteResult<Option<Arc<SurfaceTarget<T>>>>,
+) -> PasteResult<()> {
+    match captured {
+        Ok(Some(target)) => {
+            targets.insert(surface.to_string(), target);
+            Ok(())
+        }
+        Ok(None) => Ok(()),
+        Err(error) => {
+            targets.remove(surface);
+            Err(error)
+        }
+    }
+}
+
+fn inherit_launcher_target_in<T>(
+    targets: &mut SurfaceTargets<T>,
+    surface: &str,
+    caller: &str,
+    caller_focused: bool,
+) -> PasteResult<()> {
+    let captured = if caller != "launcher" || !caller_focused || surface == caller {
+        Err(error("only the focused Launcher can pass its paste target"))
+    } else {
+        targets
+            .get(caller)
+            .map(|source| {
+                Some(Arc::new(SurfaceTarget {
+                    surface: surface.to_string(),
+                    captured: Arc::clone(&source.captured),
+                }))
+            })
+            .ok_or_else(|| error("Launcher has no captured paste target"))
+    };
+    // Only registry state is accessed here. Never lock a shared X11 session
+    // while holding the registry: paste takes those locks in the other order.
+    store_capture(targets, surface, captured)
+}
+
+pub(crate) fn inherit_launcher_target(surface: &str, caller: &str, caller_focused: bool) {
+    if let Ok(mut targets) = targets().lock() {
+        if let Err(error) = inherit_launcher_target_in(&mut targets, surface, caller, caller_focused) {
+            log::debug!("Cannot inherit Linux paste target: {error}");
         }
     }
 }
@@ -356,13 +451,15 @@ pub(crate) fn clear_targets() {
     }
 }
 
-fn ensure_current(target: &Arc<PasteTarget>) -> PasteResult<()> {
-    if targets()
-        .lock()
-        .map_err(error)?
+fn is_current<T>(targets: &SurfaceTargets<T>, target: &Arc<SurfaceTarget<T>>) -> bool {
+    targets
         .get(&target.surface)
         .is_some_and(|current| Arc::ptr_eq(current, target))
-    {
+}
+
+fn ensure_current(target: &Arc<PasteTarget>) -> PasteResult<()> {
+    let registry = targets().lock().map_err(error)?;
+    if is_current(&registry, target) {
         Ok(())
     } else {
         Err(error("the surface was reopened or its target changed"))
@@ -372,17 +469,18 @@ fn ensure_current(target: &Arc<PasteTarget>) -> PasteResult<()> {
 pub(crate) fn restore_and_paste(target: Arc<PasteTarget>) -> PasteResult<()> {
     let _paste_lock = PASTE_LOCK.lock().map_err(error)?;
     ensure_current(&target)?;
-    let session = target.session.lock().map_err(error)?;
-    session.ensure_alive(target.window)?;
-    if !session.focused(target.window)? {
-        session.request_activation(target.window)?;
+    let captured = &target.captured;
+    let session = captured.session.lock().map_err(error)?;
+    session.ensure_alive(captured.window)?;
+    if !session.focused(captured.window)? {
+        session.request_activation(captured.window)?;
     }
     let deadline = Instant::now() + Duration::from_millis(1200);
     let mut focused_since = None;
     loop {
         ensure_current(&target)?;
-        session.ensure_alive(target.window)?;
-        if session.focused(target.window)? && session.keyboard_idle()? {
+        session.ensure_alive(captured.window)?;
+        if session.focused(captured.window)? && session.keyboard_idle()? {
             let since = focused_since.get_or_insert_with(Instant::now);
             if since.elapsed() >= Duration::from_millis(100) {
                 break;
@@ -398,18 +496,15 @@ pub(crate) fn restore_and_paste(target: Arc<PasteTarget>) -> PasteResult<()> {
         thread::sleep(Duration::from_millis(20));
     }
     let registry = targets().lock().map_err(error)?;
-    if !registry
-        .get(&target.surface)
-        .is_some_and(|current| Arc::ptr_eq(current, &target))
-    {
+    if !is_current(&registry, &target) {
         return Err(error("the surface was reopened or its target changed"));
     }
     // Keep the final verification and four events together. Other clients (the
     // WM included) cannot switch input focus between the check and the chord.
     // The server is ungrabbed before the target handles clipboard requests.
     let _server = ServerGrab::new(&session.connection)?;
-    session.ensure_alive(target.window)?;
-    if !session.focused(target.window)? || !session.keyboard_idle()? {
+    session.ensure_alive(captured.window)?;
+    if !session.focused(captured.window)? || !session.keyboard_idle()? {
         return Err(error("the target or keyboard state changed before paste"));
     }
     let (control, v) = session.paste_keycodes()?;
@@ -495,6 +590,123 @@ mod tests {
         assert!(!is_confirmed_external_pid(Some(0), 42));
         assert!(!is_confirmed_external_pid(Some(42), 42));
         assert!(is_confirmed_external_pid(Some(43), 42));
+    }
+
+    #[test]
+    fn visible_launcher_refreshes_only_from_a_confirmed_external_process() {
+        assert_eq!(
+            capture_action(false, true, Some(43), 42),
+            CaptureAction::Capture
+        );
+        assert_eq!(
+            capture_action(false, true, Some(42), 42),
+            CaptureAction::Preserve
+        );
+        for pid in [None, Some(0)] {
+            assert_eq!(capture_action(false, true, pid, 42), CaptureAction::Reject);
+        }
+        assert_eq!(
+            capture_action(false, false, Some(42), 42),
+            CaptureAction::Reject
+        );
+        assert_eq!(
+            capture_action(true, false, Some(42), 42),
+            CaptureAction::Capture
+        );
+    }
+
+    fn target(surface: &str, window: u32) -> Arc<SurfaceTarget<u32>> {
+        Arc::new(SurfaceTarget {
+            surface: surface.to_string(),
+            captured: Arc::new(window),
+        })
+    }
+
+    #[test]
+    fn inherited_window_is_a_snapshot_with_a_separate_surface_generation() {
+        let source = target("launcher", 10);
+        let mut registry = HashMap::from([("launcher".to_string(), source.clone())]);
+        inherit_launcher_target_in(&mut registry, "history", "launcher", true).unwrap();
+        let first_open = registry["history"].clone();
+        assert_eq!(first_open.surface, "history");
+        assert!(Arc::ptr_eq(&first_open.captured, &source.captured));
+        assert!(is_current(&registry, &first_open));
+
+        // Reopening the source must not redirect an already-open child.
+        let next_source = target("launcher", 20);
+        store_capture(&mut registry, "launcher", Ok(Some(next_source.clone()))).unwrap();
+        assert!(!is_current(&registry, &source));
+        assert!(is_current(&registry, &first_open));
+        assert_eq!(*first_open.captured, 10);
+
+        // Selecting an already-visible companion again is a new opening.
+        inherit_launcher_target_in(&mut registry, "history", "launcher", true).unwrap();
+        let second_open = registry["history"].clone();
+        assert!(!is_current(&registry, &first_open));
+        assert!(is_current(&registry, &second_open));
+        assert!(Arc::ptr_eq(&second_open.captured, &next_source.captured));
+
+        // Even repeated opens with the same source invalidate an in-flight paste.
+        inherit_launcher_target_in(&mut registry, "history", "launcher", true).unwrap();
+        assert!(!is_current(&registry, &second_open));
+        let third_open = registry["history"].clone();
+        registry.clear();
+        assert!(!is_current(&registry, &third_open));
+    }
+
+    #[test]
+    fn invalid_inheritance_removes_the_previous_destination_without_fallback() {
+        for (caller, focused, has_source) in [
+            ("launcher", true, false),
+            ("launcher", false, true),
+            ("main", true, true),
+            ("quick-editor", true, true),
+        ] {
+            let old = target("history", 99);
+            let mut registry = HashMap::from([("history".to_string(), old.clone())]);
+            if has_source {
+                registry.insert("launcher".to_string(), target("launcher", 10));
+            }
+            assert!(inherit_launcher_target_in(&mut registry, "history", caller, focused).is_err());
+            assert!(!registry.contains_key("history"));
+            assert!(!is_current(&registry, &old));
+        }
+        let mut registry = HashMap::from([("launcher".to_string(), target("launcher", 10))]);
+        assert!(inherit_launcher_target_in(&mut registry, "launcher", "launcher", true).is_err());
+        assert!(!registry.contains_key("launcher"));
+    }
+
+    #[test]
+    fn failed_capture_clears_stale_target_but_hiven_return_keeps_its_identity() {
+        let source = target("launcher", 10);
+        let mut registry = HashMap::from([("launcher".to_string(), source.clone())]);
+        store_capture(&mut registry, "launcher", Ok(None)).unwrap();
+        assert!(is_current(&registry, &source));
+        assert!(store_capture(&mut registry, "launcher", Err(error("unknown target"))).is_err());
+        assert!(!registry.contains_key("launcher"));
+        assert!(!is_current(&registry, &source));
+    }
+
+    #[test]
+    fn inheritance_keeps_the_original_window_lifecycle_observer() {
+        let source = Arc::new(SurfaceTarget {
+            surface: "launcher".to_string(),
+            captured: Arc::new(Cell::new(false)),
+        });
+        let mut registry = HashMap::from([("launcher".to_string(), source.clone())]);
+        inherit_launcher_target_in(&mut registry, "history", "launcher", true).unwrap();
+        source.captured.set(true);
+        assert!(registry["history"].captured.get());
+        // A later capture (including a reused native window ID) cannot replace
+        // the old observer whose destruction flag has already been set.
+        registry.insert(
+            "launcher".to_string(),
+            Arc::new(SurfaceTarget {
+                surface: "launcher".to_string(),
+                captured: Arc::new(Cell::new(false)),
+            }),
+        );
+        assert!(registry["history"].captured.get());
     }
 
     #[test]

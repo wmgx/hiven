@@ -762,6 +762,10 @@ fn show_launcher_window_for_hotkey_with_event(
             .as_ref()
             .and_then(|window| window.is_visible().ok())
             .unwrap_or(false);
+        #[cfg(target_os = "linux")]
+        if was_visible {
+            linux_x11_paste::refresh_launcher_target();
+        }
         if !was_visible {
             let started_at = Instant::now();
             remember_previous_foreground_app();
@@ -1382,8 +1386,15 @@ async fn close_quick_editor_window(app: tauri::AppHandle) -> Result<(), String> 
     Ok(())
 }
 
+#[derive(Clone, Copy, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum PluginSurfacePasteTarget {
+    Launcher,
+}
+
 #[tauri::command(rename_all = "camelCase")]
 async fn show_plugin_surface_window(
+    caller: tauri::WebviewWindow,
     app: tauri::AppHandle,
     source: String,
     plugin_id: String,
@@ -1396,7 +1407,10 @@ async fn show_plugin_surface_window(
     resizable: Option<bool>,
     close_on_blur: Option<bool>,
     destroy_timeout_ms: Option<u64>,
+    paste_target: Option<PluginSurfacePasteTarget>,
 ) -> Result<(), String> {
+    #[cfg(not(target_os = "linux"))]
+    let _ = (&caller, paste_target);
     let label = plugin_surface_window_label(&source, &plugin_id, &surface_id);
     let url = plugin_surface_window_url(&source, &plugin_id, &surface_id);
     let title = title.unwrap_or_else(|| surface_id.clone());
@@ -1415,6 +1429,20 @@ async fn show_plugin_surface_window(
         .as_ref()
         .and_then(|window| window.is_visible().ok())
         .unwrap_or(false);
+    #[cfg(target_os = "linux")]
+    if matches!(paste_target, Some(PluginSurfacePasteTarget::Launcher)) {
+        // This intent is only sent by the root Launcher list. Other hiven
+        // editors (including tools hosted in Launcher) keep ordinary capture.
+        // Refresh even a visible companion: a new Launcher session may have
+        // captured a different external window since this surface last opened.
+        linux_x11_paste::inherit_launcher_target(
+            &label,
+            caller.label(),
+            caller.is_focused().unwrap_or(false),
+        );
+    } else if !was_visible {
+        linux_x11_paste::remember_target(&label, true);
+    }
     if !was_visible {
         // Unlike the launcher's non-activating panel, a plugin surface window is
         // built with `.focused(true)` below, so showing/creating it here steals
@@ -1422,8 +1450,6 @@ async fn show_plugin_surface_window(
         // the launcher's show path) so hide_launcher_and_paste can hand
         // activation back to it once the surface window is hidden again.
         remember_previous_foreground_app();
-        #[cfg(target_os = "linux")]
-        linux_x11_paste::remember_target(&label, true);
         // But that "foreground app" may not actually be the real paste
         // target: a non-activating panel (the launcher, or quick editor
         // rendered inside it) can hold macOS keyboard focus (isKeyWindow)

@@ -18,7 +18,7 @@ const selectionController = read('src/components/launcher/useGlobalLauncherSelec
 const globalLauncher = read('src/launcher/hosts/GlobalLauncherHost.tsx') + '\n' + read('src/components/launcher/GlobalLauncherSurfaceFrame.ts')
 
 assert.match(surfaceWindows, /getPluginSurfaceShortcutPresentation[\s\S]*shortcutPresentation === ['"]window['"]/, 'surface metadata must choose window presentation for shortcuts')
-assert.match(windowManager, /function\s+showPluginSurfaceWindow\(target:[\s\S]*requestOpenPluginSurfaceWindow\(target\)/, 'window manager must expose plugin surface open lifecycle through a facade')
+assert.match(windowManager, /function\s+showPluginSurfaceWindow\(target:[\s\S]*requestOpenPluginSurfaceWindow\(target, options\)/, 'window manager must expose plugin surface open lifecycle through a facade')
 assert.match(shortcutHotkeys, /getPluginSurfaceShortcutPresentation\(target\) === ['"]window['"][\s\S]*showPluginSurfaceWindow\(target\)/, 'shortcut handler must route window surfaces through the window manager')
 assert.doesNotMatch(shortcutHotkeys, /requestOpenPluginSurfaceWindow/, 'shortcut handler must not call the lower-level plugin surface lifecycle API directly')
 assert.match(shortcutHotkeys, /requestOpenPluginSurfaceTool\(target\)/, 'shortcut handler must keep launcher presentation fallback')
@@ -34,7 +34,7 @@ assert.match(
 // so Global Launcher stays open (smart companion blur — see launcherBlurGuard).
 assert.match(
   selectionController,
-  /getPluginSurfaceShortcutPresentation\(target\) === ['"]window['"][\s\S]*showPluginSurfaceWindow\(target\)/,
+  /getPluginSurfaceShortcutPresentation\(target\) === ['"]window['"][\s\S]*showPluginSurfaceWindow\(target,/,
   'launcher list selection must open window-presentation surfaces as independent windows',
 )
 assert.match(
@@ -72,5 +72,40 @@ assert.match(openRequest, /if \(!isNativeDesktopRuntime\(\)\) \{[\s\S]*openLaunc
 assert.match(globalLauncher, /pluginSurfaceToolTarget/, 'global launcher must keep a separate tool-shell target')
 assert.match(globalLauncher, /samePluginSurfaceTarget/, 'global launcher must distinguish current launcher surface from shortcut tool target')
 assert.match(globalLauncher, /clearPluginSurfaceTool\(\)[\s\S]*openPluginSurface/, 'launcher-list surface opens must not be confused with shortcut tool requests')
+
+// Execute both host API layers: only the explicitly requested Launcher handoff
+// may reach native as inherited; ordinary editor/shortcut opens stay unset.
+const nativeCalls = []
+const surfaceApi = {}
+vm.runInNewContext(ts.transpileModule(surfaceWindows, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+}).outputText, {
+  exports: surfaceApi,
+  require: (path) => {
+    if (path === '@tauri-apps/api/core') return { invoke: async (command, args) => nativeCalls.push({ command, args }) }
+    if (path === './pluginRegistry') return { pluginRegistry: { getPluginDefinition: () => null } }
+    if (path === '../surfaces/registry') return { upsertSurfaceInstance: () => {} }
+    if (path === './launcherBlurGuard') return { suppressStandaloneLauncherBlur: () => {} }
+    if (path === './webNativeBridge') return { isNativeDesktopRuntime: () => true }
+    throw new Error(`Unexpected surface lifecycle import: ${path}`)
+  },
+})
+const managerApi = {}
+vm.runInNewContext(ts.transpileModule(windowManager, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+}).outputText, {
+  exports: managerApi,
+  require: (path) => {
+    if (path === '../pluginSurfaceWindows') return surfaceApi
+    throw new Error(`Unexpected surface facade import: ${path}`)
+  },
+})
+const historyTarget = { source: 'builtin', pluginId: 'clipboard-history', surfaceId: 'main' }
+await managerApi.showPluginSurfaceWindow(historyTarget)
+await managerApi.showPluginSurfaceWindow(historyTarget, { pasteTarget: 'launcher' })
+await managerApi.showPluginSurfaceWindow(historyTarget)
+assert.deepEqual(nativeCalls.map(({ command }) => command), Array(3).fill('show_plugin_surface_window'))
+assert.deepEqual(nativeCalls.map(({ args }) => args.pasteTarget), [undefined, 'launcher', undefined],
+  'explicit inheritance must survive both API layers without leaking into the next ordinary open')
 
 console.log('plugin surface shortcut window checks passed')

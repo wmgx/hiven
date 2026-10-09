@@ -28,7 +28,12 @@ export function getPluginSurfaceShortcutPresentation(target: PluginSurfaceOpenTa
   return surface?.entry?.shortcutPresentation === 'window' ? 'window' : 'launcher'
 }
 
-export async function requestOpenPluginSurfaceWindow(target: PluginSurfaceOpenTarget): Promise<void> {
+export type PluginSurfaceWindowOpenOptions = {
+  /** A root Launcher action keeps the external target captured before Launcher opened. */
+  pasteTarget?: 'launcher'
+}
+
+export async function requestOpenPluginSurfaceWindow(target: PluginSurfaceOpenTarget, options?: PluginSurfaceWindowOpenOptions): Promise<void> {
   if (!isNativeDesktopRuntime()) return
 
   const surface = resolvePluginSurface(target)
@@ -61,6 +66,7 @@ export async function requestOpenPluginSurfaceWindow(target: PluginSurfaceOpenTa
     resizable: shell?.resizable,
     closeOnBlur,
     destroyTimeoutMs,
+    pasteTarget: options?.pasteTarget,
   })
   upsertSurfaceInstance({
     id: pluginSurfaceInstanceId(target),

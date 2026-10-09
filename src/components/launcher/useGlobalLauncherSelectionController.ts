@@ -20,6 +20,7 @@ import {
 import { isNativeDesktopRuntime } from '../../workspace/webNativeBridge'
 import { showToast } from '../../workspace/toast'
 import { t, type Locale } from '../../i18n'
+import { useAppStore } from '../../store'
 import {
   TelemetryEvents,
   measureLatency,
@@ -60,7 +61,7 @@ export async function resolveSurfaceInitialText(raw: string | undefined, already
 
 export function useGlobalLauncherSelectionController({
   controllerRef,
-  standaloneLauncher: _omit_standaloneLauncher,
+  standaloneLauncher,
   overlay: _omit_overlay,
   restoreFocus: _omit_restoreFocus,
   setOpen: _omit_setOpen,
@@ -114,7 +115,10 @@ export function useGlobalLauncherSelectionController({
               })
               // Cover focus handoff before the companion window is focused/visible.
               suppressStandaloneLauncherBlur(2_000)
-              await showPluginSurfaceWindow(target)
+              const state = useAppStore.getState()
+              const fromLauncherList = standaloneLauncher && state.globalLauncherOpen
+                && !state.launcherHostSurfaceTarget && !state.pluginSurfaceToolTarget
+              await showPluginSurfaceWindow(target, fromLauncherList ? { pasteTarget: 'launcher' } : undefined)
               controllerRef.current?.recordSuccessfulSelection(item.domainItem)
               return
             }
@@ -147,7 +151,7 @@ export function useGlobalLauncherSelectionController({
       executeDomainItem(item.domainItem, customizeParams)
       return
     }
-  }, [clearPluginSurfaceTool, controllerRef, executeDomainItem, focusSearchInputAfterBack, locale, objectBlockText, objectBlockTextIsFileContent, openPluginSurface])
+  }, [clearPluginSurfaceTool, controllerRef, executeDomainItem, focusSearchInputAfterBack, locale, objectBlockText, objectBlockTextIsFileContent, openPluginSurface, standaloneLauncher])
 
   const grantItemPermissionsAndRun = useCallback(() => {
     if (!itemPermissionFrame) return
