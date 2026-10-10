@@ -505,7 +505,11 @@ export function PluginSurfaceRenderer({
               return handoff.promise
             },
             storage: hostStorage,
-            clipboard: createPluginClipboard(target.pluginId, surfaceState.permissions, hostStorage),
+            clipboard: createPluginClipboard(target.pluginId, surfaceState.permissions, hostStorage, {
+              source: target.source,
+              isCurrent: () => surfaceOwner.isCurrent()
+                && (presentation !== 'global-launcher' || launcherPasteOwner?.isCurrent() === true),
+            }),
             paste: createPluginPaste(surfaceState.permissions, hostStorage, {
               keepOpen: presentation !== 'global-launcher' && target.pluginId !== 'clipboard-history',
               ownerSource: {

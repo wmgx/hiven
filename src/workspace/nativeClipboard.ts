@@ -20,9 +20,10 @@ export async function writeText(text: string, signal?: AbortSignal): Promise<voi
   await invoke('clipboard_write_text', { text })
 }
 
-export async function readImage(): Promise<import('@tauri-apps/api/image').Image> {
+export async function readImage(beforeRead?: () => void): Promise<import('@tauri-apps/api/image').Image> {
   const { invoke } = await import('@tauri-apps/api/core')
   const { Image } = await import('@tauri-apps/api/image')
+  beforeRead?.()
   return new Image(await invoke<number>('clipboard_read_image'))
 }
 
@@ -33,10 +34,11 @@ export async function writeImage(image: import('@tauri-apps/api/image').Image, s
   await invoke('clipboard_write_image', { image: image.rid })
 }
 
-export async function readNativeClipboardText(): Promise<string> {
+export async function readNativeClipboardText(beforeRead?: () => void): Promise<string> {
   if (isTauriClipboardRuntime()) {
     try {
       const { invoke } = await import('@tauri-apps/api/core')
+      beforeRead?.()
       return (await invoke<string>('clipboard_read_public_text')) ?? ''
     } catch {
       return ''
@@ -44,6 +46,7 @@ export async function readNativeClipboardText(): Promise<string> {
   }
 
   try {
+    beforeRead?.()
     return (await navigator.clipboard.readText()) ?? ''
   } catch {
     return ''

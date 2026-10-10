@@ -39,6 +39,10 @@ function loadPluginClipboard({ readImageImpl, fromBytesImpl, writeImageImpl, wri
         return { invoke: async () => null }
       case './pluginPermissions':
         return { requirePluginPermissions: () => undefined }
+      case './nativeImageHandle':
+        return loadHandleHelper()
+      case './pluginClipboardImageRead':
+        return { createPluginClipboardImageReader: () => undefined, createPluginClipboardReadGuard: () => undefined }
       case './nativeClipboard':
         return { isTauriClipboardRuntime: () => true, readNativeClipboardText: async () => '', readImage: readImageImpl, writeImage: writeImageImpl, writeText: writeTextImpl ?? (async () => undefined) }
       default:
@@ -47,6 +51,15 @@ function loadPluginClipboard({ readImageImpl, fromBytesImpl, writeImageImpl, wri
   }
   vm.runInNewContext(out, sandbox, { filename: 'pluginClipboard.ts' })
   return { api: sandbox.module.exports, intervals }
+}
+
+function loadHandleHelper() {
+  const out = ts.transpileModule(readFileSync('src/workspace/nativeImageHandle.ts', 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023 },
+  }).outputText
+  const exports = {}
+  vm.runInNewContext(out, { exports }, { filename: 'nativeImageHandle.ts' })
+  return exports
 }
 
 function fakeImage(log, { failRgba } = {}) {

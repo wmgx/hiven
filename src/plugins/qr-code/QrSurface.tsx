@@ -3,6 +3,8 @@ import type { PluginSurfaceProps } from '@hiven/plugin'
 import { Button, ContextMenu, IconButton, SegmentedControl, Select, TextArea } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
 import { saveQrImage } from './saveQrImage'
+import { createQrPasteHandlers } from './qrPaste'
+import { createQrScanSession, EMPTY_QR_SCAN } from './qrScanSession'
 import {
   DEFAULT_QR_ERROR_LEVEL,
   DEFAULT_QR_SIZE,
@@ -11,8 +13,6 @@ import {
   copyPngBlobToClipboard,
   dataUrlToBytes,
   dataUrlToPngBlob,
-  decodeQrFromBlob,
-  decodeQrFromDataUrl,
   generateQrDataUrl,
   isImageDataUrl,
   normalizeQrErrorCorrection,
@@ -46,19 +46,28 @@ export function QrSurface(props: PluginSurfaceProps) {
   const [size, setSize] = useState(DEFAULT_QR_SIZE)
   const [dataUrl, setDataUrl] = useState('')
   const [genError, setGenError] = useState('')
-  const [scanPreview, setScanPreview] = useState(initialIsImage ? initialText ?? '' : '')
-  const [scanResult, setScanResult] = useState('')
-  const [scanError, setScanError] = useState('')
+  const [scan, setScan] = useState(EMPTY_QR_SCAN)
   const [dragOver, setDragOver] = useState(false)
-  const [busy, setBusy] = useState(false)
   const [saving, setSaving] = useState(false)
   const savingRef = useRef(false)
   const mountedRef = useRef(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const scanRef = useRef<ReturnType<typeof createQrScanSession> | null>(null)
+  const hostRef = useRef(host)
+  hostRef.current = host
+  const scanPreview = scan.previewUrl
+  const scanResult = scan.result?.ok ? scan.result.text : ''
+  const scanError = scan.clipboardError ? t('error.clipboardRead') : scan.result?.ok === false ? t(decodeErrorKey(scan.result.code)) : ''
 
   useEffect(() => {
     mountedRef.current = true
-    return () => { mountedRef.current = false }
+    const session = createQrScanSession(setScan)
+    scanRef.current = session
+    return () => {
+      mountedRef.current = false
+      session.dispose()
+      scanRef.current = null
+    }
   }, [])
 
   useEffect(() => {
@@ -85,56 +94,37 @@ export function QrSurface(props: PluginSurfaceProps) {
     }
   }, [ecc, size, t, text])
 
-  const applyDecode = useCallback(async (result: QrDecodeResult, previewUrl?: string) => {
-    if (previewUrl) setScanPreview(previewUrl)
-    if (result.ok) {
-      setScanResult(result.text)
-      setScanError('')
-      return
-    }
-    setScanResult('')
-    setScanError(t(decodeErrorKey(result.code)))
-  }, [t])
-
-  const decodeBlob = useCallback(async (blob: Blob, previewUrl?: string) => {
-    setBusy(true)
-    try {
-      const localPreview = previewUrl ?? URL.createObjectURL(blob)
-      const result = await decodeQrFromBlob(blob)
-      await applyDecode(result, localPreview)
-    } finally {
-      setBusy(false)
-    }
-  }, [applyDecode])
+  const decodeBlob = useCallback((blob: Blob) => scanRef.current?.blob(blob), [])
 
   useEffect(() => {
-    if (!initialIsImage || !initialText) return
-    void decodeQrFromDataUrl(initialText).then((result) => applyDecode(result, initialText))
-  }, [applyDecode, initialIsImage, initialText])
+    if (mode === 'scan' && initialIsImage && initialText) void scanRef.current?.dataUrl(initialText)
+    return () => scanRef.current?.reset()
+  }, [initialIsImage, initialText, mode])
 
-  const onPaste = useCallback((event: ClipboardEvent) => {
+  useEffect(() => {
     if (mode !== 'scan') return
-    const items = event.clipboardData?.items
-    if (!items) return
-    for (const item of Array.from(items)) {
-      if (!item.type.startsWith('image/')) continue
-      const file = item.getAsFile()
-      if (!file) continue
-      event.preventDefault()
-      void decodeBlob(file)
-      return
+    const handlers = createQrPasteHandlers({
+      nativeAvailable: () => typeof hostRef.current.clipboard.readImage === 'function',
+      native: () => { void scanRef.current?.clipboard(() => hostRef.current.clipboard) },
+      blob: (blob) => { void decodeBlob(blob) },
+      dataUrl: (value) => { void scanRef.current?.dataUrl(value) },
+      unreadable: () => scanRef.current?.unreadableClipboard(),
+    })
+    window.addEventListener('keydown', handlers.keydown)
+    window.addEventListener('keyup', handlers.keyup)
+    window.addEventListener('paste', handlers.paste)
+    window.addEventListener('compositionstart', handlers.compositionstart)
+    window.addEventListener('compositionend', handlers.compositionend)
+    window.addEventListener('blur', handlers.blur)
+    return () => {
+      window.removeEventListener('keydown', handlers.keydown)
+      window.removeEventListener('keyup', handlers.keyup)
+      window.removeEventListener('paste', handlers.paste)
+      window.removeEventListener('compositionstart', handlers.compositionstart)
+      window.removeEventListener('compositionend', handlers.compositionend)
+      window.removeEventListener('blur', handlers.blur)
     }
-    const pasted = event.clipboardData?.getData('text/plain') ?? ''
-    if (isImageDataUrl(pasted)) {
-      event.preventDefault()
-      void decodeQrFromDataUrl(pasted).then((result) => applyDecode(result, pasted.trim()))
-    }
-  }, [applyDecode, decodeBlob, mode])
-
-  useEffect(() => {
-    window.addEventListener('paste', onPaste)
-    return () => window.removeEventListener('paste', onPaste)
-  }, [onPaste])
+  }, [decodeBlob, mode])
 
   const onDrop = useCallback((event: DragEvent<HTMLElement>) => {
     event.preventDefault()
@@ -214,14 +204,21 @@ export function QrSurface(props: PluginSurfaceProps) {
   return (
     <section className="qr-surface" aria-label={t('surface.title')} data-no-drag>
       <header className="qr-surface__header">
-        <IconButton type="button" label={t('action.back')} onClick={() => host.requestBack()}>
+        <IconButton type="button" label={t('action.back')} onClick={() => {
+          scanRef.current?.reset()
+          host.requestBack()
+        }}>
           <BackIcon size={14} strokeWidth={2} />
         </IconButton>
         <span className="qr-surface__crumb">{t('surface.title')}</span>
         <SegmentedControl
           aria-label={t('surface.title')}
           value={mode}
-          onChange={(next) => setMode(next as Mode)}
+          onChange={(next) => {
+            if (next === mode) return
+            scanRef.current?.reset()
+            setMode(next as Mode)
+          }}
           options={[
             { value: 'generate', label: t('mode.generate') },
             { value: 'scan', label: t('mode.scan') },
@@ -242,7 +239,10 @@ export function QrSurface(props: PluginSurfaceProps) {
             {t('action.copyText')}
           </Button>
         )}
-        <IconButton type="button" label={t('action.close')} onClick={() => host.close()}>
+        <IconButton type="button" label={t('action.close')} onClick={() => {
+          scanRef.current?.reset()
+          host.close()
+        }}>
           <CloseIcon size={14} strokeWidth={2} />
         </IconButton>
       </header>
@@ -333,7 +333,7 @@ export function QrSurface(props: PluginSurfaceProps) {
             >
               {scanPreview ? <img src={scanPreview} alt={t('mode.scan')} /> : null}
               <div className="qr-surface__drop-title">{t('scan.drop')}</div>
-              <div className="qr-surface__drop-hint">{t('scan.hint').replace('{shortcut}', /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘V' : 'Ctrl+V')}</div>
+              <div className="qr-surface__drop-hint">{t(host.clipboard.readImage ? 'scan.nativeHint' : 'scan.hint').replace('{shortcut}', /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘V' : 'Ctrl+V')}</div>
               <Button
                 type="button"
                 onClick={(event) => {
@@ -354,7 +354,7 @@ export function QrSurface(props: PluginSurfaceProps) {
                 disabled={!scanResult}
                 trigger={
                   <pre className="qr-surface__result">
-                    {busy ? t('scan.working') : (scanResult || t('scan.drop'))}
+                    {scan.busy ? t('scan.working') : (scanResult || t('scan.drop'))}
                   </pre>
                 }
                 items={[

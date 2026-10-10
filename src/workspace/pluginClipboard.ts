@@ -16,6 +16,8 @@ import type {
 } from './pluginTypes'
 import { requirePluginPermissions } from './pluginPermissions'
 import { isTauriClipboardRuntime, readNativeClipboardText } from './nativeClipboard'
+import { withImageHandle } from './nativeImageHandle'
+import { createPluginClipboardImageReader, createPluginClipboardReadGuard, type PluginClipboardImageReadOwner } from './pluginClipboardImageRead'
 
 type ClipboardImage = {
   bytes: Uint8Array
@@ -32,8 +34,8 @@ type ClipboardImageSnapshot = {
   toStoredImage: () => Promise<ClipboardImage>
 }
 
-async function readClipboardText(): Promise<string> {
-  return readNativeClipboardText()
+async function readClipboardText(beforeRead?: () => void): Promise<string> {
+  return readNativeClipboardText(beforeRead)
 }
 
 export async function writeClipboardText(text: string, options?: { sensitive?: boolean }): Promise<void> {
@@ -81,21 +83,6 @@ async function writeClipboardImageViaClipboardItem(bytes: Uint8Array): Promise<v
   }
   const blob = new Blob([bytes as BlobPart], { type: 'image/png' })
   await navigator.clipboard.write([new ClipboardItemCtor({ 'image/png': blob })])
-}
-
-/**
- * Tauri Image handles pin their RGBA buffer in the webview ResourceTable until close().
- * Clipboard polling opens one every few seconds, so a forgotten handle is a native leak.
- */
-async function withImageHandle<H extends { close(): Promise<void> }, T>(
-  handle: H,
-  use: (handle: H) => Promise<T>,
-): Promise<T> {
-  try {
-    return await use(handle)
-  } finally {
-    await handle.close().catch(() => undefined)
-  }
 }
 
 /** Write PNG (or other image) bytes to the system clipboard as an image, not as text. */
@@ -255,16 +242,25 @@ export function createPluginClipboard(
   pluginId: string,
   permissions?: PluginPermissionSnapshot,
   storage?: PluginPrivateStorageApi,
+  imageReadOwner?: PluginClipboardImageReadOwner,
 ): PluginClipboardApi {
-  void pluginId
   const requirePermissions = (required: PluginPermission[]) => {
     if (permissions) requirePluginPermissions(permissions, required)
   }
+  const requireReadOwner = createPluginClipboardReadGuard(pluginId, permissions, imageReadOwner, ['clipboard.read'])
 
   return {
-    async readText(): Promise<string> {
-      requirePermissions(['clipboard.read'])
-      return readClipboardText()
+    readImage: createPluginClipboardImageReader(pluginId, permissions, imageReadOwner),
+    async readText(options?: { signal?: AbortSignal }): Promise<string> {
+      const requireCurrent = () => {
+        if (options?.signal?.aborted) throw Object.assign(new Error('Clipboard text read was interrupted'), { name: 'AbortError' })
+        requireReadOwner?.()
+        requirePermissions(['clipboard.read'])
+      }
+      requireCurrent()
+      const text = await readClipboardText(requireCurrent)
+      requireCurrent()
+      return text
     },
 
     async writeText(text: string, options?: { sensitive?: boolean }): Promise<void> {

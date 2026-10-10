@@ -587,8 +587,23 @@ export type ClipboardWatchOptions = {
   maxImageBytes?: number
 }
 
+/** A one-shot image copy held only in memory; no plugin storage is created. */
+export type PluginClipboardImage = {
+  bytes: Uint8Array
+  contentType: 'image/png'
+  width: number
+  height: number
+}
+
 export type PluginClipboardApi = {
-  readText(): Promise<string>
+  readText(options?: { signal?: AbortSignal }): Promise<string>
+  /**
+   * Only provided to a native desktop surface, for an explicit user paste/read action.
+   * Requires clipboard.read + clipboard.image. No persistent blob or browser fallback.
+   * Rejects with AbortError (obsolete action), NotAllowedError (permission),
+   * DataError (image limits/shape), or NotReadableError (read/encoding failure).
+   */
+  readImage?: (options?: { signal?: AbortSignal }) => Promise<PluginClipboardImage>
   writeText(text: string, options?: { sensitive?: boolean }): Promise<void>
   writeImage(blobId: string): Promise<void>
   writeFiles(paths: string[]): Promise<void>

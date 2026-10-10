@@ -110,6 +110,7 @@ export type {
   PluginSettingsChangeContext,
   // Plugin Clipboard types
   PluginClipboardApi,
+  PluginClipboardImage,
   ClipboardChange,
   ClipboardWatchOptions,
   // Plugin Paste types
