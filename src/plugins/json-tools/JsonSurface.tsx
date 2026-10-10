@@ -1,4 +1,4 @@
-import { Suspense, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import { Button, Checkbox, IconButton, SegmentedControl, TextEditor, TextInput, getEditorTheme, useImeKeyboard } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
@@ -37,7 +37,32 @@ export function JsonSurface(props: PluginSurfaceProps) {
   const [shouldSort, setShouldSort] = useState(false)
   const [expression, setExpression] = useState('')
   const [expressionRun, setExpressionRun] = useState<ExpressionRun | null>(null)
+  const [returning, setReturning] = useState(false)
+  const [copying, setCopying] = useState(false)
+  const pendingCopiesRef = useRef(0)
+  const [resultRevision, setResultRevision] = useState(0)
+  const resultRevisionRef = useRef(0)
+  const returnSubmissionRef = useRef<AbortController | null>(null)
   const expressionIme = useImeKeyboard()
+
+  useEffect(() => () => {
+    returnSubmissionRef.current?.abort()
+    returnSubmissionRef.current = null
+  }, [])
+
+  // Revoke an in-flight snapshot synchronously, before an edit or exit can race its receipt.
+  const cancelReturn = () => {
+    resultRevisionRef.current += 1
+    setResultRevision(resultRevisionRef.current)
+    returnSubmissionRef.current?.abort()
+    returnSubmissionRef.current = null
+    setReturning(false)
+  }
+
+  const updateResult = (update: () => void) => {
+    cancelReturn()
+    update()
+  }
 
   const operations = useMemo<OperationOption[]>(() => [
     { value: 'format', title: t('operation.format'), group: 'json' },
@@ -61,6 +86,7 @@ export function JsonSurface(props: PluginSurfaceProps) {
     : liveResult
   const outputText = result?.ok ? result.output : ''
   const hasOutput = Boolean(result?.ok && inputText.length > 0)
+  const canReturnOutput = hasOutput && (operation === 'escape' || inputText.trim().length > 0)
   const outputLanguage = useMemo(() => {
     if (operation === 'json-to-yaml') return 'yaml'
     try {
@@ -83,33 +109,62 @@ export function JsonSurface(props: PluginSurfaceProps) {
     : t(operation === 'expression' ? 'action.useAsInputExpressionDescription' : 'action.useAsInputDescription')
 
   const useOutputAsInput = () => {
-    setInputText(outputText)
-    setOperation(reverseOperations[operation] ?? operation)
+    updateResult(() => {
+      setInputText(outputText)
+      setOperation(reverseOperations[operation] ?? operation)
+    })
   }
 
   const runExpression = () => {
     if (!inputText.trim() || !expression.trim()) return
-    setExpressionRun({
+    updateResult(() => setExpressionRun({
       signature: expressionSignature,
       result: processJson(inputText, { operation: 'expression', expression }),
-    })
+    }))
+  }
+
+  const returnOutput = async () => {
+    if (!canReturnOutput || resultRevision !== resultRevisionRef.current || returnSubmissionRef.current || pendingCopiesRef.current > 0) return
+    const submission = new AbortController()
+    returnSubmissionRef.current = submission
+    setReturning(true)
+    try {
+      const accepted = await host.returnToLauncherWithObject({ kind: 'text', text: outputText, source: 'tool-result' }, { signal: submission.signal })
+      if (returnSubmissionRef.current !== submission || submission.signal.aborted) return
+      // The host owns successful navigation and reports failed delivery. Keep the draft intact.
+      if (accepted === false) {
+        returnSubmissionRef.current = null
+        setReturning(false)
+      }
+    } catch {
+      if (returnSubmissionRef.current !== submission || submission.signal.aborted) return
+      returnSubmissionRef.current = null
+      setReturning(false)
+      host.showMessage(t('toast.returnFailed'), 'error')
+    }
   }
 
   const copyOutput = async () => {
     if (!hasOutput) return
+    cancelReturn()
+    pendingCopiesRef.current += 1
+    setCopying(true)
     try {
       await host.clipboard.writeText(outputText)
       host.showMessage(t('toast.copied'), 'success')
       host.complete()
     } catch {
       host.showMessage(t('toast.copyFailed'), 'error')
+    } finally {
+      pendingCopiesRef.current -= 1
+      if (pendingCopiesRef.current === 0) setCopying(false)
     }
   }
 
   return (
     <section className="jt-surface" aria-label={t('surface.title')} data-no-drag>
       <header className="jt-header">
-        <IconButton type="button" label={t('action.back')} onClick={() => host.requestBack()}>
+        <IconButton type="button" label={t('action.back')} onClick={() => updateResult(() => host.requestBack())}>
           <BackIcon size={14} strokeWidth={2} />
         </IconButton>
         <strong className="jt-title">{t('surface.title')}</strong>
@@ -120,13 +175,13 @@ export function JsonSurface(props: PluginSurfaceProps) {
               type="button"
               className={`jt-operation ${group === activeGroup ? 'is-active' : ''}`}
               aria-pressed={group === activeGroup}
-              onClick={() => setOperation(operations.find((item) => item.group === group)!.value)}
+              onClick={() => updateResult(() => setOperation(operations.find((item) => item.group === group)!.value))}
             >
               {t(`group.${group}`)}
             </button>
           ))}
         </nav>
-        <IconButton type="button" label={t('action.close')} onClick={() => host.close()}>
+        <IconButton type="button" label={t('action.close')} onClick={() => updateResult(() => host.close())}>
           <CloseIcon size={14} strokeWidth={2} />
         </IconButton>
       </header>
@@ -137,7 +192,7 @@ export function JsonSurface(props: PluginSurfaceProps) {
             type="button"
             className={`jt-operation ${item.value === operation ? 'is-active' : ''}`}
             aria-pressed={item.value === operation}
-            onClick={() => setOperation(item.value)}
+            onClick={() => updateResult(() => setOperation(item.value))}
           >
             {item.title}
           </button>
@@ -155,7 +210,7 @@ export function JsonSurface(props: PluginSurfaceProps) {
               spellCheck={false}
               onCompositionStart={expressionIme.onCompositionStart}
               onCompositionEnd={expressionIme.onCompositionEnd}
-              onChange={(event) => setExpression(event.currentTarget.value)}
+              onChange={(event) => updateResult(() => setExpression(event.currentTarget.value))}
               onKeyDown={(event) => {
                 if (expressionIme.shouldIgnoreKeyDown(event)) return
                 if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) runExpression()
@@ -177,7 +232,7 @@ export function JsonSurface(props: PluginSurfaceProps) {
           <section className="jt-pane">
             <div className="jt-pane-header">
               <strong>{t('pane.input')}</strong>
-              <Button type="button" variant="ghost" onClick={() => setInputText('')} disabled={!inputText}>
+              <Button type="button" variant="ghost" onClick={() => updateResult(() => setInputText(''))} disabled={!inputText}>
                 {t('action.clear')}
               </Button>
             </div>
@@ -187,7 +242,7 @@ export function JsonSurface(props: PluginSurfaceProps) {
                   {...editorAppearance}
                   value={inputText}
                   language={operation === 'yaml-to-json' ? 'yaml' : operation === 'query-to-json' || operation === 'escape' ? 'plaintext' : 'json'}
-                  onChange={setInputText}
+                  onChange={(value) => updateResult(() => setInputText(value))}
                   optionOverrides={{
                     ariaLabel: t('pane.input'),
                     placeholder: operation === 'yaml-to-json' ? t('surface.yamlPlaceholder')
@@ -209,6 +264,9 @@ export function JsonSurface(props: PluginSurfaceProps) {
               <div className="jt-pane-actions">
                 <Button type="button" variant="ghost" title={useAsInputDescription} aria-label={useAsInputDescription} disabled={!hasOutput} onClick={useOutputAsInput}>
                   {t('action.useAsInput')}
+                </Button>
+                <Button type="button" variant="ghost" title={t('action.continueProcessingDescription')} aria-label={t('action.continueProcessingDescription')} disabled={!canReturnOutput || returning || copying} onClick={() => void returnOutput()}>
+                  {t('action.continueProcessing')}
                 </Button>
                 <Button type="button" title={t('action.copyDescription')} aria-label={t('action.copyDescription')} onClick={() => void copyOutput()} disabled={!hasOutput}>
                   {t('action.copy')}
@@ -256,9 +314,9 @@ export function JsonSurface(props: PluginSurfaceProps) {
                   aria-label={t('option.indent')}
                   value={String(indent)}
                   options={[{ value: '2', label: '2' }, { value: '4', label: '4' }]}
-                  onChange={(value) => setIndent(Number(value))}
+                  onChange={(value) => updateResult(() => setIndent(Number(value)))}
                 />
-                {operation === 'format' && <Checkbox checked={shouldSort} onChange={(event) => setShouldSort((event.target as HTMLInputElement).checked)}>
+                {operation === 'format' && <Checkbox checked={shouldSort} onChange={(event) => updateResult(() => setShouldSort((event.target as HTMLInputElement).checked))}>
                   {t('option.sortKeys')}
                 </Checkbox>}
               </div>
