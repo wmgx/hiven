@@ -144,7 +144,7 @@ export type LauncherControllerState = {
 export type LauncherControllerDeps = {
   surfaceId: LauncherSurfaceId
   api: PluginLauncherApi
-  makeApi?: (item: LauncherItem) => PluginLauncherApi
+  makeApi?: (item: LauncherItem, isPasteCurrent?: () => boolean) => PluginLauncherApi
   getStorage?: (item: LauncherItem) => PluginPrivateStorageApi
   getNetwork?: (item: LauncherItem) => PluginNetworkApi
   getShell?: (item: LauncherItem) => PluginShellApi
@@ -324,8 +324,12 @@ export class LauncherController {
 
   /** Ordinary navigation/success never revokes a still-registered plugin's API. */
   private apiFor(item: LauncherItem): PluginLauncherApi {
-    const api = this.deps.makeApi?.(item) ?? this.deps.api
     const lifetime = item.pluginLifetime ?? this.activePluginLifetime
+    const generation = this.flowGeneration
+    // Only paste recovery is tied to this flow; ordinary plugin API remains
+    // available while its plugin lifetime is active.
+    const isPasteCurrent = () => generation === this.flowGeneration && lifetime?.active !== false
+    const api = this.deps.makeApi?.(item, isPasteCurrent) ?? this.deps.api
     return bindPluginLauncherApi(api, lifetime, () => this.unavailableMessage())
   }
 

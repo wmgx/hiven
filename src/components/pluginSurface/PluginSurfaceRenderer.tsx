@@ -11,6 +11,7 @@ import { createPluginPrivateStorage } from '../../workspace/pluginStorage'
 import { createPluginClipboard } from '../../workspace/pluginClipboard'
 import { showToast, dismissToast } from '../../workspace/toast'
 import { createPluginPaste } from '../../workspace/pluginPaste'
+import { captureLauncherPasteOwner, combinePasteRecoveryOwners, createPasteRecoveryScope, isPasteRecoveryTemporaryHidden, observePasteRecoveryFocus } from '../../workspace/pasteRecovery'
 import { createPluginNetwork } from '../../workspace/pluginNetwork'
 import { createPluginAi } from '../../workspace/ai/runtime'
 import { createPluginShell } from '../../workspace/pluginShell'
@@ -91,6 +92,9 @@ export function PluginSurfaceRenderer({
   activeStateRef.current = surfaceState
   const mountedRef = useRef(false)
   const hiddenRef = useRef(false)
+  const pasteScope = useMemo(() => createPasteRecoveryScope(), [target, surfaceState])
+  const preparationScopeRef = useRef<ReturnType<typeof createPasteRecoveryScope> | null>(null)
+  const [, refreshPasteOwner] = useState(0)
   const exportSessionRef = useRef(0)
   const ownedSettingsTargetRef = useRef<PluginSettingsDialogTarget>(null)
   const sessionRef = useRef<AppSettingsSession | null>(null)
@@ -113,6 +117,7 @@ export function PluginSurfaceRenderer({
     if (ownedTarget && store.settingsDialogTarget === ownedTarget) store.closeSettingsDialog()
   }, [])
   const interruptSettings = useCallback(() => {
+    pasteScope.invalidate()
     // A closed/replaced surface cannot resume an old native save dialog after reopening.
     exportSessionRef.current += 1
     handoffRef.current?.controller.abort()
@@ -120,30 +125,55 @@ export function PluginSurfaceRenderer({
     deliveredHandoffRef.current = null
     closeOwnedSettings()
     finishAppSettings(sessionRef.current)
-  }, [closeOwnedSettings, finishAppSettings])
+  }, [closeOwnedSettings, finishAppSettings, pasteScope])
 
+  useLayoutEffect(() => {
+    // Revoke synchronously on registry/permission changes, before React can
+    // commit a replacement renderer while native delivery is still pending.
+    const stopRegistry = pluginRegistry.subscribe(() => pasteScope.invalidate())
+    const stopPermissions = usePluginPermissionStore.subscribe(() => pasteScope.invalidate())
+    return () => { stopRegistry(); stopPermissions() }
+  }, [pasteScope])
+
+  const interruptSettingsRef = useRef(interruptSettings)
+  interruptSettingsRef.current = interruptSettings
   useLayoutEffect(() => {
     mountedRef.current = true
     return () => {
       mountedRef.current = false
-      interruptSettings()
+      preparationScopeRef.current?.invalidate()
+      interruptSettingsRef.current()
     }
-  }, [interruptSettings])
+  }, [])
+  useLayoutEffect(() => () => preparationScopeRef.current?.invalidate(), [target])
 
   // External tool shortcuts replace target without resetting the launcher session.
   useLayoutEffect(() => () => interruptSettings(), [target, surfaceState, interruptSettings])
 
   useEffect(() => {
     hiddenRef.current = false
-    const interrupt = interruptSettings
+    const interrupt = () => {
+      if (!isPasteRecoveryTemporaryHidden()) {
+        preparationScopeRef.current?.invalidate()
+        interruptSettings()
+      }
+    }
+    const pageHide = () => { preparationScopeRef.current?.invalidate(); interruptSettings() }
     const onVisibilityChange = () => { if (document.visibilityState === 'hidden') interrupt() }
-    window.addEventListener('pagehide', interrupt)
+    window.addEventListener('pagehide', pageHide)
     document.addEventListener('visibilitychange', onVisibilityChange)
     let disposed = false
     let unlisten: (() => void) | undefined
+    let unlistenFocus: (() => void) | undefined
     // Native independent windows can hide without unmounting or a DOM visibility event.
     // Only their existing registry lifecycle is observed; blur during OAuth is not hide.
     if (presentation === 'plugin-surface-window' && '__TAURI_INTERNALS__' in window) {
+      void getCurrentWindow().onFocusChanged(({ payload }) => {
+        if (!disposed) observePasteRecoveryFocus(payload)
+      }).then((stop) => {
+        if (disposed) stop()
+        else unlistenFocus = stop
+      }).catch((error) => console.warn('[hiven] Could not observe plugin paste focus:', error))
       const id = pluginSurfaceInstanceId(target)
       type Mutation = { type?: string; id?: string; state?: string; surface?: { id?: string; state?: string } }
       void import('@tauri-apps/api/event').then(({ listen }) => listen<Mutation>('hiven://surface-registry-sync', ({ payload }) => {
@@ -151,10 +181,17 @@ export function PluginSurfaceRenderer({
         const matches = payload.type === 'upsert' ? payload.surface?.id === id : payload.id === id
         if (!matches) return
         const state = payload.type === 'upsert' ? payload.surface?.state : payload.state
-        if (state === 'visible') hiddenRef.current = false
+        if (state === 'visible') {
+          preparationScopeRef.current?.invalidate()
+          pasteScope.invalidate()
+          hiddenRef.current = false
+          refreshPasteOwner((version) => version + 1)
+        }
         if (state === 'hidden' || state === 'destroyed' || payload.type === 'remove') {
+          if (state === 'hidden' && isPasteRecoveryTemporaryHidden()) return
           hiddenRef.current = true
-          interrupt()
+          preparationScopeRef.current?.invalidate()
+          interruptSettings()
         }
       })).then((stop) => {
         if (disposed) stop()
@@ -164,13 +201,20 @@ export function PluginSurfaceRenderer({
     return () => {
       disposed = true
       unlisten?.()
-      window.removeEventListener('pagehide', interrupt)
+      unlistenFocus?.()
+      window.removeEventListener('pagehide', pageHide)
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
-  }, [target, presentation, interruptSettings])
+  }, [target, presentation, interruptSettings, pasteScope])
 
   useEffect(() => {
     let disposed = false
+    const preparationScope = createPasteRecoveryScope()
+    preparationScopeRef.current = preparationScope
+    const launcherOwner = presentation === 'global-launcher' ? captureLauncherPasteOwner() : undefined
+    const preparationOwner = combinePasteRecoveryOwners(launcherOwner, preparationScope.capture(() => !disposed && mountedRef.current && activeTargetRef.current === target))
+    let stopRegistry: (() => void) | undefined
+    let stopPermissions: (() => void) | undefined
 
     async function openSurface() {
       setSurfaceState({ status: 'loading-runtime' })
@@ -178,6 +222,8 @@ export function PluginSurfaceRenderer({
       try {
         await ensurePluginRuntimeReady(target.source)
         if (disposed) return
+        stopRegistry = pluginRegistry.subscribe(() => preparationScope.invalidate())
+        stopPermissions = usePluginPermissionStore.subscribe(() => preparationScope.invalidate())
 
         const definition = pluginRegistry.getPluginDefinition(target.pluginId, target.source) as PluginDefinition<unknown> | undefined
         const surface = definition?.ui?.surfaces?.find((item) => item.id === target.surfaceId) as PluginUiSurfaceContribution<unknown> | undefined
@@ -223,16 +269,25 @@ export function PluginSurfaceRenderer({
           initialText: target.initialText,
           storage,
           clipboard: createPluginClipboard(target.pluginId, permissions, storage),
-          paste: createPluginPaste(permissions, storage),
+          paste: createPluginPaste(permissions, storage, {
+            ownerSource: {
+              capture: () => {
+                if (presentation === 'global-launcher' && !launcherOwner) return undefined
+                return preparationOwner
+              },
+            },
+          }),
           network: createPluginNetwork(permissions),
           shell: createPluginShell(permissions),
           ai: createPluginAi(target.pluginId, target.source, permissions),
         })
 
+        preparationScope.invalidate()
         if (!disposed) {
           setSurfaceState({ status: 'ready', ...resolved })
         }
       } catch (error) {
+        preparationScope.invalidate()
         console.error(`[hiven] Plugin surface failed to open (${target.pluginId}):`, error)
         if (!disposed) {
           setSurfaceState({
@@ -246,8 +301,8 @@ export function PluginSurfaceRenderer({
 
     void openSurface()
 
-    return () => { disposed = true }
-  }, [target, pluginRegistryVersion, permissionVersion, locale])
+    return () => { disposed = true; preparationScope.invalidate(); stopRegistry?.(); stopPermissions?.() }
+  }, [target, pluginRegistryVersion, permissionVersion, locale, presentation])
 
   if (surfaceState.status === 'loading-runtime' || ('target' in surfaceState && surfaceState.target !== target)) {
     return <PluginSurfaceMessage title={t(locale, 'palette.surfaceLoading')} />
@@ -266,7 +321,16 @@ export function PluginSurfaceRenderer({
   const settings = settingsContribution ? resolvePluginSettings(target.source, target.pluginId, settingsContribution).value : {}
   const pluginT = makePluginT(target.pluginId, locale)
   const SurfaceComponent = surfaceState.surface.component
-  const isCurrentSurface = () => mountedRef.current && activeTargetRef.current === target && activeStateRef.current === surfaceState && !hiddenRef.current
+  const lifetime = pluginRegistry.getPluginLifetime(target.pluginId, target.source)
+  const isCurrentSurface = () => mountedRef.current && activeTargetRef.current === target && activeStateRef.current === surfaceState && !hiddenRef.current && lifetime.active
+  // Bind this host object now. A retained callback from before hide/reopen must
+  // not capture the replacement generation when it eventually calls paste.
+  const surfaceOwner = pasteScope.capture(
+    isCurrentSurface,
+    presentation === 'plugin-surface-window' ? () => { hiddenRef.current = true } : undefined,
+  )
+  const launcherPasteOwner = presentation === 'global-launcher' ? captureLauncherPasteOwner({ complete: false }) : undefined
+  const pasteOwner = combinePasteRecoveryOwners(launcherPasteOwner, surfaceOwner)
   const hostStorage = createPluginPrivateStorage(target.source, target.pluginId, surfaceState.permissions, {
     capture: () => {
       const exportSession = exportSessionRef.current
@@ -318,6 +382,7 @@ export function PluginSurfaceRenderer({
             openSettings: (options) => {
               if (!isCurrentSurface()) return
               interruptSettings()
+              refreshPasteOwner((version) => version + 1)
               const settingsTarget: NonNullable<PluginSettingsDialogTarget> = {
                 pluginId: target.pluginId,
                 source: target.source,
@@ -330,6 +395,7 @@ export function PluginSurfaceRenderer({
             openAppSettings: ({ section }) => {
               if (section !== 'ai' || !isCurrentSurface() || document.visibilityState === 'hidden') return Promise.reject(settingsInterrupted())
               if (sessionRef.current) return sessionRef.current.promise
+              pasteScope.invalidate()
               closeOwnedSettings()
               let resolve!: () => void
               let reject!: (error: Error) => void
@@ -349,10 +415,13 @@ export function PluginSurfaceRenderer({
               onClose()
             },
             showMessage: (message, level) => {
-              if (!isCurrentSurface()) return
+              if (!surfaceOwner.isCurrent()) return
               showToast(message, level ?? 'info')
             },
-            showToast: (message, level, options) => showToast(message, level, options),
+            showToast: (message, level, options) => {
+              if (!surfaceOwner.isCurrent()) return ''
+              return showToast(message, level, options)
+            },
             dismissToast,
             returnToLauncherWithObject: (input: PluginObjectBlockInput, options?: { signal?: AbortSignal }) => {
               if (!isCurrentSurface() || options?.signal?.aborted) return Promise.resolve(false)
@@ -439,6 +508,13 @@ export function PluginSurfaceRenderer({
             clipboard: createPluginClipboard(target.pluginId, surfaceState.permissions, hostStorage),
             paste: createPluginPaste(surfaceState.permissions, hostStorage, {
               keepOpen: presentation !== 'global-launcher' && target.pluginId !== 'clipboard-history',
+              ownerSource: {
+                capture: () => {
+                  if (!surfaceOwner.isCurrent()) return undefined
+                  if (presentation === 'global-launcher' && !launcherPasteOwner) return undefined
+                  return pasteOwner
+                },
+              },
             }),
             network: createPluginNetwork(surfaceState.permissions),
             shell: createPluginShell(surfaceState.permissions),

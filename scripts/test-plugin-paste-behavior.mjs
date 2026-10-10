@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import ts from 'typescript'
+import { createStore } from 'zustand/vanilla'
 
 const packageJson = JSON.parse(readFileSync('package.json', 'utf8'))
 const refactorSuite = readFileSync('scripts/test-refactor-suite.mjs', 'utf8')
@@ -36,7 +37,7 @@ function loadModule(path, imports = {}, globals = {}) {
   const sandbox = {
     exports: moduleExports,
     module: { exports: moduleExports },
-    console, URLSearchParams, setTimeout, clearTimeout,
+    console, URLSearchParams, setTimeout, clearTimeout, AbortController,
     ...globals,
     require: (specifier) => {
       if (Object.hasOwn(imports, specifier)) return imports[specifier]
@@ -47,6 +48,7 @@ function loadModule(path, imports = {}, globals = {}) {
   return sandbox.module.exports
 }
 
+const telemetryBoundary = loadModule('src/workspace/contentBoundary.ts')
 const workspaceMessages = loadModule('src/i18n/locales/workspace.ts').default
 const i18n = loadModule('src/i18n/registry.ts')
 i18n.registerMessages('workspace', workspaceMessages)
@@ -57,19 +59,42 @@ i18n.t = (locale, dottedKey) => {
 }
 
 function loadPluginPaste({
-  invokeImpl, writeTextImpl, writeImageImpl, navigatorClipboard,
+  invokeImpl, beginImpl, writeTextImpl, writeImageImpl, navigatorClipboard,
   windowSearch, locale = 'en', availability = 'can-attempt', availabilityImpl,
   timers = {},
 } = {}) {
   const calls = []
+  const telemetry = []
+  const telemetryApi = { trackBehavior: (event, details) => telemetry.push([event, telemetryBoundary.sanitizeNoContentDetails(details)]) }
   const availabilityCalls = []
-  const state = { open: true }
+  // Run the real store transitions; unrelated persistence/data helpers are I/O stubs.
+  const appStore = loadModule('src/store.ts', {
+    zustand: { create: () => (initialize) => createStore(initialize) },
+    'zustand/middleware': { persist: (initialize) => initialize },
+    './workspace/ai/jev': { JEV_PRESETS: { tencent: {} } },
+    './utils/persistMigration': { migrateLocalStorageKey() {} },
+    './workspace/launcher/persistableRecents': { emptyPersistableRecents: () => [] },
+    './workspace/launcher/usage': { emptyUsageBySurface: () => ({}) },
+    './workspace/launcher/favorites': { emptyLauncherFavorites: () => [] },
+    './workspace/appHotkeys': { emptyAppHotkeys: () => [] },
+    './workspace/appLauncher/appSearchAliases': {},
+  }).useAppStore
+  appStore.setState({ globalLauncherOpen: true, locale })
+  appStore.subscribe((next, previous) => {
+    if (next.globalLauncherOpen !== previous.globalLauncherOpen) calls.push(['setOpen', next.globalLauncherOpen])
+  })
+  const state = { get open() { return appStore.getState().globalLauncherOpen } }
+  const settingsStore = createStore(() => ({ settingsDialogTarget: null }))
+  const ownershipCalls = []
+  let nextAttempt = 0
   const core = {
     invoke: async (command, args) => {
       if (command === 'get_paste_availability') {
         availabilityCalls.push(command)
         return availabilityImpl ? await availabilityImpl() : availability
       }
+      if (command === 'begin_paste_attempt') { ownershipCalls.push([command]); return beginImpl ? beginImpl() : `paste-${++nextAttempt}` }
+      if (command === 'cancel_paste_attempt') { ownershipCalls.push([command, args.attemptId]); return }
       if (command !== 'hide_launcher_and_paste') throw new Error(`Unexpected native command: ${command}`)
       if (invokeImpl) return invokeImpl(command, args)
       calls.push(['invoke', command])
@@ -91,11 +116,19 @@ function loadPluginPaste({
       else calls.push(['tauri.writeImage', image])
     },
   }
+  const recovery = loadModule('src/workspace/pasteRecovery.ts', {
+    '../store': { useAppStore: appStore },
+    './pluginSettingsStore': { usePluginSettingsStore: settingsStore },
+    './telemetry': telemetryApi,
+    '@tauri-apps/api/core': core,
+  })
   const api = loadModule('src/workspace/pluginPaste.ts', {
     './pluginPermissions': permissionApi,
     './pluginClipboard': clipboardApi,
     '../i18n': i18n,
-    '../store': { useAppStore: { getState: () => ({ locale, setGlobalLauncherOpen: (open) => { state.open = open; calls.push(['setOpen', open]) } }) } },
+    '../store': { useAppStore: appStore },
+    './pasteRecovery': recovery,
+    './telemetry': telemetryApi,
     './pasteAvailability': availabilityApi,
     './nativeClipboard': { writeText: writeTextImpl ?? (async (text) => calls.push(['tauri.writeText', text])) },
     '@tauri-apps/api/core': core,
@@ -131,7 +164,7 @@ function loadPluginPaste({
     './types': loadModule('src/workspace/launcher/types.ts'),
     '../../i18n': i18n,
   })
-  return { api, calls, availabilityApi, availabilityCalls, state, launcherModule, router, output }
+  return { api, calls, telemetry, availabilityApi, availabilityCalls, state, appStore, settingsStore, recovery, ownershipCalls, launcherModule, router, output }
 }
 
 {
@@ -145,15 +178,16 @@ function loadPluginPaste({
   assert.deepEqual(plain(result), { ok: true })
   assert.deepEqual(plain(calls), [
     ['tauri.writeText', 'hello foreground'],
-    ['setOpen', false],
     ['invoke', 'hide_launcher_and_paste'],
+    ['setOpen', false],
   ], 'pasteText must write clipboard then invoke the combined hide-and-paste command exactly once')
-  assert.deepEqual(plain(invoked), [['hide_launcher_and_paste', { keepOpen: false }]])
+  assert.deepEqual(plain(invoked), [['hide_launcher_and_paste', { keepOpen: false, attemptId: 'paste-1' }]])
   assert.ok(
     !calls.some((call) => call[0] === 'delay'),
     'pasteText must not rely on any JS-side delay; a hidden WKWebView throttles timers, so the hide+paste sequence must run entirely inside the Rust command',
   )
-  await api.createPluginPaste(undefined, undefined, { keepOpen: true }).pasteText('standalone output')
+  const independent = loadPluginPaste({ invokeImpl: async (command, args) => invoked.push([command, args]) })
+  await independent.api.createPluginPaste(undefined, undefined, { keepOpen: true }).pasteText('standalone output')
   assert.deepEqual(plain(invoked[1]), ['hide_launcher_and_paste', { keepOpen: true }], 'independent tools must preserve their window when pasting')
   assert.equal(calls.filter(([kind]) => kind === 'setOpen').length, 1, 'keepOpen paste must not end the session')
 }
@@ -263,7 +297,7 @@ for (const response of [undefined, null, 'ready', 'unknown', { status: 'can-atte
   assert.equal(h.availabilityApi.pasteAvailabilityMessageKey('unknown'), undefined)
   assert.deepEqual(plain(await h.api.createPluginPaste().pasteText('legacy host')), { ok: true })
   assert.deepEqual(plain(h.calls), [
-    ['tauri.writeText', 'legacy host'], ['setOpen', false], ['invoke', 'hide_launcher_and_paste'],
+    ['tauri.writeText', 'legacy host'], ['invoke', 'hide_launcher_and_paste'], ['setOpen', false],
   ], 'unrecognized metadata preserves the existing native attempt')
 }
 
@@ -319,7 +353,7 @@ for (const availability of ['can-attempt', 'unknown']) {
       assert.deepEqual(plain(result), { ok: false, fallback: 'copied', message: workspaceMessages[locale][fallbackKey] })
       assert.equal(h.calls.filter(([kind]) => kind.startsWith('tauri.write')).length, 1)
       assert.equal(h.calls.filter(([kind]) => kind === 'invoke').length, 1)
-      assert.equal(h.state.open, false, 'a genuine native attempt preserves existing session-close behavior')
+      assert.equal(h.state.open, true, 'copied fallback preserves the original launcher session')
     }
   }
 }
@@ -356,10 +390,9 @@ for (const availability of ['unsupported', 'accessibility-required', 'can-attemp
       run = result.output.choices[0].secondaryActions.find((action) => action.id === 'paste-to-foreground-app').run
     }
     if (availability === 'can-attempt') {
-      const result = await run()
-      if (entry === 'workflow') assert.equal(result.ok, true, 'copied fallback retains the existing workflow completion contract')
+      await assert.rejects(run(), (error) => error.message === workspaceMessages.en['paste.copied'], 'copied fallback cannot consume the result as delivered')
       assert.equal(h.calls.filter(([kind]) => kind === 'invoke').length, 1)
-      assert.equal(h.state.open, false)
+      assert.equal(h.state.open, true)
     } else {
       const key = availability === 'unsupported' ? 'paste.unsupported' : 'paste.permissionRequired'
       await assert.rejects(run(), (error) => error.message === workspaceMessages.en[key])
@@ -370,3 +403,360 @@ for (const availability of ['unsupported', 'accessibility-required', 'can-attemp
 }
 
 console.log('plugin paste behavior checks passed (real availability, paste, launcher/output adapters; fake I/O)')
+
+const deferred = () => {
+  let resolve, reject
+  const promise = new Promise((done, fail) => { resolve = done; reject = fail })
+  return { promise, resolve, reject }
+}
+const settle = async () => { for (let i = 0; i < 30; i++) await Promise.resolve() }
+
+// A native failure returns to the exact store generation and surface, retaining
+// the same tree; only a delivered result is allowed to close that session.
+for (const outcome of ['success', 'failure']) {
+  const native = deferred()
+  const h = loadPluginPaste({ windowSearch: '?window=launcher', invokeImpl: () => native.promise })
+  const target = { pluginId: 'clipboard-history', surfaceId: 'history', source: 'builtin' }
+  h.appStore.getState().openPluginSurfaceTool(target)
+  const owner = h.recovery.captureLauncherPasteOwner()
+  const result = h.api.createPluginPaste(undefined, undefined, { ownerSource: { capture: () => owner } }).pasteText('draft and selection')
+  await settle()
+  const generation = h.appStore.getState().globalLauncherSessionId
+  assert.equal(h.state.open, true, 'native hide does not close the React tree')
+  assert.equal(h.appStore.getState().pluginSurfaceToolTarget, target)
+  assert.equal(h.recovery.observePasteRecoveryFocus(false), true, 'only handoff blur is consumed')
+  h.recovery.observePasteRecoveryFocus(true)
+  if (outcome === 'failure') native.reject(new Error('simulation failed'))
+  else native.resolve()
+  const delivered = await result
+  assert.equal(delivered.ok, outcome === 'success')
+  assert.equal(h.state.open, outcome === 'failure')
+  assert.equal(h.recovery.pasteRecoveryFocus.isActive(), false)
+  const terminal = h.telemetry.filter(([event]) => event === 'behavior:paste.result')
+  assert.equal(terminal.length, 1, 'one terminal signal per paste result')
+  assert.equal(terminal[0][1].status, outcome === 'success' ? 'ok' : 'copied')
+  assert.equal(terminal[0][1].reason, 'none')
+  if (outcome === 'failure') {
+    assert.equal(delivered.fallback, 'copied')
+    assert.equal(h.appStore.getState().globalLauncherSessionId, generation)
+    assert.equal(h.appStore.getState().pluginSurfaceToolTarget, target)
+  } else {
+    assert.equal(owner.isCurrent(), true, 'authorized own close allows completion bookkeeping')
+    h.appStore.getState().setGlobalLauncherOpen(true)
+    assert.equal(owner.isCurrent(), false, 'a reopen invalidates even an already completed owner')
+  }
+}
+
+// Every asynchronous boundary observes true→true reopen, close and replacement.
+// These are the real store actions, not a reimplementation of generation logic.
+for (const stage of ['availability', 'begin', 'clipboard', 'native']) {
+  for (const leave of ['reopen', 'close', 'surface', 'settings']) {
+    const pending = deferred()
+    const h = loadPluginPaste({
+      windowSearch: '?window=launcher',
+      ...(stage === 'availability' ? { availabilityImpl: () => pending.promise } : {}),
+      ...(stage === 'begin' ? { beginImpl: () => pending.promise } : {}),
+      ...(stage === 'clipboard' ? { writeTextImpl: () => pending.promise } : {}),
+      ...(stage === 'native' ? { invokeImpl: () => pending.promise } : {}),
+    })
+    const original = h.recovery.captureLauncherPasteOwner()
+    const result = h.api.createPluginPaste(undefined, undefined, { ownerSource: { capture: () => original } }).pasteText('old content')
+    await settle()
+    if (leave === 'reopen') h.appStore.getState().setGlobalLauncherOpen(true)
+    if (leave === 'close') h.appStore.getState().setGlobalLauncherOpen(false)
+    if (leave === 'surface') h.appStore.getState().openLauncherHostSurface({ id: 'new-surface' })
+    if (leave === 'settings') h.settingsStore.setState({ settingsDialogTarget: { pluginId: 'new-settings' } })
+    const currentGeneration = h.appStore.getState().globalLauncherSessionId
+    pending.resolve(stage === 'availability' ? 'can-attempt' : stage === 'begin' ? 'delayed-owner' : undefined)
+    const cancelled = await result
+    assert.equal(h.recovery.isPasteCancelled(cancelled), true, `${stage}/${leave}: late completion is cancelled`)
+    assert.equal(cancelled.message, '')
+    const terminal = h.telemetry.filter(([event]) => event === 'behavior:paste.result')
+    assert.equal(terminal.length, 1)
+    assert.equal(terminal[0][1].status, 'cancelled')
+    assert.equal(terminal[0][1].reason, 'owner-invalidated')
+    assert.equal(h.appStore.getState().globalLauncherSessionId, currentGeneration, `${stage}/${leave}: never closes the replacement`)
+    assert.equal(h.state.open, leave !== 'close')
+    if (stage !== 'native') assert.equal(h.calls.some(([kind]) => kind === 'invoke'), false, 'stale delivery never hides')
+    if (stage === 'availability' || stage === 'begin') assert.equal(h.calls.some(([kind]) => kind.startsWith('tauri.write')), false, 'stale owner never writes')
+    if (stage !== 'availability') assert.ok(h.ownershipCalls.some(([command]) => command === 'cancel_paste_attempt'))
+  }
+}
+
+// Independent History and other surfaces use their instance scope, without
+// accidentally capturing a global-launcher session in the same app store.
+for (const keepOpen of [false, true]) {
+  const native = deferred()
+  const h = loadPluginPaste({ invokeImpl: () => native.promise })
+  const scope = h.recovery.createPasteRecoveryScope()
+  let completed = 0
+  const owner = scope.capture(() => true, () => completed++)
+  const paste = h.api.createPluginPaste(undefined, undefined, { keepOpen, ownerSource: { capture: () => owner } })
+  const first = paste.pasteText('independent')
+  await settle()
+  native.resolve()
+  assert.equal((await first).ok, true)
+  assert.equal(completed, keepOpen ? 0 : 1)
+  assert.equal(h.state.open, true)
+  scope.invalidate()
+  const oldCallback = await paste.pasteText('old callback after a reopen')
+  assert.equal(h.recovery.isPasteCancelled(oldCallback), true, 'retained host cannot capture a new instance generation')
+}
+
+{
+  const blob = deferred()
+  const h = loadPluginPaste({ windowSearch: '?window=launcher' })
+  const paste = h.api.createPluginPaste(undefined, { blob: { get: () => blob.promise } }).pasteImage('old-image')
+  await settle()
+  h.appStore.getState().setGlobalLauncherOpen(true)
+  blob.resolve(new Uint8Array([1, 2]))
+  assert.equal(h.recovery.isPasteCancelled(await paste), true)
+  assert.equal(h.calls.some(([kind]) => kind === 'tauri.writeImage'), false, 'late blob read cannot overwrite the clipboard')
+}
+
+{
+  const native = deferred()
+  let material = 1
+  const h = loadPluginPaste({ windowSearch: '?window=launcher', invokeImpl: () => native.promise })
+  const owner = h.recovery.captureLauncherPasteOwner({ isCurrent: () => material === 1 })
+  const pending = h.api.createPluginPaste(undefined, undefined, { ownerSource: { capture: () => owner } }).pasteText('old material')
+  await settle()
+  material++
+  h.recovery.checkPendingPasteRecovery()
+  assert.ok(h.ownershipCalls.some(([command]) => command === 'cancel_paste_attempt'), 'material publisher revokes native recovery synchronously')
+  native.reject(new Error('late delivery failure'))
+  assert.equal(h.recovery.isPasteCancelled(await pending), true)
+}
+
+{
+  const h = loadPluginPaste({ windowSearch: '?window=launcher', invokeImpl: async () => { throw new Error('HIVEN_PASTE_ATTEMPT_CANCELLED: another window opened') } })
+  const cancelled = await h.api.createPluginPaste().pasteText('cross-window')
+  assert.equal(h.recovery.isPasteCancelled(cancelled), true, 'native cancellation is silent even before JS observes the other window')
+  assert.equal(h.telemetry.at(-1)[1].reason, 'native-cancelled')
+  assert.equal(h.state.open, true)
+}
+
+console.log('Paste recovery passed: real store/session ownership, four async boundaries, independent scope, image read, native cancellation and copied retention')
+
+// Execute the actual renderer's host factory, without rendering or testing UI.
+// Its fixed instance owner must survive async callbacks only in that instance.
+const rendererSource = readFileSync('src/components/pluginSurface/PluginSurfaceRenderer.tsx', 'utf8')
+const rendererAst = ts.createSourceFile('PluginSurfaceRenderer.tsx', rendererSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+const hostDeclarations = new Map()
+const pasteFactories = []
+function visitRenderer(node) {
+  if (ts.isVariableDeclaration(node) && ['lifetime', 'isCurrentSurface', 'surfaceOwner', 'launcherPasteOwner', 'pasteOwner'].includes(node.name.getText(rendererAst))) {
+    hostDeclarations.set(node.name.getText(rendererAst), `const ${node.getText(rendererAst)};`)
+  }
+  if (ts.isCallExpression(node) && node.expression.getText(rendererAst) === 'createPluginPaste') pasteFactories.push(node.getText(rendererAst))
+  ts.forEachChild(node, visitRenderer)
+}
+visitRenderer(rendererAst)
+const hostFactorySource = ts.transpileModule(`exports.build = () => { ${[...hostDeclarations.values()].join('\n')} return { paste: ${pasteFactories.at(-1)}, isCurrentSurface }; }`, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023 },
+}).outputText
+{
+  const native = deferred()
+  const h = loadPluginPaste({ invokeImpl: () => native.promise })
+  const target = { pluginId: 'clipboard-history', source: 'builtin' }, surfaceState = { permissions: undefined }
+  const hiddenRef = { current: false }, lifetime = { active: true }
+  const scope = h.recovery.createPasteRecoveryScope()
+  const context = {
+    exports: {}, target, surfaceState, hiddenRef, pasteScope: scope,
+    mountedRef: { current: true }, activeTargetRef: { current: target }, activeStateRef: { current: surfaceState },
+    presentation: 'plugin-surface-window', pluginRegistry: { getPluginLifetime: () => lifetime }, hostStorage: undefined,
+    createPluginPaste: h.api.createPluginPaste, ...h.recovery,
+  }
+  vm.runInNewContext(hostFactorySource, context)
+  const oldHost = context.exports.build()
+  const pending = oldHost.paste.pasteText('original selection')
+  await settle()
+  scope.invalidate()
+  hiddenRef.current = true
+  hiddenRef.current = false
+  const newHost = context.exports.build()
+  assert.equal(oldHost.isCurrentSurface(), true, 'paste invalidation does not break the existing object-handoff lifecycle')
+  native.reject(new Error('late failure after independent hide/reopen'))
+  assert.equal(h.recovery.isPasteCancelled(await pending), true)
+  assert.equal(h.recovery.isPasteCancelled(await oldHost.paste.pasteText('old retained callback')), true)
+  // The new host can capture its own generation; the fake native still fails.
+  const current = await newHost.paste.pasteText('new instance draft')
+  assert.equal(current.fallback, 'copied')
+  assert.equal(h.recovery.isPasteCancelled(current), false)
+  lifetime.active = false
+  assert.equal(h.recovery.isPasteCancelled(await newHost.paste.pasteText('disabled plugin')), true)
+}
+console.log('Renderer owner passed: actual host factory rejects retained callbacks after reopen and plugin removal')
+
+{
+  const h = loadPluginPaste({ windowSearch: '?window=launcher' })
+  const owner = h.recovery.captureLauncherPasteOwner({ complete: false })
+  const result = await h.api.createPluginPaste(undefined, undefined, { ownerSource: { capture: () => owner } }).pasteText('controller output')
+  assert.equal(result.ok, true)
+  assert.equal(h.state.open, true, 'caller-managed success remains current until output bookkeeping completes')
+  assert.equal(owner.isCurrent(), true)
+  h.appStore.getState().setGlobalLauncherOpen(false)
+  assert.equal(owner.isCurrent(), false, 'caller can close after success without exempting normal session reset')
+}
+console.log('Caller-managed completion passed: native success keeps the session current until the controller consumes it')
+
+// beforeOpen may retain its host through asynchronous plugin preparation. Its
+// factory also owns the original instance, including an independent reopen.
+const preparationNames = ['preparationScope', 'launcherOwner', 'preparationOwner']
+const preparationDeclarations = new Map()
+function visitPreparation(node) {
+  if (ts.isVariableDeclaration(node) && preparationNames.includes(node.name.getText(rendererAst))) {
+    preparationDeclarations.set(node.name.getText(rendererAst), `const ${node.getText(rendererAst)};`)
+  }
+  ts.forEachChild(node, visitPreparation)
+}
+visitPreparation(rendererAst)
+const preparationFactorySource = ts.transpileModule(`exports.build = () => { ${[...preparationDeclarations.values()].join('\n')} return { paste: ${pasteFactories[0]}, scope: preparationScope }; }`, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023 },
+}).outputText
+for (const presentation of ['global-launcher', 'plugin-surface-window']) {
+  const h = loadPluginPaste()
+  const target = {}, mountedRef = { current: true }, activeTargetRef = { current: target }
+  const context = {
+    exports: {}, target, mountedRef, activeTargetRef, presentation, disposed: false,
+    permissions: undefined, storage: undefined, createPluginPaste: h.api.createPluginPaste, ...h.recovery,
+  }
+  vm.runInNewContext(preparationFactorySource, context)
+  const original = context.exports.build()
+  if (presentation === 'global-launcher') h.appStore.getState().setGlobalLauncherOpen(true)
+  else original.scope.invalidate()
+  const result = await original.paste.pasteText('late beforeOpen callback')
+  assert.equal(h.recovery.isPasteCancelled(result), true)
+  assert.equal(h.ownershipCalls.length, 0, 'stale preparation cannot register a new native owner')
+}
+console.log('Preparation owner passed: beforeOpen cannot acquire a replacement launcher or independent window')
+
+// Keep output bookkeeping ahead of the synchronous launcher close/reset.
+{
+const { createServer } = await import('vite')
+const values = new Map()
+const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) }
+globalThis.window = { localStorage: storage, sessionStorage: storage, addEventListener() {}, removeEventListener() {}, dispatchEvent() {}, matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }) }
+globalThis.localStorage = storage
+globalThis.sessionStorage = storage
+const info = console.info
+console.info = (...args) => { if (args[0] !== '[hiven:launcher-perf]') info(...args) }
+const server = await createServer({ server: { middlewareMode: true }, appType: 'custom', logLevel: 'silent' })
+try {
+  const { LauncherController } = await server.ssrLoadModule('/src/workspace/launcher/controller.ts')
+  const { textResult } = await server.ssrLoadModule('/src/workspace/launcher/output.ts')
+  const { getLastSaveableRun, setLastSaveableRun } = await server.ssrLoadModule('/src/workspace/savedActions/lastSaveableRun.ts')
+  for (const scenario of ['early-close-control', 'caller-completes-success', 'copied-keeps-result']) {
+    const h = loadPluginPaste({ windowSearch: '?window=launcher', invokeImpl: async () => { if (scenario === 'copied-keeps-result') throw new Error('native insertion failed') } })
+    const seed = { status: 'ready', runId: 'prior-run', actionKey: 'host:review:prior', inputBinding: 'prompt', outputIntent: 'copy', savedParams: {}, contractFingerprint: 'v1:prior', actionPolicy: { effect: 'pure', learnable: true }, completedAt: Date.now() }
+    setLastSaveableRun(seed)
+    let closed = 0
+    let resets = 0
+    const events = []
+    const controller = new LauncherController({
+      surfaceId: 'global-launcher', api: {}, locale: 'en', makeT: () => key => key, getSettings: () => ({}), recordSelection() {},
+      onChange() { h.recovery.checkPendingPasteRecovery() },
+      requestClose() { closed++; h.appStore.getState().setGlobalLauncherOpen(false) },
+      appendExperienceEvent: event => events.push(event),
+      makeApi(_item, isPasteCurrent) {
+        const owner = h.recovery.captureLauncherPasteOwner({ isCurrent: isPasteCurrent, complete: scenario === 'early-close-control' })
+        return h.launcherModule.createPluginLauncherApi({ pasteOwnerSource: { capture: () => owner } })
+      },
+    })
+    // The same synchronous invalidation used by GlobalLauncherHost on external close.
+    const stop = h.appStore.subscribe((next, previous) => {
+      if (previous.globalLauncherOpen && !next.globalLauncherOpen) { resets++; controller.reset() }
+    })
+    const item = {
+      systemKey: `host:review:${scenario}`, kind: 'host', display: { title: 'Paste integration' }, behavior: { type: 'perform' },
+      actionPolicy: { effect: 'pure', learnable: true }, contractFingerprint: 'v1:paste-review',
+      execute: context => {
+        const result = textResult('keep complete draft\nsecond line', context.api, 'en')
+        result.output.choices.push({ id: 'other', title: 'Other', primaryAction: async () => {} })
+        return result
+      },
+    }
+    await controller.selectItem(item, { objectBlockText: 'source material' })
+    const frame = controller.getState().frames.at(-1)
+    assert.equal(frame.kind, 'result')
+    await controller.activateSecondary(frame.output.choices[0], 'paste-to-foreground-app')
+    // Allow the controller's queued mining fingerprint/event chain to settle.
+    for (let i = 0; i < 10; i++) await new Promise(resolve => setTimeout(resolve, 5))
+    const last = await getLastSaveableRun()
+    const applied = events.filter(event => event.eventType === 'output.applied')
+    if (scenario === 'early-close-control') {
+      assert.equal(closed, 0)
+      assert.equal(resets, 1)
+      assert.equal(last.actionKey, seed.actionKey)
+      assert.equal(applied.length, 1)
+    } else if (scenario === 'caller-completes-success') {
+      assert.equal(closed, 1)
+      assert.equal(resets, 1)
+      assert.equal(h.state.open, false)
+      assert.equal(last.actionKey, item.systemKey)
+      assert.equal(last.outputIntent, 'paste-to-foreground-app')
+      assert.equal(applied.length, 1)
+    } else {
+      assert.equal(closed, 0)
+      assert.equal(resets, 0)
+      assert.equal(h.state.open, true)
+      assert.equal(controller.getState().frames.at(-1), frame)
+      assert.match(controller.getState().error, /Copied/)
+      assert.equal(last.actionKey, seed.actionKey)
+      assert.equal(applied.length, 0)
+    }
+    stop()
+    console.log(`PASS integrated actual store/recovery/paste/pluginApi/controller: ${scenario}`)
+  }
+} finally {
+  await server.close()
+  console.info = info
+}
+
+}
+
+// Telemetry is a fixed vocabulary of lifecycle state, with no delivery data.
+for (const reason of ['explicit-leave', 'replaced-attempt', 'unexpected-blur']) {
+  const native = deferred()
+  const h = loadPluginPaste({ windowSearch: '?window=launcher', invokeImpl: () => native.promise })
+  const owner = h.recovery.captureLauncherPasteOwner({ complete: false })
+  const pending = h.api.createPluginPaste(undefined, undefined, { ownerSource: { capture: () => owner } }).pasteText('PRIVATE_BODY https://private.invalid/PRIVATE_URL')
+  await settle()
+  let replacement
+  if (reason === 'explicit-leave') h.recovery.cancelPendingPasteRecovery()
+  if (reason === 'replaced-attempt') replacement = h.recovery.createPasteRecoveryAttempt(owner, false)
+  if (reason === 'unexpected-blur') {
+    h.recovery.observePasteRecoveryFocus(false)
+    h.recovery.observePasteRecoveryFocus(true)
+    h.recovery.observePasteRecoveryFocus(false)
+  }
+  native.resolve()
+  assert.equal(h.recovery.isPasteCancelled(await pending), true)
+  const cancelled = h.telemetry.filter(([event]) => event === 'behavior:paste.recovery.cancel')
+  const terminal = h.telemetry.filter(([event]) => event === 'behavior:paste.result')
+  assert.equal(cancelled.length, 1)
+  assert.equal(cancelled[0][1].reason, reason)
+  assert.equal(terminal.length, 1)
+  assert.equal(terminal[0][1].status, 'cancelled')
+  assert.equal(terminal[0][1].reason, reason)
+  for (const [event, details] of h.telemetry) {
+    const keys = Object.keys(details)
+    const allowed = event === 'behavior:paste.result'
+      ? ['status', 'reason', 'owned', 'keepOpen', 'current', 'hiding', 'expectedBlur']
+      : event === 'behavior:paste.recovery.focus'
+        ? ['focused', 'hiding', 'expectedBlur', 'current']
+        : ['reason', 'hiding', 'expectedBlur', 'current']
+    assert.deepEqual(keys.sort(), allowed.sort(), 'events expose only the approved fixed fields')
+    for (const key of keys.filter(key => key !== 'status' && key !== 'reason')) assert.equal(typeof details[key], 'boolean')
+  }
+  assert.doesNotMatch(JSON.stringify(h.telemetry), /PRIVATE_BODY|PRIVATE_URL|private\.invalid|paste-1/)
+  replacement?.cancel()
+}
+{
+  const h = loadPluginPaste({ availability: 'unsupported', windowSearch: '?window=launcher' })
+  assert.equal((await h.api.createPluginPaste().pasteText('not copied')).fallback, 'none')
+  const terminal = h.telemetry.filter(([event]) => event === 'behavior:paste.result')
+  assert.equal(terminal.length, 1)
+  assert.equal(terminal[0][1].status, 'none')
+}
+console.log('Paste telemetry passed: fixed outcomes/cancel reasons/focus booleans, one terminal signal and no content/token/target data')

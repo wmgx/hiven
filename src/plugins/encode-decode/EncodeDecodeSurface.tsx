@@ -74,11 +74,11 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
     setPasting(true)
     try {
       const pasteResult = await host.paste.pasteText(result.output)
+      if (!pasteResult.ok && !pasteResult.message) return
       if (pasteResult.ok) {
         host.complete()
       } else if (pasteResult.fallback === 'copied') {
-        host.showMessage(pasteResult.message || t('toast.copied'), 'info')
-        host.complete()
+        host.showMessage(pasteResult.message, 'info')
       } else {
         host.showMessage(pasteResult.message || t('toast.pasteFailed'), 'error')
       }

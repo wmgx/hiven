@@ -3,6 +3,7 @@ import {
   restoreCurrentLauncherOverlayWindow,
   type RestoreForegroundMode,
 } from '../../workspace/windowManager/launcherWindow'
+import { cancelPendingPasteRecovery } from '../../workspace/pasteRecovery'
 
 export async function closeGlobalLauncherWindow({
   standaloneLauncher,
@@ -24,6 +25,9 @@ export async function closeGlobalLauncherWindow({
    */
   restoreForeground?: RestoreForegroundMode
 }) {
+  // Revoke before awaiting native hide, so a late paste failure cannot restore
+  // the surface that this close is dismissing.
+  cancelPendingPasteRecovery()
   if (window.__HIVEN_WEB_NATIVE_BRIDGE__) {
     setOpen(true)
     return

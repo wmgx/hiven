@@ -24,6 +24,7 @@ mod ai_run_registry;
 mod ai_ollama;
 pub mod ai_xai;
 mod clipboard_privacy;
+mod paste_recovery;
 mod plugin_png_export;
 mod text_material;
 pub mod desktop_bridge;
@@ -727,6 +728,7 @@ async fn show_launcher_window(app: tauri::AppHandle, resume: Option<bool>) -> Re
         let app_clone = app.clone();
         return app
             .run_on_main_thread(move || {
+                paste_recovery::invalidate_all();
                 if let Some(window) = app_clone.get_webview_window("launcher") {
                     // Resume the current command at its existing size and position.
                     // Capture consumed the remembered target; retain it for a later paste.
@@ -757,6 +759,8 @@ fn show_launcher_window_for_hotkey_with_event(
     let total_started_at = Instant::now();
     let app_clone = app.clone();
     app.run_on_main_thread(move || {
+        // Every explicit open is a new intent, including a visible re-open.
+        paste_recovery::invalidate_all();
         let main_thread_started_at = Instant::now();
         let existing_launcher = app_clone.get_webview_window("launcher");
         let was_visible = existing_launcher
@@ -799,7 +803,10 @@ fn show_launcher_window_for_hotkey_with_event(
             match tauri::WebviewWindowBuilder::from_config(&app_clone, &config)
                 .and_then(|builder| builder.build())
             {
-                Ok(window) => window,
+                Ok(window) => {
+                    attach_paste_window_events(&window);
+                    window
+                }
                 Err(error) => {
                     eprintln!("[hiven] Failed to create launcher window: {}", error);
                     return;
@@ -1075,6 +1082,7 @@ async fn hide_launcher_window(
     let mode = parse_restore_foreground_mode(restore_foreground.as_deref());
     let app_clone = app.clone();
     app.run_on_main_thread(move || {
+        paste_recovery::invalidate_window("launcher", None);
         if let Some(window) = app_clone.get_webview_window("launcher") {
             if let Err(error) = restore_launcher_previous_input_source() {
                 eprintln!("[hiven] Failed to restore launcher input source: {}", error);
@@ -1099,87 +1107,267 @@ fn hide_window_and_resolve_foreground_target(
     window: tauri::WebviewWindow,
     app: tauri::AppHandle,
     keep_open: bool,
+    attempt: Option<std::sync::Arc<paste_recovery::Attempt>>,
 ) -> Result<(Option<u32>, bool), String> {
     let (tx, rx) = std::sync::mpsc::channel();
     let app_for_main_thread = app.clone();
     app.run_on_main_thread(move || {
-        let app = app_for_main_thread;
-        if window.label() == "launcher" {
-            // Input source restoration is launcher-specific; plugin surface
-            // windows never touch the keyboard input source.
-            if let Err(error) = restore_launcher_previous_input_source() {
-                eprintln!("[hiven] Failed to restore launcher input source: {}", error);
+        let result = (|| {
+            let app = app_for_main_thread;
+            if let Some(attempt) = attempt.as_ref() {
+                paste_recovery::arm(attempt, window.is_focused().unwrap_or(false))?;
+                attempt.ensure_active()?;
+                attempt.mark_handoff();
             }
-        }
-        if !keep_open {
-            if let Err(error) = window.hide() {
-                eprintln!("[hiven] Failed to hide {} window: {}", window.label(), error);
+            if window.label() == "launcher" {
+                // Input source restoration is launcher-specific; plugin surface
+                // windows never touch the keyboard input source.
+                if let Err(error) = restore_launcher_previous_input_source() {
+                    eprintln!("[hiven] Failed to restore launcher input source: {}", error);
+                }
             }
-        }
-        let target_pid = previous_foreground_process_id()
-            .lock()
-            .ok()
-            .and_then(|mut stored| if keep_open { *stored } else { stored.take() });
-        let key_label = previous_key_window_label()
-            .lock()
-            .ok()
-            .and_then(|mut stored| if keep_open { stored.clone() } else { stored.take() });
-        // If hiven itself held keyboard focus (a non-activating panel like
-        // the launcher/quick editor, or a detached window such as a
-        // standalone quick editor) when the surface window was opened, the
-        // real target is that hiven window — not the "remembered pid" above,
-        // which only tracks the OS-level frontmost app and can be a
-        // completely unrelated external app (e.g. an IDE) in that case.
-        // Activating that remembered app here would incorrectly steal focus
-        // back away from hiven's own window.
-        let target_is_self = key_label
-            .as_ref()
-            .and_then(|label| app.get_webview_window(label))
-            .map(|target_window| {
-                if current_foreground_process_id() == Some(std::process::id()) {
-                    // hiven is already the frontmost app (e.g. the main
-                    // window or a detached quick editor never lost app
-                    // activation) — a plain focus restore is enough; do not
-                    // swizzle an ordinary window into a non-activating panel.
-                    if let Err(error) = target_window.set_focus() {
+            if !keep_open {
+                window.hide().map_err(|error| error.to_string())?;
+                if let Some(attempt) = attempt.as_ref() {
+                    attempt.mark_hidden();
+                }
+            }
+            if let Some(attempt) = attempt.as_ref() {
+                attempt.ensure_active()?;
+            }
+            // Keep the captured target available for a retry after failed delivery.
+            let retain_target = keep_open || attempt.is_some();
+            let target_pid = previous_foreground_process_id()
+                .lock()
+                .ok()
+                .and_then(|mut stored| if retain_target { *stored } else { stored.take() });
+            let key_label = previous_key_window_label()
+                .lock()
+                .ok()
+                .and_then(|mut stored| if retain_target { stored.clone() } else { stored.take() });
+            // If hiven itself held keyboard focus (a non-activating panel like
+            // the launcher/quick editor, or a detached window such as a
+            // standalone quick editor) when the surface window was opened, the
+            // real target is that hiven window — not the "remembered pid" above,
+            // which only tracks the OS-level frontmost app and can be a
+            // completely unrelated external app (e.g. an IDE) in that case.
+            // Activating that remembered app here would incorrectly steal focus
+            // back away from hiven's own window.
+            let target_is_self = key_label
+                .as_ref()
+                .and_then(|label| app.get_webview_window(label))
+                .map(|target_window| {
+                    if current_foreground_process_id() == Some(std::process::id()) {
+                        // hiven is already the frontmost app (e.g. the main
+                        // window or a detached quick editor never lost app
+                        // activation) — a plain focus restore is enough; do not
+                        // swizzle an ordinary window into a non-activating panel.
+                        if let Err(error) = target_window.set_focus() {
+                            eprintln!(
+                                "[hiven] Failed to focus previous key window: {}",
+                                error
+                            );
+                        }
+                    } else if let Err(error) =
+                        show_launcher_window_without_app_activation(&target_window)
+                    {
                         eprintln!(
-                            "[hiven] Failed to focus previous key window: {}",
+                            "[hiven] Failed to restore previous key window without activation: {}",
                             error
                         );
                     }
-                } else if let Err(error) =
-                    show_launcher_window_without_app_activation(&target_window)
-                {
-                    eprintln!(
-                        "[hiven] Failed to restore previous key window without activation: {}",
-                        error
-                    );
-                }
-            })
-            .is_some();
-        // Restore activation only if it is actually needed, and only when the
-        // target isn't one of hiven's own windows (handled above). The
-        // launcher is a non-activating panel, so the target app was never
-        // deactivated and `current_foreground_process_id() == Some(pid)`
-        // already holds here — we skip activate_process, matching Maccy's
-        // paste path (re-activating an already-active app makes macOS
-        // re-pick its key window/focus ring, which can drop the very text
-        // field the user had focused). A plugin surface window, by contrast,
-        // IS an activating window (`.focused(true)` in
-        // show_plugin_surface_window), so opening it deactivated the target
-        // app; here we must hand activation back explicitly, or the
-        // synthetic keystroke below lands on hiven itself.
-        if !target_is_self {
-            if let Some(pid) = target_pid {
-                if current_foreground_process_id() != Some(pid) {
-                    activate_process(pid);
+                })
+                .is_some();
+            // Restore activation only if it is actually needed, and only when the
+            // target isn't one of hiven's own windows (handled above). The
+            // launcher is a non-activating panel, so the target app was never
+            // deactivated and `current_foreground_process_id() == Some(pid)`
+            // already holds here — we skip activate_process, matching Maccy's
+            // paste path (re-activating an already-active app makes macOS
+            // re-pick its key window/focus ring, which can drop the very text
+            // field the user had focused). A plugin surface window, by contrast,
+            // IS an activating window (`.focused(true)` in
+            // show_plugin_surface_window), so opening it deactivated the target
+            // app; here we must hand activation back explicitly, or the
+            // synthetic keystroke below lands on hiven itself.
+            if !target_is_self {
+                if let Some(pid) = target_pid {
+                    if current_foreground_process_id() != Some(pid) {
+                        activate_process(pid);
+                    }
                 }
             }
-        }
-        let _ = tx.send((target_pid, target_is_self));
+            Ok((target_pid, target_is_self))
+        })();
+        let _ = tx.send(result);
     })
     .map_err(|error| error.to_string())?;
-    rx.recv().map_err(|error| error.to_string())
+    rx.recv().map_err(|error| error.to_string())?
+}
+
+fn attach_paste_window_events(window: &tauri::WebviewWindow) {
+    let label = window.label().to_string();
+    let instance = paste_recovery::register_window(&label, None);
+    window.on_window_event(move |event| match event {
+        tauri::WindowEvent::Focused(false) => {
+            let expected_blur_consumed = paste_recovery::consume_blur(&label, instance);
+            log_launcher_perf(
+                "native:paste-recovery.blur",
+                Instant::now(),
+                format!("pluginSurface=false expectedBlurConsumed={expected_blur_consumed}"),
+            );
+            if !expected_blur_consumed {
+                log_launcher_perf(
+                    "native:paste-recovery.cancel-request",
+                    Instant::now(),
+                    "reason=unexpected-blur pluginSurface=false",
+                );
+                paste_recovery::invalidate_window(&label, Some(instance));
+            }
+        }
+        tauri::WindowEvent::CloseRequested { .. } => {
+            paste_recovery::invalidate_window(&label, Some(instance));
+        }
+        tauri::WindowEvent::Destroyed => {
+            paste_recovery::destroyed(&label, instance);
+        }
+        _ => {}
+    });
+}
+
+#[tauri::command]
+async fn begin_paste_attempt(
+    window: tauri::WebviewWindow,
+    app: tauri::AppHandle,
+) -> Result<String, String> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    app.run_on_main_thread(move || {
+        let result = (|| {
+            if !window.is_visible().map_err(|error| error.to_string())? {
+                return Err(paste_recovery::cancelled_error());
+            }
+            paste_recovery::begin(window.label())
+                .map(|attempt| attempt.id.clone())
+                .ok_or_else(paste_recovery::cancelled_error)
+        })();
+        let _ = tx.send(result);
+    })
+    .map_err(|error| error.to_string())?;
+    rx.recv().map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+fn cancel_paste_attempt(window: tauri::WebviewWindow, attempt_id: String) {
+    log_launcher_perf(
+        "native:paste-recovery.cancel-request",
+        Instant::now(),
+        format!(
+            "reason=frontend current={}",
+            paste_recovery::current(window.label(), &attempt_id).is_ok(),
+        ),
+    );
+    paste_recovery::cancel(window.label(), &attempt_id);
+}
+
+// Diagnosis uses only fixed stages and booleans. Never log the owner ID,
+// window label, paste target, clipboard content, or raw platform error.
+fn log_paste_recovery_window_state(
+    stage: &'static str,
+    window: &tauri::WebviewWindow,
+    attempt: &paste_recovery::Attempt,
+    delivery_succeeded: bool,
+) {
+    let focused = window.is_focused();
+    log_launcher_perf(
+        stage,
+        Instant::now(),
+        format!(
+            "deliverySucceeded={} current={} hidden={} expectedBlurPending={} focusKnown={} focused={}",
+            delivery_succeeded,
+            paste_recovery::current(window.label(), &attempt.id).is_ok(),
+            attempt.was_hidden(),
+            attempt.expected_blur_pending(),
+            focused.is_ok(),
+            focused.unwrap_or(false),
+        ),
+    );
+}
+
+/// Recover only the original native window. In particular, never invoke a show
+/// command here: that would start a new session and capture a new paste target.
+fn finish_paste_attempt(
+    window: tauri::WebviewWindow,
+    app: tauri::AppHandle,
+    attempt: std::sync::Arc<paste_recovery::Attempt>,
+    succeeded: bool,
+) -> Result<(), String> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let app_for_main_thread = app.clone();
+    app.run_on_main_thread(move || {
+        log_paste_recovery_window_state(
+            "native:paste-recovery.finish-enter",
+            &window,
+            &attempt,
+            succeeded,
+        );
+        let result = (|| {
+            if paste_recovery::current(window.label(), &attempt.id).is_err() {
+                return Err(paste_recovery::cancelled_error());
+            }
+            attempt.disarm_blur();
+            if succeeded {
+                if attempt.was_hidden() {
+                    if let Some(timeout) = attempt.destroy_timeout_ms {
+                        let label = window.label();
+                        let token = touch_plugin_surface_window(label);
+                        let last_active_at = now_millis();
+                        let _ = surface_registry_mark_record_state(label, "hidden", last_active_at);
+                        emit_surface_registry_mark_state(
+                            &app_for_main_thread, label, "hidden", last_active_at,
+                        );
+                        schedule_plugin_surface_window_destroy(
+                            app_for_main_thread.clone(), label.to_string(), token, timeout,
+                        );
+                    }
+                }
+                return Ok(());
+            }
+            if attempt.needs_recovery() {
+                attempt.ensure_active()?;
+                if window.label() == "launcher" {
+                    show_launcher_window_without_app_activation(&window)?;
+                } else {
+                    if attempt.was_hidden() {
+                        window.show().map_err(|error| error.to_string())?;
+                    }
+                    attempt.ensure_active()?;
+                    window.set_focus().map_err(|error| error.to_string())?;
+                }
+            }
+            Ok(())
+        })();
+        log_paste_recovery_window_state(
+            "native:paste-recovery.finish-exit",
+            &window,
+            &attempt,
+            succeeded,
+        );
+        log_launcher_perf(
+            "native:paste-recovery.finish-result",
+            Instant::now(),
+            format!(
+                "succeeded={} cancelled={}",
+                result.is_ok(),
+                result
+                    .as_ref()
+                    .is_err_and(|error| error.starts_with(paste_recovery::CANCELLED)),
+            ),
+        );
+        paste_recovery::cancel(window.label(), &attempt.id);
+        let _ = tx.send(result);
+    })
+    .map_err(|error| error.to_string())?;
+    rx.recv().map_err(|error| error.to_string())?
 }
 
 // Combines hide_launcher_window + simulate_paste into a single native command.
@@ -1192,34 +1380,91 @@ async fn hide_launcher_and_paste(
     window: tauri::WebviewWindow,
     app: tauri::AppHandle,
     keep_open: Option<bool>,
+    attempt_id: Option<String>,
 ) -> Result<(), String> {
+    let started_at = Instant::now();
+    let outcome = async {
+        let attempt = match attempt_id {
+            Some(id) => paste_recovery::current(window.label(), &id)?,
+            None => {
+                let id = begin_paste_attempt(window.clone(), app.clone()).await?;
+                paste_recovery::current(window.label(), &id)?
+            }
+        };
+        // Claim once before any async work. A duplicate invocation must not finish
+        // or recover the original invocation's still-running lease.
+        attempt.claim()?;
+        let keep_open = keep_open.unwrap_or(false);
+        let result = perform_owned_paste(window.clone(), app.clone(), keep_open, attempt.clone()).await;
+        let recovery = finish_paste_attempt(window, app, attempt, result.is_ok());
+        match (result, recovery) {
+            (_, Err(error)) if error.starts_with(paste_recovery::CANCELLED) => Err(error),
+            (Err(error), Err(recovery)) => {
+                Err(format!("{error}; paste window recovery failed: {recovery}"))
+            }
+            (result, _) => result,
+        }
+    }
+    .await;
+    log_launcher_perf(
+        "native:paste-recovery.result",
+        started_at,
+        format!(
+            "succeeded={} cancelled={}",
+            outcome.is_ok(),
+            outcome
+                .as_ref()
+                .is_err_and(|error| error.starts_with(paste_recovery::CANCELLED)),
+        ),
+    );
+    outcome
+}
+
+async fn perform_owned_paste(
+    window: tauri::WebviewWindow,
+    app: tauri::AppHandle,
+    keep_open: bool,
+    attempt: std::sync::Arc<paste_recovery::Attempt>,
+) -> Result<(), String> {
+    attempt.ensure_active()?;
     #[cfg(target_os = "linux")]
     {
         // Snapshot before hiding. Ordinary launcher close notifications may
         // race this command, and must not erase or replace the intended target.
         let target = linux_x11_paste::snapshot(window.label())?;
-        if !keep_open.unwrap_or(false) {
-            let (tx, rx) = std::sync::mpsc::channel();
-            app.run_on_main_thread(move || {
-                let _ = tx.send(window.hide().map_err(|error| error.to_string()));
-            })
-            .map_err(|error| error.to_string())?;
-            rx.recv().map_err(|error| error.to_string())??;
-        }
-        return tokio::task::spawn_blocking(move || linux_x11_paste::restore_and_paste(target))
-            .await
-            .map_err(|error| format!("spawn_blocking failed: {error}"))?;
+        let (tx, rx) = std::sync::mpsc::channel();
+        let for_hide = attempt.clone();
+        app.run_on_main_thread(move || {
+            let result = (|| {
+                paste_recovery::arm(&for_hide, window.is_focused().unwrap_or(false))?;
+                for_hide.ensure_active()?;
+                for_hide.mark_handoff();
+                if !keep_open {
+                    window.hide().map_err(|error| error.to_string())?;
+                    for_hide.mark_hidden();
+                }
+                Ok::<(), String>(())
+            })();
+            let _ = tx.send(result);
+        })
+        .map_err(|error| error.to_string())?;
+        rx.recv().map_err(|error| error.to_string())??;
+        return tokio::task::spawn_blocking(move || {
+            linux_x11_paste::restore_and_paste_owned(target, &attempt)
+        })
+        .await
+        .map_err(|error| format!("spawn_blocking failed: {error}"))?;
     }
 
     #[cfg(not(target_os = "linux"))]
     {
         let (target_pid, target_is_self) =
-            hide_window_and_resolve_foreground_target(window, app, keep_open.unwrap_or(false))?;
+            hide_window_and_resolve_foreground_target(window, app, keep_open, Some(attempt.clone()))?;
 
         // Phase 2 (blocking thread): the launcher WebView is throttled once hidden, so
         // the focus-handoff wait and the synthetic Cmd/Ctrl+V must run natively.
         tokio::task::spawn_blocking(move || {
-            wait_for_foreground_handoff_then_paste(target_pid, target_is_self)
+            wait_for_foreground_handoff_then_paste(target_pid, target_is_self, &attempt)
         })
         .await
         .map_err(|e| format!("spawn_blocking failed: {}", e))?
@@ -1230,6 +1475,7 @@ async fn hide_launcher_and_paste(
 fn wait_for_foreground_handoff_then_paste(
     target_pid: Option<u32>,
     target_is_self: bool,
+    attempt: &paste_recovery::Attempt,
 ) -> Result<(), String> {
     const POLL_INTERVAL_MS: u64 = 20;
     const MAX_WAIT_MS: u64 = 1000;
@@ -1244,23 +1490,28 @@ fn wait_for_foreground_handoff_then_paste(
         // polling for a handoff would just burn the full MAX_WAIT_MS. Settle
         // briefly for the first responder to update, then paste directly.
         std::thread::sleep(Duration::from_millis(SETTLE_DELAY_MS));
+        attempt.ensure_active()?;
         return simulate_paste_impl();
     }
 
-    let own_pid = std::process::id();
+    let target_pid = target_pid.ok_or("No foreground paste target was captured")?;
     let started_at = Instant::now();
     let deadline = started_at + Duration::from_millis(MAX_WAIT_MS);
     loop {
-        let handed_off = match target_pid {
-            Some(pid) => current_foreground_process_id() == Some(pid),
-            None => current_foreground_process_id() != Some(own_pid),
-        };
-        if handed_off || Instant::now() >= deadline {
+        attempt.ensure_active()?;
+        if current_foreground_process_id() == Some(target_pid) {
             break;
+        }
+        if Instant::now() >= deadline {
+            return Err("The paste target did not regain foreground focus".into());
         }
         std::thread::sleep(Duration::from_millis(POLL_INTERVAL_MS));
     }
     std::thread::sleep(Duration::from_millis(SETTLE_DELAY_MS));
+    attempt.ensure_active()?;
+    if current_foreground_process_id() != Some(target_pid) {
+        return Err("The foreground paste target changed before delivery".into());
+    }
     simulate_paste_impl()
 }
 
@@ -1268,10 +1519,12 @@ fn wait_for_foreground_handoff_then_paste(
 fn wait_for_foreground_handoff_then_paste(
     _target_pid: Option<u32>,
     _target_is_self: bool,
+    attempt: &paste_recovery::Attempt,
 ) -> Result<(), String> {
     // current_foreground_process_id() always returns None on this platform, so
     // polling for a focus handoff would be meaningless; fall back to a fixed delay.
     std::thread::sleep(Duration::from_millis(200));
+    attempt.ensure_active()?;
     simulate_paste_impl()
 }
 
@@ -1288,7 +1541,9 @@ async fn hide_launcher_and_capture_selection(
     window: tauri::WebviewWindow,
     app: tauri::AppHandle,
 ) -> Result<Option<String>, String> {
-    let (target_pid, target_is_self) = hide_window_and_resolve_foreground_target(window, app.clone(), false)?;
+    paste_recovery::invalidate_all();
+    let (target_pid, target_is_self) =
+        hide_window_and_resolve_foreground_target(window, app.clone(), false, None)?;
 
     tokio::task::spawn_blocking(move || {
         wait_for_foreground_handoff_then_capture(app, target_pid, target_is_self)
@@ -1344,6 +1599,7 @@ fn wait_for_foreground_handoff_then_capture(
 
 #[tauri::command]
 async fn show_quick_editor_window(app: tauri::AppHandle) -> Result<(), String> {
+    paste_recovery::invalidate_all();
     if let Some(window) = app.get_webview_window(QUICK_EDITOR_WINDOW_LABEL) {
         window.show().map_err(|e| e.to_string())?;
         window.set_focus().map_err(|e| e.to_string())?;
@@ -1371,6 +1627,8 @@ async fn show_quick_editor_window(app: tauri::AppHandle) -> Result<(), String> {
     .build()
     .map_err(|e| e.to_string())?;
 
+    attach_paste_window_events(&window);
+
     let (quick_width, quick_height) = quick_editor_default_window_size(&window);
     window.set_size(LogicalSize::new(quick_width, quick_height))
         .map_err(|e| e.to_string())?;
@@ -1381,6 +1639,7 @@ async fn show_quick_editor_window(app: tauri::AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 async fn close_quick_editor_window(app: tauri::AppHandle) -> Result<(), String> {
+    paste_recovery::invalidate_window(QUICK_EDITOR_WINDOW_LABEL, None);
     if let Some(window) = app.get_webview_window(QUICK_EDITOR_WINDOW_LABEL) {
         window.close().map_err(|e| e.to_string())?;
     }
@@ -1410,6 +1669,7 @@ async fn show_plugin_surface_window(
     destroy_timeout_ms: Option<u64>,
     paste_target: Option<PluginSurfacePasteTarget>,
 ) -> Result<(), String> {
+    paste_recovery::invalidate_all();
     #[cfg(not(target_os = "linux"))]
     let _ = (&caller, paste_target);
     let label = plugin_surface_window_label(&source, &plugin_id, &surface_id);
@@ -1520,6 +1780,7 @@ async fn hide_plugin_surface_window(
     let label = plugin_surface_window_label(&source, &plugin_id, &surface_id);
     let destroy_timeout_ms =
         destroy_timeout_ms.unwrap_or(PLUGIN_SURFACE_WINDOW_DEFAULT_DESTROY_TIMEOUT_MS);
+    paste_recovery::invalidate_window(&label, None);
     let token = touch_plugin_surface_window(&label);
     let Some(window) = app.get_webview_window(&label) else {
         return Ok(());
@@ -1612,8 +1873,33 @@ fn attach_plugin_surface_window_events(
     close_on_blur: bool,
     destroy_timeout_ms: u64,
 ) {
+    let instance = paste_recovery::register_window(&label, Some(destroy_timeout_ms));
     window.on_window_event(move |event| match event {
-        tauri::WindowEvent::Focused(false) if close_on_blur => {
+        tauri::WindowEvent::Focused(false) => {
+            let instance_current = paste_recovery::is_window_current(&label, instance);
+            let expected_blur_consumed = instance_current
+                && paste_recovery::consume_blur(&label, instance);
+            log_launcher_perf(
+                "native:paste-recovery.blur",
+                Instant::now(),
+                format!(
+                    "pluginSurface=true currentInstance={instance_current} expectedBlurConsumed={expected_blur_consumed}",
+                ),
+            );
+            if !instance_current || expected_blur_consumed {
+                // A paste hides temporarily; only successful delivery starts
+                // the hidden-surface destruction timer.
+                return;
+            }
+            log_launcher_perf(
+                "native:paste-recovery.cancel-request",
+                Instant::now(),
+                "reason=unexpected-blur pluginSurface=true",
+            );
+            paste_recovery::invalidate_window(&label, Some(instance));
+            if !close_on_blur {
+                return;
+            }
             let token = touch_plugin_surface_window(&label);
             if let Some(window) = app.get_webview_window(&label) {
                 let _ = window.hide();
@@ -1628,7 +1914,13 @@ fn attach_plugin_surface_window_events(
                 destroy_timeout_ms,
             );
         }
+        tauri::WindowEvent::CloseRequested { .. } => {
+            paste_recovery::invalidate_window(&label, Some(instance));
+        }
         tauri::WindowEvent::Destroyed => {
+            if !paste_recovery::destroyed(&label, instance) {
+                return;
+            }
             clear_plugin_surface_window_token(&label);
             let last_active_at = now_millis();
             let destroyed_surface = plugin_surface_registry_record(
@@ -1656,15 +1948,26 @@ fn schedule_plugin_surface_window_destroy(
     token: u64,
     destroy_timeout_ms: u64,
 ) {
+    let Some(instance) = paste_recovery::window_instance(&label) else {
+        return;
+    };
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(destroy_timeout_ms));
-        if current_plugin_surface_window_token(&label) != Some(token) {
-            return;
-        }
-        if let Some(window) = app.get_webview_window(&label) {
-            let _ = window.destroy();
-        }
-        clear_plugin_surface_window_token(&label);
+        let app_for_main_thread = app.clone();
+        let _ = app.run_on_main_thread(move || {
+            // Check on the same thread as show/restore, including the native
+            // instance so an old timer cannot destroy a recreated label.
+            if current_plugin_surface_window_token(&label) != Some(token)
+                || !paste_recovery::is_window_current(&label, instance)
+            {
+                return;
+            }
+            if let Some(window) = app_for_main_thread.get_webview_window(&label) {
+                paste_recovery::invalidate_window(&label, Some(instance));
+                let _ = window.destroy();
+            }
+            clear_plugin_surface_window_token(&label);
+        });
     });
 }
 
@@ -2188,6 +2491,7 @@ fn apply_restore_foreground_mode(mode: RestoreForegroundMode) {
 /// Drop remembered "previous app" so hide_launcher does not undo an intentional switch
 /// (focus window / launch app). Call after successfully activating a new frontmost target.
 fn clear_previous_foreground_app() {
+    paste_recovery::invalidate_all();
     #[cfg(target_os = "linux")]
     linux_x11_paste::clear_targets();
     if let Ok(mut stored) = previous_foreground_process_id().lock() {
@@ -7410,6 +7714,9 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
+            for window in app.webview_windows().into_values() {
+                attach_paste_window_events(&window);
+            }
             // Disable App Nap so the event loop stays responsive to global
             // hotkeys even when the app is fully in the background. Without
             // this, macOS may throttle the main RunLoop and delay the
@@ -7517,6 +7824,8 @@ pub fn run() {
             open_devtools,
             open_system_url,
             hide_launcher_window,
+            begin_paste_attempt,
+            cancel_paste_attempt,
             get_paste_availability,
             hide_launcher_and_paste,
             hide_launcher_and_capture_selection,

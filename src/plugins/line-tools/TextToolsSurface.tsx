@@ -69,10 +69,10 @@ export function TextToolsSurface(props: PluginSurfaceProps) {
     setPasting(true)
     try {
       const result = await host.paste.pasteText(text)
+      if (!result.ok && !result.message) return
       if (result.ok) host.complete()
       else if (result.fallback === 'copied') {
-        host.showMessage(result.message || t('toast.copied'), 'info')
-        host.complete()
+        host.showMessage(result.message, 'info')
       } else host.showMessage(result.message || t('toast.pasteFailed'), 'error')
     } catch {
       host.showMessage(t('toast.pasteFailed'), 'error')

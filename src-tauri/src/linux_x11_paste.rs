@@ -467,17 +467,34 @@ fn ensure_current(target: &Arc<PasteTarget>) -> PasteResult<()> {
 }
 
 pub(crate) fn restore_and_paste(target: Arc<PasteTarget>) -> PasteResult<()> {
+    restore_and_paste_checked(target, || Ok(()))
+}
+
+pub(crate) fn restore_and_paste_owned(
+    target: Arc<PasteTarget>,
+    attempt: &crate::paste_recovery::Attempt,
+) -> PasteResult<()> {
+    restore_and_paste_checked(target, || attempt.ensure_active())
+}
+
+fn restore_and_paste_checked(
+    target: Arc<PasteTarget>,
+    check_owner: impl Fn() -> PasteResult<()>,
+) -> PasteResult<()> {
     let _paste_lock = PASTE_LOCK.lock().map_err(error)?;
+    check_owner()?;
     ensure_current(&target)?;
     let captured = &target.captured;
     let session = captured.session.lock().map_err(error)?;
     session.ensure_alive(captured.window)?;
     if !session.focused(captured.window)? {
+        check_owner()?;
         session.request_activation(captured.window)?;
     }
     let deadline = Instant::now() + Duration::from_millis(1200);
     let mut focused_since = None;
     loop {
+        check_owner()?;
         ensure_current(&target)?;
         session.ensure_alive(captured.window)?;
         if session.focused(captured.window)? && session.keyboard_idle()? {
@@ -508,11 +525,15 @@ pub(crate) fn restore_and_paste(target: Arc<PasteTarget>) -> PasteResult<()> {
         return Err(error("the target or keyboard state changed before paste"));
     }
     let (control, v) = session.paste_keycodes()?;
+    check_owner()?;
     let mut keys = SyntheticKeys {
         connection: &session.connection,
         held: Vec::new(),
     };
     keys.press(control)?;
+    // Cancellation still releases any modifier already pressed through the
+    // existing key guard; never inject V after an observed cancellation.
+    check_owner()?;
     keys.press(v)?;
     keys.release(v)?;
     keys.release(control)?;

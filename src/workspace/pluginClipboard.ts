@@ -99,18 +99,25 @@ async function withImageHandle<H extends { close(): Promise<void> }, T>(
 }
 
 /** Write PNG (or other image) bytes to the system clipboard as an image, not as text. */
-export async function writeClipboardImageBytes(bytes: Uint8Array): Promise<void> {
+export async function writeClipboardImageBytes(bytes: Uint8Array, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return
   try {
     const { writeImage } = await import('./nativeClipboard')
     const { Image } = await import('@tauri-apps/api/image')
+    if (signal?.aborted) return
+    const write = async (image: InstanceType<typeof Image>) => {
+      if (!signal?.aborted) await writeImage(image, signal)
+    }
     try {
-      await withImageHandle(await Image.fromBytes(bytes), writeImage)
+      await withImageHandle(await Image.fromBytes(bytes), write)
       return
     } catch {
+      if (signal?.aborted) return
       const decoded = await decodeImageBytesToRgba(bytes)
+      if (signal?.aborted) return
       await withImageHandle(
         await Image.new(new Uint8Array(decoded.rgba), decoded.width, decoded.height),
-        writeImage,
+        write,
       )
       return
     }
@@ -118,6 +125,7 @@ export async function writeClipboardImageBytes(bytes: Uint8Array): Promise<void>
     // Native image write unavailable — browser ClipboardItem PNG.
   }
 
+  if (signal?.aborted) return
   await writeClipboardImageViaClipboardItem(bytes)
 }
 

@@ -67,6 +67,7 @@ const commands = [
   ['npm', ['run', 'test:surface-coordinator-window-boundary']],
   ['npm', ['run', 'test:plugin-runtime-editor-cleanup-boundary']],
   ['npm', ['run', 'test:plugin-paste-behavior']],
+  ['npm', ['run', 'test:paste-recovery-controller']],
   ['npm', ['run', 'test:native-clipboard-read']],
   ['npm', ['run', 'test:plugin-product-convergence']],
   ['npm', ['run', 'test:step5-no-pin-and-csv-surface']],

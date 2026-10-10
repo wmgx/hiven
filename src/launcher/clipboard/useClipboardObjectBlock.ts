@@ -1,3 +1,4 @@
+import { checkPendingPasteRecovery } from '../../workspace/pasteRecovery'
 /**
  * useClipboardObjectBlock — React hook for Global Launcher clipboard integration.
  *
@@ -163,6 +164,7 @@ export function useClipboardObjectBlock(params: {
     cancelFileTextRead()
     materialGenerationRef.current += 1
     materialRef.current = next
+    checkPendingPasteRecovery()
     setMaterial(next)
   }, [cancelFileTextRead])
 
@@ -335,6 +337,7 @@ export function useClipboardObjectBlock(params: {
     return () => {
       mountedRef.current = false
       materialGenerationRef.current += 1
+      checkPendingPasteRecovery()
       fileReadRef.current?.cancel()
       fileReadRef.current = null
       releaseFilePickerFocus()

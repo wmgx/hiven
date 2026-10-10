@@ -21,7 +21,7 @@ function fixture() {
     }).outputText
     const exports = {}
     vm.runInNewContext(code, {
-      exports, module: { exports }, console, Date: Clock, window,
+      exports, module: { exports }, console, Date: Clock, window, AbortController,
       require(name) { assert.ok(Object.hasOwn(modules, name), `Unexpected dependency ${name}`); return modules[name] },
     }, { filename: path })
     return exports
@@ -30,6 +30,12 @@ function fixture() {
   const guard = load('src/workspace/launcherBlurGuard.ts', {
     '@tauri-apps/api/window': nativeWindow,
     '@tauri-apps/api/webviewWindow': { getAllWebviewWindows: async () => [] },
+  })
+  const recovery = load('src/workspace/pasteRecovery.ts', {
+    '../store': { useAppStore: {} },
+    './pluginSettingsStore': { usePluginSettingsStore: {} },
+    './telemetry': { trackBehavior() {} },
+    '@tauri-apps/api/core': { invoke: async () => 'attempt' },
   })
   const lifecycle = load('src/components/launcher/GlobalLauncherWindowLifecycle.ts', {
     react: {
@@ -46,9 +52,10 @@ function fixture() {
     '../../workspace/launcherBlurGuard': guard,
     './GlobalLauncherLayout': {}, '../../workspace/launcher/perf': {},
     '@tauri-apps/api/window': nativeWindow,
+    '../../workspace/pasteRecovery': recovery,
   })
   return {
-    guard, lifecycle,
+    guard, lifecycle, recovery,
     get closes() { return closes },
     onClose: () => { closes++ },
     focus(value, emit = true) { focused = value; if (emit) for (const listener of focusListeners) listener(value) },
@@ -155,3 +162,47 @@ function fixture() {
 }
 
 console.log('Native dialog focus passed: synchronous lease, long chooser, blur races, idle reset, idempotent release and cleanup')
+
+// Paste handoff protects exactly its own native blur and background interval.
+// A restored surface follows ordinary blur policy immediately, without grace.
+{
+  const test = fixture()
+  test.lifecycle.useCloseStandaloneLauncherOnBlur({ open: true, standaloneLauncher: true, closeLauncher: test.onClose })
+  test.lifecycle.useAutoCloseStandaloneLauncherOnBackgroundIdle({ open: true, standaloneLauncher: true, closeLauncher: test.onClose })
+  await flush()
+  const scope = test.recovery.createPasteRecoveryScope()
+  const attempt = test.recovery.createPasteRecoveryAttempt(scope.capture(() => true), false)
+  await attempt.prepare()
+  attempt.startHandoff()
+  test.focus(false)
+  await test.advance(20 * 60 * 1000)
+  assert.equal(test.closes, 0, 'native handoff keeps the original tree for the entire operation')
+  test.focus(true)
+  attempt.finish(false)
+  await test.advance(100)
+  assert.equal(test.closes, 0, 'restored failure does not replay the expected blur')
+  test.focus(false)
+  await test.advance(100)
+  assert.equal(test.closes, 1, 'ordinary blur works immediately after failure')
+  test.unmount()
+}
+
+{
+  const test = fixture()
+  test.lifecycle.useCloseStandaloneLauncherOnBlur({ open: true, standaloneLauncher: true, closeLauncher: test.onClose })
+  await flush()
+  const scope = test.recovery.createPasteRecoveryScope()
+  const attempt = test.recovery.createPasteRecoveryAttempt(scope.capture(() => true), false)
+  await attempt.prepare()
+  attempt.startHandoff()
+  test.focus(false)
+  await test.advance(100)
+  assert.equal(test.closes, 0)
+  test.focus(true)
+  test.focus(false)
+  await test.advance(100)
+  assert.equal(attempt.isCurrent(), false, 'real leave revokes recovery before a late native result')
+  assert.equal(test.closes, 1, 'a second blur cannot be swallowed by the paste lease')
+  test.unmount()
+}
+console.log('Paste focus passed: one expected blur, unbounded handoff, immediate normal blur and real-leave cancellation')

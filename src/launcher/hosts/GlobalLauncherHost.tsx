@@ -34,6 +34,8 @@ import { createPluginClipboard, writeClipboardText } from '../../workspace/plugi
 import { createGlobalLauncherPluginApi } from '../clipboard/globalLauncherApi'
 import type { LauncherExecuteResult } from '../../workspace/launcher/types'
 import { createPluginPaste } from '../../workspace/pluginPaste'
+import { captureLauncherPasteOwner, isPasteCancelled } from '../../workspace/pasteRecovery'
+import type { PluginPasteResult } from '../../workspace/pluginTypes'
 import { createPluginPrivateStorage } from '../../workspace/pluginStorage'
 import { createQuickEditorPane } from '../../workspace/quickEditor/quickEditorRequests'
 import { openExternalUrl } from '../../workspace/effectRunner'
@@ -51,7 +53,6 @@ import {
 } from '../../workspace/telemetry'
 import type { LauncherItem } from '../../workspace/launcher/types'
 import { getPluginPermissionSnapshot } from '../../workspace/pluginPermissions'
-import { showToast } from '../../workspace/toast'
 import { selectLauncherVisibleItems } from '../../workspace/launcher/visibleItems'
 
 type CurrentTextActionScope = { block: LauncherObjectBlock } & ReturnType<typeof captureCurrentTextDeliveryScope>
@@ -87,6 +88,8 @@ export function GlobalLauncherHost() {
   const [selectedObjectActionIndex, setSelectedObjectActionIndex] = useState(0)
   const [browsingActions, setBrowsingActions] = useState(false)
   const [currentTextBusy, setCurrentTextBusy] = useState(false)
+  const [deliveryFailure, setDeliveryFailure] = useState<{ message: string; isCurrent: () => boolean } | null>(null)
+  const deliveryGenerationRef = useRef(0)
   const currentTextDeliveryRef = useRef(createCurrentTextDelivery(setCurrentTextBusy))
   const currentTextScopesRef = useRef(new WeakMap<LauncherItem, CurrentTextActionScope>())
   const launcherFavoriteKeys = useAppStore((s) => s.launcherFavoriteKeys)
@@ -164,6 +167,12 @@ export function GlobalLauncherHost() {
     rankedLauncherItems: [nearbySaveDomainItem], query: '', locale,
   })[0] : undefined, [nearbySaveDomainItem, locale])
   liveQueryRef.current = query
+  // A failed delivery belongs to the visible material and flow, never the next
+  // query or window session. Keep it readable in the existing error region.
+  useLayoutEffect(() => {
+    deliveryGenerationRef.current += 1
+    setDeliveryFailure(null)
+  }, [open, query, clipboardBlock.block, controllerState, pluginSurfaceToolTarget, launcherHostSurfaceTarget, settingsDialogTarget])
   const editMaterial = () => {
     const active = controllerRef.current
     if (!useAppStore.getState().globalLauncherOpen || !active || active.getState().busy || active.getState().frames.length > 1) return
@@ -529,6 +538,7 @@ export function GlobalLauncherHost() {
    * For collect-input live preview: only signal empty vs has-preview (not each keystroke /
    * each preview text), so native window does not thrash while results replace in place.
    */
+  const visibleDeliveryError = controllerState?.error || (deliveryFailure?.isCurrent() ? deliveryFailure.message : null)
   const controllerResizeKey = useMemo(() => {
     if (!controllerState) return 'idle'
     const top = controllerState.frames[controllerState.frames.length - 1]
@@ -536,19 +546,11 @@ export function GlobalLauncherHost() {
     const previewSignal = top?.kind === 'collect-input'
       ? `:${top.item.materialTextEdit || top.item.executionMode === 'explicit-text-preview' ? 'multi' : 'single'}:${top.inputText.trim() ? 1 : 0}:${top.previewOutput?.choices?.length ? 1 : 0}`
       : ''
-    return `${controllerState.busy ? 1 : 0}:${controllerState.frames.length}:${topKind}:${controllerState.error ?? ''}${previewSignal}`
-  }, [controllerState])
+    return `${controllerState.busy ? 1 : 0}:${controllerState.frames.length}:${topKind}:${visibleDeliveryError ?? ''}${previewSignal}`
+  }, [controllerState, visibleDeliveryError])
 
   // Guard duplicate dismissals while the native window is hiding.
   const closingRef = useRef(false)
-  // Native paste closes/reset the launcher before its outcome arrives. Retain
-  // feedback for that closed session, only until another controller state/open.
-  const previewPasteCloseRef = useRef<{
-    isCurrent: () => boolean
-    isClosingCurrent?: () => boolean
-    isClosedCurrent?: () => boolean
-  } | null>(null)
-
   const resetLauncherSession = useCallback(() => {
     clipboardBlock.markBlockConsumed()
     clearPluginSurfaceTool()
@@ -701,15 +703,7 @@ export function GlobalLauncherHost() {
       closingRef.current = false
     } else if (previous.globalLauncherOpen && !state.globalLauncherOpen && !closingRef.current) {
       closingRef.current = true
-      const pendingPaste = previewPasteCloseRef.current
-      const wasCurrentPaste = pendingPaste?.isClosingCurrent?.() ?? pendingPaste?.isCurrent()
       resetLauncherSession()
-      if (pendingPaste && wasCurrentPaste) {
-        const closedController = controllerRef.current
-        const closedState = closedController?.getState()
-        pendingPaste.isClosedCurrent = () => !useAppStore.getState().globalLauncherOpen &&
-          controllerRef.current === closedController && closedController?.getState() === closedState
-      }
     }
   }), [clipboardBlock.cancelFileTextRead, controllerRef, resetLauncherSession])
 
@@ -735,46 +729,43 @@ export function GlobalLauncherHost() {
   })
 
 
-  const pastePreviewText = useCallback(async (text: string, isCurrent: () => boolean, options?: { historyText?: boolean; via?: string; isClosingCurrent?: () => boolean }): Promise<LauncherExecuteResult> => {
+  const pastePreviewText = useCallback(async (text: string, isCurrent: () => boolean, options?: { historyText?: boolean; via?: string }): Promise<LauncherExecuteResult> => {
     const startedAt = telemetryNow()
     trackBehavior(TelemetryEvents.pasteText, { textLength: text.length, via: options?.via ?? 'result-preview' })
-    const pendingPaste: { isCurrent: () => boolean; isClosingCurrent?: () => boolean; isClosedCurrent?: () => boolean } = {
-      isCurrent, isClosingCurrent: options?.isClosingCurrent,
+    const permissions = options?.historyText
+      ? getPluginPermissionSnapshot('builtin', 'clipboard-history', ['clipboard.write', 'accessibility.paste'])
+      : undefined
+    const owner = captureLauncherPasteOwner({ isCurrent, complete: false })
+    const result = await createPluginPaste(permissions, undefined, { ownerSource: { capture: () => owner } }).pasteText(text)
+    trackLatencyFrom(TelemetryEvents.pasteLatency, startedAt, {
+      ok: result.ok,
+      textLength: text.length,
+      via: options?.via ?? 'result-preview',
+    })
+    if (isPasteCancelled(result)) return { ok: false, message: '' }
+    if (!result.ok) {
+      // A clipboard fallback is recoverable, but is not a delivered output.
+      return { ok: false, message: result.message || t(locale, 'palette.quickEntryError') }
     }
-    previewPasteCloseRef.current = pendingPaste
-    try {
-      const permissions = options?.historyText
-        ? getPluginPermissionSnapshot('builtin', 'clipboard-history', ['clipboard.write', 'accessibility.paste'])
-        : undefined
-      const result = await createPluginPaste(permissions).pasteText(text)
-      trackLatencyFrom(TelemetryEvents.pasteLatency, startedAt, {
-        ok: result.ok,
-        textLength: text.length,
-        via: options?.via ?? 'result-preview',
-      })
-      if (!result.ok) {
-        const message = result.message || t(locale, 'palette.quickEntryError')
-        if (result.fallback !== 'copied') return { ok: false, message }
-        if (isCurrent() || pendingPaste.isClosedCurrent?.()) showToast(message, 'info')
-      }
-      return { ok: true }
-    } finally {
-      if (previewPasteCloseRef.current === pendingPaste) previewPasteCloseRef.current = null
-    }
+    return { ok: true }
+
   }, [locale])
 
 
   const executeCurrentTextAction = useCallback(async (scope: CurrentTextActionScope, action: CurrentTextDeliveryAction) => {
+    if (!scope.isCurrent()) return
+    const generation = ++deliveryGenerationRef.current
+    setDeliveryFailure(null)
     const result = await currentTextDeliveryRef.current({
       ...scope,
       action,
       copyText: writeClipboardText,
       pasteText: (text, isCurrent) => pastePreviewText(text, isCurrent, {
-        historyText: scope.block.source === 'history-item', via: 'current-material', isClosingCurrent: scope.isClosingCurrent,
+        historyText: scope.block.source === 'history-item', via: 'current-material',
       }),
     })
-    if (!result || !scope.isCurrent()) return
-    if (!result.ok) showToast(result.message, 'error')
+    if (!result || generation !== deliveryGenerationRef.current || !scope.isCurrent()) return
+    if (!result.ok) { if (result.message) setDeliveryFailure({ message: result.message, isCurrent: scope.isCurrent }) }
     else closeLauncherAfterAction()
   }, [closeLauncherAfterAction, pastePreviewText])
 
@@ -783,6 +774,8 @@ export function GlobalLauncherHost() {
     if (!block) return
     // Text rows must use their captured material/session scope below.
     if (isCurrentTextDeliveryAction(action.id)) return
+    const generation = ++deliveryGenerationRef.current
+    setDeliveryFailure(null)
     const startedAt = telemetryNow()
     trackBehavior(TelemetryEvents.objectActionExecute, {
       actionId: action.id,
@@ -802,7 +795,22 @@ export function GlobalLauncherHost() {
     ])
     const historyStorage = createPluginPrivateStorage('builtin', 'clipboard-history', historyPermissions)
     const historyClipboard = createPluginClipboard('clipboard-history', historyPermissions, historyStorage)
-    const historyPaste = createPluginPaste(historyPermissions, historyStorage)
+    const materialGeneration = clipboardBlock.getMaterialGeneration()
+    const pasteOwner = captureLauncherPasteOwner({
+      complete: false,
+      isCurrent: () => clipboardBlock.getMaterialGeneration() === materialGeneration && clipboardBlock.hasMaterial(block),
+    })
+    const historyPaste = createPluginPaste(historyPermissions, historyStorage, { ownerSource: { capture: () => pasteOwner } })
+    let pasteAttempted = false
+    let pasteCancelled = false
+    const requirePasteDelivery = (result: PluginPasteResult) => {
+      pasteAttempted = true
+      if (isPasteCancelled(result)) {
+        pasteCancelled = true
+        throw new Error('')
+      }
+      if (!result.ok) throw new Error(result.message || t(locale, 'palette.quickEntryError'))
+    }
 
     const result = await executeRecommendedAction({ block, action, target }, {
       copyText: writeClipboardText,
@@ -846,37 +854,16 @@ export function GlobalLauncherHost() {
         await createQuickEditorPane({ text: `${actionId}\n\n${text}` })
       },
       pasteText: async (text) => {
-        const pasteResult = await historyPaste.pasteText(text)
-        if (!pasteResult.ok) {
-          if (pasteResult.fallback === 'copied') {
-            showToast(pasteResult.message || pickLocale(locale, '已复制到剪贴板', 'Copied to clipboard'), 'info')
-            return
-          }
-          throw new Error(pasteResult.message || 'Paste text failed')
-        }
+        requirePasteDelivery(await historyPaste.pasteText(text))
       },
       pasteImage: async (blobId) => {
-        const pasteResult = await historyPaste.pasteImage(blobId)
-        if (!pasteResult.ok) {
-          if (pasteResult.fallback === 'copied') {
-            showToast(pasteResult.message || pickLocale(locale, '已复制到剪贴板', 'Copied to clipboard'), 'info')
-            return
-          }
-          throw new Error(pasteResult.message || 'Paste image failed')
-        }
+        requirePasteDelivery(await historyPaste.pasteImage(blobId))
       },
       writeImage: async (blobId) => {
         await historyClipboard.writeImage(blobId)
       },
       pasteFiles: async (paths) => {
-        const pasteResult = await historyPaste.pasteFiles(paths)
-        if (!pasteResult.ok) {
-          if (pasteResult.fallback === 'copied') {
-            showToast(pasteResult.message || pickLocale(locale, '已复制到剪贴板', 'Copied to clipboard'), 'info')
-            return
-          }
-          throw new Error(pasteResult.message || 'Paste files failed')
-        }
+        requirePasteDelivery(await historyPaste.pasteFiles(paths))
       },
     })
 
@@ -887,8 +874,11 @@ export function GlobalLauncherHost() {
       blockKind: block.kind,
     })
 
+    if (pasteAttempted && (pasteCancelled || !pasteOwner?.isCurrent())) return
     if (!result.ok) {
-      showToast(result.error, 'error')
+      if (generation !== deliveryGenerationRef.current) return
+      if (result.error) setDeliveryFailure({ message: result.error, isCurrent: () =>
+        clipboardBlock.getMaterialGeneration() === materialGeneration && clipboardBlock.hasMaterial(block) })
       return
     }
 
@@ -901,7 +891,7 @@ export function GlobalLauncherHost() {
         closeLauncherAfterAction()
       }
     }
-  }, [clipboardBlock.block, clipboardBlock.markBlockConsumed, closeLauncherAfterAction, locale, openPluginSurface, setQuery])
+  }, [clipboardBlock.block, clipboardBlock.getMaterialGeneration, clipboardBlock.hasMaterial, clipboardBlock.markBlockConsumed, closeLauncherAfterAction, locale, openPluginSurface, setQuery])
 
   const selectItemWithObjectActions = useCallback((item: GlobalLauncherItem) => {
     // Support both current prefix and the retired history-only prefix.
@@ -991,7 +981,9 @@ export function GlobalLauncherHost() {
         itemPermissionFrame={itemPermissionFrame}
         cancelItemPermissionPrompt={cancelItemPermissionPrompt}
         grantItemPermissionsAndRun={grantItemPermissionsAndRun}
-        controllerState={controllerState}
+        controllerState={controllerState && visibleDeliveryError !== controllerState.error
+          ? { ...controllerState, error: visibleDeliveryError }
+          : controllerState}
         resultSelectedIndex={resultSelectedIndex}
         setResultSelectedIndex={setResultSelectedIndex}
         selectedResultChoiceIds={selectedResultChoiceIds}

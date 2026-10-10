@@ -1,15 +1,15 @@
 {
-  "version": 101,
+  "version": 103,
   "packages": [
     {
       "pluginId": "encode-decode",
       "dir": "encode-decode",
-      "version": "2.5.5"
+      "version": "2.5.6"
     },
     {
       "pluginId": "formatter",
       "dir": "formatter",
-      "version": "2.1.4"
+      "version": "2.1.5"
     },
     {
       "pluginId": "json-tools",
@@ -19,7 +19,7 @@
     {
       "pluginId": "line-tools",
       "dir": "line-tools",
-      "version": "3.0.8"
+      "version": "3.0.9"
     },
     {
       "pluginId": "crypto",
@@ -64,7 +64,7 @@
     {
       "pluginId": "clipboard-history",
       "dir": "clipboard-history",
-      "version": "1.4.3"
+      "version": "1.4.5"
     },
     {
       "pluginId": "web-open",
@@ -89,7 +89,7 @@
     {
       "pluginId": "text-explode",
       "dir": "text-explode",
-      "version": "1.0.7"
+      "version": "1.0.8"
     },
     {
       "pluginId": "user-commands",

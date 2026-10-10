@@ -8,7 +8,7 @@
  * - Keyboard shortcuts: Enter=paste, Cmd/Ctrl+C=copy selection in preview, Delete=remove
  */
 
-import { useState, useEffect, useCallback, useMemo, useRef, memo, type KeyboardEvent } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, memo, type KeyboardEvent } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import {
@@ -87,6 +87,8 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const [items, setItems] = useState<ClipboardHistoryItem[]>(initialItems)
   const [selectedId, setSelectedId] = useState<string | null>(initialItems[0]?.id ?? null)
   const [query, setQuery] = useState('')
+  const [pasteNotice, setPasteNotice] = useState<string | null>(null)
+  const pasteNoticeGenerationRef = useRef(0)
   const [filter, setFilter] = useState<FilterKind>(() => initialFilter(props.surfaceId))
   const [loading, setLoading] = useState(!hasInitialCache)
   const [fullTextSearchState, setFullTextSearchState] = useState<'idle' | 'loading' | 'error'>('idle')
@@ -103,6 +105,11 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const frequentThreshold = settings.frequentPasteThreshold ?? 3
   const [mergeReader] = useState(createClipboardTextMergeReader)
   const [combining, setCombining] = useState(false)
+  useLayoutEffect(() => {
+    pasteNoticeGenerationRef.current += 1
+    setPasteNotice(null)
+    return () => { pasteNoticeGenerationRef.current += 1 }
+  }, [query, selectedId, filter, combining, host, settings.enabled])
   const [mergeIds, setMergeIds] = useState<readonly string[]>([])
   // The selection owns its order and labels; searches and background index refreshes do not.
   const mergeItemsRef = useRef(new Map<string, ClipboardHistoryItem>())
@@ -492,17 +499,20 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
 
   const handlePaste = useCallback(async (item: ClipboardHistoryItem) => {
     if (combining) return
+    const generation = ++pasteNoticeGenerationRef.current
+    setPasteNotice(null)
     try {
       // For list items from index, load full item for paste
       let fullItem = item
       if ((item.kind === 'text' && !item.text) || (item.kind === 'image' && !item.blobId) || (item.kind === 'files' && item.paths.length === 0)) {
         const loaded = await repository.getItem(item.id)
         if (!loaded) {
-          host.showMessage(t('error.pasteFailed'), 'error')
+          if (generation === pasteNoticeGenerationRef.current) setPasteNotice(t('error.pasteFailed'))
           return
         }
         fullItem = loaded
       }
+      if (generation !== pasteNoticeGenerationRef.current) return
 
       let result
       if (fullItem.kind === 'text') {
@@ -512,14 +522,10 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       } else if (fullItem.kind === 'files') {
         result = await host.paste.pasteFiles(fullItem.paths)
       }
+      if (generation !== pasteNoticeGenerationRef.current) return
       if (!result?.ok) {
-        if (result?.fallback === 'copied') {
-          host.showMessage(result.message, 'info')
-          resetBrowser()
-          host.complete()
-        } else {
-          host.showMessage(result?.message ?? t('error.pasteFailed'), 'error')
-        }
+        if (result && !result.message) return
+        setPasteNotice(result?.message ?? t('error.pasteFailed'))
         return
       }
       // Persist paste count for Frequent tab (window closes; next open reads storage/cache).
@@ -527,7 +533,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       resetBrowser()
       host.complete()
     } catch {
-      host.showMessage(t('error.pasteFailed'), 'error')
+      if (generation === pasteNoticeGenerationRef.current) setPasteNotice(t('error.pasteFailed'))
     }
   }, [host, t, repository, resetBrowser, combining])
 
@@ -539,6 +545,8 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }, [repository])
 
   const handleCopy = useCallback(async (item: ClipboardHistoryItem) => {
+    pasteNoticeGenerationRef.current += 1
+    setPasteNotice(null)
     try {
       const fullItem = await resolveFullItem(item)
       if (!fullItem) {
@@ -695,6 +703,8 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   ], [handlePaste, handleCopy, handleDelete, t])
 
   const handleReturnToLauncher = useCallback(async (item: ClipboardHistoryItem) => {
+    pasteNoticeGenerationRef.current += 1
+    setPasteNotice(null)
     try {
       let fullItem = item
       if ((item.kind === 'text' && !item.text) || (item.kind === 'image' && !item.blobId) || (item.kind === 'files' && item.paths.length === 0)) {
@@ -1022,9 +1032,11 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         </div>
 
         {!combining && <SurfaceFooterHints className="clipboard-history-footer">
-          {shortcutHints.paste && <span>↵ {t('hint.paste')}</span>}
-          {shortcutHints.returnToLauncher && <span>{typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'}↵ {t('hint.returnToLauncher')}</span>}
-          {shortcutHints.delete && <span>⌫ {t('hint.delete')}</span>}
+          {pasteNotice ? <span role="status" style={{ color: 'var(--text-1, var(--hiven-color-text-primary))' }}>{pasteNotice}</span> : <>
+            {shortcutHints.paste && <span>↵ {t('hint.paste')}</span>}
+            {shortcutHints.returnToLauncher && <span>{typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'}↵ {t('hint.returnToLauncher')}</span>}
+            {shortcutHints.delete && <span>⌫ {t('hint.delete')}</span>}
+          </>}
         </SurfaceFooterHints>}
       </>
     )

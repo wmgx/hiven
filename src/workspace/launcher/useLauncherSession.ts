@@ -1,3 +1,4 @@
+import { captureLauncherPasteOwner, checkPendingPasteRecovery } from '../pasteRecovery'
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
 import { makePluginT } from '../../i18n/pluginI18nRegistry'
 import { translate } from '../../i18n'
@@ -373,7 +374,12 @@ export function useLauncherSession({
           surfaceId: normalizedHostId,
           getMaterialGeneration: materialGenerationGetterRef.current ? () => materialGenerationGetterRef.current?.() : undefined,
           api: makeApi?.(createPluginLauncherApi()) ?? createPluginLauncherApi(),
-          makeApi: (item) => {
+          makeApi: (item, isPasteCurrent) => {
+            const materialGeneration = materialGenerationGetterRef.current?.()
+            const pasteOwner = normalizedHostId === 'global-launcher'
+              ? captureLauncherPasteOwner({ complete: false, isCurrent: () => isPasteCurrent?.() !== false &&
+                  materialGenerationGetterRef.current?.() === materialGeneration })
+              : undefined
             const requestedPermissions = item.pluginId && item.source
               ? pluginRegistry.getPluginPermissions(item.pluginId, item.source)
               : []
@@ -381,6 +387,7 @@ export function useLauncherSession({
               pluginId: item.pluginId,
               source: item.source,
               requestedPermissions,
+              pasteOwnerSource: normalizedHostId === 'global-launcher' ? { capture: () => pasteOwner } : undefined,
             })
             return makeApi?.(api, item) ?? api
           },
@@ -445,6 +452,7 @@ export function useLauncherSession({
             }
             prevControllerStateRef.current = state
             setControllerState(state)
+            checkPendingPasteRecovery()
           },
         })
         controllerRef.current = nextController

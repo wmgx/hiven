@@ -4,6 +4,16 @@ import { onCurrentLauncherWindowFocusChanged, resizeCurrentLauncherWindow, start
 import { clearStandaloneLauncherBlurDevtoolsSuppress, launcherNativeDialogFocus, shouldKeepLauncherOpenOnBlur } from '../../workspace/launcherBlurGuard'
 import { applyStandaloneLauncherGeometry, computeStandaloneLauncherGeometry } from './GlobalLauncherLayout'
 import { logLauncherPerf } from '../../workspace/launcher/perf'
+import { observePasteRecoveryFocus, pasteRecoveryFocus } from '../../workspace/pasteRecovery'
+
+const launcherFocusLease = {
+  isActive: () => launcherNativeDialogFocus.isActive() || pasteRecoveryFocus.isActive(),
+  subscribe: (listener: () => void) => {
+    const stopDialog = launcherNativeDialogFocus.subscribe(listener)
+    const stopPaste = pasteRecoveryFocus.subscribe(listener)
+    return () => { stopDialog(); stopPaste() }
+  },
+}
 
 type SurfaceShellConfig = {
   closeOnBlur?: boolean
@@ -72,14 +82,14 @@ export function useCloseStandaloneLauncherOnBlur({
     let unlisten: (() => void) | undefined
     let blurGeneration = 0
     const checkBlur = () => {
-      if (launcherNativeDialogFocus.isActive()) return
+      if (launcherFocusLease.isActive()) return
       if (closeOnBlurRef.current === false) return
       // Smart blur: keep open when focus moves to clipboard history / other hiven windows.
       const generation = ++blurGeneration
       void shouldKeepLauncherOpenOnBlur().then((keepOpen) => {
         if (disposed || generation !== blurGeneration) return
         if (keepOpen) return
-        if (launcherNativeDialogFocus.isActive()) return
+        if (launcherFocusLease.isActive()) return
         if (closeOnBlurRef.current === false) return
         closeLauncherRef.current()
       })
@@ -89,8 +99,12 @@ export function useCloseStandaloneLauncherOnBlur({
       blurGeneration += 1
       if (!launcherNativeDialogFocus.isActive()) checkBlur()
     })
+    // Invalidate work begun before handoff without treating a completed native
+    // hide as a new blur. Native failure restores focus before resolving.
+    const stopPasteFocus = pasteRecoveryFocus.subscribe(() => { blurGeneration += 1 })
     onCurrentLauncherWindowFocusChanged((focused) => {
       blurGeneration += 1
+      if (observePasteRecoveryFocus(focused)) return
       if (!focused) checkBlur()
     })
       .then((cleanup) => {
@@ -103,6 +117,7 @@ export function useCloseStandaloneLauncherOnBlur({
     return () => {
       disposed = true
       stopDialogFocus()
+      stopPasteFocus()
       unlisten?.()
     }
   }, [open, standaloneLauncher])
@@ -245,7 +260,7 @@ export function useAutoCloseStandaloneLauncherOnBackgroundIdle({
     enabled: open && standaloneLauncher,
     onClose: closeLauncher,
     idleMs,
-    focusLease: launcherNativeDialogFocus,
+    focusLease: launcherFocusLease,
   })
 }
 

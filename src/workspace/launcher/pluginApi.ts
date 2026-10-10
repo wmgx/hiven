@@ -26,6 +26,7 @@ import { readQuickEditorPaneSnapshot } from '../quickEditor/quickEditorPaneSnaps
 import type { PluginPermission } from '../pluginTypes'
 import { readNativeClipboardText } from '../nativeClipboard'
 import { createPluginPaste } from '../pluginPaste'
+import type { PasteRecoveryOwnerSource } from '../pasteRecovery'
 import { rethrowAppLaunchError } from '../appLauncher/appLaunchError'
 import { writeClipboardText } from '../pluginClipboard'
 import type { PluginSettingsSource } from '../pluginSettingsStore'
@@ -35,6 +36,8 @@ export type PluginLauncherApiOptions = {
   pluginId?: string
   source?: PluginSettingsSource
   requestedPermissions?: readonly PluginPermission[]
+  /** Host-private owner captured for this execution API, never a plugin option. */
+  pasteOwnerSource?: PasteRecoveryOwnerSource
 }
 
 function readActiveText(): string {
@@ -196,8 +199,8 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
       await writeClipboardText(text, writeOptions)
     },
     pasteToForegroundApp: async (text: string) => {
-      const result = await createPluginPaste().pasteText(text)
-      if (!result.ok && result.fallback === 'none') throw new Error(result.message)
+      const result = await createPluginPaste(undefined, undefined, { ownerSource: options.pasteOwnerSource }).pasteText(text)
+      if (!result.ok) throw new Error(result.message)
     },
     openUrl: async (url: string) => {
       await openExternalUrl(url)

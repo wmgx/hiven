@@ -130,3 +130,24 @@ const unusedStorage = {
 }
 
 console.log('plugin clipboard image resource contract passed')
+
+// Cancel during image creation/write: release an acquired handle, and never
+// fall through to another clipboard implementation after ownership is lost.
+for (const stage of ['create-resolves', 'create-rejects', 'write-rejects']) {
+  const log = []
+  let resolve, reject
+  const delayed = new Promise((done, fail) => { resolve = done; reject = fail })
+  const controller = new AbortController()
+  const { api } = loadPluginClipboard({
+    fromBytesImpl: async () => stage === 'write-rejects' ? fakeImage(log) : delayed,
+    writeImageImpl: async () => { log.push('write'); return delayed },
+  })
+  const result = api.writeClipboardImageBytes(new Uint8Array([1, 2]), controller.signal)
+  for (let i = 0; i < 12; i++) await Promise.resolve()
+  controller.abort()
+  if (stage === 'create-resolves') resolve(fakeImage(log))
+  else reject(new Error('late native failure'))
+  await result
+  assert.deepEqual(log, stage === 'create-resolves' ? ['close'] : stage === 'create-rejects' ? [] : ['write', 'close'])
+}
+console.log('Clipboard cancellation passed: delayed decode/write cannot start a fallback and acquired native handles close')

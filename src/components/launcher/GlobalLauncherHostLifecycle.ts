@@ -5,6 +5,7 @@ import { runLauncherEscapeInterceptor } from './launcherEscapeInterceptor'
 import { usePluginSettingsStore } from '../../workspace/pluginSettingsStore'
 import { focusLauncherWebview } from '../../workspace/windowManager/launcherWindow'
 import { launcherNativeDialogFocus } from '../../workspace/launcherBlurGuard'
+import { pasteRecoveryFocus } from '../../workspace/pasteRecovery'
 
 export function isStandaloneLauncherWindow() {
   return !window.__HIVEN_WEB_NATIVE_BRIDGE__
@@ -49,7 +50,7 @@ export function useGlobalLauncherFocusSession({
   const didColdRekeyRef = useRef(false)
 
   const focusLauncherInput = useCallback(() => {
-    if (launcherNativeDialogFocus.isActive()) return false
+    if (launcherNativeDialogFocus.isActive() || pasteRecoveryFocus.isActive()) return false
     const el = inputRef.current
     if (!el) return false
     try {
@@ -70,7 +71,7 @@ export function useGlobalLauncherFocusSession({
     if (node && openRef.current && retainRef.current) {
       // Defer past commit so the node is in the document before focus.
       requestAnimationFrame(() => {
-        if (!openRef.current || !retainRef.current || launcherNativeDialogFocus.isActive()) return
+        if (!openRef.current || !retainRef.current || launcherNativeDialogFocus.isActive() || pasteRecoveryFocus.isActive()) return
         if (inputRef.current !== node) return
         try {
           node.focus({ preventScroll: true })
@@ -83,7 +84,7 @@ export function useGlobalLauncherFocusSession({
             .then(() => {
               // Cold open: the window only became key during this rekey, so the
               // DOM focus above ran against an inactive page. Re-assert it.
-              if (inputRef.current === node && openRef.current && retainRef.current && !launcherNativeDialogFocus.isActive()) {
+              if (inputRef.current === node && openRef.current && retainRef.current && !launcherNativeDialogFocus.isActive() && !pasteRecoveryFocus.isActive()) {
                 try { node.focus({ preventScroll: true }) } catch { /* ignore */ }
               }
             })

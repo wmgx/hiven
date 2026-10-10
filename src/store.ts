@@ -112,6 +112,8 @@ interface AppState {
   editorCommandBarOpen: boolean
   setEditorCommandBarOpen: (open: boolean) => void
   globalLauncherOpen: boolean
+  /** Advances on explicit open/close and surface replacement, even while open. */
+  globalLauncherSessionId: number
   globalLauncherOverlay: boolean
   setGlobalLauncherOpen: (open: boolean) => void
   openGlobalLauncherOverlay: () => void
@@ -275,12 +277,14 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
   editorCommandBarOpen: false,
   setEditorCommandBarOpen: (open) => set({ editorCommandBarOpen: open }),
   globalLauncherOpen: false,
+  globalLauncherSessionId: 0,
   globalLauncherOverlay: false,
   pluginSurfaceToolTarget: null,
   launcherHostSurfaceTarget: null,
   previousLauncherHostSurfaceTarget: null,
   setGlobalLauncherOpen: (open) => set((state) => ({
     globalLauncherOpen: open,
+    globalLauncherSessionId: state.globalLauncherSessionId + 1,
     globalLauncherOverlay: open ? state.globalLauncherOverlay : false,
     ...(open ? {} : {
       launcherHostSurfaceTarget: null,
@@ -290,9 +294,10 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
       quickEditorCommandInitialQuery: '',
     }),
   })),
-  openGlobalLauncherOverlay: () => set({ globalLauncherOpen: true, globalLauncherOverlay: true }),
+  openGlobalLauncherOverlay: () => set((state) => ({ globalLauncherOpen: true, globalLauncherOverlay: true, globalLauncherSessionId: state.globalLauncherSessionId + 1 })),
   openPluginSurfaceTool: (target) => set((state) => ({
     pluginSurfaceToolTarget: target,
+    globalLauncherSessionId: state.globalLauncherSessionId + 1,
     // Suspend the host surface (e.g. quick-editor) so ESC can restore it.
     previousLauncherHostSurfaceTarget:
       state.launcherHostSurfaceTarget ?? state.previousLauncherHostSurfaceTarget,
@@ -301,14 +306,15 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
     quickEditorCommandOpen: false,
     quickEditorCommandInitialQuery: '',
   })),
-  clearPluginSurfaceTool: () => set({ pluginSurfaceToolTarget: null }),
-  openLauncherHostSurface: (target) => set({
+  clearPluginSurfaceTool: () => set((state) => ({ pluginSurfaceToolTarget: null, globalLauncherSessionId: state.globalLauncherSessionId + (state.pluginSurfaceToolTarget ? 1 : 0) })),
+  openLauncherHostSurface: (target) => set((state) => ({
+    globalLauncherSessionId: state.globalLauncherSessionId + 1,
     launcherHostSurfaceTarget: target,
     pluginSurfaceToolTarget: null,
     previousLauncherHostSurfaceTarget: null,
     globalLauncherOpen: true,
-  }),
-  clearLauncherHostSurface: () => set({ launcherHostSurfaceTarget: null }),
+  })),
+  clearLauncherHostSurface: () => set((state) => ({ launcherHostSurfaceTarget: null, globalLauncherSessionId: state.globalLauncherSessionId + (state.launcherHostSurfaceTarget ? 1 : 0) })),
   restorePreviousLauncherHostSurface: () => {
     let restored = false
     set((state) => {
@@ -317,6 +323,7 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
       restored = true
       return {
         launcherHostSurfaceTarget: previous,
+        globalLauncherSessionId: state.globalLauncherSessionId + 1,
         previousLauncherHostSurfaceTarget: null,
         pluginSurfaceToolTarget: null,
         globalLauncherOpen: true,

@@ -263,8 +263,7 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
       // feedback unless an explicit edit or navigation revoked the output.
       if (!outputGate.isCurrent(output)) return
       if (!result.ok) {
-        host.showMessage(result.message, result.fallback === 'copied' ? 'info' : 'error')
-        if (result.fallback === 'copied') host.complete()
+        if (result.message) host.showMessage(result.message, result.fallback === 'copied' ? 'info' : 'error')
         return
       }
       host.complete()

@@ -26,8 +26,10 @@ export async function readImage(): Promise<import('@tauri-apps/api/image').Image
   return new Image(await invoke<number>('clipboard_read_image'))
 }
 
-export async function writeImage(image: import('@tauri-apps/api/image').Image): Promise<void> {
+export async function writeImage(image: import('@tauri-apps/api/image').Image, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return
   const { invoke } = await import('@tauri-apps/api/core')
+  if (signal?.aborted) return
   await invoke('clipboard_write_image', { image: image.rid })
 }
 
