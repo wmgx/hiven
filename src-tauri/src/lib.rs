@@ -1721,6 +1721,16 @@ fn wait_for_foreground_handoff_then_paste(
     simulate_paste_impl()
 }
 
+/// Platform support only: never reads the clipboard, changes focus, or prompts.
+#[tauri::command]
+fn get_selection_capture_availability() -> &'static str {
+    if cfg!(any(target_os = "macos", target_os = "windows")) {
+        "can-attempt"
+    } else {
+        "unsupported"
+    }
+}
+
 // Mirror of hide_launcher_and_paste for the read direction: hide the launcher,
 // wait for OS focus to hand back to whatever app was previously in the
 // foreground, then simulate Cmd/Ctrl+C and read the result back off the
@@ -1734,15 +1744,25 @@ async fn hide_launcher_and_capture_selection(
     window: tauri::WebviewWindow,
     app: tauri::AppHandle,
 ) -> Result<Option<String>, String> {
-    paste_recovery::invalidate_all();
-    let (target_pid, target_is_self) =
-        hide_window_and_resolve_foreground_target(window, app.clone(), false, None)?;
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        // Unsupported capture must not disturb the launcher, pending paste
+        // recovery, or either clipboard selection (including X11 PRIMARY).
+        let _ = (window, app);
+        Err("SELECTION_CAPTURE_UNSUPPORTED".to_string())
+    }
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    {
+        paste_recovery::invalidate_all();
+        let (target_pid, target_is_self) =
+            hide_window_and_resolve_foreground_target(window, app.clone(), false, None)?;
 
-    tokio::task::spawn_blocking(move || {
-        wait_for_foreground_handoff_then_capture(app, target_pid, target_is_self)
-    })
-    .await
-    .map_err(|e| format!("spawn_blocking failed: {}", e))?
+        tokio::task::spawn_blocking(move || {
+            wait_for_foreground_handoff_then_capture(app, target_pid, target_is_self)
+        })
+        .await
+        .map_err(|e| format!("spawn_blocking failed: {}", e))?
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -8106,6 +8126,7 @@ pub fn run() {
             get_paste_availability,
             hide_launcher_and_paste,
             hide_launcher_and_capture_selection,
+            get_selection_capture_availability,
             show_quick_editor_window,
             close_quick_editor_window,
             show_plugin_surface_window,

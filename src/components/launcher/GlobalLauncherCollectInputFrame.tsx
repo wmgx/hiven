@@ -10,6 +10,7 @@ import { resolveDisplayTitle } from '../../workspace/launcher/display'
 import type { IconRef, LauncherOutput, LauncherResultChoice } from '../../workspace/launcher/types'
 import { resolveIcon } from '../../utils/resolveIcon'
 import { Tooltip } from '../Tooltip'
+import { useSelectionCaptureAvailability } from '../useSelectionCaptureAvailability'
 import { LauncherHintKey, LauncherHintText } from './LauncherFooterHints'
 import { LauncherCommandTag, LauncherParamChipTrail } from './LauncherCommandTag'
 import { LauncherEmptyWell } from './LauncherEmptyWell'
@@ -154,6 +155,8 @@ export function GlobalLauncherCollectInputFrame({
   const placeholder = frame.input.placeholderI18n?.[locale] ?? frame.input.placeholder ?? ''
   const explicitPreview = frame.item.executionMode === 'explicit-text-preview'
   const materialTextEdit = frame.item.materialTextEdit === true
+  const showCaptureSelection = Boolean(!explicitPreview && !frame.item.metadataInput && onCaptureSelection && !frame.inputText && frame.item.behavior.type === 'perform' && frame.item.inputPolicy && frame.item.inputPolicy.mode !== 'all')
+  const captureAvailability = useSelectionCaptureAvailability(showCaptureSelection)
   const multilineInput = materialTextEdit || explicitPreview
   const previewChoices = frame.previewOutput?.choices ?? []
   const selectedIndex = frame.selectedSuggestionIndex ?? -1
@@ -414,7 +417,7 @@ export function GlobalLauncherCollectInputFrame({
         />
       )}
       <div className="global-launcher-footer l-foot">
-        {!explicitPreview && !frame.item.metadataInput && onCaptureSelection && !frame.inputText && frame.item.behavior.type === 'perform' && frame.item.inputPolicy && frame.item.inputPolicy.mode !== 'all' && (
+        {showCaptureSelection && (captureAvailability === 'can-attempt' ? (
           <button
             type="button"
             className="launcher-footer-back-btn"
@@ -427,7 +430,9 @@ export function GlobalLauncherCollectInputFrame({
           >
             {t(locale, 'palette.captureSelection')}
           </button>
-        )}
+        ) : (
+          <LauncherHintText label={t(locale, 'palette.captureSelectionUnavailable')} />
+        ))}
         {multilineInput ? (
           <>
             <LauncherHintKey keys="↵" label={t(locale, 'palette.objectBlockEditNewline')} />

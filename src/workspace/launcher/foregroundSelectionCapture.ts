@@ -11,9 +11,33 @@
  */
 
 import { t, type Locale } from '../../i18n'
+import { isNativeDesktopRuntime } from '../webNativeBridge'
 import type { PluginLauncherApi } from './types'
 
 type CaptureInvokeResult = { text: string; error?: string }
+export type SelectionCaptureAvailability = 'can-attempt' | 'unsupported' | 'unknown'
+const SELECTION_CAPTURE_UNSUPPORTED = 'SELECTION_CAPTURE_UNSUPPORTED'
+
+/** Match the native capture capability, independently of direct-paste support. */
+export async function readSelectionCaptureAvailability(): Promise<SelectionCaptureAvailability> {
+  if (typeof window === 'undefined' || !isNativeDesktopRuntime()) return 'unsupported'
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      import('@tauri-apps/api/core').then(async ({ invoke }): Promise<SelectionCaptureAvailability> => {
+        const availability = await invoke<unknown>('get_selection_capture_availability')
+        return availability === 'can-attempt' || availability === 'unsupported' ? availability : 'unknown'
+      }),
+      new Promise<SelectionCaptureAvailability>((resolve) => {
+        timeout = setTimeout(() => resolve('unknown'), 300)
+      }),
+    ])
+  } catch {
+    return 'unknown'
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout)
+  }
+}
 
 async function invokeCapture(): Promise<CaptureInvokeResult> {
   try {
@@ -37,6 +61,7 @@ async function restoreLauncherWindow(): Promise<void> {
 }
 
 function captureFailureMessageKey(error: string): string {
+  if (error === SELECTION_CAPTURE_UNSUPPORTED) return 'workspace.captureSelection.unsupported'
   return error.includes('Accessibility permission')
     ? 'workspace.captureSelection.accessibilityRequired'
     : 'workspace.captureSelection.failed'
@@ -45,8 +70,8 @@ function captureFailureMessageKey(error: string): string {
 /**
  * Attempt the capture. The native command hides the launcher window as part
  * of running (it needs the target app to hold real OS focus) — on failure
- * this always re-shows it, so callers only need to decide what UI state to
- * land on next (e.g. fall through to a manual text prompt).
+ * this re-shows it unless native rejected unsupported capture before hiding.
+ * Unsupported/unknown hosts fail preflight without altering focus or clipboard.
  *
  * Input import restores the same window without starting a new launcher session.
  * Direct tool execution can leave it hidden for the following output action.
@@ -56,8 +81,15 @@ export async function captureForegroundSelectionText(
   locale: Locale,
   options: { restoreLauncher?: boolean } = {},
 ): Promise<string | undefined> {
+  const availability = await readSelectionCaptureAvailability()
+  if (availability !== 'can-attempt') {
+    api.showMessage(t(locale, availability === 'unsupported'
+      ? 'workspace.captureSelection.unsupported'
+      : 'workspace.captureSelection.unavailable'), 'warning')
+    return undefined
+  }
   const { text, error } = await invokeCapture()
-  if (!text || options.restoreLauncher) await restoreLauncherWindow()
+  if (error !== SELECTION_CAPTURE_UNSUPPORTED && (!text || options.restoreLauncher)) await restoreLauncherWindow()
   if (text) return text
   if (error) api.showMessage(t(locale, captureFailureMessageKey(error)), 'warning')
   return undefined
