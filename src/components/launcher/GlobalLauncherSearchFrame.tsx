@@ -11,6 +11,14 @@ import type { RecommendedAction, RecommendedOutputTarget } from '../../launcher/
 import { LauncherEmptyWell } from './LauncherEmptyWell'
 import { getPlatformShortcutMeta } from './launcherParamShortcuts'
 import { FILE_TEXT_ERROR_KEYS } from '../../launcher/clipboard/fileTextMaterial'
+import type { LauncherBrowseCategory } from '../../workspace/launcher/browseItems'
+
+const BROWSE_CATEGORIES = [
+  { id: 'all', label: 'palette.browseAll' },
+  { id: 'tools', label: 'palette.browseTools' },
+  { id: 'apps', label: 'palette.browseApps' },
+  { id: 'system', label: 'palette.browseSystem' },
+] as const
 
 function primaryActionLabel(item: LauncherMixedItem | undefined, locale: Locale): string {
   if (!item || item.kind !== 'domain') return t(locale, 'palette.actionRun')
@@ -45,6 +53,8 @@ export function GlobalLauncherSearchFrame({
   clipboardHintSelected,
   isFavoriteSelected,
   browsingActions = false,
+  browseCategory = 'all',
+  onBrowseCategoryChange,
   onBrowseActions,
   onLeaveActionBrowser,
   truncateItems = true,
@@ -79,6 +89,8 @@ export function GlobalLauncherSearchFrame({
   /** Whether the focused row is currently pinned. */
   isFavoriteSelected?: boolean
   browsingActions?: boolean
+  browseCategory?: LauncherBrowseCategory
+  onBrowseCategoryChange?: (category: LauncherBrowseCategory) => void
   onBrowseActions?: () => void
   onLeaveActionBrowser?: () => void
   truncateItems?: boolean
@@ -318,7 +330,31 @@ export function GlobalLauncherSearchFrame({
               {browsingActions && <ArrowLeft size={14} aria-hidden />}
               {t(locale, browsingActions ? 'palette.backToSearch' : 'palette.browseAllActions')}
             </button>
-            {browsingActions && <span>{t(locale, 'palette.allActions')}</span>}
+            {browsingActions && onBrowseCategoryChange && (
+              <div
+                className="launcher-discovery-categories"
+                role="group"
+                aria-label={t(locale, 'palette.browseCategories')}
+              >
+                {BROWSE_CATEGORIES.map((category) => (
+                  <button
+                    key={category.id}
+                    type="button"
+                    className="launcher-discovery-action launcher-discovery-category"
+                    data-launcher-focus-action="browse-category"
+                    data-launcher-browse-category={category.id}
+                    aria-pressed={browseCategory === category.id}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') event.stopPropagation()
+                    }}
+                    onClick={() => onBrowseCategoryChange(category.id)}
+                  >
+                    {t(locale, category.label)}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
         {nearbySaveItem && !query.trim() && !browsingActions && (
@@ -349,7 +385,7 @@ export function GlobalLauncherSearchFrame({
         {items.length === 0 && (query || browsingActions) ? (
           <LauncherEmptyWell
             title={t(locale, 'palette.noResults')}
-            hint={t(locale, 'palette.noResultsHint')}
+            hint={t(locale, browsingActions ? 'palette.browseEmptyHint' : 'palette.noResultsHint')}
           />
         ) : (
           <LauncherMixedList

@@ -1,10 +1,14 @@
+import { selectLauncherBrowseItems } from './browseItems'
+import type { LauncherBrowseCategory, LauncherBrowseItem } from './browseItems'
+
 export const MAX_VISIBLE_IDLE = 12
 
 /**
  * Compose a visible list from candidates already filtered for availability.
  * Idle recommendations retain their ranking and cap. Unavailable favorites are
  * removed, and available favorites extend that list in saved order. Search keeps
- * its ranking, and browse shows all items.
+ * its ranking, even during a delayed browse reset. Empty-query browse groups
+ * tools first and applies the selected category without an idle cap.
  */
 export function selectLauncherVisibleItems<T>(options: {
   rankedItems: readonly T[]
@@ -12,19 +16,20 @@ export function selectLauncherVisibleItems<T>(options: {
   favoriteKeys: readonly string[]
   query: string
   browse?: boolean
+  browseCategory?: LauncherBrowseCategory
+  browseItemOf?: (item: T) => LauncherBrowseItem
   keyOf: (item: T) => string
 }): T[] {
   const { rankedItems, availableItems, favoriteKeys, query, browse, keyOf } = options
 
-  if (!browse && query.trim()) return [...rankedItems]
+  if (query.trim()) return [...rankedItems]
 
   if (browse) {
-    const seen = new Set<string>()
-    return availableItems.filter((item) => {
-      const key = keyOf(item)
-      if (seen.has(key)) return false
-      seen.add(key)
-      return true
+    return selectLauncherBrowseItems({
+      items: availableItems,
+      category: options.browseCategory,
+      keyOf,
+      itemOf: options.browseItemOf,
     })
   }
 

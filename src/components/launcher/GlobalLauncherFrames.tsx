@@ -17,6 +17,7 @@ import { GlobalLauncherResultFrame } from './GlobalLauncherResultFrame'
 import { GlobalLauncherPermissionFrame, type GlobalLauncherPermissionFrameState } from './GlobalLauncherPermissionFrame'
 import { GlobalLauncherCollectInputFrame } from './GlobalLauncherCollectInputFrame'
 import type { LauncherSurfaceUnsavedChangesReport } from './useLauncherSurfaceBackgroundIdle'
+import type { LauncherBrowseCategory } from '../../workspace/launcher/browseItems'
 
 export type GlobalLauncherActiveSurfaceFrame = {
   surface: PluginUiSurfaceContribution
@@ -49,6 +50,8 @@ export function GlobalLauncherFrameSwitch({
   isFavoriteSelected,
   isImeComposingRef,
   browsingActions,
+  browseCategory,
+  onBrowseCategoryChange,
   onBrowseActions,
   onLeaveActionBrowser,
   truncateSearchItems,
@@ -119,6 +122,8 @@ export function GlobalLauncherFrameSwitch({
   isFavoriteSelected?: boolean
   isImeComposingRef: RefObject<boolean>
   browsingActions?: boolean
+  browseCategory?: LauncherBrowseCategory
+  onBrowseCategoryChange?: (category: LauncherBrowseCategory) => void
   onBrowseActions?: () => void
   onLeaveActionBrowser?: () => void
   truncateSearchItems?: boolean
@@ -338,6 +343,8 @@ export function GlobalLauncherFrameSwitch({
       customizeShortcutLabel={customizeShortcutLabel}
       isFavoriteSelected={isFavoriteSelected}
       browsingActions={browsingActions}
+      browseCategory={browseCategory}
+      onBrowseCategoryChange={onBrowseCategoryChange}
       onBrowseActions={onBrowseActions}
       onLeaveActionBrowser={onLeaveActionBrowser}
       truncateItems={truncateSearchItems}

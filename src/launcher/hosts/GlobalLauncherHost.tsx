@@ -59,6 +59,7 @@ import {
 import type { LauncherItem } from '../../workspace/launcher/types'
 import { getPluginPermissionSnapshot } from '../../workspace/pluginPermissions'
 import { selectLauncherVisibleItems } from '../../workspace/launcher/visibleItems'
+import type { LauncherBrowseCategory } from '../../workspace/launcher/browseItems'
 import { showToast } from '../../workspace/toast'
 
 type CurrentTextActionScope = { block: LauncherObjectBlock } & ReturnType<typeof captureCurrentTextDeliveryScope>
@@ -94,6 +95,7 @@ export function GlobalLauncherHost() {
   const extraSelectionRowsRef = useRef<readonly SelectableExtraRow[]>([])
   const [selectedObjectActionIndex, setSelectedObjectActionIndex] = useState(0)
   const [browsingActions, setBrowsingActions] = useState(false)
+  const [browseCategory, setBrowseCategory] = useState<LauncherBrowseCategory>('all')
   const [currentTextBusy, setCurrentTextBusy] = useState(false)
   const [deliveryFailure, setDeliveryFailure] = useState<{ message: string; isCurrent: () => boolean } | null>(null)
   const deliveryGenerationRef = useRef(0)
@@ -236,6 +238,7 @@ export function GlobalLauncherHost() {
   useEffect(() => subscribePendingObjectBlock(() => {
     setQuery('')
     setBrowsingActions(false)
+    setBrowseCategory('all')
   }), [setQuery])
   const trackQueryChangeRef = useRef(
     createDebouncedTracker(TelemetryEvents.launcherQueryChange, 280),
@@ -587,8 +590,10 @@ export function GlobalLauncherHost() {
     favoriteKeys: launcherFavoriteKeys,
     query: rankingQuery,
     browse: browsingActions,
+    browseCategory,
+    browseItemOf: (item: GlobalLauncherItem) => item.domainItem,
     keyOf: (item: GlobalLauncherItem) => item.id,
-  }), [availableItems, browsingActions, composedRankedItems, launcherFavoriteKeys, rankingQuery])
+  }), [availableItems, browseCategory, browsingActions, composedRankedItems, launcherFavoriteKeys, rankingQuery])
   const visibleSelectionItems = useMemo(
     () => visibleFiltered.map((item) => item.domainItem),
     [visibleFiltered],
@@ -641,6 +646,7 @@ export function GlobalLauncherHost() {
     }
     setSelectedObjectActionIndex(0)
     setBrowsingActions(false)
+    setBrowseCategory('all')
     isImeComposingRef.current = false
     resetSession()
   }, [clipboardBlock.markBlockConsumed, clearLauncherHostSurface, clearPluginSurfaceTool, closeSettingsDialog, isImeComposingRef, resetSession])
@@ -814,6 +820,7 @@ export function GlobalLauncherHost() {
   const leaveActionBrowser = useCallback(() => {
     if (!browsingActions) return false
     setBrowsingActions(false)
+    setBrowseCategory('all')
     setSelectedIndex(0, { pin: false })
     focusSearchInputAfterBack()
     return true
@@ -1145,12 +1152,19 @@ export function GlobalLauncherHost() {
         query={query}
         setQuery={(value) => {
           setBrowsingActions(false)
+          setBrowseCategory('all')
           setQuery(value)
         }}
         browsingActions={browsingActions}
+        browseCategory={browseCategory}
+        onBrowseCategoryChange={(category) => {
+          setSelectedIndex(0, { pin: false })
+          setBrowseCategory(category)
+        }}
         onBrowseActions={() => {
           setQuery('')
           setSelectedIndex(0, { pin: false })
+          setBrowseCategory('all')
           setBrowsingActions(true)
           focusSearchInputAfterBack()
         }}

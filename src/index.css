@@ -6255,6 +6255,23 @@ body[data-theme='dark'] .launcher-preview-well {
   background: var(--accent-soft);
 }
 
+.launcher-discovery-categories {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.launcher-discovery-category {
+  flex: none;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.launcher-discovery-category[aria-pressed='true'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 .launcher-file-material-action {
   -webkit-app-region: no-drag;
   app-region: no-drag;

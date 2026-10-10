@@ -18,6 +18,7 @@ import type { RecommendedAction, RecommendedOutputTarget } from '../../launcher/
 import { GLOBAL_LAUNCHER_SETTINGS_HEIGHT, STANDALONE_SURFACE_MAX_HEIGHT } from './GlobalLauncherLayout'
 import { useAppStore } from '../../store'
 import { showToast } from '../../workspace/toast'
+import type { LauncherBrowseCategory } from '../../workspace/launcher/browseItems'
 
 type GlobalLauncherPanelProps = {
   panelRef: RefObject<HTMLDivElement | null>
@@ -66,6 +67,8 @@ type GlobalLauncherPanelProps = {
   query: string
   setQuery: (value: string) => void
   browsingActions: boolean
+  browseCategory: LauncherBrowseCategory
+  onBrowseCategoryChange: (category: LauncherBrowseCategory) => void
   onBrowseActions: () => void
   onLeaveActionBrowser: () => void
   availableItemKeys: ReadonlySet<string>
@@ -129,6 +132,8 @@ export function GlobalLauncherPanel({
   query,
   setQuery,
   browsingActions,
+  browseCategory,
+  onBrowseCategoryChange,
   onBrowseActions,
   onLeaveActionBrowser,
   availableItemKeys,
@@ -329,6 +334,8 @@ export function GlobalLauncherPanel({
         isFavoriteSelected={isFavoriteSelected}
         isImeComposingRef={isImeComposingRef}
         browsingActions={browsingActions}
+        browseCategory={browseCategory}
+        onBrowseCategoryChange={onBrowseCategoryChange}
         onBrowseActions={onBrowseActions}
         onLeaveActionBrowser={onLeaveActionBrowser}
         truncateSearchItems={false}
