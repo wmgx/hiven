@@ -3,6 +3,7 @@ import { resolveDisplaySubtitle, resolveDisplayTitle } from '../../workspace/lau
 import type { LauncherItem as DomainLauncherItem } from '../../workspace/launcher/types'
 import { usePluginSurfaceShortcutStore, type PluginSurfaceShortcut } from '../../workspace/pluginSurfaceShortcuts'
 import { computeTitleMatchRanges } from '../../workspace/searchRanking'
+import { stripWindowQueryPrefix } from '../../workspace/desktopControl/windows'
 import type { LauncherMixedItem } from './LauncherMixedList'
 
 export type GlobalLauncherItem = LauncherMixedItem
@@ -25,7 +26,10 @@ export function buildGlobalLauncherItems({
 
   return rankedLauncherItems.map((domainItem) => {
     const title = resolveDisplayTitle(domainItem.display, locale)
-    const match = q ? computeTitleMatchRanges(title, q, locale) : undefined
+    const titleQuery = domainItem.systemKey.startsWith('host.window:focus:native:x11:')
+      ? stripWindowQueryPrefix(q).rest
+      : q
+    const match = titleQuery ? computeTitleMatchRanges(title, titleQuery, locale) : undefined
     const rawSubtitle = resolveDisplaySubtitle(domainItem.display, locale) ?? ''
     // Subtitle is now always rendered (not just on selection), so a subtitle
     // that only repeats the title case-insensitively ("Settings" / "settings")

@@ -6,6 +6,7 @@ import type { MatchRange, MatchType } from '../../workspace/searchRanking'
 import { getPlatformShortcutMeta, isMacPlatform } from './launcherParamShortcuts'
 import { Pin, PinOff } from 'lucide-react'
 import { MAX_VISIBLE_IDLE } from '../../workspace/launcher/visibleItems'
+import { HighlightedTitle, WindowTitle } from './WindowTitle'
 
 /** Rows 1–8 are quick-run via ⌘N / Ctrl+N (see GlobalLauncherKeyboard). */
 export const QUICK_SELECT_MAX = 8
@@ -134,6 +135,7 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
   // fold ⌘N into the tag pill instead of floating it as a second box.
   const combineTagAndQuickSelect = showTag && showQuickSelect
   const iconSlotClass = appIcon ? 'r-app' : avatarIcon ? 'r-ico r-avatar' : 'r-ico'
+  const isX11Window = item.id.startsWith('host.window:focus:native:x11:')
 
   useEffect(() => {
     // Keyboard nav only — hover selection already keeps the row under the cursor.
@@ -165,6 +167,7 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
         type="button"
         tabIndex={-1}
         className="launcher-row-main"
+        aria-label={isX11Window ? [item.title, item.subtitle, tag, item.shortcut ?? quickSelectLabel].filter(Boolean).join(', ') : undefined}
         disabled={item.disabled}
         onClick={handleClick}
       >
@@ -179,9 +182,11 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
       </span>
 
       <div className="r-main">
-        <span className="r-title launcher-item-title">
-          <HighlightedTitle title={item.title} ranges={item.matchRanges} />
-        </span>
+        {isX11Window ? <WindowTitle title={item.title} ranges={item.matchRanges} /> : (
+          <span className="r-title launcher-item-title">
+            <HighlightedTitle title={item.title} ranges={item.matchRanges} />
+          </span>
+        )}
         {item.subtitle && (
           <span className="r-desc">{item.subtitle}</span>
         )}
@@ -306,40 +311,5 @@ function isRemoteAvatarIcon(icon?: string): boolean {
     icon.startsWith('https://') ||
     icon.startsWith('http://') ||
     icon.startsWith('data:image/')
-  )
-}
-
-// ─── Highlighted Title Rendering ─────────────────────────────────────────────
-
-function HighlightedTitle({ title, ranges }: { title: string; ranges?: MatchRange[] }) {
-  if (!ranges || ranges.length === 0) {
-    return <>{title}</>
-  }
-
-  const segments: Array<{ text: string; highlight: boolean }> = []
-  let cursor = 0
-
-  for (const range of ranges) {
-    if (range.start > cursor) {
-      segments.push({ text: title.slice(cursor, range.start), highlight: false })
-    }
-    segments.push({ text: title.slice(range.start, range.end), highlight: true })
-    cursor = range.end
-  }
-
-  if (cursor < title.length) {
-    segments.push({ text: title.slice(cursor), highlight: false })
-  }
-
-  return (
-    <>
-      {segments.map((seg, i) =>
-        seg.highlight ? (
-          <span key={i} className="launcher-match-highlight">{seg.text}</span>
-        ) : (
-          <span key={i}>{seg.text}</span>
-        )
-      )}
-    </>
   )
 }

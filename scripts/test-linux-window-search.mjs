@@ -16,7 +16,7 @@ const deferred = () => {
 }
 const settle = async () => { for (let i = 0; i < 30; i += 1) await Promise.resolve() }
 
-function harness(platform = 'linux') {
+function harness(platform = 'linux', globals = {}) {
   const calls = []
   const logs = []
   const idle = []
@@ -57,6 +57,7 @@ function harness(platform = 'linux') {
       if (specifier === 'pinyin-pro') return nodeRequire(specifier)
       if (specifier === './audit') return { auditL2Action: () => { throw new Error('Unexpected close audit') } }
       if (specifier.endsWith('/launcher/favoriteSuggestion')) return { shouldSuggestFavorite: () => false }
+      if (specifier.endsWith('/pluginSurfaceShortcuts')) return { usePluginSurfaceShortcutStore: { getState: () => ({ shortcuts: {} }) } }
       if (specifier.startsWith('.')) return load(path.relative(root, path.resolve(path.dirname(file), `${specifier}.ts`)))
       throw new Error(`Unexpected import: ${specifier}`)
     }
@@ -67,6 +68,7 @@ function harness(platform = 'linux') {
       CustomEvent: class CustomEvent {},
       Date: class extends Date { static now() { return state.now } },
       setTimeout, clearTimeout, Promise, Error, AbortController,
+      ...globals,
     }, { filename: file })
     return module.exports
   }
@@ -158,13 +160,30 @@ function harness(platform = 'linux') {
   const rank = (query, rows) => ranking.rankLauncherItems({
     query, locale: 'en', surfaceId: 'global-launcher', usage: {}, now: h.state.now,
   }, rows)
+  const { buildGlobalLauncherItems } = h.load('src/components/launcher/GlobalLauncherItems.ts')
   // This uses the real searchRanking + rankLauncherItems modules. The native
   // list is the only fixture: provider matches must survive the final UI rank.
   for (const query of ['window HivenWindow', '窗口 HivenWindow', '切到：HivenWindow']) {
     const rows = await h.list(query)
     assert.equal(rows.length, 2)
     assert.equal(rank(query, rows).length, 2, `prefixed results must survive shared ranking: ${query}`)
+    const ranked = rank(query, rows)
+    const before = JSON.stringify(ranked)
+    const mapped = buildGlobalLauncherItems({ rankedLauncherItems: ranked, query, locale: 'en' })
+    assert.equal(JSON.stringify(ranked), before, 'display highlighting must not mutate ranked/provider items')
+    assert.deepEqual(Array.from(mapped, (item) => item.id), Array.from(ranked, (item) => item.systemKey), 'mapping preserves rank/identity')
+    mapped.forEach((item, index) => {
+      assert.equal(item.domainItem, ranked[index], 'original execution/storage object is preserved')
+      assert.equal(item.title, ranked[index].display.title, 'the UI model keeps the full raw title')
+      assert.equal(item.title.slice(item.matchRanges[0].start, item.matchRanges[0].end), 'HivenWindow', 'only display matching strips the prefix')
+    })
   }
+  const map = (query, rankedLauncherItems) => buildGlobalLauncherItems({ query, rankedLauncherItems, locale: 'en' })
+  const all = await h.list('window')
+  assert.ok(map('window', all).every((row) => !row.matchRanges), 'empty filter has no title anchor')
+  assert.ok(map('window Fixture', await h.list('window Fixture')).every((row) => row.matchRanges.length === 0), 'app-only matches use the no-anchor display')
+  const nonX11 = { ...all[0], systemKey: 'host.window:focus:native:123' }
+  assert.equal(map('window HivenWindow', [nonX11])[0].matchRanges.length, 0, 'other window types retain complete-query highlighting')
   assert.equal((await h.list('window Missing')).length, 0, 'query alias only exists after an actual window match')
   const [alpha] = await h.list('window Alpha')
   const [beta] = await h.list('window Beta')
@@ -182,6 +201,111 @@ function harness(platform = 'linux') {
   assert.ok(mapped.every((row) => row.recordUsage === false && row.experienceRecord === false))
   assert.equal((await h.list('HivenWindow')).length, 0, 'transient query aliases must not enable ordinary Linux searches')
   await h.windows.releaseDesktopWindowSearch()
+}
+
+{
+  const h = harness()
+  const { windowTitleExcerpt } = h.load('src/components/launcher/windowTitleExcerpt.ts')
+  const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+  const glyphs = (text) => Array.from(segmenter.segment(text), ({ segment }) => segment)
+  const baseWidth = (text) => glyphs(text).reduce((sum, glyph) => sum + (/^[\x00-\x7f]$/.test(glyph) ? 8 : 16), 0)
+  // Synthetic variable-width font, with wider highlighted glyphs. Production
+  // supplies the measured normal/highlight fonts from the actual title span.
+  const measure = (text, ranges = []) => baseWidth(text) + ranges.reduce((sum, range) => sum + glyphs(text.slice(range.start, range.end)).length * 2, 0)
+  const excerpt = (title, query, width) => {
+    const start = title.indexOf(query)
+    const ranges = query && start >= 0 ? [{ start, end: start + query.length }] : []
+    const result = windowTitleExcerpt(title, ranges, width, measure)
+    assert.ok(measure(result.text, result.ranges) <= width, `excerpt exceeds pixel budget: ${result.text}`)
+    const boundaries = new Set([0, ...Array.from(segmenter.segment(title), ({ index, segment }) => index + segment.length)])
+    for (const chunk of result.text.split('…').filter(Boolean)) {
+      let start = title.indexOf(chunk)
+      while (start >= 0 && !(boundaries.has(start) && boundaries.has(start + chunk.length))) start = title.indexOf(chunk, start + 1)
+      assert.ok(start >= 0, `a visible chunk split a grapheme: ${chunk}`)
+    }
+    return result
+  }
+  const title = '/common/long/shared/prefix/'.repeat(3) + 'HivenWindow Alpha report.txt — Fixture App'
+  const match = excerpt(title, 'HivenWindow', 260)
+  assert.ok(match.text.startsWith('…'))
+  assert.ok(match.text.includes('HivenWindow Alpha'), 'right context identifies the matching window')
+  assert.equal(match.text.slice(match.ranges[0].start, match.ranges[0].end), 'HivenWindow', 'source highlights are remapped past the leading ellipsis')
+  const fallback = excerpt(title, '', 260)
+  assert.ok(fallback.text.startsWith('/common'), 'no-anchor excerpt keeps a short original head')
+  assert.ok(fallback.text.endsWith('Fixture App'), 'no-anchor excerpt preserves the full tail')
+  const [head, tail] = fallback.text.split('…')
+  assert.ok(baseWidth(tail) > baseWidth(head), 'tail gets most of the no-match budget')
+  assert.equal(excerpt('Short title', 'title', 260).text, 'Short title')
+  assert.equal(excerpt(title, 'HivenWindow', 1).text, '', 'too little space for ellipsis is safe')
+  assert.equal(excerpt(title, 'HivenWindow', 16).text, '…')
+  const partial = excerpt(title, 'HivenWindow Alpha report', 90)
+  assert.ok(partial.ranges.length > 0, 'oversized matches retain a safe matched fragment')
+  for (const unicode of [
+    '共同前缀目录'.repeat(20) + '项目甲验证报告 — 中文应用',
+    '👩🏽‍💻🇨🇳e\u0301👍🏾'.repeat(25) + '👨‍👩‍👧‍👦 Alpha 👩🏽‍🚀',
+  ]) {
+    for (const width of [16, 48, 90, 180, 300]) excerpt(unicode, '', width)
+  }
+  assert.ok(excerpt('共同目录'.repeat(20) + '项目甲验证报告', '项目甲', 180).text.includes('项目甲验证报告'))
+  const emojiTitle = 'prefix/'.repeat(20) + '👨‍👩‍👧‍👦 Alpha 👩🏽‍🚀'
+  assert.equal(excerpt(emojiTitle, '👨‍👩‍👧‍👦', 130).text.match(/👨‍👩‍👧‍👦/)?.[0], '👨‍👩‍👧‍👦')
+  for (const [query, grapheme] of [['👨', '👨‍👩‍👧‍👦'], ['👩🏽', '👩🏽‍🚀']]) {
+    const result = excerpt(emojiTitle, query, 130)
+    assert.equal(result.text.slice(result.ranges[0].start, result.ranges[0].end), grapheme, 'highlight spans also preserve whole graphemes')
+  }
+  const combining = excerpt('目录/'.repeat(20) + 'e\u0301 report', 'e', 100)
+  assert.equal(combining.text.slice(combining.ranges[0].start, combining.ranges[0].end), 'e\u0301', 'combining highlights retain their mark')
+  const overlapped = [{ start: 5, end: 9 }, { start: 3, end: 7 }, { start: -1, end: 99 }]
+  const beforeRanges = JSON.stringify(overlapped)
+  const normalized = windowTitleExcerpt('0123456789', overlapped, 200, measure)
+  assert.equal(JSON.stringify(normalized.ranges), JSON.stringify([{ start: 3, end: 9 }]))
+  assert.equal(JSON.stringify(overlapped), beforeRanges, 'display normalization cannot mutate source offsets')
+  // Resize/query transitions always start from the raw title, never the previous excerpt.
+  assert.equal(excerpt(title, 'HivenWindow', 10000).text, title)
+  assert.equal(excerpt(title, 'HivenWindow', 260).text, match.text)
+  assert.ok(excerpt(title, 'report', 180).text.includes('report'))
+  assert.equal(excerpt(title, '', 260).text, fallback.text)
+  assert.equal(excerpt(title, 'HivenWindow', 260).text, match.text)
+  let measurements = 0
+  windowTitleExcerpt('long/'.repeat(10000) + 'needle tail', [{ start: 50000, end: 50006 }], 260, (text, ranges) => {
+    measurements += 1
+    return measure(text, ranges)
+  })
+  assert.ok(measurements < 80, 'font measurement work is bounded by binary searches')
+  const legacy = harness('linux', { Intl: { Segmenter: undefined } }).load('src/components/launcher/windowTitleExcerpt.ts')
+  assert.equal(legacy.windowTitleExcerpt(emojiTitle, [], 20, measure).text, emojiTitle, 'without Segmenter, leave safe CSS truncation to the original text')
+}
+
+{
+  // Exercise the renderer's source identity guard without a DOM/GUI harness.
+  // A failed measurement after switching windows must show the current title.
+  const h = harness()
+  const oldRanges = [{ start: 0, end: 3 }]
+  const state = { sourceTitle: 'Old window', sourceRanges: oldRanges, excerpt: { text: 'Old…', ranges: oldRanges } }
+  const effects = []
+  const jsx = (type, props) => ({ type, props })
+  const module = { exports: {} }
+  const code = ts.transpileModule(readFileSync('src/components/launcher/WindowTitle.tsx', 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText
+  vm.runInNewContext(code, {
+    module, exports: module.exports,
+    document: { createElement: () => ({ getContext: () => null }) },
+    require: (id) => {
+      if (id === 'react') return { useRef: () => ({ current: null }), useState: () => [state, () => {}], useLayoutEffect: (effect) => effects.push(effect) }
+      if (id === 'react/jsx-runtime') return { jsx, jsxs: jsx }
+      if (id === './windowTitleExcerpt') return h.load('src/components/launcher/windowTitleExcerpt.ts')
+      throw new Error(`Unexpected title renderer import: ${id}`)
+    },
+  })
+  const render = (title, ranges) => module.exports.WindowTitle({ title, ranges })
+  assert.equal(render('Old window', oldRanges).props.children[0].props.title, 'Old…')
+  const changed = render('Current full window title', [])
+  effects.forEach((effect) => effect())
+  assert.equal(changed.props.children[0].props.title, 'Current full window title')
+  assert.equal(changed.props.title, 'Current full window title', 'tooltip always uses the raw current title')
+  assert.equal(changed.props['aria-hidden'], 'true', 'visual excerpt cannot replace the button accessible name')
+  assert.equal(render('Old window', []).props.children[0].props.title, 'Old window', 'new query cannot reuse the previous excerpt/ranges')
 }
 
 {
