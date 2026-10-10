@@ -71,6 +71,7 @@ const HOST_EMPTY_OPEN_DELAY_MS = 120
  */
 const DOCUMENT_DYNAMIC_DEBOUNCE_MS = 520
 const JEV_DEBOUNCE_MS = 250
+const EMPTY_DYNAMIC_ITEMS: readonly LauncherItem[] = []
 
 type UseLauncherSessionOptions = {
   hostId: LauncherSurfaceId
@@ -762,12 +763,18 @@ export function useLauncherSession({
   // Keep open-path warm-cache decision off the render dependency list.
   hostDynamicItemsRef.current = hostDynamicItems
 
+  const rankQuery = query.trim()
+  const inputIdentity = launcherInputIdentity(rankQuery, objectBlockText)
+  // Empty or stale generations do not change the visible candidates. Keep their
+  // dependencies stable without retaining nonempty rows or their old callbacks.
+  const visiblePluginDynamicItems = pluginInputIdentity === inputIdentity && pluginDynamicItems.length > 0
+    ? pluginDynamicItems : EMPTY_DYNAMIC_ITEMS
+  const visibleHostDynamicItems = hostInputIdentity === inputIdentity && hostDynamicItems.length > 0
+    ? hostDynamicItems : EMPTY_DYNAMIC_ITEMS
+  const visibleDocumentDynamicItems = documentInputIdentity === rankQuery && documentDynamicItems.length > 0
+    ? documentDynamicItems : EMPTY_DYNAMIC_ITEMS
+
   const resolvedCandidateItems = useMemo<LauncherItem[]>(() => {
-    const rankQuery = query.trim()
-    const inputIdentity = launcherInputIdentity(rankQuery, objectBlockText)
-    const visiblePluginDynamicItems = pluginInputIdentity === inputIdentity ? pluginDynamicItems : []
-    const visibleHostDynamicItems = hostInputIdentity === inputIdentity ? hostDynamicItems : []
-    const visibleDocumentDynamicItems = documentInputIdentity === rankQuery ? documentDynamicItems : []
     // Any live result wins over its rehydrated recent snapshot. Keeping both
     // also creates duplicate React keys, which corrupts visible quick-run indices.
     const liveKeys = new Set([...staticCandidates, ...visiblePluginDynamicItems, ...visibleHostDynamicItems, ...visibleDocumentDynamicItems].map((item) => item.systemKey))
@@ -776,8 +783,8 @@ export function useLauncherSession({
       ...recentsDeduped, ...visibleDocumentDynamicItems]
       .filter((item) => !item.automaticLearningSignal
         || (automaticLearningEnabled === true && !item.automaticLearningSignal.aborted))
-  }, [automaticLearningEnabled, query, objectBlockText, pluginInputIdentity, pluginDynamicItems, hostInputIdentity,
-    hostDynamicItems, documentInputIdentity, documentDynamicItems, staticCandidates, persistableRecentItems])
+  }, [automaticLearningEnabled, query, objectBlockText, visiblePluginDynamicItems, visibleHostDynamicItems,
+    visibleDocumentDynamicItems, staticCandidates, persistableRecentItems])
 
   const availableItems = useMemo(() => {
     void pluginPermissions
