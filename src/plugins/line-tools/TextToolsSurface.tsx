@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import { Button, Checkbox, IconButton, SegmentedControl, TextInput } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
@@ -19,6 +19,12 @@ export function TextToolsSurface(props: PluginSurfaceProps) {
   const initialRoute = textToolRoutes.find((route) => route.surfaceId === props.surfaceId)
   const [group, setGroup] = useState<Group>(initialRoute?.group ?? 'lines')
   const [inputText, setInputText] = useState(props.initialText ?? '')
+  const baseline = useRef(props.initialText ?? '')
+  const hasUnsavedChanges = inputText !== baseline.current
+  const reportUnsavedChanges = host.setUnsavedChanges
+  useLayoutEffect(() => {
+    reportUnsavedChanges?.(hasUnsavedChanges)
+  }, [hasUnsavedChanges, reportUnsavedChanges])
   const [lineOperation, setLineOperation] = useState<LineOperation>(
     initialRoute?.group === 'lines' ? initialRoute.operation as LineOperation : 'sort',
   )

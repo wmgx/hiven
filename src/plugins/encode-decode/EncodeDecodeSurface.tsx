@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import { Button, IconButton } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
@@ -34,6 +34,12 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
   const initialText = props.initialText ?? ''
   const [initial] = useState(() => initialOperation(initialText, props.surfaceId))
   const [inputText, setInputText] = useState(initialText)
+  const baseline = useRef(initialText)
+  const hasUnsavedChanges = inputText !== baseline.current
+  const reportUnsavedChanges = host.setUnsavedChanges
+  useLayoutEffect(() => {
+    reportUnsavedChanges?.(hasUnsavedChanges)
+  }, [hasUnsavedChanges, reportUnsavedChanges])
   const [format, setFormat] = useState<EncodeDecodeFormat>(initial.format)
   const [direction, setDirection] = useState<EncodeDecodeDirection>(initial.direction)
   const [pasting, setPasting] = useState(false)

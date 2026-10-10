@@ -1,4 +1,4 @@
-import { Suspense, useMemo, useState } from 'react'
+import { Suspense, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { getPluginHostSdk, type PluginSurfaceProps } from '@hiven/plugin'
 import { Button, IconButton, TextEditor, getEditorTheme } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
@@ -26,6 +26,12 @@ export function FormatterSurface(props: PluginSurfaceProps) {
   const initialText = props.initialText ?? ''
   const initialRoute = formatterRoutes.find((item) => item.id === props.surfaceId)
   const [inputText, setInputText] = useState(initialText)
+  const baseline = useRef(initialText)
+  const hasUnsavedChanges = inputText !== baseline.current
+  const reportUnsavedChanges = host.setUnsavedChanges
+  useLayoutEffect(() => {
+    reportUnsavedChanges?.(hasUnsavedChanges)
+  }, [hasUnsavedChanges, reportUnsavedChanges])
   const [language, setLanguage] = useState<FormatterLanguage>(() => initialLanguage(props.surfaceId, initialText))
   const [operation, setOperation] = useState<FormatterOperation>(initialRoute?.operation ?? 'format')
   const [pasting, setPasting] = useState(false)

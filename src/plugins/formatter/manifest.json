@@ -2,7 +2,7 @@
   "pluginId": "formatter",
   "displayName": "Formatter",
   "displayNameI18n": { "zh": "格式化" },
-  "version": "2.1.6",
+  "version": "2.1.7",
   "capabilities": ["command", "surface"],
   "permissions": ["clipboard.write", "accessibility.paste"]
 }
