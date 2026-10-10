@@ -19,6 +19,7 @@ import { getPluginSurfaceDefinition, isWorkflowObjectLauncherItem } from '../../
 import { useGlobalLauncherSurfaceFrame } from '../../components/launcher/GlobalLauncherSurfaceFrame'
 import { readLauncherClipboard } from '../clipboard/readLauncherClipboard'
 import { GlobalLauncherPanel } from '../../components/launcher/GlobalLauncherPanel'
+import { useLauncherSurfaceBackgroundIdle } from '../../components/launcher/useLauncherSurfaceBackgroundIdle'
 import { WindowResizeHandles } from '../../components/WindowResizeHandles'
 import { useGlobalLauncherSelectionController } from '../../components/launcher/useGlobalLauncherSelectionController'
 import { useClipboardObjectBlock } from '../clipboard/useClipboardObjectBlock'
@@ -359,6 +360,9 @@ export function GlobalLauncherHost() {
     : null
   const resizableSurface = standaloneLauncher && surfaceKey !== null
     && activeSurfaceFrame?.surface.shell?.resizable === true
+  const surfaceBackgroundIdle = useLauncherSurfaceBackgroundIdle(
+    open && surfaceKey !== null ? surfaceFrame : null,
+  )
 
   useEffect(() => {
     if (!standaloneLauncher || !isNativeDesktopRuntime()) return
@@ -705,6 +709,9 @@ export function GlobalLauncherHost() {
     open,
     standaloneLauncher,
     closeLauncher,
+    paused: surfaceBackgroundIdle.paused,
+    isPaused: surfaceBackgroundIdle.isPaused,
+    restartVersion: surfaceBackgroundIdle.restartVersion,
   })
 
   // -1 focuses the recent-clipboard hint row (30s–2 min) above the command list.
@@ -1110,6 +1117,7 @@ export function GlobalLauncherHost() {
         surfaceFrame={surfaceFrame}
         activeSurfaceFrame={activeSurfaceFrame}
         surfaceFillsWindow={resizableSurface}
+        onSurfaceUnsavedChangesReport={surfaceBackgroundIdle.onUnsavedChangesReport}
         leaveSurface={leaveSurface}
         itemPermissionFrame={itemPermissionFrame}
         cancelItemPermissionPrompt={cancelItemPermissionPrompt}

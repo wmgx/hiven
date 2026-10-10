@@ -7,6 +7,7 @@ import type { LauncherExecuteResult, LauncherResultChoice } from '../../workspac
 import { createDeleteSavedActionItem, createRenameSavedActionItem } from '../../workspace/launcher/hostActions'
 import type { GlobalLauncherActiveSurfaceFrame } from './GlobalLauncherFrames'
 import { GlobalLauncherFrameSwitch } from './GlobalLauncherFrames'
+import type { LauncherSurfaceUnsavedChangesReport } from './useLauncherSurfaceBackgroundIdle'
 import type { GlobalLauncherPermissionFrameState } from './GlobalLauncherPermissionFrame'
 import { LauncherView } from './LauncherView'
 import { getPlatformShortcutMeta, supportsParamCustomization } from './launcherParamShortcuts'
@@ -72,6 +73,7 @@ type GlobalLauncherPanelProps = {
   searchPlaceholder: string
   requestSurfaceBack: () => void
   requestSurfaceClose: () => void
+  onSurfaceUnsavedChangesReport?: (report: LauncherSurfaceUnsavedChangesReport) => void
   handleCompositionStart: () => void
   handleCompositionEnd: () => void
   clipboardBlock: ClipboardObjectBlockState
@@ -134,6 +136,7 @@ export function GlobalLauncherPanel({
   searchPlaceholder,
   requestSurfaceBack,
   requestSurfaceClose,
+  onSurfaceUnsavedChangesReport,
   handleCompositionStart,
   handleCompositionEnd,
   clipboardBlock,
@@ -340,6 +343,7 @@ export function GlobalLauncherPanel({
         }}
         onSurfaceBack={requestSurfaceBack}
         onSurfaceClose={requestSurfaceClose}
+        onSurfaceUnsavedChangesReport={onSurfaceUnsavedChangesReport}
         onPermissionBack={cancelItemPermissionPrompt}
         onPermissionGrant={grantItemPermissionsAndRun}
         onParamQueryChange={(value, frame) => controllerRef.current?.setParamQuery(value, frame)}

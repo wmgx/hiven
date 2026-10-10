@@ -136,11 +136,14 @@ export function useAutoCloseCurrentWindowOnBackgroundIdle({
   onClose,
   idleMs = STANDALONE_SURFACE_BACKGROUND_IDLE_MS,
   focusLease,
+  restartVersion = 0,
 }: {
   enabled: boolean
   onClose: () => void
   idleMs?: number
   focusLease?: { isActive: () => boolean; subscribe: (listener: () => void) => () => void }
+  /** Discard elapsed idle time even when enabled is unchanged in a batched update. */
+  restartVersion?: number
 }) {
   const onCloseRef = useRef(onClose)
   const idleMsRef = useRef(idleMs)
@@ -239,7 +242,7 @@ export function useAutoCloseCurrentWindowOnBackgroundIdle({
       stopFocusLease?.()
       unlisten?.()
     }
-  }, [enabled, focusLease])
+  }, [enabled, focusLease, restartVersion])
 }
 
 /**
@@ -249,18 +252,26 @@ export function useAutoCloseStandaloneLauncherOnBackgroundIdle({
   open,
   standaloneLauncher,
   closeLauncher,
+  paused = false,
+  isPaused,
+  restartVersion,
   idleMs = STANDALONE_SURFACE_BACKGROUND_IDLE_MS,
 }: {
   open: boolean
   standaloneLauncher: boolean
   closeLauncher: () => void
+  paused?: boolean
+  /** Synchronous check for a dirty report arriving before the next commit. */
+  isPaused?: () => boolean
+  restartVersion?: number
   idleMs?: number
 }) {
   useAutoCloseCurrentWindowOnBackgroundIdle({
-    enabled: open && standaloneLauncher,
-    onClose: closeLauncher,
+    enabled: open && standaloneLauncher && !paused,
+    onClose: () => { if (!isPaused?.()) closeLauncher() },
     idleMs,
     focusLease: launcherFocusLease,
+    restartVersion,
   })
 }
 

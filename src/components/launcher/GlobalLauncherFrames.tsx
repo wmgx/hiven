@@ -16,6 +16,7 @@ import type { RecommendedAction, RecommendedOutputTarget } from '../../launcher/
 import { GlobalLauncherResultFrame } from './GlobalLauncherResultFrame'
 import { GlobalLauncherPermissionFrame, type GlobalLauncherPermissionFrameState } from './GlobalLauncherPermissionFrame'
 import { GlobalLauncherCollectInputFrame } from './GlobalLauncherCollectInputFrame'
+import type { LauncherSurfaceUnsavedChangesReport } from './useLauncherSurfaceBackgroundIdle'
 
 export type GlobalLauncherActiveSurfaceFrame = {
   surface: PluginUiSurfaceContribution
@@ -59,6 +60,7 @@ export function GlobalLauncherFrameSwitch({
   onSettingsClose,
   onSurfaceBack,
   onSurfaceClose,
+  onSurfaceUnsavedChangesReport,
   onPermissionBack,
   onPermissionGrant,
   onParamQueryChange,
@@ -128,6 +130,7 @@ export function GlobalLauncherFrameSwitch({
   onSettingsClose: () => void
   onSurfaceBack: () => void
   onSurfaceClose: () => void
+  onSurfaceUnsavedChangesReport?: (report: LauncherSurfaceUnsavedChangesReport) => void
   onPermissionBack: () => void
   onPermissionGrant: () => void
   onParamQueryChange: (value: string, frame?: ParamInputFrame) => void
@@ -203,6 +206,7 @@ export function GlobalLauncherFrameSwitch({
         autoHeight={shell?.autoHeight}
         fillsWindow={surfaceFillsWindow}
         breadcrumbTitle={breadcrumbTitle}
+        onUnsavedChangesReport={onSurfaceUnsavedChangesReport}
         onBack={onSurfaceBack}
         onClose={onSurfaceClose}
       />

@@ -5,6 +5,7 @@ import { ConfirmDialog } from '../../plugin-ui'
 import { useLauncherEscapeInterceptor } from './launcherEscapeInterceptor'
 import { PluginSurfaceRenderer, type PluginSurfaceLeaveOwner } from '../pluginSurface/PluginSurfaceRenderer'
 import { SurfaceBreadcrumbHeader } from '../SurfaceBreadcrumbHeader'
+import type { LauncherSurfaceUnsavedChangesReport } from './useLauncherSurfaceBackgroundIdle'
 
 const BREADCRUMB_HEIGHT = 40
 type LeaveAction = 'back' | 'close'
@@ -19,6 +20,7 @@ export function GlobalLauncherPluginSurfaceFrame({
   breadcrumbTitle,
   onBack,
   onClose,
+  onUnsavedChangesReport,
 }: {
   target: PluginSurfaceOpenTarget
   locale: Locale
@@ -28,12 +30,15 @@ export function GlobalLauncherPluginSurfaceFrame({
   breadcrumbTitle?: string
   onBack: () => void
   onClose: () => void
+  onUnsavedChangesReport?: (report: LauncherSurfaceUnsavedChangesReport) => void
 }) {
   const bodyHeight = breadcrumbTitle ? shellHeight - BREADCRUMB_HEIGHT : shellHeight
   const activeTargetRef = useRef(target)
   activeTargetRef.current = target
   const mountedRef = useRef(false)
   const changesRef = useRef<{ owner: PluginSurfaceLeaveOwner; dirty: boolean } | null>(null)
+  const reportRef = useRef(onUnsavedChangesReport)
+  reportRef.current = onUnsavedChangesReport
   const pendingRef = useRef<PendingLeave | null>(null)
   const [pendingLeave, setPendingLeave] = useState<PendingLeave | null>(null)
 
@@ -42,6 +47,8 @@ export function GlobalLauncherPluginSurfaceFrame({
     return () => { mountedRef.current = false }
   }, [])
   useLayoutEffect(() => () => {
+    const changes = changesRef.current
+    if (changes) reportRef.current?.({ kind: 'release', target, owner: changes.owner })
     changesRef.current = null
     pendingRef.current = null
     setPendingLeave(null)
@@ -52,8 +59,10 @@ export function GlobalLauncherPluginSurfaceFrame({
     if (!owner.isCurrent()) {
       if (changesRef.current?.owner !== owner) return
       changesRef.current = null
+      reportRef.current?.({ kind: 'release', target, owner })
     } else {
       changesRef.current = { owner, dirty }
+      reportRef.current?.({ kind: 'change', target, owner, dirty })
     }
     if (pendingRef.current && (!dirty || pendingRef.current.owner !== owner || !owner.isCurrent())) {
       pendingRef.current = null
