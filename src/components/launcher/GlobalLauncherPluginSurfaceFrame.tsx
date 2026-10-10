@@ -12,6 +12,7 @@ export function GlobalLauncherPluginSurfaceFrame({
   locale,
   shellHeight,
   autoHeight,
+  fillsWindow = false,
   breadcrumbTitle,
   onBack,
   onClose,
@@ -20,6 +21,7 @@ export function GlobalLauncherPluginSurfaceFrame({
   locale: Locale
   shellHeight: number
   autoHeight?: boolean
+  fillsWindow?: boolean
   breadcrumbTitle?: string
   onBack: () => void
   onClose: () => void
@@ -41,7 +43,9 @@ export function GlobalLauncherPluginSurfaceFrame({
     <div
       className="global-launcher-surface-shell flex flex-col min-h-0 outline-none"
       tabIndex={-1}
-      style={autoHeight ? { maxHeight: shellHeight } : { height: shellHeight }}
+      style={fillsWindow
+        ? { height: '100%', flex: '1 1 0', minWidth: 0 }
+        : autoHeight ? { maxHeight: shellHeight } : { height: shellHeight }}
     >
       {breadcrumbTitle && (
         <SurfaceBreadcrumbHeader
@@ -55,7 +59,9 @@ export function GlobalLauncherPluginSurfaceFrame({
         data-no-drag
         data-launcher-scrollable
         style={
-          autoHeight
+          fillsWindow
+            ? { maxHeight: 'none', flex: '1 1 0', minWidth: 0, overflow: 'hidden', touchAction: 'auto' }
+            : autoHeight
             ? { maxHeight: bodyHeight, overflow: 'hidden', touchAction: 'auto' }
             : { maxHeight: bodyHeight, height: bodyHeight, overflow: 'hidden', touchAction: 'auto' }
         }

@@ -25,6 +25,7 @@ mod ai_ollama;
 pub mod ai_xai;
 mod clipboard_privacy;
 mod paste_recovery;
+mod launcher_resize_state;
 mod plugin_png_export;
 mod text_material;
 pub mod desktop_bridge;
@@ -69,6 +70,7 @@ static PLUGIN_SURFACE_WINDOW_TOKENS: OnceLock<Mutex<HashMap<String, u64>>> = Onc
 static PLUGIN_SURFACE_PAYLOADS: OnceLock<Mutex<HashMap<String, PluginSurfacePayload>>> =
     OnceLock::new();
 static SURFACE_REGISTRY: OnceLock<SurfaceRegistryState> = OnceLock::new();
+static LAUNCHER_RESIZE_STATE: OnceLock<Mutex<launcher_resize_state::LauncherResizeState>> = OnceLock::new();
 const SURFACE_REGISTRY_EVENT: &str = "hiven://surface-registry-sync";
 const MAX_APP_ICON_CACHE_WARM_COUNT: usize = 20;
 const LAUNCHER_PERF_ENV: &str = "HIVEN_LAUNCHER_PERF";
@@ -746,6 +748,138 @@ async fn show_launcher_window(app: tauri::AppHandle, resume: Option<bool>) -> Re
     show_launcher_window_for_hotkey(app)
 }
 
+fn launcher_resize_state() -> &'static Mutex<launcher_resize_state::LauncherResizeState> {
+    LAUNCHER_RESIZE_STATE.get_or_init(|| Mutex::new(Default::default()))
+}
+
+fn reset_launcher_window_resize(window: &tauri::WebviewWindow, active: bool) -> Result<(), String> {
+    launcher_resize_state().lock().map_err(|error| error.to_string())?.reset(active);
+    window.set_min_size(None::<LogicalSize<f64>>).map_err(|error| error.to_string())?;
+    window.set_resizable(false).map_err(|error| error.to_string())
+}
+
+#[derive(serde::Serialize)]
+struct LauncherWindowResizeSession {
+    session: u64,
+    revision: u64,
+}
+
+#[tauri::command]
+fn get_launcher_window_resize_session(window: tauri::WebviewWindow) -> Result<LauncherWindowResizeSession, String> {
+    if window.label() != "launcher" {
+        return Err("Launcher window sizing is only available to the launcher".into());
+    }
+    let state = launcher_resize_state().lock().map_err(|error| error.to_string())?;
+    Ok(LauncherWindowResizeSession { session: state.session, revision: state.revision })
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LauncherWindowResizeRequest {
+    session: u64,
+    revision: u64,
+    resizable: bool,
+    #[serde(default)]
+    compact_width: bool,
+    min_width: Option<f64>,
+    min_height: Option<f64>,
+    width: Option<f64>,
+    height: Option<f64>,
+}
+
+/// Private launcher-only operation: constraints and an optional initial size
+/// belong to the same surface revision. No arbitrary window label is accepted.
+#[tauri::command]
+async fn configure_launcher_window(
+    window: tauri::WebviewWindow,
+    app: tauri::AppHandle,
+    request: LauncherWindowResizeRequest,
+) -> Result<bool, String> {
+    if window.label() != "launcher" {
+        return Err("Launcher window sizing is only available to the launcher".into());
+    }
+    for value in [request.width, request.height, request.min_width, request.min_height].into_iter().flatten() {
+        if !value.is_finite() || value <= 0.0 {
+            return Err("Launcher window dimensions must be finite and positive".into());
+        }
+    }
+    if request.compact_width && (request.resizable || request.height.is_none()) {
+        return Err("Compact launcher sizing requires a fixed window and explicit height".into());
+    }
+    if request.compact_width && request.width.is_some() {
+        return Err("Compact launcher sizing cannot also specify a width".into());
+    }
+    if !request.compact_width && request.width.is_some() != request.height.is_some() {
+        return Err("Launcher window width and height must be supplied together".into());
+    }
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.run_on_main_thread(move || {
+        let result = (|| {
+            let mut state = launcher_resize_state().lock().map_err(|error| error.to_string())?;
+            if !state.accept(request.session, request.revision) {
+                return Ok(false);
+            }
+            let scale = window.scale_factor().map_err(|error| error.to_string())?;
+            let old_position = window.outer_position().map_err(|error| error.to_string())?.to_logical::<f64>(scale);
+            let old_size = window.outer_size().map_err(|error| error.to_string())?.to_logical::<f64>(scale);
+            let work_area = window.current_monitor().ok().flatten()
+                .or_else(|| window.primary_monitor().ok().flatten())
+                .map(|monitor| {
+                    let scale = monitor.scale_factor();
+                    let area = monitor.work_area();
+                    (area.position.to_logical::<f64>(scale), area.size.to_logical::<f64>(scale))
+                });
+            // GTK can have no monitor while a window is not mapped. Retain a
+            // bounded, already usable size instead of accepting an unbounded
+            // plugin declaration until monitor information becomes available.
+            let available_width = work_area.as_ref().map_or_else(
+                || launcher_resize_state::fallback_dimension(old_size.width, LAUNCHER_COMPACT_WIDTH),
+                |(_, size)| size.width,
+            );
+            let available_height = work_area.as_ref().map_or_else(
+                || launcher_resize_state::fallback_dimension(old_size.height, LAUNCHER_COMPACT_HEIGHT),
+                |(_, size)| size.height,
+            );
+            let min_width = if request.resizable { request.min_width.unwrap_or(1.0).min(available_width) } else { 1.0 };
+            let min_height = if request.resizable { request.min_height.unwrap_or(1.0).min(available_height) } else { 1.0 };
+            let min_size = request.resizable.then(|| LogicalSize::new(min_width, min_height));
+            window.set_min_size(min_size).map_err(|error| error.to_string())?;
+            window.set_resizable(request.resizable).map_err(|error| error.to_string())?;
+            // A constraint-only update retains the user's dimensions unless a
+            // changed minimum or monitor work area requires fitting them.
+            // Webview innerWidth may still reflect the previous tool after a
+            // native compact/reopen. Search width belongs to the native monitor
+            // policy, never that stale frontend viewport snapshot.
+            let requested_width = if request.compact_width {
+                launcher_default_window_size_for_window(&window).0
+            } else {
+                request.width.unwrap_or(old_size.width)
+            };
+            let width = launcher_resize_state::fit_dimension(requested_width, min_width, available_width);
+            let height = launcher_resize_state::fit_dimension(request.height.unwrap_or(old_size.height), min_height, available_height);
+            let same_width = (old_size.width - width).abs() < 0.5;
+            let same_height = (old_size.height - height).abs() < 0.5;
+            if !same_width || !same_height {
+                window.set_size(LogicalSize::new(width, height)).map_err(|error| error.to_string())?;
+                // Only compensate after set_size succeeds. Keep the top center,
+                // except where the current monitor's work area requires a fit.
+                let mut x = old_position.x + (old_size.width - width) / 2.0;
+                let mut y = old_position.y;
+                if let Some((origin, area)) = work_area {
+                    x = x.clamp(origin.x, origin.x + (area.width - width).max(0.0));
+                    y = y.clamp(origin.y, origin.y + (area.height - height).max(0.0));
+                }
+                if (x - old_position.x).abs() >= 0.5 || (y - old_position.y).abs() >= 0.5 {
+                    window.set_position(tauri::LogicalPosition::new(x, y)).map_err(|error| error.to_string())?;
+                }
+            }
+            Ok(true)
+        })();
+        let _ = tx.send(result);
+    }).map_err(|error| error.to_string())?;
+    rx.await.map_err(|error| error.to_string())?
+}
+
 pub(crate) fn show_launcher_window_for_hotkey(app: tauri::AppHandle) -> Result<(), String> {
     show_launcher_window_for_hotkey_with_event(app, "hiven://launcher-open")
 }
@@ -822,6 +956,9 @@ fn show_launcher_window_for_hotkey_with_event(
         let mut requested_launcher_width = None;
         if !was_visible {
             let started_at = Instant::now();
+            if let Err(error) = reset_launcher_window_resize(&window, true) {
+                eprintln!("[hiven] Failed to reset launcher resize mode before show: {}", error);
+            }
             let (compact_width, compact_height) = launcher_default_window_size_for_window(&window);
             match window.set_size(LogicalSize::new(compact_width, compact_height)) {
                 Ok(()) => requested_launcher_width = Some(compact_width),
@@ -1090,6 +1227,13 @@ async fn hide_launcher_window(
             if let Err(error) = window.hide() {
                 eprintln!("[hiven] Failed to hide launcher window: {}", error);
             }
+            if let Err(error) = reset_launcher_window_resize(&window, false) {
+                eprintln!("[hiven] Failed to reset launcher resize mode after hide: {}", error);
+            }
+            let (width, height) = launcher_default_window_size_for_window(&window);
+            if let Err(error) = window.set_size(LogicalSize::new(width, height)) {
+                eprintln!("[hiven] Failed to compact launcher window after hide: {}", error);
+            }
         }
         apply_restore_foreground_mode(mode);
     })
@@ -1227,9 +1371,15 @@ fn attach_paste_window_events(window: &tauri::WebviewWindow) {
         }
         tauri::WindowEvent::CloseRequested { .. } => {
             paste_recovery::invalidate_window(&label, Some(instance));
+            if label == "launcher" {
+                if let Ok(mut state) = launcher_resize_state().lock() { state.reset(false); }
+            }
         }
         tauri::WindowEvent::Destroyed => {
             paste_recovery::destroyed(&label, instance);
+            if label == "launcher" {
+                if let Ok(mut state) = launcher_resize_state().lock() { state.reset(false); }
+            }
         }
         _ => {}
     });
@@ -7818,6 +7968,8 @@ pub fn run() {
             hotkeys::unregister_double_modifier_hotkey,
             restore_launcher_input_source,
             show_launcher_window,
+            get_launcher_window_resize_session,
+            configure_launcher_window,
             focus_launcher_webview,
             log_launcher_perf_frontend,
             launcher_perf_log_file,

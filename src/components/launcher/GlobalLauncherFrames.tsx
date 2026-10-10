@@ -28,6 +28,7 @@ export function GlobalLauncherFrameSwitch({
   settingsHeight,
   surfaceFrame,
   activeSurfaceFrame,
+  surfaceFillsWindow = false,
   itemPermissionFrame,
   controllerState,
   inputRef,
@@ -95,6 +96,7 @@ export function GlobalLauncherFrameSwitch({
   settingsHeight: number
   surfaceFrame: PluginSurfaceOpenTarget | null
   activeSurfaceFrame: GlobalLauncherActiveSurfaceFrame | null
+  surfaceFillsWindow?: boolean
   itemPermissionFrame: GlobalLauncherPermissionFrameState | null
   controllerState: { frames: Array<CollectInputFrame | ParamInputFrame | ResultFrame | { kind: string }>; error?: string | null; busy: boolean; deliveryIntent?: LauncherControllerState['deliveryIntent'] } | null | undefined
   inputRef: RefObject<HTMLInputElement | HTMLTextAreaElement | null>
@@ -199,6 +201,7 @@ export function GlobalLauncherFrameSwitch({
         locale={locale}
         shellHeight={shell?.defaultHeight ?? 480}
         autoHeight={shell?.autoHeight}
+        fillsWindow={surfaceFillsWindow}
         breadcrumbTitle={breadcrumbTitle}
         onBack={onSurfaceBack}
         onClose={onSurfaceClose}

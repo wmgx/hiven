@@ -26,6 +26,8 @@ export type StandaloneLauncherGeometryInput = {
 export type StandaloneLauncherGeometry = {
   width: number
   height: number
+  minWidth?: number
+  minHeight?: number
   bodyMaxHeight?: number
 }
 
@@ -36,6 +38,27 @@ export function computeStandaloneLauncherGeometry({
   surfaceShell,
   currentWindowWidth = window.innerWidth,
 }: StandaloneLauncherGeometryInput): StandaloneLauncherGeometry {
+  if (!hostSurfaceTarget && !launcherSettingsTarget && surfaceShell?.resizable === true) {
+    // Shell dimensions describe the plugin panel. Native constraints include
+    // the transparent host gutter; the native monitor work area applies the
+    // final screen bounds without making these defaults a live viewport cap.
+    const minWidth = Math.ceil(positiveDimension(surfaceShell.minWidth,
+      STANDALONE_LAUNCHER_WIDTH - STANDALONE_LAUNCHER_HORIZONTAL_PADDING,
+    ) + STANDALONE_LAUNCHER_HORIZONTAL_PADDING)
+    const minHeight = Math.ceil(positiveDimension(surfaceShell.minHeight,
+      STANDALONE_LAUNCHER_MIN_HEIGHT - STANDALONE_LAUNCHER_VERTICAL_PADDING,
+    ) + STANDALONE_LAUNCHER_VERTICAL_PADDING)
+    return {
+      width: Math.max(minWidth, Math.ceil(positiveDimension(surfaceShell.defaultWidth,
+        positiveDimension(currentWindowWidth, STANDALONE_LAUNCHER_WIDTH) - STANDALONE_LAUNCHER_HORIZONTAL_PADDING,
+      ) + STANDALONE_LAUNCHER_HORIZONTAL_PADDING)),
+      height: Math.max(minHeight, Math.ceil(positiveDimension(surfaceShell.defaultHeight, 480)
+        + STANDALONE_LAUNCHER_VERTICAL_PADDING)),
+      minWidth,
+      minHeight,
+    }
+  }
+
   const isSurfaceLike = Boolean(surfaceShell || launcherSettingsTarget || hostSurfaceTarget)
   const measured = measureLauncherPanelParts(panel)
 
@@ -146,4 +169,8 @@ export function measureStandaloneLauncherPanelHeight(panel: HTMLElement) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max)
+}
+
+function positiveDimension(value: number | undefined, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback
 }

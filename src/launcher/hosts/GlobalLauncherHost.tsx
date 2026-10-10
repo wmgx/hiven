@@ -18,6 +18,7 @@ import { getPluginSurfaceDefinition, isWorkflowObjectLauncherItem } from '../../
 import { useGlobalLauncherSurfaceFrame } from '../../components/launcher/GlobalLauncherSurfaceFrame'
 import { readLauncherClipboard } from '../clipboard/readLauncherClipboard'
 import { GlobalLauncherPanel } from '../../components/launcher/GlobalLauncherPanel'
+import { WindowResizeHandles } from '../../components/WindowResizeHandles'
 import { useGlobalLauncherSelectionController } from '../../components/launcher/useGlobalLauncherSelectionController'
 import { useClipboardObjectBlock } from '../clipboard/useClipboardObjectBlock'
 import { chooseTextMaterialFile } from '../clipboard/fileTextMaterial'
@@ -34,13 +35,14 @@ import { createPluginClipboard, writeClipboardText } from '../../workspace/plugi
 import { createGlobalLauncherPluginApi } from '../clipboard/globalLauncherApi'
 import type { LauncherExecuteResult } from '../../workspace/launcher/types'
 import { createPluginPaste } from '../../workspace/pluginPaste'
-import { captureLauncherPasteOwner, isPasteCancelled } from '../../workspace/pasteRecovery'
+import { cancelPendingPasteRecovery, captureLauncherPasteOwner, isPasteCancelled } from '../../workspace/pasteRecovery'
+import { LAUNCHER_NEW_SESSION_EVENT } from '../../workspace/launcherWindowEvents'
 import type { PluginPasteResult } from '../../workspace/pluginTypes'
 import { createPluginPrivateStorage } from '../../workspace/pluginStorage'
 import { createQuickEditorPane } from '../../workspace/quickEditor/quickEditorRequests'
 import { openExternalUrl } from '../../workspace/effectRunner'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
-import { restoreLauncherInputSource } from '../../workspace/windowManager/launcherWindow'
+import { invalidateCurrentLauncherWindowResize, restoreLauncherInputSource, startCurrentLauncherWindowResize, type LauncherWindowResizeDirection } from '../../workspace/windowManager/launcherWindow'
 import { getHostSurfaceShell } from '../../components/launcher/hostSurfaceShell'
 import { endLauncherPerfOpenSession, logLauncherPerf } from '../../workspace/launcher/perf'
 import {
@@ -319,6 +321,11 @@ export function GlobalLauncherHost() {
     // ESC/back pops the tool surface; keep the launcher open and refocus search.
     onReturnedToList: () => focusSearchInputAfterBackRef.current(),
   })
+  const surfaceKey = surfaceFrame && activeSurfaceFrame && !hostSurfaceTarget && !launcherSettingsTarget
+    ? `${surfaceFrame.source}:${surfaceFrame.pluginId}:${surfaceFrame.surfaceId}:${surfaceFocusVersion}`
+    : null
+  const resizableSurface = standaloneLauncher && surfaceKey !== null
+    && activeSurfaceFrame?.surface.shell?.resizable === true
 
   useEffect(() => {
     if (!standaloneLauncher || !isNativeDesktopRuntime()) return
@@ -551,8 +558,8 @@ export function GlobalLauncherHost() {
 
   // Guard duplicate dismissals while the native window is hiding.
   const closingRef = useRef(false)
-  const resetLauncherSession = useCallback(() => {
-    clipboardBlock.markBlockConsumed()
+  const resetLauncherSession = useCallback((options?: { preservePendingMaterial?: boolean }) => {
+    clipboardBlock.markBlockConsumed({ preservePending: options?.preservePendingMaterial })
     clearPluginSurfaceTool()
     clearLauncherHostSurface()
     // Drop any suspended host (e.g. quick-editor under Diff) when fully closing.
@@ -568,6 +575,19 @@ export function GlobalLauncherHost() {
     isImeComposingRef.current = false
     resetSession()
   }, [clipboardBlock.markBlockConsumed, clearLauncherHostSurface, clearPluginSurfaceTool, closeSettingsDialog, isImeComposingRef, resetSession])
+
+  useLayoutEffect(() => {
+    if (!standaloneLauncher) return
+    const resetForNativeOpen = () => {
+      invalidateCurrentLauncherWindowResize()
+      if (!useAppStore.getState().globalLauncherOpen) return
+      cancelPendingPasteRecovery()
+      resetLauncherSession({ preservePendingMaterial: true })
+      closingRef.current = false
+    }
+    window.addEventListener(LAUNCHER_NEW_SESSION_EVENT, resetForNativeOpen)
+    return () => window.removeEventListener(LAUNCHER_NEW_SESSION_EVENT, resetForNativeOpen)
+  }, [standaloneLauncher, resetLauncherSession])
 
   const closeSession = useCallback((reason: 'esc-or-overlay' | 'blur' | 'after-action') => {
     const completed = reason === 'after-action'
@@ -667,6 +687,7 @@ export function GlobalLauncherHost() {
     hostSurfaceTarget: hostSurfaceTarget as never,
     launcherSettingsTarget,
     surfaceShell: activeSurfaceFrame?.surface.shell,
+    surfaceKey,
     visibleFilteredLength: visibleFiltered.length,
     controllerResizeKey: `${controllerResizeKey}:${locale}:${clipboardBlock.canPickTextFile}:${clipboardBlock.isPickingTextFile}:${clipboardBlock.canReadFileText}:${clipboardBlock.isReadingFileText}:${clipboardBlock.fileTextError ?? ''}`,
   })
@@ -925,6 +946,12 @@ export function GlobalLauncherHost() {
 
 
   const beginDrag = useGlobalLauncherNativeDrag(standaloneLauncher)
+  const backdropPointerDownRef = useRef(false)
+  const beginResize = useCallback((direction: LauncherWindowResizeDirection) => {
+    void startCurrentLauncherWindowResize(direction).catch((error) => {
+      console.warn('[hiven] Failed to resize launcher window:', error)
+    })
+  }, [])
 
   // The launcher is always horizontally centered. In the standalone window the
   // window itself is positioned natively (see `center_launcher_window`); here
@@ -957,9 +984,17 @@ export function GlobalLauncherHost() {
         zIndex: 1100,
       }}
       aria-hidden={!open}
+      onPointerDownCapture={(event) => {
+        // Native edge resize can finish with a click retargeted to the gutter.
+        // Dismiss only an intentional background click, not that drag's end.
+        backdropPointerDownRef.current = event.button === 0 && event.target === event.currentTarget
+      }}
+      onPointerCancel={() => { backdropPointerDownRef.current = false }}
       onClick={(event) => {
+        const startedOnBackdrop = backdropPointerDownRef.current
+        backdropPointerDownRef.current = false
         if (!open) return
-        if (event.target === event.currentTarget) closeLauncher()
+        if (startedOnBackdrop && event.target === event.currentTarget) closeLauncher()
       }}
     >
       <GlobalLauncherPanel
@@ -977,6 +1012,7 @@ export function GlobalLauncherHost() {
         focusSearchInputAfterBack={focusSearchInputAfterBack}
         surfaceFrame={surfaceFrame}
         activeSurfaceFrame={activeSurfaceFrame}
+        surfaceFillsWindow={resizableSurface}
         leaveSurface={leaveSurface}
         itemPermissionFrame={itemPermissionFrame}
         cancelItemPermissionPrompt={cancelItemPermissionPrompt}
@@ -1031,6 +1067,7 @@ export function GlobalLauncherHost() {
         expandSelectedObjectAction={() => objectActionControllerRef.current?.expand()}
         executeSelectedObjectAction={(keepOpen) => objectActionControllerRef.current?.execute(keepOpen)}
       />
+      {open && resizableSurface && <WindowResizeHandles inset={8} onResizeStart={beginResize} />}
     </div>
   )
 }

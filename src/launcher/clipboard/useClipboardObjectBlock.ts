@@ -20,6 +20,7 @@ import {
 import {
   clearPendingObjectBlock,
   consumePendingObjectBlock,
+  peekPendingObjectBlock,
   setPendingObjectBlock,
   subscribePendingObjectBlock,
 } from './pendingObjectBlock'
@@ -62,7 +63,7 @@ export type ClipboardObjectBlockState = {
   handleBackspace: (queryEmpty: boolean) => boolean
   attachHintAsBlock: () => void
   attachQueryAsBlock: (text: string) => void
-  markBlockConsumed: () => void
+  markBlockConsumed: (options?: { preservePending?: boolean }) => void
   canRestorePreviousMaterial: boolean
   restorePreviousMaterial: () => void
   canEditText: boolean
@@ -393,17 +394,26 @@ export function useClipboardObjectBlock(params: {
    * action doesn't clear it), so the very next open would silently re-attach
    * the same block — reproducing the "still has my old input" complaint.
    */
-  const markBlockConsumed = useCallback(() => {
+  const markBlockConsumed = useCallback((options?: { preservePending?: boolean }) => {
+    // A fresh native open can arrive while React still considers a paste-hidden
+    // host open. Keep a waiting handoff's original envelope, TTL and persistence.
+    const pending = options?.preservePending ? peekPendingObjectBlock() : null
     // Completion must also cancel history/tool handoff recovery after a native hide.
     userDismissedRef.current = true
-    publishMaterial(discardCurrentMaterial(materialRef.current))
-    clearPendingObjectBlock()
+    // A new session may receive a backup already delivered to the old session.
+    // Reset that receipt only when preserving a fresh pending handoff.
+    publishMaterial(pending ? replaceCurrentMaterial(null) : discardCurrentMaterial(materialRef.current))
+    if (!options?.preservePending) clearPendingObjectBlock()
     clearExitTimer()
     setHint(null)
     setIsExiting(false)
     const snapshot = getLastClipboardSnapshot()
     if (snapshot) dismissClipboardBlock(snapshot)
-  }, [clearExitTimer, publishMaterial])
+    if (pending) {
+      userDismissedRef.current = false
+      applyHandoffBlock(pending)
+    }
+  }, [applyHandoffBlock, clearExitTimer, publishMaterial])
 
   /**
    * Handle Backspace when query is empty: remove the object block in one press

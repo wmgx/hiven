@@ -126,6 +126,7 @@ function session(initial = fileBlock(), options = {}) {
     } },
     '../../workspace/launcher/perf': { launcherPerfNow: () => 0, logLauncherPerfDuration: noop },
     '../../workspace/telemetry': { TelemetryEvents: {}, trackBehavior: noop },
+    '../../workspace/pasteRecovery': { checkPendingPasteRecovery: noop },
   }).useClipboardObjectBlock
   let open = true
   const picker = options.picker ? {
@@ -136,6 +137,78 @@ function session(initial = fileBlock(), options = {}) {
   } : undefined
   const render = () => runtime.render(() => hook({ open, readClipboard: options.readClipboard ?? forbiddenRead, filePicker: picker }))
   return { initial, reads, choices, get focusLeases() { return focusLeases }, get completed() { return completed }, render, close: () => { open = false; return render() }, reopen: () => { open = true; return render() }, unmount: runtime.unmount }
+}
+
+// A normal native reopen may reset an already-open, temporarily hidden host.
+// A waiting handoff keeps its original persistence and age through that reset.
+const pendingStorageKey = 'hiven-pending-object-block'
+{
+  const test = session(textBlock('old input', 'query'))
+  let state = test.render()
+  const next = textBlock('fresh waiting input', 'tool-result')
+  pending.clearPendingObjectBlock()
+  pending.setPendingObjectBlock(next, { silent: true })
+  assert.equal(storage.getItem(pendingStorageKey), null)
+  state.markBlockConsumed({ preservePending: true })
+  state = test.render()
+  assert.equal(state.block, next, 'new native session accepts memory-only waiting material')
+  assert.equal(state.canRestorePreviousMaterial, false, 'old session material is not a restore target')
+  assert.equal(storage.getItem(pendingStorageKey), null, 'reset cannot upgrade a memory-only handoff to persistence')
+  assert.equal(pending.peekPendingObjectBlock(), next)
+  test.unmount()
+}
+{
+  const test = session(textBlock('old input', 'query'))
+  let state = test.render()
+  const next = textBlock('persisted waiting input', 'tool-result')
+  pending.clearPendingObjectBlock()
+  const envelope = JSON.stringify({ block: next, createdAt: Date.now() - 20_000 })
+  storage.setItem(pendingStorageKey, envelope)
+  state.markBlockConsumed({ preservePending: true })
+  state = test.render()
+  assert.equal(state.block.id, next.id)
+  assert.equal(storage.getItem(pendingStorageKey), envelope, 'reset preserves the exact persisted envelope and original TTL')
+  assert.equal(state.canRestorePreviousMaterial, false)
+  test.unmount()
+}
+{
+  const initial = textBlock('already accepted input', 'tool-result')
+  const test = session(initial)
+  let state = test.render()
+  assert.equal(state.block, initial)
+  const envelope = storage.getItem(pendingStorageKey)
+  assert.ok(envelope)
+  state.markBlockConsumed({ preservePending: true })
+  state = test.render()
+  assert.equal(state.block, initial, 'new session can accept the current silent backup despite the previous handoff receipt')
+  assert.equal(state.canRestorePreviousMaterial, false)
+  assert.equal(storage.getItem(pendingStorageKey), envelope, 'reusing an accepted backup cannot refresh its TTL')
+  test.unmount()
+}
+{
+  const test = session(textBlock('old input', 'query'))
+  let state = test.render()
+  pending.clearPendingObjectBlock()
+  storage.setItem(pendingStorageKey, JSON.stringify({ block: textBlock('expired waiting input', 'tool-result'), createdAt: Date.now() - 61_000 }))
+  state.markBlockConsumed({ preservePending: true })
+  state = test.render()
+  assert.equal(state.block, null, 'preserving pending data does not revive an expired handoff')
+  assert.equal(pending.peekPendingObjectBlock(), null)
+  test.unmount()
+}
+{
+  const initial = textBlock('consumed input', 'tool-result')
+  const test = session(initial)
+  let state = test.render()
+  state.markBlockConsumed()
+  assert.equal(test.render().block, null)
+  assert.equal(pending.peekPendingObjectBlock(), null)
+  assert.equal(storage.getItem(pendingStorageKey), null)
+  pending.setPendingObjectBlock(initial)
+  state = test.render()
+  assert.equal(state.block, null, 'ordinary completion still rejects a duplicate handoff')
+  assert.equal(pending.peekPendingObjectBlock(), null)
+  test.unmount()
 }
 
 const exact = '\ufeff  {"hello":"世界"}\r\n\r\n  '

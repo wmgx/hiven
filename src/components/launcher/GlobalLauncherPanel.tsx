@@ -34,6 +34,7 @@ type GlobalLauncherPanelProps = {
   focusSearchInputAfterBack: () => void
   surfaceFrame: PluginSurfaceOpenTarget | null
   activeSurfaceFrame: GlobalLauncherActiveSurfaceFrame | null
+  surfaceFillsWindow?: boolean
   leaveSurface: () => void
   itemPermissionFrame: GlobalLauncherPermissionFrameState | null
   cancelItemPermissionPrompt: () => void
@@ -100,6 +101,7 @@ export function GlobalLauncherPanel({
   focusSearchInputAfterBack,
   surfaceFrame,
   activeSurfaceFrame,
+  surfaceFillsWindow = false,
   leaveSurface: _omit_leaveSurface,
   itemPermissionFrame,
   cancelItemPermissionPrompt,
@@ -300,6 +302,7 @@ export function GlobalLauncherPanel({
         settingsHeight={GLOBAL_LAUNCHER_SETTINGS_HEIGHT}
         surfaceFrame={surfaceFrame}
         activeSurfaceFrame={activeSurfaceFrame}
+        surfaceFillsWindow={surfaceFillsWindow}
         itemPermissionFrame={itemPermissionFrame}
         controllerState={controllerState}
         inputRef={inputRef}

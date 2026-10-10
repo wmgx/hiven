@@ -465,12 +465,12 @@ check('standalone launcher ignores in-app panel drag coordinates', () => {
 check('standalone launcher sizes the transparent window to the panel', () => {
   assertHas(
     files.tauriLib,
-    /if\s+!was_visible[\s\S]{0,360}set_size\(LogicalSize::new\(\s*compact_width,\s*compact_height/,
+    /if\s+!was_visible[\s\S]{0,650}set_size\(LogicalSize::new\(\s*compact_width,\s*compact_height/,
     'native launcher show path should compact the transparent window only before first show',
   )
   assertHas(
     files.globalLauncher,
-    /resizeCurrentLauncherWindow\(\{[\s\S]{0,80}width:[\s\S]{0,80}height:/,
+    /const size = [\s\S]{0,180}width: geometry\.width, height: geometry\.height[\s\S]{0,400}configureCurrentLauncherWindow/,
     'standalone launcher should resize the native window using the measured panel size',
   )
   assertHas(

@@ -132,7 +132,7 @@ assert.match(
 
 assert.match(
   files.globalLauncherWindowLifecycle,
-  /computeStandaloneLauncherGeometry[\s\S]*applyStandaloneLauncherGeometry[\s\S]*resizeCurrentLauncherWindow/,
+  /computeStandaloneLauncherGeometry[\s\S]*applyStandaloneLauncherGeometry[\s\S]*configureCurrentLauncherWindow/,
   'standalone launcher resize lifecycle should use a single geometry calculation for CSS and native size',
 )
 
@@ -144,8 +144,18 @@ function loadNativeLauncherWindow(bounds = { x: 100, y: 80, width: 600, height: 
   const launcherWindowModule = { exports: {} }
   const calls = []
   const reads = []
+  const invocations = []
+  const commands = {
+    invoke: async (command, args) => {
+      invocations.push([command, args])
+      if (command === 'get_launcher_window_resize_session') return { session: 3, revision: 5 }
+      return true
+    },
+  }
   const nativeBounds = { ...bounds }
   const nativeWindow = {
+    label: 'launcher',
+    startResizeDragging: async (direction) => { calls.push(['resize-drag', direction]) },
     scaleFactor: async () => { reads.push('scaleFactor'); return scale },
     outerPosition: async () => {
       reads.push('outerPosition')
@@ -172,6 +182,7 @@ function loadNativeLauncherWindow(bounds = { x: 100, y: 80, width: 600, height: 
     module: launcherWindowModule,
     exports: launcherWindowModule.exports,
     require(specifier) {
+      if (specifier === '@tauri-apps/api/core') return { invoke: (...args) => commands.invoke(...args) }
       if (specifier === '@tauri-apps/api/window') {
         reads.push('importWindow')
         return {
@@ -181,13 +192,20 @@ function loadNativeLauncherWindow(bounds = { x: 100, y: 80, width: 600, height: 
         }
       }
       if (specifier.endsWith('webNativeBridge')) return { isNativeDesktopRuntime: () => true }
+      if (specifier.endsWith('windowLabels')) return { LAUNCHER_WINDOW_LABEL: 'launcher' }
       return new Proxy({}, { get: () => () => {} })
     },
     window: { dispatchEvent: () => calls.push(['programmatic-move']) },
     CustomEvent: class {},
     console,
   })
-  return { resize: launcherWindowModule.exports.resizeCurrentLauncherWindow, calls, reads, nativeWindow, nativeBounds }
+  return {
+    resize: launcherWindowModule.exports.resizeCurrentLauncherWindow,
+    configure: launcherWindowModule.exports.configureCurrentLauncherWindow,
+    invalidate: launcherWindowModule.exports.invalidateCurrentLauncherWindowResize,
+    resizeDrag: launcherWindowModule.exports.startCurrentLauncherWindowResize,
+    calls, reads, nativeWindow, nativeBounds, commands, invocations,
+  }
 }
 
 function deferred() {
@@ -290,6 +308,70 @@ oldBoundsReply.resolve()
 await oldBounds
 assert.deepEqual(staleBounds.calls, callsBeforeOldBounds, 'superseded bounds must not resize or move the window')
 
+const surfaceMode = loadNativeLauncherWindow()
+await surfaceMode.configure({ resizable: true, minWidth: 704, minHeight: 504, width: 944, height: 644 })
+assert.deepEqual(JSON.parse(JSON.stringify(surfaceMode.invocations)), [
+  ['get_launcher_window_resize_session', null],
+  ['configure_launcher_window', { request: { resizable: true, minWidth: 704, minHeight: 504, width: 944, height: 644, session: 3, revision: 6 } }],
+], 'initial sizing and constraints must share one native session/revision command')
+await surfaceMode.configure({ resizable: true, minWidth: 724, minHeight: 524 })
+const constraintRequest = surfaceMode.invocations.at(-1)[1].request
+assert.equal(constraintRequest.width, undefined, 'constraint-only updates must preserve the user size')
+assert.equal(constraintRequest.height, undefined)
+assert.equal(constraintRequest.revision, 7, 'requests must advance even before a previous native revision is read back')
+await surfaceMode.configure({ resizable: false, compactWidth: true, height: 318 })
+assert.equal(surfaceMode.invocations.at(-1)[1].request.resizable, false, 'search must clear resizable mode')
+assert.equal(surfaceMode.invocations.at(-1)[1].request.minWidth, undefined, 'search must not retain surface minimums')
+assert.equal(surfaceMode.invocations.at(-1)[1].request.compactWidth, true, 'search width must use the native compact policy')
+assert.equal(surfaceMode.invocations.at(-1)[1].request.width, undefined, 'search must not reassert a stale webview width after native compact')
+await assert.rejects(surfaceMode.configure({ resizable: true, compactWidth: true, height: 318 }), /fixed window/)
+await assert.rejects(surfaceMode.configure({ resizable: false, compactWidth: true }), /explicit height/)
+await assert.rejects(surfaceMode.configure({ resizable: false, compactWidth: true, width: 944, height: 318 }), /cannot also specify a width/)
+
+for (const dimension of [0, -1, NaN, Infinity]) {
+  const invalidMode = loadNativeLauncherWindow()
+  await assert.rejects(invalidMode.configure({ resizable: true, minWidth: dimension }), /finite and positive/)
+  assert.deepEqual(invalidMode.invocations, [], 'invalid constraints must never reach native code')
+}
+
+const deferredMode = loadNativeLauncherWindow()
+const firstSessionStarted = deferred()
+const firstSessionReply = deferred()
+const invokeMode = deferredMode.commands.invoke
+let firstSession = true
+deferredMode.commands.invoke = async (command, args) => {
+  if (command === 'get_launcher_window_resize_session' && firstSession) {
+    firstSession = false
+    firstSessionStarted.resolve()
+    return firstSessionReply.promise
+  }
+  return invokeMode(command, args)
+}
+const oldMode = deferredMode.configure({ resizable: true, width: 944, height: 644 })
+await firstSessionStarted.promise
+await deferredMode.configure({ resizable: false, width: 660, height: 318 })
+const invocationsBeforeOldSession = [...deferredMode.invocations]
+firstSessionReply.resolve({ session: 3, revision: 100 })
+assert.equal(await oldMode, false)
+assert.deepEqual(deferredMode.invocations, invocationsBeforeOldSession, 'a late old surface session must not submit a native mutation')
+
+const closedMode = loadNativeLauncherWindow()
+const closedSession = deferred()
+closedMode.commands.invoke = () => closedSession.promise
+const pendingClose = closedMode.configure({ resizable: true, width: 944, height: 644 })
+closedMode.invalidate()
+closedSession.resolve({ session: 3, revision: 5 })
+assert.equal(await pendingClose, false, 'close must cancel pending sizing before another frame is configured')
+assert.deepEqual(closedMode.calls, [], 'cancelled sizing must not signal a programmatic move')
+
+const wrongWindow = loadNativeLauncherWindow()
+wrongWindow.nativeWindow.label = 'plugin-surface:installed:history:panel'
+await wrongWindow.resizeDrag('SouthEast')
+assert.deepEqual(wrongWindow.calls, [], 'launcher resize handles must not resize independent surface windows')
+wrongWindow.nativeWindow.label = 'launcher'
+await wrongWindow.resizeDrag('SouthEast')
+assert.deepEqual(wrongWindow.calls, [['resize-drag', 'SouthEast']])
+
 assert.match(
   files.globalLauncherGeometry,
   /surfaceShell\?\.defaultWidth[\s\S]*launcherSettingsTarget[\s\S]*GLOBAL_LAUNCHER_SETTINGS_WIDTH/,
@@ -313,6 +395,53 @@ assert.match(
   /max-height:\s*var\(--launcher-body-max-height,\s*var\(--launcher-list-max-height\)\)/,
   'launcher body should accept geometry-owned body max height',
 )
+
+// Native resize can retarget the release click onto the transparent backdrop.
+// Execute the actual Host handlers so gesture ownership, not CSS, is covered.
+{
+  const path = 'src/launcher/hosts/GlobalLauncherHost.tsx'
+  const source = ts.createSourceFile(path, read(path), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+  let overlay
+  function visit(node) {
+    if (ts.isJsxOpeningElement(node) && node.attributes.getText(source).includes('global-launcher-overlay')) overlay = node
+    ts.forEachChild(node, visit)
+  }
+  visit(source)
+  assert.ok(overlay, 'launcher overlay must be present')
+  let closes = 0
+  const sandbox = vm.createContext({ open: true, backdropPointerDownRef: { current: false }, closeLauncher: () => { closes++ }, module: { exports: {} } })
+  const handlers = {}
+  for (const name of ['onPointerDownCapture', 'onPointerCancel', 'onClick']) {
+    const attribute = overlay.attributes.properties.find((entry) => ts.isJsxAttribute(entry) && entry.name.getText(source) === name)
+    assert.ok(attribute?.initializer && ts.isJsxExpression(attribute.initializer), `missing ${name} handler`)
+    const expression = attribute.initializer.expression.getText(source)
+    vm.runInContext(ts.transpileModule(`module.exports = (${expression})`, {
+      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    }).outputText, sandbox)
+    handlers[name] = sandbox.module.exports
+  }
+  const backdrop = {}, content = {}, handle = {}
+  const down = (target, button = 0) => handlers.onPointerDownCapture({ target, currentTarget: backdrop, button })
+  const click = (target) => handlers.onClick({ target, currentTarget: backdrop })
+  down(handle); click(backdrop)
+  assert.equal(closes, 0, 'native resize ending on the gutter must keep the launcher open')
+  down(content); click(backdrop)
+  assert.equal(closes, 0, 'selection from content to the backdrop is not a dismissal')
+  down(backdrop); click(backdrop)
+  assert.equal(closes, 1, 'an intentional backdrop click still dismisses')
+  click(backdrop)
+  assert.equal(closes, 1, 'a click consumes its gesture')
+  down(backdrop); handlers.onPointerCancel(); click(backdrop)
+  assert.equal(closes, 1, 'pointer cancellation revokes dismissal')
+  down(backdrop); down(handle); click(backdrop)
+  assert.equal(closes, 1, 'a newer pointerdown replaces the previous gesture')
+  down(backdrop, 2); click(backdrop)
+  assert.equal(closes, 1, 'secondary pointer buttons do not dismiss')
+  down(backdrop); click(content); click(backdrop)
+  assert.equal(closes, 1, 'ending inside consumes the gesture without dismissing')
+  down(backdrop); sandbox.open = false; click(backdrop); sandbox.open = true; click(backdrop)
+  assert.equal(closes, 1, 'a closed host cannot replay a prior backdrop gesture')
+}
 
 if (failures.length > 0) {
   console.error(`global launcher window height checks failed (${failures.length}):`)

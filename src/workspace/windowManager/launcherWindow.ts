@@ -28,6 +28,7 @@ export type RestoreForegroundMode = 'auto' | 'never' | 'force'
 export async function hideLauncherWindow(options?: {
   restoreForeground?: RestoreForegroundMode
 }): Promise<void> {
+  invalidateCurrentLauncherWindowResize()
   if (!isNativeDesktopRuntime()) return
   await invoke('hide_launcher_window', {
     restoreForeground: options?.restoreForeground ?? 'auto',
@@ -70,6 +71,53 @@ export async function onCurrentLauncherWindowMoved(
 }
 
 let latestLauncherResize = 0
+let latestLauncherConfiguration = 0
+let lastLauncherNativeRevision = 0
+
+export type LauncherWindowConfiguration = {
+  resizable: boolean
+  /** Search/controller frames use the native monitor's normal launcher width. */
+  compactWidth?: boolean
+  minWidth?: number
+  minHeight?: number
+}
+
+/** Revoke pending geometry work immediately on surface change or dismissal. */
+export function invalidateCurrentLauncherWindowResize(): void {
+  latestLauncherResize += 1
+  latestLauncherConfiguration += 1
+}
+
+export async function configureCurrentLauncherWindow(
+  configuration: LauncherWindowConfiguration & { width?: number; height?: number },
+  isCurrent: () => boolean = () => true,
+): Promise<boolean> {
+  for (const dimension of [configuration.width, configuration.height, configuration.minWidth, configuration.minHeight]) {
+    if (dimension !== undefined && (!Number.isFinite(dimension) || dimension <= 0)) {
+      throw new RangeError('Launcher window dimensions must be finite and positive')
+    }
+  }
+  if (configuration.compactWidth && (configuration.resizable || configuration.height === undefined)) {
+    throw new RangeError('Compact launcher sizing requires a fixed window and explicit height')
+  }
+  if (configuration.compactWidth && configuration.width !== undefined) {
+    throw new RangeError('Compact launcher sizing cannot also specify a width')
+  }
+  if (!configuration.compactWidth && (configuration.width === undefined) !== (configuration.height === undefined)) {
+    throw new RangeError('Launcher window width and height must be supplied together')
+  }
+  if (!isNativeDesktopRuntime()) return false
+  const revision = ++latestLauncherConfiguration
+  const session = await invoke<{ session: number; revision: number }>('get_launcher_window_resize_session')
+  if (revision !== latestLauncherConfiguration || !isCurrent()) return false
+  lastLauncherNativeRevision = Math.max(lastLauncherNativeRevision, session.revision) + 1
+  // The private native command validates the caller, session and revision again
+  // on its main thread, including requests racing a native close/reopen.
+  window.dispatchEvent(new CustomEvent(LAUNCHER_PROGRAMMATIC_MOVE_EVENT))
+  return invoke<boolean>('configure_launcher_window', {
+    request: { ...configuration, session: session.session, revision: lastLauncherNativeRevision },
+  })
+}
 
 export async function resizeCurrentLauncherWindow(size: { width: number; height: number }): Promise<void> {
   if (!Number.isFinite(size.width) || size.width <= 0 || !Number.isFinite(size.height) || size.height <= 0) {
@@ -116,6 +164,16 @@ export async function startCurrentLauncherWindowDrag(): Promise<void> {
   if (!isNativeDesktopRuntime()) return
   const { getCurrentWindow } = await import('@tauri-apps/api/window')
   await getCurrentWindow().startDragging()
+}
+
+export type LauncherWindowResizeDirection = 'North' | 'South' | 'East' | 'West' | 'NorthEast' | 'NorthWest' | 'SouthEast' | 'SouthWest'
+
+export async function startCurrentLauncherWindowResize(direction: LauncherWindowResizeDirection): Promise<void> {
+  if (!isNativeDesktopRuntime()) return
+  const { getCurrentWindow } = await import('@tauri-apps/api/window')
+  const win = getCurrentWindow()
+  if (win.label !== LAUNCHER_WINDOW_LABEL) return
+  await win.startResizeDragging(direction)
 }
 
 export async function restoreCurrentLauncherOverlayWindow(options: { hide?: boolean } = {}): Promise<void> {

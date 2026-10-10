@@ -1,10 +1,12 @@
-import { useCallback, useLayoutEffect, useRef, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
+import { useCallback, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
 import type { LauncherHostSurfaceTarget } from '../../store'
-import { onCurrentLauncherWindowFocusChanged, resizeCurrentLauncherWindow, startCurrentLauncherWindowDrag } from '../../workspace/windowManager/launcherWindow'
+import { configureCurrentLauncherWindow, invalidateCurrentLauncherWindowResize, onCurrentLauncherWindowFocusChanged, startCurrentLauncherWindowDrag } from '../../workspace/windowManager/launcherWindow'
+import type { PluginUiSurfaceContribution } from '../../workspace/pluginTypes'
 import { clearStandaloneLauncherBlurDevtoolsSuppress, launcherNativeDialogFocus, shouldKeepLauncherOpenOnBlur } from '../../workspace/launcherBlurGuard'
 import { applyStandaloneLauncherGeometry, computeStandaloneLauncherGeometry } from './GlobalLauncherLayout'
 import { logLauncherPerf } from '../../workspace/launcher/perf'
 import { observePasteRecoveryFocus, pasteRecoveryFocus } from '../../workspace/pasteRecovery'
+import { LAUNCHER_NEW_SESSION_EVENT } from '../../workspace/launcherWindowEvents'
 
 const launcherFocusLease = {
   isActive: () => launcherNativeDialogFocus.isActive() || pasteRecoveryFocus.isActive(),
@@ -15,9 +17,7 @@ const launcherFocusLease = {
   },
 }
 
-type SurfaceShellConfig = {
-  closeOnBlur?: boolean
-} | undefined
+type SurfaceShellConfig = PluginUiSurfaceContribution['shell']
 
 type LauncherSettingsTarget = unknown
 
@@ -271,6 +271,7 @@ export function useStandaloneLauncherResize({
   hostSurfaceTarget,
   launcherSettingsTarget,
   surfaceShell,
+  surfaceKey,
   visibleFilteredLength,
   /** Stable primitive signature for frame changes — NOT a new object every render. */
   controllerResizeKey,
@@ -281,6 +282,8 @@ export function useStandaloneLauncherResize({
   hostSurfaceTarget: LauncherHostSurfaceTarget | null
   launcherSettingsTarget: LauncherSettingsTarget
   surfaceShell: SurfaceShellConfig
+  /** Stable surface instance, independent of input and controller changes. */
+  surfaceKey: string | null
   visibleFilteredLength: number
   controllerResizeKey: string
 }) {
@@ -288,10 +291,46 @@ export function useStandaloneLauncherResize({
   // so sizeKey === lastSizeKey was always false → native resize every keystroke.
   const lastSizeKeyRef = useRef('')
   const initialWindowWidthRef = useRef<number | null>(null)
+  const activeResizableSurfaceRef = useRef<string | null>(null)
+  const initializedResizableSurfaceRef = useRef(false)
+  const [nativeOpenVersion, setNativeOpenVersion] = useState(0)
+  const resizableSurfaceKey = !hostSurfaceTarget && !launcherSettingsTarget && surfaceShell?.resizable === true
+    ? surfaceKey
+    : null
+  // Input/results affect auto-sized search frames. A tool whose size belongs
+  // to the user must not re-enter this effect on every keystroke or re-render.
+  const contentResizeKey = resizableSurfaceKey ? '' : controllerResizeKey
+  const contentVisibleLength = resizableSurfaceKey ? 0 : visibleFilteredLength
+  const defaultWidth = surfaceShell?.defaultWidth
+  const defaultHeight = surfaceShell?.defaultHeight
+  const minWidth = surfaceShell?.minWidth
+  const minHeight = surfaceShell?.minHeight
+  const shellPresent = surfaceShell != null
+  const compactWidth = !hostSurfaceTarget && !launcherSettingsTarget && !surfaceKey && !shellPresent
+
+  useLayoutEffect(() => {
+    if (!standaloneLauncher) return
+    const resetForNativeOpen = () => {
+      invalidateCurrentLauncherWindowResize()
+      lastSizeKeyRef.current = ''
+      initialWindowWidthRef.current = null
+      activeResizableSurfaceRef.current = null
+      initializedResizableSurfaceRef.current = false
+      setNativeOpenVersion((version) => version + 1)
+    }
+    window.addEventListener(LAUNCHER_NEW_SESSION_EVENT, resetForNativeOpen)
+    return () => window.removeEventListener(LAUNCHER_NEW_SESSION_EVENT, resetForNativeOpen)
+  }, [standaloneLauncher])
 
   useLayoutEffect(() => {
     if (!open || !standaloneLauncher) return
     if (!isTauriRuntime()) return
+
+    if (activeResizableSurfaceRef.current !== resizableSurfaceKey) {
+      activeResizableSurfaceRef.current = resizableSurfaceKey
+      initializedResizableSurfaceRef.current = false
+      lastSizeKeyRef.current = ''
+    }
 
     let disposed = false
     let frameId: number
@@ -313,16 +352,36 @@ export function useStandaloneLauncherResize({
         panel,
         hostSurfaceTarget,
         launcherSettingsTarget,
-        surfaceShell,
+        surfaceShell: shellPresent ? { defaultWidth, defaultHeight, minWidth, minHeight, resizable: Boolean(resizableSurfaceKey) } : undefined,
         currentWindowWidth: initialWindowWidth,
       })
       applyStandaloneLauncherGeometry(panel, geometry)
 
-      const sizeKey = `${geometry.width}:${geometry.height}`
+      const resizable = resizableSurfaceKey !== null
+      const sizeKey = resizable
+        ? `${resizableSurfaceKey}:${geometry.minWidth}:${geometry.minHeight}`
+        : compactWidth
+        ? `compact:${geometry.height}`
+        : `auto:${geometry.width}:${geometry.height}`
       if (sizeKey === lastSizeKeyRef.current) return
-      lastSizeKeyRef.current = sizeKey
-      logLauncherPerf('resize:native-window', { width: geometry.width, height: geometry.height })
-      void resizeCurrentLauncherWindow({ width: geometry.width, height: geometry.height })
+      const size = compactWidth
+        ? { compactWidth: true, height: geometry.height }
+        : resizable && initializedResizableSurfaceRef.current
+        ? {}
+        : { width: geometry.width, height: geometry.height }
+      logLauncherPerf('resize:native-window', { ...size, resizable })
+      void configureCurrentLauncherWindow({
+        resizable,
+        minWidth: resizable ? geometry.minWidth : undefined,
+        minHeight: resizable ? geometry.minHeight : undefined,
+        ...size,
+      }, () => !disposed)
+        .then((applied) => {
+          if (disposed) return
+          if (applied) lastSizeKeyRef.current = sizeKey
+          if (applied && resizable) initializedResizableSurfaceRef.current = true
+          if (!applied && lastSizeKeyRef.current === sizeKey) lastSizeKeyRef.current = ''
+        })
         .catch((error) => {
           if (!disposed && lastSizeKeyRef.current === sizeKey) lastSizeKeyRef.current = ''
           console.warn('[hiven] Failed to resize launcher window:', error)
@@ -333,13 +392,21 @@ export function useStandaloneLauncherResize({
     return () => {
       disposed = true
       window.cancelAnimationFrame(frameId)
+      invalidateCurrentLauncherWindowResize()
     }
   }, [
-    visibleFilteredLength,
+    contentVisibleLength,
+    nativeOpenVersion,
     open,
-    controllerResizeKey,
+    contentResizeKey,
     standaloneLauncher,
-    surfaceShell,
+    resizableSurfaceKey,
+    shellPresent,
+    compactWidth,
+    defaultWidth,
+    defaultHeight,
+    minWidth,
+    minHeight,
     hostSurfaceTarget,
     launcherSettingsTarget,
     panelRef,
@@ -350,6 +417,9 @@ export function useStandaloneLauncherResize({
     if (!open) {
       lastSizeKeyRef.current = ''
       initialWindowWidthRef.current = null
+      activeResizableSurfaceRef.current = null
+      initializedResizableSurfaceRef.current = false
+      invalidateCurrentLauncherWindowResize()
     }
   }, [open])
 }

@@ -51,26 +51,35 @@ export function buildGlobalLauncherPanelStyle({
     : standaloneLauncher
     ? 'calc(100vw - 24px)'
     : GLOBAL_LAUNCHER_PANEL_WIDTH
+  const fillsWindow = standaloneLauncher && !hostSurfaceTarget && !launcherSettingsTarget
+    && surfaceShell?.resizable === true
 
   return {
     background: 'var(--panel, #ffffff)',
     border: '1px solid var(--border, #ececed)',
     borderRadius: 'var(--radius, 10px)',
-    '--launcher-panel-width': hostSurfaceTarget
+    '--launcher-panel-width': fillsWindow
+      ? 'calc(100vw - 24px)'
+      : hostSurfaceTarget
       ? `${STANDALONE_SURFACE_MAX_WIDTH}px`
       : surfaceShell?.defaultWidth
       ? `${surfaceShell.defaultWidth}px`
       : launcherSettingsTarget
       ? `${GLOBAL_LAUNCHER_SETTINGS_WIDTH}px`
       : defaultPanelWidth,
-    width: hostSurfaceTarget
+    width: fillsWindow
+      ? 'calc(100vw - 24px)'
+      : hostSurfaceTarget
       ? validationBrowser ? `${STANDALONE_SURFACE_MAX_WIDTH}px` : `min(${STANDALONE_SURFACE_MAX_WIDTH}px, calc(100vw - 24px))`
       : surfaceShell?.defaultWidth
       ? validationBrowser ? `${surfaceShell.defaultWidth}px` : `min(${surfaceShell.defaultWidth}px, calc(100vw - 24px))`
       : launcherSettingsTarget
       ? validationBrowser ? `${GLOBAL_LAUNCHER_SETTINGS_WIDTH}px` : `min(${GLOBAL_LAUNCHER_SETTINGS_WIDTH}px, calc(100vw - 24px))`
       : undefined,
-    maxHeight: hostSurfaceTarget
+    height: fillsWindow ? 'calc(100vh - 24px)' : undefined,
+    maxHeight: fillsWindow
+      ? 'calc(100vh - 24px)'
+      : hostSurfaceTarget
       ? `min(${STANDALONE_SURFACE_MAX_HEIGHT}px, calc(100vh - 24px))`
       : surfaceShell?.defaultHeight
       ? `min(${surfaceShell.defaultHeight}px, calc(100vh - 24px))`

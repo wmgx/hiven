@@ -1,8 +1,6 @@
 import { useAppStore, type PluginSurfaceOpenTarget } from '../store'
-import { pluginRegistry } from './pluginRegistry'
-import { resizeCurrentLauncherWindow, showLauncherWindow } from './windowManager/launcherWindow'
+import { showLauncherWindow } from './windowManager/launcherWindow'
 import { LAUNCHER_WINDOW_LABEL } from './windowManager/windowLabels'
-import type { PluginDefinition } from './pluginTypes'
 import { isNativeDesktopRuntime } from './webNativeBridge'
 import {
   getPluginSurfaceShortcutPresentation,
@@ -11,8 +9,6 @@ import {
 
 const PENDING_OPEN_KEY = 'hiven-plugin-surface-open-request'
 const MAX_PENDING_AGE_MS = 30_000
-const STANDALONE_LAUNCHER_VERTICAL_PADDING = 24
-const STANDALONE_LAUNCHER_HORIZONTAL_PADDING = 24
 
 type PendingOpenRequest = {
   target: PluginSurfaceOpenTarget
@@ -91,10 +87,8 @@ export async function requestOpenPluginSurfaceTool(target: PluginSurfaceOpenTarg
     return
   }
 
-  if (isLauncherWindowRuntime()) {
-    await preSizeCurrentLauncherWindowForPluginSurface(target)
-  }
-
+  // The launcher lifecycle applies the target's initial geometry after it owns
+  // the surface. Resizing here can race a newer open or a user-sized tool.
   await showLauncherWindow()
   try {
     const { emitTo } = await import('@tauri-apps/api/event')
@@ -114,35 +108,4 @@ export function isPluginSurfaceOpenTarget(value: unknown): value is PluginSurfac
     typeof target.surfaceId === 'string' &&
     target.surfaceId.length > 0
   )
-}
-
-
-async function preSizeCurrentLauncherWindowForPluginSurface(target: PluginSurfaceOpenTarget): Promise<void> {
-  // Pre-size only when this code is already running in the launcher window.
-  // Other webviews must not call current-window resizing, because that
-  // would resize the caller window instead of the launcher.
-  const shell = resolveSurfaceShell(target)
-  if (!shell) return
-  try {
-    await resizeCurrentLauncherWindow({
-      width: Math.ceil((shell.defaultWidth ?? 660) + STANDALONE_LAUNCHER_HORIZONTAL_PADDING),
-      height: Math.ceil((shell.defaultHeight ?? 480) + STANDALONE_LAUNCHER_VERTICAL_PADDING),
-    })
-  } catch {
-    // Non-critical: window will resize later via useLayoutEffect fallback.
-  }
-}
-
-function isLauncherWindowRuntime(): boolean {
-  try {
-    return new URLSearchParams(window.location.search).get('window') === 'launcher'
-  } catch {
-    return false
-  }
-}
-
-function resolveSurfaceShell(target: PluginSurfaceOpenTarget): { defaultWidth?: number; defaultHeight?: number } | null {
-  const def = pluginRegistry.getPluginDefinition(target.pluginId, target.source) as PluginDefinition<unknown> | undefined
-  const surface = def?.ui?.surfaces?.find((s) => s.id === target.surfaceId)
-  return surface?.shell ?? null
 }

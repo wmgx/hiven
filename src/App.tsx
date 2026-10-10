@@ -18,7 +18,7 @@ import { installAppHotkeys } from './hotkeys/appHotkeys'
 import { installQuickEditorHotkeys } from './hotkeys/quickEditor'
 import { consumePendingPluginSurfaceOpenTarget, isPluginSurfaceOpenTarget, openLauncherHostedPluginSurface } from './workspace/pluginSurfaceOpenRequest'
 import { LAUNCHER_HOST_SURFACE_OPEN_EVENT, consumePendingLauncherHostSurfaceOpen, isLauncherHostSurfaceOpenRequest, isLauncherHostSurfaceTarget, openLauncherHostSurfaceLocally, openLauncherHostSurfaceRequestLocally } from './workspace/launcherHostSurfaceBridge'
-import { LAUNCHER_PROGRAMMATIC_MOVE_EVENT } from './workspace/launcherWindowEvents'
+import { LAUNCHER_NEW_SESSION_EVENT, LAUNCHER_PROGRAMMATIC_MOVE_EVENT } from './workspace/launcherWindowEvents'
 import { onCurrentLauncherWindowMoved, setCurrentLauncherWindowPosition, type LauncherWindowMovedPosition } from './workspace/windowManager/launcherWindow'
 import {
   beginLauncherPerfOpenSession,
@@ -213,6 +213,10 @@ function LauncherRuntimeApp() {
       // Open the store *synchronously*. Awaiting rehydrate first left the panel
       // visible with no mounted search input, so native first-responder could not
       // land on a real caret until the user clicked.
+      // Paste temporarily hides the native window without closing the React
+      // host. A normal hotkey open still starts a fresh search session. Reset
+      // synchronously before delivering any explicitly pending new target.
+      window.dispatchEvent(new CustomEvent(LAUNCHER_NEW_SESSION_EVENT))
       const pendingHostSurfaceTarget = consumePendingLauncherHostSurfaceOpen()
       if (pendingHostSurfaceTarget) {
         openLauncherHostSurfaceRequestLocally(pendingHostSurfaceTarget)
