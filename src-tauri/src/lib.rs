@@ -37,6 +37,8 @@ pub mod keyboard_observation;
 mod linux_app_launch;
 #[cfg(target_os = "linux")]
 mod linux_x11_paste;
+#[cfg(target_os = "linux")]
+mod linux_x11_windows;
 
 const LAUNCHER_COMPACT_WIDTH: f64 = 660.0;
 const LAUNCHER_COMPACT_HEIGHT: f64 = 318.0;
@@ -733,6 +735,8 @@ async fn show_launcher_window(app: tauri::AppHandle, resume: Option<bool>) -> Re
             .run_on_main_thread(move || {
                 paste_recovery::invalidate_all();
                 if let Some(window) = app_clone.get_webview_window("launcher") {
+                    #[cfg(target_os = "linux")]
+                    linux_x11_windows::opened();
                     // Resume the current command at its existing size and position.
                     // Capture consumed the remembered target; retain it for a later paste.
                     remember_previous_foreground_app();
@@ -894,6 +898,9 @@ fn show_launcher_window_for_hotkey_with_event(
     let total_started_at = Instant::now();
     let app_clone = app.clone();
     app.run_on_main_thread(move || {
+        // Invalidate old focus completion before capturing this new intent.
+        #[cfg(target_os = "linux")]
+        linux_x11_windows::opening();
         // Every explicit open is a new intent, including a visible re-open.
         paste_recovery::invalidate_all();
         let main_thread_started_at = Instant::now();
@@ -948,6 +955,8 @@ fn show_launcher_window_for_hotkey_with_event(
                 }
             }
         };
+        #[cfg(target_os = "linux")]
+        linux_x11_windows::opened();
         if !was_visible {
             host_text_export::invalidate_window(&window);
         }
@@ -1220,6 +1229,8 @@ async fn hide_launcher_window(
 ) -> Result<(), String> {
     use tauri::Manager;
 
+    #[cfg(target_os = "linux")]
+    linux_x11_windows::closed(None);
     let mode = parse_restore_foreground_mode(restore_foreground.as_deref());
     let app_clone = app.clone();
     app.run_on_main_thread(move || {
@@ -1276,6 +1287,8 @@ fn hide_window_and_resolve_foreground_target(
                 }
             }
             if !keep_open {
+                #[cfg(target_os = "linux")]
+                if window.label() == "launcher" { linux_x11_windows::closed(None); }
                 host_text_export::invalidate_window(&window);
                 window.hide().map_err(|error| error.to_string())?;
                 if let Some(attempt) = attempt.as_ref() {
@@ -1358,9 +1371,15 @@ fn hide_window_and_resolve_foreground_target(
 fn attach_paste_window_events(window: &tauri::WebviewWindow) {
     let label = window.label().to_string();
     let instance = paste_recovery::register_window(&label, None);
+    #[cfg(target_os = "linux")]
+    let search_instance = (label == "launcher").then(linux_x11_windows::register_launcher);
     let export_window = window.clone();
     window.on_window_event(move |event| match event {
         tauri::WindowEvent::Focused(false) => {
+            #[cfg(target_os = "linux")]
+            if let Some(search_instance) = search_instance {
+                if !export_window.is_focused().unwrap_or(true) { linux_x11_windows::blurred(search_instance); }
+            }
             let expected_blur_consumed = paste_recovery::consume_blur(&label, instance);
             log_launcher_perf(
                 "native:paste-recovery.blur",
@@ -1376,10 +1395,19 @@ fn attach_paste_window_events(window: &tauri::WebviewWindow) {
                 paste_recovery::invalidate_window(&label, Some(instance));
             }
         }
+        #[cfg(target_os = "linux")]
+        tauri::WindowEvent::Focused(true) => {
+            if let Some(search_instance) = search_instance {
+                linux_x11_windows::regained_focus(search_instance,
+                    export_window.is_visible().unwrap_or(false), export_window.is_focused().unwrap_or(false));
+            }
+        }
         tauri::WindowEvent::CloseRequested { .. } => {
             host_text_export::invalidate_window(&export_window);
             paste_recovery::invalidate_window(&label, Some(instance));
             if label == "launcher" {
+                #[cfg(target_os = "linux")]
+                linux_x11_windows::closed(search_instance);
                 if let Ok(mut state) = launcher_resize_state().lock() { state.reset(false); }
             }
         }
@@ -1387,6 +1415,8 @@ fn attach_paste_window_events(window: &tauri::WebviewWindow) {
             host_text_export::invalidate_window(&export_window);
             paste_recovery::destroyed(&label, instance);
             if label == "launcher" {
+                #[cfg(target_os = "linux")]
+                linux_x11_windows::closed(search_instance);
                 if let Ok(mut state) = launcher_resize_state().lock() { state.reset(false); }
             }
         }
@@ -1494,6 +1524,8 @@ fn finish_paste_attempt(
             if attempt.needs_recovery() {
                 attempt.ensure_active()?;
                 if window.label() == "launcher" {
+                    #[cfg(target_os = "linux")]
+                    linux_x11_windows::opened();
                     show_launcher_window_without_app_activation(&window)?;
                 } else {
                     if attempt.was_hidden() {
@@ -1599,6 +1631,7 @@ async fn perform_owned_paste(
                 for_hide.ensure_active()?;
                 for_hide.mark_handoff();
                 if !keep_open {
+                    if window.label() == "launcher" { linux_x11_windows::closed(None); }
                     host_text_export::invalidate_window(&window);
                     window.hide().map_err(|error| error.to_string())?;
                     for_hide.mark_hidden();
@@ -4061,7 +4094,7 @@ fn activate_process(pid: u32) {
 #[cfg(not(target_os = "macos"))]
 fn activate_process(_pid: u32) {}
 
-// ─── Desktop windows / processes (macOS-first; other platforms return empty) ───
+// ─── Desktop windows / processes (macOS + explicit Linux X11 window search) ───
 
 #[derive(Clone, serde::Serialize)]
 struct DesktopWindow {
@@ -4578,6 +4611,64 @@ fn list_macos_desktop_windows_raw() -> Result<Vec<DesktopWindow>, String> {
     Ok(Vec::new())
 }
 
+#[derive(Clone, Copy, serde::Deserialize)]
+struct DesktopWindowSearchRequest {
+    explicit: bool,
+    session: u64,
+    instance: u64,
+}
+
+#[derive(serde::Serialize)]
+struct DesktopWindowSearchSession {
+    session: u64,
+    instance: u64,
+}
+
+/// Capability routing only: never contacts X11 or enumerates a desktop.
+#[tauri::command]
+fn get_desktop_window_platform() -> &'static str {
+    if cfg!(target_os = "macos") { "macos" }
+    else if cfg!(target_os = "linux") { "linux" }
+    else { "unsupported" }
+}
+
+#[tauri::command]
+fn get_desktop_window_search_session(window: tauri::WebviewWindow) -> Result<DesktopWindowSearchSession, String> {
+    if window.label() != "launcher" || !window.is_visible().unwrap_or(false) {
+        return Err("x11-window-expired".into());
+    }
+    #[cfg(target_os = "linux")]
+    { linux_x11_windows::session() }
+    #[cfg(not(target_os = "linux"))]
+    { Err("x11-window-unsupported".into()) }
+}
+
+#[tauri::command]
+fn release_desktop_window_search_session(window: tauri::WebviewWindow, request: DesktopWindowSearchRequest) -> Result<(), String> {
+    if window.label() != "launcher" { return Err("x11-window-expired".into()); }
+    #[cfg(target_os = "linux")]
+    { linux_x11_windows::release(&request) }
+    #[cfg(not(target_os = "linux"))]
+    { let _ = request; Ok(()) }
+}
+
+#[cfg(target_os = "linux")]
+#[tauri::command]
+async fn list_desktop_windows(
+    window: tauri::WebviewWindow,
+    query: Option<String>,
+    request: Option<DesktopWindowSearchRequest>,
+) -> Result<Vec<DesktopWindow>, String> {
+    let _ = query;
+    if window.label() != "launcher" || !window.is_visible().unwrap_or(false) {
+        return Err("x11-window-expired".into());
+    }
+    let request = request.ok_or_else(|| "x11-window-expired".to_string())?;
+    tokio::task::spawn_blocking(move || linux_x11_windows::list(request))
+        .await.map_err(|_| "x11-window-unavailable".to_string())?
+}
+
+#[cfg(not(target_os = "linux"))]
 #[tauri::command]
 fn list_desktop_windows(query: Option<String>) -> Result<Vec<DesktopWindow>, String> {
     let q = query
@@ -4595,10 +4686,13 @@ fn list_desktop_windows(query: Option<String>) -> Result<Vec<DesktopWindow>, Str
 /// Offline / open-path enrich: CG + batched Accessibility titles. Do not call per keystroke.
 #[tauri::command]
 fn list_desktop_windows_enriched() -> Result<Vec<DesktopWindow>, String> {
-    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(list_macos_desktop_windows_enriched)) {
+    #[cfg(target_os = "linux")]
+    { return Err("x11-window-unsupported".into()); }
+    #[cfg(not(target_os = "linux"))]
+    { match std::panic::catch_unwind(std::panic::AssertUnwindSafe(list_macos_desktop_windows_enriched)) {
         Ok(result) => result,
         Err(_) => Err("list_desktop_windows_enriched panicked".to_string()),
-    }
+    } }
 }
 
 fn find_desktop_window(id: &str) -> Result<DesktopWindow, String> {
@@ -4837,6 +4931,24 @@ fn focus_macos_desktop_window(window: &DesktopWindow) -> Result<(), String> {
     }
 }
 
+#[cfg(target_os = "linux")]
+#[tauri::command]
+async fn focus_desktop_window(
+    window: tauri::WebviewWindow,
+    id: String,
+    request: Option<DesktopWindowSearchRequest>,
+) -> Result<(), String> {
+    if window.label() != "launcher" || !window.is_visible().unwrap_or(false) {
+        return Err("x11-window-expired".into());
+    }
+    let request = request.ok_or_else(|| "x11-window-expired".to_string())?;
+    let previous_target = linux_x11_paste::snapshot("launcher").ok();
+    tokio::task::spawn_blocking(move || linux_x11_windows::focus(&id, request, || {
+        if let Some(target) = previous_target { linux_x11_paste::clear_target_if_current(&target); }
+    })).await.map_err(|_| "x11-window-unavailable".to_string())?
+}
+
+#[cfg(not(target_os = "linux"))]
 #[tauri::command]
 fn focus_desktop_window(id: String) -> Result<(), String> {
     #[cfg(not(target_os = "macos"))]
@@ -8012,6 +8124,9 @@ pub fn run() {
             cache_installed_app_icons,
             launch_installed_app,
             toggle_installed_app,
+            get_desktop_window_platform,
+            get_desktop_window_search_session,
+            release_desktop_window_search_session,
             list_desktop_windows,
             list_desktop_windows_enriched,
             focus_desktop_window,

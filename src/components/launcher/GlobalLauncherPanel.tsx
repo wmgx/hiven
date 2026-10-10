@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, type RefObject } from 'react'
+import { useCallback, useEffect, useMemo, useRef, type RefObject } from 'react'
 import { t, type Locale } from '../../i18n'
 import type { LauncherHostSurfaceTarget, PluginSurfaceOpenTarget } from '../../store'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
@@ -164,9 +164,14 @@ export function GlobalLauncherPanel({
   }, [controllerRef])
   const toggleLauncherFavorite = useAppStore((s) => s.toggleLauncherFavorite)
   const launcherFavoriteKeys = useAppStore((s) => s.launcherFavoriteKeys)
+  // X11 window tokens expire with the current search. Keep the rows searchable
+  // and executable, but exclude them from both pin controls and the shared handler.
+  const pinnableItemKeys = useMemo(() => new Set(
+    [...availableItemKeys].filter((key) => !key.startsWith('host.window:focus:native:x11:')),
+  ), [availableItemKeys])
   const handleToggleFavorite = useCallback((item: GlobalLauncherItem) => {
     const key = item.kind === 'domain' ? item.domainItem.systemKey : item.id
-    if (!key || !availableItemKeys.has(key)) return
+    if (!key || !pinnableItemKeys.has(key)) return
     const index = visibleFiltered.findIndex((candidate) => candidate.id === item.id)
     if (index >= 0) setSelectedIndex(index)
     try {
@@ -176,7 +181,7 @@ export function GlobalLauncherPanel({
     } catch {
       showToast(t(locale, 'palette.favoriteSaveFailed'), 'error')
     }
-  }, [availableItemKeys, launcherFavoriteKeys, locale, setSelectedIndex, toggleLauncherFavorite, visibleFiltered])
+  }, [pinnableItemKeys, launcherFavoriteKeys, locale, setSelectedIndex, toggleLauncherFavorite, visibleFiltered])
   const isFavoriteSelected = Boolean(
     selectedItem
       && launcherFavoriteKeys.includes(
@@ -328,7 +333,7 @@ export function GlobalLauncherPanel({
         onRenameSavedAction={handleRenameSavedAction}
         onDeleteSavedAction={handleDeleteSavedAction}
         favoriteKeys={launcherFavoriteKeys}
-        pinnableItemKeys={availableItemKeys}
+        pinnableItemKeys={pinnableItemKeys}
         onSettingsClose={() => {
           closeSettingsDialog()
           focusSearchInputAfterBack()

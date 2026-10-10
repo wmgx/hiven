@@ -197,8 +197,9 @@ export function desktopTargetToLauncherItem(
   options: ToLauncherItemOptions,
 ): LauncherItem {
   const locale = options.locale
+  const transientWindow = target.sourceId === 'host.window' && target.id.startsWith('host.window:focus:native:x11:')
   const usageKey = stableUsageKeyForTarget(target)
-  const recordUsage = shouldRecordUsage(target)
+  const recordUsage = !transientWindow && shouldRecordUsage(target)
   const providerBoost = clampProviderPriority(options.provider?.priority)
   const scoreBias = clampTargetScoreBias(target.scoreBias)
   const fallback = target.fallback === true
@@ -257,6 +258,7 @@ export function desktopTargetToLauncherItem(
             ? ['app-search']
             : undefined,
     recordUsage: recordUsage ? true : false,
+    experienceRecord: transientWindow ? false : undefined,
     legacyUsageKeys: recordUsage && usageKey && usageKey !== target.id ? [usageKey] : undefined,
     ranking,
     persistable: persistable || undefined,
@@ -264,7 +266,7 @@ export function desktopTargetToLauncherItem(
     execute: async () => {
       if (activate) {
         try {
-          console.info('[desktop-target:execute]', {
+          if (!transientWindow) console.info('[desktop-target:execute]', {
             id: target.id,
             sourceId: target.sourceId,
             kind: target.kind,
@@ -272,10 +274,10 @@ export function desktopTargetToLauncherItem(
             url: target.meta?.url ?? null,
           })
           await activate(target, { locale, surfaceId: 'global-launcher' })
-          console.info('[desktop-target:execute] ok', { id: target.id })
+          if (!transientWindow) console.info('[desktop-target:execute] ok', { id: target.id })
           return { ok: true as const }
         } catch (error) {
-          console.warn('[desktop-target:execute] error', {
+          if (!transientWindow) console.warn('[desktop-target:execute] error', {
             id: target.id,
             message: error instanceof Error ? error.message : String(error),
           })
@@ -285,7 +287,7 @@ export function desktopTargetToLauncherItem(
           }
         }
       }
-      console.warn('[desktop-target:execute] no activate handler', { id: target.id })
+      if (!transientWindow) console.warn('[desktop-target:execute] no activate handler', { id: target.id })
       return { ok: false as const, message: 'No activate handler' }
     },
   }

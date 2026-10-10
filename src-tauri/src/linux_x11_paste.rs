@@ -445,6 +445,18 @@ pub(crate) fn snapshot(surface: &str) -> PasteResult<Arc<PasteTarget>> {
         .ok_or_else(|| error("no target was captured before this surface opened"))
 }
 
+// A completed window switch only consumes the launcher target it started
+// with. Other surfaces and targets captured by a later open remain intact.
+pub(crate) fn clear_target_if_current(target: &Arc<PasteTarget>) {
+    if let Ok(mut targets) = targets().lock() {
+        remove_if_current(&mut targets, target);
+    }
+}
+
+fn remove_if_current<T>(targets: &mut SurfaceTargets<T>, target: &Arc<SurfaceTarget<T>>) {
+    if is_current(targets, target) { targets.remove(&target.surface); }
+}
+
 pub(crate) fn clear_targets() {
     if let Ok(mut targets) = targets().lock() {
         targets.clear();
@@ -728,6 +740,24 @@ mod tests {
             }),
         );
         assert!(registry["history"].captured.get());
+    }
+
+    #[test]
+    fn completed_switch_only_releases_the_matching_surface_capture() {
+        let old = target("launcher", 10);
+        let other = target("history", 20);
+        let newer = target("launcher", 30);
+        let mut registry = HashMap::from([
+            ("launcher".to_string(), old.clone()),
+            ("history".to_string(), other.clone()),
+        ]);
+        remove_if_current(&mut registry, &old);
+        assert!(!registry.contains_key("launcher"));
+        assert!(is_current(&registry, &other));
+        registry.insert("launcher".to_string(), newer.clone());
+        remove_if_current(&mut registry, &old);
+        assert!(is_current(&registry, &newer));
+        assert!(is_current(&registry, &other));
     }
 
     #[test]

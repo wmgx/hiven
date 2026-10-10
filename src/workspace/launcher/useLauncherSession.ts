@@ -16,7 +16,13 @@ import { resolveDisplaySubtitle, resolveDisplayTitle } from './display'
 import { createPluginShell } from '../pluginShell'
 import { getPluginPermissionSnapshot, usePluginPermissionStore } from '../pluginPermissions'
 import { resolvePluginSettingsSource } from './pluginSource'
-import { subscribeDesktopWindowsUpdated } from '../desktopControl/windows'
+import {
+  hasLinuxDesktopWindowSearch,
+  isExplicitWindowSearch,
+  releaseDesktopWindowSearch,
+  setDesktopWindowRootSearchEnabled,
+  subscribeDesktopWindowsUpdated,
+} from '../desktopControl/windows'
 import { getDesktopDocumentLauncherDynamicItems } from '../desktopTargets/collectDocumentLauncherItems'
 import { rankLauncherItems } from './ranking'
 import {
@@ -257,6 +263,8 @@ export function useLauncherSession({
   const hostQueryRef = useRef('')
   const documentQueryRef = useRef('')
   const requestCloseRef = useRef(requestClose)
+  const launcherOpenRef = useRef(open)
+  launcherOpenRef.current = open
   const prevControllerStateRef = useRef<LauncherControllerState | null>(null)
   const pluginAbortRef = useRef<AbortController | null>(null)
   const hostAbortRef = useRef<AbortController | null>(null)
@@ -329,6 +337,7 @@ export function useLauncherSession({
   }, [])
 
   const reset = useCallback(() => {
+    if (normalizedHostId === 'global-launcher') void releaseDesktopWindowSearch()
     queryRef.current = ''
     setQueryState('')
     selectedKeyRef.current = null
@@ -346,7 +355,34 @@ export function useLauncherSession({
     hostAbortRef.current?.abort()
     documentAbortRef.current?.abort()
     controllerRef.current?.reset()
-  }, [])
+  }, [normalizedHostId])
+
+  const windowSearchFrame = controllerState?.frames[controllerState.frames.length - 1]
+  const inWindowSearchCommand = windowSearchFrame?.kind === 'collect-input'
+    && windowSearchFrame.item.systemKey === 'host:window:switch-command'
+  const inRootWindowSearch = (!windowSearchFrame || windowSearchFrame.kind === 'list') && isExplicitWindowSearch(query)
+
+  useEffect(() => {
+    if (normalizedHostId !== 'global-launcher') return
+    setDesktopWindowRootSearchEnabled(open && (!windowSearchFrame || windowSearchFrame.kind === 'list'))
+    if (!open || (!inRootWindowSearch && !inWindowSearchCommand)) {
+      void releaseDesktopWindowSearch()
+    }
+  }, [inWindowSearchCommand, inRootWindowSearch, normalizedHostId, open, windowSearchFrame])
+
+  useEffect(() => {
+    if (normalizedHostId !== 'global-launcher') return
+    return () => {
+      const hadLinuxSearch = hasLinuxDesktopWindowSearch()
+      void releaseDesktopWindowSearch()
+      // Do not retain window titles in the hidden launcher/controller frames.
+      if (hadLinuxSearch) {
+        controllerRef.current?.reset()
+        setHostDynamicItems(hostDynamicItemsRef.current.filter((item) => !item.systemKey.startsWith('host.window:focus:native:x11:')))
+      }
+      setDesktopWindowRootSearchEnabled(false)
+    }
+  }, [normalizedHostId, open])
   useEffect(() => {
     if (!open) return
     const openedAt = launcherPerfNow()
@@ -446,6 +482,9 @@ export function useLauncherSession({
             setQueryState('')
           },
           onChange: (state) => {
+            if (normalizedHostId === 'global-launcher') {
+              setDesktopWindowRootSearchEnabled(launcherOpenRef.current && state.frames[state.frames.length - 1]?.kind === 'list')
+            }
             const prev = prevControllerStateRef.current
             if (prev && prev.busy === state.busy && prev.deliveryIntent === state.deliveryIntent && prev.error === state.error && prev.frames === state.frames) {
               return

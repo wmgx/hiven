@@ -1,4 +1,4 @@
-import type { Locale } from '../../i18n'
+import { pickLocale, type Locale } from '../../i18n'
 import { resolveInstalledAppIdByName } from '../appLauncher/hostAppLauncher'
 import type { LauncherExecuteResult, LauncherItem, LauncherSurfaceId } from '../launcher/types'
 import { scheduleIdleWork } from '../scheduleIdleWork'
@@ -48,8 +48,149 @@ const titleMemoryById = new Map<string, string>()
 const appIdMemoryByWindowId = new Map<string, string>()
 const appIdMemoryByPid = new Map<number, string>()
 
+type DesktopWindowPlatform = 'macos' | 'linux' | 'unsupported'
+type WindowSearchRequest = { explicit: true; session: number; instance: number }
+type LinuxWindowSearch = {
+  generation: number
+  request: Promise<WindowSearchRequest>
+  windows: DesktopWindow[] | null
+  fetchedAt: number
+  loading: Promise<DesktopWindow[]> | null
+}
+
+let platformPromise: Promise<DesktopWindowPlatform> | null = null
+let resolvedPlatform: DesktopWindowPlatform | null = null
+let linuxRootSearchEnabled = false
+let isDesktopWindowSearchVisible: () => boolean = () => false
+let linuxSearch: LinuxWindowSearch | null = null
+let linuxSearchGeneration = 0
+let linuxReleaseBarrier: Promise<void> = Promise.resolve()
+
+/** Pure platform information: this command never opens an X11 connection. */
+export function getDesktopWindowPlatform(): Promise<DesktopWindowPlatform> {
+  if (!isTauriRuntime()) return Promise.resolve('unsupported')
+  platformPromise ??= import('@tauri-apps/api/core')
+    .then(({ invoke }) => invoke<DesktopWindowPlatform>('get_desktop_window_platform'))
+    .catch(() => 'unsupported' as const)
+    .then((platform) => { resolvedPlatform = platform; return platform })
+  return platformPromise
+}
+
+/** The root query can stay in memory while another command is visible. */
+export function setDesktopWindowRootSearchEnabled(enabled: boolean): void {
+  const changed = linuxRootSearchEnabled !== enabled
+  linuxRootSearchEnabled = enabled
+  if (changed && enabled && resolvedPlatform === 'linux') notifyDesktopWindowsUpdated()
+}
+
+/** Host-owned live visibility; tool/settings/permission overlays can cover the root frame. */
+export function setDesktopWindowSearchVisibilityGuard(isVisible: () => boolean): void {
+  isDesktopWindowSearchVisible = isVisible
+}
+
+/** Linux only accepts an explicit window search, never ordinary text or close. */
+export function isExplicitWindowSearch(query: string): boolean {
+  return /^(?:window|窗口|切到)(?:$|[\s:：])/i.test(query.trim())
+}
+
+export function isLinuxWindowId(id: string): boolean {
+  return id.startsWith('x11:')
+}
+
+export function hasLinuxDesktopWindowSearch(): boolean {
+  return linuxSearch !== null
+}
+
+/** Invalidate locally before awaiting native release so late replies cannot revive a search. */
+export function releaseDesktopWindowSearch(): Promise<void> {
+  linuxSearchGeneration += 1
+  const previous = linuxSearch
+  linuxSearch = null
+  if (!previous) return linuxReleaseBarrier
+  return releaseLinuxSnapshot(previous)
+}
+
+function releaseLinuxSnapshot(previous: LinuxWindowSearch): Promise<void> {
+  previous.windows = null
+  linuxReleaseBarrier = linuxReleaseBarrier.then(async () => {
+    try {
+      const request = await previous.request
+      const { invoke } = await import('@tauri-apps/api/core')
+      await invoke('release_desktop_window_search_session', { request })
+    } catch {
+      // Native close/reopen also revokes the session. Never log a target/token.
+    }
+  })
+  return linuxReleaseBarrier
+}
+
+export function desktopWindowErrorMessage(error: unknown, locale: Locale): string {
+  const code = error instanceof Error ? error.message : String(error)
+  if (code.includes('x11-window-unsupported')) {
+    return pickLocale(locale, '窗口搜索仅支持 X11 桌面；当前会话不支持（包括 Wayland）。', 'Window search requires an X11 desktop. This session is unsupported, including Wayland.')
+  }
+  if (code.includes('x11-window-expired')) {
+    return pickLocale(locale, '窗口列表已过期，请重新搜索后选择。', 'The window list expired. Search again and choose a window.')
+  }
+  if (code.includes('x11-window-unavailable')) {
+    return pickLocale(locale, '该窗口已关闭、隐藏或不可用，请重新搜索。', 'This window was closed, hidden, or became unavailable. Search again.')
+  }
+  return pickLocale(locale, '无法切换到该窗口，请重新搜索后重试。', 'Could not switch to this window. Search again and retry.')
+}
+
+function linuxSearchIsCurrent(search: LinuxWindowSearch): boolean {
+  return linuxSearch === search && search.generation === linuxSearchGeneration
+}
+
+/** Called only from explicit root intent or the selected Switch Window command. */
+async function listLinuxWindows(): Promise<DesktopWindow[]> {
+  if (!isDesktopWindowSearchVisible()) return []
+  let search = linuxSearch
+  if (!search) {
+    const generation = linuxSearchGeneration
+    const request = linuxReleaseBarrier.then(async (): Promise<WindowSearchRequest> => {
+      if (generation !== linuxSearchGeneration) throw new Error('x11-window-expired')
+      const { invoke } = await import('@tauri-apps/api/core')
+      if (generation !== linuxSearchGeneration || !isDesktopWindowSearchVisible()) throw new Error('x11-window-expired')
+      const session = await invoke<{ session: number; instance: number }>('get_desktop_window_search_session')
+      return { explicit: true, ...session }
+    })
+    search = { generation, request, windows: null, fetchedAt: 0, loading: null }
+    linuxSearch = search
+  }
+  if (search.windows && Date.now() - search.fetchedAt < WINDOW_LIST_TTL_MS) return search.windows
+  if (search.loading) return search.loading
+  const current = search
+  const loading = (async () => {
+    const request = await current.request
+    if (!linuxSearchIsCurrent(current)) return []
+    const { invoke } = await import('@tauri-apps/api/core')
+    if (!linuxSearchIsCurrent(current) || !isDesktopWindowSearchVisible()) return []
+    const raw = await invoke<DesktopWindow[]>('list_desktop_windows', { query: null, request })
+    if (!linuxSearchIsCurrent(current) || !isDesktopWindowSearchVisible()) return []
+    // No enrichment, remembered title, app/PID cache, or background refresh on Linux.
+    current.windows = Array.isArray(raw) ? raw.filter((win) => isLinuxWindowId(win.id)) : []
+    current.fetchedAt = Date.now()
+    return current.windows
+  })()
+  current.loading = loading
+  try {
+    return await loading
+  } catch (error) {
+    if (linuxSearchIsCurrent(current)) {
+      // One shared failure invalidates this snapshot, not the user's intent.
+      // Every still-current query awaiting it must receive the same error.
+      linuxSearch = null
+      void releaseLinuxSnapshot(current)
+    }
+    throw error
+  } finally {
+    if (current.loading === loading) current.loading = null
+  }
+}
+
 function isTauriRuntime(): boolean {
-  return Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
+  return typeof window !== 'undefined' && Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
 }
 
 function isCacheFresh(cache: WindowListCache, now = Date.now()): boolean {
@@ -144,6 +285,7 @@ function rememberTitles(windows: DesktopWindow[]): void {
 }
 
 function resolveWindowAppId(win: DesktopWindow): string | undefined {
+  if (isLinuxWindowId(win.id)) return win.appId
   if (win.appId) return win.appId
   const byId = appIdMemoryByWindowId.get(win.id)
   if (byId) return byId
@@ -194,6 +336,7 @@ function titlesSignature(windows: DesktopWindow[]): string {
  * Prevents "App · 窗口 1" → real title remount flicker.
  */
 async function loadWindowsWithStableTitles(): Promise<DesktopWindow[]> {
+  if (await getDesktopWindowPlatform() !== 'macos') return []
   const { invoke } = await import('@tauri-apps/api/core')
   const raw = (await invoke('list_desktop_windows', { query: null })) as DesktopWindow[]
   let list = applyStableTitles(Array.isArray(raw) ? raw : [])
@@ -283,6 +426,8 @@ function scheduleDeferredWindowListLoad(delayMs = COLD_LOAD_DEFER_MS): void {
 export async function listDesktopWindowsCached(
   options: { force?: boolean; immediate?: boolean } = {},
 ): Promise<DesktopWindow[]> {
+  // This generic cache is also called on startup/empty search: never enumerate Linux here.
+  if (await getDesktopWindowPlatform() !== 'macos') return []
   const now = Date.now()
   if (options.force === true) {
     if (deferredListTimer != null) {
@@ -309,10 +454,13 @@ export async function listDesktopWindowsCached(
  */
 export function prefetchDesktopWindowsOnStartup(): void {
   if (!isTauriRuntime()) return
-  // Idle after boot — do not compete with plugin load / app index.
-  scheduleIdleWork(() => {
-    void listDesktopWindowsCached({ immediate: true })
-  }, 4000)
+  void getDesktopWindowPlatform().then((platform) => {
+    if (platform !== 'macos') return
+    // Idle after boot — do not compete with plugin load / app index.
+    scheduleIdleWork(() => {
+      void listDesktopWindowsCached({ immediate: true })
+    }, 4000)
+  })
 }
 
 /** Test helper: reset in-memory TTL cache. */
@@ -326,9 +474,22 @@ export function clearDesktopWindowListCache(): void {
   }
 }
 
-export async function focusDesktopWindow(id: string): Promise<void> {
+export async function focusDesktopWindow(id: string, locale: Locale = 'en'): Promise<void> {
   if (!isTauriRuntime()) throw new Error('Window focus is only available in the desktop runtime.')
   const { invoke } = await import('@tauri-apps/api/core')
+  if (isLinuxWindowId(id)) {
+    const search = linuxSearch
+    try {
+      if (!search || !search.windows?.some((win) => win.id === id)) throw new Error('x11-window-expired')
+      const request = await search.request
+      if (!linuxSearchIsCurrent(search) || !isDesktopWindowSearchVisible()) throw new Error('x11-window-expired')
+      await invoke('focus_desktop_window', { id, request })
+    } catch (error) {
+      if (search && linuxSearch === search) void releaseDesktopWindowSearch()
+      throw new Error(desktopWindowErrorMessage(error, locale))
+    }
+    return
+  }
   await invoke('focus_desktop_window', { id })
 }
 
@@ -341,8 +502,21 @@ export async function listSwitchableWindowsForFilter(
   locale: Locale,
   limit = QUERY_WINDOW_LIMIT,
 ): Promise<Array<{ win: DesktopWindow; title: string; subtitle: string; icon: string }>> {
+  const generation = linuxSearchGeneration
+  const platform = await getDesktopWindowPlatform()
   let windows: DesktopWindow[]
-  if (windowListCache && isCacheFresh(windowListCache)) {
+  if (platform === 'linux') {
+    if (generation !== linuxSearchGeneration) return []
+    try {
+      windows = await listLinuxWindows()
+    } catch (error) {
+      if (generation !== linuxSearchGeneration || !isDesktopWindowSearchVisible()) return []
+      throw error
+    }
+    if (generation !== linuxSearchGeneration) return []
+  } else if (platform !== 'macos') {
+    throw new Error('x11-window-unsupported')
+  } else if (windowListCache && isCacheFresh(windowListCache)) {
     windows = windowListCache.windows
   } else if (listInflight) {
     windows = await listInflight
@@ -408,11 +582,12 @@ function windowIcon(win: DesktopWindow): string {
   return 'AppWindow'
 }
 
-function buildFocusItem(win: DesktopWindow): LauncherItem {
+function buildFocusItem(win: DesktopWindow, locale: Locale, matchedQuery?: string): LauncherItem {
   const title = windowDisplayTitle(win)
   const subtitle = windowSubtitle(win)
   const listId = `host.window:focus:native:${win.id}`
-  const usageKey = win.appName
+  const transient = isLinuxWindowId(win.id)
+  const usageKey = !transient && win.appName
     ? `host:window:focus:app:${win.appName}`
     : null
   return {
@@ -424,18 +599,24 @@ function buildFocusItem(win: DesktopWindow): LauncherItem {
       subtitle,
       subtitleI18n: { en: subtitle, zh: subtitle },
       icon: windowIcon(win),
-      aliases: ['窗口', '切到', 'focus', 'window', win.appName, win.title, title].filter(Boolean) as string[],
+      // Linux has already matched the text after its explicit intent prefix.
+      // Keep that exact query as a transient alias so the shared host ranker
+      // does not drop the row when it rechecks the full prefixed query.
+      aliases: ['窗口', '切到', 'focus', 'window', win.appName, win.title, title,
+        ...(transient && matchedQuery ? [matchedQuery] : []),
+      ].filter(Boolean) as string[],
       kindLabel: 'Window',
       kindLabelI18n: { en: 'Window', zh: '窗口' },
     },
     behavior: { type: 'perform' },
     surfaces: ['global-launcher'],
     requiredCapabilities: ['desktop-windows'],
-    recordUsage: true,
+    recordUsage: !transient,
+    experienceRecord: transient ? false : undefined,
     legacyUsageKeys: usageKey ? [usageKey] : undefined,
     execute: async () => {
       try {
-        await focusDesktopWindow(win.id)
+        await focusDesktopWindow(win.id, locale)
         return { ok: true }
       } catch (error) {
         return { ok: false, message: error instanceof Error ? error.message : String(error) }
@@ -513,19 +694,50 @@ export async function getHostWindowLauncherDynamicItems({
   query,
   surfaceId,
   locale,
+  signal,
 }: {
   query: string
   surfaceId: LauncherSurfaceId
   locale: Locale
+  signal?: AbortSignal
 }): Promise<LauncherItem[]> {
   if (surfaceId !== 'global-launcher') return []
-
+  const generation = linuxSearchGeneration
+  const platform = await getDesktopWindowPlatform()
+  if (signal?.aborted) return []
   const { rest, mode } = stripWindowQueryPrefix(query)
   const q = normalizeQuery(query)
+  if (platform === 'linux' || platform === 'unsupported') {
+    if (!linuxRootSearchEnabled || !isDesktopWindowSearchVisible() || !isExplicitWindowSearch(query) || generation !== linuxSearchGeneration) return []
+    try {
+      if (platform === 'unsupported') throw new Error('x11-window-unsupported')
+      const windows = await listLinuxWindows()
+      if (!linuxRootSearchEnabled || !isDesktopWindowSearchVisible() || signal?.aborted || generation !== linuxSearchGeneration) return []
+      return windows.filter(isSwitchableDesktopWindow)
+        .filter((win) => windowMatchesFilter(win, rest, locale))
+        .slice(0, QUERY_WINDOW_LIMIT)
+        .map((win) => buildFocusItem(win, locale, query.trim()))
+    } catch (error) {
+      if (!linuxRootSearchEnabled || !isDesktopWindowSearchVisible() || signal?.aborted || generation !== linuxSearchGeneration) return []
+      const message = desktopWindowErrorMessage(error, locale)
+      return [{
+        systemKey: 'host:window:unavailable',
+        kind: 'host',
+        display: { title: message, titleI18n: { en: desktopWindowErrorMessage(error, 'en'), zh: desktopWindowErrorMessage(error, 'zh') }, icon: 'AppWindow' },
+        behavior: { type: 'perform' },
+        surfaces: ['global-launcher'],
+        directAnswer: {},
+        disabledReason: { code: 'window-search-unavailable', message },
+        recordUsage: false,
+        experienceRecord: false,
+        execute: async () => ({ ok: false, message }),
+      }]
+    }
+  }
   const windows = (await listDesktopWindowsCached()).filter(isSwitchableDesktopWindow)
 
   if (!q && mode === 'search') {
-    return windows.slice(0, EMPTY_QUERY_WINDOW_LIMIT).map(buildFocusItem)
+    return windows.slice(0, EMPTY_QUERY_WINDOW_LIMIT).map((win) => buildFocusItem(win, locale))
   }
 
   const filter = rest.trim()
@@ -536,5 +748,5 @@ export async function getHostWindowLauncherDynamicItems({
   if (mode === 'close') {
     return matched.map(buildCloseItem)
   }
-  return matched.map(buildFocusItem)
+  return matched.map((win) => buildFocusItem(win, locale))
 }

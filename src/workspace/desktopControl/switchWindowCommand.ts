@@ -13,6 +13,8 @@ import type {
 } from '../launcher/types'
 import {
   focusDesktopWindow,
+  getDesktopWindowPlatform,
+  desktopWindowErrorMessage,
   listSwitchableWindowsForFilter,
   type DesktopWindow,
 } from './windows'
@@ -23,7 +25,7 @@ function windowToChoice(entry: {
   title: string
   subtitle: string
   icon: string
-}): LauncherResultChoice {
+}, locale: LauncherSuggestContext['locale']): LauncherResultChoice {
   const { win, title, subtitle, icon } = entry
   return {
     id: `window:${win.id}`,
@@ -34,7 +36,7 @@ function windowToChoice(entry: {
     icon,
     primaryAction: async () => {
       try {
-        await focusDesktopWindow(win.id)
+        await focusDesktopWindow(win.id, locale)
         return { ok: true as const }
       } catch (error) {
         return {
@@ -50,8 +52,23 @@ async function loadWindowChoices(
   filter: string,
   locale: LauncherSuggestContext['locale'],
 ): Promise<LauncherResultChoice[]> {
-  const list = await listSwitchableWindowsForFilter(filter, locale)
-  return list.map(windowToChoice)
+  try {
+    const list = await listSwitchableWindowsForFilter(filter, locale)
+    return list.map((entry) => windowToChoice(entry, locale))
+  } catch (error) {
+    if (await getDesktopWindowPlatform() === 'macos') throw error
+    // Suggest failures are otherwise swallowed by the controller. Keep a clear,
+    // non-activating status row for unsupported sessions and expired snapshots.
+    const message = desktopWindowErrorMessage(error, locale)
+    return [{
+      id: 'window:unavailable',
+      title: message,
+      titleI18n: { en: desktopWindowErrorMessage(error, 'en'), zh: desktopWindowErrorMessage(error, 'zh') },
+      icon: 'AppWindow',
+      tone: 'muted',
+      primaryAction: async () => ({ ok: false, message }),
+    }]
+  }
 }
 
 /**
@@ -59,7 +76,7 @@ async function loadWindowChoices(
  * Second level uses collect-input + suggest — only windows, filterable.
  */
 export function getSwitchWindowHostItem(): LauncherItem {
-  return {
+  const item: LauncherItem = {
     systemKey: 'host:window:switch-command',
     kind: 'host',
     display: {
@@ -105,6 +122,10 @@ export function getSwitchWindowHostItem(): LauncherItem {
     surfaces: ['global-launcher'],
     requiredCapabilities: ['desktop-windows'],
     recordUsage: true,
+    prepare: async () => {
+      const platform = await getDesktopWindowPlatform()
+      return platform === 'macos' ? item : { ...item, prepare: undefined, recordUsage: false, experienceRecord: false }
+    },
     suggest: async (ctx: LauncherSuggestContext) => {
       const choices = await loadWindowChoices(ctx.inputText, ctx.locale)
       return { choices } satisfies LauncherOutput
@@ -137,6 +158,7 @@ export function getSwitchWindowHostItem(): LauncherItem {
       }
     },
   }
+  return item
 }
 
 export function isSwitchWindowCommandKey(systemKey: string): boolean {

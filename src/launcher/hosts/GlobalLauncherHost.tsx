@@ -9,6 +9,7 @@ import { buildGlobalLauncherItems, type GlobalLauncherItem } from '../../compone
 import { buildGlobalLauncherPanelStyle } from '../../components/launcher/GlobalLauncherLayout'
 import { usePluginPermissionStore } from '../../workspace/pluginPermissions'
 import { useLauncherSession } from '../../workspace/launcher/useLauncherSession'
+import { releaseDesktopWindowSearch, setDesktopWindowSearchVisibilityGuard } from '../../workspace/desktopControl/windows'
 import type { SelectableExtraRow } from '../../workspace/launcher/selectionPreserve'
 import { useGlobalLauncherSurfaceRegistry } from '../../components/launcher/GlobalLauncherSurfaceRegistry'
 import { useAutoCloseStandaloneLauncherOnBackgroundIdle, useCloseStandaloneLauncherOnBlur, useFocusGlobalLauncherSurfaceShell, useGlobalLauncherNativeDrag, useStandaloneLauncherResize } from '../../components/launcher/GlobalLauncherWindowLifecycle'
@@ -114,6 +115,19 @@ export function GlobalLauncherHost() {
   // Live query for suppress gate (session is declared below; ref stays current each render).
   const liveQueryRef = useRef('')
   const fileTextRootVisibleRef = useRef(false)
+  useEffect(() => {
+    setDesktopWindowSearchVisibilityGuard(() => {
+      const state = useAppStore.getState()
+      const settings = usePluginSettingsStore.getState().settingsDialogTarget
+      return state.globalLauncherOpen && fileTextRootVisibleRef.current &&
+        !state.pluginSurfaceToolTarget && !state.launcherHostSurfaceTarget &&
+        settings?.presentation !== 'global-launcher'
+    })
+    return () => {
+      setDesktopWindowSearchVisibilityGuard(() => false)
+      void releaseDesktopWindowSearch()
+    }
+  }, [])
   const clipboardBlock = useClipboardObjectBlock({
     open,
     readClipboard: readLauncherClipboard,
@@ -764,6 +778,12 @@ export function GlobalLauncherHost() {
     locale,
   })
   fileTextRootVisibleRef.current = !surfaceFrame && !itemPermissionFrame
+
+  useEffect(() => {
+    if (surfaceFrame || itemPermissionFrame || hostSurfaceTarget || launcherSettingsTarget) {
+      void releaseDesktopWindowSearch()
+    }
+  }, [hostSurfaceTarget, itemPermissionFrame, launcherSettingsTarget, surfaceFrame])
 
   // Reset synchronously on external closes, before the hidden WebView can throttle React.
   useEffect(() => useAppStore.subscribe((state, previous) => {

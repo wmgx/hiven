@@ -116,6 +116,7 @@
     "test:native-clipboard-read": "node scripts/test-native-clipboard-read.mjs",
     "test:plugin-clipboard-image-resource": "node scripts/test-plugin-clipboard-image-resource.mjs",
     "test:plugin-clipboard-image-read": "node scripts/test-plugin-clipboard-image-read.mjs",
+    "test:linux-window-search": "node scripts/test-linux-window-search.mjs",
     "test:global-launcher-quick-text": "node scripts/test-global-launcher-quick-text.mjs",
     "test:core-plugin-externalization": "node scripts/test-core-plugin-externalization.mjs",
     "test:launcher-identity": "node scripts/test-launcher-identity.mjs",
