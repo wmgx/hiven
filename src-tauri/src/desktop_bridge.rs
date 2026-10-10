@@ -587,9 +587,12 @@ fn route_validation_request(
                 "plugin_blob_prepare_png_export"
                     | "plugin_blob_commit_png_export"
                     | "plugin_blob_discard_png_export"
+                    | "prepare_host_text_export"
+                    | "commit_host_text_export"
+                    | "discard_host_text_export"
             ) {
                 // Browser tabs share the relay's native webview, so they cannot
-                // own its dialog leases. PNG export is desktop-only.
+                // own its dialog leases. Native exports are desktop-only.
                 (
                     403,
                     r#"{"error":"command requires a native webview"}"#.to_string(),
@@ -1239,12 +1242,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn png_export_commands_cannot_be_relayed_from_browser_tabs() {
+    fn native_export_commands_cannot_be_relayed_from_browser_tabs() {
         let token = super::validation_state().lock().unwrap().token.clone();
         for command in [
             "plugin_blob_prepare_png_export",
             "plugin_blob_commit_png_export",
             "plugin_blob_discard_png_export",
+            "prepare_host_text_export",
+            "commit_host_text_export",
+            "discard_host_text_export",
         ] {
             let body = serde_json::json!({
                 "id": "png-export-denied",

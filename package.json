@@ -221,6 +221,7 @@
     "test:launcher-output-recovery": "node scripts/test-launcher-output-recovery.mjs",
     "test:launcher-current-material": "node scripts/test-launcher-current-material.mjs",
     "test:current-text-delivery": "node scripts/test-current-text-delivery.mjs",
+    "test:current-text-export": "node scripts/test-current-text-export.mjs",
     "test:launcher-root-query-errors": "node scripts/test-launcher-root-query-errors.mjs",
     "test:formatter-xml": "node --experimental-strip-types scripts/test-formatter-xml.mts",
     "test:random-surface-parameters": "node scripts/test-random-surface-parameters.mjs",

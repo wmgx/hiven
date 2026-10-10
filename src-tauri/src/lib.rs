@@ -27,6 +27,7 @@ mod clipboard_privacy;
 mod paste_recovery;
 mod launcher_resize_state;
 mod plugin_png_export;
+mod host_text_export;
 mod text_material;
 pub mod desktop_bridge;
 pub mod desktop_capture;
@@ -947,6 +948,9 @@ fn show_launcher_window_for_hotkey_with_event(
                 }
             }
         };
+        if !was_visible {
+            host_text_export::invalidate_window(&window);
+        }
         log_launcher_perf(
             "native:get-or-create-window",
             started_at,
@@ -1221,6 +1225,7 @@ async fn hide_launcher_window(
     app.run_on_main_thread(move || {
         paste_recovery::invalidate_window("launcher", None);
         if let Some(window) = app_clone.get_webview_window("launcher") {
+            host_text_export::invalidate_window(&window);
             if let Err(error) = restore_launcher_previous_input_source() {
                 eprintln!("[hiven] Failed to restore launcher input source: {}", error);
             }
@@ -1271,6 +1276,7 @@ fn hide_window_and_resolve_foreground_target(
                 }
             }
             if !keep_open {
+                host_text_export::invalidate_window(&window);
                 window.hide().map_err(|error| error.to_string())?;
                 if let Some(attempt) = attempt.as_ref() {
                     attempt.mark_hidden();
@@ -1352,6 +1358,7 @@ fn hide_window_and_resolve_foreground_target(
 fn attach_paste_window_events(window: &tauri::WebviewWindow) {
     let label = window.label().to_string();
     let instance = paste_recovery::register_window(&label, None);
+    let export_window = window.clone();
     window.on_window_event(move |event| match event {
         tauri::WindowEvent::Focused(false) => {
             let expected_blur_consumed = paste_recovery::consume_blur(&label, instance);
@@ -1370,12 +1377,14 @@ fn attach_paste_window_events(window: &tauri::WebviewWindow) {
             }
         }
         tauri::WindowEvent::CloseRequested { .. } => {
+            host_text_export::invalidate_window(&export_window);
             paste_recovery::invalidate_window(&label, Some(instance));
             if label == "launcher" {
                 if let Ok(mut state) = launcher_resize_state().lock() { state.reset(false); }
             }
         }
         tauri::WindowEvent::Destroyed => {
+            host_text_export::invalidate_window(&export_window);
             paste_recovery::destroyed(&label, instance);
             if label == "launcher" {
                 if let Ok(mut state) = launcher_resize_state().lock() { state.reset(false); }
@@ -1590,6 +1599,7 @@ async fn perform_owned_paste(
                 for_hide.ensure_active()?;
                 for_hide.mark_handoff();
                 if !keep_open {
+                    host_text_export::invalidate_window(&window);
                     window.hide().map_err(|error| error.to_string())?;
                     for_hide.mark_hidden();
                 }
@@ -7960,6 +7970,9 @@ pub fn run() {
             plugin_png_export::plugin_blob_prepare_png_export,
             plugin_png_export::plugin_blob_commit_png_export,
             plugin_png_export::plugin_blob_discard_png_export,
+            host_text_export::prepare_host_text_export,
+            host_text_export::commit_host_text_export,
+            host_text_export::discard_host_text_export,
             install_plugin_dir,
             install_plugin_zip,
             install_plugin_zip_url,

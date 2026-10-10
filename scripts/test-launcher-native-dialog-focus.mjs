@@ -53,6 +53,7 @@ function fixture() {
     './GlobalLauncherLayout': {}, '../../workspace/launcher/perf': {},
     '@tauri-apps/api/window': nativeWindow,
     '../../workspace/pasteRecovery': recovery,
+    '../../workspace/launcherWindowEvents': { LAUNCHER_NEW_SESSION_EVENT: 'hiven:launcher-new-session' },
   })
   return {
     guard, lifecycle, recovery,

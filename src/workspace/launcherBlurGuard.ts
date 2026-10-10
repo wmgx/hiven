@@ -10,24 +10,27 @@
 
 let suppressStandaloneLauncherBlurUntil = 0
 
-const nativeDialogLeases = new Set<symbol>()
+const nativeDialogLeases = new Map<symbol, () => boolean>()
 const nativeDialogLeaseListeners = new Set<() => void>()
 
 /** A native dialog owns focus for its actual lifetime, including slow user selection. */
 export const launcherNativeDialogFocus = {
-  isActive: () => nativeDialogLeases.size > 0,
+  isActive: () => [...nativeDialogLeases.values()].some((isCurrent) => isCurrent()),
   subscribe: (listener: () => void) => {
     nativeDialogLeaseListeners.add(listener)
     return () => { nativeDialogLeaseListeners.delete(listener) }
   },
 }
 
-export function acquireLauncherNativeDialogFocus(): () => void {
+export function acquireLauncherNativeDialogFocus(isCurrent: () => boolean = () => true): () => void {
   const lease = Symbol('native-dialog')
-  nativeDialogLeases.add(lease)
+  nativeDialogLeases.set(lease, isCurrent)
   for (const listener of nativeDialogLeaseListeners) listener()
   return () => {
+    const belongsToCurrentSession = nativeDialogLeases.get(lease)?.()
     if (!nativeDialogLeases.delete(lease)) return
+    // A chooser from a closed session must not start a blur check in the new one.
+    if (!belongsToCurrentSession) return
     for (const listener of nativeDialogLeaseListeners) listener()
   }
 }

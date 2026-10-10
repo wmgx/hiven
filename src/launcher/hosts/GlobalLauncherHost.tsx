@@ -26,6 +26,7 @@ import { captureRootFileTextSession } from '../clipboard/fileTextInputSession'
 import { acquireLauncherNativeDialogFocus } from '../../workspace/launcherBlurGuard'
 import { getObjectBlockRecommendationText, type LauncherObjectBlock } from '../clipboard/objectBlock'
 import { captureCurrentTextDeliveryScope, createCurrentTextDelivery, isCurrentTextDeliveryAction, type CurrentTextDeliveryAction } from '../clipboard/currentTextDelivery'
+import { canExportCurrentText, captureCurrentTextExportScope, createCurrentTextExport, CURRENT_TEXT_EXPORT_ACTION, CURRENT_TEXT_EXPORT_ERROR_KEYS } from '../clipboard/currentTextExport'
 import { setPendingObjectBlock, subscribePendingObjectBlock } from '../clipboard/pendingObjectBlock'
 import { subscribeLauncherObjectHandoff } from '../clipboard/launcherObjectHandoff'
 import { isNativeDesktopRuntime } from '../../workspace/webNativeBridge'
@@ -56,8 +57,10 @@ import {
 import type { LauncherItem } from '../../workspace/launcher/types'
 import { getPluginPermissionSnapshot } from '../../workspace/pluginPermissions'
 import { selectLauncherVisibleItems } from '../../workspace/launcher/visibleItems'
+import { showToast } from '../../workspace/toast'
 
 type CurrentTextActionScope = { block: LauncherObjectBlock } & ReturnType<typeof captureCurrentTextDeliveryScope>
+type CurrentTextExportScope = { block: LauncherObjectBlock } & ReturnType<typeof captureCurrentTextExportScope>
 
 export function GlobalLauncherHost() {
   const {
@@ -94,6 +97,11 @@ export function GlobalLauncherHost() {
   const deliveryGenerationRef = useRef(0)
   const currentTextDeliveryRef = useRef(createCurrentTextDelivery(setCurrentTextBusy))
   const currentTextScopesRef = useRef(new WeakMap<LauncherItem, CurrentTextActionScope>())
+  const currentTextExportRef = useRef(createCurrentTextExport())
+  const currentTextExportScopesRef = useRef(new WeakMap<LauncherItem, CurrentTextExportScope>())
+  const textExportLifetimeRef = useRef(0)
+  const textExportMountedRef = useRef(true)
+  const textExportQueryGenerationRef = useRef(0)
   const launcherFavoriteKeys = useAppStore((s) => s.launcherFavoriteKeys)
   const objectActionControllerRef = useRef<{ expand: () => void; execute: (keepOpen?: boolean) => void } | null>(null)
   const { isImeComposingRef, handleCompositionStart, handleCompositionEnd } = useGlobalLauncherImeComposition()
@@ -142,7 +150,7 @@ export function GlobalLauncherHost() {
   const {
     query,
     rankingQuery,
-    setQuery,
+    setQuery: setSessionQuery,
     selectedIndex,
     setSelectedIndex,
     controller,
@@ -165,6 +173,17 @@ export function GlobalLauncherHost() {
     visibleSelectionItemsRef,
     extraSelectionRowsRef,
   })
+  const setQuery = useCallback((value: string) => {
+    if (liveQueryRef.current !== value) textExportQueryGenerationRef.current += 1
+    liveQueryRef.current = value
+    setSessionQuery(value)
+  }, [setSessionQuery])
+  useLayoutEffect(() => {
+    textExportMountedRef.current = true
+    return () => {
+      textExportMountedRef.current = false
+    }
+  }, [])
   const nearbySaveItem = useMemo(() => nearbySaveDomainItem ? buildGlobalLauncherItems({
     rankedLauncherItems: [nearbySaveDomainItem], query: '', locale,
   })[0] : undefined, [nearbySaveDomainItem, locale])
@@ -428,9 +447,7 @@ export function GlobalLauncherHost() {
             provider: 'Quick Editor',
             defaultOutput: 'open-editor',
           }]
-    } else {
-      return []
-    }
+    } else actions = []
 
     const kindLabel =
       block.kind === 'image'
@@ -462,7 +479,7 @@ export function GlobalLauncherHost() {
       }),
     }
 
-    return actions
+    const items = actions
       .filter((action) => {
         if (!q) return true
         return (
@@ -495,7 +512,40 @@ export function GlobalLauncherHost() {
           domainItem,
         }
       })
-  }, [clipboardBlock.block, clipboardBlock.getMaterialGeneration, clipboardBlock.hasMaterial, controllerRef, controllerState, locale, objectActions, rankingQuery])
+    // Host-only export has its own empty-text eligibility and no plugin output route.
+    if (canExportCurrentText({ block, nativeDesktop: isNativeDesktopRuntime(), standaloneLauncher })) {
+      const titleI18n = { en: t('en', 'palette.saveCurrentText'), zh: t('zh', 'palette.saveCurrentText') }
+      if (!q || titleI18n.en.toLowerCase().includes(q) || titleI18n.zh.includes(q) || CURRENT_TEXT_EXPORT_ACTION.includes(q)) {
+        const title = t(locale, 'palette.saveCurrentText')
+        const domainItem: LauncherItem = {
+          systemKey: `object-action:${CURRENT_TEXT_EXPORT_ACTION}`,
+          kind: 'host', display: { title, titleI18n, kindLabel: kindLabel.en, kindLabelI18n: kindLabel },
+          behavior: { type: 'perform' }, execute: async () => ({ ok: true, keepOpen: true }),
+          experienceRecord: false, recordUsage: false,
+        }
+        currentTextExportScopesRef.current.set(domainItem, {
+          block,
+          ...captureCurrentTextExportScope({
+            block,
+            getMaterialGeneration: clipboardBlock.getMaterialGeneration,
+            hasMaterial: clipboardBlock.hasMaterial,
+            getController: () => controllerRef.current,
+            isOpen: () => useAppStore.getState().globalLauncherOpen,
+            isRootVisible: () => {
+              const state = useAppStore.getState()
+              return fileTextRootVisibleRef.current && !state.pluginSurfaceToolTarget && !state.launcherHostSurfaceTarget &&
+                usePluginSettingsStore.getState().settingsDialogTarget?.presentation !== 'global-launcher'
+            },
+            getQueryGeneration: () => textExportQueryGenerationRef.current,
+            getLifetime: () => textExportMountedRef.current && useAppStore.getState().globalLauncherOpen
+              ? textExportLifetimeRef.current : undefined,
+          }),
+        })
+        items.push({ kind: 'domain', id: domainItem.systemKey, title, subtitle: '', domainItem })
+      }
+    }
+    return items
+  }, [clipboardBlock.block, clipboardBlock.getMaterialGeneration, clipboardBlock.hasMaterial, controllerRef, controllerState, locale, objectActions, rankingQuery, standaloneLauncher])
 
   const composedRankedItems = useMemo(() => {
     if (
@@ -559,6 +609,7 @@ export function GlobalLauncherHost() {
   // Guard duplicate dismissals while the native window is hiding.
   const closingRef = useRef(false)
   const resetLauncherSession = useCallback((options?: { preservePendingMaterial?: boolean }) => {
+    textExportLifetimeRef.current += 1
     clipboardBlock.markBlockConsumed({ preservePending: options?.preservePendingMaterial })
     clearPluginSurfaceTool()
     clearLauncherHostSurface()
@@ -721,6 +772,7 @@ export function GlobalLauncherHost() {
       clipboardBlock.cancelFileTextRead()
     }
     if (!previous.globalLauncherOpen && state.globalLauncherOpen) {
+      textExportLifetimeRef.current += 1
       closingRef.current = false
     } else if (previous.globalLauncherOpen && !state.globalLauncherOpen && !closingRef.current) {
       closingRef.current = true
@@ -789,6 +841,24 @@ export function GlobalLauncherHost() {
     if (!result.ok) { if (result.message) setDeliveryFailure({ message: result.message, isCurrent: scope.isCurrent }) }
     else closeLauncherAfterAction()
   }, [closeLauncherAfterAction, pastePreviewText])
+
+  const executeCurrentTextExport = useCallback(async (scope: CurrentTextExportScope) => {
+    if (!standaloneLauncher || !isNativeDesktopRuntime() || !scope.isCurrent() || currentTextExportRef.current.isBusy()) return
+    const generation = ++deliveryGenerationRef.current
+    setDeliveryFailure(null)
+    const result = await currentTextExportRef.current({
+      ...scope,
+      labels: {
+        dialogTitle: t(locale, 'palette.currentTextExportDialogTitle'),
+      },
+      acquireFocusLease: () => acquireLauncherNativeDialogFocus(scope.isCurrentLifetime),
+    })
+    if (!result || generation !== deliveryGenerationRef.current || !scope.isCurrent()) return
+    try { inputRef.current?.focus({ preventScroll: true }) } catch { /* best-effort caret restore */ }
+    if (result.status === 'error') {
+      setDeliveryFailure({ message: t(locale, CURRENT_TEXT_EXPORT_ERROR_KEYS[result.code]), isCurrent: scope.isCurrent })
+    } else if (result.status === 'saved') showToast(t(locale, 'palette.currentTextExportSaved'), 'success')
+  }, [locale, standaloneLauncher])
 
   const executeObjectAction = useCallback(async (action: RecommendedAction, target: RecommendedOutputTarget) => {
     const block = clipboardBlock.block
@@ -921,6 +991,13 @@ export function GlobalLauncherHost() {
       : item.id.startsWith('history-object-action:')
         ? item.id.slice('history-object-action:'.length)
         : null
+    if (objectActionId === CURRENT_TEXT_EXPORT_ACTION) {
+      const scope = item.kind === 'domain' ? currentTextExportScopesRef.current.get(item.domainItem) : undefined
+      if (!scope?.isCurrent()) return
+      clipboardBlock.cancelFileTextRead()
+      void executeCurrentTextExport(scope)
+      return
+    }
     if (objectActionId && isCurrentTextDeliveryAction(objectActionId)) {
       const scope = item.kind === 'domain' ? currentTextScopesRef.current.get(item.domainItem) : undefined
       if (!scope?.isCurrent()) return
@@ -942,7 +1019,7 @@ export function GlobalLauncherHost() {
       return
     }
     selectItem(item)
-  }, [clipboardBlock.cancelFileTextRead, executeCurrentTextAction, executeObjectAction, objectActions, selectItem])
+  }, [clipboardBlock.cancelFileTextRead, executeCurrentTextAction, executeCurrentTextExport, executeObjectAction, objectActions, selectItem])
 
 
   const beginDrag = useGlobalLauncherNativeDrag(standaloneLauncher)
