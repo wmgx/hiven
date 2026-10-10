@@ -36,7 +36,7 @@ const snapshot = load('src/launcher/clipboard/clipboardSnapshot.ts', { '../../ki
 const attachPolicy = load('src/launcher/clipboard/attachPolicy.ts', {
   '../../kits/content/index': content, './clipboardSnapshot': snapshot,
 })
-const blocks = load('src/launcher/clipboard/objectBlock.ts', { './clipboardSnapshot': snapshot, './attachPolicy': attachPolicy })
+const blocks = load('src/launcher/clipboard/objectBlock.ts', { '../../kits/content/index': content, './clipboardSnapshot': snapshot, './attachPolicy': attachPolicy })
 const material = load('src/launcher/clipboard/currentMaterial.ts')
 const pending = load('src/launcher/clipboard/pendingObjectBlock.ts')
 let serial = 0

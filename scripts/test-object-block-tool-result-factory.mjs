@@ -71,11 +71,13 @@ const attachPolicy = loadModule('src/launcher/clipboard/attachPolicy.ts', {
 const objectBlock = loadModule('src/launcher/clipboard/objectBlock.ts', {
   stripImports: [
     ...stripTypeImports,
+    /import\s*\{\s*detectContent\s*\}\s*from\s*'\.\.\/\.\.\/kits\/content\/index'\s*;?\s*\n?/,
     /import\s*\{[^}]*\}\s*from\s*'\.\/clipboardSnapshot'\s*;?\s*\n?/,
     /import\s*\{[^}]*\}\s*from\s*'\.\/attachPolicy'\s*;?\s*\n?/,
   ],
   globals: {
     isStrongClipboardAttachEligible: attachPolicy.isStrongClipboardAttachEligible,
+    detectContent: detectContentModule.detectContent,
     detectClipboardFilePath: clipboardSnapshot.detectClipboardFilePath,
     detectClipboardType: clipboardSnapshot.detectClipboardType,
     fileNameFromPath: clipboardSnapshot.fileNameFromPath,

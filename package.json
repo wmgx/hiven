@@ -231,6 +231,7 @@
     "test:plugin-blob-export": "node scripts/test-plugin-blob-export.mjs",
     "test:launcher-material-edit": "node scripts/test-launcher-material-edit.mjs",
     "test:plugin-surface-object-origin": "node scripts/test-plugin-surface-object-origin.mjs",
+    "test:sensitive-material-mask": "node scripts/test-sensitive-material-mask.mjs",
     "test:plugin-surface-unsaved-changes": "node scripts/test-plugin-surface-unsaved-changes.mjs && node scripts/test-json-result-return.mjs && node scripts/test-text-tool-unsaved-changes.mjs",
     "test:text-tool-unsaved-changes": "node scripts/test-text-tool-unsaved-changes.mjs",
     "test:automatic-learning-settings": "node scripts/test-automatic-learning-settings.mjs",

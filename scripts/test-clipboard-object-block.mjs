@@ -32,6 +32,7 @@ function transpileAndRun(path, globals = {}) {
 
 // ─── Load modules ──────────────────────────────────────────────────────────────
 const snapshot = transpileAndRun('src/launcher/clipboard/clipboardSnapshot.ts')
+const content = transpileAndRun('src/kits/content/detectContent.ts')
 // attachPolicy needs isSoft + detectClipboardFilePath + detectContent stub
 function detectContentStub(text) {
   const t = String(text).trim()
@@ -47,6 +48,7 @@ const attachPolicy = transpileAndRun('src/launcher/clipboard/attachPolicy.ts', {
   isSoftClipboardOperand: snapshot.isSoftClipboardOperand,
 })
 const objectBlock = transpileAndRun('src/launcher/clipboard/objectBlock.ts', {
+  detectContent: content.detectContent,
   shouldAutoAttachClipboard: snapshot.shouldAutoAttachClipboard,
   shouldShowRecentClipboardHint: snapshot.shouldShowRecentClipboardHint,
   isStrongClipboardAttachEligible: attachPolicy.isStrongClipboardAttachEligible,

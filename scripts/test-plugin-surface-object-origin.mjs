@@ -25,7 +25,7 @@ const attachPolicy = load('src/launcher/clipboard/attachPolicy.ts', {
   '../../kits/content/index': content, './clipboardSnapshot': snapshot,
 })
 const blocks = load('src/launcher/clipboard/objectBlock.ts', {
-  './clipboardSnapshot': snapshot, './attachPolicy': attachPolicy,
+  '../../kits/content/index': content, './clipboardSnapshot': snapshot, './attachPolicy': attachPolicy,
 })
 const { createPluginSurfaceObjectBlock: convert } = load('src/components/pluginSurface/pluginSurfaceObjectBlock.ts', {
   '../../launcher/clipboard/objectBlock': blocks,

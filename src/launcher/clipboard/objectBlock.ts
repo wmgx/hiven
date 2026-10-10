@@ -6,6 +6,7 @@
  * product objects rather than plugin parameters.
  */
 
+import { detectContent } from '../../kits/content/index'
 import type { ClipboardDetectedType, ClipboardSnapshot } from './clipboardSnapshot'
 import {
   detectClipboardFilePath,
@@ -183,7 +184,9 @@ export function createGenericObjectBlock(params: {
   state?: ObjectBlockState
   meta?: ObjectBlockMeta
 }): LauncherObjectBlock {
-  const masked = params.masked || params.kind === 'secret' || params.kind === 'secret-like'
+  // Format labels and explicit caller kinds must not hide a sensitive-content signal.
+  const masked = Boolean(params.masked || isSecretKind(params.kind) ||
+    (params.text && detectContent(params.text).some((detection) => isSecretKind(detection.kind))))
   const state = params.state ?? (masked ? 'secret-masked' : params.validity === 'invalid' ? 'invalid' : undefined)
   return {
     id: `object-block:${params.source}:${++blockIdCounter}`,
@@ -495,7 +498,7 @@ function normalizeSecretKind(kind: ObjectBlockKind): ObjectBlockKind {
   return kind === 'secret' ? 'secret-like' : kind
 }
 
-function isSecretKind(kind: ObjectBlockKind): boolean {
+function isSecretKind(kind: string): boolean {
   return kind === 'secret' || kind === 'secret-like'
 }
 

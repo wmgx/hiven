@@ -54,20 +54,21 @@ export function findStrongClipboardAttachHits(text: string): StrongAttachHit[] {
   if (!trimmed) return []
   if (isSoftClipboardOperand(trimmed)) return []
 
-  // Clipboard holds a path with a known structured extension (csv/json/…).
-  const filePath = detectClipboardFilePath(trimmed)
-  if (filePath) {
-    return [{ kind: filePath.kind as ContentKind, confidence: 0.95 }]
-  }
-
-  if (typeof detectContent !== 'function') return []
-
-  const detections: ContentDetection[] = detectContent(trimmed)
+  const detections: ContentDetection[] = typeof detectContent === 'function' ? detectContent(trimmed) : []
   const hits: StrongAttachHit[] = []
   for (const d of detections) {
     if (!STRONG_ATTACH_CONTENT_KINDS.has(d.kind)) continue
     if (d.confidence < STRONG_ATTACH_MIN_CONFIDENCE) continue
     hits.push({ kind: d.kind, confidence: d.confidence })
+  }
+  // Sensitive material takes precedence over format confidence and path spelling.
+  const sensitive = hits.filter((hit) => hit.kind === 'secret' || hit.kind === 'secret-like')
+  if (sensitive.length) return sensitive
+
+  // Preserve the mainline extension-based path attach behavior for other content.
+  const filePath = detectClipboardFilePath(trimmed)
+  if (filePath) {
+    return [{ kind: filePath.kind as ContentKind, confidence: 0.95 }]
   }
   return hits
 }
