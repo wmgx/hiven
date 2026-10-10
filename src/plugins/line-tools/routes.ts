@@ -27,7 +27,7 @@ export const caseOperationRoutes: TextToolRoute[] = [
   { surfaceId: 'case-upper', titleKey: 'case.upper.title', group: 'case', operation: 'plain-upper', aliases: ['uppercase', 'upper case', '转大写', '大写'] },
   { surfaceId: 'case-lower', titleKey: 'case.lower.title', group: 'case', operation: 'plain-lower', aliases: ['lowercase', 'lower case', '转小写', '小写'] },
   { surfaceId: 'case-title', titleKey: 'case.title.title', group: 'case', operation: 'plain-title', aliases: ['title case', 'capitalize', '转标题', '首字母大写'] },
-  { surfaceId: 'case-camel', titleKey: 'case.camel.title', group: 'case', operation: 'camel', aliases: ['camelCase', 'camel case', '转驼峰', '小驼峰', '驼峰'] },
+  { surfaceId: 'case-camel', titleKey: 'case.camel.title', group: 'case', operation: 'camel', aliases: ['case converter', '命名转换', 'camelCase', 'camel case', '转驼峰', '小驼峰', '驼峰'] },
   { surfaceId: 'case-pascal', titleKey: 'case.pascal.title', group: 'case', operation: 'pascal', aliases: ['PascalCase', 'pascal case', '大驼峰', '帕斯卡'] },
   { surfaceId: 'case-snake', titleKey: 'case.snake.title', group: 'case', operation: 'snake', aliases: ['snake_case', 'snake case', '转下划线', '下划线命名'] },
   { surfaceId: 'case-constant', titleKey: 'case.constant.title', group: 'case', operation: 'constant', aliases: ['CONSTANT_CASE', 'screaming snake case', '常量命名', '全大写下划线'] },

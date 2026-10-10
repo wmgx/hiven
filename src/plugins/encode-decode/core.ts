@@ -1,3 +1,7 @@
+import { getPluginHostSdk } from '@hiven/plugin'
+
+export const { urlEncode, urlDecode } = getPluginHostSdk().kits.textTransforms
+
 export type EncodeDecodeFormat = 'base64' | 'url' | 'html' | 'slashes' | 'jwt'
 export type EncodeDecodeDirection = 'encode' | 'decode'
 
@@ -7,14 +11,6 @@ export function base64Encode(text: string): string {
 
 export function base64Decode(text: string): string {
   return decodeURIComponent(escape(atob(text.trim())))
-}
-
-export function urlEncode(text: string): string {
-  return encodeURIComponent(text)
-}
-
-export function urlDecode(text: string): string {
-  return decodeURIComponent(text.trim())
 }
 
 export function htmlEncode(text: string): string {

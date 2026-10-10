@@ -7,6 +7,7 @@ import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import ts from 'typescript'
+import { jsonCore } from './helpers/text-transform-cores.mjs'
 
 function readSourceFiles(dir) {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -144,7 +145,6 @@ for (const key of ['surfaceLoading', 'surfaceOpening', 'surfaceOpenFailed', 'sur
 assert.doesNotMatch(pluginSurfaceRenderer, />Plugin surface crashed<|>Back<|Loading plugin surface/, 'plugin surface fallback UI must not hardcode English')
 assert.match(systemSettingsLocale, /en:\s*\{[\s\S]*title:\s*['"]Settings['"][\s\S]*zh:\s*\{[\s\S]*title:\s*['"]设置['"]/, 'system settings surface title should exist in both locales')
 
-const jsonCore = loadModule('src/plugins/json-tools/jsonCore.ts', { globals: { URLSearchParams } })
 const jsonLocaleEn = JSON.parse(readFileSync('src/plugins/json-tools/locales/en.json', 'utf8'))
 const jsonLocaleZh = JSON.parse(readFileSync('src/plugins/json-tools/locales/zh.json', 'utf8'))
 assert.equal(jsonCore.processJson('  ', { operation: 'format' }).output, '', 'empty JSON input should not be an error')

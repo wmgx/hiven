@@ -1,5 +1,6 @@
 import { definePlugin, type PluginToolContext, type PluginToolExplicitTextPreviewContext, type PluginToolTextPreviewResult, type PluginToolSurfaces } from '@hiven/plugin'
 import { TextToolsSurface } from './TextToolsSurface'
+import { TextWorkbenchSurface } from './TextWorkbenchSurface'
 import {
   appendLines,
   cleanLineList,
@@ -79,8 +80,8 @@ export const lineToolsPlugin = definePlugin({
         title: 'Text Tools',
         titleI18n: { zh: '文本整理' },
         icon: 'Type',
-        aliases: ['text tools', 'line tools', 'case converter', 'text statistics', '文本整理', '行工具', '命名转换', '文本统计'],
-        component: TextToolsSurface,
+        aliases: ['text tools', 'line tools', 'text workbench', '文本整理', '行工具', '文本工作台'],
+        component: TextWorkbenchSurface,
         entry: {
           launcher: { surfaces: ['global-launcher', 'editor-command-bar', 'quick-editor-command'] },
           shortcutBindable: true,

@@ -262,7 +262,8 @@
     "test:ai-writing-summary": "node scripts/test-ai-writing-summary.mjs",
     "test:line-list-cleanup": "node scripts/test-line-list-cleanup.mjs",
     "test:text-list-extraction": "node scripts/test-text-list-extraction.mjs",
-    "test:launcher-preview-parameter-edit": "node scripts/test-launcher-preview-parameter-edit.mjs"
+    "test:launcher-preview-parameter-edit": "node scripts/test-launcher-preview-parameter-edit.mjs",
+    "test:text-transforms": "node --experimental-strip-types scripts/test-text-transforms.mts"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

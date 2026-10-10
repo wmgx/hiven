@@ -1,4 +1,7 @@
 import jsYaml from 'js-yaml'
+import { getPluginHostSdk } from '@hiven/plugin'
+
+export const { formatJson: jsonPrettify, compactJson: jsonCompact, sortKeys } = getPluginHostSdk().kits.textTransforms
 
 export type JsonOperation =
   | 'format'
@@ -32,26 +35,6 @@ export class JsonCoreError extends Error {
     super(code)
     this.code = code
   }
-}
-
-export function sortKeys(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sortKeys)
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(Object.keys(value).sort().map((key) => [
-      key,
-      sortKeys((value as Record<string, unknown>)[key]),
-    ]))
-  }
-  return value
-}
-
-export function jsonPrettify(text: string, indent = 2, shouldSort = false): string {
-  const value = JSON.parse(text)
-  return JSON.stringify(shouldSort ? sortKeys(value) : value, null, indent)
-}
-
-export function jsonCompact(text: string): string {
-  return JSON.stringify(JSON.parse(text))
 }
 
 export function sortJsonKeys(text: string): string {

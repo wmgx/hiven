@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import ts from 'typescript'
 import * as sqlFormatter from 'sql-formatter'
+import { encodeDecodeCore } from './helpers/text-transform-cores.mjs'
 
 function compile(source) {
   return ts.transpileModule(source, { compilerOptions: {
@@ -29,7 +30,7 @@ const specs = [
   { plugin: 'line-tools', component: 'TextToolsSurface', route: 'line-sort', input: 'b\r\na\r\n中文🙂',
     core: load('src/plugins/line-tools/core.ts'), extras: { './routes': load('src/plugins/line-tools/routes.ts') } },
   { plugin: 'encode-decode', component: 'EncodeDecodeSurface', route: 'base64-encode', input: 'a & b\r\n中文🙂',
-    core: load('src/plugins/encode-decode/core.ts') },
+    core: encodeDecodeCore },
   { plugin: 'formatter', component: 'FormatterSurface', route: 'css-format', input: 'a{color:red;}\r\n',
     core: load('src/plugins/formatter/core.ts', { 'sql-formatter': sqlFormatter, './xml.ts': load('src/plugins/formatter/xml.ts') }) },
 ]

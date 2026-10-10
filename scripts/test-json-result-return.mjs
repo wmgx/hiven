@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import ts from 'typescript'
-import jsYaml from 'js-yaml'
+import { jsonCore as core } from './helpers/text-transform-cores.mjs'
 
 const surfacePath = 'src/plugins/json-tools/JsonSurface.tsx'
 const surfaceSource = readFileSync(surfacePath, 'utf8')
@@ -44,7 +44,6 @@ function load(path, dependencies, source = readFileSync(path, 'utf8')) {
   }, { filename: path })
   return exports
 }
-const core = load('src/plugins/json-tools/jsonCore.ts', { 'js-yaml': jsYaml })
 const routes = load('src/plugins/json-tools/routes.ts', {})
 const deferred = () => {
   let resolve, reject

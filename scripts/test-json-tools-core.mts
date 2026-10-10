@@ -2,7 +2,9 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { operationRoutes } from '../src/plugins/json-tools/routes.ts'
 import { searchableFieldsMatch } from '../src/workspace/searchRanking.ts'
-import {
+import { jsonCore } from './helpers/text-transform-cores.mjs'
+
+const {
   evaluateJsonExpression,
   escapeJsonString,
   jsonToYaml,
@@ -12,7 +14,7 @@ import {
   sortJsonKeys,
   unescapeJsonString,
   yamlToJson,
-} from '../src/plugins/json-tools/jsonCore.ts'
+} = jsonCore
 
 assert.equal(sortJsonKeys('{"z":1,"a":{"d":2,"b":1},"__proto__":3}'), '{\n  "__proto__": 3,\n  "a": {\n    "b": 1,\n    "d": 2\n  },\n  "z": 1\n}')
 assert.deepEqual(JSON.parse(queryStringToJson('?name=Ada&active=true')), { name: 'Ada', active: 'true' })

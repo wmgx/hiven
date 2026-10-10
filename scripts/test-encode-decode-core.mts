@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
-import { transformText } from '../src/plugins/encode-decode/core.ts'
+import { encodeDecodeCore } from './helpers/text-transform-cores.mjs'
+
+const { transformText } = encodeDecodeCore
 
 // Literal escapes and real newlines must survive a workbench round trip.
 const input = 'C:\\notes\\temp\n"你好" & <world>'

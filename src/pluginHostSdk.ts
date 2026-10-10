@@ -4,6 +4,7 @@ import { useAppStore } from './store'
 import { makePluginT, type PluginT } from './i18n/pluginI18nRegistry'
 import type { Locale } from './i18n'
 import { detectContent } from './kits/content'
+import * as textTransforms from './kits/textTransforms'
 import { createMonacoDisposableBucket, disposeAllMonacoDisposables } from './utils/monacoDisposables'
 import type { PaneId } from './workspace/types'
 import {
@@ -62,6 +63,8 @@ type HostSettings = ReturnType<typeof useAppStore.getState>['settings']
  * Diff / DualEditorView live on `@hiven/plugin-diff` (text-diff only) — not here.
  */
 export type PluginHostKits = {
+  /** Pure text transforms shared by local text products; no host I/O. */
+  textTransforms: typeof textTransforms
   monacoDisposables: {
     createBucket: typeof createMonacoDisposableBucket
     disposeAll: typeof disposeAllMonacoDisposables
@@ -242,6 +245,7 @@ export function getPluginHostSdk(): PluginHostSdk {
 
 function createPluginHostKits(): PluginHostKits {
   return {
+    textTransforms,
     monacoDisposables: {
       createBucket: createMonacoDisposableBucket,
       disposeAll: disposeAllMonacoDisposables,
