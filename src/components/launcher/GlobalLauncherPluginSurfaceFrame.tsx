@@ -1,11 +1,14 @@
-import { useCallback } from 'react'
-import type { Locale } from '../../i18n'
+import { useCallback, useLayoutEffect, useRef, useState } from 'react'
+import { t, type Locale } from '../../i18n'
 import type { PluginSurfaceOpenTarget } from '../../store'
+import { ConfirmDialog } from '../../plugin-ui'
 import { useLauncherEscapeInterceptor } from './launcherEscapeInterceptor'
-import { PluginSurfaceRenderer } from '../pluginSurface/PluginSurfaceRenderer'
+import { PluginSurfaceRenderer, type PluginSurfaceLeaveOwner } from '../pluginSurface/PluginSurfaceRenderer'
 import { SurfaceBreadcrumbHeader } from '../SurfaceBreadcrumbHeader'
 
 const BREADCRUMB_HEIGHT = 40
+type LeaveAction = 'back' | 'close'
+type PendingLeave = { action: LeaveAction; target: PluginSurfaceOpenTarget; owner: PluginSurfaceLeaveOwner }
 
 export function GlobalLauncherPluginSurfaceFrame({
   target,
@@ -27,16 +30,85 @@ export function GlobalLauncherPluginSurfaceFrame({
   onClose: () => void
 }) {
   const bodyHeight = breadcrumbTitle ? shellHeight - BREADCRUMB_HEIGHT : shellHeight
+  const activeTargetRef = useRef(target)
+  activeTargetRef.current = target
+  const mountedRef = useRef(false)
+  const changesRef = useRef<{ owner: PluginSurfaceLeaveOwner; dirty: boolean } | null>(null)
+  const pendingRef = useRef<PendingLeave | null>(null)
+  const [pendingLeave, setPendingLeave] = useState<PendingLeave | null>(null)
+
+  useLayoutEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
+  useLayoutEffect(() => () => {
+    changesRef.current = null
+    pendingRef.current = null
+    setPendingLeave(null)
+  }, [target])
+
+  const onUnsavedChangesChange = useCallback((dirty: boolean, owner: PluginSurfaceLeaveOwner) => {
+    if (!mountedRef.current || activeTargetRef.current !== target) return
+    if (!owner.isCurrent()) {
+      if (changesRef.current?.owner !== owner) return
+      changesRef.current = null
+    } else {
+      changesRef.current = { owner, dirty }
+    }
+    if (pendingRef.current && (!dirty || pendingRef.current.owner !== owner || !owner.isCurrent())) {
+      pendingRef.current = null
+      setPendingLeave(null)
+    }
+  }, [target])
+
+  const requestLeave = useCallback((action: LeaveAction) => {
+    if (!mountedRef.current || activeTargetRef.current !== target) return
+    const changes = changesRef.current
+    if (changes?.dirty && changes.owner.isCurrent()) {
+      if (pendingRef.current) return
+      const pending = { action, target, owner: changes.owner }
+      pendingRef.current = pending
+      setPendingLeave(pending)
+      return
+    }
+    if (action === 'back') onBack()
+    else onClose()
+  }, [target, onBack, onClose])
+
+  const cancelLeave = useCallback(() => {
+    // A retained dismissal from an old dialog cannot dismiss its replacement.
+    if (pendingRef.current !== pendingLeave) return
+    pendingRef.current = null
+    setPendingLeave(null)
+  }, [pendingLeave])
+  const discardChanges = () => {
+    if (!pendingLeave || pendingRef.current !== pendingLeave || !mountedRef.current
+      || pendingLeave.target !== activeTargetRef.current
+      || changesRef.current?.owner !== pendingLeave.owner || !pendingLeave.owner.isCurrent()) return
+    pendingRef.current = null
+    changesRef.current = null
+    setPendingLeave(null)
+    // Confirmed exits use raw host navigation, never a plugin callback.
+    if (pendingLeave.action === 'back') onBack()
+    else onClose()
+  }
 
   const escapeHandler = useCallback((event: KeyboardEvent): boolean => {
     if (event.key !== 'Escape') return false
+    if (pendingRef.current) {
+      event.preventDefault()
+      event.stopPropagation()
+      pendingRef.current = null
+      setPendingLeave(null)
+      return true
+    }
     // Let the editor close its find widget before navigating out of the surface.
     if (event.target instanceof Element && event.target.closest('.monaco-editor')?.querySelector('.find-widget.visible')) return true
     event.preventDefault()
     event.stopPropagation()
-    onBack()
+    requestLeave('back')
     return true
-  }, [onBack])
+  }, [requestLeave])
   useLauncherEscapeInterceptor(escapeHandler)
 
   return (
@@ -50,8 +122,8 @@ export function GlobalLauncherPluginSurfaceFrame({
       {breadcrumbTitle && (
         <SurfaceBreadcrumbHeader
           title={breadcrumbTitle}
-          onBack={onBack}
-          onClose={onClose}
+          onBack={() => requestLeave('back')}
+          onClose={() => requestLeave('close')}
         />
       )}
       <div
@@ -73,8 +145,20 @@ export function GlobalLauncherPluginSurfaceFrame({
           contextSurfaceId="global-launcher"
           onBack={onBack}
           onClose={onClose}
+          onUnsavedChangesChange={onUnsavedChangesChange}
+          onRequestLeave={requestLeave}
         />
       </div>
+      <ConfirmDialog
+        open={Boolean(pendingLeave && pendingLeave.target === target && pendingLeave.owner.isCurrent())}
+        title={t(locale, 'palette.surfaceDiscardTitle')}
+        message={t(locale, 'palette.surfaceDiscardMessage')}
+        confirmLabel={t(locale, 'palette.surfaceDiscardConfirm')}
+        cancelLabel={t(locale, 'palette.surfaceDiscardCancel')}
+        defaultFocus="cancel"
+        onConfirm={discardChanges}
+        onCancel={cancelLeave}
+      />
     </div>
   )
 }

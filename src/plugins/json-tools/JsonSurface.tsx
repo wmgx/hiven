@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import { Button, Checkbox, IconButton, SegmentedControl, TextEditor, TextInput, getEditorTheme, useImeKeyboard } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
@@ -36,6 +36,12 @@ export function JsonSurface(props: PluginSurfaceProps) {
   const [indent, setIndent] = useState(2)
   const [shouldSort, setShouldSort] = useState(false)
   const [expression, setExpression] = useState('')
+  const baseline = useRef({ inputText: initialText, expression: '' })
+  const hasUnsavedChanges = inputText !== baseline.current.inputText || expression !== baseline.current.expression
+  const reportUnsavedChanges = host.setUnsavedChanges
+  useLayoutEffect(() => {
+    reportUnsavedChanges?.(hasUnsavedChanges)
+  }, [hasUnsavedChanges, reportUnsavedChanges])
   const [expressionRun, setExpressionRun] = useState<ExpressionRun | null>(null)
   const [returning, setReturning] = useState(false)
   const [copying, setCopying] = useState(false)

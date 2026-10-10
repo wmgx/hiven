@@ -147,6 +147,7 @@ type ConfirmDialogProps = {
   message?: string
   confirmLabel?: string
   cancelLabel?: string
+  defaultFocus?: 'confirm' | 'cancel'
   onConfirm: () => void
   onCancel: () => void
 }
@@ -552,17 +553,18 @@ export function Dialog({ open, onOpenChange, title, children, className }: Dialo
   )
 }
 
-export function ConfirmDialog({ open, title, message, confirmLabel = 'Confirm', cancelLabel = 'Cancel', onConfirm, onCancel }: ConfirmDialogProps) {
+export function ConfirmDialog({ open, title, message, confirmLabel = 'Confirm', cancelLabel = 'Cancel', defaultFocus, onConfirm, onCancel }: ConfirmDialogProps) {
+  const cancelRef = useRef<HTMLButtonElement>(null)
   return (
     <BaseDialog.Root open={open} onOpenChange={(next) => { if (!next) onCancel() }}>
       <BaseDialog.Portal>
         <BaseDialog.Backdrop className="hiven-ui-confirm" />
-        <BaseDialog.Popup className="hiven-ui-confirm-panel">
+        <BaseDialog.Popup className="hiven-ui-confirm-panel" initialFocus={defaultFocus === 'cancel' ? cancelRef : undefined}>
           <BaseDialog.Title className="hiven-ui-confirm-title">{title}</BaseDialog.Title>
           {message && <BaseDialog.Description className="hiven-ui-confirm-message">{message}</BaseDialog.Description>}
           <div className="hiven-ui-confirm-actions">
             <Button variant="danger" onClick={onConfirm}>{confirmLabel}</Button>
-            <BaseDialog.Close render={<Button />}>{cancelLabel}</BaseDialog.Close>
+            <BaseDialog.Close render={<Button ref={cancelRef} />}>{cancelLabel}</BaseDialog.Close>
           </div>
         </BaseDialog.Popup>
       </BaseDialog.Portal>

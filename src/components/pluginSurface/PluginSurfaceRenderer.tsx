@@ -60,6 +60,9 @@ function settingsInterrupted(): Error {
   return Object.assign(new Error('App settings surface interrupted'), { name: 'AbortError' })
 }
 
+/** Internal renderer identity, revoked on replacement, unload, or lifetime expiry. */
+export type PluginSurfaceLeaveOwner = { isCurrent: () => boolean }
+
 export type PluginSurfaceRendererProps = {
   target: PluginSurfaceOpenTarget
   locale: Locale
@@ -67,6 +70,8 @@ export type PluginSurfaceRendererProps = {
   contextSurfaceId: string
   onBack: () => void
   onClose: () => void
+  onUnsavedChangesChange?: (hasUnsavedChanges: boolean, owner: PluginSurfaceLeaveOwner) => void
+  onRequestLeave?: (action: 'back' | 'close') => void
 }
 
 export function PluginSurfaceRenderer({
@@ -76,6 +81,8 @@ export function PluginSurfaceRenderer({
   contextSurfaceId,
   onBack,
   onClose,
+  onUnsavedChangesChange,
+  onRequestLeave,
 }: PluginSurfaceRendererProps) {
   const pluginRegistryVersion = usePluginRegistryVersion()
   const permissionVersion = usePluginPermissionStore((s) => s.version)
@@ -92,6 +99,17 @@ export function PluginSurfaceRenderer({
   activeStateRef.current = surfaceState
   const mountedRef = useRef(false)
   const hiddenRef = useRef(false)
+  const leaveOwner = useMemo<PluginSurfaceLeaveOwner>(() => {
+    const lifetime = pluginRegistry.getPluginLifetime(target.pluginId, target.source)
+    return {
+      isCurrent: () => mountedRef.current && activeTargetRef.current === target
+        && activeStateRef.current === surfaceState && surfaceState.status === 'ready'
+        && surfaceState.target === target && !hiddenRef.current && lifetime.active,
+    }
+  }, [target, surfaceState])
+  const setUnsavedChanges = useCallback((hasUnsavedChanges: boolean) => {
+    if (leaveOwner.isCurrent()) onUnsavedChangesChange?.(hasUnsavedChanges, leaveOwner)
+  }, [leaveOwner, onUnsavedChangesChange])
   const pasteScope = useMemo(() => createPasteRecoveryScope(), [target, surfaceState])
   const preparationScopeRef = useRef<ReturnType<typeof createPasteRecoveryScope> | null>(null)
   const [, refreshPasteOwner] = useState(0)
@@ -146,6 +164,8 @@ export function PluginSurfaceRenderer({
     }
   }, [])
   useLayoutEffect(() => () => preparationScopeRef.current?.invalidate(), [target])
+  // The renderer owns cleanup; retained plugin setters cannot clear a newer owner.
+  useLayoutEffect(() => () => onUnsavedChangesChange?.(false, leaveOwner), [leaveOwner, onUnsavedChangesChange])
 
   // External tool shortcuts replace target without resetting the launcher session.
   useLayoutEffect(() => () => interruptSettings(), [target, surfaceState, interruptSettings])
@@ -342,6 +362,12 @@ export function PluginSurfaceRenderer({
     interruptSettings()
     action()
   }
+  const requestLeave = (action: 'back' | 'close') => {
+    if (!isCurrentSurface()) return
+    // Keep this renderer intact until the Launcher decides whether to leave.
+    if (onRequestLeave) onRequestLeave(action)
+    else leaveSurface(action === 'back' ? onBack : onClose)
+  }
 
   return (
     <PluginSurfaceErrorBoundary
@@ -374,11 +400,12 @@ export function PluginSurfaceRenderer({
           permissions={surfaceState.permissions}
           initialText={target.initialText}
           host={{
-            close: () => leaveSurface(onClose),
+            close: () => requestLeave('close'),
             complete: () => {
               if (presentation === 'global-launcher') leaveSurface(onClose)
             },
-            requestBack: () => leaveSurface(onBack),
+            requestBack: () => requestLeave('back'),
+            setUnsavedChanges: onUnsavedChangesChange ? setUnsavedChanges : undefined,
             openSettings: (options) => {
               if (!isCurrentSurface()) return
               interruptSettings()

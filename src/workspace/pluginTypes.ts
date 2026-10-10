@@ -742,6 +742,8 @@ export type PluginSurfaceHostApi = {
   /** Finish a successful output action; closes Launcher tools, keeps independent surfaces open. */
   complete(): void
   requestBack(): void
+  /** Report local edits for active Launcher exit confirmation. No content is retained by the host. */
+  setUnsavedChanges?(hasUnsavedChanges: boolean): void
   /** Opt in to retaining the mounted Launcher surface beneath a settings dialog. */
   openSettings(options?: { preserveSurface?: boolean }): void
   /**

@@ -52,10 +52,10 @@ const deferred = () => {
   return { promise, resolve, reject }
 }
 const plain = (value) => JSON.parse(JSON.stringify(value))
-function harness({ input = '{"b":2,"a":1}', operation = 'format', outcome = () => Promise.resolve(true), copyOutcome = () => Promise.resolve() } = {}) {
+function harness({ input = '{"b":2,"a":1}', operation = 'format', outcome = () => Promise.resolve(true), copyOutcome = () => Promise.resolve(), legacyHost = false } = {}) {
   const slots = [], effects = []
   let cursor = 0, view, mounted = true
-  const calls = { handoff: [], messages: [], copied: [], complete: 0, back: 0, close: 0, clipboardReads: 0 }
+  const calls = { handoff: [], messages: [], copied: [], dirty: [], complete: 0, back: 0, close: 0, clipboardReads: 0 }
   const useState = (initial) => {
     const index = cursor++
     if (!(index in slots)) slots[index] = typeof initial === 'function' ? initial() : initial
@@ -65,11 +65,19 @@ function harness({ input = '{"b":2,"a":1}', operation = 'format', outcome = () =
     useState,
     useRef: (initial) => useState(() => ({ current: initial }))[0],
     useMemo: (factory) => factory(),
-    useEffect: (setup) => {
+    useEffect: (setup, deps) => {
       const index = cursor++
-      if (!(index in slots)) { slots[index] = true; effects.push({ setup, cleanup: setup() }) }
+      const previous = slots[index]
+      if (!previous || !deps || deps.some((value, offset) => !Object.is(value, previous.deps?.[offset]))) {
+        previous?.cleanup?.()
+        const effect = { deps, setup, cleanup: setup() }
+        if (previous) effects.splice(effects.indexOf(previous), 1, effect)
+        else effects.push(effect)
+        slots[index] = effect
+      }
     },
   }
+  react.useLayoutEffect = react.useEffect
   const { JsonSurface } = load(surfacePath, {
     react, 'react/jsx-runtime': { jsx: () => null, jsxs: () => null },
     '@hiven/plugin-ui': { getEditorTheme: (value) => value, useImeKeyboard: () => ({}) },
@@ -85,6 +93,7 @@ function harness({ input = '{"b":2,"a":1}', operation = 'format', outcome = () =
     requestBack: () => { calls.back++; mounted = false },
     close: () => { calls.close++; mounted = false },
     complete: () => calls.complete++,
+    setUnsavedChanges: legacyHost ? undefined : (dirty) => calls.dirty.push(dirty),
     clipboard: { writeText: async (text) => { calls.copied.push(text); await copyOutcome() }, readText: () => { calls.clipboardReads++; throw Error('Unexpected clipboard read') } },
   }
   const render = () => {
@@ -94,6 +103,7 @@ function harness({ input = '{"b":2,"a":1}', operation = 'format', outcome = () =
   }
   render()
   return { calls, render, get view() { return view },
+    replaceInitialText(value) { input = value; render() },
     edit(name, value, rerender = true) {
       view.updateResult(() => view[`set${name}`](value))
       if (rerender) render()
@@ -243,5 +253,36 @@ await check('return waits for every already-started Copy without changing Copy c
   assert.equal(h.calls.messages.at(-1)[0], 'toast.copyFailed')
   await h.view.returnOutput()
   assert.equal(h.calls.handoff.length, 1, 'the independent surface may return after Copy settles')
+})
+await check('dirty tracks exact input and expression against the first-load baseline', async () => {
+  const original = '  {"b":2,"a":1}\r\n'
+  const h = harness({ input: original })
+  assert.deepEqual(h.calls.dirty, [false], 'opening and automatic output are clean')
+  h.edit('Indent', 4); h.edit('ShouldSort', true); h.edit('Operation', 'compact')
+  assert.deepEqual(h.calls.dirty, [false], 'parameters never mark the input dirty')
+  h.edit('InputText', '{"changed":true}')
+  assert.deepEqual(h.calls.dirty, [false, true])
+  h.render(); h.render()
+  assert.deepEqual(h.calls.dirty, [false, true], 'unchanged renders do not re-report')
+  h.edit('InputText', original)
+  assert.equal(h.calls.dirty.at(-1), false, 'exact undo clears dirty')
+  h.edit('Expression', '.a'); h.edit('Operation', 'format')
+  assert.equal(h.calls.dirty.at(-1), true, 'an expression remains dirty while its controls are hidden')
+  h.edit('Expression', '')
+  assert.equal(h.calls.dirty.at(-1), false)
+  h.replaceInitialText('later prop text')
+  assert.equal(h.calls.dirty.at(-1), false, 'the original loaded input remains the baseline')
+  h.edit('InputText', '')
+  assert.equal(h.calls.dirty.at(-1), true, 'user clearing supplied input is an edit')
+})
+await check('user replacement by output counts as an input edit; unmount never sends a stale clear', async () => {
+  const h = harness()
+  h.view.useOutputAsInput(); h.render()
+  assert.deepEqual(h.calls.dirty, [false, true])
+  h.unmount()
+  assert.deepEqual(h.calls.dirty, [false, true], 'renderer owns lifetime cleanup')
+  const oldHost = harness({ legacyHost: true })
+  oldHost.edit('InputText', '{"changed":true}')
+  assert.deepEqual(oldHost.calls.dirty, [], 'optional API retains compatibility with older hosts')
 })
 console.log(`JSON result return: ${passed} production-module logic scenarios passed`)
