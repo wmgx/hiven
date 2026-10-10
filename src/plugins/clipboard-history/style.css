@@ -236,6 +236,7 @@
 }
 
 .clipboard-history-favorite-title-bar {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -341,16 +342,24 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: auto;
+  overflow: hidden;
   background: var(--bg-surface, var(--hiven-color-bg-primary));
 }
 
 .clipboard-history-preview-content {
   min-height: 0;
-  max-height: 50%;
-  flex: 0 0 auto;
+  flex: 1 1 0;
   overflow: auto;
+  overscroll-behavior: contain;
   padding: 16px 18px;
+}
+
+.clipboard-history-search-match {
+  padding: 0;
+  border-radius: 2px;
+  color: inherit;
+  background: color-mix(in srgb, var(--hiven-color-accent) 22%, transparent);
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--hiven-color-accent) 55%, transparent);
 }
 
 .clipboard-history-section-label {
@@ -454,10 +463,71 @@
 }
 
 .clipboard-history-meta {
-  margin: 18px 18px 18px;
-  padding: 16px 0 0;
+  flex: 0 1 auto;
+  min-height: 39px;
+  max-height: 40%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  margin: 0 18px;
   background: var(--bg-surface, var(--hiven-color-bg-primary));
   border-top: 1px solid var(--border, var(--hiven-color-border));
+}
+
+.clipboard-history-meta-summary {
+  appearance: none;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  color: var(--hiven-color-text-secondary);
+  text-align: left;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.clipboard-history-meta-summary:hover {
+  color: var(--hiven-color-text-primary);
+}
+
+.clipboard-history-meta-summary:focus-visible {
+  outline: 2px solid var(--hiven-color-accent);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+
+.clipboard-history-meta-summary-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clipboard-history-meta-toggle,
+.clipboard-history-meta-chevron {
+  flex-shrink: 0;
+}
+
+.clipboard-history-meta-chevron {
+  transform: rotate(180deg);
+}
+
+.clipboard-history-meta.is-expanded .clipboard-history-meta-chevron {
+  transform: none;
+}
+
+.clipboard-history-meta-details {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 10px;
 }
 
 .clipboard-history-meta-row {

@@ -8,7 +8,7 @@
  * - Keyboard shortcuts: Enter=paste, Cmd/Ctrl+C=copy selection in preview, Delete=remove
  */
 
-import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, memo, type KeyboardEvent } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, useId, memo, type KeyboardEvent } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import {
@@ -45,6 +45,7 @@ import {
   type ClipboardTextMergeSeparator,
 } from '../merge/clipboardTextMerge'
 import { ClipboardTextMergePanel } from './ClipboardTextMergePanel'
+import { getClipboardHistoryMatchContext, getClipboardHistoryMatchSnippet } from './clipboardHistoryMatchContext'
 import {
   getClipboardHistoryShortcuts,
   observeClipboardHistoryShortcutFocus,
@@ -276,7 +277,18 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }, [settings.enabled, combining, mergePreview, mergeReader, host, cancelMerge, t, mergeSuspended])
 
   const applyListItems = useCallback((listItems: ClipboardHistoryItem[]) => {
-    setItems(listItems)
+    setItems((current) => {
+      const previousById = new Map(current.map((item) => [item.id, item]))
+      return listItems.map((item) => {
+        const previous = previousById.get(item.id)
+        // Index refreshes must not temporarily remove full-text search matches.
+        // Keep only text for the same content; all fresh metadata still wins.
+        return item.kind === 'text' && !item.text && item.hash
+          && previous?.kind === 'text' && previous.hash === item.hash && previous.text
+          ? { ...item, text: previous.text }
+          : item
+      })
+    })
     setSelectedId((current) => {
       if (listItems.length === 0) return null
       if (current && listItems.some((item) => item.id === current)) return current
@@ -438,6 +450,11 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   })
 
   const [selectedFullItem, setSelectedFullItem] = useState<ClipboardHistoryItem | null>(null)
+  // A selection change renders before the previous read's effect is cleaned up.
+  const matchingFullItem = selectedFullItem?.id === selectedItem?.id && selectedFullItem?.hash === selectedItem?.hash
+    ? selectedFullItem : null
+  const previewItem = selectedItem?.kind === 'text' && selectedItem.text
+    ? selectedItem : matchingFullItem ?? selectedItem
 
   useEffect(() => {
     if (!selectedId) {
@@ -949,6 +966,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                         >
                           <ClipboardHistoryItemRow
                             item={row.item}
+                            query={query}
                             selected={row.item.id === selectedId}
                             locale={locale}
                             t={t}
@@ -991,39 +1009,30 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
             />
           ) : <ContextMenu
             disabled={!selectedItem}
-            items={selectedItem ? itemContextMenuItems(selectedFullItem ?? selectedItem) : []}
+            items={previewItem ? itemContextMenuItems(previewItem) : []}
             trigger={
               <SurfacePreview className="clipboard-history-preview" data-launcher-scrollable>
-                {!selectedItem ? (
+                {!previewItem ? (
                   <SurfaceEmptyState>
                     {t('preview.empty')}
                   </SurfaceEmptyState>
                 ) : (
                   <>
-                    <div className="clipboard-history-preview-content" data-launcher-scrollable>
-                      {renderPreview(selectedFullItem ?? selectedItem, t, host.storage)}
-                    </div>
-                    {(selectedFullItem ?? selectedItem).isFavorite && (
+                    <ClipboardHistoryPreviewContent item={previewItem} query={query} t={t} storage={host.storage} />
+                    {previewItem.isFavorite && (
                       <div className="clipboard-history-favorite-title-bar">
                         <span className="clipboard-history-favorite-title-label">
-                          {(selectedFullItem ?? selectedItem).favoriteTitle || t('favorite.untitled')}
+                          {previewItem.favoriteTitle || t('favorite.untitled')}
                         </span>
                         <ToolbarButton
                           type="button"
-                          onClick={() => openFavoriteTitleDialog(selectedFullItem ?? selectedItem, 'edit')}
+                          onClick={() => openFavoriteTitleDialog(previewItem, 'edit')}
                         >
                           {t('action.editFavoriteTitle')}
                         </ToolbarButton>
                       </div>
                     )}
-                    <div className="clipboard-history-meta">
-                      {getMetaRows(selectedFullItem ?? selectedItem, locale, t).map((row) => (
-                        <div key={row.label} className="clipboard-history-meta-row">
-                          <span>{row.label}</span>
-                          <strong>{row.value}</strong>
-                        </div>
-                      ))}
-                    </div>
+                    <ClipboardHistoryMetadata key={previewItem.id} item={previewItem} locale={locale} t={t} />
                   </>
                 )}
               </SurfacePreview>
@@ -1186,6 +1195,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
 
 const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
   item,
+  query,
   selected,
   locale,
   t,
@@ -1201,6 +1211,7 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
   onToggleMerge,
 }: {
   item: ClipboardHistoryItem
+  query: string
   selected: boolean
   locale: string
   t: (key: string) => string
@@ -1224,6 +1235,12 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
   }, [selected])
 
   const pasteCount = item.pasteCount ?? 0
+  const matchSnippet = useMemo(
+    () => item.kind === 'text' ? getClipboardHistoryMatchSnippet(item.text || item.preview, query) : null,
+    [item, query],
+  )
+  const hasCustomTitle = Boolean(item.favoriteTitle?.trim())
+  const title = !hasCustomTitle && matchSnippet ? matchSnippet : getItemTitle(item, t)
 
   return (
     <ContextMenu
@@ -1252,9 +1269,12 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
               </span>
             ) : renderItemMedia(item, storage)}
             <span className="clipboard-history-item-text">
-              <span className="clipboard-history-item-title">{getItemTitle(item, t)}</span>
+              <span className="clipboard-history-item-title"><ClipboardHistoryHighlightedText text={title} query={query} /></span>
               <span className="clipboard-history-item-subtitle">
-                {getItemSubtitle(item, locale, t)}
+                {hasCustomTitle && matchSnippet ? <>
+                  <ClipboardHistoryHighlightedText text={matchSnippet} query={query} />
+                  {` · ${getContentTypeLabel(item, t)} · ${formatBytes(item.byteSize)} · ${formatDateTime(item.lastCopiedAt, locale)}`}
+                </> : getItemSubtitle(item, locale, t)}
                 {pasteCount > 0 ? ` · ×${pasteCount}` : ''}
               </span>
             </span>
@@ -1358,13 +1378,90 @@ function ClipboardImagePreview({ item, storage, t }: { item: ImageHistoryItem, s
   )
 }
 
-function renderPreview(item: ClipboardHistoryItem, t: (key: string) => string, storage: SurfaceStorage) {
+function ClipboardHistoryHighlightedText({ text, query }: { text: string, query: string }) {
+  const { segments } = useMemo(() => getClipboardHistoryMatchContext(text, query), [text, query])
+  return <>{segments.map((segment) => segment.match
+    ? <mark key={segment.start} className="clipboard-history-search-match">{segment.text}</mark>
+    : segment.text)}</>
+}
+
+function ClipboardHistoryPreviewContent({ item, query, t, storage }: {
+  item: ClipboardHistoryItem
+  query: string
+  t: (key: string) => string
+  storage: SurfaceStorage
+}) {
+  const contentRef = useRef<HTMLDivElement>(null)
+  const alignedRef = useRef<{ id: string, query: string, fullText: boolean } | null>(null)
+  const normalizedQuery = query.trim().toLowerCase()
+  const fullText = item.kind === 'text' && Boolean(item.text)
+
+  useLayoutEffect(() => {
+    const content = contentRef.current
+    if (!content) return
+    const previous = alignedRef.current
+    const sameSearch = previous?.id === item.id && previous.query === normalizedQuery
+    // Loading the full record gets one alignment. Re-reads and background index
+    // refreshes must not move a reader who has since scrolled through the text.
+    if (sameSearch && (previous.fullText || !fullText)) return
+    alignedRef.current = { id: item.id, query: normalizedQuery, fullText }
+    const firstMatch = content.querySelector<HTMLElement>('.clipboard-history-search-match')
+    if (firstMatch) {
+      const matchTop = firstMatch.getBoundingClientRect().top - content.getBoundingClientRect().top + content.scrollTop
+      content.scrollTop = Math.max(0, matchTop - Math.max(16, content.clientHeight * 0.3))
+    } else if (!sameSearch) {
+      content.scrollTop = 0
+    }
+  }, [item.id, normalizedQuery, fullText])
+
+  return (
+    <div ref={contentRef} className="clipboard-history-preview-content" data-launcher-scrollable>
+      {renderPreview(item, t, storage, query)}
+    </div>
+  )
+}
+
+function ClipboardHistoryMetadata({ item, locale, t }: {
+  item: ClipboardHistoryItem
+  locale: string
+  t: (key: string) => string
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const detailsId = useId()
+  return (
+    <div className={`clipboard-history-meta${expanded ? ' is-expanded' : ''}`}>
+      <button
+        type="button"
+        className="clipboard-history-meta-summary"
+        aria-expanded={expanded}
+        aria-controls={detailsId}
+        onClick={() => setExpanded((current) => !current)}
+      >
+        <span className="clipboard-history-meta-summary-text">
+          {`${getContentTypeLabel(item, t)} · ${formatBytes(item.byteSize)} · ${formatDateTime(item.lastCopiedAt, locale)}`}
+        </span>
+        <span className="clipboard-history-meta-toggle">{t(expanded ? 'meta.hideDetails' : 'meta.showDetails')}</span>
+        <span className="clipboard-history-meta-chevron" aria-hidden="true">⌃</span>
+      </button>
+      <div id={detailsId} className="clipboard-history-meta-details" hidden={!expanded}>
+        {getMetaRows(item, locale, t).map((row) => (
+          <div key={row.label} className="clipboard-history-meta-row">
+            <span>{row.label}</span>
+            <strong>{row.value}</strong>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function renderPreview(item: ClipboardHistoryItem, t: (key: string) => string, storage: SurfaceStorage, query: string) {
   if (item.kind === 'text') {
     // Show preview text while full item is loading
     const displayText = item.text || item.preview
     return (
       <pre className="clipboard-history-preview-text">
-        {displayText}
+        <ClipboardHistoryHighlightedText text={displayText} query={query} />
       </pre>
     )
   }

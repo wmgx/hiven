@@ -59,6 +59,8 @@
   "favorite.untitled": "Untitled favorite",
   "preview.label": "Preview",
   "meta.label": "Information",
+  "meta.showDetails": "Details",
+  "meta.hideDetails": "Less",
   "hint.paste": "Paste",
   "hint.returnToLauncher": "Return to Launcher",
   "hint.delete": "Delete",
