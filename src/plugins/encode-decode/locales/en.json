@@ -52,6 +52,7 @@
   "toast.copied": "Copied",
   "toast.copyFailed": "Copy failed",
   "toast.pasteFailed": "Paste failed",
+  "toast.returnFailed": "Could not return to search. Your result is preserved.",
   "error.invalid": "Unable to process this input",
   "error.convert": "Conversion failed: {message}",
   "route.open": "Open in Encode / Decode"

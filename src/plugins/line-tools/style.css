@@ -243,6 +243,15 @@
   text-align: right;
 }
 
+.text-tools-status.has-delivery { flex: none; grid-template-columns: minmax(0, 1fr); padding-block: 8px; }
+.text-tools-status.has-delivery > span:first-child,
+.text-tools-status.has-delivery > span:last-child { display: none; }
+.text-tools-status.has-delivery > [role="status"],
+.text-tools-pane-header > .text-tools-delivery { min-width: 0; color: var(--color-text-secondary); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.text-tools-status .is-error,
+.text-tools-pane-header > .text-tools-delivery.is-error { color: var(--hiven-color-danger); }
+.text-tools-pane-header.has-delivery { height: auto; min-height: 44px; align-items: flex-start; padding-block: 10px; }
+
 .text-tools-results ul {
   flex: 1;
   min-height: 0;

@@ -49,5 +49,6 @@
   "action.close": "Close",
   "toast.copied": "Copied output",
   "toast.copyFailed": "Copy failed",
-  "toast.pasteFailed": "Paste failed"
+  "toast.pasteFailed": "Paste failed",
+  "toast.returnFailed": "Could not return to search. Your result is preserved."
 }

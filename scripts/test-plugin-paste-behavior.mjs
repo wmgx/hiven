@@ -542,12 +542,19 @@ console.log('Paste recovery passed: real store/session ownership, four async bou
 // Its fixed instance owner must survive async callbacks only in that instance.
 const rendererSource = readFileSync('src/components/pluginSurface/PluginSurfaceRenderer.tsx', 'utf8')
 const rendererAst = ts.createSourceFile('PluginSurfaceRenderer.tsx', rendererSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+const rendererFunction = rendererAst.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === 'PluginSurfaceRenderer')
 const hostDeclarations = new Map()
 const pasteFactories = []
-function visitRenderer(node) {
-  if (ts.isVariableDeclaration(node) && ['lifetime', 'isCurrentSurface', 'surfaceOwner', 'launcherPasteOwner', 'pasteOwner'].includes(node.name.getText(rendererAst))) {
-    hostDeclarations.set(node.name.getText(rendererAst), `const ${node.getText(rendererAst)};`)
+// Memo callbacks may declare their own owners. Only the renderer's top-level
+// declarations belong to the presented host factory, in their real source order.
+for (const statement of rendererFunction.body.statements.filter(ts.isVariableStatement)) {
+  for (const node of statement.declarationList.declarations) {
+    if (['lifetime', 'isCurrentSurface', 'surfaceOwner', 'launcherPasteOwner', 'pasteOwner'].includes(node.name.getText(rendererAst))) {
+      hostDeclarations.set(node.name.getText(rendererAst), `const ${node.getText(rendererAst)};`)
+    }
   }
+}
+function visitRenderer(node) {
   if (ts.isCallExpression(node) && node.expression.getText(rendererAst) === 'createPluginPaste') pasteFactories.push(node.getText(rendererAst))
   ts.forEachChild(node, visitRenderer)
 }
@@ -604,13 +611,18 @@ console.log('Caller-managed completion passed: native success keeps the session 
 // factory also owns the original instance, including an independent reopen.
 const preparationNames = ['preparationScope', 'launcherOwner', 'preparationOwner']
 const preparationDeclarations = new Map()
-function visitPreparation(node) {
-  if (ts.isVariableDeclaration(node) && preparationNames.includes(node.name.getText(rendererAst))) {
-    preparationDeclarations.set(node.name.getText(rendererAst), `const ${node.getText(rendererAst)};`)
+const preparationEffect = rendererFunction.body.statements.find((node) => ts.isExpressionStatement(node)
+  && ts.isCallExpression(node.expression) && node.expression.expression.getText(rendererAst) === 'useEffect'
+  && node.expression.arguments[0]?.body?.statements?.some((statement) => ts.isVariableStatement(statement)
+    && statement.declarationList.declarations.some((declaration) => declaration.name.getText(rendererAst) === 'preparationScope')))
+assert.ok(preparationEffect, 'use the real beforeOpen preparation effect')
+for (const statement of preparationEffect.expression.arguments[0].body.statements.filter(ts.isVariableStatement)) {
+  for (const node of statement.declarationList.declarations) {
+    if (preparationNames.includes(node.name.getText(rendererAst))) {
+      preparationDeclarations.set(node.name.getText(rendererAst), `const ${node.getText(rendererAst)};`)
+    }
   }
-  ts.forEachChild(node, visitPreparation)
 }
-visitPreparation(rendererAst)
 const preparationFactorySource = ts.transpileModule(`exports.build = () => { ${[...preparationDeclarations.values()].join('\n')} return { paste: ${pasteFactories[0]}, scope: preparationScope }; }`, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023 },
 }).outputText

@@ -7,6 +7,7 @@ import vm from 'node:vm'
 import ts from 'typescript'
 import * as sqlFormatter from 'sql-formatter'
 import { encodeDecodeCore } from './helpers/text-transform-cores.mjs'
+import * as textTransforms from '../src/kits/textTransforms/index.ts'
 
 function compile(source) {
   return ts.transpileModule(source, { compilerOptions: {
@@ -16,7 +17,7 @@ function compile(source) {
 function load(path, dependencies = {}) {
   const exports = {}
   vm.runInNewContext(compile(readFileSync(path, 'utf8')), {
-    exports, module: { exports }, console, atob, btoa, TextDecoder, Uint8Array,
+    exports, module: { exports }, console, atob, btoa, TextDecoder, Uint8Array, AbortController,
     require(name) {
       assert.ok(Object.hasOwn(dependencies, name), `${path}: unexpected dependency ${name}`)
       return dependencies[name]
@@ -25,7 +26,7 @@ function load(path, dependencies = {}) {
   return exports
 }
 const jsx = (type, props) => ({ type, props })
-const primitives = Object.fromEntries(['Button', 'Checkbox', 'IconButton', 'SegmentedControl', 'TextInput', 'TextEditor'].map(name => [name, name]))
+const primitives = Object.fromEntries(['Button', 'Checkbox', 'IconButton', 'SegmentedControl', 'TextInput', 'TextEditor', 'TextArea', 'Select'].map(name => [name, name]))
 const specs = [
   { plugin: 'line-tools', component: 'TextToolsSurface', route: 'line-sort', input: 'b\r\na\r\n中文🙂',
     core: load('src/plugins/line-tools/core.ts'), extras: { './routes': load('src/plugins/line-tools/routes.ts') } },
@@ -34,6 +35,12 @@ const specs = [
   { plugin: 'formatter', component: 'FormatterSurface', route: 'css-format', input: 'a{color:red;}\r\n',
     core: load('src/plugins/formatter/core.ts', { 'sql-formatter': sqlFormatter, './xml.ts': load('src/plugins/formatter/xml.ts') }) },
 ]
+const workbenchSpec = {
+  plugin: 'line-tools', component: 'TextWorkbenchSurface', route: 'text-workbench', input: ' b  \n a ',
+  core: specs[0].core, extras: { './workbench.css': {} },
+  actions: { 'action.useAsInput': 'workbench.useResult', 'action.continueProcessing': 'workbench.returnDescription' },
+}
+const deliveryController = load('src/ui/toolDeliveryFeedback.ts')
 const tick = () => new Promise(resolve => setImmediate(resolve))
 const plain = value => JSON.parse(JSON.stringify(value))
 function deferred() {
@@ -48,13 +55,17 @@ function nodes(tree) {
 }
 function harness(spec, { input = spec.input, legacyHost = false, copy = async () => {}, paste = async () => ({ ok: true }), handoff = async () => true } = {}) {
   const slots = [], queuedEffects = []
-  let cursor = 0, view, mounted = true, host
+  let cursor = 0, view, mounted = true, host, needsRender = false
   const calls = { dirty: [], copied: [], pasted: [], returned: [], messages: [], complete: 0, back: 0, close: 0 }
   const props = { initialText: input, surfaceId: spec.route, t: key => key, appearance: { theme: 'dark' } }
   const useState = initial => {
     const index = cursor++
     if (!(index in slots)) slots[index] = typeof initial === 'function' ? initial() : initial
-    return [slots[index], value => { slots[index] = typeof value === 'function' ? value(slots[index]) : value }]
+    return [slots[index], value => {
+      const next = typeof value === 'function' ? value(slots[index]) : value
+      if (!Object.is(next, slots[index])) needsRender = true
+      slots[index] = next
+    }]
   }
   const useEffect = (setup, deps) => {
     const index = cursor++, previous = slots[index]
@@ -65,30 +76,58 @@ function harness(spec, { input = spec.input, legacyHost = false, copy = async ()
       })
     }
   }
+  const useMemo = (factory, deps) => {
+    const index = cursor++, previous = slots[index]
+    if (!previous || deps.some((value, offset) => !Object.is(value, previous.deps[offset]))) {
+      slots[index] = { deps, value: factory() }
+    }
+    return slots[index].value
+  }
   const react = { Suspense: 'Suspense', useState, useRef: value => useState(() => ({ current: value }))[0],
-    useMemo: factory => factory(), useEffect, useLayoutEffect: useEffect }
+    useMemo, useCallback: (callback, deps) => useMemo(() => callback, deps), useEffect, useLayoutEffect: useEffect,
+    useSyncExternalStore(subscribe, getSnapshot) {
+      useEffect(() => subscribe(() => { needsRender = true }), [subscribe])
+      return getSnapshot()
+    } }
+  const { useToolDeliveryFeedback } = load('src/ui/useToolDeliveryFeedback.ts', {
+    react, './toolDeliveryFeedback': deliveryController,
+  })
   const component = load(`src/plugins/${spec.plugin}/${spec.component}.tsx`, {
     react, 'react/jsx-runtime': { jsx, jsxs: jsx },
-    '@hiven/plugin': { getPluginHostSdk: () => ({ kits: { content: { detectContent: () => [] } } }) },
-    '@hiven/plugin-ui': { ...primitives, getEditorTheme: value => value },
+    '@hiven/plugin': { getPluginHostSdk: () => ({ kits: { content: { detectContent: () => [] }, textTransforms } }) },
+    '@hiven/plugin-ui': { ...primitives, getEditorTheme: value => value, useToolDeliveryFeedback },
     '@hiven/plugin-ui/icons': { BackIcon: 'BackIcon', CloseIcon: 'CloseIcon' },
-    'lucide-react': { ClipboardPaste: 'ClipboardPaste', CornerDownLeft: 'CornerDownLeft' },
+    'lucide-react': { ClipboardPaste: 'ClipboardPaste', CornerDownLeft: 'CornerDownLeft', Check: 'Check', Copy: 'Copy', TriangleAlert: 'TriangleAlert' },
     './core': spec.core, ...spec.extras,
   })[spec.component]
   const reporter = dirty => { if (mounted) calls.dirty.push(dirty) }
+  const ownerListeners = new Set()
+  let ownerActive = true, ownerRevision = 0
+  const createOwner = () => {
+    const revision = ownerRevision
+    return { isCurrent: () => ownerActive && revision === ownerRevision,
+      subscribeInvalidation: listener => { ownerListeners.add(listener); return () => ownerListeners.delete(listener) } }
+  }
+  const owner = createOwner()
   host = {
+    deliveryFeedbackOwner: owner,
     setUnsavedChanges: legacyHost ? undefined : reporter,
     clipboard: { writeText: async text => { calls.copied.push(text); await copy() } },
     paste: { pasteText: async text => { calls.pasted.push(text); return paste() } },
-    returnToLauncherWithObject: block => { calls.returned.push(plain(block)); return handoff() },
+    returnToLauncherWithObject: (block, options) => { calls.returned.push(plain(block)); calls.returnSignal = options?.signal; return handoff() },
     showMessage: (...args) => calls.messages.push(args),
     complete: () => calls.complete++, requestBack: () => calls.back++, close: () => calls.close++,
   }
   function render() {
     assert.ok(mounted)
-    cursor = 0
-    view = component({ ...props, host })
-    queuedEffects.splice(0).forEach(run => run())
+    let commits = 0
+    do {
+      assert.ok(commits++ < 20, 'hook updates must settle')
+      needsRender = false
+      cursor = 0
+      view = component({ ...props, host })
+      queuedEffects.splice(0).forEach(run => run())
+    } while (needsRender)
     return view
   }
   const find = predicate => {
@@ -97,9 +136,12 @@ function harness(spec, { input = spec.input, legacyHost = false, copy = async ()
     return found.props
   }
   const inputProps = () => find(node => typeof node.props?.onChange === 'function'
-    && (node.type === 'textarea' || node.type === 'TextEditor'))
-  const action = key => find(node => typeof node.props?.onClick === 'function'
-    && [node.props.label, node.props['aria-label'], node.props.children].flat().includes(key))
+    && (node.type === 'textarea' || node.type === 'TextArea' || node.type === 'TextEditor'))
+  const action = key => {
+    const actual = spec.actions?.[key] ?? key
+    return find(node => typeof node.props?.onClick === 'function'
+      && [node.props.label, node.props['aria-label'], node.props.children, node.props.title].flat().includes(actual))
+  }
   function fire(key) {
     const button = action(key)
     assert.ok(!button.disabled, `${key} must be enabled`)
@@ -110,7 +152,23 @@ function harness(spec, { input = spec.input, legacyHost = false, copy = async ()
   render()
   return { calls, render, action, find, fire,
     get input() { return inputProps().value },
-    get output() { return find(node => (node.type === 'textarea' && node.props.readOnly)
+    get feedback() { return nodes(view).find(node => node.props?.role === 'status' && (
+      String(node.props.className).includes('is-info') || String(node.props.className).includes('is-error')
+    ))?.props.children },
+    get statuses() {
+      const text = value => typeof value === 'string' ? [value] : Array.isArray(value) ? value.flatMap(text) : text(value?.props?.children ?? [])
+      return nodes(view).filter(node => node.props?.role === 'status').flatMap(node => text(node.props.children))
+    },
+    editWithoutRender(value) { const field = inputProps(); field.onChange(spec.plugin === 'formatter' ? value : { currentTarget: { value } }) },
+    invalidateOwner() { ownerActive = false; for (const listener of ownerListeners) listener() },
+    restoreOwner() { ownerActive = true; render() },
+    rotateOwner() {
+      ownerRevision++
+      for (const listener of ownerListeners) listener()
+      host = { ...host, deliveryFeedbackOwner: createOwner() }
+      render()
+    },
+    get output() { return find(node => ((node.type === 'textarea' || node.type === 'TextArea') && node.props.readOnly)
       || (node.type === 'TextEditor' && node.props.optionOverrides?.readOnly)).value },
     edit(value) { const field = inputProps(); field.onChange(spec.plugin === 'formatter' ? value : { currentTarget: { value } }); render() },
     change(key, value) { find(node => node.props?.['aria-label'] === key).onChange({ currentTarget: { value } }); render() },
@@ -229,7 +287,10 @@ for (const spec of specs) {
     else receipt.resolve()
     await h.settle()
     assert.equal(h.calls.complete, failed ? 0 : 1)
-    assert.equal(h.calls.messages.at(-1)[0], failed ? 'toast.copyFailed' : 'toast.copied')
+    if (failed) {
+      assert.ok(h.statuses.includes('toast.copyFailed'))
+      assert.equal(h.calls.messages.length, 0, 'failure lives in the status slot')
+    } else assert.equal(h.calls.messages.at(-1)[0], 'toast.copied')
     assert.deepEqual(h.calls.dirty, [false, true], 'only the host owns successful exit cleanup')
   })
   for (const outcome of [{ ok: true }, { ok: false, fallback: 'copied', message: 'copied only' }, { ok: false, message: 'failed' }, { ok: false }, 'throw']) {
@@ -317,4 +378,126 @@ await check('formatter: language and operation do not dirty even for invalid out
   h.edit(`${specs[2].input} `); h.fire('operation.compact')
   assert.equal(h.calls.dirty.at(-1), true)
 })
-console.log(`Text tool unsaved changes: ${passed} production-module logic scenarios passed`)
+// Delivery feedback is part of the same draft/owner contract. Exercise the actual
+// component callbacks and shared hook, including the interval before a rerender.
+const copiedOnly = { ok: false, fallback: 'copied', message: 'Copied. Paste manually in the original app.' }
+const deliverySpecs = [...specs, workbenchSpec]
+for (const spec of deliverySpecs) {
+  const run = (name, body) => check(`${spec.component}: ${name}`, body)
+  await run('copied fallback remains in the existing status slot and keeps the draft', async () => {
+    const h = harness(spec, { paste: async () => copiedOnly })
+    h.edit(`${spec.input} `)
+    const draft = h.input, output = h.output
+    await h.click('action.pasteBack')
+    assert.ok(h.statuses.includes(copiedOnly.message))
+    assert.equal(h.calls.complete, 0)
+    assert.equal(h.calls.messages.length, 0, 'persistent feedback does not also toast')
+    assert.equal(h.input, draft); assert.equal(h.output, output)
+    assert.equal(h.calls.dirty.at(-1), true)
+    h.rebuildHost(); h.rebuildHost()
+    assert.ok(h.statuses.includes(copiedOnly.message), 'ordinary host renders preserve feedback')
+    h.edit(`${draft} `)
+    assert.ok(!h.statuses.includes(copiedOnly.message))
+  })
+  for (const outcome of [{ ok: true }, { ok: false, fallback: 'none', message: 'Clipboard write failed' }, { ok: false, fallback: 'none', message: '' }, 'throw']) {
+    await run(`paste settlement ${JSON.stringify(outcome)}`, async () => {
+      const h = harness(spec, { paste: async () => { if (outcome === 'throw') throw Error('failed'); return outcome } })
+      await h.click('action.pasteBack')
+      assert.equal(h.calls.complete, outcome.ok ? 1 : 0)
+      assert.equal(h.calls.messages.length, 0)
+      if (outcome.message) assert.ok(h.statuses.includes(outcome.message))
+      if (outcome === 'throw') assert.ok(h.statuses.includes('toast.pasteFailed'))
+      assert.ok(!h.statuses.includes(copiedOnly.message), 'write failure never claims it copied')
+    })
+  }
+  for (const action of ['action.copy', 'action.continueProcessing', 'action.pasteBack']) {
+    await run(`${action} clears a prior fallback before settling`, async () => {
+      const receipt = deferred()
+      let pastes = 0
+      const h = harness(spec, { copy: () => receipt.promise, handoff: () => receipt.promise,
+        paste: () => ++pastes === 1 ? Promise.resolve(copiedOnly) : receipt.promise })
+      await h.click('action.pasteBack')
+      assert.ok(h.statuses.includes(copiedOnly.message))
+      h.fire(action)
+      assert.ok(!h.statuses.includes(copiedOnly.message))
+      receipt.resolve(action === 'action.pasteBack' ? { ok: false, fallback: 'none', message: '' } : false)
+      await h.settle()
+    })
+  }
+  for (const trigger of ['edit', 'replace input', 'parameter', 'back', 'close', 'owner', 'unmount']) {
+    await run(`${trigger} clears feedback immediately`, async () => {
+      const h = harness(spec, { paste: async () => copiedOnly })
+      await h.click('action.pasteBack')
+      if (trigger === 'edit') h.editWithoutRender(`${spec.input} changed`)
+      if (trigger === 'replace input') h.action('action.useAsInput').onClick()
+      if (trigger === 'parameter') {
+        if (spec.component === 'TextToolsSurface') h.find(node => node.type === 'SegmentedControl').onChange('desc')
+        if (spec.component === 'EncodeDecodeSurface') h.action('format.url').onClick()
+        if (spec.component === 'FormatterSurface') h.action('operation.compact').onClick()
+        if (spec.component === 'TextWorkbenchSurface') h.find(node => node.type === 'Select').onChange({ currentTarget: { value: 'dedup' } })
+      }
+      if (trigger === 'back' || trigger === 'close') h.action(`action.${trigger}`).onClick()
+      if (trigger === 'owner') h.invalidateOwner()
+      if (trigger === 'unmount') h.unmount()
+      else { h.render(); assert.ok(!h.statuses.includes(copiedOnly.message)) }
+      assert.equal(h.calls.complete, 0)
+    })
+  }
+  for (const action of ['action.copy', 'action.pasteBack']) {
+    for (const trigger of ['edit', 'parameter', 'exit', 'owner', 'unmount']) {
+      for (const late of ['success', 'failure']) await run(`${action}: late ${late} after ${trigger} stays silent`, async () => {
+        const receipt = deferred(), h = harness(spec, { copy: () => receipt.promise, paste: () => receipt.promise })
+        const retained = h.action(action).onClick
+        h.fire(action)
+        if (trigger === 'edit') h.editWithoutRender(`${spec.input} changed`)
+        if (trigger === 'parameter') {
+          if (spec.component === 'TextToolsSurface') h.find(node => node.type === 'SegmentedControl').onChange('desc')
+          if (spec.component === 'EncodeDecodeSurface') h.action('format.url').onClick()
+          if (spec.component === 'FormatterSurface') h.action('operation.compact').onClick()
+          if (spec.component === 'TextWorkbenchSurface') h.find(node => node.type === 'Select').onChange({ currentTarget: { value: 'dedup' } })
+        }
+        if (trigger === 'exit') h.action('action.back').onClick()
+        if (trigger === 'owner') h.invalidateOwner()
+        if (trigger === 'unmount') h.unmount()
+        if (late === 'failure') receipt.reject(Error('late failure'))
+        else receipt.resolve(action === 'action.pasteBack' ? { ok: true } : undefined)
+        await tick()
+        assert.equal(h.calls.complete, 0)
+        assert.equal(h.calls.messages.length, 0)
+        // A retained handler cannot start the old result in the edit/commit gap.
+        retained(); await tick()
+        assert.equal(h.calls.copied.length + h.calls.pasted.length, 1)
+        if (trigger !== 'unmount') h.render()
+      })
+    }
+  }
+  for (const accepted of [true, false, 'reject']) await run(`return owner expires synchronously then ${accepted}: settlement releases its lock`, async () => {
+    const receipt = deferred()
+    let h
+    h = harness(spec, { handoff: () => { h.rotateOwner(); return receipt.promise } })
+    h.fire('action.continueProcessing')
+    if (accepted === 'reject') receipt.reject(Error('host rejection'))
+    else receipt.resolve(accepted)
+    await h.settle()
+    assert.equal(h.action('action.copy').disabled, false, 'including a still-mounted standalone surface after success')
+    await h.click('action.copy')
+    assert.equal(h.calls.complete, 1)
+    assert.equal(h.calls.copied.length, 1)
+    assert.equal(h.calls.messages.filter(([text]) => text === 'toast.copied').length, 1)
+  })
+  await run('edit aborts a pending handoff without unlocking a newer one', async () => {
+    const first = deferred(), second = deferred()
+    let returns = 0
+    const h = harness(spec, { handoff: () => ++returns === 1 ? first.promise : second.promise })
+    h.fire('action.continueProcessing')
+    const firstSignal = h.calls.returnSignal
+    h.edit(`${spec.input} `)
+    assert.equal(firstSignal.aborted, true)
+    h.fire('action.continueProcessing')
+    first.resolve(false); await h.settle()
+    assert.equal(h.action('action.copy').disabled, true, 'old finally does not release the newer submission')
+    second.resolve(false); await h.settle()
+    assert.equal(h.action('action.copy').disabled, false)
+  })
+}
+console.log(`Text tool unsaved changes and delivery feedback: ${passed} production-module logic scenarios passed`)

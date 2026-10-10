@@ -122,6 +122,12 @@
 .formatter-status > span { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 18px; }
 .formatter-status > span { justify-content: flex-end; border-left: 1px solid var(--formatter-border); }
 .formatter-status .is-error { color: var(--hiven-color-danger); }
+.formatter-status.has-delivery { flex: none; grid-template-columns: minmax(0, 1fr); }
+.formatter-status.has-delivery > span,
+.formatter-status.has-delivery > div > span:first-child { display: none; }
+.formatter-status.has-delivery > div { min-width: 0; padding-block: 8px; }
+.formatter-status.has-delivery [role="status"] { min-width: 0; color: var(--color-text-secondary); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.formatter-status.has-delivery .is-error { color: var(--hiven-color-danger); }
 
 @media (max-width: 720px) {
   .formatter-header { gap: 6px; padding: 0 8px; }

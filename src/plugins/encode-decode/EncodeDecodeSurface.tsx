@@ -1,6 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, IconButton } from '@hiven/plugin-ui'
+import { Button, IconButton, useToolDeliveryFeedback } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
 import { ClipboardPaste, CornerDownLeft } from 'lucide-react'
 import {
@@ -42,7 +42,8 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
   }, [hasUnsavedChanges, reportUnsavedChanges])
   const [format, setFormat] = useState<EncodeDecodeFormat>(initial.format)
   const [direction, setDirection] = useState<EncodeDecodeDirection>(initial.direction)
-  const [pasting, setPasting] = useState(false)
+  const [busy, setBusy] = useState<'copy' | 'paste' | 'return' | null>(null)
+  const pendingRef = useRef<{ action: 'copy' | 'paste' | 'return'; controller: AbortController } | null>(null)
   const result = useMemo(() => {
     if (!inputText) return { ok: true as const, output: '' }
     try {
@@ -58,55 +59,92 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
   })
 
   const chooseFormat = (nextFormat: EncodeDecodeFormat) => {
-    setFormat(nextFormat)
-    if (nextFormat === 'jwt') setDirection('decode')
+    update(() => {
+      setFormat(nextFormat)
+      if (nextFormat === 'jwt') setDirection('decode')
+    })
   }
 
   const useOutputAsInput = () => {
     if (!hasOutput) return
-    setInputText(result.output)
-    if (format !== 'jwt') setDirection(direction === 'encode' ? 'decode' : 'encode')
+    update(() => {
+      setInputText(result.output)
+      if (format !== 'jwt') setDirection(direction === 'encode' ? 'decode' : 'encode')
+    })
   }
 
-  const copyOutput = async () => {
-    if (!hasOutput) return
-    try {
-      await host.clipboard.writeText(result.output)
-      host.showMessage(t('toast.copied'), 'success')
-      host.complete()
-    } catch {
-      host.showMessage(t('toast.copyFailed'), 'error')
+  const delivery = useToolDeliveryFeedback(result, host.deliveryFeedbackOwner)
+
+  useLayoutEffect(() => () => {
+    pendingRef.current?.controller.abort()
+    pendingRef.current = null
+  }, [])
+
+  const update = (change: () => void) => {
+    delivery.invalidate()
+    pendingRef.current?.controller.abort()
+    // Keep an issued clipboard/paste write locked until it settles.
+    if (pendingRef.current?.action === 'return') {
+      pendingRef.current = null
+      setBusy(null)
     }
+    change()
   }
 
-  const pasteOutput = async () => {
-    if (!hasOutput || pasting) return
-    setPasting(true)
+  const deliver = async (action: 'copy' | 'paste' | 'return') => {
+    if (!hasOutput || pendingRef.current) return
+    const attempt = delivery.beginAttempt()
+    if (!attempt.isCurrent()) return
+    const submission = { action, controller: new AbortController() }
+    pendingRef.current = submission
+    setBusy(action)
+    const isCurrent = () => pendingRef.current === submission
+      && !submission.controller.signal.aborted && attempt.isCurrent()
+    const release = () => {
+      if (pendingRef.current !== submission) return
+      pendingRef.current = null
+      setBusy(null)
+    }
     try {
-      const pasteResult = await host.paste.pasteText(result.output)
-      if (!pasteResult.ok && !pasteResult.message) return
-      if (pasteResult.ok) {
+      if (action === 'return') {
+        const accepted = await host.returnToLauncherWithObject(
+          { kind: 'text', text: result.output, source: 'tool-result' },
+          { signal: submission.controller.signal },
+        )
+        if (!isCurrent()) return
+        if (accepted === false) release()
+        return accepted
+      }
+      if (action === 'copy') {
+        await host.clipboard.writeText(result.output)
+        if (!isCurrent()) return
+        delivery.invalidate()
+        host.showMessage(t('toast.copied'), 'success')
         host.complete()
-      } else if (pasteResult.fallback === 'copied') {
-        host.showMessage(pasteResult.message, 'info')
       } else {
-        host.showMessage(pasteResult.message || t('toast.pasteFailed'), 'error')
+        const delivered = await host.paste.pasteText(result.output)
+        if (!isCurrent()) return
+        attempt.reportPaste(delivered)
+        if (delivered.ok) host.complete()
       }
     } catch {
-      host.showMessage(t('toast.pasteFailed'), 'error')
+      if (isCurrent()) {
+        attempt.reportError(t(action === 'copy' ? 'toast.copyFailed' : action === 'paste' ? 'toast.pasteFailed' : 'toast.returnFailed'))
+        release()
+      }
     } finally {
-      setPasting(false)
+      release()
     }
   }
 
   return (
     <section className="encode-surface" aria-label={t('surface.title')} data-no-drag>
       <header className="encode-header">
-        <IconButton type="button" label={t('action.back')} onClick={() => host.requestBack()}>
+        <IconButton type="button" label={t('action.back')} onClick={() => update(() => host.requestBack())}>
           <BackIcon size={14} strokeWidth={2} />
         </IconButton>
         <strong>{t('surface.title')}</strong>
-        <IconButton type="button" label={t('action.close')} onClick={() => host.close()}>
+        <IconButton type="button" label={t('action.close')} onClick={() => update(() => host.close())}>
           <CloseIcon size={14} strokeWidth={2} />
         </IconButton>
       </header>
@@ -132,7 +170,7 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
             type="button"
             className={item === direction ? 'is-active' : ''}
             aria-pressed={item === direction}
-            onClick={() => setDirection(item as EncodeDecodeDirection)}
+            onClick={() => update(() => setDirection(item as EncodeDecodeDirection))}
           >
             {t(`direction.${item}`)}
           </button>
@@ -143,7 +181,7 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
         <section className="encode-pane">
           <div className="encode-pane-header">
             <strong>{t('pane.input')}</strong>
-            <Button type="button" variant="ghost" disabled={!inputText} onClick={() => setInputText('')}>
+            <Button type="button" variant="ghost" disabled={!inputText} onClick={() => update(() => setInputText(''))}>
               {t('action.clear')}
             </Button>
           </div>
@@ -154,7 +192,7 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
             aria-label={t('pane.input')}
             placeholder={t('surface.inputPlaceholder')}
             spellCheck={false}
-            onChange={(event) => setInputText(event.currentTarget.value)}
+            onChange={(event) => update(() => setInputText(event.currentTarget.value))}
           />
         </section>
 
@@ -163,19 +201,19 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
             <strong>{t('pane.output')}</strong>
             <div className="encode-pane-actions">
               {format !== 'jwt' ? (
-                <Button type="button" variant="ghost" title={useAsInputDescription} aria-label={useAsInputDescription} disabled={!hasOutput || pasting} onClick={useOutputAsInput}>
+                <Button type="button" variant="ghost" title={useAsInputDescription} aria-label={useAsInputDescription} disabled={!hasOutput || busy !== null} onClick={useOutputAsInput}>
                   {t('action.useAsInput')}
                 </Button>
               ) : null}
-              <Button type="button" variant="ghost" title={t('action.continueProcessingDescription')} aria-label={t('action.continueProcessingDescription')} disabled={!hasOutput || pasting} onClick={() => host.returnToLauncherWithObject({ kind: 'text', text: result.output, source: 'tool-result' })}>
+              <Button type="button" variant="ghost" title={t('action.continueProcessingDescription')} aria-label={t('action.continueProcessingDescription')} disabled={!hasOutput || busy !== null} onClick={() => deliver('return')}>
                 <CornerDownLeft size={14} aria-hidden="true" />
                 {t('action.continueProcessing')}
               </Button>
-              <Button type="button" variant="ghost" title={t('action.pasteBackDescription')} aria-label={t('action.pasteBackDescription')} disabled={!hasOutput || pasting} onClick={() => void pasteOutput()}>
+              <Button type="button" variant="ghost" title={t('action.pasteBackDescription')} aria-label={t('action.pasteBackDescription')} disabled={!hasOutput || busy !== null} onClick={() => void deliver('paste')}>
                 <ClipboardPaste size={14} aria-hidden="true" />
                 {t('action.pasteBack')}
               </Button>
-              <Button type="button" title={t('action.copyDescription')} aria-label={t('action.copyDescription')} disabled={!hasOutput || pasting} onClick={() => void copyOutput()}>
+              <Button type="button" title={t('action.copyDescription')} aria-label={t('action.copyDescription')} disabled={!hasOutput || busy !== null} onClick={() => void deliver('copy')}>
                 {t('action.copy')}
               </Button>
             </div>
@@ -194,10 +232,10 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
         </section>
       </main>
 
-      <footer className="encode-status" aria-live="polite">
+      <footer className={`encode-status${delivery.feedback ? ' has-delivery' : ''}`} aria-live="polite">
         <span>{t('meta.characters', { count: inputText.length })}</span>
-        <span className={!result.ok ? 'is-error' : ''}>
-          {!result.ok ? t('status.error') : format === 'url' ? t(`hint.url.${direction}`) : hasOutput ? t('status.ready') : t('status.waiting')}
+        <span className={delivery.feedback ? `is-${delivery.feedback.tone}` : !result.ok ? 'is-error' : ''} role="status">
+          {delivery.feedback?.message ?? (!result.ok ? t('status.error') : format === 'url' ? t(`hint.url.${direction}`) : hasOutput ? t('status.ready') : t('status.waiting'))}
         </span>
         <span>{t('meta.characters', { count: result.output.length })}</span>
       </footer>

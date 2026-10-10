@@ -74,6 +74,8 @@
 .text-workbench-pane > .hiven-ui-textarea::placeholder { color: var(--color-text-tertiary); }
 .text-workbench-result.is-error > .hiven-ui-textarea { color: var(--color-error-text); }
 .text-workbench-result-meta { flex: none; min-height: 30px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 18px 8px; color: var(--color-text-tertiary); font-size: 10px; }
+.text-workbench-result-meta.is-delivery { padding-top: 4px; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; color: var(--color-text-secondary); }
+.text-workbench-result-meta.is-error { color: var(--hiven-color-danger); }
 
 .text-workbench-footer { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 60px; padding: 12px 18px; border-top: 1px solid var(--workbench-border); }
 .text-workbench-output-actions { display: flex; align-items: center; gap: 6px; }

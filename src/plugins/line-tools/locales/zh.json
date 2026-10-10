@@ -56,6 +56,7 @@
   "action.pasteBack": "粘贴",
   "action.pasteBackDescription": "粘贴当前结果到原应用",
   "toast.pasteFailed": "粘贴失败",
+  "toast.returnFailed": "返回搜索失败，结果已保留。",
   "action.useAsInput": "替换输入",
   "action.useAsInputDescription": "替换输入：用当前结果替换输入，保留当前操作与参数并即时重算。",
   "toast.copied": "已复制",

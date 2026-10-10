@@ -52,6 +52,7 @@
   "toast.copied": "已复制",
   "toast.copyFailed": "复制失败",
   "toast.pasteFailed": "粘贴失败",
+  "toast.returnFailed": "返回搜索失败，结果已保留。",
   "error.invalid": "无法处理此输入",
   "error.convert": "转换失败：{message}",
   "route.open": "在编解码中打开"

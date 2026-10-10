@@ -180,6 +180,7 @@ export function PluginSurfaceRenderer({
 
   useEffect(() => {
     hiddenRef.current = false
+    let visibilityRevoked = false
     const interrupt = () => {
       if (!isPasteRecoveryTemporaryHidden()) {
         preparationScopeRef.current?.invalidate()
@@ -187,7 +188,17 @@ export function PluginSurfaceRenderer({
       }
     }
     const pageHide = () => { preparationScopeRef.current?.invalidate(); interruptSettings() }
-    const onVisibilityChange = () => { if (document.visibilityState === 'hidden') interrupt() }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        if (!isPasteRecoveryTemporaryHidden()) {
+          visibilityRevoked = true
+          interrupt()
+        }
+      } else if (visibilityRevoked) {
+        visibilityRevoked = false
+        refreshPasteOwner((version) => version + 1)
+      }
+    }
     window.addEventListener('pagehide', pageHide)
     document.addEventListener('visibilitychange', onVisibilityChange)
     let disposed = false
@@ -332,6 +343,20 @@ export function PluginSurfaceRenderer({
     return () => { disposed = true; preparationScope.invalidate(); stopRegistry?.(); stopPermissions?.() }
   }, [target, pluginRegistryVersion, permissionVersion, locale, presentation])
 
+  const deliveryFeedbackOwner = useMemo<NonNullable<PluginSurfaceHostApi['deliveryFeedbackOwner']>>(() => {
+    const lifetime = pluginRegistry.getPluginLifetime(target.pluginId, target.source)
+    const surfaceOwner = pasteScope.capture(() => mountedRef.current
+      && activeTargetRef.current === target && activeStateRef.current === surfaceState
+      && surfaceState.status === 'ready' && surfaceState.target === target
+      && !hiddenRef.current && !sessionRef.current && lifetime.active)
+    const launcherOwner = presentation === 'global-launcher' ? captureLauncherPasteOwner({ complete: false }) : undefined
+    const owner = combinePasteRecoveryOwners(surfaceOwner, launcherOwner)
+    return {
+      isCurrent: () => owner.isCurrent() && (presentation !== 'global-launcher' || launcherOwner !== undefined),
+      subscribeInvalidation: owner.subscribeInvalidation,
+    }
+  }, [target, surfaceState, pasteScope, presentation, pasteOwnerVersion, appSettingsSession, launcherSettingsTarget, launcherSessionId])
+
   // Stable within the presented owner, including ordinary theme/status rerenders.
   // Retained callbacks never capture a replacement generation at invocation time.
   const saveText = useMemo<NonNullable<PluginSurfaceHostApi['saveText']>>(() => {
@@ -435,6 +460,7 @@ export function PluginSurfaceRenderer({
           permissions={surfaceState.permissions}
           initialText={target.initialText}
           host={{
+            deliveryFeedbackOwner,
             close: () => requestLeave('close'),
             complete: () => {
               if (presentation === 'global-launcher') leaveSurface(onClose)
@@ -494,6 +520,9 @@ export function PluginSurfaceRenderer({
                 ? deliveredHandoffRef.current : null
               interruptSettings()
               const block = delivered?.block ?? createPluginSurfaceObjectBlock(input)
+              // Handoff revokes pending output attempts, but a rejected handoff
+              // leaves this surface usable for a fresh explicit delivery.
+              refreshPasteOwner((version) => version + 1)
               const controller = new AbortController()
               const handoff = { controller, promise: Promise.resolve(false) }
               handoffRef.current = handoff

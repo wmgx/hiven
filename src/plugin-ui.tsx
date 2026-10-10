@@ -23,6 +23,8 @@ import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } fro
 
 export { getFluxMonacoTheme as getEditorTheme } from './utils/monacoTheme'
 export { Tooltip } from '@base-ui/react/tooltip'
+export { useToolDeliveryFeedback } from './ui/useToolDeliveryFeedback'
+export type { ToolDeliveryFeedback, ToolDeliveryFeedbackAttempt, ToolDeliveryFeedbackOwner } from './ui/toolDeliveryFeedback'
 
 // Load the existing editor only when a plugin mounts it; keep Launcher startup light.
 export const TextEditor = lazy(async () => {

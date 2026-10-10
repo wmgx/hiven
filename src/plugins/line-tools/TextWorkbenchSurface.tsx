@@ -1,6 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { getPluginHostSdk, type PluginSurfaceProps } from '@hiven/plugin'
-import { Button, Checkbox, IconButton, SegmentedControl, Select, TextArea } from '@hiven/plugin-ui'
+import { Button, Checkbox, IconButton, SegmentedControl, Select, TextArea, useToolDeliveryFeedback } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
 import { Check, ClipboardPaste, Copy, CornerDownLeft, TriangleAlert } from 'lucide-react'
 import { dedupLines, removeBlankLines, trimLineWhitespace } from './core'
@@ -58,6 +58,7 @@ export function TextWorkbenchSurface(props: PluginSurfaceProps) {
     }
     // A revision gives identical-looking results a fresh identity after any edit or exit.
   }, [inputText, operation, indent, ignoreCase, category, revision, compactJson, formatJson, urlDecode, urlEncode])
+  const delivery = useToolDeliveryFeedback(result, host.deliveryFeedbackOwner)
 
   useLayoutEffect(() => {
     activeRef.current = true
@@ -81,6 +82,7 @@ export function TextWorkbenchSurface(props: PluginSurfaceProps) {
 
   // Revoke pending callbacks before React commits the next input or operation.
   const update = (change: () => void) => {
+    delivery.invalidate()
     currentResultRef.current = null
     revisionRef.current += 1
     pendingRef.current?.controller.abort()
@@ -107,11 +109,13 @@ export function TextWorkbenchSurface(props: PluginSurfaceProps) {
 
   const deliver = async (action: OutputAction) => {
     if (!isCurrentResult() || result.status !== 'ready' || pendingRef.current) return
+    const attempt = delivery.beginAttempt()
+    if (!attempt.isCurrent()) return
     const submission = { action, controller: new AbortController() }
     pendingRef.current = submission
     setBusy(action)
     const isCurrent = () => pendingRef.current === submission
-      && !submission.controller.signal.aborted && isCurrentResult()
+      && !submission.controller.signal.aborted && isCurrentResult() && attempt.isCurrent()
     const release = () => {
       if (pendingRef.current !== submission) return
       pendingRef.current = null
@@ -131,22 +135,22 @@ export function TextWorkbenchSurface(props: PluginSurfaceProps) {
       if (action === 'copy') {
         await host.clipboard.writeText(result.text)
         if (!isCurrent()) return
+        delivery.invalidate()
         host.showMessage(t('toast.copied'), 'success')
         host.complete()
       } else {
         const delivered = await host.paste.pasteText(result.text)
         if (!isCurrent()) return
+        attempt.reportPaste(delivered)
         if (delivered.ok) host.complete()
-        else if (delivered.fallback === 'copied') host.showMessage(delivered.message, 'info')
-        else if (delivered.message) host.showMessage(delivered.message, 'error')
       }
     } catch {
       if (isCurrent()) {
-        host.showMessage(t(action === 'copy' ? 'toast.copyFailed' : action === 'paste' ? 'toast.pasteFailed' : 'workbench.returnFailed'), 'error')
+        attempt.reportError(t(action === 'copy' ? 'toast.copyFailed' : action === 'paste' ? 'toast.pasteFailed' : 'workbench.returnFailed'))
         release()
       }
     } finally {
-      if (action !== 'return') release()
+      release()
     }
   }
 
@@ -242,9 +246,9 @@ export function TextWorkbenchSurface(props: PluginSurfaceProps) {
             readOnly
             spellCheck={false}
           />
-          <div className="text-workbench-result-meta">
-            <span>{t(selected.label)}</span>
-            {result.status === 'ready' ? <span>{t('meta.characters', { count: outputText.length })}</span> : null}
+          <div className={`text-workbench-result-meta${delivery.feedback ? ` is-delivery is-${delivery.feedback.tone}` : ''}`} role="status" aria-live="polite">
+            <span>{delivery.feedback?.message ?? t(selected.label)}</span>
+            {!delivery.feedback && result.status === 'ready' ? <span>{t('meta.characters', { count: outputText.length })}</span> : null}
           </div>
         </section>
       </main>

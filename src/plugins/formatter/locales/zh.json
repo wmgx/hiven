@@ -49,5 +49,6 @@
   "action.close": "关闭",
   "toast.copied": "已复制输出",
   "toast.copyFailed": "复制失败",
-  "toast.pasteFailed": "粘贴失败"
+  "toast.pasteFailed": "粘贴失败",
+  "toast.returnFailed": "返回搜索失败，结果已保留。"
 }

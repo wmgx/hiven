@@ -757,7 +757,15 @@ export type PluginSurfaceSaveTextErrorName =
   | 'SaveFailedError'
   | 'TypeError'
 
+/** Read-only lifetime of the currently presented surface; never grants output access. */
+export type PluginSurfaceFeedbackOwner = {
+  isCurrent(): boolean
+  subscribeInvalidation(listener: () => void): () => void
+}
+
 export type PluginSurfaceHostApi = {
+  /** Stable across ordinary renders; revoked on replacement, hide, or session expiry. */
+  deliveryFeedbackOwner?: PluginSurfaceFeedbackOwner
   close(): void
   /** Finish a successful output action; closes Launcher tools, keeps independent surfaces open. */
   complete(): void

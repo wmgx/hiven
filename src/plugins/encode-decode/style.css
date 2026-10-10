@@ -227,6 +227,12 @@
   color: var(--hiven-color-danger);
 }
 
+.encode-status.has-delivery { flex: none; grid-template-columns: minmax(0, 1fr); padding-block: 8px; }
+.encode-status.has-delivery > span:first-child,
+.encode-status.has-delivery > span:last-child { display: none; }
+.encode-status.has-delivery > [role="status"] { min-width: 0; color: var(--color-text-secondary); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.encode-status.has-delivery > .is-error { color: var(--hiven-color-danger); }
+
 @media (max-width: 720px) {
   .encode-header { gap: 6px; padding: 0 8px; }
   .encode-formats { gap: 0; padding: 0 8px; }
