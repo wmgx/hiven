@@ -175,14 +175,16 @@ export function TextToolsSurface(props: PluginSurfaceProps) {
               <div className="text-tools-pane-header">
                 <strong>{t('pane.output')}</strong>
                 <div className="text-tools-pane-actions">
-                  <Button type="button" variant="ghost" disabled={!lineOutput || pasting} onClick={useLineOutput}>{t('action.useAsInput')}</Button>
-                  <IconButton type="button" label={t('action.continueProcessing')} disabled={!lineOutput || pasting} onClick={() => host.returnToLauncherWithObject({ kind: 'text', text: lineOutput, source: 'tool-result' })}>
-                    <CornerDownLeft size={14} />
-                  </IconButton>
-                  <IconButton type="button" label={t('action.pasteBack')} disabled={!lineOutput || pasting} onClick={() => void pasteOutput(lineOutput)}>
-                    <ClipboardPaste size={14} />
-                  </IconButton>
-                  <Button type="button" disabled={!lineOutput || pasting} onClick={() => void copyText(lineOutput)}>{t('action.copy')}</Button>
+                  <Button type="button" variant="ghost" title={t('action.useAsInputDescription')} aria-label={t('action.useAsInputDescription')} disabled={!lineOutput || pasting} onClick={useLineOutput}>{t('action.useAsInput')}</Button>
+                  <Button type="button" variant="ghost" title={t('action.continueProcessingDescription')} aria-label={t('action.continueProcessingDescription')} disabled={!lineOutput || pasting} onClick={() => host.returnToLauncherWithObject({ kind: 'text', text: lineOutput, source: 'tool-result' })}>
+                    <CornerDownLeft size={14} aria-hidden="true" />
+                    {t('action.continueProcessing')}
+                  </Button>
+                  <Button type="button" variant="ghost" title={t('action.pasteBackDescription')} aria-label={t('action.pasteBackDescription')} disabled={!lineOutput || pasting} onClick={() => void pasteOutput(lineOutput)}>
+                    <ClipboardPaste size={14} aria-hidden="true" />
+                    {t('action.pasteBack')}
+                  </Button>
+                  <Button type="button" title={t('action.copyDescription')} aria-label={t('action.copyDescription')} disabled={!lineOutput || pasting} onClick={() => void copyText(lineOutput)}>{t('action.copy')}</Button>
                 </div>
               </div>
               <textarea data-launcher-scrollable value={lineOutput} aria-label={t('pane.output')} placeholder={t('surface.outputPlaceholder')} readOnly spellCheck={false} />
@@ -228,10 +230,10 @@ export function TextToolsSurface(props: PluginSurfaceProps) {
                     <small>{t('action.copy')}</small>
                   </button>
                   <div className="text-tools-pane-actions">
-                    <IconButton type="button" label={t('action.continueProcessing')} disabled={!result.output || pasting} onClick={() => host.returnToLauncherWithObject({ kind: 'text', text: result.output, source: 'tool-result' })}>
+                    <IconButton type="button" label={t('action.continueProcessingDescription')} disabled={!result.output || pasting} onClick={() => host.returnToLauncherWithObject({ kind: 'text', text: result.output, source: 'tool-result' })}>
                       <CornerDownLeft size={14} />
                     </IconButton>
-                    <IconButton type="button" label={t('action.pasteBack')} disabled={!result.output || pasting} onClick={() => void pasteOutput(result.output)}>
+                    <IconButton type="button" label={t('action.pasteBackDescription')} disabled={!result.output || pasting} onClick={() => void pasteOutput(result.output)}>
                       <ClipboardPaste size={14} />
                     </IconButton>
                   </div>

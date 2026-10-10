@@ -76,9 +76,22 @@
   color: var(--color-text-secondary);
   font-size: 11px;
 }
-.formatter-pane-header strong { font-weight: 500; }
-.formatter-pane-actions { display: flex; align-items: center; gap: 8px; }
+.formatter-pane-header strong { flex: none; font-weight: 500; white-space: nowrap; }
+.formatter-pane-actions { flex: none; display: flex; align-items: center; gap: 4px; }
 .formatter-pane-header .hiven-ui-button { min-height: 25px; padding: 0 8px; font-size: 11px; }
+.formatter-pane-actions .hiven-ui-button {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0 6px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.formatter-pane-actions .hiven-ui-button svg { flex: none; }
 .formatter-editor { flex: 1; position: relative; width: 100%; min-height: 0; overflow: hidden; }
 .formatter-editor-loading { padding: 12px 20px; color: var(--color-text-tertiary); font-size: 12px; }
 .formatter-error {

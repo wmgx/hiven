@@ -46,6 +46,10 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
     }
   }, [direction, format, inputText])
   const hasOutput = result.ok && inputText.length > 0
+  const useAsInputDescription = t('action.useAsInputDescription', {
+    format: t(`format.${format}`),
+    direction: t(`direction.${direction === 'encode' ? 'decode' : 'encode'}`),
+  })
 
   const chooseFormat = (nextFormat: EncodeDecodeFormat) => {
     setFormat(nextFormat)
@@ -153,17 +157,19 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
             <strong>{t('pane.output')}</strong>
             <div className="encode-pane-actions">
               {format !== 'jwt' ? (
-                <Button type="button" variant="ghost" disabled={!hasOutput || pasting} onClick={useOutputAsInput}>
+                <Button type="button" variant="ghost" title={useAsInputDescription} aria-label={useAsInputDescription} disabled={!hasOutput || pasting} onClick={useOutputAsInput}>
                   {t('action.useAsInput')}
                 </Button>
               ) : null}
-              <IconButton type="button" label={t('action.continueProcessing')} disabled={!hasOutput || pasting} onClick={() => host.returnToLauncherWithObject({ kind: 'text', text: result.output, source: 'tool-result' })}>
-                <CornerDownLeft size={14} />
-              </IconButton>
-              <IconButton type="button" label={t('action.pasteBack')} disabled={!hasOutput || pasting} onClick={() => void pasteOutput()}>
-                <ClipboardPaste size={14} />
-              </IconButton>
-              <Button type="button" disabled={!hasOutput || pasting} onClick={() => void copyOutput()}>
+              <Button type="button" variant="ghost" title={t('action.continueProcessingDescription')} aria-label={t('action.continueProcessingDescription')} disabled={!hasOutput || pasting} onClick={() => host.returnToLauncherWithObject({ kind: 'text', text: result.output, source: 'tool-result' })}>
+                <CornerDownLeft size={14} aria-hidden="true" />
+                {t('action.continueProcessing')}
+              </Button>
+              <Button type="button" variant="ghost" title={t('action.pasteBackDescription')} aria-label={t('action.pasteBackDescription')} disabled={!hasOutput || pasting} onClick={() => void pasteOutput()}>
+                <ClipboardPaste size={14} aria-hidden="true" />
+                {t('action.pasteBack')}
+              </Button>
+              <Button type="button" title={t('action.copyDescription')} aria-label={t('action.copyDescription')} disabled={!hasOutput || pasting} onClick={() => void copyOutput()}>
                 {t('action.copy')}
               </Button>
             </div>

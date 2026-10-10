@@ -151,7 +151,7 @@
 
 .text-tools-pane-header {
   flex: none;
-  min-height: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -162,7 +162,9 @@
 }
 
 .text-tools-pane-header strong {
+  flex: none;
   font-weight: 550;
+  white-space: nowrap;
 }
 
 .text-tools-pane-header > span {
@@ -175,10 +177,32 @@
   gap: 8px;
 }
 
+.text-tools-pane-header .text-tools-pane-actions {
+  flex: none;
+  gap: 4px;
+}
+
 .text-tools-pane-header .hiven-ui-button {
   min-height: 25px;
   padding: 0 8px;
   font-size: 11px;
+}
+
+.text-tools-pane-header .text-tools-pane-actions .hiven-ui-button {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0 6px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.text-tools-pane-header .text-tools-pane-actions .hiven-ui-button svg {
+  flex: none;
 }
 
 .text-tools-pane > textarea {

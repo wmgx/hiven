@@ -21,6 +21,12 @@ type ExpressionRun = {
   result: JsonProcessResult
 }
 
+const reverseOperations: Partial<Record<JsonOperation, JsonOperation>> = {
+  'yaml-to-json': 'json-to-yaml', 'json-to-yaml': 'yaml-to-json',
+  'query-to-json': 'json-to-query', 'json-to-query': 'query-to-json',
+  escape: 'unescape', unescape: 'escape',
+}
+
 export function JsonSurface(props: PluginSurfaceProps) {
   const { host, t } = props
   const initialText = props.initialText ?? ''
@@ -71,15 +77,14 @@ export function JsonSurface(props: PluginSurfaceProps) {
     wordWrap: props.appearance.wordWrap,
   }
   const editorLoading = <div className="jt-editor-loading" role="status">{t('surface.editorLoading')}</div>
+  const reverseOperation = reverseOperations[operation]
+  const useAsInputDescription = reverseOperation
+    ? t('action.useAsInputReverseDescription', { operation: operations.find((item) => item.value === reverseOperation)!.title })
+    : t(operation === 'expression' ? 'action.useAsInputExpressionDescription' : 'action.useAsInputDescription')
 
   const useOutputAsInput = () => {
-    const reverse: Partial<Record<JsonOperation, JsonOperation>> = {
-      'yaml-to-json': 'json-to-yaml', 'json-to-yaml': 'yaml-to-json',
-      'query-to-json': 'json-to-query', 'json-to-query': 'query-to-json',
-      escape: 'unescape', unescape: 'escape',
-    }
     setInputText(outputText)
-    setOperation(reverse[operation] ?? operation)
+    setOperation(reverseOperations[operation] ?? operation)
   }
 
   const runExpression = () => {
@@ -202,10 +207,10 @@ export function JsonSurface(props: PluginSurfaceProps) {
             <div className="jt-pane-header">
               <strong>{t('pane.output')}</strong>
               <div className="jt-pane-actions">
-                <Button type="button" variant="ghost" disabled={!hasOutput} onClick={useOutputAsInput}>
+                <Button type="button" variant="ghost" title={useAsInputDescription} aria-label={useAsInputDescription} disabled={!hasOutput} onClick={useOutputAsInput}>
                   {t('action.useAsInput')}
                 </Button>
-                <Button type="button" onClick={() => void copyOutput()} disabled={!hasOutput}>
+                <Button type="button" title={t('action.copyDescription')} aria-label={t('action.copyDescription')} onClick={() => void copyOutput()} disabled={!hasOutput}>
                   {t('action.copy')}
                 </Button>
               </div>

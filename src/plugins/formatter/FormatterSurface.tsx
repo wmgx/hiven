@@ -144,16 +144,18 @@ export function FormatterSurface(props: PluginSurfaceProps) {
           <div className="formatter-pane-header">
             <strong>{t('pane.output')}</strong>
             <div className="formatter-pane-actions">
-              <Button type="button" variant="ghost" disabled={!hasOutput || pasting} onClick={() => setInputText(outputText)}>
+              <Button type="button" variant="ghost" title={t('action.useAsInputDescription')} aria-label={t('action.useAsInputDescription')} disabled={!hasOutput || pasting} onClick={() => setInputText(outputText)}>
                 {t('action.useAsInput')}
               </Button>
-              <IconButton type="button" label={t('action.continueProcessing')} disabled={!hasOutput || pasting} onClick={() => host.returnToLauncherWithObject({ kind: 'text', text: outputText, source: 'tool-result' })}>
-                <CornerDownLeft size={14} />
-              </IconButton>
-              <IconButton type="button" label={t('action.pasteBack')} disabled={!hasOutput || pasting} onClick={() => void pasteOutput()}>
-                <ClipboardPaste size={14} />
-              </IconButton>
-              <Button type="button" disabled={!hasOutput || pasting} onClick={() => void copyOutput()}>
+              <Button type="button" variant="ghost" title={t('action.continueProcessingDescription')} aria-label={t('action.continueProcessingDescription')} disabled={!hasOutput || pasting} onClick={() => host.returnToLauncherWithObject({ kind: 'text', text: outputText, source: 'tool-result' })}>
+                <CornerDownLeft size={14} aria-hidden="true" />
+                {t('action.continueProcessing')}
+              </Button>
+              <Button type="button" variant="ghost" title={t('action.pasteBackDescription')} aria-label={t('action.pasteBackDescription')} disabled={!hasOutput || pasting} onClick={() => void pasteOutput()}>
+                <ClipboardPaste size={14} aria-hidden="true" />
+                {t('action.pasteBack')}
+              </Button>
+              <Button type="button" title={t('action.copyDescription')} aria-label={t('action.copyDescription')} disabled={!hasOutput || pasting} onClick={() => void copyOutput()}>
                 {t('action.copy')}
               </Button>
             </div>

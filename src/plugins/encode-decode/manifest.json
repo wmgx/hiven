@@ -2,7 +2,7 @@
   "pluginId": "encode-decode",
   "displayName": "Encode / Decode",
   "displayNameI18n": { "zh": "编解码" },
-  "version": "2.5.6",
+  "version": "2.5.7",
   "capabilities": ["command", "surface"],
   "permissions": ["clipboard.write", "accessibility.paste"]
 }

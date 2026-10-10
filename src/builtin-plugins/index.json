@@ -1,25 +1,25 @@
 {
-  "version": 103,
+  "version": 104,
   "packages": [
     {
       "pluginId": "encode-decode",
       "dir": "encode-decode",
-      "version": "2.5.6"
+      "version": "2.5.7"
     },
     {
       "pluginId": "formatter",
       "dir": "formatter",
-      "version": "2.1.5"
+      "version": "2.1.6"
     },
     {
       "pluginId": "json-tools",
       "dir": "json-tools",
-      "version": "2.5.6"
+      "version": "2.5.7"
     },
     {
       "pluginId": "line-tools",
       "dir": "line-tools",
-      "version": "3.0.9"
+      "version": "3.0.10"
     },
     {
       "pluginId": "crypto",

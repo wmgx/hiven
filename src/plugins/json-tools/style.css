@@ -77,9 +77,21 @@
   color: var(--color-text-secondary);
   font-size: 11px;
 }
-.jt-pane-header strong { font-weight: 500; }
-.jt-pane-actions { display: flex; align-items: center; gap: 8px; }
+.jt-pane-header strong { flex: none; font-weight: 500; white-space: nowrap; }
+.jt-pane-actions { flex: none; display: flex; align-items: center; gap: 4px; }
 .jt-pane-header .hiven-ui-button { min-height: 25px; padding: 0 8px; font-size: 11px; }
+.jt-pane-actions .hiven-ui-button {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0 6px;
+  font-size: 11px;
+  white-space: nowrap;
+}
 .jt-editor {
   flex: 1;
   position: relative;
