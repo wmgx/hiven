@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from 'react'
 import {
   DataGrid,
   type CellCopyArgs,
@@ -41,6 +41,7 @@ const OUTPUT_PREVIEW_MAX_ROWS = 1_500
 const SOURCE_TEXTAREA_MAX_CHARS = 200_000
 /** Above this, skip full JSON re-stringify on every render path. */
 const LARGE_SOURCE_CHARS = 512_000
+const RETURN_MAX_BYTES = 1024 * 1024
 
 const JSON_OUTPUTS: OutputMode[] = ['objects', 'array', 'columns', 'keyed']
 
@@ -253,6 +254,46 @@ export function CsvSurface(props: PluginSurfaceProps) {
   const fullJobKeyRef = useRef<string>('')
   const abortRef = useRef<AbortController | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [fileReadingHost, setFileReadingHost] = useState<typeof host | null>(null)
+  const readingFile = fileReadingHost === host
+  const fileReadRef = useRef<object | null>(null)
+  const [resultRevision, setResultRevision] = useState(0)
+  const resultRevisionRef = useRef(0)
+  const returnSubmissionRef = useRef<AbortController | null>(null)
+  const [returnSubmission, setReturnSubmission] = useState<{ host: typeof host; controller: AbortController } | null>(null)
+  const returnLifetimeRef = useRef({ host, active: false })
+  const pendingCopiesRef = useRef(0)
+  const returning = returnSubmission?.host === host && !returnSubmission.controller.signal.aborted
+
+  useLayoutEffect(() => {
+    const lifetime = { host, active: true }
+    returnLifetimeRef.current = lifetime
+    return () => {
+      lifetime.active = false
+      returnSubmissionRef.current?.abort()
+      returnSubmissionRef.current = null
+      fileReadRef.current = null
+    }
+  }, [host])
+
+  // Revoke the click snapshot before an edit, file read or exit can race its receipt.
+  const cancelReturn = useCallback(() => {
+    resultRevisionRef.current += 1
+    setResultRevision(resultRevisionRef.current)
+    returnSubmissionRef.current?.abort()
+    returnSubmissionRef.current = null
+    setReturnSubmission(null)
+  }, [])
+
+  const updateResult = useCallback((update: () => void) => {
+    cancelReturn()
+    update()
+  }, [cancelReturn])
+
+  // Retain the exact source separately from the old preview fingerprint: same-length
+  // middle edits must never make an earlier full result eligible for a new handoff.
+  const resultParameters = JSON.stringify([delimiter, header, output, minify, indent, tableName, dropEmpty, dedupe, transpose])
+  const fullReturnSnapshotRef = useRef<{ sourceText: string; parameters: string } | null>(null)
 
   const deferredSource = useDeferredValue(sourceText)
   const isSourceStale = deferredSource !== sourceText
@@ -297,6 +338,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
     abortRef.current = null
     fullOutputRef.current = null
     fullJobKeyRef.current = ''
+    fullReturnSnapshotRef.current = null
     setFullJob({ status: 'idle' })
   }, [])
 
@@ -304,21 +346,33 @@ export function CsvSurface(props: PluginSurfaceProps) {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
+    cancelReturn()
+    const read = {}
+    const lifetime = returnLifetimeRef.current
+    fileReadRef.current = read
+    setFileReadingHost(host)
     setFileError(null)
     try {
       const content = await file.text()
-      startParseTransition(() => {
+      if (fileReadRef.current !== read || !lifetime.active) return
+      updateResult(() => startParseTransition(() => {
         invalidateFullJob()
         setSourceText(content)
         setLinkedFileLabel(file.name)
         setSourceEditUnlocked(content.length <= SOURCE_TEXTAREA_MAX_CHARS)
         setSelectedCell(null)
         setMainView('table')
-      })
+      }))
     } catch (error) {
+      if (fileReadRef.current !== read || !lifetime.active) return
       setFileError(error instanceof Error ? error.message : String(error))
+    } finally {
+      if (fileReadRef.current === read) {
+        fileReadRef.current = null
+        setFileReadingHost(null)
+      }
     }
-  }, [invalidateFullJob])
+  }, [cancelReturn, host, invalidateFullJob, updateResult])
 
   const parsed = useMemo(() => {
     try {
@@ -383,13 +437,66 @@ export function CsvSurface(props: PluginSurfaceProps) {
   const fullJobReady =
     fullJob.status === 'done' && fullJobKeyRef.current === jobFingerprint && Boolean(fullOutputRef.current)
 
+  // Check the parsed rows before transforms: a capped preview can shrink after
+  // deduplication or transpose. Source byte size alone does not imply missing rows.
+  const returnNeedsFullProcess = Boolean(
+    parseLimits && parsed.ok && parsed.table.rows.length >= PARSE_MAX_ROWS - 1,
+  )
+  const fullReturnReady = fullJob.status === 'done'
+    && fullOutputRef.current !== null
+    && fullReturnSnapshotRef.current?.sourceText === sourceText
+    && fullReturnSnapshotRef.current.parameters === resultParameters
+  const canReturnOutput = Boolean(sourceText.trim() && tableFull)
+    && !isParsing && !isSourceStale && !readingFile
+    && (!returnNeedsFullProcess || fullReturnReady)
+
+  const returnOutput = async () => {
+    const lifetime = returnLifetimeRef.current
+    if (!canReturnOutput || !lifetime.active || lifetime.host !== host
+      || resultRevision !== resultRevisionRef.current || fileReadRef.current
+      || returnSubmissionRef.current || pendingCopiesRef.current > 0) return
+    // Serialize all transformed rows, never the grid selection or 1,500-row preview.
+    let text: string
+    try {
+      text = returnNeedsFullProcess
+        ? fullOutputRef.current!
+        : toOutput(tableFull!, output, { minify, indent }, { tableName })
+      if (text.length > RETURN_MAX_BYTES || new TextEncoder().encode(text).byteLength > RETURN_MAX_BYTES) {
+        host.showMessage(t('toast.returnTooLarge'), 'error')
+        return
+      }
+    } catch {
+      host.showMessage(t('toast.returnFailed'), 'error')
+      return
+    }
+    const submission = new AbortController()
+    returnSubmissionRef.current = submission
+    setReturnSubmission({ host, controller: submission })
+    try {
+      const accepted = await host.returnToLauncherWithObject({ kind: 'text', text, source: 'tool-result' }, { signal: submission.signal })
+      if (!lifetime.active || returnSubmissionRef.current !== submission || submission.signal.aborted) return
+      // The host owns successful navigation. A failed receipt leaves the draft intact.
+      if (accepted === false) {
+        returnSubmissionRef.current = null
+        setReturnSubmission(null)
+      }
+    } catch {
+      if (!lifetime.active || returnSubmissionRef.current !== submission || submission.signal.aborted) return
+      returnSubmissionRef.current = null
+      setReturnSubmission(null)
+      host.showMessage(t('toast.returnFailed'), 'error')
+    }
+  }
+
   const runFullProcess = useCallback(async () => {
     if (fullJob.status === 'running') return
+    cancelReturn()
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
     setFullJob({ status: 'running', ratio: 0, phase: 'parse' })
     fullOutputRef.current = null
+    fullReturnSnapshotRef.current = null
     try {
       const result = await processFullSource(
         sourceText,
@@ -411,6 +518,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
       if (controller.signal.aborted) return
       fullOutputRef.current = result.output
       fullJobKeyRef.current = jobFingerprint
+      fullReturnSnapshotRef.current = { sourceText, parameters: resultParameters }
       setFullJob({
         status: 'done',
         rows: result.rowCount,
@@ -437,6 +545,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
       })
     }
   }, [
+    cancelReturn,
     dedupe,
     delimiter,
     dropEmpty,
@@ -447,6 +556,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
     jobFingerprint,
     minify,
     output,
+    resultParameters,
     sourceText,
     t,
     tableName,
@@ -454,10 +564,11 @@ export function CsvSurface(props: PluginSurfaceProps) {
   ])
 
   const cancelFullProcess = useCallback(() => {
+    cancelReturn()
     abortRef.current?.abort()
     abortRef.current = null
     setFullJob({ status: 'idle' })
-  }, [])
+  }, [cancelReturn])
 
   const downloadFullResult = useCallback(() => {
     const text = fullOutputRef.current
@@ -730,6 +841,8 @@ export function CsvSurface(props: PluginSurfaceProps) {
   const writeClipboard = useCallback(
     async (text: string, complete = false) => {
       if (!text) return
+      cancelReturn()
+      pendingCopiesRef.current += 1
       try {
         await host.clipboard.writeText(text)
         host.showMessage(localizedText(t, 'toast.copied', 'Copied'), 'success')
@@ -742,9 +855,11 @@ export function CsvSurface(props: PluginSurfaceProps) {
         } catch {
           host.showMessage(localizedText(t, 'toast.copyFailed', 'Copy failed'), 'error')
         }
+      } finally {
+        pendingCopiesRef.current -= 1
       }
     },
-    [host, t],
+    [cancelReturn, host, t],
   )
 
   const copySelection = useCallback(async () => {
@@ -924,7 +1039,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
     }
   }, [])
 
-  const showTruncationBanner = needsFullProcess
+  const showTruncationBanner = needsFullProcess || returnNeedsFullProcess
 
   return (
     <section
@@ -938,7 +1053,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
           type="button"
           className="csv-tools-surface__back"
           label={localizedText(t, 'action.back', 'Back')}
-          onClick={() => host.requestBack()}
+          onClick={() => updateResult(() => host.requestBack())}
         >
           <BackIcon size={14} strokeWidth={2} />
           <span className="csv-tools-surface__back-root">hiven</span>
@@ -997,11 +1112,20 @@ export function CsvSurface(props: PluginSurfaceProps) {
           >
             <IconCopy />
           </IconButton>
+          <button
+            type="button"
+            className="csv-tools-surface__file-btn"
+            title={t(returnNeedsFullProcess && !fullReturnReady ? 'action.returnNeedsFull' : 'action.returnToSearchDescription')}
+            disabled={!canReturnOutput || returning}
+            onClick={() => void returnOutput()}
+          >
+            {t('action.returnToSearch')}
+          </button>
           <IconButton
             type="button"
             className="csv-tools-surface__ib"
             label={localizedText(t, 'action.detach', 'Open in window')}
-            onClick={() => host.detachToWindow(sourceText)}
+            onClick={() => updateResult(() => host.detachToWindow(sourceText))}
           >
             <IconDetach />
           </IconButton>
@@ -1009,7 +1133,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
             type="button"
             className="csv-tools-surface__ib csv-tools-surface__ib--close"
             label={localizedText(t, 'action.close', 'Close')}
-            onClick={() => host.close()}
+            onClick={() => updateResult(() => host.close())}
           >
             <CloseIcon size={14} strokeWidth={2} />
           </IconButton>
@@ -1127,7 +1251,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
                 disabled={isJsonInput}
                 options={delimiterOptions}
                 aria-label={localizedText(t, 'param.delimiter', 'Delimiter')}
-                onChange={(event) => setDelimiter(event.target.value as DelimiterMode)}
+                onChange={(event) => updateResult(() => setDelimiter(event.target.value as DelimiterMode))}
               />
             </label>
 
@@ -1139,7 +1263,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
                 disabled={isJsonInput}
                 options={headerOptions}
                 aria-label={localizedText(t, 'param.header', 'Header')}
-                onChange={(event) => setHeader(event.target.value as HeaderMode)}
+                onChange={(event) => updateResult(() => setHeader(event.target.value as HeaderMode))}
               />
             </label>
           </div>
@@ -1158,7 +1282,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
                 options={outputOptions}
                 aria-label={localizedText(t, 'param.output', 'Output')}
                 onChange={(event) => {
-                  setOutput(event.target.value as OutputMode)
+                  updateResult(() => setOutput(event.target.value as OutputMode))
                   setMainView('output')
                 }}
               />
@@ -1167,7 +1291,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
             {showJsonStyle && mainView === 'output' && (
               <Checkbox
                 checked={minify}
-                onChange={(event) => setMinify((event.target as HTMLInputElement).checked)}
+                onChange={(event) => updateResult(() => setMinify((event.target as HTMLInputElement).checked))}
               >
                 {localizedText(t, 'param.minify', 'Minify')}
               </Checkbox>
@@ -1183,7 +1307,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
                       { value: '4', label: '4' },
                     ]}
                     aria-label={localizedText(t, 'param.indent', 'Indent')}
-                    onChange={(event) => setIndent(event.target.value === '4' ? 4 : 2)}
+                    onChange={(event) => updateResult(() => setIndent(event.target.value === '4' ? 4 : 2))}
                   />
                 </label>
             )}
@@ -1195,7 +1319,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
                   type="text"
                   className="csv-tools-surface__text"
                   value={tableName}
-                  onChange={(event) => setTableName(event.target.value)}
+                  onChange={(event) => updateResult(() => setTableName(event.target.value))}
                   spellCheck={false}
                 />
               </label>
@@ -1208,13 +1332,13 @@ export function CsvSurface(props: PluginSurfaceProps) {
             {localizedText(t, 'toolbar.clean', 'Shape')}
           </span>
           <div className="csv-tools-surface__transform-checks">
-            <Checkbox checked={dropEmpty} onChange={(event) => setDropEmpty((event.target as HTMLInputElement).checked)}>
+            <Checkbox checked={dropEmpty} onChange={(event) => updateResult(() => setDropEmpty((event.target as HTMLInputElement).checked))}>
               {localizedText(t, 'transform.dropEmpty', 'Drop empty rows')}
             </Checkbox>
-            <Checkbox checked={dedupe} onChange={(event) => setDedupe((event.target as HTMLInputElement).checked)}>
+            <Checkbox checked={dedupe} onChange={(event) => updateResult(() => setDedupe((event.target as HTMLInputElement).checked))}>
               {localizedText(t, 'transform.dedupe', 'Deduplicate')}
             </Checkbox>
-            <Checkbox checked={transpose} onChange={(event) => setTranspose((event.target as HTMLInputElement).checked)}>
+            <Checkbox checked={transpose} onChange={(event) => updateResult(() => setTranspose((event.target as HTMLInputElement).checked))}>
               {localizedText(t, 'transform.transpose', 'Transpose')}
             </Checkbox>
           </div>
@@ -1531,9 +1655,11 @@ export function CsvSurface(props: PluginSurfaceProps) {
               value={sourceText}
               onChange={(event) => {
                 const next = event.target.value
-                invalidateFullJob()
-                setSourceText(next)
-                setLinkedFileLabel(undefined)
+                updateResult(() => {
+                  invalidateFullJob()
+                  setSourceText(next)
+                  setLinkedFileLabel(undefined)
+                })
               }}
               spellCheck={false}
               placeholder={localizedText(t, 'empty.source', 'Paste CSV, TSV, or a JSON array of objects')}

@@ -96,5 +96,10 @@
   "route.toArray": "CSV → 2D Array",
   "route.toColumns": "CSV → Column Arrays",
   "route.toKeyed": "CSV → Keyed Object",
-  "route.toNdjson": "CSV → JSON Lines"
+  "route.toNdjson": "CSV → JSON Lines",
+  "action.returnToSearch": "Return to Search",
+  "action.returnToSearchDescription": "Use the complete current result as search material (up to 1 MiB).",
+  "action.returnNeedsFull": "Process the complete file before returning its result to search.",
+  "toast.returnFailed": "Could not return the result to search. Your data is still here.",
+  "toast.returnTooLarge": "The complete result exceeds 1 MiB. Copy or download it instead."
 }

@@ -96,5 +96,10 @@
   "route.toArray": "CSV → 二维数组",
   "route.toColumns": "CSV → 列数组",
   "route.toKeyed": "CSV → 键值对象",
-  "route.toNdjson": "CSV → JSON Lines"
+  "route.toNdjson": "CSV → JSON Lines",
+  "action.returnToSearch": "带回搜索",
+  "action.returnToSearchDescription": "将当前完整结果带回搜索作为材料（最多 1 MiB）。",
+  "action.returnNeedsFull": "请先处理完整文件，再将完整结果带回搜索。",
+  "toast.returnFailed": "带回搜索失败，数据仍保留在当前页面。",
+  "toast.returnTooLarge": "完整结果超过 1 MiB，请使用复制或下载结果。"
 }
