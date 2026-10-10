@@ -15,12 +15,15 @@ import { captureLauncherPasteOwner, combinePasteRecoveryOwners, createPasteRecov
 import { createPluginNetwork } from '../../workspace/pluginNetwork'
 import { createPluginAi } from '../../workspace/ai/runtime'
 import { createPluginShell } from '../../workspace/pluginShell'
+import { createPluginSurfaceTextSaver } from '../../workspace/pluginSurfaceTextSave'
+import { acquireLauncherNativeDialogFocus } from '../../workspace/launcherBlurGuard'
 import { ensurePluginRuntimeReady } from '../../workspace/pluginRuntimeBootstrap'
 import type {
   PluginDefinition,
   PluginObjectBlockInput,
   PluginPermission,
   PluginPermissionSnapshot,
+  PluginSurfaceHostApi,
   PluginUiSurfaceContribution,
 } from '../../workspace/pluginTypes'
 import { createPluginSurfaceObjectBlock } from './pluginSurfaceObjectBlock'
@@ -87,8 +90,10 @@ export function PluginSurfaceRenderer({
   const pluginRegistryVersion = usePluginRegistryVersion()
   const permissionVersion = usePluginPermissionStore((s) => s.version)
   const appearance = useAppStore((s) => s.settings)
+  const launcherSessionId = useAppStore((s) => presentation === 'global-launcher' ? s.globalLauncherSessionId : undefined)
   const grantPluginPermissions = usePluginPermissionStore((s) => s.grantPermissions)
   const openSettingsDialog = usePluginSettingsStore((s) => s.openSettingsDialog)
+  const launcherSettingsTarget = usePluginSettingsStore((s) => presentation === 'global-launcher' ? s.settingsDialogTarget : null)
   // Settings dialogs can overlay a mounted surface. Observe just its record so
   // saving applies immediately without remounting or discarding its local input.
   usePluginSettingsStore((s) => s.pluginSettings[target.source][target.pluginId])
@@ -112,8 +117,11 @@ export function PluginSurfaceRenderer({
   }, [leaveOwner, onUnsavedChangesChange])
   const pasteScope = useMemo(() => createPasteRecoveryScope(), [target, surfaceState])
   const preparationScopeRef = useRef<ReturnType<typeof createPasteRecoveryScope> | null>(null)
-  const [, refreshPasteOwner] = useState(0)
+  const [pasteOwnerVersion, refreshPasteOwner] = useState(0)
   const exportSessionRef = useRef(0)
+  const textSaverRef = useRef(createPluginSurfaceTextSaver())
+  const localeRef = useRef(locale)
+  localeRef.current = locale
   const ownedSettingsTargetRef = useRef<PluginSettingsDialogTarget>(null)
   const sessionRef = useRef<AppSettingsSession | null>(null)
   const handoffRef = useRef<{ controller: AbortController; promise: Promise<boolean> } | null>(null)
@@ -324,6 +332,33 @@ export function PluginSurfaceRenderer({
     return () => { disposed = true; preparationScope.invalidate(); stopRegistry?.(); stopPermissions?.() }
   }, [target, pluginRegistryVersion, permissionVersion, locale, presentation])
 
+  // Stable within the presented owner, including ordinary theme/status rerenders.
+  // Retained callbacks never capture a replacement generation at invocation time.
+  const saveText = useMemo<NonNullable<PluginSurfaceHostApi['saveText']>>(() => {
+    const lifetime = pluginRegistry.getPluginLifetime(target.pluginId, target.source)
+    const surfaceOwner = pasteScope.capture(() => mountedRef.current
+      && activeTargetRef.current === target && activeStateRef.current === surfaceState
+      && surfaceState.status === 'ready' && surfaceState.target === target
+      && !hiddenRef.current && !sessionRef.current && lifetime.active
+      && (!ownedSettingsTargetRef.current || usePluginSettingsStore.getState().settingsDialogTarget !== ownedSettingsTargetRef.current))
+    const launcherOwner = presentation === 'global-launcher' ? captureLauncherPasteOwner({ complete: false }) : undefined
+    const owner = combinePasteRecoveryOwners(surfaceOwner, launcherOwner)
+    const originalLauncher = useAppStore.getState()
+    const isCurrentLauncherLifetime = () => {
+      const current = useAppStore.getState()
+      return current.globalLauncherOpen && current.globalLauncherSessionId === originalLauncher.globalLauncherSessionId
+    }
+    return (snapshot, options) => textSaverRef.current(snapshot, options, {
+      owner: {
+        ...owner,
+        isCurrent: () => owner.isCurrent() && (presentation !== 'global-launcher' || launcherOwner !== undefined),
+      },
+      dialogTitle: t(localeRef.current, 'palette.surfaceTextSaveDialogTitle'),
+      acquireFocusLease: () => presentation === 'global-launcher'
+        ? acquireLauncherNativeDialogFocus(isCurrentLauncherLifetime) : () => {},
+    })
+  }, [target, surfaceState, pasteScope, presentation, pasteOwnerVersion, appSettingsSession, launcherSettingsTarget, launcherSessionId])
+
   if (surfaceState.status === 'loading-runtime' || ('target' in surfaceState && surfaceState.target !== target)) {
     return <PluginSurfaceMessage title={t(locale, 'palette.surfaceLoading')} />
   }
@@ -442,14 +477,15 @@ export function PluginSurfaceRenderer({
               onClose()
             },
             showMessage: (message, level) => {
-              if (!surfaceOwner.isCurrent()) return
+              if (!surfaceOwner.isCurrent() || (presentation === 'global-launcher' && launcherPasteOwner?.isCurrent() !== true)) return
               showToast(message, level ?? 'info')
             },
             showToast: (message, level, options) => {
-              if (!surfaceOwner.isCurrent()) return ''
+              if (!surfaceOwner.isCurrent() || (presentation === 'global-launcher' && launcherPasteOwner?.isCurrent() !== true)) return ''
               return showToast(message, level, options)
             },
             dismissToast,
+            saveText,
             returnToLauncherWithObject: (input: PluginObjectBlockInput, options?: { signal?: AbortSignal }) => {
               if (!isCurrentSurface() || options?.signal?.aborted) return Promise.resolve(false)
               if (handoffRef.current) return handoffRef.current.promise

@@ -737,6 +737,26 @@ export type PluginObjectBlockInput =
       ageLabel?: string
     }
 
+export type PluginSurfaceSaveTextOptions = {
+  /** Suggested basename only. The desktop chooser owns the destination. */
+  suggestedFilename?: string
+  /** Cancels uncommitted work. An accepted write still returns its actual result. */
+  signal?: AbortSignal
+}
+
+export type PluginSurfaceSaveTextResult = { status: 'saved' } | { status: 'cancelled' }
+
+/** Stable Error.name values; error messages never include native destination paths. */
+export type PluginSurfaceSaveTextErrorName =
+  | 'NotSupportedError'
+  | 'AbortError'
+  | 'BusyError'
+  | 'TextTooLargeError'
+  | 'InvalidFilenameError'
+  | 'SaveUnavailableError'
+  | 'SaveFailedError'
+  | 'TypeError'
+
 export type PluginSurfaceHostApi = {
   close(): void
   /** Finish a successful output action; closes Launcher tools, keeps independent surfaces open. */
@@ -756,6 +776,14 @@ export type PluginSurfaceHostApi = {
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
   showToast(message: string, level?: 'info' | 'success' | 'warning' | 'error', options?: { action?: { label: string; onClick: () => void }; duration?: number }): string
   dismissToast(id: string): void
+  /**
+   * Explicitly save this surface's frozen text through the desktop save dialog.
+   * Accepts at most 10 MiB of UTF-8, including an empty string. Returns no path,
+   * changes no storage permissions, and never reads the clipboard or source file.
+   * Rejects with a PluginSurfaceSaveTextErrorName; browser/relay hosts reject with
+   * NotSupportedError. Older hosts may omit this capability.
+   */
+  saveText?(snapshot: string, options?: PluginSurfaceSaveTextOptions): Promise<PluginSurfaceSaveTextResult>
   /**
    * Attach a snapshot Object Block and return to Global Launcher (leave surface / open launcher).
    * Resolves true after delivery, false on interruption/failure. Legacy hosts may

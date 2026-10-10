@@ -200,6 +200,7 @@
     "test:object-block-expanded-model": "node scripts/test-object-block-expanded-model.mjs",
     "test:plugin-product-convergence": "node scripts/test-plugin-product-convergence.mjs",
     "test:csv-result-return": "node scripts/test-csv-result-return.mjs",
+    "test:surface-text-save": "node scripts/test-surface-text-save.mjs",
     "test:csv-core": "npx tsx scripts/test-csv-core.mts",
     "test:csv-entry": "node scripts/test-csv-entry.mjs",
     "test:step5-no-pin-and-csv-surface": "node scripts/test-step5-no-pin-and-csv-surface.mjs",

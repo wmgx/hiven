@@ -84,6 +84,9 @@ export type {
   PluginSurfaceProps,
   PluginSurfaceAppearance,
   PluginSurfaceHostApi,
+  PluginSurfaceSaveTextOptions,
+  PluginSurfaceSaveTextResult,
+  PluginSurfaceSaveTextErrorName,
   PluginObjectBlockInput,
   // Plugin Background types
   PluginBackgroundContribution,

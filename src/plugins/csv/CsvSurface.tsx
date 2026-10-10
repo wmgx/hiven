@@ -16,7 +16,6 @@ import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
 import {
   applyTransforms,
   applyTableQuery,
-  downloadTextFile,
   estimateRowCount,
   outputExtension,
   parseSource,
@@ -42,6 +41,7 @@ const SOURCE_TEXTAREA_MAX_CHARS = 200_000
 /** Above this, skip full JSON re-stringify on every render path. */
 const LARGE_SOURCE_CHARS = 512_000
 const RETURN_MAX_BYTES = 1024 * 1024
+const SAVE_MAX_BYTES = 10 * 1024 * 1024
 
 const JSON_OUTPUTS: OutputMode[] = ['objects', 'array', 'columns', 'keyed']
 
@@ -214,6 +214,8 @@ function initialOutput(surfaceId: string): OutputMode {
 
 export function CsvSurface(props: PluginSurfaceProps) {
   const { host, t } = props
+  // New hosts keep saveText stable for one surface owner, even when theme or settings rerender.
+  const owner = host.saveText ?? host
   const initial = resolveInitialSource(props.initialText)
   const [sourceText, setSourceText] = useState(initial.source)
   const [linkedFileLabel, setLinkedFileLabel] = useState<string | undefined>(initial.fileLabel)
@@ -255,48 +257,56 @@ export function CsvSurface(props: PluginSurfaceProps) {
   const fullJobKeyRef = useRef<string>('')
   const abortRef = useRef<AbortController | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [fileReadingHost, setFileReadingHost] = useState<typeof host | null>(null)
-  const readingFile = fileReadingHost === host
+  const [fileReadingOwner, setFileReadingOwner] = useState<typeof owner | null>(null)
+  const readingFile = fileReadingOwner === owner
   const fileReadRef = useRef<object | null>(null)
   const [resultRevision, setResultRevision] = useState(0)
   const resultRevisionRef = useRef(0)
   const returnSubmissionRef = useRef<AbortController | null>(null)
-  const [returnSubmission, setReturnSubmission] = useState<{ host: typeof host; controller: AbortController } | null>(null)
-  const returnLifetimeRef = useRef({ host, active: false })
+  const [returnSubmission, setReturnSubmission] = useState<{ owner: typeof owner; controller: AbortController } | null>(null)
+  const saveSubmissionRef = useRef<AbortController | null>(null)
+  const [saveSubmission, setSaveSubmission] = useState<{ owner: typeof owner; controller: AbortController } | null>(null)
+  const surfaceLifetimeRef = useRef({ owner, active: false })
   const pendingCopiesRef = useRef(0)
-  const returning = returnSubmission?.host === host && !returnSubmission.controller.signal.aborted
+  const returning = returnSubmission?.owner === owner && !returnSubmission.controller.signal.aborted
+  const saving = saveSubmission?.owner === owner && !saveSubmission.controller.signal.aborted
 
   useLayoutEffect(() => {
-    if (returnLifetimeRef.current.host !== host) {
+    if (surfaceLifetimeRef.current.owner !== owner) {
       fullOutputRef.current = null
       fullResultRef.current = null
       fullJobKeyRef.current = ''
       fullReturnSnapshotRef.current = null
       setFullJob({ status: 'idle' })
     }
-    const lifetime = { host, active: true }
-    returnLifetimeRef.current = lifetime
+    const lifetime = { owner, active: true }
+    surfaceLifetimeRef.current = lifetime
     return () => {
       lifetime.active = false
       returnSubmissionRef.current?.abort()
       returnSubmissionRef.current = null
+      saveSubmissionRef.current?.abort()
+      saveSubmissionRef.current = null
       fileReadRef.current = null
       abortRef.current?.abort()
       abortRef.current = null
     }
-  }, [host])
+  }, [owner])
 
   // Revoke the click snapshot before an edit, file read or exit can race its receipt.
-  const cancelReturn = useCallback(() => {
+  const cancelSubmissions = useCallback(() => {
     resultRevisionRef.current += 1
     setResultRevision(resultRevisionRef.current)
     returnSubmissionRef.current?.abort()
     returnSubmissionRef.current = null
     setReturnSubmission(null)
+    saveSubmissionRef.current?.abort()
+    saveSubmissionRef.current = null
+    setSaveSubmission(null)
   }, [])
 
   const updateResult = useCallback((update: () => void) => {
-    cancelReturn()
+    cancelSubmissions()
     abortRef.current?.abort()
     abortRef.current = null
     fullOutputRef.current = null
@@ -305,7 +315,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
     fullReturnSnapshotRef.current = null
     setFullJob({ status: 'idle' })
     update()
-  }, [cancelReturn])
+  }, [cancelSubmissions])
 
   // Retain the exact source separately from the old preview fingerprint: same-length
   // middle edits must never make an earlier full result eligible for a new handoff.
@@ -356,12 +366,12 @@ export function CsvSurface(props: PluginSurfaceProps) {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
-    cancelReturn()
+    cancelSubmissions()
     invalidateFullJob()
     const read = {}
-    const lifetime = returnLifetimeRef.current
+    const lifetime = surfaceLifetimeRef.current
     fileReadRef.current = read
-    setFileReadingHost(host)
+    setFileReadingOwner(() => owner)
     setFileError(null)
     try {
       const content = await file.text()
@@ -380,10 +390,10 @@ export function CsvSurface(props: PluginSurfaceProps) {
     } finally {
       if (fileReadRef.current === read) {
         fileReadRef.current = null
-        setFileReadingHost(null)
+        setFileReadingOwner(null)
       }
     }
-  }, [cancelReturn, host, invalidateFullJob, updateResult])
+  }, [cancelSubmissions, owner, invalidateFullJob, updateResult])
 
   const parsed = useMemo(() => {
     try {
@@ -453,10 +463,10 @@ export function CsvSurface(props: PluginSurfaceProps) {
   }, [canReturnOutput, finalTable, fullJobReady, indent, minify, output, resultRevision, tableName])
 
   const returnOutput = async () => {
-    const lifetime = returnLifetimeRef.current
-    if (!canReturnOutput || !lifetime.active || lifetime.host !== host
+    const lifetime = surfaceLifetimeRef.current
+    if (!canReturnOutput || !lifetime.active || lifetime.owner !== owner
       || resultRevision !== resultRevisionRef.current || fileReadRef.current
-      || returnSubmissionRef.current || pendingCopiesRef.current > 0) return
+      || returnSubmissionRef.current || saveSubmissionRef.current || pendingCopiesRef.current > 0) return
     // Serialize all transformed rows, never the grid selection or 1,500-row preview.
     let text: string
     try {
@@ -473,7 +483,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
     }
     const submission = new AbortController()
     returnSubmissionRef.current = submission
-    setReturnSubmission({ host, controller: submission })
+    setReturnSubmission({ owner, controller: submission })
     try {
       const accepted = await host.returnToLauncherWithObject({ kind: 'text', text, source: 'tool-result' }, { signal: submission.signal })
       if (!lifetime.active || returnSubmissionRef.current !== submission || submission.signal.aborted) return
@@ -491,13 +501,13 @@ export function CsvSurface(props: PluginSurfaceProps) {
   }
 
   const runFullProcess = useCallback(async () => {
-    const lifetime = returnLifetimeRef.current
+    const lifetime = surfaceLifetimeRef.current
     if (abortRef.current || resultRevision !== resultRevisionRef.current || !currentInputReady
-      || !sourceText.trim() || !tableFull || filterError || !lifetime.active || lifetime.host !== host) return
-    cancelReturn()
+      || !sourceText.trim() || !tableFull || filterError || !lifetime.active || lifetime.owner !== owner) return
+    cancelSubmissions()
     const controller = new AbortController()
     abortRef.current = controller
-    const isCurrent = () => lifetime.active && lifetime.host === host
+    const isCurrent = () => lifetime.active && lifetime.owner === owner
       && abortRef.current === controller && !controller.signal.aborted
     setFullJob({ status: 'running', ratio: 0, phase: 'parse' })
     fullOutputRef.current = null
@@ -556,7 +566,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
       if (abortRef.current === controller) abortRef.current = null
     }
   }, [
-    cancelReturn,
+    cancelSubmissions,
     currentInputReady,
     dedupe,
     delimiter,
@@ -568,6 +578,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
     jobFingerprint,
     minify,
     output,
+    owner,
     resultParameters,
     resultRevision,
     sourceText,
@@ -579,18 +590,66 @@ export function CsvSurface(props: PluginSurfaceProps) {
   ])
 
   const cancelFullProcess = useCallback(() => {
-    cancelReturn()
+    cancelSubmissions()
     invalidateFullJob()
-  }, [cancelReturn, invalidateFullJob])
+  }, [cancelSubmissions, invalidateFullJob])
 
-  const downloadFullResult = useCallback(() => {
-    const text = getCompleteOutput()
-    if (text === null) return
-    const base = linkedFileLabel
-      ? fileNameFromPath(linkedFileLabel).replace(/\.[^.]+$/, '')
-      : 'csv-export'
-    downloadTextFile(`${base}.${outputExtension(output)}`, text)
-  }, [getCompleteOutput, linkedFileLabel, output])
+  const saveFullResult = useCallback(async () => {
+    const lifetime = surfaceLifetimeRef.current
+    if (!canReturnOutput || !lifetime.active || lifetime.owner !== owner
+      || resultRevision !== resultRevisionRef.current || fileReadRef.current
+      || saveSubmissionRef.current || returnSubmissionRef.current || pendingCopiesRef.current > 0) return
+    if (!host.saveText) {
+      host.showMessage(t('toast.saveUnsupported'), 'error')
+      return
+    }
+    // Capture the complete result at the click, including a valid zero-byte result.
+    let text: string
+    try {
+      const snapshot = getCompleteOutput()
+      if (snapshot === null) return
+      text = snapshot
+      if (text.length > SAVE_MAX_BYTES || new TextEncoder().encode(text).byteLength > SAVE_MAX_BYTES) {
+        host.showMessage(t('toast.saveTooLarge'), 'error')
+        return
+      }
+    } catch {
+      host.showMessage(t('toast.saveFailed'), 'error')
+      return
+    }
+    const submission = new AbortController()
+    const revision = resultRevisionRef.current
+    const isCurrent = () => lifetime.active && lifetime.owner === owner
+      && saveSubmissionRef.current === submission && !submission.signal.aborted
+      && resultRevisionRef.current === revision
+    saveSubmissionRef.current = submission
+    setSaveSubmission({ owner, controller: submission })
+    try {
+      const receipt = await host.saveText(text, {
+        suggestedFilename: `csv-export.${outputExtension(output)}`,
+        signal: submission.signal,
+      })
+      if (!isCurrent()) return
+      if (receipt.status === 'saved') host.showMessage(t('toast.saved'), 'success')
+      else if (receipt.status !== 'cancelled') host.showMessage(t('toast.saveFailed'), 'error')
+    } catch (error) {
+      if (!isCurrent()) return
+      const name = error && typeof error === 'object' && 'name' in error ? error.name : undefined
+      if (name === 'AbortError') return
+      const key = name === 'NotSupportedError' ? 'toast.saveUnsupported'
+        : name === 'TextTooLargeError' ? 'toast.saveTooLarge'
+          : name === 'BusyError' ? 'toast.saveBusy'
+            : name === 'SaveUnavailableError' ? 'toast.saveUnavailable'
+              : 'toast.saveFailed'
+      host.showMessage(t(key), 'error')
+    } finally {
+      // An old receipt must not release a newer attempt or change its result.
+      if (saveSubmissionRef.current === submission) {
+        saveSubmissionRef.current = null
+        setSaveSubmission(null)
+      }
+    }
+  }, [canReturnOutput, getCompleteOutput, host, output, owner, resultRevision, t])
 
   const errorMessage = !parsed.ok
     ? localizedText(t, 'error.generic', 'Parse error: {message}', { message: parsed.message })
@@ -795,11 +854,11 @@ export function CsvSurface(props: PluginSurfaceProps) {
 
   const writeClipboard = useCallback(
     async (text: string, complete = false) => {
-      const lifetime = returnLifetimeRef.current
-      if (!lifetime.active || lifetime.host !== host || (complete && pendingCopiesRef.current > 0)) return
-      cancelReturn()
+      const lifetime = surfaceLifetimeRef.current
+      if (!lifetime.active || lifetime.owner !== owner || (complete && pendingCopiesRef.current > 0)) return
+      cancelSubmissions()
       const revision = resultRevisionRef.current
-      const isCurrent = () => lifetime.active && lifetime.host === host && resultRevisionRef.current === revision
+      const isCurrent = () => lifetime.active && lifetime.owner === owner && resultRevisionRef.current === revision
       pendingCopiesRef.current += 1
       try {
         await host.clipboard.writeText(text)
@@ -820,7 +879,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
         pendingCopiesRef.current -= 1
       }
     },
-    [cancelReturn, host, t],
+    [cancelSubmissions, host, owner, t],
   )
 
   const copySelection = useCallback(async () => {
@@ -1028,7 +1087,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
             type="button"
             className="csv-tools-surface__file-btn"
             title={t(returnNeedsFullProcess && !fullReturnReady ? 'action.returnNeedsFull' : 'action.returnToSearchDescription')}
-            disabled={!canReturnOutput || returning}
+            disabled={!canReturnOutput || returning || saving}
             onClick={() => void returnOutput()}
           >
             {t('action.returnToSearch')}
@@ -1090,7 +1149,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
                 localizedText(
                   t,
                   'job.done',
-                  'Final result ready: {rows} × {cols}, {size}. Copy, Return to Search and Download use this complete result.',
+                  'Final result ready: {rows} × {cols}, {size}. Save As supports up to 10 MiB; Return to Search supports up to 1 MiB.',
                   {
                     rows: fullJob.rows,
                     cols: fullJob.cols,
@@ -1126,9 +1185,9 @@ export function CsvSurface(props: PluginSurfaceProps) {
                   >
                     {localizedText(t, 'job.copyFull', 'Copy full')}
                   </button>
-                  <button type="button" className="csv-tools-surface__file-btn" disabled={!canCopyOutput} onClick={downloadFullResult}>
+                  <button type="button" className="csv-tools-surface__file-btn" disabled={!canCopyOutput || saving || returning} onClick={() => void saveFullResult()}>
                     <IconDownload />
-                    <span>{localizedText(t, 'job.download', 'Download')}</span>
+                    <span>{t(saving ? 'job.saving' : 'job.saveFull')}</span>
                   </button>
                 </>
               ) : (
@@ -1519,7 +1578,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
             ) : null}
             <div className="csv-tools-surface__output-hint">
               {finalTable
-                ? localizedText(t, 'job.outputHint', '{total} result rows · previewing up to {shown}. Copy, Return to Search and Download use the complete result.', {
+                ? localizedText(t, 'job.outputHint', '{total} result rows · previewing up to {shown}. Copy and Save As use the complete result; Return to Search supports up to 1 MiB.', {
                     total: totalDataRows,
                     shown: outputPreviewTable?.rows.length ?? 0,
                   })

@@ -42,10 +42,10 @@ const fields = [
   'sourceText', 'delimiter', 'header', 'output', 'minify', 'indent', 'tableName', 'dropEmpty', 'dedupe', 'transpose',
   'outputText', 'tableFull', 'fullJob', 'fullJobReady', 'fullOutputRef', 'jobFingerprint', 'fullReturnReady',
   'returnNeedsFullProcess', 'canReturnOutput', 'returning', 'returnOutput', 'runFullProcess', 'cancelFullProcess',
-  'onFilePicked', 'readingFile', 'handleCopyPrimary', 'downloadFullResult', 'updateResult', 'setSourceText',
+  'onFilePicked', 'readingFile', 'handleCopyPrimary', 'saveFullResult', 'updateResult', 'setSourceText',
   'setSelectedCell', 'setSelectedColumns', 'setCellBlock', 'setGlobalFilter', 'setSqlFilter', 'setFilterMode', 'setMainView',
   'filterMode', 'globalFilter', 'sqlFilter', 'sortColumns', 'cycleSort', 'applySqlCompletion', 'sqlCompletions',
-  'finalTable', 'table', 'tableHeaders', 'displayGridRows', 'filterError', 'canCopyOutput', 'copyFullOutput',
+  'saving', 'setLinkedFileLabel', 'finalTable', 'table', 'tableHeaders', 'displayGridRows', 'filterError', 'canCopyOutput', 'copyFullOutput',
 ]
 const probe = `({ ${fields.join(', ')}, clearSelection: ${clearSelection}, queryEdits: { ${Object.entries(queryEdits).map(([name, fn]) => `${name}: ${fn}`).join(', ')} }, edits: { ${Object.entries(edits).map(([name, fn]) => `${name}: ${fn}`).join(', ')} }, exits: { ${Object.entries(exits).map(([name, fn]) => `${name}: ${fn}`).join(', ')} } })`
 const source = surfaceSource.slice(0, returned.expression.getStart(file)) + probe + surfaceSource.slice(returned.expression.end)
@@ -71,10 +71,10 @@ const deferred = () => {
   return { promise, resolve, reject }
 }
 const plain = (value) => JSON.parse(JSON.stringify(value))
-function harness({ input = 'name,value\none,1\ntwo,2', operation = 'to-json', outcome = () => true, copyOutcome = () => Promise.resolve(), process = core.processFullSource } = {}) {
+function harness({ input = 'name,value\none,1\ntwo,2', operation = 'to-json', outcome = () => true, copyOutcome = () => Promise.resolve(), saveOutcome = () => ({ status: 'saved' }), saveAvailable = true, process = core.processFullSource } = {}) {
   const slots = [], effects = []
   let cursor = 0, view, mounted = true, changed = false, deferredInput, processing = false
-  const calls = { handoff: [], messages: [], copied: [], downloads: [], navigation: 0, complete: 0, back: 0, close: 0, detach: 0 }
+  const calls = { handoff: [], messages: [], copied: [], saves: [], navigation: 0, complete: 0, back: 0, close: 0, detach: 0 }
   const useState = (initial) => {
     const index = cursor++
     if (!(index in slots)) slots[index] = typeof initial === 'function' ? initial() : initial
@@ -109,7 +109,7 @@ function harness({ input = 'name,value\none,1\ntwo,2', operation = 'to-json', ou
     react, 'react/jsx-runtime': { jsx: () => null, jsxs: () => null },
     'react-data-grid': {}, 'react-data-grid/lib/styles.css': {},
     '@hiven/plugin-ui': {}, '@hiven/plugin-ui/icons': {},
-    './csvCore': { ...core, processFullSource: process, downloadTextFile: (filename, text) => calls.downloads.push({ filename, text }) }, './csvSqlFilter': sql,
+    './csvCore': { ...core, processFullSource: process }, './csvSqlFilter': sql,
   }, source, { requestAnimationFrame: (fn) => fn(), window: { addEventListener() {}, removeEventListener() {} }, navigator: { clipboard: { writeText: () => Promise.reject(Error('no browser clipboard')) } } })
   const makeHost = () => {
     const result = {
@@ -120,6 +120,10 @@ function harness({ input = 'name,value\none,1\ntwo,2', operation = 'to-json', ou
           return accepted
         })
       },
+      saveText: saveAvailable ? (text, options) => {
+        calls.saves.push({ text, ...options, host: result })
+        return Promise.resolve(saveOutcome(text, options))
+      } : undefined,
       showMessage: (...args) => calls.messages.push(args),
       requestBack: () => { calls.back++ }, close: () => { calls.close++ }, detachToWindow: () => { calls.detach++ },
       complete: () => calls.complete++,
@@ -157,6 +161,7 @@ function harness({ input = 'name,value\none,1\ntwo,2', operation = 'to-json', ou
     async full() { await view.runFullProcess(); render() },
     draft: () => plain(Object.fromEntries(['sourceText', 'delimiter', 'header', 'output', 'minify', 'indent', 'tableName', 'dropEmpty', 'dedupe', 'transpose'].map((key) => [key, view[key]]))),
     replaceHost() { host = makeHost(); render() },
+    rerenderHost() { host = { ...host }; render() },
     unmount() { mounted = false; for (const slot of slots) slot?.cleanup?.() },
     replayEffects() { for (const slot of slots) if (slot?.setup) { slot.cleanup?.(); slot.cleanup = slot.setup() } },
   }
@@ -389,23 +394,23 @@ for (const action of ['edit', 'unmount', 'replaceHost']) await check(`late copy 
   assert.equal(h.calls.complete, 0)
   assert.equal(h.calls.messages.length, 0)
 })
-await check('filtering beyond both preview caps feeds the same grid, copy, return and download', async () => {
+await check('filtering beyond both preview caps feeds the same grid, copy, return and save', async () => {
   const h = harness({ input: csv(8105) })
   h.query({ globalFilter: 'row8104' })
   assert.equal(h.view.finalTable, null)
   assert.equal(h.view.displayGridRows.length, 0)
   assert.equal(h.view.canCopyOutput, false)
-  h.view.handleCopyPrimary(); h.view.downloadFullResult(); await h.view.returnOutput()
-  assert.equal(h.calls.copied.length + h.calls.downloads.length + h.calls.handoff.length, 0)
+  h.view.handleCopyPrimary(); h.view.saveFullResult(); await h.view.returnOutput()
+  assert.equal(h.calls.copied.length + h.calls.saves.length + h.calls.handoff.length, 0)
   await h.full()
   assert.equal(h.view.finalTable.rows.length, 1)
   assert.equal(h.view.displayGridRows[0].name, 'row8104')
-  h.view.downloadFullResult()
+  await h.view.saveFullResult()
   h.view.handleCopyPrimary(); await new Promise((resolve) => setTimeout(resolve, 0)); h.render()
   await h.view.returnOutput()
   const text = JSON.stringify([{ name: 'row8104', value: '8104' }], null, 2)
   assert.equal(h.calls.copied[0], text)
-  assert.equal(h.calls.downloads[0].text, text)
+  assert.equal(h.calls.saves[0].text, text)
   assert.equal(h.calls.handoff[0].block.text, text)
 })
 await check('SQL limit and header sort run before the grid and output preview slices', async () => {
@@ -442,8 +447,8 @@ await check('invalid SQL disables every complete output until it is fixed in pla
   assert.equal(h.view.canCopyOutput, false)
   assert.equal(h.view.canReturnOutput, false)
   assert.deepEqual(plain(h.view.table.headers), ['name', 'value'])
-  h.view.handleCopyPrimary(); h.view.downloadFullResult(); await h.view.returnOutput()
-  assert.equal(h.calls.copied.length + h.calls.downloads.length + h.calls.handoff.length, 0)
+  h.view.handleCopyPrimary(); h.view.saveFullResult(); await h.view.returnOutput()
+  assert.equal(h.calls.copied.length + h.calls.saves.length + h.calls.handoff.length, 0)
   h.query({ sqlFilter: 'SELECT name FROM data LIMIT 1' })
   assert.equal(h.view.filterError, null)
   assert.equal(h.view.canReturnOutput, true)
@@ -455,23 +460,23 @@ for (const operation of ['to-ndjson', 'to-sql']) await check(`${operation} share
   assert.equal(h.view.finalTable.rows.length, 0)
   assert.deepEqual(plain(h.view.table.headers), ['name'])
   assert.deepEqual(plain(h.view.tableHeaders), ['name', 'value'])
-  h.view.downloadFullResult()
+  await h.view.saveFullResult()
   h.view.handleCopyPrimary(); await new Promise((resolve) => setTimeout(resolve, 0)); h.render()
   await h.view.returnOutput()
   assert.deepEqual(h.calls.copied, [''])
-  assert.equal(h.calls.downloads[0].text, '')
+  assert.equal(h.calls.saves[0].text, '')
   assert.equal(h.calls.handoff[0].block.text, '')
 })
 for (const control of ['filterMode', 'globalFilter', 'sqlFilter', 'sort']) await check(`${control} immediately invalidates full output and a pending handoff`, async () => {
   const receipt = deferred(), h = harness({ input: csv(8105), outcome: () => receipt.promise })
   await h.full()
   const previousFingerprint = h.view.jobFingerprint
-  const oldDownload = h.view.downloadFullResult, oldReturn = h.view.returnOutput, pending = oldReturn()
+  const oldSave = h.view.saveFullResult, oldReturn = h.view.returnOutput, pending = oldReturn()
   if (control === 'sort') h.sort('value', false)
   else h.query({ [control]: control === 'filterMode' ? 'sql' : control === 'globalFilter' ? 'row8104' : 'SELECT name FROM data LIMIT 1' }, false)
   assert.equal(h.calls.handoff[0].signal.aborted, true)
-  oldDownload(); await oldReturn()
-  assert.equal(h.calls.downloads.length, 0)
+  oldSave(); await oldReturn()
+  assert.equal(h.calls.saves.length, 0)
   assert.equal(h.calls.handoff.length, 1)
   h.render()
   assert.notEqual(h.view.jobFingerprint, previousFingerprint)
@@ -563,4 +568,202 @@ await check('effect replay preserves an untouched result', async () => {
   h.replayEffects(); await h.view.returnOutput()
   assert.equal(h.calls.handoff.length, 1)
 })
+
+await check('save captures complete filtered output, waits for saved receipt and prevents same-turn double clicks', async () => {
+  const receipt = deferred(), h = harness({ input: csv(8105), saveOutcome: () => receipt.promise })
+  h.query({ filterMode: 'sql', sqlFilter: 'SELECT name, value FROM data WHERE value >= 100 ORDER BY value DESC' })
+  await h.full()
+  h.view.setSelectedColumns(new Set(['name'])); h.render()
+  const draft = h.draft(), complete = h.view.fullOutputRef.current
+  h.calls.messages.length = 0
+  const save = h.view.saveFullResult, pending = save()
+  await save(); h.render()
+  assert.equal(h.calls.saves.length, 1)
+  assert.equal(h.calls.saves[0].text, complete)
+  assert.equal(JSON.parse(complete).length, 8005, 'save includes rows beyond both output and grid preview caps')
+  assert.equal(h.calls.saves[0].suggestedFilename, 'csv-export.json')
+  assert.equal(h.view.saving, true)
+  assert.deepEqual(h.calls.messages, [])
+  receipt.resolve({ status: 'saved' }); await pending; h.render()
+  assert.deepEqual(h.calls.messages, [['toast.saved', 'success']])
+  assert.equal(h.view.saving, false)
+  assert.equal(h.view.fullOutputRef.current, complete)
+  assert.equal(h.view.fullJobReady, true)
+  assert.deepEqual(h.draft(), draft)
+  assert.equal(h.calls.complete + h.calls.navigation + h.calls.back + h.calls.close + h.calls.detach, 0)
+})
+
+await check('cancel preserves complete result and allows an immediate retry without reprocessing', async () => {
+  let attempts = 0
+  const h = harness({ input: csv(8105), saveOutcome: () => ({ status: ++attempts === 1 ? 'cancelled' : 'saved' }) })
+  await h.full()
+  const draft = h.draft(), complete = h.view.fullOutputRef.current
+  h.calls.messages.length = 0
+  await h.view.saveFullResult(); h.render()
+  assert.equal(h.view.saving, false)
+  assert.equal(h.view.fullJobReady, true)
+  assert.equal(h.view.fullOutputRef.current, complete)
+  assert.deepEqual(h.calls.messages, [])
+  await h.view.saveFullResult(); h.render()
+  assert.deepEqual(h.calls.saves.map((save) => save.text), [complete, complete])
+  assert.deepEqual(h.calls.messages, [['toast.saved', 'success']])
+  assert.deepEqual(h.draft(), draft)
+})
+
+for (const [name, key] of [
+  ['SaveFailedError', 'toast.saveFailed'], ['NotSupportedError', 'toast.saveUnsupported'],
+  ['SaveUnavailableError', 'toast.saveUnavailable'], ['TextTooLargeError', 'toast.saveTooLarge'],
+  ['BusyError', 'toast.saveBusy'], ['InvalidFilenameError', 'toast.saveFailed'],
+  ['Error', 'toast.saveFailed'], ['AbortError', null],
+]) await check(`${name} preserves the complete result and permits retry`, async () => {
+  let attempts = 0
+  const h = harness({ saveOutcome: () => {
+    if (++attempts === 1) return Promise.reject(Object.assign(Error('native failure details'), { name }))
+    return { status: 'saved' }
+  } })
+  await h.full()
+  const draft = h.draft(), complete = h.view.fullOutputRef.current
+  h.calls.messages.length = 0
+  await h.view.saveFullResult(); h.render()
+  assert.equal(h.view.saving, false)
+  assert.equal(h.view.fullJobReady, true)
+  assert.equal(h.view.fullOutputRef.current, complete)
+  assert.deepEqual(h.calls.messages, key ? [[key, 'error']] : [])
+  assert.deepEqual(h.draft(), draft)
+  await h.view.saveFullResult()
+  assert.equal(h.calls.saves.length, 2)
+  assert.equal(h.calls.saves[1].text, complete)
+})
+
+await check('old hosts honestly report that native save is unavailable', async () => {
+  const h = harness({ saveAvailable: false })
+  await h.view.saveFullResult(); h.render()
+  assert.equal(h.calls.saves.length, 0)
+  assert.equal(h.view.saving, false)
+  assert.deepEqual(h.calls.messages, [['toast.saveUnsupported', 'error']])
+})
+
+for (const [name, value] of [['SourceText', 'x,y\nnew,result'], ['Delimiter', 'tab'], ['Header', 'no-header'], ['Output', 'csv'], ['Minify', true], ['Indent', 4], ['TableName', 'new_table'], ['DropEmpty', true], ['Dedupe', true], ['Transpose', true]]) {
+  await check(`${name} revokes a save snapshot synchronously before rendering`, async () => {
+    const receipt = deferred(), h = harness({ saveOutcome: () => receipt.promise })
+    const save = h.view.saveFullResult, pending = save()
+    h.edit(name, value, false)
+    assert.equal(h.calls.saves[0].signal.aborted, true)
+    await save()
+    assert.equal(h.calls.saves.length, 1, 'a stale click cannot submit the prior result')
+    h.render()
+    const draft = h.draft()
+    receipt.resolve({ status: 'saved' }); await pending; h.render()
+    assert.deepEqual(h.draft(), draft)
+    assert.deepEqual(h.calls.messages, [])
+    assert.equal(h.view.saving, false)
+  })
+}
+
+for (const control of ['filterMode', 'globalFilter', 'sqlFilter', 'sort']) await check(`${control} aborts a full-result save before an old success arrives`, async () => {
+  const receipt = deferred(), h = harness({ input: csv(8105), saveOutcome: () => receipt.promise })
+  await h.full(); h.calls.messages.length = 0
+  const pending = h.view.saveFullResult()
+  if (control === 'sort') h.sort('value', false)
+  else h.query({ [control]: control === 'filterMode' ? 'sql' : control === 'globalFilter' ? 'row8104' : 'SELECT name FROM data LIMIT 1' }, false)
+  assert.equal(h.calls.saves[0].signal.aborted, true)
+  h.render()
+  receipt.resolve({ status: 'saved' }); await pending; h.render()
+  assert.equal(h.view.fullJobReady, false)
+  assert.deepEqual(h.calls.messages, [])
+})
+
+for (const action of ['unmount', 'replaceHost', 'requestBack', 'close', 'detachToWindow', 'replayEffects']) await check(`${action} revokes a pending save and ignores its late failure`, async () => {
+  const receipt = deferred(), h = harness({ saveOutcome: () => receipt.promise })
+  const pending = h.view.saveFullResult()
+  if (h.view.exits[action]) h.view.exits[action]()
+  else h[action]()
+  assert.equal(h.calls.saves[0].signal.aborted, true)
+  receipt.reject(Error('late failure')); await pending
+  assert.deepEqual(h.calls.messages, [])
+})
+
+await check('starting a file read revokes a save before the new file resolves', async () => {
+  const receipt = deferred(), read = deferred(), h = harness({ saveOutcome: () => receipt.promise })
+  const pending = h.view.saveFullResult()
+  const loading = h.view.onFilePicked({ target: { files: [{ name: 'replacement.csv', text: () => read.promise }], value: 'file' } })
+  assert.equal(h.calls.saves[0].signal.aborted, true)
+  receipt.resolve({ status: 'saved' }); await pending
+  assert.deepEqual(h.calls.messages, [])
+  read.resolve('new,data\nx,y'); await loading; h.render()
+  assert.equal(h.view.sourceText, 'new,data\nx,y')
+})
+
+for (const oldOutcome of ['saved', 'cancelled', 'error']) await check(`late old ${oldOutcome} cannot clear a newer save attempt`, async () => {
+  const receipts = [deferred(), deferred()]
+  let attempts = 0
+  const h = harness({ saveOutcome: () => receipts[attempts++].promise })
+  const old = h.view.saveFullResult()
+  h.query({ globalFilter: 'one' })
+  const current = h.view.saveFullResult(); h.render()
+  assert.equal(h.view.saving, true)
+  if (oldOutcome === 'error') receipts[0].reject(Error('old failure'))
+  else receipts[0].resolve({ status: oldOutcome })
+  await old; h.render()
+  assert.equal(h.view.saving, true)
+  assert.deepEqual(h.calls.messages, [])
+  assert.equal(h.calls.saves[1].signal.aborted, false)
+  receipts[1].resolve({ status: 'saved' }); await current; h.render()
+  assert.equal(h.view.saving, false)
+  assert.deepEqual(h.calls.messages, [['toast.saved', 'success']])
+})
+
+const saveLimit = 10 * 1024 * 1024
+for (const [name, text, accepted] of [
+  ['ASCII exact limit', 'a'.repeat(saveLimit), true],
+  ['ASCII one byte over', 'a'.repeat(saveLimit + 1), false],
+  ['UTF-8 exact limit', '🙂'.repeat(saveLimit / 4), true],
+  ['UTF-8 one byte over', '🙂'.repeat(saveLimit / 4) + 'a', false],
+  ['replacement character crosses the UTF-8 limit', 'a'.repeat(saveLimit - 2) + '\ud800', false],
+]) await check(`native save handles ${name} without truncation`, async () => {
+  const table = { headers: ['value'], rows: [['one']] }
+  const h = harness({ process: async () => ({ table, sourceHeaders: table.headers, output: text, rowCount: 1, colCount: 1 }) })
+  await h.full(); h.calls.messages.length = 0
+  await h.view.saveFullResult(); h.render()
+  assert.equal(h.calls.saves.length, accepted ? 1 : 0)
+  if (accepted) assert.equal(h.calls.saves[0].text, text)
+  else assert.deepEqual(h.calls.messages, [['toast.saveTooLarge', 'error']])
+  assert.equal(h.view.fullOutputRef.current, text)
+  assert.equal(h.view.fullJobReady, true)
+})
+
+for (const operation of ['to-ndjson', 'to-sql']) await check(`a full ${operation} result filtered to zero rows saves a real empty file`, async () => {
+  const h = harness({ input: csv(8105), operation })
+  h.query({ filterMode: 'sql', sqlFilter: 'SELECT name FROM data WHERE value > 9000' })
+  await h.full(); h.calls.messages.length = 0
+  assert.equal(h.view.fullJobReady, true)
+  assert.equal(h.view.fullOutputRef.current, '')
+  await h.view.saveFullResult()
+  assert.equal(h.calls.saves[0].text, '')
+  assert.deepEqual(h.calls.messages, [['toast.saved', 'success']])
+})
+
+for (const [operation, extension] of [['to-json', 'json'], ['to-array', 'json'], ['to-columns', 'json'], ['to-keyed', 'json'], ['to-ndjson', 'ndjson'], ['to-csv', 'csv'], ['to-tsv', 'tsv'], ['to-markdown', 'md'], ['to-sql', 'sql']]) {
+  await check(`${operation} suggests only a safe filename with the result extension`, async () => {
+    const h = harness({ operation })
+    h.view.setLinkedFileLabel('/private/source/../../source.csv'); h.render()
+    await h.view.saveFullResult()
+    assert.equal(h.calls.saves[0].suggestedFilename, `csv-export.${extension}`)
+  })
+}
+
+await check('ordinary surface rerenders preserve a pending save snapshot', async () => {
+  const receipt = deferred(), h = harness({ saveOutcome: () => receipt.promise })
+  await h.full(); h.calls.messages.length = 0
+  const complete = h.view.fullOutputRef.current
+  const pending = h.view.saveFullResult()
+  h.view.setMainView('source'); h.view.setSelectedColumns(new Set(['name'])); h.render(); h.rerenderHost()
+  assert.equal(h.calls.saves[0].signal.aborted, false)
+  assert.equal(h.view.saving, true)
+  assert.equal(h.view.fullJobReady, true)
+  assert.equal(h.view.fullOutputRef.current, complete)
+  receipt.resolve({ status: 'saved' }); await pending; h.render()
+  assert.deepEqual(h.calls.messages, [['toast.saved', 'success']])
+})
+
 console.log(`CSV result return: ${passed} production-module logic scenarios passed`)

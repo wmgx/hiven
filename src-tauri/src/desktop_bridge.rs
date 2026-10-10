@@ -590,6 +590,11 @@ fn route_validation_request(
                     | "prepare_host_text_export"
                     | "commit_host_text_export"
                     | "discard_host_text_export"
+                    | "register_host_surface_text_export_owner"
+                    | "revoke_host_surface_text_export_owner"
+                    | "prepare_host_surface_text_export"
+                    | "commit_host_surface_text_export"
+                    | "discard_host_surface_text_export"
             ) {
                 // Browser tabs share the relay's native webview, so they cannot
                 // own its dialog leases. Native exports are desktop-only.
@@ -1251,6 +1256,11 @@ mod tests {
             "prepare_host_text_export",
             "commit_host_text_export",
             "discard_host_text_export",
+            "register_host_surface_text_export_owner",
+            "revoke_host_surface_text_export_owner",
+            "prepare_host_surface_text_export",
+            "commit_host_surface_text_export",
+            "discard_host_surface_text_export",
         ] {
             let body = serde_json::json!({
                 "id": "png-export-denied",

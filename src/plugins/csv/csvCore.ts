@@ -1060,17 +1060,3 @@ export function outputExtension(mode: OutputMode): string {
   if (mode === 'ndjson') return 'ndjson'
   return 'json'
 }
-
-export function downloadTextFile(filename: string, content: string, mime = 'text/plain;charset=utf-8'): void {
-  const blob = new Blob([content], { type: mime })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.rel = 'noopener'
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  // Revoke after the browser has a chance to start the download
-  setTimeout(() => URL.revokeObjectURL(url), 2_000)
-}

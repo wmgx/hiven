@@ -1942,6 +1942,8 @@ async fn show_plugin_surface_window(
         remember_previous_key_window_label(previous_key_window_label);
     }
     let window = if let Some(window) = existing_window {
+        // Reopening/replacing the surface starts a new host ownership lifetime.
+        host_text_export::invalidate_window(&window);
         let _ = window.set_size(LogicalSize::new(width, height));
         window
     } else {
@@ -1998,6 +2000,7 @@ async fn hide_plugin_surface_window(
     let Some(window) = app.get_webview_window(&label) else {
         return Ok(());
     };
+    host_text_export::invalidate_window(&window);
     window.hide().map_err(|error| error.to_string())?;
     let last_active_at = now_millis();
     surface_registry_mark_record_state(&label, "hidden", last_active_at)?;
@@ -2087,6 +2090,7 @@ fn attach_plugin_surface_window_events(
     destroy_timeout_ms: u64,
 ) {
     let instance = paste_recovery::register_window(&label, Some(destroy_timeout_ms));
+    let export_window = window.clone();
     window.on_window_event(move |event| match event {
         tauri::WindowEvent::Focused(false) => {
             let instance_current = paste_recovery::is_window_current(&label, instance);
@@ -2113,6 +2117,12 @@ fn attach_plugin_surface_window_events(
             if !close_on_blur {
                 return;
             }
+            // The native chooser can blur its own parent. Only its captured
+            // window instance receives this temporary close-on-blur hold.
+            if host_text_export::has_open_surface_dialog(&export_window) {
+                return;
+            }
+            host_text_export::invalidate_window(&export_window);
             let token = touch_plugin_surface_window(&label);
             if let Some(window) = app.get_webview_window(&label) {
                 let _ = window.hide();
@@ -2128,9 +2138,11 @@ fn attach_plugin_surface_window_events(
             );
         }
         tauri::WindowEvent::CloseRequested { .. } => {
+            host_text_export::invalidate_window(&export_window);
             paste_recovery::invalidate_window(&label, Some(instance));
         }
         tauri::WindowEvent::Destroyed => {
+            host_text_export::invalidate_window(&export_window);
             if !paste_recovery::destroyed(&label, instance) {
                 return;
             }
@@ -8105,6 +8117,11 @@ pub fn run() {
             host_text_export::prepare_host_text_export,
             host_text_export::commit_host_text_export,
             host_text_export::discard_host_text_export,
+            host_text_export::register_host_surface_text_export_owner,
+            host_text_export::revoke_host_surface_text_export_owner,
+            host_text_export::prepare_host_surface_text_export,
+            host_text_export::commit_host_surface_text_export,
+            host_text_export::discard_host_surface_text_export,
             install_plugin_dir,
             install_plugin_zip,
             install_plugin_zip_url,
