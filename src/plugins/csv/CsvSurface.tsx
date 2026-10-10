@@ -15,6 +15,7 @@ import { Checkbox, IconButton, SearchField, SegmentedControl, Select, TextInput 
 import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
 import {
   applyTransforms,
+  applyTableQuery,
   downloadTextFile,
   estimateRowCount,
   outputExtension,
@@ -25,11 +26,10 @@ import {
   type DelimiterMode,
   type HeaderMode,
   type OutputMode,
+  type FullProcessResult,
 } from './csvCore'
 import {
   defaultSqlTemplate,
-  filterRowsBySql,
-  filterRowsByText,
   getSqlCompletions,
   type SqlCompletionItem,
 } from './csvSqlFilter'
@@ -251,6 +251,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
   const [isParsing, startParseTransition] = useTransition()
   const [fullJob, setFullJob] = useState<FullJobState>({ status: 'idle' })
   const fullOutputRef = useRef<string | null>(null)
+  const fullResultRef = useRef<FullProcessResult | null>(null)
   const fullJobKeyRef = useRef<string>('')
   const abortRef = useRef<AbortController | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -266,6 +267,13 @@ export function CsvSurface(props: PluginSurfaceProps) {
   const returning = returnSubmission?.host === host && !returnSubmission.controller.signal.aborted
 
   useLayoutEffect(() => {
+    if (returnLifetimeRef.current.host !== host) {
+      fullOutputRef.current = null
+      fullResultRef.current = null
+      fullJobKeyRef.current = ''
+      fullReturnSnapshotRef.current = null
+      setFullJob({ status: 'idle' })
+    }
     const lifetime = { host, active: true }
     returnLifetimeRef.current = lifetime
     return () => {
@@ -273,6 +281,8 @@ export function CsvSurface(props: PluginSurfaceProps) {
       returnSubmissionRef.current?.abort()
       returnSubmissionRef.current = null
       fileReadRef.current = null
+      abortRef.current?.abort()
+      abortRef.current = null
     }
   }, [host])
 
@@ -287,12 +297,19 @@ export function CsvSurface(props: PluginSurfaceProps) {
 
   const updateResult = useCallback((update: () => void) => {
     cancelReturn()
+    abortRef.current?.abort()
+    abortRef.current = null
+    fullOutputRef.current = null
+    fullResultRef.current = null
+    fullJobKeyRef.current = ''
+    fullReturnSnapshotRef.current = null
+    setFullJob({ status: 'idle' })
     update()
   }, [cancelReturn])
 
   // Retain the exact source separately from the old preview fingerprint: same-length
   // middle edits must never make an earlier full result eligible for a new handoff.
-  const resultParameters = JSON.stringify([delimiter, header, output, minify, indent, tableName, dropEmpty, dedupe, transpose])
+  const resultParameters = JSON.stringify([delimiter, header, output, minify, indent, tableName, dropEmpty, dedupe, transpose, filterMode, globalFilter, sqlFilter, sortColumns])
   const fullReturnSnapshotRef = useRef<{ sourceText: string; parameters: string } | null>(null)
 
   const deferredSource = useDeferredValue(sourceText)
@@ -309,17 +326,9 @@ export function CsvSurface(props: PluginSurfaceProps) {
         // sample edges so identity changes when content swaps of same length
         sourceText.slice(0, 64),
         sourceText.slice(-64),
-        delimiter,
-        header,
-        output,
-        minify,
-        indent,
-        tableName,
-        dropEmpty,
-        dedupe,
-        transpose,
+        resultParameters,
       ].join('|'),
-    [dedupe, delimiter, dropEmpty, header, indent, minify, output, sourceText, tableName, transpose],
+    [resultParameters, sourceText],
   )
 
   const parseLimits = useMemo(() => {
@@ -337,6 +346,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
     abortRef.current?.abort()
     abortRef.current = null
     fullOutputRef.current = null
+    fullResultRef.current = null
     fullJobKeyRef.current = ''
     fullReturnSnapshotRef.current = null
     setFullJob({ status: 'idle' })
@@ -347,6 +357,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
     event.target.value = ''
     if (!file) return
     cancelReturn()
+    invalidateFullJob()
     const read = {}
     const lifetime = returnLifetimeRef.current
     fileReadRef.current = read
@@ -394,61 +405,52 @@ export function CsvSurface(props: PluginSurfaceProps) {
     }
   }, [dedupe, dropEmpty, parsed, transpose])
 
-  const parseTruncated =
-    Boolean(parseLimits) &&
-    parsed.ok &&
-    (estimatedLines > (tableFull?.rows.length ?? 0) + 2 ||
-      (tableFull !== null && tableFull.rows.length >= PARSE_MAX_ROWS))
-
-  const gridSlice = useMemo(() => {
-    if (!tableFull) return null
-    return sliceTable(tableFull, GRID_MAX_ROWS)
-  }, [tableFull])
-
-  const table = gridSlice?.table ?? null
-  const totalDataRows = gridSlice?.totalRows ?? tableFull?.rows.length ?? 0
-
-  const outputPreviewTable = useMemo(() => {
-    if (!tableFull) return null
-    return sliceTable(tableFull, OUTPUT_PREVIEW_MAX_ROWS).table
-  }, [tableFull])
-
-  // Only build heavy output strings when viewing output; small tables precompute for instant copy
+  // A capped parse is only useful for discovering source columns. Do not query
+  // that subset or present its row count as the complete result.
+  const returnNeedsFullProcess = Boolean(
+    parseLimits && parsed.ok && parsed.table.rows.length >= PARSE_MAX_ROWS - 1,
+  )
+  const needsFullProcess = returnNeedsFullProcess
+  const fullReturnReady = fullJob.status === 'done'
+    && fullOutputRef.current !== null
+    && fullResultRef.current !== null
+    && fullJobKeyRef.current === jobFingerprint
+    && fullReturnSnapshotRef.current?.sourceText === sourceText
+    && fullReturnSnapshotRef.current.parameters === resultParameters
+  const fullJobReady = fullReturnReady
+  const tableQuery = useMemo(() => ({ filterMode, globalFilter, sqlFilter, sortColumns }), [filterMode, globalFilter, sqlFilter, sortColumns])
+  const queryResult = useMemo(() => {
+    if (!tableFull || returnNeedsFullProcess) return null
+    // Capped JSON and transposed sources may have columns beyond the preview.
+    // Their query validation belongs to the full run as well.
+    return applyTableQuery(tableFull, tableQuery)
+  }, [returnNeedsFullProcess, tableFull, tableQuery])
+  const filterError = queryResult && !queryResult.ok ? queryResult.message : null
+  const currentInputReady = !isParsing && !isSourceStale && !readingFile
+  const finalTable = currentInputReady && !filterError
+    ? fullJobReady ? fullResultRef.current!.table
+      : !returnNeedsFullProcess && queryResult?.ok ? queryResult.table : null
+    : null
+  const gridSlice = useMemo(() => finalTable ? sliceTable(finalTable, GRID_MAX_ROWS) : null, [finalTable])
+  // Keep the same filter controls available for pending, invalid and zero-row results.
+  const table = gridSlice?.table ?? (tableFull ? { headers: tableFull.headers, rows: [] } : null)
+  const totalDataRows = finalTable?.rows.length ?? 0
+  const tableHeaders = fullJobReady ? fullResultRef.current!.sourceHeaders : tableFull?.headers ?? []
+  const outputPreviewTable = useMemo(() => finalTable ? sliceTable(finalTable, OUTPUT_PREVIEW_MAX_ROWS).table : null, [finalTable])
   const outputText = useMemo(() => {
-    if (!tableFull) return ''
-    if (mainView !== 'output') {
-      if (isLargeSource || tableFull.rows.length > OUTPUT_PREVIEW_MAX_ROWS) return ''
-      try {
-        return toOutput(tableFull, output, { minify, indent }, { tableName })
-      } catch {
-        return ''
-      }
-    }
-    if (!outputPreviewTable) return ''
+    if (!outputPreviewTable || mainView !== 'output') return ''
     try {
       return toOutput(outputPreviewTable, output, { minify, indent }, { tableName })
     } catch {
       return ''
     }
-  }, [indent, isLargeSource, mainView, minify, output, outputPreviewTable, tableFull, tableName])
-
-  /** True when preview parse did not cover the whole source — needs async full pipeline. */
-  const needsFullProcess = Boolean(parseTruncated)
-  const fullJobReady =
-    fullJob.status === 'done' && fullJobKeyRef.current === jobFingerprint && Boolean(fullOutputRef.current)
-
-  // Check the parsed rows before transforms: a capped preview can shrink after
-  // deduplication or transpose. Source byte size alone does not imply missing rows.
-  const returnNeedsFullProcess = Boolean(
-    parseLimits && parsed.ok && parsed.table.rows.length >= PARSE_MAX_ROWS - 1,
-  )
-  const fullReturnReady = fullJob.status === 'done'
-    && fullOutputRef.current !== null
-    && fullReturnSnapshotRef.current?.sourceText === sourceText
-    && fullReturnSnapshotRef.current.parameters === resultParameters
-  const canReturnOutput = Boolean(sourceText.trim() && tableFull)
-    && !isParsing && !isSourceStale && !readingFile
-    && (!returnNeedsFullProcess || fullReturnReady)
+  }, [indent, mainView, minify, output, outputPreviewTable, tableName])
+  const canReturnOutput = Boolean(sourceText.trim() && finalTable) && currentInputReady
+  const getCompleteOutput = useCallback((): string | null => {
+    if (!canReturnOutput || resultRevision !== resultRevisionRef.current || fileReadRef.current) return null
+    if (fullJobReady) return fullOutputRef.current
+    return toOutput(finalTable!, output, { minify, indent }, { tableName })
+  }, [canReturnOutput, finalTable, fullJobReady, indent, minify, output, resultRevision, tableName])
 
   const returnOutput = async () => {
     const lifetime = returnLifetimeRef.current
@@ -458,9 +460,9 @@ export function CsvSurface(props: PluginSurfaceProps) {
     // Serialize all transformed rows, never the grid selection or 1,500-row preview.
     let text: string
     try {
-      text = returnNeedsFullProcess
-        ? fullOutputRef.current!
-        : toOutput(tableFull!, output, { minify, indent }, { tableName })
+      const currentOutput = getCompleteOutput()
+      if (currentOutput === null) return
+      text = currentOutput
       if (text.length > RETURN_MAX_BYTES || new TextEncoder().encode(text).byteLength > RETURN_MAX_BYTES) {
         host.showMessage(t('toast.returnTooLarge'), 'error')
         return
@@ -489,13 +491,17 @@ export function CsvSurface(props: PluginSurfaceProps) {
   }
 
   const runFullProcess = useCallback(async () => {
-    if (fullJob.status === 'running') return
+    const lifetime = returnLifetimeRef.current
+    if (abortRef.current || resultRevision !== resultRevisionRef.current || !currentInputReady
+      || !sourceText.trim() || !tableFull || filterError || !lifetime.active || lifetime.host !== host) return
     cancelReturn()
-    abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
+    const isCurrent = () => lifetime.active && lifetime.host === host
+      && abortRef.current === controller && !controller.signal.aborted
     setFullJob({ status: 'running', ratio: 0, phase: 'parse' })
     fullOutputRef.current = null
+    fullResultRef.current = null
     fullReturnSnapshotRef.current = null
     try {
       const result = await processFullSource(
@@ -507,23 +513,25 @@ export function CsvSurface(props: PluginSurfaceProps) {
           transforms: { dropEmpty, dedupe, transpose },
           jsonStyle: { minify, indent },
           sqlStyle: { tableName },
+          query: tableQuery,
         },
         {
           signal: controller.signal,
           onProgress: (p) => {
-            setFullJob({ status: 'running', ratio: p.ratio, phase: p.phase })
+            if (isCurrent()) setFullJob({ status: 'running', ratio: p.ratio, phase: p.phase })
           },
         },
       )
-      if (controller.signal.aborted) return
+      if (!isCurrent()) return
       fullOutputRef.current = result.output
+      fullResultRef.current = result
       fullJobKeyRef.current = jobFingerprint
       fullReturnSnapshotRef.current = { sourceText, parameters: resultParameters }
       setFullJob({
         status: 'done',
         rows: result.rowCount,
         cols: result.colCount,
-        bytes: result.output.length,
+        bytes: new TextEncoder().encode(result.output).byteLength,
       })
       setMainView('output')
       try {
@@ -535,6 +543,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
         // optional host toast
       }
     } catch (error) {
+      if (!isCurrent()) return
       if (error instanceof Error && error.name === 'AbortError') {
         setFullJob({ status: 'idle' })
         return
@@ -543,13 +552,16 @@ export function CsvSurface(props: PluginSurfaceProps) {
         status: 'error',
         message: error instanceof Error ? error.message : String(error),
       })
+    } finally {
+      if (abortRef.current === controller) abortRef.current = null
     }
   }, [
     cancelReturn,
+    currentInputReady,
     dedupe,
     delimiter,
     dropEmpty,
-    fullJob.status,
+    filterError,
     header,
     host,
     indent,
@@ -557,37 +569,37 @@ export function CsvSurface(props: PluginSurfaceProps) {
     minify,
     output,
     resultParameters,
+    resultRevision,
     sourceText,
     t,
     tableName,
+    tableFull,
+    tableQuery,
     transpose,
   ])
 
   const cancelFullProcess = useCallback(() => {
     cancelReturn()
-    abortRef.current?.abort()
-    abortRef.current = null
-    setFullJob({ status: 'idle' })
-  }, [cancelReturn])
+    invalidateFullJob()
+  }, [cancelReturn, invalidateFullJob])
 
   const downloadFullResult = useCallback(() => {
-    const text = fullOutputRef.current
-    if (!text) return
+    const text = getCompleteOutput()
+    if (text === null) return
     const base = linkedFileLabel
       ? fileNameFromPath(linkedFileLabel).replace(/\.[^.]+$/, '')
       : 'csv-export'
     downloadTextFile(`${base}.${outputExtension(output)}`, text)
-  }, [linkedFileLabel, output])
+  }, [getCompleteOutput, linkedFileLabel, output])
 
   const errorMessage = !parsed.ok
     ? localizedText(t, 'error.generic', 'Parse error: {message}', { message: parsed.message })
     : ''
 
-  const cols = tableFull?.headers.length ?? 0
-  const displayRows = fullJobReady && fullJob.status === 'done' ? fullJob.rows : totalDataRows
+  const cols = finalTable?.headers.length ?? 0
   const sizeLabel = localizedText(t, 'meta.size', '{rows} × {cols}', {
-    rows: displayRows,
-    cols: fullJobReady && fullJob.status === 'done' ? fullJob.cols : cols,
+    rows: totalDataRows,
+    cols,
   })
 
   const delimiterHint =
@@ -599,7 +611,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
 
   const showJsonStyle = JSON_OUTPUTS.includes(output)
   const isJsonInput = parsed.ok && parsed.kind === 'json'
-  const canCopyOutput = Boolean(tableFull) && !errorMessage
+  const canCopyOutput = canReturnOutput && !errorMessage
 
   const gridRows = useMemo((): CsvGridRow[] => {
     if (!table) return []
@@ -612,28 +624,8 @@ export function CsvSurface(props: PluginSurfaceProps) {
     })
   }, [table])
 
-  const tableHeaders = table?.headers ?? []
-
-  const sqlFilterResult = useMemo(() => {
-    if (filterMode !== 'sql' || !sqlFilter.trim()) return null
-    const plain = gridRows.map((row) => {
-      const rec: Record<string, string> = {}
-      for (const h of tableHeaders) rec[h] = String(row[h] ?? '')
-      return rec
-    })
-    return filterRowsBySql(plain, tableHeaders, sqlFilter)
-  }, [filterMode, gridRows, sqlFilter, tableHeaders])
-
-  const filterError =
-    sqlFilterResult && !sqlFilterResult.ok ? sqlFilterResult.message : null
-
-  /** Columns visible in the grid (SQL SELECT projection or full table). */
-  const visibleHeaders = useMemo(() => {
-    if (filterMode === 'sql' && sqlFilter.trim() && sqlFilterResult?.ok && sqlFilterResult.columns) {
-      return sqlFilterResult.columns
-    }
-    return tableHeaders
-  }, [filterMode, sqlFilter, sqlFilterResult, tableHeaders])
+  /** Final columns include SQL projection, with source columns kept for completion. */
+  const visibleHeaders = table?.headers ?? []
 
   const sqlCompletions = useMemo(() => {
     if (filterMode !== 'sql') return { items: [] as SqlCompletionItem[], from: 0, to: 0 }
@@ -645,7 +637,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
       const { from, to } = sqlCompletions
       const next = sqlFilter.slice(0, from) + item.insertText + sqlFilter.slice(to)
       const caret = from + item.insertText.length
-      setSqlFilter(next)
+      updateResult(() => setSqlFilter(next))
       setSqlCursor(caret)
       setSqlSuggestOpen(false)
       setSqlSuggestIndex(0)
@@ -656,47 +648,10 @@ export function CsvSurface(props: PluginSurfaceProps) {
         el.setSelectionRange(caret, caret)
       })
     },
-    [sqlCompletions, sqlFilter],
+    [sqlCompletions, sqlFilter, updateResult],
   )
 
-  const displayGridRows = useMemo((): CsvGridRow[] => {
-    // gridRows use id = original row index — filter indexes match id
-    let rows = gridRows
-    if (filterMode === 'sql' && sqlFilter.trim()) {
-      if (sqlFilterResult?.ok) {
-        // Preserve SQL ORDER BY / LIMIT order from rowIndexes
-        const byId = new Map(gridRows.map((row) => [row.id, row]))
-        rows = sqlFilterResult.rowIndexes
-          .map((id) => byId.get(id))
-          .filter((row): row is CsvGridRow => Boolean(row))
-      } else {
-        rows = []
-      }
-    } else if (filterMode === 'text' && globalFilter.trim()) {
-      const plain = gridRows.map((row) => {
-        const rec: Record<string, string> = {}
-        for (const h of tableHeaders) rec[h] = String(row[h] ?? '')
-        return rec
-      })
-      const indexes = new Set(filterRowsByText(plain, tableHeaders, globalFilter))
-      rows = gridRows.filter((row) => indexes.has(row.id))
-    }
-    // UI header sort only when SQL didn't already order (or always allow override)
-    if (sortColumns.length > 0) {
-      const sorted = [...rows]
-      sorted.sort((a, b) => {
-        for (const sc of sortColumns) {
-          const av = String(a[sc.columnKey] ?? '')
-          const bv = String(b[sc.columnKey] ?? '')
-          const cmp = av.localeCompare(bv, undefined, { numeric: true, sensitivity: 'base' })
-          if (cmp !== 0) return sc.direction === 'ASC' ? cmp : -cmp
-        }
-        return 0
-      })
-      rows = sorted
-    }
-    return rows
-  }, [filterMode, globalFilter, gridRows, sortColumns, sqlFilter, sqlFilterResult, tableHeaders])
+  const displayGridRows = gridRows
 
   const toggleColumnSelected = useCallback((columnKey: string, additive: boolean) => {
     setSelectedColumns((prev) => {
@@ -713,13 +668,13 @@ export function CsvSurface(props: PluginSurfaceProps) {
   }, [])
 
   const cycleSort = useCallback((columnKey: string) => {
-    setSortColumns((prev) => {
+    updateResult(() => setSortColumns((prev) => {
       const existing = prev.find((s) => s.columnKey === columnKey)
       if (!existing) return [{ columnKey, direction: 'ASC' }]
       if (existing.direction === 'ASC') return [{ columnKey, direction: 'DESC' }]
       return prev.filter((s) => s.columnKey !== columnKey)
-    })
-  }, [])
+    }))
+  }, [updateResult])
 
   const sortDirFor = useCallback(
     (columnKey: string): 'ASC' | 'DESC' | null => {
@@ -840,20 +795,26 @@ export function CsvSurface(props: PluginSurfaceProps) {
 
   const writeClipboard = useCallback(
     async (text: string, complete = false) => {
-      if (!text) return
+      const lifetime = returnLifetimeRef.current
+      if (!lifetime.active || lifetime.host !== host || (complete && pendingCopiesRef.current > 0)) return
       cancelReturn()
+      const revision = resultRevisionRef.current
+      const isCurrent = () => lifetime.active && lifetime.host === host && resultRevisionRef.current === revision
       pendingCopiesRef.current += 1
       try {
         await host.clipboard.writeText(text)
+        if (!isCurrent()) return
         host.showMessage(localizedText(t, 'toast.copied', 'Copied'), 'success')
         if (complete) host.complete()
       } catch {
+        if (!isCurrent()) return
         try {
           await navigator.clipboard.writeText(text)
+          if (!isCurrent()) return
           host.showMessage(localizedText(t, 'toast.copied', 'Copied'), 'success')
           if (complete) host.complete()
         } catch {
-          host.showMessage(localizedText(t, 'toast.copyFailed', 'Copy failed'), 'error')
+          if (isCurrent()) host.showMessage(localizedText(t, 'toast.copyFailed', 'Copy failed'), 'error')
         }
       } finally {
         pendingCopiesRef.current -= 1
@@ -863,7 +824,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
   )
 
   const copySelection = useCallback(async () => {
-    if (!table) return
+    if (!table || !canCopyOutput || resultRevision !== resultRevisionRef.current || fileReadRef.current) return
     if (cellBlock) {
       await writeClipboard(blockToTsv(cellBlock, displayGridRows, visibleHeaders))
       return
@@ -878,12 +839,12 @@ export function CsvSurface(props: PluginSurfaceProps) {
       const row = displayGridRows.find((r) => r.id === selectedCell.rowId)
       if (row) await writeClipboard(String(row[selectedCell.columnKey] ?? ''))
     }
-  }, [cellBlock, displayGridRows, selectedCell, selectedColumns, visibleHeaders, writeClipboard])
+  }, [canCopyOutput, cellBlock, displayGridRows, resultRevision, selectedCell, selectedColumns, table, visibleHeaders, writeClipboard])
 
   const handleCellCopy = useCallback(
     (args: CellCopyArgs<CsvGridRow>, event: React.ClipboardEvent<HTMLDivElement>) => {
-      if (!table) return
       event.preventDefault()
+      if (!table || !canCopyOutput || resultRevision !== resultRevisionRef.current || fileReadRef.current) return
       if (cellBlock) {
         const tsv = blockToTsv(cellBlock, displayGridRows, visibleHeaders)
         event.clipboardData.setData('text/plain', tsv)
@@ -902,7 +863,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
       event.clipboardData.setData('text/plain', value)
       void writeClipboard(value)
     },
-    [cellBlock, displayGridRows, selectedColumns, visibleHeaders, writeClipboard],
+    [canCopyOutput, cellBlock, displayGridRows, resultRevision, selectedColumns, table, visibleHeaders, writeClipboard],
   )
 
   const handleCellKeyDown = useCallback(
@@ -967,77 +928,36 @@ export function CsvSurface(props: PluginSurfaceProps) {
     }
   }, [])
 
-  const handleCopyPrimary = useCallback(() => {
-    if (mainView === 'table' && (selectedCell || selectedColumns.size > 0 || cellBlock)) {
-      void copySelection()
-      return
+  const copyFullOutput = useCallback(() => {
+    try {
+      const text = getCompleteOutput()
+      if (text !== null) void writeClipboard(text, true)
+    } catch {
+      host.showMessage(localizedText(t, 'toast.copyFailed', 'Copy failed'), 'error')
     }
+  }, [getCompleteOutput, host, t, writeClipboard])
+
+  const handleCopyPrimary = useCallback(() => {
+    if (resultRevision !== resultRevisionRef.current || fileReadRef.current) return
     if (mainView === 'source') {
       void writeClipboard(sourceText)
       return
     }
-    // Prefer completed full-file result
-    if (fullJobReady && fullOutputRef.current) {
-      void writeClipboard(fullOutputRef.current, true)
+    if (!canCopyOutput) return
+    if (mainView === 'table' && (selectedCell || selectedColumns.size > 0 || cellBlock)) {
+      void copySelection()
       return
     }
-    // Whole table already in memory (preview parse not truncated) → serialize full output
-    if (!needsFullProcess && tableFull) {
-      try {
-        void writeClipboard(toOutput(tableFull, output, { minify, indent }, { tableName }), true)
-      } catch {
-        // ignore
-      }
-      return
-    }
-    // Preview-only: copy what we have (or prompt full process via banner)
-    if (outputText) {
-      void writeClipboard(outputText, true)
-    }
-  }, [
-    cellBlock,
-    copySelection,
-    fullJobReady,
-    indent,
-    mainView,
-    minify,
-    needsFullProcess,
-    output,
-    outputText,
-    selectedCell,
-    selectedColumns.size,
-    sourceText,
-    tableFull,
-    tableName,
-    writeClipboard,
-  ])
+    copyFullOutput()
+  }, [canCopyOutput, cellBlock, copyFullOutput, copySelection, mainView, resultRevision, selectedCell, selectedColumns.size, sourceText, writeClipboard])
 
-  // Clear selection when table shape changes
+  // Row identities belong to the current final result; a query edit must not
+  // leave a cell or range pointing at a different row. Conditions stay intact.
   useEffect(() => {
     setSelectedCell(null)
     setSelectedColumns(new Set())
     setCellBlock(null)
-    setSortColumns([])
-    setGlobalFilter('')
-    setSqlFilter('')
-  }, [tableFull?.headers.join('\0'), totalDataRows])
-
-  // Invalidate full result when pipeline inputs change
-  useEffect(() => {
-    if (fullJobKeyRef.current && fullJobKeyRef.current !== jobFingerprint) {
-      fullOutputRef.current = null
-      fullJobKeyRef.current = ''
-      if (fullJob.status === 'done' || fullJob.status === 'error') {
-        setFullJob({ status: 'idle' })
-      }
-    }
-  }, [fullJob.status, jobFingerprint])
-
-  useEffect(() => {
-    return () => {
-      abortRef.current?.abort()
-    }
-  }, [])
+  }, [sourceText, resultParameters])
 
   const showTruncationBanner = needsFullProcess || returnNeedsFullProcess
 
@@ -1060,7 +980,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
         </IconButton>
         <span className="csv-tools-surface__sep">/</span>
         <span className="csv-tools-surface__crumb">{localizedText(t, 'surface.title', 'CSV Tools')}</span>
-        {tableFull ? <span className="csv-tools-surface__meta">{sizeLabel}</span> : null}
+        {finalTable ? <span className="csv-tools-surface__meta">{sizeLabel}</span> : null}
         {delimiterHint ? <span className="csv-tools-surface__meta mono">{delimiterHint}</span> : null}
         {linkedFileLabel ? (
           <span className="csv-tools-surface__meta" title={linkedFileLabel}>
@@ -1098,16 +1018,8 @@ export function CsvSurface(props: PluginSurfaceProps) {
               ? t('action.copySelection')
               : mainView === 'source'
                 ? t('source.copyRaw')
-                : needsFullProcess && !fullJobReady
-                  ? t('action.copyPreviewOutput')
-                  : t('action.copyFullOutput')}
-            disabled={
-              !canCopyOutput &&
-              selectedColumns.size === 0 &&
-              !cellBlock &&
-              !selectedCell &&
-              !sourceText
-            }
+                : t('action.copyFullOutput')}
+            disabled={mainView === 'source' ? !sourceText || readingFile : !canCopyOutput}
             onClick={handleCopyPrimary}
           >
             <IconCopy />
@@ -1178,7 +1090,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
                 localizedText(
                   t,
                   'job.done',
-                  'Full result ready: {rows} × {cols}, {size}. Copy or download uses the complete file.',
+                  'Final result ready: {rows} × {cols}, {size}. Copy, Return to Search and Download use this complete result.',
                   {
                     rows: fullJob.rows,
                     cols: fullJob.cols,
@@ -1191,9 +1103,8 @@ export function CsvSurface(props: PluginSurfaceProps) {
                 localizedText(
                   t,
                   'meta.truncated',
-                  'Preview only (up to {shown} rows, ≈{total} lines, {size}). Run full process to convert the entire file.',
+                  'Source: ≈{total} lines, {size}. Process the full file to apply the current filters and sorting before previewing the result.',
                   {
-                    shown: Math.min(totalDataRows, PARSE_MAX_ROWS, GRID_MAX_ROWS),
                     total: estimatedLines,
                     size: formatBytes(sourceText.length),
                   },
@@ -1210,11 +1121,12 @@ export function CsvSurface(props: PluginSurfaceProps) {
                   <button
                     type="button"
                     className="csv-tools-surface__file-btn csv-tools-surface__file-btn--primary"
-                    onClick={() => void writeClipboard(fullOutputRef.current ?? '', true)}
+                    disabled={!canCopyOutput}
+                    onClick={copyFullOutput}
                   >
                     {localizedText(t, 'job.copyFull', 'Copy full')}
                   </button>
-                  <button type="button" className="csv-tools-surface__file-btn" onClick={downloadFullResult}>
+                  <button type="button" className="csv-tools-surface__file-btn" disabled={!canCopyOutput} onClick={downloadFullResult}>
                     <IconDownload />
                     <span>{localizedText(t, 'job.download', 'Download')}</span>
                   </button>
@@ -1223,7 +1135,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
                 <button
                   type="button"
                   className="csv-tools-surface__file-btn csv-tools-surface__file-btn--primary"
-                  disabled={Boolean(errorMessage) || !sourceText.trim()}
+                  disabled={Boolean(errorMessage || filterError) || !sourceText.trim() || !currentInputReady}
                   onClick={() => void runFullProcess()}
                 >
                   {localizedText(t, 'job.runFull', 'Process full file')}
@@ -1361,10 +1273,10 @@ export function CsvSurface(props: PluginSurfaceProps) {
             {cellBlock
               ? localizedText(t, 'meta.selectedBlock', 'Block selected')
               : localizedText(t, 'meta.selectedCols', '{count} columns', { count: selectedColumns.size })}
-            {globalFilter.trim() || sqlFilter.trim()
-              ? ` · ${localizedText(t, 'meta.filtered', '{shown}/{total}', {
+            {finalTable
+              ? ` · ${localizedText(t, 'table.previewScope', '{total} result rows · previewing {shown}', {
                   shown: displayGridRows.length,
-                  total: gridRows.length,
+                  total: totalDataRows,
                 })}`
               : ''}
           </span>
@@ -1376,8 +1288,8 @@ export function CsvSurface(props: PluginSurfaceProps) {
                   count: estimatedLines.toLocaleString(),
                 })}`
               : ''}
-            {mainView === 'table' && (globalFilter.trim() || sqlFilter.trim())
-              ? ` · ${displayGridRows.length}/${gridRows.length}`
+            {mainView === 'table' && finalTable
+              ? ` · ${localizedText(t, 'table.previewScope', '{total} result rows · previewing {shown}', { shown: displayGridRows.length, total: totalDataRows })}`
               : ''}
           </span>
         )}
@@ -1398,13 +1310,15 @@ export function CsvSurface(props: PluginSurfaceProps) {
                     value={filterMode}
                     onChange={(value) => {
                       const next = value as 'text' | 'sql'
-                      setFilterMode(next)
-                      if (next === 'sql' && !sqlFilter.trim()) {
-                        const starter = defaultSqlTemplate(tableHeaders)
-                        setSqlFilter(starter)
-                        setSqlCursor(starter.length)
-                        setSqlSuggestOpen(true)
-                      }
+                      updateResult(() => {
+                        setFilterMode(next)
+                        if (next === 'sql' && !sqlFilter.trim()) {
+                          const starter = defaultSqlTemplate(tableHeaders)
+                          setSqlFilter(starter)
+                          setSqlCursor(starter.length)
+                          setSqlSuggestOpen(true)
+                        }
+                      })
                     }}
                     options={[
                       { value: 'text', label: localizedText(t, 'table.filterModeText', 'Text') },
@@ -1415,7 +1329,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
                     <SearchField
                       className="csv-tools-surface__filter"
                       value={globalFilter}
-                      onChange={(event) => setGlobalFilter(event.target.value)}
+                      onChange={(event) => updateResult(() => setGlobalFilter(event.target.value))}
                       placeholder={localizedText(t, 'table.filterPlaceholder', 'Filter rows…')}
                       aria-label={localizedText(t, 'table.filterPlaceholder', 'Filter rows…')}
                     />
@@ -1427,7 +1341,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
                         value={sqlFilter}
                         onChange={(event) => {
                           const el = event.target
-                          setSqlFilter(el.value)
+                          updateResult(() => setSqlFilter(el.value))
                           setSqlCursor(el.selectionStart ?? el.value.length)
                           setSqlSuggestOpen(true)
                           setSqlSuggestIndex(0)
@@ -1514,7 +1428,9 @@ export function CsvSurface(props: PluginSurfaceProps) {
                     </div>
                   )}
                   <span className="csv-tools-surface__table-hint" title={t('table.filterScope')}>
-                    {t('table.previewScope')}
+                    {finalTable
+                      ? localizedText(t, 'table.previewScope', '{total} result rows · previewing {shown}', { shown: displayGridRows.length, total: totalDataRows })
+                      : t(filterError ? 'table.invalidQuery' : 'table.pendingFull')}
                   </span>
                   {(selectedColumns.size > 0 ||
                     cellBlock ||
@@ -1528,9 +1444,13 @@ export function CsvSurface(props: PluginSurfaceProps) {
                         setSelectedColumns(new Set())
                         setCellBlock(null)
                         setSelectedCell(null)
-                        setGlobalFilter('')
-                        setSqlFilter('')
-                        setSortColumns([])
+                        if (globalFilter || sqlFilter || sortColumns.length > 0) {
+                          updateResult(() => {
+                            setGlobalFilter('')
+                            setSqlFilter('')
+                            setSortColumns([])
+                          })
+                        }
                       }}
                     >
                       {localizedText(t, 'table.clearSelection', 'Clear')}
@@ -1597,24 +1517,16 @@ export function CsvSurface(props: PluginSurfaceProps) {
             {sortColumns.length > 0 || (filterMode === 'text' ? globalFilter : sqlFilter).trim() ? (
               <div className="csv-tools-surface__output-hint">{t('table.filterScope')}</div>
             ) : null}
-            {fullJobReady ? (
-              <div className="csv-tools-surface__output-hint">
-                {localizedText(
-                  t,
-                  'job.outputHint',
-                  'Showing a preview of the full result ({size}). Use Copy full / Download for the complete file.',
-                  { size: formatBytes(fullOutputRef.current?.length ?? 0) },
-                )}
-              </div>
-            ) : null}
-            <pre className={errorMessage ? 'is-error' : undefined}>
-              {errorMessage ||
-                (fullJobReady && fullOutputRef.current
-                  ? fullOutputRef.current.length > 400_000
-                    ? fullOutputRef.current.slice(0, 400_000) +
-                      `\n… (${formatBytes(fullOutputRef.current.length - 400_000)} more)`
-                    : fullOutputRef.current
-                  : outputText)}
+            <div className="csv-tools-surface__output-hint">
+              {finalTable
+                ? localizedText(t, 'job.outputHint', '{total} result rows · previewing up to {shown}. Copy, Return to Search and Download use the complete result.', {
+                    total: totalDataRows,
+                    shown: outputPreviewTable?.rows.length ?? 0,
+                  })
+                : !errorMessage && !filterError && tableFull ? t('table.pendingFull') : ''}
+            </div>
+            <pre className={errorMessage || filterError ? 'is-error' : undefined}>
+              {errorMessage || (filterError ? localizedText(t, 'table.sqlError', 'SQL: {message}', { message: filterError }) : outputText)}
             </pre>
           </div>
         ) : null}
@@ -1629,7 +1541,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
                 {localizedText(
                   t,
                   'source.largeBody',
-                  'Editing {size} of text in the browser may freeze the UI. Table and output already use a capped preview.',
+                  'Editing {size} of text in the browser may freeze the UI. Use Process full file to calculate the complete result; the table and output views show limited previews.',
                   { size: formatBytes(sourceText.length) },
                 )}
               </p>

@@ -3,6 +3,8 @@
  * No React / host dependencies. No external packages (safe for disk-released plugins).
  */
 
+import { filterRowsBySql, filterRowsByText } from './csvSqlFilter'
+
 export type DelimiterMode = 'auto' | 'comma' | 'tab' | 'semicolon' | 'pipe'
 export type HeaderMode = 'auto' | 'first-row' | 'no-header'
 export type OutputMode =
@@ -24,6 +26,17 @@ export type Table = {
   headers: string[]
   rows: string[][]
 }
+
+export type TableQuery = {
+  filterMode?: 'text' | 'sql'
+  globalFilter?: string
+  sqlFilter?: string
+  sortColumns?: readonly { columnKey: string; direction: 'ASC' | 'DESC' }[]
+}
+
+export type TableQueryResult =
+  | { ok: true; table: Table; rowIndexes: number[] }
+  | { ok: false; message: string }
 
 export type ParseResult =
   | { ok: true; kind: 'csv' | 'json'; delimiter?: string; table: Table }
@@ -280,7 +293,7 @@ function parseCsvText(
     return { ok: true, kind: 'csv', delimiter, table: { headers, rows } }
   }
 
-  const width = Math.max(...matrix.map((r) => r.length), 0)
+  const width = matrix.reduce((max, row) => Math.max(max, row.length), 0)
   const headers = Array.from({ length: width }, (_, i) => `column_${i + 1}`)
   const rows = matrix.map((row) => {
     const next = row.slice(0, width)
@@ -370,7 +383,7 @@ export function dedupeRows(table: Table): Table {
 export function transposeTable(table: Table): Table {
   const matrix = [table.headers, ...table.rows]
   if (matrix.length === 0) return emptyTable()
-  const width = Math.max(...matrix.map((r) => r.length), 0)
+  const width = matrix.reduce((max, row) => Math.max(max, row.length), 0)
   if (width === 0) return emptyTable()
 
   const transposed: string[][] = []
@@ -398,6 +411,63 @@ export function applyTransforms(table: Table, transforms: TableTransforms): Tabl
   if (transforms.dedupe) next = dedupeRows(next)
   if (transforms.transpose) next = transposeTable(next)
   return next
+}
+
+/**
+ * Apply the result query to a transformed table, before any preview slicing.
+ * SQL ORDER BY / LIMIT run first; header sorting then reorders that result, just
+ * as in the grid. Projection comes last so sorting can use unselected columns.
+ * Row indexes refer to the input table and remain useful after projection.
+ */
+export function applyTableQuery(table: Table, query: TableQuery = {}): TableQueryResult {
+  const sql = query.filterMode === 'sql' ? query.sqlFilter?.trim() : undefined
+  const text = query.filterMode !== 'sql' ? query.globalFilter?.trim() : undefined
+  let rowIndexes: number[]
+  let columns: string[] | null = null
+
+  if (sql || text) {
+    const records = table.rows.map((row) => {
+      const record: Record<string, string> = Object.create(null)
+      table.headers.forEach((header, index) => {
+        record[header] = row[index] ?? ''
+      })
+      return record
+    })
+    if (sql) {
+      const result = filterRowsBySql(records, table.headers, sql)
+      if (!result.ok) return result
+      rowIndexes = result.rowIndexes
+      columns = result.columns
+    } else {
+      rowIndexes = filterRowsByText(records, table.headers, text ?? '')
+    }
+  } else {
+    rowIndexes = table.rows.map((_, index) => index)
+  }
+
+  const headerIndexes = new Map(table.headers.map((header, index) => [header, index]))
+  if (query.sortColumns?.length) {
+    const sortColumns = query.sortColumns.map(({ columnKey, direction }) => ({
+      index: headerIndexes.get(columnKey),
+      direction,
+    }))
+    rowIndexes.sort((left, right) => {
+      for (const sort of sortColumns) {
+        const a = sort.index === undefined ? '' : table.rows[left][sort.index] ?? ''
+        const b = sort.index === undefined ? '' : table.rows[right][sort.index] ?? ''
+        const compared = a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+        if (compared !== 0) return sort.direction === 'ASC' ? compared : -compared
+      }
+      return 0
+    })
+  }
+
+  const projectedIndexes = columns?.map((column) => headerIndexes.get(column)!)
+  const rows = rowIndexes.map((index) => {
+    const row = table.rows[index]
+    return projectedIndexes ? projectedIndexes.map((column) => row[column] ?? '') : row
+  })
+  return { ok: true, table: { headers: columns ?? table.headers, rows }, rowIndexes }
 }
 
 function tableObjects(table: Table): Array<Record<string, string>> {
@@ -665,7 +735,7 @@ function matrixToCsvTable(matrix: string[][], delimiter: string, headerMode: Hea
     })
     return { ok: true, kind: 'csv', delimiter, table: { headers, rows } }
   }
-  const width = Math.max(...matrix.map((r) => r.length), 0)
+  const width = matrix.reduce((max, row) => Math.max(max, row.length), 0)
   const headers = Array.from({ length: width }, (_, i) => `column_${i + 1}`)
   const rows = matrix.map((row) => {
     const next = row.slice(0, width)
@@ -789,15 +859,17 @@ export async function toOutputAsync(
   sql: SqlStyle = DEFAULT_SQL_STYLE,
   hooks?: JobHooks,
 ): Promise<string> {
+  throwIfAborted(hooks?.signal)
   const total = Math.max(table.rows.length, 1)
   const report = async (done: number) => {
     hooks?.onProgress?.({
       phase: 'output',
       ratio: 0.72 + Math.min(0.28, (done / total) * 0.28),
     })
+    throwIfAborted(hooks?.signal)
     if (done > 0 && done % YIELD_ROWS === 0) {
-      throwIfAborted(hooks?.signal)
       await yieldToMain()
+      throwIfAborted(hooks?.signal)
     }
   }
 
@@ -833,7 +905,7 @@ export async function toOutputAsync(
   }
 
   if (mode === 'sql') {
-    if (table.headers.length === 0) return ''
+    if (table.headers.length === 0 || table.rows.length === 0) return ''
     const tableName = (sql.tableName || 'table').trim() || 'table'
     const cols = table.headers.map(quoteSqlIdent).join(', ')
     const parts: string[] = [`INSERT INTO ${quoteSqlIdent(tableName)} (${cols}) VALUES\n`]
@@ -923,12 +995,14 @@ export async function toOutputAsync(
 
 export type FullProcessResult = {
   table: Table
+  /** Transformed columns before SELECT projection, for query completion. */
+  sourceHeaders: string[]
   output: string
   rowCount: number
   colCount: number
 }
 
-/** Parse → transform → serialize the entire source without preview caps. */
+/** Parse → transform → query → serialize the entire source without preview caps. */
 export async function processFullSource(
   text: string,
   options: {
@@ -936,16 +1010,29 @@ export async function processFullSource(
     header: HeaderMode
     output: OutputMode
     transforms: TableTransforms
+    query?: TableQuery
     jsonStyle?: JsonStyle
     sqlStyle?: SqlStyle
   },
   hooks?: JobHooks,
 ): Promise<FullProcessResult> {
+  throwIfAborted(hooks?.signal)
   const parsed = await parseSourceAsync(text, options.delimiter, options.header, hooks)
+  throwIfAborted(hooks?.signal)
   if (!parsed.ok) {
     throw new Error(parsed.message)
   }
-  const table = await applyTransformsAsync(parsed.table, options.transforms, hooks)
+  const transformed = await applyTransformsAsync(parsed.table, options.transforms, hooks)
+  await yieldToMain()
+  throwIfAborted(hooks?.signal)
+  const queried = applyTableQuery(transformed, options.query)
+  if (!queried.ok) throw new Error(queried.message)
+  // Filtering and native sorting share the synchronous small-table semantics.
+  // Yield before serialization so cancellation during this stage cannot publish
+  // a completed result, including when the query returns no rows.
+  await yieldToMain()
+  throwIfAborted(hooks?.signal)
+  const table = queried.table
   const output = await toOutputAsync(
     table,
     options.output,
@@ -953,9 +1040,12 @@ export async function processFullSource(
     options.sqlStyle ?? DEFAULT_SQL_STYLE,
     hooks,
   )
+  throwIfAborted(hooks?.signal)
   hooks?.onProgress?.({ phase: 'output', ratio: 1 })
+  throwIfAborted(hooks?.signal)
   return {
     table,
+    sourceHeaders: transformed.headers,
     output,
     rowCount: table.rows.length,
     colCount: table.headers.length,

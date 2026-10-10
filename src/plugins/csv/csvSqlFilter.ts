@@ -95,6 +95,7 @@ function tokenize(input: string): Token[] | { error: string } {
       const quote = ch
       i++
       let value = ''
+      let closed = false
       while (i < input.length) {
         if (input[i] === quote) {
           if (input[i + 1] === quote) {
@@ -103,11 +104,13 @@ function tokenize(input: string): Token[] | { error: string } {
             continue
           }
           i++
+          closed = true
           break
         }
         value += input[i]
         i++
       }
+      if (!closed) return { error: 'Unterminated quoted value' }
       if (quote === '"' && value.length > 0) {
         tokens.push({ kind: 'ident', value })
       } else {
@@ -123,7 +126,8 @@ function tokenize(input: string): Token[] | { error: string } {
         value += input[i]
         i++
       }
-      if (input[i] === end) i++
+      if (input[i] !== end) return { error: 'Unterminated quoted column' }
+      i++
       tokens.push({ kind: 'ident', value })
       continue
     }
@@ -279,10 +283,13 @@ function splitSelectList(list: string): { cols: string[] } | { error: string } {
     current += ch
     i++
   }
+  if (inSingle || inDouble) return { error: 'Unterminated quoted column in SELECT' }
   if (current.trim()) {
     const parsed = parseSelectItem(current)
     if ('error' in parsed) return parsed
     cols.push(parsed.col)
+  } else if (cols.length > 0) {
+    return { error: 'Empty column in SELECT' }
   }
   if (cols.length === 0) return { error: 'SELECT list is empty' }
   return { cols }

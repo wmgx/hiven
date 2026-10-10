@@ -1,5 +1,5 @@
 {
-  "version": 111,
+  "version": 112,
   "packages": [
     {
       "pluginId": "encode-decode",
@@ -29,7 +29,7 @@
     {
       "pluginId": "csv",
       "dir": "csv",
-      "version": "1.9.5"
+      "version": "1.9.6"
     },
     {
       "pluginId": "calculator",
