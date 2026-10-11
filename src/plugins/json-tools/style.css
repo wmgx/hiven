@@ -68,17 +68,18 @@
 .jt-pane + .jt-pane { border-left: 1px solid var(--jt-border); }
 .jt-pane-header {
   flex: none;
-  height: 44px;
+  min-height: 44px;
+  flex-wrap: wrap;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 0 18px;
+  padding: 6px 18px;
   color: var(--color-text-secondary);
   font-size: 11px;
 }
 .jt-pane-header strong { flex: none; font-weight: 500; white-space: nowrap; }
-.jt-pane-actions { flex: none; display: flex; align-items: center; gap: 4px; }
+.jt-pane-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .jt-pane-header .hiven-ui-button { min-height: 25px; padding: 0 8px; font-size: 11px; }
 .jt-pane-actions .hiven-ui-button {
   flex: none;

@@ -63,6 +63,7 @@ async function harness(presentation = 'plugin-surface-window') {
     activeTargetRef: { current: target }, activeStateRef: { current: ready }, mountedRef: { current: false },
     hiddenRef: { current: false }, sessionRef: { current: null }, preparationScopeRef: { current: null },
     exportSessionRef: { current: 0 }, handoffRef: { current: null }, deliveredHandoffRef: { current: null },
+    historyDiffRef: { current: null },
     pasteScope: scope, ...recoveryExports,
     pluginRegistry: { getPluginLifetime: () => lifetime, subscribe: subscribe(registryListeners) },
     usePluginPermissionStore: { subscribe: subscribe(permissionListeners) },

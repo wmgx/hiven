@@ -78,5 +78,8 @@
   "error.stringRequired": "此操作需要输入带引号的 JSON 字符串。",
   "error.expressionRequired": "请输入要执行的表达式。",
   "error.finiteNumberRequired": "JSON 不支持 NaN 或无穷大，请先修改 YAML 中的数值。",
-  "surface.editorLoading": "正在打开编辑器…"
+  "surface.editorLoading": "正在打开编辑器…",
+  "action.paste": "粘贴回原应用",
+  "action.pasteDescription": "将当前结果粘贴回原应用",
+  "toast.pasteFailed": "粘贴失败。输入和结果已保留，可重试或复制结果。"
 }

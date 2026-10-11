@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, Checkbox, IconButton, SegmentedControl, TextEditor, TextInput, getEditorTheme, useImeKeyboard } from '@hiven/plugin-ui'
+import { Button, Checkbox, IconButton, SegmentedControl, TextEditor, TextInput, getEditorTheme, useImeKeyboard, useToolDeliveryFeedback } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
 import { operationRoutes } from './routes'
 import {
@@ -66,6 +66,7 @@ export function JsonSurface(props: PluginSurfaceProps) {
   }
 
   const updateResult = (update: () => void) => {
+    delivery.invalidate()
     cancelReturn()
     update()
   }
@@ -90,6 +91,7 @@ export function JsonSurface(props: PluginSurfaceProps) {
   const result = operation === 'expression'
     ? expressionRun?.signature === expressionSignature ? expressionRun.result : null
     : liveResult
+  const delivery = useToolDeliveryFeedback(result, host.deliveryFeedbackOwner)
   const outputText = result?.ok ? result.output : ''
   const hasOutput = Boolean(result?.ok && inputText.length > 0)
   const canReturnOutput = hasOutput && (operation === 'escape' || inputText.trim().length > 0)
@@ -150,17 +152,28 @@ export function JsonSurface(props: PluginSurfaceProps) {
     }
   }
 
-  const copyOutput = async () => {
-    if (!hasOutput) return
+  const deliverOutput = async (action: 'copy' | 'paste') => {
+    if (!hasOutput || resultRevision !== resultRevisionRef.current || returning || pendingCopiesRef.current > 0) return
+    const attempt = delivery.beginAttempt()
+    if (!attempt.isCurrent()) return
     cancelReturn()
     pendingCopiesRef.current += 1
     setCopying(true)
     try {
-      await host.clipboard.writeText(outputText)
-      host.showMessage(t('toast.copied'), 'success')
-      host.complete()
+      if (action === 'copy') {
+        await host.clipboard.writeText(outputText)
+        if (!attempt.isCurrent()) return
+        delivery.invalidate()
+        host.showMessage(t('toast.copied'), 'success')
+        host.complete()
+      } else {
+        const receipt = await host.paste.pasteText(outputText)
+        if (!attempt.isCurrent()) return
+        attempt.reportPaste(receipt)
+        if (receipt.ok) host.complete()
+      }
     } catch {
-      host.showMessage(t('toast.copyFailed'), 'error')
+      if (attempt.isCurrent()) attempt.reportError(t(action === 'copy' ? 'toast.copyFailed' : 'toast.pasteFailed'))
     } finally {
       pendingCopiesRef.current -= 1
       if (pendingCopiesRef.current === 0) setCopying(false)
@@ -274,8 +287,11 @@ export function JsonSurface(props: PluginSurfaceProps) {
                 <Button type="button" variant="ghost" title={t('action.continueProcessingDescription')} aria-label={t('action.continueProcessingDescription')} disabled={!canReturnOutput || returning || copying} onClick={() => void returnOutput()}>
                   {t('action.continueProcessing')}
                 </Button>
-                <Button type="button" title={t('action.copyDescription')} aria-label={t('action.copyDescription')} onClick={() => void copyOutput()} disabled={!hasOutput}>
+                <Button type="button" title={t('action.copyDescription')} aria-label={t('action.copyDescription')} onClick={() => void deliverOutput('copy')} disabled={!hasOutput || returning || copying}>
                   {t('action.copy')}
+                </Button>
+                <Button type="button" title={t('action.pasteDescription')} aria-label={t('action.pasteDescription')} onClick={() => void deliverOutput('paste')} disabled={!hasOutput || returning || copying}>
+                  {t('action.paste')}
                 </Button>
               </div>
             </div>
@@ -308,8 +324,8 @@ export function JsonSurface(props: PluginSurfaceProps) {
         <footer className="jt-status" aria-live="polite">
           <div className="jt-status-input">
             <span>{t('meta.characters', { count: inputText.length })}</span>
-            <span className={result && !result.ok ? 'jt-status-error' : ''}>
-              {result && !result.ok ? t('status.error') : hasOutput ? t('status.ready') : t('status.waiting')}
+            <span className={delivery.feedback?.tone === 'error' || (result && !result.ok) ? 'jt-status-error' : ''}>
+              {delivery.feedback?.message ?? (result && !result.ok ? t('status.error') : hasOutput ? t('status.ready') : t('status.waiting'))}
             </span>
           </div>
           <div className="jt-status-output">

@@ -25,7 +25,7 @@ const inspect = (node) => {
   ts.forEachChild(node, inspect)
 }
 inspect(returned)
-const fields = 'inputText, operation, indent, shouldSort, expression, expressionRun, outputText, hasOutput, canReturnOutput, returning, returnOutput, copyOutput, useOutputAsInput, runExpression, updateResult, setInputText, setOperation, setIndent, setShouldSort, setExpression'
+const fields = 'inputText, operation, indent, shouldSort, expression, expressionRun, outputText, hasOutput, canReturnOutput, returning, returnOutput, copyOutput: () => deliverOutput("copy"), useOutputAsInput, runExpression, updateResult, setInputText, setOperation, setIndent, setShouldSort, setExpression'
 // Preserve the complete production function body; replace only the final JSX with a logic probe.
 const source = surfaceSource.slice(0, returned.expression.getStart(file))
   + `({ ${fields}, back: ${exits.requestBack}, close: ${exits.close} })`
@@ -44,6 +44,7 @@ function load(path, dependencies, source = readFileSync(path, 'utf8')) {
   }, { filename: path })
   return exports
 }
+const { createToolDeliveryFeedbackController } = load('src/ui/toolDeliveryFeedback.ts', {})
 const routes = load('src/plugins/json-tools/routes.ts', {})
 const deferred = () => {
   let resolve, reject
@@ -79,7 +80,14 @@ function harness({ input = '{"b":2,"a":1}', operation = 'format', outcome = () =
   react.useLayoutEffect = react.useEffect
   const { JsonSurface } = load(surfacePath, {
     react, 'react/jsx-runtime': { jsx: () => null, jsxs: () => null },
-    '@hiven/plugin-ui': { getEditorTheme: (value) => value, useImeKeyboard: () => ({}) },
+    '@hiven/plugin-ui': { getEditorTheme: (value) => value, useImeKeyboard: () => ({}),
+      useToolDeliveryFeedback: (result, owner) => {
+        const [controller] = useState(createToolDeliveryFeedbackController)
+        react.useLayoutEffect(() => { controller.activate(); return () => controller.deactivate() }, [controller])
+        controller.setContext(result, owner)
+        return { feedback: controller.getSnapshot().feedback, invalidate: controller.invalidate,
+          beginAttempt: () => controller.beginAttempt(result, owner, controller.getSnapshot().revision) }
+      } },
     '@hiven/plugin-ui/icons': {}, './routes': routes, './jsonCore': core,
   }, source)
   const host = {
@@ -237,21 +245,18 @@ await check('effect replay does not revoke an untouched result', async () => {
   await h.view.returnOutput()
   assert.equal(h.calls.handoff.length, 1)
 })
-await check('return waits for every already-started Copy without changing Copy completion', async () => {
-  const copies = [deferred(), deferred()]
-  const h = harness({ copyOutcome: () => copies[h.calls.copied.length - 1].promise })
-  const first = h.view.copyOutput(), second = h.view.copyOutput()
-  h.render()
+await check('delivery serializes copies and ignores receipts after an edit', async () => {
+  const receipt = deferred(), h = harness({ copyOutcome: () => receipt.promise })
+  const first = h.view.copyOutput()
+  await h.view.copyOutput()
+  assert.equal(h.calls.copied.length, 1)
+  h.edit('InputText', '{"new":true}')
   await h.view.returnOutput()
   assert.equal(h.calls.handoff.length, 0)
-  copies[0].resolve(); await first; h.render()
+  receipt.resolve(); await first; h.render()
+  assert.equal(h.calls.complete, 0, 'old copy cannot close edited draft')
   await h.view.returnOutput()
-  assert.equal(h.calls.handoff.length, 0, 'a second pending Copy still owns completion')
-  copies[1].reject(Error('copy failed')); await second; h.render()
-  assert.equal(h.calls.complete, 1)
-  assert.equal(h.calls.messages.at(-1)[0], 'toast.copyFailed')
-  await h.view.returnOutput()
-  assert.equal(h.calls.handoff.length, 1, 'the independent surface may return after Copy settles')
+  assert.equal(h.calls.handoff.length, 1)
 })
 await check('dirty tracks exact input and expression against the first-load baseline', async () => {
   const original = '  {"b":2,"a":1}\r\n'

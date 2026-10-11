@@ -78,5 +78,8 @@
   "error.stringRequired": "This operation needs a quoted JSON string.",
   "error.expressionRequired": "Enter an expression to run.",
   "error.finiteNumberRequired": "JSON cannot represent NaN or infinity. Update these YAML values first.",
-  "surface.editorLoading": "Opening editor…"
+  "surface.editorLoading": "Opening editor…",
+  "action.paste": "Paste back",
+  "action.pasteDescription": "Paste the current result into the original application",
+  "toast.pasteFailed": "Could not paste back. Your input and result are kept; retry or copy the result."
 }
