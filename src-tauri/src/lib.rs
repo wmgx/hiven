@@ -2760,7 +2760,21 @@ fn show_launcher_window_without_app_activation(
     {
         show_launcher_window_without_app_activation_macos(window)
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    {
+        use gtk::prelude::{GtkWindowExt, WidgetExt};
+        // All callers run on the GTK main thread. Tao queues show(), but its
+        // set_focus() checks visibility synchronously and silently skips a
+        // hidden window. Present through Tauri's supported GTK window handle
+        // so mapping and the normal WM focus request happen in order. No
+        // delayed retries: switching away must not trigger a later refocus.
+        let gtk_window = window.gtk_window().map_err(|error| error.to_string())?;
+        gtk_window.show_all();
+        gtk_window.deiconify();
+        gtk_window.present();
+        Ok(())
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         window.show().map_err(|error| error.to_string())?;
         let _ = window.unminimize();

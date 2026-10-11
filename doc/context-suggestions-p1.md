@@ -51,6 +51,26 @@ controller 在异步准备前捕获来源/会话，成功 commit 才回调；参
 - **关闭/清除**：使用产品 UI 关闭后再次实际执行“设置”，事件/指标均不增长；产品 UI 清除后只有该功能记录/计数归零，其他 localStorage key 保留。测试结束为关闭、空记录。英文及中文设置文案真实 DOM/截图确认。证据：`native-boundary-results.json`、`disabled-cleared.png`、`zh-ui-evidence.json`、`settings-zh.png`。
 - **唤起成本**：真实 XTerm 验证时间窗内 12 个 `native:main-thread-open` 样本为 0–2ms（包含可见重开），仅限该环境，不外推性能承诺。
 
-验收限制：Openbox 下程序化 show/合成全局热键未稳定自动取得键盘焦点，测试用标准窗口管理器显式聚焦 launcher 后发送键盘事件；已验证键盘目标与执行映射，未宣称自动焦点/真实中文 IME 或 macOS/Windows/Wayland 全链通过。实现缺失来源时会回退最近使用。原生权限撤销/卸载的完整交互未实测，复用了现有严格 availability 过滤及执行检查。
+初轮验收限制：Openbox 下程序化 show/合成全局热键未稳定自动取得键盘焦点，初轮测试用标准窗口管理器显式聚焦 launcher 后发送键盘事件；当时仅验证键盘目标与执行映射。此焦点问题随后进行了下面的独立基线对照及修复，不把初轮手动聚焦当作自动焦点通过。真实中文 IME、macOS/Windows/Wayland 全链仍未验。实现缺失来源时回退最近使用；原生权限撤销/卸载完整交互未实测，复用了现有严格 availability 过滤及执行检查。
 
 本地实现提交 `0c62554`，无远端新分支、无合并、无发布。环境断连提示后已实际复查，命令与文件持续可用；修改完整保存在独立本地分支。
+
+
+## Linux 窗口焦点跟进（2026-10-11）
+
+用户要求核实正常唤起是否需要额外点击，以及 Enter 是否可能落到原窗口；本次仅修复同一独立分支的 Linux 窗口聚焦，不扩大 P1 信号或采集。
+
+**直接对照**：相同 Xvfb/Openbox、实际 XTest 热键和独立 AppImage profile。外部 XTerm 运行专用原始字节接收器，输入为合成字符串，不执行 shell 命令。未修 P1 6/6 暖打开持续不获焦；精确基线 `0ee4804` 首次冷打开成功，随后 5/5 暖打开失败；基线真实 Esc → 热键重开也失败。失败时 query 为空，全部字符及 Enter（字节 13）进入外部窗口。因此是该环境可复现的基线应用焦点缺陷，不是 P1 回归，也不能将其归咎为必须手动聚焦的验收条件。证据：`focus-p1.json`、`focus-baseline.json`、`focus-baseline-esc.json`。
+
+**根因与修复**：当前 Tao 0.35.2 Linux `set_visible` 排队显示，`set_focus` 却同步检查 GTK 可见性；隐藏窗口执行原来的 `show → unminimize → set_focus` 会跳过焦点请求。已显示后再单次调用既有 focus IPC 则可获焦（仅诊断，未计入验收）。改为在现有主线程闭包，通过 [Tauri 的公开 GTK handle](https://docs.rs/tauri/latest/tauri/webview/struct.WebviewWindow.html#method.gtk_window) 同步 `show_all → deiconify → present`；[GTK present](https://docs.gtk.org/gtk3/method.Window.present.html) 将焦点请求交给窗口管理器。无延迟重试、直接 XSetInputFocus、键盘抓取、输入重放、权限扩展或安全禁用。macOS/Windows 路径未改。独立审查确认四个调用点均在主线程，既有粘贴恢复的有效性检查保留。
+
+**修复后的真实原生结果**：测试不调用手动 launcher 聚焦、DOM focus 或诊断 focus IPC。只在唤起之前正常激活外部窗口。
+
+- IPC / 配置热键交替 6/6 自动获焦，完整字符串和 Enter 均进入 launcher，外部收到 0 字节。暖打开最早约 60ms 采样已获焦；首次冷打开 48ms 仍未获焦、144ms 样本已获焦，不能外推为通用启动时延保证。证据：`focus-fixed.json`。
+- 真实 Esc → 全局热键 → 等待 100ms → 输入/Enter，6/6 正确且外部 0 字节；另一次直接键入 `settings`，首项为 Settings，真实 Enter 打开设置页面，外部 0 字节。证据：`focus-fixed-100ms.json`、`focus-fixed-settings-before.json`、`focus-fixed-settings-after.json`、`focus-fixed-settings.png`。
+- 主动切回外部窗口后连续观察约 1.7 秒，无迟到回抢；最小化后热键恢复获焦。证据：`focus-fixed-followup.json`。
+- **剩余交接风险**：热键释放后零等待连续注入字符，3 轮中 2 轮最前两个字符赶在 WM 焦点交接前进入外部窗口，余下字符和 Enter 进入 launcher。此原始结果完整保留在 `focus-fixed-followup.json`，不以延迟后的通过覆盖，不宣称“任意时刻立即输入都不会落错窗口”。本轮修复持续不获焦的缺陷；极短间隔输入仍有正常异步窗口交接边界，不引入全局键盘抓取或重放来掩盖。
+
+焦点跟进使用全新隔离 profile，功能始终关闭，设置页 N/S/E 为 0，feature storage key 仍为 null；未增加真实或模拟推荐记录，未改真实设置。包内与实际 WebView 均为 `index-B_iATRDw.js`。修复 AppImage SHA256：`bd8fafd05e62e61c9e59ba17f311b0d1a600e3330faeeb90c58bfdf75cb5ce7b`；文件 `/workspace/context-native/candidates/focus-fixed.AppImage`；构建证据 `candidates/focus-fixed-build-evidence.json`。上述相对证据均位于 `/workspace/context-native/`。
+
+`cargo check`、锁定依赖原生构建、官方 AppImage 打包、架构检查及 diff 检查通过。只有既有 GTK 0.18 增为 Linux 显式依赖，无依赖升级。焦点跟进仅在 Linux X11/Openbox 实测，其他窗口管理器及平台未验。仍无推送、合并或发布。
