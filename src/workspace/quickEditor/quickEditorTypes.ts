@@ -5,6 +5,8 @@ export type QuickEditorPaneId = string
 export interface QuickEditorPaneState {
   id: QuickEditorPaneId
   text: string
+  /** Content revision; legacy panes start at zero. */
+  revision?: number
   language: string
   languageSource: 'manual' | 'auto'
   cursorPosition: { lineNumber: number; column: number }
@@ -31,7 +33,11 @@ export type QuickEditorExternalVersion = {
   preview: string
 }
 
+export type QuickEditorPaneCloseRequest = { paneId: QuickEditorPaneId; revision: number; text: string }
+
 export interface QuickEditorState {
+  /** Runtime-only close intent; never hydrated or persisted. */
+  pendingPaneClose: QuickEditorPaneCloseRequest | null
   panes: Record<QuickEditorPaneId, QuickEditorPaneState>
   paneOrder: QuickEditorPaneId[]
   activePaneId: QuickEditorPaneId
@@ -72,6 +78,8 @@ export interface QuickEditorActions {
   createPane: (options?: { direction?: 'right' | 'bottom'; text?: string; language?: string }) => QuickEditorPaneId
   closePane: (paneId: QuickEditorPaneId) => boolean
   closeActivePane: () => boolean
+  confirmPaneClose: (request: QuickEditorPaneCloseRequest) => boolean
+  cancelPaneClose: (request: QuickEditorPaneCloseRequest) => void
   focusNextPane: () => void
   focusPreviousPane: () => void
   /**

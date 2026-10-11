@@ -337,7 +337,7 @@ assert.match(
 )
 assert.match(
   files.panel,
-  /statusBarTrailing[\s\S]{0,260}pane-status-close[\s\S]{0,180}closePane\(pane\.id\)/,
+  /statusBarTrailing[\s\S]{0,260}pane-status-close[\s\S]{0,260}closePane\(pane\.id\)/,
   'quick editor pane status bar must expose a close button',
 )
 assert.match(

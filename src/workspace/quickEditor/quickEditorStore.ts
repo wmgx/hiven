@@ -17,6 +17,7 @@ function createPaneState(input: Partial<QuickEditorPaneState> & { id: QuickEdito
   return {
     id: input.id,
     text: input.text ?? '',
+    revision: input.revision ?? 0,
     language: input.language ?? 'plaintext',
     languageSource: input.languageSource ?? 'auto',
     cursorPosition: input.cursorPosition ?? { lineNumber: 1, column: 1 },
@@ -33,8 +34,10 @@ function withActivePane(
   patch: Partial<Omit<QuickEditorPaneState, 'id'>>,
 ): Partial<QuickEditorState> {
   const current = activePaneSnapshot(state)
-  const pane = { ...current, ...patch }
+  const changed = 'text' in patch || 'language' in patch || 'languageSource' in patch
+  const pane = { ...current, ...patch, revision: (current.revision ?? 0) + (changed ? 1 : 0) }
   return {
+    ...(changed ? { pendingPaneClose: null } : {}),
     panes: { ...state.panes, [pane.id]: pane },
     text: pane.text,
     language: pane.language,
@@ -82,6 +85,7 @@ function pushExternalVersion(
 const initialPane = createPaneState({ id: DEFAULT_PANE_ID })
 
 const INITIAL_STATE: QuickEditorState = {
+  pendingPaneClose: null,
   panes: { [DEFAULT_PANE_ID]: initialPane },
   paneOrder: [DEFAULT_PANE_ID],
   activePaneId: DEFAULT_PANE_ID,
@@ -111,7 +115,34 @@ function commitReplacement(state: QuickEditorStore, patch: Partial<QuickEditorSt
   publishCommittedState(patch)
 }
 
-const quickEditorInitializer = persist<QuickEditorStore, [], [], Omit<QuickEditorState, 'panelInstancesV2'>>(
+/** Delete only after durable state still matches this window's complete pane set. */
+function commitPaneClose(state: QuickEditorStore, paneId: QuickEditorPaneId): boolean {
+  if (state.paneOrder.length <= 1 || !state.panes[paneId]) return false
+  try {
+    const stored = JSON.parse(localStorage.getItem('hiven-quick-editor') ?? 'null')?.state
+    if (!stored || JSON.stringify(stored.panes) !== JSON.stringify(state.panes)
+      || JSON.stringify(stored.paneOrder) !== JSON.stringify(state.paneOrder)) return false
+    const panes = { ...state.panes }
+    delete panes[paneId]
+    const paneOrder = state.paneOrder.filter((id) => id !== paneId)
+    const index = state.paneOrder.indexOf(paneId)
+    const activePaneId = state.activePaneId === paneId
+      ? paneOrder[Math.max(0, Math.min(index, paneOrder.length - 1))] : state.activePaneId
+    const active = panes[activePaneId]
+    const panelInstancesV2 = Object.fromEntries(Object.entries(state.panelInstancesV2).filter(([, panel]) => (
+      panel.scope?.type !== 'pane' || panel.scope.paneId !== paneId
+    )))
+    commitReplacement(state, {
+      pendingPaneClose: null, panes, paneOrder, activePaneId, panelInstancesV2,
+      splitDirection: paneOrder.length > 1 ? state.splitDirection : 'horizontal',
+      text: active.text, language: active.language, languageSource: active.languageSource,
+      cursorPosition: active.cursorPosition, scrollPosition: active.scrollPosition,
+    })
+    return true
+  } catch { return false }
+}
+
+const quickEditorInitializer = persist<QuickEditorStore, [], [], Omit<QuickEditorState, 'panelInstancesV2' | 'pendingPaneClose'>>(
     (set, get) => ({
       ...INITIAL_STATE,
 
@@ -121,7 +152,8 @@ const quickEditorInitializer = persist<QuickEditorStore, [], [], Omit<QuickEdito
         if (!pane) return false
         const isActive = get().activePaneId === paneId
         set((state) => ({
-          panes: { ...state.panes, [paneId]: { ...pane, text } },
+          pendingPaneClose: null,
+          panes: { ...state.panes, [paneId]: { ...pane, text, revision: (pane.revision ?? 0) + 1 } },
           ...(isActive ? { text } : {}),
         }))
         return true
@@ -134,6 +166,7 @@ const quickEditorInitializer = persist<QuickEditorStore, [], [], Omit<QuickEdito
         const pane = state.panes[paneId]
         if (!pane) return {}
         return {
+          pendingPaneClose: paneId === state.activePaneId ? state.pendingPaneClose : null,
           activePaneId: paneId,
           text: pane.text,
           language: pane.language,
@@ -158,6 +191,7 @@ const quickEditorInitializer = persist<QuickEditorStore, [], [], Omit<QuickEdito
             ...state.paneOrder.slice(insertIndex),
           ]
           return {
+            pendingPaneClose: null,
             panes: { ...state.panes, [id]: pane },
             paneOrder,
             activePaneId: id,
@@ -172,34 +206,25 @@ const quickEditorInitializer = persist<QuickEditorStore, [], [], Omit<QuickEdito
         return id
       },
       closePane: (paneId) => {
-        let didClose = false
-        set((state) => {
-          if (state.paneOrder.length <= 1 || !state.panes[paneId]) return {}
-          const nextPaneOrder = state.paneOrder.filter((id) => id !== paneId)
-          const nextPanes = { ...state.panes }
-          delete nextPanes[paneId]
-          const closedIndex = state.paneOrder.indexOf(paneId)
-          const nextActivePaneId = state.activePaneId === paneId
-            ? nextPaneOrder[Math.max(0, Math.min(closedIndex, nextPaneOrder.length - 1))]
-            : state.activePaneId
-          const active = nextPanes[nextActivePaneId] ?? activePaneSnapshot({
-            panes: nextPanes,
-            activePaneId: nextPaneOrder[0] ?? DEFAULT_PANE_ID,
-          })
-          didClose = true
-          return {
-            panes: nextPanes,
-            paneOrder: nextPaneOrder,
-            activePaneId: active.id,
-            splitDirection: nextPaneOrder.length > 1 ? state.splitDirection : 'horizontal',
-            text: active.text,
-            language: active.language,
-            languageSource: active.languageSource,
-            cursorPosition: active.cursorPosition,
-            scrollPosition: active.scrollPosition,
-          }
-        })
-        return didClose
+        const state = get()
+        const pane = state.panes[paneId]
+        if (state.paneOrder.length <= 1 || !pane) return false
+        if (pane.text.length > 0) {
+          // Repeated close shortcuts never replace or implicitly approve an intent.
+          if (!state.pendingPaneClose) publishCommittedState({ pendingPaneClose: { paneId, revision: pane.revision ?? 0, text: pane.text } })
+          return false
+        }
+        return commitPaneClose(state, paneId)
+      },
+      confirmPaneClose: (request) => {
+        const state = get()
+        const pane = state.panes[request.paneId]
+        if (state.pendingPaneClose !== request || !pane
+          || (pane.revision ?? 0) !== request.revision || pane.text !== request.text) return false
+        return commitPaneClose(state, request.paneId)
+      },
+      cancelPaneClose: (request) => {
+        if (get().pendingPaneClose === request) publishCommittedState({ pendingPaneClose: null })
       },
       closeActivePane: () => {
         const { activePaneId, closePane } = get()
@@ -247,6 +272,7 @@ const quickEditorInitializer = persist<QuickEditorStore, [], [], Omit<QuickEdito
         const targetPane = state.panes[version.paneId] ?? activePaneSnapshot(state)
         const restoredPane: QuickEditorPaneState = {
           ...targetPane,
+          revision: (targetPane.revision ?? 0) + 1,
           id: version.paneId,
           text: version.text,
           language: version.language,
@@ -259,6 +285,7 @@ const quickEditorInitializer = persist<QuickEditorStore, [], [], Omit<QuickEdito
           : [...state.paneOrder, restoredPane.id]
         // Restore does not append history — only external overwrite does.
         commitReplacement(state, {
+          pendingPaneClose: null,
           panes,
           paneOrder,
           activePaneId: restoredPane.id,
@@ -345,6 +372,7 @@ const quickEditorInitializer = persist<QuickEditorStore, [], [], Omit<QuickEdito
         return {
           ...current,
           ...source,
+          pendingPaneClose: null,
           panes,
           paneOrder: paneOrder.length > 0 ? paneOrder : [activePaneId],
           activePaneId,

@@ -1,4 +1,4 @@
-import { useCallback, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useQuickEditorStore } from '../../workspace/quickEditor/quickEditorStore'
 import { useAppStore } from '../../store'
 import { EditorSurface } from '../editor/EditorSurface'
@@ -12,10 +12,18 @@ import { QuickEditorVersionHistory } from './QuickEditorVersionHistory'
 import { useT } from '../../i18n'
 import type { QuickEditorPaneId, QuickEditorPaneState } from '../../workspace/quickEditor/quickEditorTypes'
 import { X } from 'lucide-react'
+import { ConfirmDialog } from '../../plugin-ui'
 import { pluginRegistry } from '../../workspace/pluginRegistry'
 import { applyEffectsToQuickEditor } from '../../workspace/quickEditor/quickEditorActions'
 
 export function QuickEditorPanel({ onRequestExit }: { onRequestExit: () => void }) {
+  const pendingClose = useQuickEditorStore((s) => s.pendingPaneClose)
+  const [closeFailed, setCloseFailed] = useState(false)
+  useEffect(() => { setCloseFailed(false) }, [pendingClose])
+  useEffect(() => () => {
+    const state = useQuickEditorStore.getState()
+    if (state.pendingPaneClose) state.cancelPaneClose(state.pendingPaneClose)
+  }, [])
   const panes = useQuickEditorStore((s) => s.panes)
   const paneOrder = useQuickEditorStore((s) => s.paneOrder)
   const splitDirection = useQuickEditorStore((s) => s.splitDirection)
@@ -26,6 +34,7 @@ export function QuickEditorPanel({ onRequestExit }: { onRequestExit: () => void 
   const isDetached = isQuickEditorDetachedWindow()
 
   const handleKeyDownCapture = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return
     if (!(event.metaKey || event.ctrlKey)) return
     if (event.key.toLowerCase() === 'w') {
       if (useQuickEditorStore.getState().paneOrder.length <= 1) return
@@ -91,6 +100,21 @@ export function QuickEditorPanel({ onRequestExit }: { onRequestExit: () => void 
         </div>
       )}
       <QuickEditorCommandOverlay />
+      <ConfirmDialog
+        open={Boolean(pendingClose)}
+        title={tQuickEditor('closePaneTitle')}
+        message={closeFailed ? tQuickEditor('closePaneFailed') : tQuickEditor('closePaneMessage', {
+          index: pendingClose ? paneOrder.indexOf(pendingClose.paneId) + 1 : 0,
+          preview: pendingClose?.text.split(/\r?\n/, 1)[0].slice(0, 60) || tQuickEditor('closePaneBlankPreview'),
+        })}
+        confirmLabel={tQuickEditor('closePaneConfirm')}
+        cancelLabel={tQuickEditor('closePaneKeep')}
+        defaultFocus="cancel"
+        onConfirm={() => {
+          if (pendingClose && !useQuickEditorStore.getState().confirmPaneClose(pendingClose)) setCloseFailed(true)
+        }}
+        onCancel={() => { if (pendingClose) useQuickEditorStore.getState().cancelPaneClose(pendingClose) }}
+      />
     </div>
   )
 }
@@ -217,6 +241,7 @@ function QuickEditorPaneSurface({
               type="button"
               className="pane-status-close"
               title={tEditor('closePane')}
+              onMouseDown={(event) => event.preventDefault()}
               onClick={(event) => {
                 event.stopPropagation()
                 closePane(pane.id)

@@ -1,6 +1,12 @@
 export default {
   en: {
     title: 'Quick Editor',
+    closePaneTitle: 'Close this draft?',
+    closePaneMessage: 'Pane {index}: {preview} — Closing removes this draft. It cannot be reopened.',
+    closePaneConfirm: 'Close draft',
+    closePaneKeep: 'Keep editing',
+    closePaneBlankPreview: 'Whitespace or blank first line',
+    closePaneFailed: 'The draft changed or could not be saved safely. It has been kept. Cancel and reopen Quick Editor before retrying.',
     overwriteFailed: 'Could not confirm the replacement. Your draft remains in the editor or its history. Reopen Quick Editor before retrying.',
     detach: 'Detach to window',
     closeWindow: 'Close window',
@@ -21,6 +27,12 @@ export default {
   },
   zh: {
     title: '快捷编辑器',
+    closePaneTitle: '关闭这份草稿？',
+    closePaneMessage: '面板 {index}：{preview}。关闭会删除这份草稿，之后无法重新打开。',
+    closePaneConfirm: '关闭草稿',
+    closePaneKeep: '继续编辑',
+    closePaneBlankPreview: '空白内容或首行为空',
+    closePaneFailed: '草稿已变化或暂时无法安全保存，已保留。请取消并重新进入快捷编辑器后再试。',
     overwriteFailed: '未能确认替换完成，原草稿保留在编辑器或版本历史中。请重新打开快捷编辑器查看后再重试。',
     detach: '拆分为独立窗口',
     closeWindow: '关闭窗口',

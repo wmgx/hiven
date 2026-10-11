@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useQuickEditorStore } from '../../workspace/quickEditor/quickEditorStore'
 import { useAppStore } from '../../store'
 import { useLauncherEscapeInterceptor } from '../launcher/launcherEscapeInterceptor'
 import { isQuickEditorDetachedWindow } from '../../workspace/windowManager/quickEditorWindow'
@@ -33,7 +34,15 @@ export function useQuickEditorEscape(onExit: () => void) {
   useEffect(() => () => clearHint(), [clearHint])
 
   const handleEscape = useCallback((event: KeyboardEvent): boolean => {
-    if (event.key !== 'Escape') return false
+    if (event.key !== 'Escape' || event.isComposing || event.keyCode === 229) return false
+    const state = useQuickEditorStore.getState()
+    if (state.pendingPaneClose) {
+      event.preventDefault()
+      event.stopPropagation()
+      clearHint()
+      state.cancelPaneClose(state.pendingPaneClose)
+      return true
+    }
     if (useAppStore.getState().quickEditorCommandOpen) {
       return quickEditorImperative.handleOverlayEscape(event)
     }
