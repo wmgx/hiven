@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import ts from 'typescript'
+import BigNumber from 'bignumber.js'
 
 const surfacePath = 'src/plugins/csv/CsvSurface.tsx'
 const surfaceSource = readFileSync(surfacePath, 'utf8')
@@ -39,7 +40,7 @@ assert.equal(Object.keys(queryEdits).length, 3, 'all query controls revoke the p
 assert.ok(clearSelection, 'the existing clear action is exercised')
 assert.equal(Object.keys(edits).length, 10, 'all source, parsing, transform and output controls are exercised')
 const fields = [
-  'sourceText', 'delimiter', 'header', 'output', 'minify', 'indent', 'tableName', 'dropEmpty', 'dedupe', 'transpose',
+  'fileError', 'linkedFileLabel', 'sourceText', 'delimiter', 'header', 'output', 'minify', 'indent', 'tableName', 'dropEmpty', 'dedupe', 'transpose',
   'outputText', 'tableFull', 'fullJob', 'fullJobReady', 'fullOutputRef', 'jobFingerprint', 'fullReturnReady',
   'returnNeedsFullProcess', 'canReturnOutput', 'returning', 'returnOutput', 'runFullProcess', 'cancelFullProcess',
   'onFilePicked', 'readingFile', 'handleCopyPrimary', 'saveFullResult', 'updateResult', 'setSourceText',
@@ -55,7 +56,7 @@ function load(path, dependencies, contents = readFileSync(path, 'utf8'), globals
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX,
   } }).outputText
   vm.runInNewContext(code, {
-    exports, module: { exports }, AbortController, TextEncoder, setTimeout, console, ...globals,
+    exports, module: { exports }, AbortController, TextEncoder, TextDecoder, setTimeout, console, ...globals,
     require: (name) => {
       assert.ok(Object.hasOwn(dependencies, name), `${path}: unexpected dependency ${name}`)
       return dependencies[name]
@@ -63,13 +64,18 @@ function load(path, dependencies, contents = readFileSync(path, 'utf8'), globals
   }, { filename: path })
   return exports
 }
+const statistics = load('src/plugins/csv/columnStatistics.ts', { 'bignumber.js': BigNumber })
+const fileInput = load('src/plugins/csv/csvFileInput.ts', {})
 const sql = load('src/plugins/csv/csvSqlFilter.ts', {})
-const core = load('src/plugins/csv/csvCore.ts', { './csvSqlFilter': sql })
+const markdownCell = load('src/plugins/csv/markdownCell.ts', {})
+const core = load('src/plugins/csv/csvCore.ts', { './csvSqlFilter': sql, './markdownCell': markdownCell })
 const deferred = () => {
   let resolve, reject
   const promise = new Promise((yes, no) => { resolve = yes; reject = no })
   return { promise, resolve, reject }
 }
+const bytes = (text) => new TextEncoder().encode(text).buffer
+const pickFile = (h, content, name = 'synthetic.csv') => h.view.onFilePicked({ target: { files: [{ name, arrayBuffer: async () => typeof content === 'string' ? bytes(content) : content }], value: 'file' } })
 const plain = (value) => JSON.parse(JSON.stringify(value))
 function harness({ input = 'name,value\none,1\ntwo,2', operation = 'to-json', outcome = () => true, copyOutcome = () => Promise.resolve(), saveOutcome = () => ({ status: 'saved' }), saveAvailable = true, process = core.processFullSource } = {}) {
   const slots = [], effects = []
@@ -109,7 +115,7 @@ function harness({ input = 'name,value\none,1\ntwo,2', operation = 'to-json', ou
     react, 'react/jsx-runtime': { jsx: () => null, jsxs: () => null },
     'react-data-grid': {}, 'react-data-grid/lib/styles.css': {},
     '@hiven/plugin-ui': {}, '@hiven/plugin-ui/icons': {},
-    './csvCore': { ...core, processFullSource: process }, './csvSqlFilter': sql,
+    './csvCore': { ...core, processFullSource: process }, './csvSqlFilter': sql, './csvFileInput': fileInput, './columnStatistics': statistics,
   }, source, { requestAnimationFrame: (fn) => fn(), window: { addEventListener() {}, removeEventListener() {} }, navigator: { clipboard: { writeText: () => Promise.reject(Error('no browser clipboard')) } } })
   const makeHost = () => {
     const result = {
@@ -166,8 +172,10 @@ function harness({ input = 'name,value\none,1\ntwo,2', operation = 'to-json', ou
     replayEffects() { for (const slot of slots) if (slot?.setup) { slot.cleanup?.(); slot.cleanup = slot.setup() } },
   }
 }
+const checkFilter = process.env.CSV_CHECK_FILTER ? new RegExp(process.env.CSV_CHECK_FILTER) : null
 let passed = 0
 async function check(name, run) {
+  if (checkFilter && !checkFilter.test(name)) return
   try { await run(); passed++ } catch (error) { error.message = `${name}: ${error.message}`; throw error }
 }
 const csv = (rows) => 'name,value\n' + Array.from({ length: rows }, (_, i) => `row${i},${i}`).join('\n')
@@ -355,7 +363,7 @@ await check('source deferred rendering and active parsing cannot return older ro
 for (const result of ['load', 'reject', 'replaceHost', 'unmount']) await check(`file read ${result} cancels immediately and blocks old results while reading`, async () => {
   const receipt = deferred(), read = deferred(), h = harness({ outcome: () => receipt.promise })
   const old = h.view.returnOutput, pending = old()
-  const loading = h.view.onFilePicked({ target: { files: [{ name: 'new.csv', text: () => read.promise }], value: 'file' } })
+  const loading = h.view.onFilePicked({ target: { files: [{ name: 'new.csv', arrayBuffer: () => read.promise }], value: 'file' } })
   assert.equal(h.calls.handoff[0].signal.aborted, true)
   await old(); h.render(); await h.view.returnOutput()
   assert.equal(h.calls.handoff.length, 1)
@@ -363,7 +371,7 @@ for (const result of ['load', 'reject', 'replaceHost', 'unmount']) await check(`
   if (result === 'replaceHost') h.replaceHost()
   if (result === 'unmount') h.unmount()
   if (result === 'reject') read.reject(Error('read failed'))
-  else read.resolve('x,y\nnew,result')
+  else read.resolve(bytes('x,y\nnew,result'))
   receipt.resolve(true); await Promise.all([pending, loading])
   if (result !== 'unmount') h.render()
   assert.equal(h.calls.navigation + h.calls.complete, 0)
@@ -686,11 +694,11 @@ for (const action of ['unmount', 'replaceHost', 'requestBack', 'close', 'detachT
 await check('starting a file read revokes a save before the new file resolves', async () => {
   const receipt = deferred(), read = deferred(), h = harness({ saveOutcome: () => receipt.promise })
   const pending = h.view.saveFullResult()
-  const loading = h.view.onFilePicked({ target: { files: [{ name: 'replacement.csv', text: () => read.promise }], value: 'file' } })
+  const loading = h.view.onFilePicked({ target: { files: [{ name: 'replacement.csv', arrayBuffer: () => read.promise }], value: 'file' } })
   assert.equal(h.calls.saves[0].signal.aborted, true)
   receipt.resolve({ status: 'saved' }); await pending
   assert.deepEqual(h.calls.messages, [])
-  read.resolve('new,data\nx,y'); await loading; h.render()
+  read.resolve(bytes('new,data\nx,y')); await loading; h.render()
   assert.equal(h.view.sourceText, 'new,data\nx,y')
 })
 
@@ -764,6 +772,88 @@ await check('ordinary surface rerenders preserve a pending save snapshot', async
   assert.equal(h.view.fullOutputRef.current, complete)
   receipt.resolve({ status: 'saved' }); await pending; h.render()
   assert.deepEqual(h.calls.messages, [['toast.saved', 'success']])
+})
+
+await check('expanded synchronous JSON saves complete output after return limit, cancellation and filter changes', async () => {
+  const headers = Array.from({ length: 10 }, (_, c) => `customer_long_descriptive_field_${c}`)
+  const input = headers.join(',') + '\n' + Array.from({ length: 3000 }, (_, r) => headers.map((_, c) => `${r}:${c}`).join(',')).join('\n')
+  let attempts = 0
+  const h = harness({ input, saveOutcome: () => ({ status: ++attempts === 1 ? 'cancelled' : 'saved' }) })
+  assert.equal(h.view.fullJobReady, false)
+  assert.equal(h.view.returnNeedsFullProcess, false)
+  assert.equal(h.view.canReturnOutput, true)
+  const complete = expected(input)
+  assert.ok(bytes(complete).byteLength > 1024 * 1024 && bytes(complete).byteLength < 10 * 1024 * 1024)
+  await h.view.returnOutput()
+  assert.equal(h.calls.handoff.length, 0)
+  assert.deepEqual(h.calls.messages, [['toast.returnTooLarge', 'error']])
+  h.calls.messages.length = 0
+  const draft = h.draft()
+  await h.view.saveFullResult(); h.render()
+  assert.deepEqual(h.calls.messages, [])
+  assert.equal(h.view.saving, false)
+  assert.deepEqual(h.draft(), draft)
+  await h.view.saveFullResult(); h.render()
+  assert.deepEqual(h.calls.saves.map((save) => save.text), [complete, complete])
+  const saved = JSON.parse(h.calls.saves[1].text)
+  assert.equal(saved.length, 3000)
+  assert.equal(saved[2999][headers[9]], '2999:9')
+  h.query({ globalFilter: '2999:' })
+  await h.view.saveFullResult()
+  assert.deepEqual(JSON.parse(h.calls.saves[2].text), [saved[2999]])
+})
+
+await check('expanded synchronous output over 10 MiB is refused without truncation', async () => {
+  const headers = Array.from({ length: 10 }, (_, c) => `customer_${'x'.repeat(400)}_${c}`)
+  const input = headers.join(',') + '\n' + Array.from({ length: 3000 }, (_, r) => headers.map((_, c) => `${r}:${c}`).join(',')).join('\n')
+  const h = harness({ input })
+  assert.equal(h.view.returnNeedsFullProcess, false)
+  assert.equal(h.view.canReturnOutput, true)
+  assert.ok(bytes(expected(input)).byteLength > 10 * 1024 * 1024)
+  const draft = h.draft()
+  await h.view.saveFullResult(); h.render()
+  assert.equal(h.calls.saves.length, 0)
+  assert.deepEqual(h.calls.messages, [['toast.saveTooLarge', 'error']])
+  assert.deepEqual(h.draft(), draft)
+  assert.equal(h.view.saving, false)
+})
+
+for (const full of [false, true]) await check(`strict UTF8 rejection preserves ${full ? 'full' : 'synchronous'} filtered result and permits BOM retry`, async () => {
+  const h = harness({ input: csv(full ? 8105 : 30) })
+  h.query({ globalFilter: 'row1' })
+  if (full) await h.full()
+  await h.view.saveFullResult()
+  const old = h.calls.saves[0].text, draft = h.draft()
+  for (const invalid of [new Uint8Array([0xd0, 0xd5, 0xc3, 0xfb]).buffer, new Uint8Array([0x61, 0x2c, 0xc3, 0x28]).buffer]) {
+    await pickFile(h, invalid, 'invalid.csv'); h.render()
+    assert.ok(h.view.fileError)
+    assert.equal(h.view.readingFile, false)
+    assert.deepEqual(h.draft(), draft)
+    assert.equal(h.view.globalFilter, 'row1')
+    assert.equal(h.view.fullJobReady, full)
+    await h.view.saveFullResult()
+    assert.equal(h.calls.saves.at(-1).text, old)
+  }
+  await pickFile(h, '\ufeff姓名,城市\n测试,北京', 'utf8-bom.csv'); h.render()
+  assert.equal(h.view.fileError, null)
+  assert.equal(h.view.sourceText, '姓名,城市\n测试,北京')
+  assert.equal(h.view.linkedFileLabel, 'utf8-bom.csv')
+  h.query({ globalFilter: '' })
+  await h.view.saveFullResult()
+  assert.deepEqual(JSON.parse(h.calls.saves.at(-1).text), [{ 姓名: '测试', 城市: '北京' }])
+})
+
+for (const action of ['edit', 'replaceHost', 'newerRead']) await check(`late UTF8 read cannot replace ${action}`, async () => {
+  const h = harness(), read = deferred()
+  const pending = h.view.onFilePicked({ target: { files: [{ name: 'old.csv', arrayBuffer: () => read.promise }], value: 'file' } })
+  if (action === 'edit') h.edit('SourceText', 'name,value\nmanual,9')
+  else if (action === 'replaceHost') h.replaceHost()
+  else { await pickFile(h, 'name,value\nnewer,8', 'newer.csv'); h.render() }
+  const draft = h.draft(), label = h.view.linkedFileLabel
+  read.resolve(bytes('name,value\nlate,0')); await pending; h.render()
+  assert.deepEqual(h.draft(), draft)
+  assert.equal(h.view.linkedFileLabel, label)
+  assert.equal(h.view.readingFile, false)
 })
 
 console.log(`CSV result return: ${passed} production-module logic scenarios passed`)

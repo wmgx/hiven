@@ -28,6 +28,7 @@ import {
   type FullProcessResult,
 } from './csvCore'
 import { columnStatistics, type ColumnStatistics } from './columnStatistics'
+import { decodeCsvFileBytes } from './csvFileInput'
 import {
   defaultSqlTemplate,
   getSqlCompletions,
@@ -307,6 +308,10 @@ export function CsvSurface(props: PluginSurfaceProps) {
   }, [])
 
   const updateResult = useCallback((update: () => void) => {
+    // An edit or exit supersedes an in-flight file selection as well as delivery.
+    fileReadRef.current = null
+    setFileReadingOwner(null)
+    setFileError(null)
     cancelSubmissions()
     abortRef.current?.abort()
     abortRef.current = null
@@ -368,17 +373,21 @@ export function CsvSurface(props: PluginSurfaceProps) {
     event.target.value = ''
     if (!file) return
     cancelSubmissions()
-    invalidateFullJob()
     const read = {}
     const lifetime = surfaceLifetimeRef.current
     fileReadRef.current = read
     setFileReadingOwner(() => owner)
     setFileError(null)
     try {
-      const content = await file.text()
+      const bytes = await file.arrayBuffer()
       if (fileReadRef.current !== read || !lifetime.active) return
+      const decoded = decodeCsvFileBytes(bytes)
+      if (!decoded.ok) {
+        setFileError(t('error.fileUtf8'))
+        return
+      }
+      const content = decoded.text
       updateResult(() => startParseTransition(() => {
-        invalidateFullJob()
         setSourceText(content)
         setLinkedFileLabel(file.name)
         setSourceEditUnlocked(content.length <= SOURCE_TEXTAREA_MAX_CHARS)
@@ -394,7 +403,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
         setFileReadingOwner(null)
       }
     }
-  }, [cancelSubmissions, owner, invalidateFullJob, updateResult])
+  }, [cancelSubmissions, owner, t, updateResult])
 
   const parsed = useMemo(() => {
     try {
@@ -1116,6 +1125,15 @@ export function CsvSurface(props: PluginSurfaceProps) {
           >
             <IconCopy />
           </IconButton>
+          <IconButton
+            type="button"
+            className="csv-tools-surface__ib"
+            label={t(saving ? 'job.saving' : 'job.saveFull')}
+            disabled={!canReturnOutput || saving || returning}
+            onClick={() => void saveFullResult()}
+          >
+            <IconDownload />
+          </IconButton>
           <button
             type="button"
             className="csv-tools-surface__file-btn"
@@ -1217,10 +1235,6 @@ export function CsvSurface(props: PluginSurfaceProps) {
                     onClick={copyFullOutput}
                   >
                     {localizedText(t, 'job.copyFull', 'Copy full')}
-                  </button>
-                  <button type="button" className="csv-tools-surface__file-btn" disabled={!canCopyOutput || saving || returning} onClick={() => void saveFullResult()}>
-                    <IconDownload />
-                    <span>{t(saving ? 'job.saving' : 'job.saveFull')}</span>
                   </button>
                 </>
               ) : (

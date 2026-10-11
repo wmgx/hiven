@@ -84,6 +84,7 @@
   "source.copyRaw": "复制原始源文本",
   "error.generic": "解析错误：{message}",
   "error.file": "文件错误：{message}",
+  "error.fileUtf8": "文件不是有效的 UTF-8 编码。请选择 UTF-8 文件重试；当前材料和筛选结果已保留。",
   "table.filterScope": "筛选、SQL 和列排序先作用于完整结果，再截取预览行。复制和另存使用这份结果；带回搜索最多支持 1 MiB。",
   "route.csvToJson": "CSV 转 JSON",
   "route.jsonToCsv": "JSON 转 CSV",

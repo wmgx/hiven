@@ -84,6 +84,7 @@
   "source.copyRaw": "Copy raw source",
   "error.generic": "Parse error: {message}",
   "error.file": "File error: {message}",
+  "error.fileUtf8": "This file is not valid UTF-8. Choose a UTF-8 file and try again; your current data and filters have been kept.",
   "table.filterScope": "Filters, SQL and column sorting apply to the complete result before preview rows are limited. Copy and Save As use that result; Return to Search supports up to 1 MiB.",
   "route.csvToJson": "CSV to JSON",
   "route.jsonToCsv": "JSON to CSV",
