@@ -1,3 +1,4 @@
+import { suggestionStore, useSuggestionSettings } from '../workspace/launcher/contextSuggestionsStore'
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { check } from '@tauri-apps/plugin-updater'
@@ -20,6 +21,7 @@ import { showToast } from '../workspace/toast'
 import { Combobox, NumberField, Select, Switch } from '../plugin-ui'
 
 export function SettingsContent() {
+  const suggestions = useSuggestionSettings()
   const { settings, updateSetting } = useAppStore()
   const locale = useAppStore((s) => s.locale)
   const t = useT('settings')
@@ -82,6 +84,17 @@ export function SettingsContent() {
         <SettingsListRow icon={<Save size={15} strokeWidth={2} />} name={t('persistParams')} desc={t('persistParamsInfo')}>
           <Switch checked={settings.persistParams} onCheckedChange={(value) => updateSetting('persistParams', value)} aria-label={t('persistParams')} />
         </SettingsListRow>
+      </SettingGroup>
+
+      <SettingGroup title={t('contextSuggestions')}>
+        <SettingsListRow icon={<BrainCircuit size={15} />} name={t('contextSuggestions')} desc={t('contextSuggestionsInfo')}>
+          <Switch checked={suggestions.enabled} onCheckedChange={suggestionStore.enable} aria-label={t('contextSuggestions')} />
+        </SettingsListRow>
+        <SettingsListRow icon={<Hash size={15} />} name={t('contextSuggestionsMetrics')}
+          desc={`N ${suggestions.metrics.length} · S ${suggestions.metrics.filter(m => m.selected).length} · E ${suggestions.metrics.filter(m => m.executed).length}`}>
+          <button type="button" onClick={suggestionStore.clear}>{t('contextSuggestionsClear')}</button>
+        </SettingsListRow>
+        {suggestions.storageError && <p role="alert">{t('contextSuggestionsStorageError')}</p>}
       </SettingGroup>
 
       <SettingGroup title={t('hotkeys')}>

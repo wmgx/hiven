@@ -907,6 +907,7 @@ fn show_launcher_window_for_hotkey_with_event(
         // Every explicit open is a new intent, including a visible re-open.
         paste_recovery::invalidate_all();
         let main_thread_started_at = Instant::now();
+        let suggestion_origin = capture_context_suggestion_origin();
         let existing_launcher = app_clone.get_webview_window("launcher");
         let was_visible = existing_launcher
             .as_ref()
@@ -1015,7 +1016,7 @@ fn show_launcher_window_for_hotkey_with_event(
                 log_launcher_perf("native:center-window", started_at, "");
             }
             let started_at = Instant::now();
-            let _ = window.emit(open_event, ());
+            let _ = window.emit(open_event, suggestion_origin);
             log_launcher_perf("native:emit-launcher-open", started_at, "");
         }
         log_launcher_perf(
@@ -2380,6 +2381,27 @@ fn previous_foreground_process_id() -> &'static Mutex<Option<u32>> {
     PREVIOUS_FOREGROUND_PROCESS_ID.get_or_init(|| Mutex::new(None))
 }
 
+// Explicit opt-in; metadata is captured only at launcher open, never a watcher.
+static CONTEXT_SUGGESTIONS_ENABLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+#[tauri::command]
+fn set_context_suggestions_enabled(enabled: bool) {
+    CONTEXT_SUGGESTIONS_ENABLED.store(enabled, std::sync::atomic::Ordering::Relaxed);
+}
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ContextSuggestionOpen { origin_app_id: Option<String> }
+fn capture_context_suggestion_origin() -> ContextSuggestionOpen {
+    let mut origin_app_id = None;
+    if CONTEXT_SUGGESTIONS_ENABLED.load(std::sync::atomic::Ordering::Relaxed) {
+        #[cfg(target_os = "macos")]
+        { origin_app_id = current_foreground_process_id().filter(|pid| *pid != std::process::id())
+            .and_then(|_| macos_frontmost_bundle_id()).map(|id| format!("mac-bundle:{id}")); }
+        #[cfg(target_os = "linux")]
+        { origin_app_id = linux_x11_windows::suggestion_origin(); }
+    }
+    ContextSuggestionOpen { origin_app_id }
+}
+
 fn remember_previous_foreground_app() {
     let previous = current_foreground_process_id().filter(|pid| *pid != std::process::id());
     if let Ok(mut stored) = previous_foreground_process_id().lock() {
@@ -2738,7 +2760,21 @@ fn show_launcher_window_without_app_activation(
     {
         show_launcher_window_without_app_activation_macos(window)
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    {
+        use gtk::prelude::{GtkWindowExt, WidgetExt};
+        // All callers run on the GTK main thread. Tao queues show(), but its
+        // set_focus() checks visibility synchronously and silently skips a
+        // hidden window. Present through Tauri's supported GTK window handle
+        // so mapping and the normal WM focus request happen in order. No
+        // delayed retries: switching away must not trigger a later refocus.
+        let gtk_window = window.gtk_window().map_err(|error| error.to_string())?;
+        gtk_window.show_all();
+        gtk_window.deiconify();
+        gtk_window.present();
+        Ok(())
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         window.show().map_err(|error| error.to_string())?;
         let _ = window.unminimize();
@@ -7805,6 +7841,7 @@ pub fn run() {
             simulate_paste,
             current_foreground_app_name,
             current_foreground_app_context,
+            set_context_suggestions_enabled,
             desktop_capture::capture_desktop_snapshot,
             keyboard_observation::poll_keyboard_observation,
             keyboard_observation::stop_keyboard_observation,

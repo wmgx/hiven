@@ -1,5 +1,13 @@
 export default {
   en: {
+    'contextSuggestionsStorageError': 'Could not save the change on this device. Collection is paused for this change; retry before restarting.',
+    'contextSuggestions': 'Suggested next actions',
+    'contextSuggestionsInfo': 'Off by default. Shows up to three suggestions only in an idle global launcher. When enabled, stores successful static action IDs, source app IDs, time and session locally for up to 90 days (1,000 events). No text, clipboard, titles, URLs or paths. Automatic clipboard attachment is paused while enabled; explicit paste still works. Turn off to stop new collection; clear removes only this feature’s records and counts. Suggestions never run automatically.',
+    'contextSuggestionsMetrics': 'Local sessions: N shown · S explicitly selected · E succeeded',
+    'contextSuggestionsClear': 'Clear suggestion data',
+    'contextSuggestionRecent': 'Recently used',
+    'contextSuggestionApp': 'Often used from this app',
+
     'aiSelectionLoading': 'Loading',
     'aiSelectionUnavailable': 'Unavailable',
     'aiChooseProvider': 'Choose a provider',
@@ -205,6 +213,14 @@ export default {
     'errorCopied': 'Copied',
   },
   zh: {
+    'contextSuggestionsStorageError': '无法保存此次更改。本次采集已暂停，请在重启前重试保存或清除。',
+    'contextSuggestions': '猜你想干',
+    'contextSuggestionsInfo': '默认关闭，仅在全局启动器空闲时显示最多三条建议。开启后仅在本地记录成功静态动作标识、来源应用标识、时间和会话，最多保留90天、1000条。不读取正文、剪贴板、标题、网址或路径。开启期间暂停自动附加剪贴板，可主动粘贴。关闭即停止新增采集；清除仅移除此功能记录和计数。建议不会自动执行。',
+    'contextSuggestionsMetrics': '本地会话：N 展示 · S 明确选择 · E 成功执行',
+    'contextSuggestionsClear': '清除建议数据',
+    'contextSuggestionRecent': '最近使用',
+    'contextSuggestionApp': '在此应用中常用',
+
     'aiSelectionLoading': '正在加载',
     'aiSelectionUnavailable': '不可用',
     'aiChooseProvider': '请选择 AI 服务',

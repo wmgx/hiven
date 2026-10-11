@@ -1,3 +1,4 @@
+import { getSuggestionSession, recordSuggestionSuccess } from './contextSuggestionsStore'
 import { captureLauncherPasteOwner, checkPendingPasteRecovery } from '../pasteRecovery'
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
 import { makePluginT } from '../../i18n/pluginI18nRegistry'
@@ -468,6 +469,11 @@ export function useLauncherSession({
           locale,
           makeT: (item) => makePluginT(item.pluginId ?? '', locale),
           getSettings: getLauncherItemSettings,
+          captureSuccessfulSelection: () => {
+            const session = normalizedHostId === 'global-launcher' ? getSuggestionSession() : null
+            const selectedKey = session?.selectedActionKey
+            return item => recordSuggestionSuccess(session, item.systemKey, selectedKey === item.systemKey)
+          },
           recordSelection: (surfaceId, item) => {
             recordLauncherSelection(surfaceId, item.systemKey)
             // Plugin-declared durable content → host recents for next-session recommend.

@@ -150,6 +150,8 @@ export type LauncherControllerDeps = {
   getSettings: (item: LauncherItem) => unknown
   /** Record a first-level selection in launcher usage. */
   recordSelection: (surfaceId: LauncherSurfaceId, item: LauncherItem) => void
+  /** Capture optional local metadata attribution before any async preparation. */
+  captureSuccessfulSelection?: () => (item: LauncherItem) => void
   /** Notify the host that the launcher should close (success, no output). */
   requestClose: () => void
   /** Clear search after a successful host return/save, preserving attached material. */
@@ -337,8 +339,11 @@ export class LauncherController {
   }
 
   /** Reset to the base list frame (e.g. when the launcher opens). */
+  private successfulSelectionObserver?: (item: LauncherItem) => void
+
   reset(): void {
     this.inputBaselines.clear()
+    this.successfulSelectionObserver = undefined
     if (this.suggestDebounceTimer != null) {
       clearTimeout(this.suggestDebounceTimer)
       this.suggestDebounceTimer = null
@@ -377,8 +382,13 @@ export class LauncherController {
   }
 
   /** Record a successfully committed selection + fire-and-forget journal row. */
-  recordSuccessfulSelection(item: LauncherItem, options: SelectOptions = {}): void {
+  captureSuccessfulSelection(): ((item: LauncherItem) => void) | undefined {
+    return this.deps.captureSuccessfulSelection?.()
+  }
+
+  recordSuccessfulSelection(item: LauncherItem, options: SelectOptions = {}, observer = this.successfulSelectionObserver): void {
     if (item.pluginLifetime?.active === false || !this.shouldRecord(item, options)) return
+    try { observer?.(item) } catch { /* Optional local metadata must never interrupt execution. */ }
     this.deps.recordSelection(this.deps.surfaceId, item)
     void appendUsageJournal({
       commandId: item.systemKey,
@@ -659,6 +669,7 @@ export class LauncherController {
     }
     if (this.state.busy && this.pendingItemKey === item.systemKey) return
     this.inputBaselines.clear()
+    this.successfulSelectionObserver = this.deps.captureSuccessfulSelection?.()
     this.activePluginLifetime = item.pluginLifetime
     this.pluginUnavailable = false
     this.invalidatePendingActions()

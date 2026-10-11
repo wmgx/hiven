@@ -91,6 +91,8 @@ export function useGlobalLauncherSelectionController({
       // Controller.selectItem records general item_select; here only surface-routing.
       const pluginSurfaceTarget = resolvePluginSurfaceTarget(item.domainItem)
       if (pluginSurfaceTarget) {
+        const selectionController = controllerRef.current
+        const successObserver = selectionController?.captureSuccessfulSelection() ?? (() => {})
         void (async () => {
           const surface = getPluginSurfaceDefinition(pluginSurfaceTarget)
           if (!surface) {
@@ -119,7 +121,7 @@ export function useGlobalLauncherSelectionController({
               const fromLauncherList = standaloneLauncher && state.globalLauncherOpen
                 && !state.launcherHostSurfaceTarget && !state.pluginSurfaceToolTarget
               await showPluginSurfaceWindow(target, fromLauncherList ? { pasteTarget: 'launcher' } : undefined)
-              controllerRef.current?.recordSuccessfulSelection(item.domainItem)
+              selectionController?.recordSuccessfulSelection(item.domainItem, {}, successObserver)
               return
             }
           }
@@ -133,7 +135,7 @@ export function useGlobalLauncherSelectionController({
             pluginId: target.pluginId,
             surfaceId: target.surfaceId,
           })
-          controllerRef.current?.recordSuccessfulSelection(item.domainItem)
+          selectionController?.recordSuccessfulSelection(item.domainItem, {}, successObserver)
         })().catch((error) => {
           console.error('[hiven] Failed to open plugin surface:', error)
           showToast(t(locale, 'scripts.pluginUnavailable'), 'error')

@@ -1,3 +1,6 @@
+import { selectContextSuggestions, type Suggestion } from '../../workspace/launcher/contextSuggestions'
+import { beginSuggestionSession, endSuggestionSession, getSuggestionSession, recordSuggestionSelected, recordSuggestionShown, useSuggestionSettings } from '../../workspace/launcher/contextSuggestionsStore'
+import { filterAvailableLauncherItems } from '../../workspace/launcher/registry'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '../../store'
 import { useShallow } from 'zustand/react/shallow'
@@ -79,6 +82,16 @@ export function GlobalLauncherHost() {
     pluginSurfaceToolTarget: s.pluginSurfaceToolTarget,
     launcherHostSurfaceTarget: s.launcherHostSurfaceTarget,
   })))
+  const suggestionSettings = useSuggestionSettings()
+  if (open && !getSuggestionSession()) beginSuggestionSession()
+  const suggestionSession = open ? getSuggestionSession() : null
+  const [suggestionDismissed, setSuggestionDismissed] = useState<string | null>(null)
+  useLayoutEffect(() => { if (!open) endSuggestionSession() }, [open])
+  useEffect(() => {
+    const dismiss = () => { const session = getSuggestionSession(); if (session) setSuggestionDismissed(session.id) }
+    document.addEventListener('compositionstart', dismiss, true)
+    return () => document.removeEventListener('compositionstart', dismiss, true)
+  }, [])
   const setOpen = useAppStore((s) => s.setGlobalLauncherOpen)
   const clearPluginSurfaceTool = useAppStore((s) => s.clearPluginSurfaceTool)
   const clearLauncherHostSurface = useAppStore((s) => s.clearLauncherHostSurface)
@@ -134,6 +147,7 @@ export function GlobalLauncherHost() {
   const clipboardBlock = useClipboardObjectBlock({
     open,
     readClipboard: readLauncherClipboard,
+    skipAutomaticRead: () => suggestionSettings.enabled,
     // Do not replace an in-progress query with clipboard suggestions.
     suppressAutoAttach: () => (
       Boolean(liveQueryRef.current.trim())
@@ -192,6 +206,7 @@ export function GlobalLauncherHost() {
   })
   const setQuery = useCallback((value: string) => {
     if (liveQueryRef.current !== value) textExportQueryGenerationRef.current += 1
+    if (value.length > 0 && getSuggestionSession()) setSuggestionDismissed(getSuggestionSession()!.id)
     liveQueryRef.current = value
     setSessionQuery(value)
   }, [setSessionQuery])
@@ -584,7 +599,7 @@ export function GlobalLauncherHost() {
     ...buildGlobalLauncherItems({ rankedLauncherItems: availableLauncherItems, query: rankingQuery, locale }),
   ], [availableLauncherItems, locale, pinnedObjectActionItems, rankingQuery])
   const availableItemKeys = useMemo(() => new Set(availableItems.map((item) => item.id)), [availableItems])
-  const visibleFiltered = useMemo(() => selectLauncherVisibleItems({
+  const ordinaryVisible = useMemo(() => selectLauncherVisibleItems({
     rankedItems: composedRankedItems,
     availableItems,
     favoriteKeys: launcherFavoriteKeys,
@@ -594,6 +609,49 @@ export function GlobalLauncherHost() {
     browseItemOf: (item: GlobalLauncherItem) => item.domainItem,
     keyOf: (item: GlobalLauncherItem) => item.id,
   }), [availableItems, browseCategory, browsingActions, composedRankedItems, launcherFavoriteKeys, rankingQuery])
+  const frozenSuggestions = useRef<{ session: string; epoch: string; suggestions: Suggestion[]; keys: string[] } | null>(null)
+  if (!open) frozenSuggestions.current = null
+  if (suggestionSession && frozenSuggestions.current?.session !== suggestionSession.id) {
+    const available = filterAvailableLauncherItems(availableLauncherItems, 'global-launcher')
+    const suggestions = suggestionSettings.enabled ? selectContextSuggestions({
+      events: suggestionSettings.events, originAppId: suggestionSession.originAppId,
+      availableKeys: available.map(item => item.systemKey), excludedKeys: launcherFavoriteKeys, now: Date.now(),
+    }) : []
+    const keys = new Set(suggestions.map(item => item.actionKey))
+    frozenSuggestions.current = { session: suggestionSession.id, epoch: suggestionSettings.epoch, suggestions,
+      keys: [...keys, ...ordinaryVisible.filter(item => !keys.has(item.id)).map(item => item.id)] }
+  }
+  const suggestionsIdle = Boolean(suggestionSession && suggestionSettings.enabled &&
+    (frozenSuggestions.current?.suggestions.length ?? 0) > 0 &&
+    frozenSuggestions.current?.epoch === suggestionSettings.epoch && suggestionDismissed !== suggestionSession.id &&
+    query === '' && !isImeComposingRef.current && !browsingActions && !clipboardBlock.block && !clipboardBlock.hint &&
+    !clipboardBlock.isPickingTextFile && !clipboardBlock.isReadingFileText && !clipboardBlock.fileTextError &&
+    !controllerState?.busy && !controllerState?.error && (controllerState?.frames.length ?? 1) <= 1 &&
+    !surfaceFrame && !hostSurfaceTarget && !launcherSettingsTarget)
+  const snapshot = frozenSuggestions.current
+  const { visibleFiltered, currentSuggestionKeys } = useMemo(() => {
+    const keys = new Set<string>()
+    if (!suggestionsIdle || !snapshot) return { visibleFiltered: ordinaryVisible, currentSuggestionKeys: keys }
+    const eligible = new Set(filterAvailableLauncherItems(availableLauncherItems, 'global-launcher').map(item => item.systemKey))
+    const byKey = new Map(availableItems.map(item => [item.id, item]))
+    const reasons = new Map(snapshot.suggestions.map(item => [item.actionKey, item.reason]))
+    // Async ordinary candidates may arrive after the first paint. Append them
+    // without moving existing rows or changing their numeric shortcuts.
+    const frozenKeys = new Set(snapshot.keys)
+    snapshot.keys.push(...ordinaryVisible.filter(item => !frozenKeys.has(item.id)).map(item => item.id))
+    const items = snapshot.keys.flatMap(key => {
+      const item = byKey.get(key)
+      if (!item) return []
+      const reason = reasons.get(key)
+      if (!reason) return [item]
+      if (!eligible.has(key)) return []
+      keys.add(key)
+      return [{ ...item, subtitle: `${t(locale, 'settings.contextSuggestions')} · ${t(locale,
+        reason === 'app' ? 'settings.contextSuggestionApp' : 'settings.contextSuggestionRecent')}` }]
+    })
+    return { visibleFiltered: items, currentSuggestionKeys: keys }
+  }, [suggestionsIdle, snapshot, ordinaryVisible, availableLauncherItems, availableItems, locale, pluginRegistryVersion])
+  const showingSuggestions = suggestionsIdle && currentSuggestionKeys.size > 0
   const visibleSelectionItems = useMemo(
     () => visibleFiltered.map((item) => item.domainItem),
     [visibleFiltered],
@@ -791,6 +849,15 @@ export function GlobalLauncherHost() {
     locale,
   })
   fileTextRootVisibleRef.current = !surfaceFrame && !itemPermissionFrame
+  useEffect(() => {
+    if (!showingSuggestions || !suggestionSession || itemPermissionFrame) return
+    // Count only an actual visible paint, once per session; no typed/Esc penalty.
+    const frame = requestAnimationFrame(() => {
+      if (document.visibilityState === 'visible') recordSuggestionShown(suggestionSession)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [showingSuggestions, suggestionSession, itemPermissionFrame])
+
 
   useEffect(() => {
     if (surfaceFrame || itemPermissionFrame || hostSurfaceTarget || launcherSettingsTarget) {
@@ -1026,7 +1093,15 @@ export function GlobalLauncherHost() {
     }
   }, [clipboardBlock.block, clipboardBlock.getMaterialGeneration, clipboardBlock.hasMaterial, clipboardBlock.markBlockConsumed, closeLauncherAfterAction, locale, openPluginSurface, setQuery])
 
-  const selectItemWithObjectActions = useCallback((item: GlobalLauncherItem) => {
+  const selectItemWithObjectActions = useCallback((item: GlobalLauncherItem | undefined, customizeParams = false) => {
+    if (!item) return
+    if (suggestionSession) suggestionSession.selectedActionKey = null
+    if (showingSuggestions && currentSuggestionKeys.has(item.id) && suggestionSession) {
+      if (filterAvailableLauncherItems([item.domainItem], 'global-launcher').length !== 1) return
+      recordSuggestionShown(suggestionSession)
+      recordSuggestionSelected(suggestionSession, item.id)
+    }
+
     // Support both current prefix and the retired history-only prefix.
     const objectActionId = item.id.startsWith('object-action:')
       ? item.id.slice('object-action:'.length)
@@ -1066,8 +1141,8 @@ export function GlobalLauncherHost() {
       const index = visibleFiltered.findIndex((candidate) => candidate.id === item.id)
       if (index >= 0) setSelectedIndex(index)
     }
-    selectItem(item)
-  }, [clipboardBlock.cancelFileTextRead, executeCurrentTextAction, executeCurrentTextExport, executeObjectAction, objectActions, selectItem, setSelectedIndex, visibleFiltered])
+    selectItem(item, customizeParams)
+  }, [clipboardBlock.cancelFileTextRead, executeCurrentTextAction, executeCurrentTextExport, executeObjectAction, objectActions, selectItem, setSelectedIndex, visibleFiltered, showingSuggestions, suggestionSession, currentSuggestionKeys])
 
 
   const beginDrag = useGlobalLauncherNativeDrag(standaloneLauncher)

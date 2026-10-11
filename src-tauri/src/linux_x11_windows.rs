@@ -766,3 +766,21 @@ mod tests {
         assert_ne!(first, second);
     }
 }
+
+/// Only WM_CLASS resource class, never instance/title/PID persistence. Existing
+/// bounded passive X11 connection; Wayland and unknown identities return None.
+pub(crate) fn suggestion_origin() -> Option<String> {
+    if !is_x11_session(std::env::var("XDG_SESSION_TYPE").ok().as_deref(),
+        std::env::var("WAYLAND_DISPLAY").ok().as_deref()) { return None; }
+    let (connection, screen) = connect().ok()?;
+    connection.stream().budget(Duration::from_millis(100)).ok()?;
+    let root = connection.setup().roots.get(screen)?.root;
+    let active = connection.intern_atom(true, b"_NET_ACTIVE_WINDOW").ok()?.reply().ok()?.atom;
+    let window = property_scalar(&connection, root, active, AtomEnum::WINDOW).ok()??;
+    let pid_atom = connection.intern_atom(true, b"_NET_WM_PID").ok()?.reply().ok()?.atom;
+    if property_scalar(&connection, window, pid_atom, AtomEnum::CARDINAL).ok()? == Some(std::process::id()) { return None; }
+    let bytes = property_bytes(&connection, window, AtomEnum::WM_CLASS.into(), AtomEnum::STRING.into(), 512).ok()?;
+    let class = std::str::from_utf8(bytes.split(|b| *b == 0).nth(1)?).ok()?;
+    if class.is_empty() || class.len() > 160 || !class.bytes().all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b)) { return None; }
+    Some(format!("x11-class:{}", class.to_ascii_lowercase()))
+}
