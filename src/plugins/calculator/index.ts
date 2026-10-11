@@ -4,6 +4,7 @@ import { CalculatorSurface } from './CalculatorSurface'
 import { convertUnitQuery } from './unitConversion'
 import { parseChineseNumeralQuery } from './chineseNumeral'
 import { parseRadixQuery } from './radixAnswer'
+import { parseThousandsQuery } from './thousandsAnswer'
 import './style.css'
 
 // ─── Safe Math Parser ────────────────────────────────────────────────────────
@@ -621,6 +622,12 @@ const definition: PluginDefinition = {
   launcher: {
     dynamicItems(ctx: LauncherDynamicContext): LauncherItemContribution[] {
       const input = ctx.query
+      const thousands = parseThousandsQuery(input)
+      if (thousands) {
+        return [thousands.ok
+          ? numberAnswerItem('thousands-answer', thousands.text, ctx.t('thousands.copyHint'), thousands.text)
+          : numberAnswerItem('thousands-answer-error', ctx.t(`thousands.error.${thousands.error}`), ctx.t('thousands.syntax'))]
+      }
       const chinese = parseChineseNumeralQuery(input)
       if (chinese) {
         return [chinese.ok

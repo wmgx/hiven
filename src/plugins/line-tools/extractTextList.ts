@@ -1,3 +1,5 @@
+import { lexer, type Token } from 'marked'
+
 export type TextListKind = 'urls' | 'emails'
 
 const URL_TOKEN = /https?:\/\/[^\s<>"'`\\\u0000-\u001f\u007f-\u009f，。；：！？、（）【】《》“”‘’]+/gi
@@ -20,7 +22,7 @@ function trimUrlToken(token: string): string {
   return token.slice(0, end)
 }
 
-function extractUrls(text: string): string[] {
+function scanPlainUrls(text: string): string[] {
   const matches: string[] = []
   // A single unambiguous token scan, followed by linear trimming and URL parsing.
   // Never normalize via URL.href: path/query spelling and original case matter.
@@ -36,6 +38,44 @@ function extractUrls(text: string): string[] {
       } catch { /* Not a syntactically usable HTTP(S) URL. No network validation. */ }
     }
   }
+  return matches
+}
+
+/** Parse only: no Markdown rendering, image loads, URL requests or execution. */
+function extractUrls(text: string): string[] {
+  const matches: string[] = []
+  const visit = (tokens: Token[]) => {
+    let plain = ''
+    const flush = () => { matches.push(...scanPlainUrls(plain)); plain = '' }
+    for (const token of tokens) {
+      if (token.type === 'link' || token.type === 'image') {
+        flush()
+        // A Markdown label/title is not another destination. Keep explicit
+        // target punctuation (unlike trailing punctuation in ordinary prose).
+        try {
+          // marked HTML-escapes autolink hrefs; take their original spelling.
+          const href = /^<https?:\/\/[^<>]+>$/i.test(token.raw) ? token.raw.slice(1, -1) : token.href
+          const url = new URL(href)
+          if (/^https?:\/\//i.test(href) && url.hostname && !/[\s\u0000-\u001f]/.test(href)) matches.push(href)
+        } catch { /* Unsupported protocol or invalid URL: do not salvage the label. */ }
+      } else if (token.type === 'list') {
+        flush()
+        for (const item of token.items) visit(item.tokens)
+      } else if (token.type === 'table') {
+        flush()
+        for (const cell of [...token.header, ...token.rows.flat()]) visit(cell.tokens)
+      } else if ('tokens' in token && Array.isArray(token.tokens)) {
+        flush()
+        visit(token.tokens)
+      } else {
+        plain += token.raw
+      }
+    }
+    flush()
+  }
+  // Plain URL scanning remains ours: GFM autolinks trim nested parentheses too
+  // aggressively. Standard Markdown links and <autolinks> still become tokens.
+  visit(lexer(text, { gfm: false }))
   return matches
 }
 
@@ -89,7 +129,7 @@ function extractEmails(text: string): string[] {
  * Token scans have no nested ambiguous repetitions; oversized email tokens are
  * rejected before validation. Preserve spelling and encounter order throughout.
  */
-export function extractTextList(text: string, kind: TextListKind, dedup = true): string[] {
+export function extractTextList(text: string, kind: TextListKind, dedup = kind === 'emails'): string[] {
   const matches = kind === 'urls' ? extractUrls(text) : extractEmails(text)
   if (!dedup) return matches
   const seen = new Set<string>()

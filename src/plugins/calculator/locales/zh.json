@@ -79,5 +79,10 @@
   "radix.base.2": "二进制",
   "radix.base.8": "八进制",
   "radix.base.10": "十进制",
-  "radix.base.16": "十六进制"
+  "radix.base.16": "十六进制",
+  "thousands.copyHint": "按 Enter 完整复制 · 英文格式：逗号分组、点号小数 · 保留全部数字和尾零",
+  "thousands.syntax": "试试 千分位 12345.6700 → 12,345.6700",
+  "thousands.error.comma": "输入含逗号；请使用未分组数字和点号小数，避免地区格式歧义",
+  "thousands.error.invalid": "请输入可带正负号的十进制整数或小数，不支持表达式或科学记数法",
+  "thousands.error.limit": "数字文本最多 10,000 字符，超出时不截断"
 }

@@ -34,6 +34,10 @@ const cronModule = { exports: {} }
 vm.runInNewContext(ts.transpileModule(readFileSync('src/plugins/date-time-assistant/cronAnswer.ts', 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023 },
 }).outputText, { module: cronModule, exports: cronModule.exports, Date: FixedDate, Intl })
+const relativeModule = { exports: {} }
+vm.runInNewContext(ts.transpileModule(readFileSync('src/plugins/date-time-assistant/relativeTimeAnswer.ts', 'utf8'), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023 },
+}).outputText, { module: relativeModule, exports: relativeModule.exports, Date: FixedDate, Intl })
 const module = { exports: {} }
 const context = vm.createContext({
   Date: FixedDate,
@@ -45,6 +49,7 @@ const context = vm.createContext({
   module,
   exports: module.exports,
   require(specifier) {
+    if (specifier === './relativeTimeAnswer') return relativeModule.exports
     if (specifier === './cronAnswer') return cronModule.exports
     if (specifier === './timeZoneAnswer') return zoneModule.exports
     if (specifier === '@hiven/plugin') {
@@ -255,3 +260,20 @@ assert.equal(invalidNowResult.ok, false)
 assert.match(invalidNowResult.message, /cron.error.syntax/)
 fixedEpochMs = initialEpoch
 console.log('Cron dynamic execution refresh and failure checks passed')
+
+const relativeItem = (await provider({ query: '3天前', locale: 'zh', settings: {}, t: cronTranslate }))[0]
+assert.match(relativeItem.display.title, /2026-06-07 12:05:06 UTC\+08:00/)
+assert.match(relativeItem.display.subtitle, /2026-06-10 12:05:06 UTC\+08:00/)
+fixedEpochMs += 60_000
+const relativeCopies = []
+await relativeItem.execute({ api: { copyText: async (text) => relativeCopies.push(text) } })
+assert.match(relativeCopies[0], /2026-06-07 12:05:06 UTC\+08:00/)
+assert.match(relativeCopies[0], /2026-06-10 12:05:06 UTC\+08:00/)
+assert.match(relativeCopies[0], /Asia\/Shanghai/)
+const changedRelative = (await provider({ query: 'in 3 hours', locale: 'en', settings: {}, t: cronTranslate }))[0]
+await changedRelative.execute({ api: { copyText: async (text) => relativeCopies.push(text) } })
+assert.match(relativeCopies[1], /2026-06-10 15:06:06 UTC\+08:00/)
+assert.doesNotMatch(relativeCopies[1], /2026-06-07/)
+assert.equal((await values('1 month ago')).length, 0)
+fixedEpochMs = initialEpoch
+console.log('Relative dynamic answers keep an explicit base, copy full values, and respond to changed input')

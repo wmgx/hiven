@@ -50,9 +50,10 @@ try {
     ['sql-in-number', 'sql-number', 'sqlin.number', {}],
   ]
   assert.deepEqual(lineOperationRoutes.map((route) => route.surfaceId), routes.map(([id]) => id))
-  assert.equal(new Set(operations.map(({ value }) => value)).size, 17)
+  assert.equal(new Set(operations.map(({ value }) => value)).size, 19)
   assert.equal(getWorkbenchOperation('main'), 'trim', 'main keeps its existing initial operation')
   assert.equal(getWorkbenchOperation('unknown'), 'trim')
+  assert.equal(getWorkbenchOperation('regex-escape'), 'regex-escape')
   assert.equal(plugin.ui.surfaces.find(({ id }) => id === 'main').component, TextWorkbenchSurface)
 
   const sample = "  B  \r\n\r\nb\nO'Brien\n B \n🙂"
@@ -125,6 +126,14 @@ try {
   const encoded = ready('a & b/中文', 'url-encode')
   assert.equal(encoded, 'a%20%26%20b%2F%E4%B8%AD%E6%96%87')
   assert.equal(ready(encoded, 'url-decode'), 'a & b/中文')
+  assert.equal(ready('a.b\\c\n中文', 'regex-escape'), 'a\\.b\\\\c\\n中文')
+  const urlSource = '[https://label.example](https://target.example "https://title.example")\nhttps://target.example'
+  assert.equal(ready(urlSource, 'extract-urls'), 'https://target.example\nhttps://target.example')
+  assert.deepEqual(result('no links', 'extract-urls'), { status: 'error', messageKey: 'extractList.noUrls' })
+  assert.equal(ready('https://recovered.example', 'extract-urls'), 'https://recovered.example', 'editing recovers without source replacement')
+  const regexTool = plugin.tools.find(({ id }) => id === 'line-tools.regex-escape')
+  assert.equal(regexTool.run({ input: { text: 'a.b' }, output: { text: (text) => text } }), 'a\\.b')
+  assert.equal(regexTool.run({ input: { text: '' }, output: { error: (error) => error }, t: (key) => key }), 'regexEscape.empty')
   assert.deepEqual(result('{', 'json-format'), { status: 'error', messageKey: 'workbench.error.json' })
   assert.deepEqual(result('%E0%A4%A', 'url-decode'), { status: 'error', messageKey: 'workbench.error.url' })
   assert.equal(ready('{"fixed":true}', 'json-format'), '{\n  "fixed": true\n}', 'valid edits recover from an invalid result')

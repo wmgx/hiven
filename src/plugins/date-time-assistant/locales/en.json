@@ -66,5 +66,16 @@
   "cron.help": "Five fields: minute hour day month weekday; e.g. */5 * * * *",
   "cron.error.syntax": "Use standard five-field cron; seconds, Quartz symbols, macros and extra fields are unsupported",
   "cron.error.zone": "The local time zone is unavailable",
-  "cron.error.unreachable": "No matching date within the next eight years"
+  "cron.error.unreachable": "No matching date within the next eight years",
+  "relative.base": "Base {time} ({zone})",
+  "relative.calendar": "Calendar days: keep local time",
+  "relative.elapsed": "Exact elapsed hours/minutes",
+  "relative.copy": "Enter copies the displayed base and result",
+  "relative.help": "Examples: 3 days ago, in 3 hours; non-negative whole days/hours/minutes only",
+  "relative.error.syntax": "Use whole days, hours or minutes with an explicit ago/in direction",
+  "relative.error.range": "Limit: 3660 days, 87840 hours or 5270400 minutes",
+  "relative.error.unit": "Months/years are unsupported; use days or hours to avoid guessing month ends",
+  "relative.error.zone": "The local time zone is unavailable",
+  "relative.error.gap": "Target calendar time does not exist after a clock/date change; use exact hours",
+  "relative.error.fold": "Target calendar time occurs twice; use exact hours to disambiguate"
 }

@@ -1,0 +1,8 @@
+{
+  "pluginId": "curl-inspector",
+  "displayName": "cURL Inspector",
+  "displayNameI18n": { "zh": "cURL 解析" },
+  "version": "1.0.0",
+  "capabilities": ["surface"],
+  "permissions": ["clipboard.write"]
+}

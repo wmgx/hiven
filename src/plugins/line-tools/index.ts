@@ -21,6 +21,7 @@ import {
 } from './core'
 import { textToolRoutes } from './routes'
 import { extractTextList } from './extractTextList'
+import { escapeRegexPattern } from './escapeRegexPattern'
 import './style.css'
 
 const LEARNABLE_PURE = { effect: 'pure', learnable: true } as const
@@ -65,7 +66,7 @@ function cleanListText(text: string, params: Record<string, unknown>): string {
 function extractListText(ctx: PluginToolExplicitTextPreviewContext): PluginToolTextPreviewResult {
   const kind = ctx.params.kind ?? 'urls'
   if (kind !== 'urls' && kind !== 'emails') return { ok: false, message: ctx.t('extractList.invalidKind') }
-  const matches = extractTextList(ctx.input.text, kind, ctx.params.dedup !== false)
+  const matches = extractTextList(ctx.input.text, kind, ctx.params.dedup === true)
   return matches.length > 0
     ? { ok: true, text: matches.join('\n') }
     : { ok: false, message: ctx.t(kind === 'urls' ? 'extractList.noUrls' : 'extractList.noEmails') }
@@ -118,12 +119,19 @@ export const lineToolsPlugin = definePlugin({
   },
   tools: [
     {
+      id: 'line-tools.regex-escape', title: 'regexEscape.title', subtitle: 'regexEscape.description', icon: 'Regex',
+      aliases: ['escape regex', 'regex escape', '正则转义', '正则字面量'],
+      inputPolicy: { mode: 'auto' }, policy: LEARNABLE_PURE,
+      run(ctx) { return ctx.input.text.length ? ctx.output.text(escapeRegexPattern(ctx.input.text)) : ctx.output.error(ctx.t('regexEscape.empty')) },
+      surfaces: EDITOR_TOOL_SURFACES,
+    },
+    {
       id: 'line-tools.extract-list', title: 'extractList.title', subtitle: 'extractList.description', icon: 'ListFilter',
       aliases: ['extract links', 'extract urls', 'extract emails', 'extract email addresses', '提取链接', '提取网址', '提取邮箱', '提取邮件地址'],
       inputPolicy: { mode: 'auto' }, policy: LEARNABLE_PURE, requireParamSelection: true,
       params: [
         { key: 'kind', label: 'param.extractList.kind', hint: 'param.extractList.kindHint', type: 'single-select', options: [{ label: 'param.extractList.urls', value: 'urls' }, { label: 'param.extractList.emails', value: 'emails' }], default: 'urls', saveable: true },
-        { key: 'dedup', label: 'param.extractList.dedup', hint: 'param.extractList.dedupHint', type: 'boolean', default: true, saveable: true },
+        { key: 'dedup', label: 'param.extractList.dedup', hint: 'param.extractList.dedupHint', type: 'boolean', default: false, saveable: true },
       ],
       explicitTextPreview: { run: extractListText },
       run(ctx) {

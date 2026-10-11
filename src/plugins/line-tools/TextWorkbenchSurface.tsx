@@ -266,7 +266,7 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
               <TextInput value={options[key]} aria-label={t(`param.${key}`)} onChange={(event) => changeOption(key, event.currentTarget.value)} />
             </label>
           ))}
-          {!['json-format', 'sort', 'dedup', 'clean-list', 'join', 'prepend', 'append', 'wrap'].includes(operation) ? <span>{t('option.livePreview')}</span> : null}
+          {!['json-format', 'sort', 'dedup', 'clean-list', 'join', 'prepend', 'append', 'wrap'].includes(operation) ? <span>{t(operation === 'regex-escape' ? 'regexEscape.hint' : operation === 'extract-urls' ? 'extractUrls.hint' : 'option.livePreview')}</span> : null}
         </div>
       </div>
 

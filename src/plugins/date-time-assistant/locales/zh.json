@@ -66,5 +66,16 @@
   "cron.help": "五字段：分钟 小时 日期 月份 星期；例如 */5 * * * *",
   "cron.error.syntax": "仅支持标准五字段 Cron；不支持秒字段、Quartz 特殊符号、宏或附加字段",
   "cron.error.zone": "无法读取本地时区",
-  "cron.error.unreachable": "未来八年内没有满足条件的日期"
+  "cron.error.unreachable": "未来八年内没有满足条件的日期",
+  "relative.base": "基准 {time}（{zone}）",
+  "relative.calendar": "日历天：保留当地时分秒",
+  "relative.elapsed": "精确时长：小时／分钟",
+  "relative.copy": "回车复制显示的基准与结果",
+  "relative.help": "例如 3天前、2小时后、3 days ago、in 3 hours；仅支持非负整数天／小时／分钟",
+  "relative.error.syntax": "请输入明确的整数天／小时／分钟及前后方向",
+  "relative.error.range": "超出范围：最多 3660 天、87840 小时或 5270400 分钟",
+  "relative.error.unit": "暂不支持月／年；请使用明确的天或小时，避免猜测月末日期",
+  "relative.error.zone": "无法读取本地时区",
+  "relative.error.gap": "目标日历时刻不存在（夏令时或日期跳变）；请改用精确小时",
+  "relative.error.fold": "目标日历时刻重复出现，无法唯一确定；请改用精确小时"
 }

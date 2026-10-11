@@ -266,8 +266,8 @@ export function createPluginClipboard(
     async writeText(text: string, options?: { sensitive?: boolean; recordInHistory?: boolean }): Promise<void> {
       requirePermissions(['clipboard.write'])
       if (options?.recordInHistory === false) {
-        if (pluginId !== 'clipboard-history' || options.sensitive) {
-          throw new Error('History-preserving copy is restricted to clipboard history')
+        if (!['clipboard-history', 'curl-inspector'].includes(pluginId) || options.sensitive) {
+          throw new Error('History-preserving copy is restricted to approved text tools')
         }
         const { writeTextWithoutHistory } = await import('./nativeClipboard')
         await writeTextWithoutHistory(text)

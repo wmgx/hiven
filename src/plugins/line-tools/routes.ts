@@ -47,4 +47,9 @@ export const statsRoute: TextToolRoute = {
   aliases: ['text statistics', 'word count', 'character count', 'stats', 'wc', '文本统计', '字数统计', '统计', '字数', '字符数', '行数'],
 }
 
-export const textToolRoutes = [...lineOperationRoutes, ...caseOperationRoutes, statsRoute]
+export const textToolRoutes = [
+  ...lineOperationRoutes,
+  { surfaceId: 'regex-escape', titleKey: 'regexEscape.title', group: 'lines', aliases: ['escape regex', 'regex escape', 'escape regexp', '正则转义', '正则字面量'] } satisfies TextToolRoute,
+  ...caseOperationRoutes,
+  statsRoute,
+]

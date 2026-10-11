@@ -1,4 +1,5 @@
 import { definePlugin, getPluginHostSdk, textError, textOutput, type TextInput, type LauncherDynamicContext, type LauncherItemContribution, type PluginSurfaceProps, type PluginToolSurfaces } from '@hiven/plugin'
+import { parseRelativeTimeAnswer } from './relativeTimeAnswer'
 import { parseCronAnswer } from './cronAnswer'
 import { parseTimeZoneAnswer } from './timeZoneAnswer'
 import type { DateTimeConversionResult } from './DateTimeSurface'
@@ -563,6 +564,25 @@ export const dateTimeAssistantPlugin = definePlugin({
       const input = ctx.query
       if (!input) return []
       const now = new Date()
+      const relative = parseRelativeTimeAnswer(input, now)
+      if (relative) {
+        if (!relative.ok) return [{
+          id: 'dt-relative-error', display: { title: ctx.t(`relative.error.${relative.error}`), subtitle: ctx.t('relative.help'), icon: 'Clock' },
+          behavior: { type: 'perform' }, surfaces: ['global-launcher'], directAnswer: true,
+          execute() { return { ok: false, message: ctx.t(`relative.error.${relative.error}`) } },
+        }]
+        const value = relative.value
+        const base = ctx.t('relative.base', { time: value.base, zone: value.zone })
+        const rule = ctx.t(value.mode === 'calendar' ? 'relative.calendar' : 'relative.elapsed')
+        // Copy this explicit displayed base and result together, rather than
+        // silently moving the reference time when the user activates the answer.
+        const copied = `${input.trim()} → ${value.target} (${value.zone}) · ${base} · ${rule}`
+        return [{
+          id: 'dt-relative-answer', display: { title: `${input.trim()} → ${value.target}`, subtitle: `${base} · ${rule} · ${ctx.t('relative.copy')}`, icon: 'Clock' },
+          behavior: { type: 'perform' }, surfaces: ['global-launcher'], directAnswer: true,
+          async execute(execution) { await execution.api.copyText(copied); return { ok: true } },
+        }]
+      }
       const cron = parseCronAnswer(input, now)
       if (cron) {
         if (!cron.ok) return [{

@@ -111,5 +111,18 @@
   "toast.saveBusy": "另一次保存正在进行，完整结果仍保留，请稍后重试。",
   "toast.saveFailed": "保存完整结果失败，结果仍保留，请重试。",
   "output.markdownRules": "单元格按纯文本输出：换行变为 <br>，HTML 和 Markdown 语法转义。JSON 仅接受对象数组：按对象键首次出现顺序生成列，缺失值/null 留空，嵌套值用紧凑 JSON；保留空键和含空格键。CSV 多出字段自动补列名。",
-  "error.jsonObjects": "JSON 必须是对象数组，不接受单个对象或含基本值、数组、null 的行。"
+  "error.jsonObjects": "JSON 必须是对象数组，不接受单个对象或含基本值、数组、null 的行。",
+  "statistics.title": "选中列统计",
+  "statistics.all": "全部结果行 · {count}",
+  "statistics.filtered": "当前筛选结果 · {count} 行",
+  "statistics.precision": "精确求和 · 均值最多20位有效数字",
+  "statistics.values": "求和 {sum} · 平均 {average} · 去重计数 {distinct}",
+  "statistics.counts": "有效数字 {valid} · 空值 {empty} · 无效 {invalid} · 超范围 {range}",
+  "statistics.pendingFull": "请先完成全量处理，再计算统计。",
+  "statistics.calculating": "正在统计全部结果行…",
+  "statistics.notInResult": "当前结果不包含选中的列。",
+  "statistics.emptyHeader": "（空列名）",
+  "statistics.rulesLabel": "计数与精度规则",
+  "statistics.rules": "统计筛选和转换后的全部结果行，不取预览。空值和纯空白不按0计算。仅接受十进制/科学计数法，最多100位有效数字，指数绝对值≤1000，最多512字符；无效或超范围值不参与求和/平均。求和精确，均值最多20位有效数字，按四舍五入取近似值（≈标记舍入）。去重按非空单元格原始字符串，区分大小写和空格，1与1.0不同；JSON缺失/null为空。",
+  "statistics.failed": "统计失败，请重新选择列以重试。"
 }

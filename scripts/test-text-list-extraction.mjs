@@ -29,19 +29,19 @@ try {
     'https://[::1]:8080/path',
   ]
   const sourceUrls = `链接：“${urls[0]}”， (${urls[1]}).\r\n<${urls[2]}>; ${urls[3]}! [${urls[4]}]。\n${urls[0]}`
-  assert.deepEqual(extractTextList(sourceUrls, 'urls'), urls, 'keep spelling, source order, balanced brackets, query/fragment and first duplicate')
-  assert.deepEqual(extractTextList(sourceUrls, 'urls', false), [...urls, urls[0]], 'dedup off retains every occurrence')
+  assert.deepEqual(extractTextList(sourceUrls, 'urls', true), urls, 'keep spelling, source order, balanced brackets, query/fragment and first duplicate')
+  assert.deepEqual(extractTextList(sourceUrls, 'urls'), [...urls, urls[0]], 'dedup off retains every occurrence')
   assert.deepEqual(extractTextList('https://example.com/a(b(c)))). https://example.com/x[y]] https://example.com/a{b}}', 'urls'), [
     'https://example.com/a(b(c))', 'https://example.com/x[y]', 'https://example.com/a{b}',
   ], 'remove only excess trailing bracket closers')
-  assert.deepEqual(extractTextList('https://EXAMPLE.com/A?b=2&a=1 https://example.com/a?a=1&b=2 https://EXAMPLE.com/A?b=2&a=1', 'urls'), [
+  assert.deepEqual(extractTextList('https://EXAMPLE.com/A?b=2&a=1 https://example.com/a?a=1&b=2 https://EXAMPLE.com/A?b=2&a=1', 'urls', true), [
     'https://EXAMPLE.com/A?b=2&a=1', 'https://example.com/a?a=1&b=2',
   ], 'URL dedup never changes case, query order, host spelling or path')
   assert.deepEqual(extractTextList('www.example.com ftp://example.com mailto:a@example.com http:// https://?bad prefixhttps://example.com', 'urls'), [], 'require an explicit standalone HTTP(S) scheme and parsed host')
   assert.deepEqual(extractTextList('https://example.com/中文?q=值，https://example.com/next。', 'urls'), ['https://example.com/中文?q=值', 'https://example.com/next'], 'Chinese punctuation separates links while Unicode paths remain intact')
   assert.deepEqual(extractTextList('[https://one.example](https://two.example) https://a.example/x,https://b.example/y;https://c.example/z', 'urls'), [
-    'https://one.example', 'https://two.example', 'https://a.example/x', 'https://b.example/y', 'https://c.example/z',
-  ], 'Markdown URL labels and punctuation-separated URLs never swallow each other')
+    'https://two.example', 'https://a.example/x', 'https://b.example/y', 'https://c.example/z',
+  ], 'Markdown uses only link destinations and keeps punctuation-separated URLs')
   assert.deepEqual(extractTextList('https://example.com/?next=https://other.example/path', 'urls'), ['https://example.com/?next=https://other.example/path'], 'embedded redirect query remains one URL')
   assert.deepEqual(extractTextList('"a.b+tag_1-x@Sub.Example.COM", a.b+tag_1-x@sub.example.com A.b+tag_1-x@sub.example.com; next@example.org.', 'emails'), [
     'a.b+tag_1-x@Sub.Example.COM', 'A.b+tag_1-x@sub.example.com', 'next@example.org',
@@ -80,9 +80,9 @@ try {
   assert.deepEqual(item.actionPolicy, { effect: 'pure', learnable: true })
   assert.equal(item.display.title, 'Extract Links / Emails')
   assert.equal(item.display.titleI18n.zh, '提取链接 / 邮箱')
-  assert.deepEqual(item.defaultParams, { kind: 'urls', dedup: true })
+  assert.deepEqual(item.defaultParams, { kind: 'urls', dedup: false })
   assert.deepEqual(item.params.map(({ key, type, default: value, saveable }) => [key, type, value, saveable]), [
-    ['kind', 'single-select', 'urls', true], ['dedup', 'boolean', true, true],
+    ['kind', 'single-select', 'urls', true], ['dedup', 'boolean', false, true],
   ])
   for (const param of item.params) {
     assert.ok(param.label && param.labelI18n.zh && param.hint && param.hintI18n.zh)

@@ -27,6 +27,7 @@ import {
   type OutputMode,
   type FullProcessResult,
 } from './csvCore'
+import { columnStatistics, type ColumnStatistics } from './columnStatistics'
 import {
   defaultSqlTemplate,
   getSqlCompletions,
@@ -441,6 +442,21 @@ export function CsvSurface(props: PluginSurfaceProps) {
     ? fullJobReady ? fullResultRef.current!.table
       : !returnNeedsFullProcess && queryResult?.ok ? queryResult.table : null
     : null
+  const [statistics, setStatistics] = useState<{ table: typeof finalTable; columns: typeof selectedColumns; values: ColumnStatistics[] | null } | null>(null)
+  useEffect(() => {
+    setStatistics(null)
+    if (!finalTable || !selectedColumns.size) return
+    const controller = new AbortController()
+    void columnStatistics(finalTable, selectedColumns, controller.signal).then((values) => {
+      if (!controller.signal.aborted) setStatistics({ table: finalTable, columns: selectedColumns, values })
+    }).catch(() => {
+      if (!controller.signal.aborted) setStatistics({ table: finalTable, columns: selectedColumns, values: null })
+    })
+    return () => controller.abort()
+  }, [finalTable, selectedColumns])
+  const currentStatistics = statistics?.table === finalTable && statistics?.columns === selectedColumns ? statistics.values : null
+  const statisticsFailed = statistics?.table === finalTable && statistics?.columns === selectedColumns && statistics.values === null
+  const statisticsFiltered = Boolean((filterMode === 'sql' ? sqlFilter : globalFilter).trim())
   const gridSlice = useMemo(() => finalTable ? sliceTable(finalTable, GRID_MAX_ROWS) : null, [finalTable])
   // Keep the same filter controls available for pending, invalid and zero-row results.
   const table = gridSlice?.table ?? (tableFull ? { headers: tableFull.headers, rows: [] } : null)
@@ -1013,12 +1029,27 @@ export function CsvSurface(props: PluginSurfaceProps) {
   }, [canCopyOutput, cellBlock, copyFullOutput, copySelection, mainView, resultRevision, selectedCell, selectedColumns.size, sourceText, writeClipboard])
 
   // Row identities belong to the current final result; a query edit must not
-  // leave a cell or range pointing at a different row. Conditions stay intact.
+  // leave a cell or range pointing at a different row. Column identities survive
+  // filtering/sorting so their statistics continue following the current result.
   useEffect(() => {
     setSelectedCell(null)
-    setSelectedColumns(new Set())
     setCellBlock(null)
   }, [sourceText, resultParameters])
+
+  useEffect(() => {
+    setSelectedColumns(new Set())
+  }, [sourceText, delimiter, header, transpose])
+
+  useEffect(() => {
+    // Keep the selection while a full result is pending or the query is incomplete.
+    // A completed projection may remove columns, but zero-row filters do not.
+    if (!finalTable) return
+    const available = new Set(finalTable.headers)
+    setSelectedColumns((selected) => {
+      const retained = new Set([...selected].filter((column) => available.has(column)))
+      return retained.size === selected.size ? selected : retained
+    })
+  }, [finalTable])
 
   const showTruncationBanner = needsFullProcess || returnNeedsFullProcess
 
@@ -1521,6 +1552,22 @@ export function CsvSurface(props: PluginSurfaceProps) {
                 {filterError ? (
                   <div className="csv-tools-surface__filter-error" role="alert">
                     {localizedText(t, 'table.sqlError', 'SQL: {message}', { message: filterError })}
+                  </div>
+                ) : null}
+                {selectedColumns.size > 0 ? (
+                  <div className="csv-tools-surface__statistics" role="region" aria-label={t('statistics.title')} data-launcher-scrollable>
+                    <div className="csv-tools-surface__statistics-scope">
+                      {finalTable ? t(statisticsFiltered ? 'statistics.filtered' : 'statistics.all', { count: totalDataRows }) : t('statistics.title')}
+                      <span title={t('statistics.rules')}> · {t('statistics.precision')}</span>
+                    </div>
+                    {!finalTable ? t('statistics.pendingFull') : statisticsFailed ? t('statistics.failed') : !currentStatistics ? t('statistics.calculating') : currentStatistics.length === 0 ? t('statistics.notInResult') : currentStatistics.map((stats) => (
+                      <div key={stats.index} className="csv-tools-surface__statistics-row">
+                        <strong>{stats.column || t('statistics.emptyHeader')}</strong>
+                        <span>{t('statistics.values', { sum: stats.sum ?? '—', average: stats.average === null ? '—' : `${stats.averageRounded ? '≈' : ''}${stats.average}`, distinct: stats.distinct })}</span>
+                        <span>{t('statistics.counts', { valid: stats.valid, empty: stats.empty, invalid: stats.invalid, range: stats.outOfRange })}</span>
+                      </div>
+                    ))}
+                    <details><summary>{t('statistics.rulesLabel')}</summary>{t('statistics.rules')}</details>
                   </div>
                 ) : null}
                 <div className="csv-tools-surface__grid-host" data-no-drag data-launcher-scrollable>

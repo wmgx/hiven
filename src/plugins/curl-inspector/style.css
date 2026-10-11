@@ -1,0 +1,17 @@
+.curl-inspector { box-sizing: border-box; height: 100%; overflow: auto; padding: 18px; font: 13px/1.5 var(--hiven-font-ui); color: var(--hiven-color-text-primary); }
+.curl-inspector h2 { font-size: 19px; margin: 0 0 6px; }
+.curl-inspector h3 { font-size: 14px; margin: 14px 0 4px; }
+.curl-inspector p { margin: 5px 0 10px; color: var(--hiven-color-text-secondary); }
+.curl-inspector button { border: 1px solid var(--hiven-color-border); border-radius: 5px; padding: 4px 9px; background: var(--hiven-color-bg-secondary); color: inherit; cursor: pointer; font: inherit; }
+.curl-inspector button:disabled { opacity: .4; cursor: default; }
+.curl-inspector button:focus-visible, .curl-inspector textarea:focus-visible, .curl-inspector pre:focus-visible { outline: 2px solid var(--hiven-color-accent, #477be3); outline-offset: 2px; }
+.curl-inspector textarea { box-sizing: border-box; width: 100%; resize: vertical; padding: 9px; border: 1px solid var(--hiven-color-border); border-radius: 6px; background: var(--hiven-color-bg-secondary); color: inherit; font: 12px/1.5 monospace; }
+.curl-source-masked { -webkit-text-security: disc; }
+.curl-source-actions, .curl-field-heading, .curl-field-heading > div { display: flex; align-items: center; gap: 6px; }
+.curl-source-actions { margin: 5px 0 8px; flex-wrap: wrap; }
+.curl-field { margin-top: 9px; }
+.curl-field-heading { justify-content: space-between; }
+.curl-field-heading > span { overflow-wrap: anywhere; min-width: 0; }
+.curl-field pre { margin: 4px 0; padding: 8px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 150px; overflow: auto; background: var(--hiven-color-bg-secondary); border-radius: 6px; user-select: text; }
+.curl-error { color: var(--hiven-color-error, #c34a4a) !important; }
+.curl-status { margin-top: 10px; min-height: 20px; }

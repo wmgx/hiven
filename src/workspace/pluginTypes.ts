@@ -604,7 +604,7 @@ export type PluginClipboardApi = {
    * DataError (image limits/shape), or NotReadableError (read/encoding failure).
    */
   readImage?: (options?: { signal?: AbortSignal }) => Promise<PluginClipboardImage>
-  /** recordInHistory:false is restricted to clipboard-history text assembly on native desktop. */
+  /** recordInHistory:false is restricted to History assembly and curl inspection on native desktop. */
   writeText(text: string, options?: { sensitive?: boolean; recordInHistory?: boolean }): Promise<void>
   writeImage(blobId: string): Promise<void>
   writeFiles(paths: string[]): Promise<void>

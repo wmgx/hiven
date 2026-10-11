@@ -1,5 +1,7 @@
 import { cleanLineList, processLines, type LineOperation, type LineOptions } from './core'
 import { lineOperationRoutes } from './routes'
+import { escapeRegexPattern } from './escapeRegexPattern'
+import { extractTextList } from './extractTextList'
 
 export type WorkbenchCategory = 'text' | 'json' | 'url'
 export type WorkbenchOperation =
@@ -11,6 +13,8 @@ export type WorkbenchOperation =
   | 'json-compact'
   | 'url-encode'
   | 'url-decode'
+  | 'regex-escape'
+  | 'extract-urls'
 
 export type WorkbenchOptions = LineOptions & {
   indent: number
@@ -49,10 +53,12 @@ export const WORKBENCH_OPERATIONS: readonly {
   { value: 'wrap', category: 'text', label: 'wrap.title' },
   { value: 'sql-string', category: 'text', label: 'sqlin.string.title' },
   { value: 'sql-number', category: 'text', label: 'sqlin.number.title' },
+  { value: 'regex-escape', category: 'text', label: 'regexEscape.title' },
   { value: 'json-format', category: 'json', label: 'workbench.operation.jsonFormat' },
   { value: 'json-compact', category: 'json', label: 'workbench.operation.jsonCompact' },
   { value: 'url-encode', category: 'url', label: 'workbench.operation.urlEncode' },
   { value: 'url-decode', category: 'url', label: 'workbench.operation.urlDecode' },
+  { value: 'extract-urls', category: 'url', label: 'extractUrls.title' },
 ]
 
 // Keep these aligned with existing tool parameters so opening a route preserves
@@ -73,6 +79,7 @@ export const DEFAULT_WORKBENCH_OPTIONS: Readonly<WorkbenchOptions> = {
 }
 
 export function getWorkbenchOperation(surfaceId?: string): WorkbenchOperation {
+  if (surfaceId === 'regex-escape') return 'regex-escape'
   const operation = lineOperationRoutes.find((route) => route.surfaceId === surfaceId)?.operation
   if (operation === 'trim-whitespace') return 'trim'
   if (operation === 'remove-blank-lines') return 'remove-blank'
@@ -96,6 +103,13 @@ export function evaluateWorkbench(
       case 'json-compact': text = inputText.trim() ? textTransforms.compactJson(inputText) : ''; break
       case 'url-encode': text = textTransforms.urlEncode(inputText); break
       case 'url-decode': text = textTransforms.urlDecode(inputText); break
+      case 'regex-escape': text = escapeRegexPattern(inputText); break
+      case 'extract-urls': {
+        const urls = extractTextList(inputText, 'urls', false)
+        if (!urls.length) return { status: 'error', messageKey: 'extractList.noUrls' }
+        text = urls.join('\n')
+        break
+      }
       default: text = processLines(operation, inputText, options)
     }
     return { status: 'ready', text }

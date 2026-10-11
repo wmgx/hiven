@@ -79,5 +79,10 @@
   "radix.base.2": "Binary",
   "radix.base.8": "Octal",
   "radix.base.10": "Decimal",
-  "radix.base.16": "Hex"
+  "radix.base.16": "Hex",
+  "thousands.copyHint": "Enter to copy in full · English format: comma grouping, decimal point · All digits and trailing zeros preserved",
+  "thousands.syntax": "Try thousands 12345.6700 → 12,345.6700",
+  "thousands.error.comma": "Input contains a comma; use ungrouped digits and a decimal point to avoid locale ambiguity",
+  "thousands.error.invalid": "Enter a decimal integer or number, with an optional sign; no expressions or exponent notation",
+  "thousands.error.limit": "Number formatting accepts at most 10,000 input characters; nothing is truncated"
 }

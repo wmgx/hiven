@@ -72,13 +72,13 @@
   "case.copyLabel": "复制 {format}",
   "case.emptyResult": "等待输入",
   "extractList.title": "提取链接 / 邮箱",
-  "extractList.description": "按原文顺序提取，每行一项；预览后再复制或继续使用。不验证链接能否访问或邮箱是否存在。",
+  "extractList.description": "每项一行，默认保留顺序与重复。Markdown 提取目标，不提取标签或标题。预览后复制，不打开链接或图片。",
   "param.extractList.kind": "提取内容",
   "param.extractList.kindHint": "链接须含 http:// 或 https://；常见邮箱如 name+tag@example.com。邮箱与前后文字请用空格或标点隔开，不支持带引号或国际化地址。",
   "param.extractList.urls": "HTTP(S) 链接",
   "param.extractList.emails": "常见邮箱地址",
   "param.extractList.dedup": "去除重复项",
-  "param.extractList.dedupHint": "默认开启，保留首次原文和顺序。链接按原文完全一致去重；邮箱域名忽略大小写，@ 前区分大小写。",
+  "param.extractList.dedupHint": "默认关闭；开启后仅保留首次出现。链接按原文精确比较；邮箱域名忽略大小写，@ 前区分大小写。",
   "extractList.noUrls": "未找到 HTTP(S) 链接。请输入含 http:// 或 https:// 链接的文本，或改选邮箱地址。",
   "extractList.noEmails": "未找到支持的邮箱地址。请输入含 name+tag@example.com 这类地址的文本，或改选 HTTP(S) 链接。",
   "extractList.invalidKind": "请选择 HTTP(S) 链接或常见邮箱地址后重试。",
@@ -122,5 +122,11 @@
   "count.lines": "行数：{count}", "count.words": "单词数：{count}",
   "count.characters": "字符数：{count}", "count.charactersNoSpace": "字符数（不含空白）：{count}",
   "count.linesLabel": "行数", "count.wordsLabel": "单词数", "count.charactersLabel": "字符数", "count.charactersNoSpaceLabel": "不含空白字符数",
-  "error.convert": "转换失败：{message}"
+  "error.convert": "转换失败：{message}",
+  "regexEscape.title": "正则转义",
+  "regexEscape.description": "将字面文本转为正则模式，不加 JS 字符串引号、不二次转义、不执行。",
+  "regexEscape.hint": "正则模式，非 JS 字符串 · 不执行 · 空输入不生成输出",
+  "regexEscape.empty": "请输入要转义的文本；空输入不更改原文和剪贴板。",
+  "extractUrls.title": "提取 URL",
+  "extractUrls.hint": "仅 HTTP(S) 目标 · 一行一个 · 保序保重复 · 不打开链接或图片"
 }
