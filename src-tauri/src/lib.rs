@@ -28,6 +28,7 @@ mod plugin_kv_paging;
 mod paste_recovery;
 mod launcher_resize_state;
 mod plugin_png_export;
+mod plugin_surface_handoff;
 mod host_text_export;
 mod text_material;
 mod toast_hud;
@@ -71,24 +72,12 @@ static INSTALLED_APP_TARGETS: OnceLock<Mutex<HashMap<String, String>>> = OnceLoc
 static PLUGIN_KV_DB: OnceLock<Result<Mutex<PluginKvDb>, String>> = OnceLock::new();
 static LAST_SAVEABLE_RUN: OnceLock<Mutex<Option<serde_json::Value>>> = OnceLock::new();
 static PLUGIN_SURFACE_WINDOW_TOKENS: OnceLock<Mutex<HashMap<String, u64>>> = OnceLock::new();
-static PLUGIN_SURFACE_PAYLOADS: OnceLock<Mutex<HashMap<String, PluginSurfacePayload>>> =
-    OnceLock::new();
 static SURFACE_REGISTRY: OnceLock<SurfaceRegistryState> = OnceLock::new();
 static LAUNCHER_RESIZE_STATE: OnceLock<Mutex<launcher_resize_state::LauncherResizeState>> = OnceLock::new();
 const SURFACE_REGISTRY_EVENT: &str = "hiven://surface-registry-sync";
 const MAX_APP_ICON_CACHE_WARM_COUNT: usize = 20;
 const LAUNCHER_PERF_ENV: &str = "HIVEN_LAUNCHER_PERF";
 const LAST_SAVEABLE_RUN_TTL_MS: i64 = 30 * 60 * 1000;
-
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct PluginSurfacePayload {
-    initial_text: Option<String>,
-}
-
-fn plugin_surface_payloads() -> &'static Mutex<HashMap<String, PluginSurfacePayload>> {
-    PLUGIN_SURFACE_PAYLOADS.get_or_init(|| Mutex::new(HashMap::new()))
-}
 
 fn launcher_perf_enabled() -> bool {
     std::env::var(LAUNCHER_PERF_ENV).ok().as_deref() == Some("1")
@@ -2000,6 +1989,7 @@ async fn hide_plugin_surface_window(
     let destroy_timeout_ms =
         destroy_timeout_ms.unwrap_or(PLUGIN_SURFACE_WINDOW_DEFAULT_DESTROY_TIMEOUT_MS);
     paste_recovery::invalidate_window(&label, None);
+    plugin_surface_handoff::invalidate_window(&label);
     let token = touch_plugin_surface_window(&label);
     let Some(window) = app.get_webview_window(&label) else {
         return Ok(());
@@ -2041,23 +2031,6 @@ fn url_query_encode(value: &str) -> String {
 
 fn plugin_surface_window_tokens() -> &'static Mutex<HashMap<String, u64>> {
     PLUGIN_SURFACE_WINDOW_TOKENS.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-#[tauri::command(rename_all = "camelCase")]
-fn plugin_surface_payload_set(label: String, payload: PluginSurfacePayload) -> Result<(), String> {
-    plugin_surface_payloads()
-        .lock()
-        .map_err(|_| "plugin surface payload lock poisoned".to_string())?
-        .insert(label, payload);
-    Ok(())
-}
-
-#[tauri::command(rename_all = "camelCase")]
-fn plugin_surface_payload_consume(label: String) -> Result<Option<PluginSurfacePayload>, String> {
-    let mut payloads = plugin_surface_payloads()
-        .lock()
-        .map_err(|_| "plugin surface payload lock poisoned".to_string())?;
-    Ok(payloads.remove(&label))
 }
 
 fn touch_plugin_surface_window(label: &str) -> u64 {
@@ -2126,6 +2099,7 @@ fn attach_plugin_surface_window_events(
             if host_text_export::has_open_surface_dialog(&export_window) {
                 return;
             }
+            plugin_surface_handoff::invalidate_window(&label);
             host_text_export::invalidate_window(&export_window);
             let token = touch_plugin_surface_window(&label);
             if let Some(window) = app.get_webview_window(&label) {
@@ -2143,11 +2117,13 @@ fn attach_plugin_surface_window_events(
         }
         tauri::WindowEvent::CloseRequested { .. } => {
             toast_hud::invalidate_owner(export_window.app_handle(), &label);
+            plugin_surface_handoff::invalidate_window(&label);
             host_text_export::invalidate_window(&export_window);
             paste_recovery::invalidate_window(&label, Some(instance));
         }
         tauri::WindowEvent::Destroyed => {
             toast_hud::invalidate_owner(export_window.app_handle(), &label);
+            plugin_surface_handoff::invalidate_window(&label);
             host_text_export::invalidate_window(&export_window);
             if !paste_recovery::destroyed(&label, instance) {
                 return;
@@ -7834,8 +7810,11 @@ pub fn run() {
             close_quick_editor_window,
             show_plugin_surface_window,
             hide_plugin_surface_window,
-            plugin_surface_payload_set,
-            plugin_surface_payload_consume,
+            plugin_surface_handoff::plugin_surface_handoff_begin,
+            plugin_surface_handoff::plugin_surface_handoff_peek,
+            plugin_surface_handoff::plugin_surface_handoff_status,
+            plugin_surface_handoff::plugin_surface_handoff_finish,
+            plugin_surface_handoff::plugin_surface_handoff_cancel,
             simulate_paste,
             current_foreground_app_name,
             current_foreground_app_context,

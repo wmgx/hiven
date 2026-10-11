@@ -14,6 +14,7 @@ type DiffPayload = {
   original: DiffSource
   modified: DiffSource
   sources?: DiffSource[]
+  mode?: DiffMode
 }
 
 function asDiffSource(side: Partial<DiffSource> | undefined, fallbackId: string): DiffSource {
@@ -40,8 +41,9 @@ function parsePayload(initialText?: string): DiffPayload {
     }
   }
   try {
-    const parsed = JSON.parse(initialText) as { original?: Partial<DiffSource>; modified?: Partial<DiffSource>; sources?: Partial<DiffSource>[] }
+    const parsed = JSON.parse(initialText) as { original?: Partial<DiffSource>; modified?: Partial<DiffSource>; sources?: Partial<DiffSource>[]; mode?: DiffMode }
     return {
+      mode: parsed.mode === 'text' || parsed.mode === 'json' ? parsed.mode : undefined,
       sources: Array.isArray(parsed.sources) ? parsed.sources.map((source, i) => asDiffSource(source, String(i))) : [],
       original: asDiffSource(parsed.original, 'original'),
       modified: asDiffSource(parsed.modified, 'modified'),
@@ -174,7 +176,7 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
     invalidateCopy()
     invalidateSourceReads()
   }, [invalidateCopy, invalidateSourceReads])
-  const [diffMode, setDiffMode] = useState<DiffMode>(surfaceId === 'json' ? 'json' : 'text')
+  const [diffMode, setDiffMode] = useState<DiffMode>(payload.mode ?? (surfaceId === 'json' ? 'json' : 'text'))
 
   const sourceOptions = payload.sources?.length ? payload.sources : [
     asDiffSource({ sourceId: 'clipboard', kind: 'clipboard', title: t('choice.clipboard') }, 'clipboard'),
@@ -265,9 +267,10 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
 
   const handleDetach = useCallback(() => {
     leaveSurface()
-    const p = JSON.stringify({ original: { text: originalText }, modified: { text: modifiedText } })
+    const snapshot = (source: DiffSource, text: string) => ({ sourceId: source.sourceId, kind: 'empty', title: source.title, language: source.language, text })
+    const p = JSON.stringify({ original: snapshot(originalSource, originalText), modified: snapshot(modifiedSource, modifiedText), mode: diffMode })
     host.detachToWindow(p)
-  }, [originalText, modifiedText, host, leaveSurface])
+  }, [originalText, modifiedText, originalSource, modifiedSource, diffMode, host, leaveSurface])
 
   const handlePrevHunk = useCallback(() => {
     if (totalHunks === 0) return

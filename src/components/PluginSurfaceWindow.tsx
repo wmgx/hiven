@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore, type PluginSurfaceOpenTarget } from '../store'
 import type { PluginSettingsSource } from '../workspace/pluginSettingsStore'
 import { markSurfaceInstanceState, upsertSurfaceInstance } from '../surfaces/registry'
 import { pluginSurfaceInstanceId, pluginSurfaceWindowLabel } from '../workspace/pluginSurfaceWindows'
 import { hideCurrentPluginSurfaceWindow, hidePluginSurfaceWindow } from '../workspace/windowManager/pluginSurfaceWindows'
-import { useT } from '../i18n'
+import { useT, t as translate } from '../i18n'
+import { ConfirmDialog } from '../plugin-ui'
+import { invoke } from '@tauri-apps/api/core'
 import { PluginSettingsDialog } from './PluginSettingsDialog'
 import { ToastContainer } from './workspace/ToastContainer'
 import { PluginSurfaceRenderer, usePluginSurfaceRendersTitlebar, usePluginSurfaceTitle } from './pluginSurface/PluginSurfaceRenderer'
@@ -15,21 +17,121 @@ export function PluginSurfaceWindow() {
   const theme = useAppStore((s) => s.settings.theme)
   const t = useT('workspace')
   const baseTarget = useMemo(() => parseTargetFromUrl(), [])
-  const [target, setTarget] = useState<PluginSurfaceOpenTarget | null>(null)
+  type Entry = { id: string; target: PluginSurfaceOpenTarget }
+  type Request = { id: string; initialText: string; status: string }
+  const [active, setActive] = useState<Entry | null>(null)
+  const activeRef = useRef<Entry | null>(null)
+  const [pending, setPending] = useState<Request | null>(null)
+  const pendingRef = useRef<Request | null>(null)
+  const [staged, setStaged] = useState<Entry | null>(null)
+  const stagedRef = useRef<Entry | null>(null)
+  const settlingRef = useRef(false)
+  const aliveRef = useRef(false)
   const [targetReady, setTargetReady] = useState(false)
+  const target = active?.target ?? staged?.target ?? baseTarget
   const title = usePluginSurfaceTitle(target, locale)
   const usesPluginTitlebar = usePluginSurfaceRendersTitlebar(target)
+  const clearPending = useCallback(() => {
+    pendingRef.current = null
+    stagedRef.current = null
+    setPending(null)
+    setStaged(null)
+    if (!activeRef.current && baseTarget) {
+      const entry = { id: 'initial', target: baseTarget }
+      activeRef.current = entry
+      setActive(entry)
+    }
+  }, [baseTarget])
+  const rejectPending = useCallback(async () => {
+    const request = pendingRef.current
+    if (!request || settlingRef.current) return
+    settlingRef.current = true
+    try { await invoke('plugin_surface_handoff_finish', { id: request.id, accepted: false }) }
+    finally {
+      settlingRef.current = false
+      if (aliveRef.current && pendingRef.current === request) clearPending()
+    }
+  }, [clearPending])
+  const hide = useCallback(async () => {
+    if (settlingRef.current) return
+    await rejectPending().catch(() => undefined)
+    await hideCurrentWindow(baseTarget)
+  }, [baseTarget, rejectPending])
+  const stageRequest = useCallback((request: Request) => {
+    if (!baseTarget || pendingRef.current !== request || settlingRef.current) return
+    const entry = { id: request.id, target: { ...baseTarget, initialText: request.initialText } }
+    stagedRef.current = entry
+    setStaged(entry)
+  }, [baseTarget])
+  const ready = useCallback(async (entry: Entry, ok: boolean) => {
+    const request = pendingRef.current
+    if (!request || stagedRef.current !== entry || entry.id !== request.id || settlingRef.current) return
+    settlingRef.current = true
+    try {
+      const status = await invoke<string>('plugin_surface_handoff_finish', { id: request.id, accepted: ok }).catch(() => invoke<string>('plugin_surface_handoff_status', { label: pluginSurfaceWindowLabel(entry.target), id: request.id }))
+      if (!aliveRef.current || pendingRef.current !== request || stagedRef.current !== entry) return
+      if (status === 'accepted') {
+        activeRef.current = entry
+        setActive(entry)
+      }
+      clearPending()
+    } catch {
+      // Retain both trees while receipt delivery is uncertain; polling recovers it.
+    } finally { settlingRef.current = false }
+  }, [clearPending])
 
   useEffect(() => {
-    if (!baseTarget) {
-      setTargetReady(true)
-      return
+    aliveRef.current = true
+    let busy = false
+    let initialized = false
+    const check = async () => {
+      if (busy || settlingRef.current || !baseTarget) return
+      busy = true
+      try {
+        // Poll only the receipt while waiting; do not shuttle a large snapshot
+        // through IPC on every tick while the user considers the old draft.
+        const previous = pendingRef.current
+        if (previous) {
+          const status = await invoke<string>('plugin_surface_handoff_status', { label: pluginSurfaceWindowLabel(baseTarget), id: previous.id })
+          if (!aliveRef.current || settlingRef.current || pendingRef.current !== previous) return
+          if (status === 'pending') return
+          const entry = stagedRef.current
+          if (status === 'accepted' && entry?.id === previous.id) {
+            activeRef.current = entry
+            setActive(entry)
+          }
+          clearPending()
+        }
+        const request = isTauriRuntime() ? await invoke<Request | null>('plugin_surface_handoff_peek') : null
+        if (!aliveRef.current || settlingRef.current) return
+        if (request && !pendingRef.current) {
+          pendingRef.current = request
+          setPending(request)
+          if (!activeRef.current) stageRequest(request)
+        }
+        if (!initialized) {
+          initialized = true
+          if (!request) {
+            const entry = { id: 'initial', target: baseTarget }
+            activeRef.current = entry
+            setActive(entry)
+          }
+          setTargetReady(true)
+        }
+      } catch {
+        // A failed read must never replace the existing draft.
+        if (!initialized) setTargetReady(true)
+      } finally { busy = false }
     }
-    consumePluginSurfacePayload(baseTarget).then((resolved) => {
-      setTarget(resolved)
-      setTargetReady(true)
-    })
-  }, [baseTarget])
+    void check()
+    const timer = window.setInterval(() => { void check() }, 150)
+    return () => {
+      aliveRef.current = false
+      window.clearInterval(timer)
+      const request = pendingRef.current
+      if (request) void invoke('plugin_surface_handoff_finish', { id: request.id, accepted: false }).catch(() => undefined)
+    }
+  }, [baseTarget, clearPending, stageRequest])
 
   useEffect(() => {
     if (!target) return
@@ -52,7 +154,7 @@ export function PluginSurfaceWindow() {
       window.removeEventListener('pagehide', onPageHide)
       markSurfaceInstanceState(instanceId, 'hidden')
     }
-  }, [target, title])
+  }, [baseTarget, title])
 
   const isImeComposingRef = useRef(false)
 
@@ -81,14 +183,14 @@ export function PluginSurfaceWindow() {
       if (isImeComposingRef.current || event.isComposing || (event as unknown as { keyCode: number }).keyCode === 229) return
       event.preventDefault()
       event.stopPropagation()
-      void hideCurrentWindow(target)
+      void hide()
     }
     // Plugin editors and dialogs handle Escape first; this is only the window fallback.
     window.addEventListener('keydown', onKeyDown)
     return () => {
       window.removeEventListener('keydown', onKeyDown)
     }
-  }, [target])
+  }, [hide])
 
   if (!targetReady) {
     return null
@@ -104,20 +206,36 @@ export function PluginSurfaceWindow() {
         {!usesPluginTitlebar && (
           <div className="plugin-surface-window-titlebar" data-tauri-drag-region>
             <div className="plugin-surface-window-title" data-tauri-drag-region>{title || t('pluginSurface')}</div>
-            <button className="plugin-surface-window-close" type="button" onClick={() => { void hideCurrentWindow(target) }}>×</button>
+            <button className="plugin-surface-window-close" type="button" onClick={() => { void hide() }}>×</button>
           </div>
         )}
         <div className="plugin-surface-window-body">
-          <PluginSurfaceRenderer
-            target={target}
-            locale={locale}
-            presentation="plugin-surface-window"
-            contextSurfaceId="plugin-surface-window"
-            onBack={() => { void hideCurrentWindow(target) }}
-            onClose={() => { void hideCurrentWindow(target) }}
-          />
+          {[active, staged].filter((entry): entry is Entry => Boolean(entry)).map((entry) => (
+            <div key={entry.id} style={{ height: '100%', display: staged && entry !== staged ? 'none' : undefined }}>
+              <PluginSurfaceRenderer
+                target={entry.target}
+                locale={locale}
+                presentation="plugin-surface-window"
+                contextSurfaceId="plugin-surface-window"
+                suspended={Boolean(staged)}
+                onHandoffReady={entry === staged ? (ok) => { void ready(entry, ok) } : undefined}
+                onBack={() => { void hide() }}
+                onClose={() => { void hide() }}
+              />
+            </div>
+          ))}
         </div>
       </div>
+      <ConfirmDialog
+        open={Boolean(pending && active && !staged)}
+        title={translate(locale, 'palette.surfaceWindowReplaceTitle')}
+        message={translate(locale, 'palette.surfaceWindowReplaceMessage')}
+        confirmLabel={translate(locale, 'palette.surfaceDiscardConfirm')}
+        cancelLabel={translate(locale, 'palette.surfaceDiscardCancel')}
+        defaultFocus="cancel"
+        onConfirm={() => { if (pending && pendingRef.current === pending) stageRequest(pending) }}
+        onCancel={() => { void rejectPending().catch(() => undefined) }}
+      />
       <PluginSettingsDialog />
       <ToastContainer />
     </div>
@@ -168,24 +286,4 @@ function WindowMessage({ title, message }: { title: string; message?: string }) 
       </div>
     </div>
   )
-}
-
-async function consumePluginSurfacePayload(
-  target: PluginSurfaceOpenTarget,
-): Promise<PluginSurfaceOpenTarget> {
-  if (!isTauriRuntime()) return target
-  try {
-    const { invoke } = await import('@tauri-apps/api/core')
-    const label = pluginSurfaceWindowLabel(target)
-    const payload = await invoke<{ initialText?: string } | null>(
-      'plugin_surface_payload_consume',
-      { label },
-    )
-    if (payload?.initialText) {
-      return { ...target, initialText: payload.initialText }
-    }
-  } catch {
-    // ignore — payload may not exist
-  }
-  return target
 }

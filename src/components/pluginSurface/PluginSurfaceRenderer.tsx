@@ -78,6 +78,8 @@ export type PluginSurfaceRendererProps = {
   onClose: () => void
   onUnsavedChangesChange?: (hasUnsavedChanges: boolean, owner: PluginSurfaceLeaveOwner) => void
   onRequestLeave?: (action: 'back' | 'close') => void
+  suspended?: boolean
+  onHandoffReady?: (ready: boolean) => void
 }
 
 export function PluginSurfaceRenderer({
@@ -89,7 +91,16 @@ export function PluginSurfaceRenderer({
   onClose,
   onUnsavedChangesChange,
   onRequestLeave,
+  suspended = false,
+  onHandoffReady,
 }: PluginSurfaceRendererProps) {
+  const suspensionOwner = useMemo(() => ({}), [suspended])
+  const suspensionOwnerRef = useRef(suspensionOwner)
+  suspensionOwnerRef.current = suspensionOwner
+  const suspendedRef = useRef(suspended)
+  suspendedRef.current = suspended
+  const [detaching, setDetaching] = useState(false)
+  const detachRef = useRef<AbortController | null>(null)
   const pluginRegistryVersion = usePluginRegistryVersion()
   const permissionVersion = usePluginPermissionStore((s) => s.version)
   const appearance = useAppStore((s) => s.settings)
@@ -100,6 +111,7 @@ export function PluginSurfaceRenderer({
   // Settings dialogs can overlay a mounted surface. Observe just its record so
   // saving applies immediately without remounting or discarding its local input.
   usePluginSettingsStore((s) => s.pluginSettings[target.source][target.pluginId])
+  const crashedRef = useRef(false)
   const [surfaceState, setSurfaceState] = useState<PluginSurfaceRendererState>({ status: 'loading-runtime' })
   const activeTargetRef = useRef(target)
   activeTargetRef.current = target
@@ -112,13 +124,13 @@ export function PluginSurfaceRenderer({
     return {
       isCurrent: () => mountedRef.current && activeTargetRef.current === target
         && activeStateRef.current === surfaceState && surfaceState.status === 'ready'
-        && surfaceState.target === target && !hiddenRef.current && lifetime.active,
+        && surfaceState.target === target && !hiddenRef.current && !suspendedRef.current && suspensionOwnerRef.current === suspensionOwner && lifetime.active,
     }
-  }, [target, surfaceState])
+  }, [target, surfaceState, suspensionOwner])
   const setUnsavedChanges = useCallback((hasUnsavedChanges: boolean) => {
     if (leaveOwner.isCurrent()) onUnsavedChangesChange?.(hasUnsavedChanges, leaveOwner)
   }, [leaveOwner, onUnsavedChangesChange])
-  const pasteScope = useMemo(() => createPasteRecoveryScope(), [target, surfaceState])
+  const pasteScope = useMemo(() => createPasteRecoveryScope(), [target, surfaceState, suspended])
   const preparationScopeRef = useRef<ReturnType<typeof createPasteRecoveryScope> | null>(null)
   const [pasteOwnerVersion, refreshPasteOwner] = useState(0)
   const exportSessionRef = useRef(0)
@@ -153,6 +165,7 @@ export function PluginSurfaceRenderer({
     pasteScope.invalidate()
     // A closed/replaced surface cannot resume an old native save dialog after reopening.
     exportSessionRef.current += 1
+    detachRef.current?.abort()
     handoffRef.current?.controller.abort()
     handoffRef.current = null
     deliveredHandoffRef.current = null
@@ -355,7 +368,7 @@ export function PluginSurfaceRenderer({
     const surfaceOwner = pasteScope.capture(() => mountedRef.current
       && activeTargetRef.current === target && activeStateRef.current === surfaceState
       && surfaceState.status === 'ready' && surfaceState.target === target
-      && !hiddenRef.current && !sessionRef.current && lifetime.active)
+      && !hiddenRef.current && !suspendedRef.current && suspensionOwnerRef.current === suspensionOwner && !sessionRef.current && lifetime.active)
     const launcherOwner = presentation === 'global-launcher' ? captureLauncherPasteOwner({ complete: false }) : undefined
     const owner = combinePasteRecoveryOwners(surfaceOwner, launcherOwner)
     return {
@@ -371,7 +384,7 @@ export function PluginSurfaceRenderer({
     const surfaceOwner = pasteScope.capture(() => mountedRef.current
       && activeTargetRef.current === target && activeStateRef.current === surfaceState
       && surfaceState.status === 'ready' && surfaceState.target === target
-      && !hiddenRef.current && !sessionRef.current && lifetime.active
+      && !hiddenRef.current && !suspendedRef.current && suspensionOwnerRef.current === suspensionOwner && !sessionRef.current && lifetime.active
       && (!ownedSettingsTargetRef.current || usePluginSettingsStore.getState().settingsDialogTarget !== ownedSettingsTargetRef.current))
     const launcherOwner = presentation === 'global-launcher' ? captureLauncherPasteOwner({ complete: false }) : undefined
     const owner = combinePasteRecoveryOwners(surfaceOwner, launcherOwner)
@@ -390,6 +403,10 @@ export function PluginSurfaceRenderer({
         ? acquireLauncherNativeDialogFocus(isCurrentLauncherLifetime) : () => {},
     })
   }, [target, surfaceState, pasteScope, presentation, pasteOwnerVersion, appSettingsSession, launcherSettingsTarget, launcherSessionId])
+
+  useEffect(() => {
+    if (surfaceState.status === 'error' || surfaceState.status === 'surface-not-found' || surfaceState.status === 'permission-gate') onHandoffReady?.(false)
+  }, [surfaceState, target, onHandoffReady])
 
   const historyPasteQueue = useMemo(() => target.pluginId === 'clipboard-history'
     && surfaceState && 'definition' in surfaceState
@@ -416,7 +433,7 @@ export function PluginSurfaceRenderer({
   const pluginT = makePluginT(target.pluginId, locale)
   const SurfaceComponent = surfaceState.surface.component
   const lifetime = pluginRegistry.getPluginLifetime(target.pluginId, target.source)
-  const isCurrentSurface = () => mountedRef.current && activeTargetRef.current === target && activeStateRef.current === surfaceState && !hiddenRef.current && lifetime.active
+  const isCurrentSurface = () => mountedRef.current && activeTargetRef.current === target && activeStateRef.current === surfaceState && !hiddenRef.current && !suspendedRef.current && suspensionOwnerRef.current === suspensionOwner && lifetime.active
   // Bind this host object now. A retained callback from before hide/reopen must
   // not capture the replacement generation when it eventually calls paste.
   const surfaceOwner = pasteScope.capture(
@@ -449,6 +466,7 @@ export function PluginSurfaceRenderer({
       locale={locale}
       onBack={onBack}
       onError={() => {
+        crashedRef.current = true
         interruptSettings()
         setSurfaceState({ status: 'error', title: t(locale, 'palette.surfaceCrashed'), message: '' })
       }}
@@ -464,6 +482,7 @@ export function PluginSurfaceRenderer({
           }}
         />
       ) : (
+        <div style={{ display: 'contents' }} inert={detaching || suspended} aria-busy={detaching || undefined}>
         <SurfaceComponent
           pluginId={target.pluginId}
           surfaceId={target.surfaceId}
@@ -528,13 +547,31 @@ export function PluginSurfaceRenderer({
               return promise
             },
             detachToWindow: (initialText?: string) => {
-              if (!isCurrentSurface()) return
+              if (!isCurrentSurface() || detachRef.current) return
               interruptSettings()
-              const windowTarget = { ...target, initialText: initialText ?? target.initialText }
-              import('../../workspace/windowManager/pluginSurfaceWindows').then(({ showPluginSurfaceWindow }) => {
-                void showPluginSurfaceWindow(windowTarget)
-              })
-              onClose()
+              refreshPasteOwner((version) => version + 1)
+              const controller = new AbortController()
+              detachRef.current = controller
+              setDetaching(true)
+              const windowTarget = { ...target, initialText: initialText ?? target.initialText ?? '' }
+              const current = () => isCurrentSurface() && !controller.signal.aborted && detachRef.current === controller
+              const releaseFocus = presentation === 'global-launcher' ? acquireLauncherNativeDialogFocus(current) : () => {}
+              void (async () => {
+                try {
+                  const { showPluginSurfaceWindow } = await import('../../workspace/windowManager/pluginSurfaceWindows')
+                  await showPluginSurfaceWindow(windowTarget, { signal: controller.signal, isCurrent: current })
+                  if (current()) onClose()
+                } catch (error) {
+                  if (current()) showToast(t(localeRef.current, String(error).includes('PluginSurfaceHandoffTooLarge')
+                    ? 'palette.surfaceWindowHandoffTooLarge' : 'palette.surfaceWindowHandoffFailed'), 'error')
+                } finally {
+                  releaseFocus()
+                  if (detachRef.current === controller) {
+                    detachRef.current = null
+                    if (mountedRef.current) setDetaching(false)
+                  }
+                }
+              })()
             },
             showMessage: (message, level) => {
               if (!surfaceOwner.isCurrent() || (presentation === 'global-launcher' && launcherPasteOwner?.isCurrent() !== true)) return
@@ -651,6 +688,8 @@ export function PluginSurfaceRenderer({
             ai: createPluginAi(target.pluginId, target.source, surfaceState.permissions),
           }}
         />
+        {onHandoffReady && <PluginSurfaceCommitted onCommit={() => { if (!crashedRef.current && activeStateRef.current === surfaceState) onHandoffReady(true) }} />}
+        </div>
       )}
       {historyDiff && historyDiff.owner === surfaceState && (
         <PluginSurfaceRenderer
@@ -664,6 +703,11 @@ export function PluginSurfaceRenderer({
       )}
     </PluginSurfaceErrorBoundary>
   )
+}
+
+function PluginSurfaceCommitted({ onCommit }: { onCommit: () => void }) {
+  useEffect(onCommit, [onCommit])
+  return null
 }
 
 export function PluginSurfacePermissionGate({

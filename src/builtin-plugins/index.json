@@ -1,5 +1,5 @@
 {
-  "version": 125,
+  "version": 126,
   "packages": [
     {
       "pluginId": "encode-decode",
@@ -59,7 +59,7 @@
     {
       "pluginId": "text-diff",
       "dir": "textDiff",
-      "version": "3.3.3"
+      "version": "3.4.1"
     },
     {
       "pluginId": "clipboard-history",
