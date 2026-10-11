@@ -37,6 +37,7 @@ import {
   CLIPBOARD_TEXT_MERGE_MIN_ITEMS,
   CLIPBOARD_TEXT_MERGE_MAX_ITEMS,
   createClipboardTextMergeReader,
+  copyClipboardTextBundle,
   toggleClipboardTextMergeSelection,
   removeClipboardTextMergeSelection,
   moveClipboardTextMergeSelection,
@@ -151,6 +152,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   // The selection owns its order and labels; searches and background index refreshes do not.
   const mergeItemsRef = useRef(new Map<string, ClipboardHistoryItem>())
   const [mergeSeparator, setMergeSeparator] = useState<ClipboardTextMergeSeparator>('newline')
+  const [customMergeSeparator, setCustomMergeSeparator] = useState('')
   const [mergePreview, setMergePreview] = useState<ClipboardTextMergePreview | null>(null)
   const [mergeError, setMergeError] = useState<ClipboardTextMergeError | null>(null)
   const [mergeLoading, setMergeLoading] = useState(false)
@@ -240,6 +242,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     setMergeIds([])
     mergeItemsRef.current.clear()
     setMergeSeparator('newline')
+    setCustomMergeSeparator('')
     mergeSuspendedRef.current = document.visibilityState === 'hidden'
     setMergeSuspended(mergeSuspendedRef.current)
     setCombining(true)
@@ -289,9 +292,9 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       setMergePreview(null)
       setMergeError(error)
       setMergeLoading(false)
-    })
+    }, customMergeSeparator)
     return () => mergeReader.invalidate()
-  }, [combining, settings.enabled, mergeIds, mergeSeparator, mergeReader, repository, mergeRetry, mergeSuspended])
+  }, [combining, settings.enabled, mergeIds, mergeSeparator, customMergeSeparator, mergeReader, repository, mergeRetry, mergeSuspended])
 
   useEffect(() => {
     if (!settings.enabled) cancelMerge()
@@ -365,6 +368,29 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       setMergeRetry((current) => current + 1)
     }
   }, [settings.enabled, combining, mergePreview, mergeReader, host, cancelMerge, t, mergeSuspended])
+
+  const copyMerge = useCallback(async () => {
+    if (queueSubmissionRef.current || compareSubmissionRef.current || mergeSubmissionRef.current || !settings.enabled || !combining || mergeSuspendedRef.current || !mergePreview || !mergeReader.isCurrent(mergePreview)) return
+    const submission = new AbortController()
+    mergeSubmissionRef.current = submission
+    setMergeLoading(true)
+    setCompareNotice(null)
+    const isCurrent = () => mergeSubmissionRef.current === submission && !submission.signal.aborted && !mergeSuspendedRef.current
+    try {
+      await copyClipboardTextBundle(repository,
+        mergeIds.map((id) => ({ id, hash: mergeItemsRef.current.get(id)?.hash ?? '' })),
+        mergeSeparator, customMergeSeparator, isCurrent,
+        (text) => host.clipboard.writeText(text, { recordInHistory: false }))
+      if (isCurrent()) setCompareNotice(t('merge.copied'))
+    } catch (error) {
+      if (isCurrent()) setCompareNotice(t(error instanceof Error && error.message === 'too-large' ? 'merge.tooLarge' : 'merge.copyFailed'))
+    } finally {
+      if (mergeSubmissionRef.current === submission) {
+        mergeSubmissionRef.current = null
+        setMergeLoading(false)
+      }
+    }
+  }, [settings.enabled, combining, mergePreview, mergeReader, repository, mergeIds, mergeSeparator, customMergeSeparator, host, t])
 
   const compareHistory = useCallback(async () => {
     if (queueSubmissionRef.current || compareSubmissionRef.current || mergeSubmissionRef.current || mergeIds.length !== 2 || !settings.enabled || !host.compareHistoryTexts) return
@@ -1247,6 +1273,8 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
               ids={mergeIds}
               items={mergeItemsRef.current}
               separator={mergeSeparator}
+              customSeparator={customMergeSeparator}
+              onCustomSeparatorChange={(value) => { invalidateMerge(); setCustomMergeSeparator(value) }}
               preview={mergePreview}
               error={mergeError}
               loading={mergeLoading}
@@ -1411,9 +1439,11 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
             {queueApi && <Button type="button" title={t('queue.platformHint')} disabled={queueBusy || queueCancelling || mergeIds.length === 0 || compareBusy || mergeSuspended || !settings.enabled} onClick={() => void startQueue()}>
               {t(queueBusy ? 'queue.starting' : queueActive ? 'queue.replace' : 'queue.start')}
             </Button>}
+            <Button type="button" variant="primary" disabled={queueBusy || !mergePreview || mergeLoading || compareBusy || mergeSuspended || !settings.enabled} onClick={() => void copyMerge()}>
+              {t('merge.copy')}
+            </Button>
             <Button
               type="button"
-              variant="primary"
               disabled={queueBusy || !mergePreview || mergeLoading || compareBusy || mergeSuspended || !settings.enabled}
               onClick={continueMerge}
             >

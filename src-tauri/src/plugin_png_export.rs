@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{Manager, Resource, ResourceId, ResourceTable};
+use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_dialog::DialogExt;
 
 const MAX_PNG_BYTES: usize = 10 * 1024 * 1024;
@@ -37,7 +38,10 @@ pub enum PreparePngExportResult {
 #[derive(serde::Serialize)]
 #[serde(tag = "status", rename_all = "camelCase")]
 pub enum CommitPngExportResult {
-    Saved,
+    Saved {
+        #[serde(rename = "pathCopied", skip_serializing_if = "Option::is_none")]
+        path_copied: Option<bool>,
+    },
 }
 
 struct PreparedPngExport {
@@ -335,6 +339,7 @@ fn consume_export(
 fn write_png_atomic_with(
     destination: &Path,
     bytes: &[u8],
+    no_clobber: bool,
     write: impl FnOnce(&mut File, &[u8]) -> std::io::Result<()>,
 ) -> Result<(), String> {
     let parent = destination
@@ -347,12 +352,29 @@ fn write_png_atomic_with(
         .as_file()
         .sync_all()
         .map_err(|_| WRITE_FAILED.to_string())?;
-    // Same-directory persistence atomically replaces an existing destination;
-    // write failure leaves it intact and the temporary file is removed on drop.
-    temporary
-        .persist(destination)
-        .map_err(|_| WRITE_FAILED.to_string())?;
+    // The save-and-copy action never replaces an existing destination, including
+    // a file created after the dialog. Existing save-only callers keep the OS
+    // dialog's overwrite behavior. Failure removes our temporary file.
+    if no_clobber {
+        temporary
+            .persist_noclobber(destination)
+            .map_err(|_| WRITE_FAILED.to_string())?;
+    } else {
+        temporary
+            .persist(destination)
+            .map_err(|_| WRITE_FAILED.to_string())?;
+    }
     Ok(())
+}
+
+// Clipboard failure cannot change a completed disk write into a save failure.
+fn write_then_copy_path(
+    write: impl FnOnce() -> Result<(), String>,
+    copy_path: bool,
+    copy: impl FnOnce() -> bool,
+) -> Result<Option<bool>, String> {
+    write()?;
+    Ok(if copy_path { Some(copy()) } else { None })
 }
 
 #[tauri::command]
@@ -361,6 +383,7 @@ pub async fn plugin_blob_commit_png_export(
     source: String,
     plugin_id: String,
     export_id: ResourceId,
+    copy_path_to_clipboard: Option<bool>,
 ) -> Result<CommitPngExportResult, String> {
     let lease = webview
         .resources_table()
@@ -376,14 +399,33 @@ pub async fn plugin_blob_commit_png_export(
         &plugin_id,
         Instant::now(),
     )?;
-    tauri::async_runtime::spawn_blocking(move || {
-        write_png_atomic_with(&ready.destination, &ready.bytes, |file, bytes| {
-            file.write_all(bytes)
-        })
+    let copy_path = copy_path_to_clipboard.unwrap_or(false);
+    // Never guess a relative destination or lossy path for the clipboard.
+    if !ready.destination.is_absolute() {
+        return Err(WRITE_FAILED.into());
+    }
+    let path = ready.destination.to_str().map(str::to_owned);
+    let app = webview.app_handle().clone();
+    let path_copied = tauri::async_runtime::spawn_blocking(move || {
+        write_then_copy_path(
+            || {
+                write_png_atomic_with(&ready.destination, &ready.bytes, copy_path, |file, bytes| {
+                    file.write_all(bytes)
+                })
+            },
+            copy_path,
+            || {
+                path.is_some_and(|path| {
+                    super::clipboard_privacy::with_clipboard(&app, move |app| {
+                        app.clipboard().write_text(path).map_err(|_| WRITE_FAILED.to_string())
+                    }).is_ok()
+                })
+            },
+        )
     })
     .await
     .map_err(|_| WRITE_FAILED.to_string())??;
-    Ok(CommitPngExportResult::Saved)
+    Ok(CommitPngExportResult::Saved { path_copied })
 }
 
 #[tauri::command]
@@ -557,7 +599,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let destination = dir.path().join("export.png");
         std::fs::write(&destination, b"original").unwrap();
-        let result = write_png_atomic_with(&destination, &fixture_png(), |file, _| {
+        let result = write_png_atomic_with(&destination, &fixture_png(), false, |file, _| {
             file.write_all(b"partial")?;
             Err(std::io::Error::other("private filesystem details"))
         });
@@ -565,9 +607,32 @@ mod tests {
         assert_eq!(std::fs::read(&destination).unwrap(), b"original");
         assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
         let png = fixture_png();
-        write_png_atomic_with(&destination, &png, |file, bytes| file.write_all(bytes)).unwrap();
+        write_png_atomic_with(&destination, &png, false, |file, bytes| file.write_all(bytes)).unwrap();
         assert_eq!(std::fs::read(&destination).unwrap(), png);
         assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn path_copy_is_only_after_write_and_failure_remains_saved() {
+        let copied = std::cell::Cell::new(false);
+        assert!(write_then_copy_path(|| Err(WRITE_FAILED.into()), true, || { copied.set(true); true }).is_err());
+        assert!(!copied.get());
+        assert_eq!(write_then_copy_path(|| Ok(()), true, || false).unwrap(), Some(false));
+        assert_eq!(write_then_copy_path(|| Ok(()), true, || true).unwrap(), Some(true));
+        assert_eq!(write_then_copy_path(|| Ok(()), false, || panic!("must not copy")).unwrap(), None);
+    }
+
+    #[test]
+    fn save_and_copy_refuses_existing_destination() {
+        let dir = tempfile::tempdir().unwrap();
+        let destination = dir.path().join("export.png");
+        std::fs::write(&destination, b"original").unwrap();
+        assert!(write_png_atomic_with(&destination, &fixture_png(), true, |file, bytes| file.write_all(bytes)).is_err());
+        assert_eq!(std::fs::read(&destination).unwrap(), b"original");
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+        let fresh = dir.path().join("new.png");
+        write_png_atomic_with(&fresh, &fixture_png(), true, |file, bytes| file.write_all(bytes)).unwrap();
+        assert_eq!(std::fs::read(fresh).unwrap(), fixture_png());
     }
 
     #[test]

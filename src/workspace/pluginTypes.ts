@@ -516,7 +516,7 @@ export type PluginBlobRef = {
 }
 
 /** A successful save is returned only after the native file write completes. */
-export type PluginBlobSaveResult = { status: 'saved' } | { status: 'cancelled' }
+export type PluginBlobSaveResult = { status: 'saved'; pathCopied?: boolean } | { status: 'cancelled' }
 
 export type PluginStoragePrunePolicy = {
   maxItems?: number
@@ -536,8 +536,8 @@ export type PluginPrivateStorageApi = {
     get(blobId: string): Promise<Uint8Array | undefined>
     delete(blobId: string): Promise<void>
     url(blobId: string): Promise<string>
-    /** Save this plugin's PNG through a desktop dialog. Requires an active owner, not a surface preparation hook. No output path is accepted or exposed. Errors reject. */
-    savePng(blobId: string, options?: { suggestedFilename?: string }): Promise<PluginBlobSaveResult>
+    /** Save this plugin's PNG through a desktop dialog. Requires an active owner, not a surface preparation hook. No output path is accepted or exposed. copyPathToClipboard requires clipboard.write, refuses existing destinations, and reports pathCopied after the write. Errors reject. */
+    savePng(blobId: string, options?: { suggestedFilename?: string; copyPathToClipboard?: boolean }): Promise<PluginBlobSaveResult>
   }
   quota: {
     usage(): Promise<{ bytes: number; itemCount: number }>
@@ -604,7 +604,8 @@ export type PluginClipboardApi = {
    * DataError (image limits/shape), or NotReadableError (read/encoding failure).
    */
   readImage?: (options?: { signal?: AbortSignal }) => Promise<PluginClipboardImage>
-  writeText(text: string, options?: { sensitive?: boolean }): Promise<void>
+  /** recordInHistory:false is restricted to clipboard-history text assembly on native desktop. */
+  writeText(text: string, options?: { sensitive?: boolean; recordInHistory?: boolean }): Promise<void>
   writeImage(blobId: string): Promise<void>
   writeFiles(paths: string[]): Promise<void>
   watch(

@@ -157,7 +157,7 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
       ref={ref}
       data-launcher-row-index={index}
       data-quick-select={quickSelectLabel ?? undefined}
-      className={`l-row cmd-item w-full border-none text-left ${selected ? 'sel selected' : ''} ${item.disabled ? 'disabled' : ''}`}
+      className={`l-row cmd-item w-full border-none text-left ${item.domainItem.directAnswer ? 'is-direct-answer' : ''} ${selected ? 'sel selected' : ''} ${item.disabled ? 'disabled' : ''}`}
       // Hover select is gated by parent (must move pointer first); enter alone is not enough.
       onMouseEnter={onHoverIndex ? handleMouseEnter : undefined}
       // Keep the search caret — do not let list rows take focus on mousedown.

@@ -27,7 +27,7 @@ function deferred() {
   return { promise, resolve, reject }
 }
 const tick = () => new Promise(setImmediate)
-function fixture(source = 'builtin') {
+function fixture(source = 'builtin', copyPath = false) {
   const deps = {
     zustand: require('zustand'),
     'zustand/middleware': { persist: config => config },
@@ -40,7 +40,7 @@ function fixture(source = 'builtin') {
   const window = { __TAURI_INTERNALS__: {} }
   const focus = load('src/workspace/launcherBlurGuard.ts', {}, { window })
   const id = 'export-test'
-  const requested = ['storage.blob']
+  const requested = copyPath ? ['storage.blob', 'clipboard.write'] : ['storage.blob']
   const register = (definition = {}, permissions = requested) => source === 'dev'
     ? registry.pluginRegistry.registerDevPlugin(id, [], [], [], [], definition, permissions)
     : registry.pluginRegistry.registerProductionPlugin(id, [], [], [], [], definition, permissions)
@@ -188,3 +188,31 @@ for (const unavailable of [f => { delete f.window.__TAURI_INTERNALS__ }, f => { 
 
 await tick()
 console.log('plugin PNG export transaction checks passed')
+
+// The optional side effect requires its own live permission and preserves partial success.
+{
+  const f = fixture()
+  await assert.rejects(f.save('own-blob', { copyPathToClipboard: true }), /clipboard.write/)
+  assert.equal(f.calls.length, 0)
+}
+for (const pathCopied of [true, false]) {
+  const f = fixture('builtin', true)
+  const result = f.save('own-blob', { copyPathToClipboard: true })
+  await f.preparedStarted.promise
+  f.prepare.resolve({ status: 'prepared', exportId: 55 })
+  await f.commitStarted.promise
+  assert.equal(f.calls.find(call => call.command === 'plugin_blob_commit_png_export').args.copyPathToClipboard, true)
+  f.commit.resolve({ status: 'saved', pathCopied })
+  assert.equal((await result).pathCopied, pathCopied)
+}
+{
+  const f = fixture('builtin', true)
+  const result = f.save('own-blob', { copyPathToClipboard: true })
+  const rejection = assert.rejects(result, /interrupted|permission/)
+  await f.preparedStarted.promise
+  f.permission.usePluginPermissionStore.getState().revokePermissions(f.source, f.id, ['clipboard.write'])
+  f.prepare.resolve({ status: 'prepared', exportId: 56 })
+  await rejection
+  assert.equal(f.count('plugin_blob_commit_png_export'), 0)
+}
+console.log('PNG path-copy permission and partial-success checks passed')

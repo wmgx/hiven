@@ -19,23 +19,26 @@ export function createPluginPngSaver(
 ): PluginPrivateStorageApi['blob']['savePng'] {
   const lifetime = pluginRegistry.getPluginLifetime(pluginId, source)
 
-  const requireOwner = () => {
+  const requireOwner = (copyPath: boolean) => {
     if (!lifetime.active || pluginRegistry.getPluginLifetime(pluginId, source) !== lifetime ||
       resolvePluginSettingsSource(pluginId, source === 'dev' ? 'dev' : 'production') !== source) {
       throw new Error('Plugin image export owner is no longer active')
     }
     const requested = pluginRegistry.getPluginPermissions(pluginId, source)
     if (!requested.includes('storage.blob')) throw new Error('Plugin permission required: storage.blob')
-    if (permissions) requirePluginPermissions(permissions, ['storage.blob'])
-    requirePluginPermissions(getPluginPermissionSnapshot(source, pluginId, requested), ['storage.blob'])
+    const required = copyPath ? ['storage.blob', 'clipboard.write'] as const : ['storage.blob'] as const
+    if (copyPath && !requested.includes('clipboard.write')) throw new Error('Plugin permission required: clipboard.write')
+    if (permissions) requirePluginPermissions(permissions, [...required])
+    requirePluginPermissions(getPluginPermissionSnapshot(source, pluginId, requested), [...required])
   }
 
   return async (blobId, options): Promise<PluginBlobSaveResult> => {
+    const copyPath = options?.copyPathToClipboard === true
     const isCurrentOwner = owner?.capture()
     let invalidated = false
     const requireCurrent = () => {
       if (invalidated || (isCurrentOwner && !isCurrentOwner())) throw new Error('Plugin image export was interrupted')
-      requireOwner()
+      requireOwner(copyPath)
     }
     requireCurrent()
     if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ || window.__HIVEN_WEB_NATIVE_BRIDGE__) {
@@ -72,11 +75,11 @@ export function createPluginPngSaver(
       // No await between this last authorization check and dispatch. Native owns
       // the one-shot destination ticket; accepting commit is the write boundary.
       requireCurrent()
-      const saved = await invoke<PluginBlobSaveResult>('plugin_blob_commit_png_export', { source, pluginId, exportId })
+      const saved = await invoke<PluginBlobSaveResult>('plugin_blob_commit_png_export', { source, pluginId, exportId, copyPathToClipboard: copyPath })
       // Once dispatched, report the real write result even if its owner closes.
       // The surface host separately suppresses messages from an obsolete view.
       if (saved.status !== 'saved') throw new Error('Native image export did not confirm a write')
-      return saved
+      return copyPath ? { ...saved, pathCopied: saved.pathCopied === true } : saved
     } finally {
       // Commit consumes its ticket. Discard is idempotent and also covers errors,
       // late prepare replies and owners removed while the dialog was visible.

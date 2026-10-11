@@ -110,3 +110,8 @@
 .td-copy { flex-shrink: 0; white-space: nowrap; }
 .td-source { border: 0; border-radius: 4px; background: transparent; color: var(--hiven-color-text-secondary); font: 12px var(--hiven-font-ui); padding: 4px 6px; cursor: pointer; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .td-source:hover { background: var(--td-bg-tertiary); }
+
+.td-explanation { flex-shrink: 0; padding: 5px 12px; border-bottom: 1px solid var(--td-border); color: var(--hiven-color-text-secondary); font: 12px/1.4 var(--hiven-font-ui); }
+.td-explanation-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.td-explanation-hint { font-size: 11px; margin-top: 3px; }
+.td-explanation-result { margin-top: 5px; max-height: 76px; overflow: auto; white-space: pre-wrap; user-select: text; color: var(--hiven-color-text-primary); }

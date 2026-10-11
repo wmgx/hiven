@@ -1,4 +1,5 @@
 import { definePlugin, getPluginHostSdk, textError, textOutput, type TextInput, type LauncherDynamicContext, type LauncherItemContribution, type PluginSurfaceProps, type PluginToolSurfaces } from '@hiven/plugin'
+import { parseTimeZoneAnswer } from './timeZoneAnswer'
 import type { DateTimeConversionResult } from './DateTimeSurface'
 
 function pad(n: number, width = 2): string {
@@ -26,8 +27,9 @@ function formatOffsetDateTime(date: Date, offsetMinutes?: number): string {
 
 function formatOffsetLabel(offsetMinutes: number): string {
   const sign = offsetMinutes >= 0 ? '+' : '-'
-  const absolute = Math.abs(offsetMinutes)
-  return `UTC${sign}${pad(Math.floor(absolute / 60))}:${pad(absolute % 60)}`
+  const absoluteSeconds = Math.round(Math.abs(offsetMinutes) * 60)
+  const seconds = absoluteSeconds % 60
+  return `UTC${sign}${pad(Math.floor(absoluteSeconds / 3600))}:${pad(Math.floor(absoluteSeconds / 60) % 60)}${seconds ? `:${pad(seconds)}` : ''}`
 }
 
 function parseTzSuffix(str: string): { body: string; offsetMinutes: number | undefined } {
@@ -560,6 +562,31 @@ export const dateTimeAssistantPlugin = definePlugin({
       const input = ctx.query
       if (!input) return []
       const now = new Date()
+      const zoneResult = parseTimeZoneAnswer(input, now)
+      if (zoneResult) {
+        if (!zoneResult.ok) return [{
+          id: 'dt-zone-error',
+          display: { title: ctx.t(`zone.error.${zoneResult.error}`), subtitle: ctx.t('zone.help'), icon: 'Clock' },
+          behavior: { type: 'perform' }, surfaces: ['global-launcher'], directAnswer: true,
+          execute() { return { ok: false, message: ctx.t(`zone.error.${zoneResult.error}`) } },
+        }]
+        const value = zoneResult.value
+        const summary = value.targets.map((target) => {
+          const delta = target.dayDelta ? ` (${ctx.t('zone.dayDelta', { count: `${target.dayDelta > 0 ? '+' : ''}${target.dayDelta}` })})` : ''
+          return `${ctx.t(`zone.${target.key}`)} ${target.time}${delta}`
+        }).join(' · ')
+        const source = `${value.sourceDate} ${value.sourceTime} ${value.zone} (${formatOffsetLabel(value.offsetMinutes)})`
+        const copied = `${source} → ${value.targets.map((target) => `${ctx.t(`zone.${target.key}`)} ${target.date} ${target.time}`).join(' · ')}`
+        return [{
+          id: 'dt-zone-answer',
+          display: { title: summary, subtitle: `${source} · ${ctx.t(value.fixed ? 'zone.fixed' : 'zone.dateRules')} · ${ctx.t('zone.copy')}`, icon: 'Clock' },
+          behavior: { type: 'perform' }, surfaces: ['global-launcher'], directAnswer: true,
+          async execute(execution) {
+            await execution.api.copyText(copied)
+            return { ok: true, output: { choices: [{ id: 'copy', title: copied, primaryAction: async () => { await execution.api.copyText(copied) } }] } }
+          },
+        }]
+      }
       const parsed = parseDateTimeQuery(input, now)
       const dateTimestampResults = parseDateForTimestampSuggestions(input)
       if (!parsed && dateTimestampResults.length === 0) return []

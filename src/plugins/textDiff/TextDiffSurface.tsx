@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import { Menu } from '@hiven/plugin-ui'
 import { getPluginDiffHost, type DiffSource } from '@hiven/plugin-diff'
+import { DiffExplanation } from './DiffExplanation'
 import { canUseSemanticJsonDiff } from './autoDiffMode'
 import { useDiffSourceText } from './useDiffSourceText'
 import { createDiffSourceReader } from './sourceReadLifetime'
@@ -382,6 +383,8 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
           </div>
         ))}
       </div>
+
+      <DiffExplanation host={host} t={t} original={originalText} modified={modifiedText} />
 
       {/* Editor body */}
       <div className="td-body">

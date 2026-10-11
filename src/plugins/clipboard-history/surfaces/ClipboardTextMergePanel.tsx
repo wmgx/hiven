@@ -13,6 +13,8 @@ import {
 type ClipboardTextMergePanelProps = {
   ids: readonly string[]
   items: ReadonlyMap<string, ClipboardHistoryItem>
+  customSeparator: string
+  onCustomSeparatorChange: (value: string) => void
   separator: ClipboardTextMergeSeparator
   preview: ClipboardTextMergePreview | null
   error: ClipboardTextMergeError | null
@@ -25,7 +27,7 @@ type ClipboardTextMergePanelProps = {
 }
 
 export function ClipboardTextMergePanel({
-  ids, items, separator, preview, error, loading, t,
+  ids, items, separator, customSeparator, onCustomSeparatorChange, preview, error, loading, t,
   onMove, onRemove, onSeparatorChange, onRetry,
 }: ClipboardTextMergePanelProps) {
   return (
@@ -74,9 +76,17 @@ export function ClipboardTextMergePanel({
           options={[
             { value: 'newline', label: t('merge.newline') },
             { value: 'blankline', label: t('merge.blankline') },
+            { value: 'custom', label: t('merge.custom') },
           ]}
         />
       </div>
+      {separator === 'custom' && <input
+        className="clipboard-history-custom-separator"
+        aria-label={t('merge.customSeparator')}
+        placeholder={t('merge.customSeparatorHint')}
+        value={customSeparator}
+        onChange={(event) => onCustomSeparatorChange(event.target.value)}
+      />}
       <div className="clipboard-history-merge-preview" aria-busy={loading} data-launcher-scrollable>
         <div className="clipboard-history-merge-section-heading">
           <h3>{t('merge.preview')}</h3>
@@ -84,7 +94,7 @@ export function ClipboardTextMergePanel({
         </div>
         {error ? (
           <div className="clipboard-history-merge-error" role="alert">
-            <p>{t('merge.readFailed')}</p>
+            <p>{t(error.code === 'too-large' ? 'merge.tooLarge' : 'merge.readFailed')}</p>
             <ToolbarButton type="button" onClick={onRetry}>{t('merge.retry')}</ToolbarButton>
           </div>
         ) : loading ? (

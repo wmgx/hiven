@@ -26,6 +26,10 @@ class FixedDate extends Date {
 FixedDate.UTC = Date.UTC
 FixedDate.parse = Date.parse
 
+const zoneModule = { exports: {} }
+vm.runInNewContext(ts.transpileModule(readFileSync('src/plugins/date-time-assistant/timeZoneAnswer.ts', 'utf8'), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023 },
+}).outputText, { module: zoneModule, exports: zoneModule.exports, Date: FixedDate, Intl })
 const module = { exports: {} }
 const context = vm.createContext({
   Date: FixedDate,
@@ -37,6 +41,7 @@ const context = vm.createContext({
   module,
   exports: module.exports,
   require(specifier) {
+    if (specifier === './timeZoneAnswer') return zoneModule.exports
     if (specifier === '@hiven/plugin') {
       return {
         definePlugin: (definition) => definition,
@@ -176,4 +181,49 @@ assert.equal(
   'surface conversion should not apply the selected offset twice to an ISO UTC value',
 )
 
+const parseZone = zoneModule.exports.parseTimeZoneAnswer
+const zone = (text) => {
+  const result = parseZone(text, new FixedDate())
+  assert.equal(result?.ok, true, text)
+  return result.value
+}
+const est = zone('3pm EST')
+assert.equal(est.sourceDate, '2026-06-09', 'omitted date uses the current date in the source zone')
+assert.equal(est.offsetMinutes, -300)
+assert.equal(est.targets[0].date, '2026-06-10')
+assert.equal(est.targets[0].time, '04:00')
+assert.equal(est.targets[0].dayDelta, 1)
+assert.equal(est.targets[1].time, '05:00')
+assert.equal(est.targets[2].time, '20:00')
+assert.equal(zone('2026-07-01 3pm EST').offsetMinutes, -300)
+assert.equal(zone('2026-07-01 3pm America/New_York').offsetMinutes, -240)
+assert.equal(zone('2026-01-01 3pm America/New_York').offsetMinutes, -300)
+assert.equal(zone('2026-01-01 00:15 UTC+14').targets[2].dayDelta, -1)
+assert.equal(zone('2026-01-01 12am UTC').sourceTime, '00:00')
+assert.equal(zone('2026-01-01 12pm UTC').sourceTime, '12:00')
+assert.equal(zone('2026-01-01 15:30 Asia/Kolkata').offsetMinutes, 330)
+assert.equal(zone('1991-07-01 15:00 UTC').targets[0].time, '00:00', 'Beijing follows historical Shanghai daylight saving')
+assert.equal(zone('1991-07-01 15:00 UTC').targets[0].dayDelta, 1)
+assert.equal(zone('1950-07-01 15:00 UTC').targets[1].time, '01:00', 'Tokyo follows historical daylight saving')
+assert.equal(zone('1900-01-01 15:00 Asia/Shanghai').targets[2].time, '06:54:17', 'historical second offsets retain precision')
+for (const text of ['3pm CST', '3pm IST', '3pm EDT', '3pm Not/A_Zone', '3pm UTC+14:01']) {
+  assert.equal(parseZone(text)?.error, 'zone', text)
+}
+for (const text of ['2026-02-30 3pm EST', '2026-01-01 24:00 UTC', '0am UTC', '13pm EST', '15:60 UTC']) {
+  assert.equal(parseZone(text)?.error, 'date', text)
+}
+assert.equal(parseZone('2026-03-08 02:30 America/New_York')?.error, 'gap')
+assert.equal(parseZone('2026-11-01 01:30 America/New_York')?.error, 'fold')
+assert.equal(parseZone('2026-04-05 01:45 Australia/Lord_Howe')?.error, 'fold')
+assert.equal(parseZone('2026-10-04 02:15 Australia/Lord_Howe')?.error, 'gap')
+assert.equal(parseZone('now'), null)
+assert.equal(parseZone('2026-06-10 12:05:06 UTC+8'), null)
+const zoneCopies = await values('3pm EST')
+assert.equal(zoneCopies.length, 1)
+assert.ok(zoneCopies[0].includes('2026-06-09 15:00 EST (UTC-05:00)'))
+assert.ok(zoneCopies[0].includes('2026-06-10 04:00'))
+const badItems = await provider({ query: '3pm CST', locale: 'en', settings: {}, t: (key) => key })
+assert.equal(badItems.length, 1)
+const badResult = await badItems[0].execute({ api: { copyText() { assert.fail('invalid zone must not copy') } } })
+assert.equal(badResult.ok, false)
 console.log('date time assistant checks passed')

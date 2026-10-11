@@ -4,7 +4,8 @@ import type { ClipboardHistoryItem } from '../storage/clipboardHistoryTypes'
 export const CLIPBOARD_TEXT_MERGE_MIN_ITEMS = 2
 export const CLIPBOARD_TEXT_MERGE_MAX_ITEMS = 20
 
-export type ClipboardTextMergeSeparator = 'newline' | 'blankline'
+export const CLIPBOARD_TEXT_MERGE_MAX_BYTES = 1024 * 1024
+export type ClipboardTextMergeSeparator = 'newline' | 'blankline' | 'custom'
 
 export type ClipboardTextMergePreview = Readonly<{
   ids: readonly string[]
@@ -13,7 +14,7 @@ export type ClipboardTextMergePreview = Readonly<{
 }>
 
 export type ClipboardTextMergeError = {
-  code: 'count' | 'duplicate' | 'missing' | 'not-text' | 'read-failed'
+  code: 'count' | 'duplicate' | 'missing' | 'not-text' | 'read-failed' | 'too-large'
   id?: string
 }
 
@@ -51,8 +52,12 @@ export function moveClipboardTextMergeSelection(
 }
 
 /** Do not trim, normalize line endings, deduplicate, or fall back to list previews. */
-export function joinClipboardTexts(texts: readonly string[], separator: ClipboardTextMergeSeparator): string {
-  return texts.join(separator === 'blankline' ? '\n\n' : '\n')
+export function joinClipboardTexts(texts: readonly string[], separator: ClipboardTextMergeSeparator, customSeparator = ''): string {
+  return texts.join(resolveClipboardTextSeparator(separator, customSeparator))
+}
+
+function resolveClipboardTextSeparator(separator: ClipboardTextMergeSeparator, customSeparator: string): string {
+  return separator === 'custom' ? customSeparator : separator === 'blankline' ? '\n\n' : '\n'
 }
 
 type TextRead = { text: string } | { error: ClipboardTextMergeError }
@@ -80,7 +85,8 @@ export function createClipboardTextMergeReader() {
       separator: ClipboardTextMergeSeparator,
       onReady: (preview: ClipboardTextMergePreview) => void,
       onError: (error: ClipboardTextMergeError) => void,
-    ): Promise<void> {
+      customSeparator = '',
+    ): Promise<ClipboardTextMergePreview | undefined> {
       const requestRevision = ++revision
       currentPreview = null
       const ids = Object.freeze([...selectedIds])
@@ -113,16 +119,51 @@ export function createClipboardTextMergeReader() {
       if (requestRevision !== revision) return
 
       const texts: string[] = []
+      const separatorText = resolveClipboardTextSeparator(separator, customSeparator)
+      let bytes = new TextEncoder().encode(separatorText).byteLength * (ids.length - 1)
       for (const result of loaded) {
         if ('error' in result) {
           onError(result.error)
           return
         }
+        if (result.text.length > CLIPBOARD_TEXT_MERGE_MAX_BYTES) { onError({ code: 'too-large' }); return }
+        bytes += new TextEncoder().encode(result.text).byteLength
+        if (bytes > CLIPBOARD_TEXT_MERGE_MAX_BYTES) { onError({ code: 'too-large' }); return }
         texts.push(result.text)
       }
-      const preview = Object.freeze({ ids, text: joinClipboardTexts(texts, separator), separator })
+      const preview = Object.freeze({ ids, text: joinClipboardTexts(texts, separator, customSeparator), separator })
       currentPreview = preview
       onReady(preview)
+      return preview
     },
   }
+}
+
+/** Reread complete text and recheck the durable index immediately before one copy. */
+export async function copyClipboardTextBundle(
+  repository: Pick<ClipboardHistoryRepository, 'getItem' | 'getFreshListItems'>,
+  selection: readonly { id: string; hash: string }[],
+  separator: ClipboardTextMergeSeparator,
+  customSeparator: string,
+  isCurrent: () => boolean,
+  writeText: (text: string) => Promise<void>,
+): Promise<void> {
+  const requireCurrent = () => { if (!isCurrent()) throw new Error('aborted') }
+  requireCurrent()
+  const reader = createClipboardTextMergeReader()
+  let failure: ClipboardTextMergeError | undefined
+  const preview = await reader.read({ getItem: async (id) => {
+    const item = await repository.getItem(id)
+    requireCurrent()
+    return item?.hash === selection.find((selected) => selected.id === id)?.hash ? item : undefined
+  } }, selection.map((item) => item.id), separator,
+    () => {}, (error) => { failure = error }, customSeparator)
+  requireCurrent()
+  if (!preview) throw new Error(failure?.code ?? 'read-failed')
+  const index = await repository.getFreshListItems()
+  requireCurrent()
+  if (selection.some((selected) => !index.some((item) => item.id === selected.id && item.kind === 'text' && item.hash === selected.hash))) {
+    throw new Error('read-failed')
+  }
+  await writeText(preview.text)
 }

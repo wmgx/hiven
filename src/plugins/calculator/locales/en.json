@@ -58,5 +58,11 @@
   "surface.root": "Root",
   "surface.absolute": "Absolute",
   "surface.rounding": "Rounding",
-  "surface.powerHint": "Powers take integer exponents; use sqrt for square roots. round rounds to nearest, floor down, ceil up."
+  "surface.powerHint": "Powers take integer exponents; use sqrt for square roots. round rounds to nearest, floor down, ceil up.",
+  "units.copyHint": "Enter to copy · Up to 12 significant digits; ≈ means rounded",
+  "units.dataHint": "Enter to copy · KB = 1000 B; KiB = 1024 B; b = bit, B = byte",
+  "units.syntax": "Try 5 ft to cm, 2 kg to lb, 1 KiB to B · Unit symbols are case-sensitive",
+  "units.error.dimension": "Cannot convert between different dimensions",
+  "units.error.unit": "Unsupported unit or letter case",
+  "units.error.range": "Value out of range (use exponents from −30 to 30)"
 }

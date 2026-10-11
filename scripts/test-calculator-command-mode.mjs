@@ -7,6 +7,10 @@ import vm from 'node:vm'
 import ts from 'typescript'
 
 const require = createRequire(import.meta.url)
+const unitModule = { exports: {} }
+vm.runInNewContext(ts.transpileModule(readFileSync('src/plugins/calculator/unitConversion.ts', 'utf8'), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023, esModuleInterop: true },
+}).outputText, { require, module: unitModule, exports: unitModule.exports })
 const source = readFileSync('src/plugins/calculator/index.ts', 'utf8')
 const transpiled = ts.transpileModule(source, {
   compilerOptions: {
@@ -25,6 +29,7 @@ const context = vm.createContext({
   isFinite,
   isNaN,
   require(id) {
+    if (id === './unitConversion') return unitModule.exports
     if (id === './CalculatorSurface') return { CalculatorSurface: () => null }
     if (id === './style.css') return {}
     if (id === '@hiven/plugin') return {
@@ -143,5 +148,18 @@ assert.equal(
   '1000.3',
   'calculator sum command should sum all numeric tokens with BigNumber precision',
 )
+
+const copied = []
+const unitContext = { query: '1 KiB to B', t: (key) => key, api: { copyText: async (text) => { copied.push(text) } } }
+const unitItems = plugin.launcher.dynamicItems(unitContext)
+assert.equal(unitItems.length, 1)
+assert.equal(unitItems[0].display.title, '1 KiB to B = 1024 B')
+assert.equal(copied.length, 0, 'query evaluation has no clipboard side effect')
+assert.equal((await unitItems[0].execute(unitContext)).ok, true)
+assert.deepEqual(copied, ['1024 B'], 'execution copies the full answer once')
+const invalidUnit = plugin.launcher.dynamicItems({ ...unitContext, query: '1 m to kg' })[0]
+assert.equal((await invalidUnit.execute(unitContext)).ok, false)
+assert.deepEqual(copied, ['1024 B'], 'invalid dimensions never overwrite clipboard')
+await assert.rejects(unitItems[0].execute({ api: { copyText: async () => { throw new Error('clipboard unavailable') } } }), /clipboard unavailable/)
 
 console.log('calculator command mode checks passed')

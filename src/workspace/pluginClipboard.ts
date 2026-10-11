@@ -15,7 +15,7 @@ import type {
   PluginPrivateStorageApi,
 } from './pluginTypes'
 import { requirePluginPermissions } from './pluginPermissions'
-import { isTauriClipboardRuntime, readNativeClipboardText } from './nativeClipboard'
+import { isTauriClipboardRuntime, readNativeClipboardText, readHistoryClipboardText } from './nativeClipboard'
 import { withImageHandle } from './nativeImageHandle'
 import { createPluginClipboardImageReader, createPluginClipboardReadGuard, type PluginClipboardImageReadOwner } from './pluginClipboardImageRead'
 
@@ -263,8 +263,16 @@ export function createPluginClipboard(
       return text
     },
 
-    async writeText(text: string, options?: { sensitive?: boolean }): Promise<void> {
+    async writeText(text: string, options?: { sensitive?: boolean; recordInHistory?: boolean }): Promise<void> {
       requirePermissions(['clipboard.write'])
+      if (options?.recordInHistory === false) {
+        if (pluginId !== 'clipboard-history' || options.sensitive) {
+          throw new Error('History-preserving copy is restricted to clipboard history')
+        }
+        const { writeTextWithoutHistory } = await import('./nativeClipboard')
+        await writeTextWithoutHistory(text)
+        return
+      }
       await writeClipboardText(text, options)
     },
 
@@ -303,9 +311,11 @@ export function createPluginClipboard(
           })
       }
 
+      const readWatchedText = pluginId === 'clipboard-history' ? readHistoryClipboardText : readClipboardText
+
       // Initialize with current clipboard content
       try {
-        const lastText = await readClipboardText()
+        const lastText = await readWatchedText()
         lastTextHash = hashString(lastText)
       } catch {
         // Ignore initialization errors
@@ -354,7 +364,7 @@ export function createPluginClipboard(
           }
 
           if (options.text !== false || options.files) {
-            const currentText = await readClipboardText()
+            const currentText = await readWatchedText()
             if (!currentText) return
 
             const filePaths = options.files ? extractFilePaths(currentText) : []

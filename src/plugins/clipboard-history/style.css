@@ -1164,3 +1164,14 @@ body[data-theme='dark'] .clipboard-history-surface {
 .clipboard-history-merge-footer-actions { flex-wrap: wrap; }
 
 .clipboard-history-footer:has(.clipboard-history-queue-status) { flex-wrap: wrap; }
+
+.clipboard-history-custom-separator {
+  width: 100%;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  padding: 7px 9px;
+  color: var(--hiven-color-text-primary);
+  background: var(--hiven-color-bg-secondary);
+  border: 1px solid var(--border, var(--hiven-color-border));
+  border-radius: 6px;
+}

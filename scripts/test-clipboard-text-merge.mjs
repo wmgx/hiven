@@ -9,6 +9,8 @@ const code = ts.transpileModule(readFileSync('src/plugins/clipboard-history/merg
 }).outputText
 const {
   CLIPBOARD_TEXT_MERGE_MIN_ITEMS,
+  CLIPBOARD_TEXT_MERGE_MAX_BYTES,
+  copyClipboardTextBundle,
   CLIPBOARD_TEXT_MERGE_MAX_ITEMS,
   toggleClipboardTextMergeSelection,
   removeClipboardTextMergeSelection,
@@ -240,6 +242,50 @@ await check('cancel and retry the same IDs cannot revive earlier work', async ()
   currentRead.resolve(textItem('a', 'CURRENT_BODY'))
   await current
   assert.equal(test.state.previews[0].text, 'CURRENT_BODY\nFULL_b')
+})
+
+await check('custom separators preserve literal whitespace and permit empty joins', async () => {
+  assert.equal(joinClipboardTexts([' a\r\n', 'b '], 'custom', ' | '), ' a\r\n | b ')
+  assert.equal(joinClipboardTexts(['a', 'b'], 'custom', ''), 'ab')
+})
+await check('bundle copies full ordered snapshots once without storage mutations', async () => {
+  const items = [textItem('a', ' a\r\nEND-A'), textItem('b', '中文 END-B ')]
+  const writes = []
+  const repository = { getItem: async (id) => items.find((item) => item.id === id), getFreshListItems: async () => items }
+  await copyClipboardTextBundle(repository, [{ id: 'b', hash: 'b' }, { id: 'a', hash: 'a' }], 'custom', ' | ', () => true, async (text) => writes.push(text))
+  assert.deepEqual(writes, ['中文 END-B  |  a\r\nEND-A'])
+})
+await check('bundle rejects missing, changed and non-text snapshots without clipboard writes', async () => {
+  for (const item of [undefined, { ...textItem('a'), hash: 'changed' }, { ...textItem('a'), kind: 'image' }]) {
+    let written = false
+    await assert.rejects(copyClipboardTextBundle({ getItem: async (id) => id === 'a' ? item : textItem(id), getFreshListItems: async () => [textItem('a'), textItem('b')] }, [{ id: 'a', hash: 'a' }, { id: 'b', hash: 'b' }], 'newline', '', () => true, async () => { written = true }))
+    assert.equal(written, false)
+  }
+})
+await check('deletion and cancellation after reads cannot copy stale full texts', async () => {
+  for (const cancel of [false, true]) {
+    let current = true; let written = false
+    await assert.rejects(copyClipboardTextBundle({ getItem: async (id) => textItem(id), getFreshListItems: async () => { if (cancel) current = false; return cancel ? [textItem('a'), textItem('b')] : [textItem('a')] } }, [{ id: 'a', hash: 'a' }, { id: 'b', hash: 'b' }], 'blankline', '', () => current, async () => { written = true }))
+    assert.equal(written, false)
+  }
+})
+await check('UTF-8 byte bound includes literal separator and never truncates', async () => {
+  const selection = [{ id: 'a', hash: 'a' }, { id: 'b', hash: 'b' }]
+  const items = [textItem('a', 'x'.repeat(CLIPBOARD_TEXT_MERGE_MAX_BYTES - 1)), textItem('b', '')]
+  const repository = { getItem: async (id) => items.find((item) => item.id === id), getFreshListItems: async () => items }
+  const writes = []
+  await copyClipboardTextBundle(repository, selection, 'newline', '', () => true, async (text) => writes.push(text))
+  assert.equal(writes[0].length, CLIPBOARD_TEXT_MERGE_MAX_BYTES)
+  await assert.rejects(copyClipboardTextBundle(repository, selection, 'custom', '中', () => true, async (text) => writes.push(text)), /too-large/)
+  assert.equal(writes.length, 1)
+})
+await check('failed copy propagates and permits same selection retry', async () => {
+  const repository = { getItem: async (id) => textItem(id), getFreshListItems: async () => [textItem('a'), textItem('b')] }
+  const selection = [{ id: 'a', hash: 'a' }, { id: 'b', hash: 'b' }]
+  await assert.rejects(copyClipboardTextBundle(repository, selection, 'newline', '', () => true, async () => { throw new Error('copy-failed') }), /copy-failed/)
+  let output
+  await copyClipboardTextBundle(repository, selection, 'newline', '', () => true, async (text) => { output = text })
+  assert.equal(output, 'FULL_a\nFULL_b')
 })
 
 console.log(`Clipboard text merge: ${passed} important logic checks passed (synthetic data only)`)

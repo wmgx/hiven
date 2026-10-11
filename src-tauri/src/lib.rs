@@ -8081,6 +8081,7 @@ pub fn run() {
             plugin_http_request,
             plugin_shell_run,
             clipboard_privacy::clipboard_read_public_text,
+            clipboard_privacy::clipboard_read_history_text,
             clipboard_privacy::clipboard_write_sensitive_text,
             clipboard_privacy::clipboard_write_login_link,
             clipboard_privacy::clipboard_write_text,

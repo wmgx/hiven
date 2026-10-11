@@ -5,6 +5,11 @@ use tauri_plugin_clipboard_manager::ClipboardExt;
 mod login_link_clipboard;
 use login_link_clipboard::{ClipboardPrivacy, LoginLinkGuard};
 
+#[path = "history_copy_clipboard.rs"]
+mod history_copy_clipboard;
+static HISTORY_COPY: std::sync::Mutex<history_copy_clipboard::HistoryCopy> =
+    std::sync::Mutex::new(history_copy_clipboard::HistoryCopy::new());
+
 static CLIPBOARD_PRIVACY: ClipboardPrivacy = ClipboardPrivacy::new();
 
 // NSPasteboard's cache is shared with WebKit and our privacy/file readers.
@@ -45,11 +50,16 @@ fn with_clipboard_privacy<T: Send + 'static>(
 }
 
 #[tauri::command]
-pub async fn clipboard_write_text(app: tauri::AppHandle, text: String) -> Result<(), String> {
+pub async fn clipboard_write_text(
+    app: tauri::AppHandle,
+    text: String,
+    record_in_history: Option<bool>,
+) -> Result<(), String> {
     with_clipboard(&app, move |app| {
-        app.clipboard()
-            .write_text(text)
-            .map_err(|error| error.to_string())
+        let mut history = HISTORY_COPY.lock().map_err(|_| "Clipboard unavailable")?;
+        history.write(text, record_in_history != Some(false), |text| {
+            app.clipboard().write_text(text.to_owned()).map_err(|_| "Clipboard write failed".to_string())
+        })
     })
 }
 
@@ -87,8 +97,17 @@ pub async fn clipboard_read_public_text(app: tauri::AppHandle) -> Result<String,
     read_public_clipboard_text(&app)
 }
 
+#[tauri::command]
+pub async fn clipboard_read_history_text(app: tauri::AppHandle) -> Result<String, String> {
+    read_clipboard_text(&app, true)
+}
+
 pub(crate) fn read_public_clipboard_text(app: &tauri::AppHandle) -> Result<String, String> {
-    with_clipboard_privacy(app, |app, guard| {
+    read_clipboard_text(app, false)
+}
+
+fn read_clipboard_text(app: &tauri::AppHandle, for_history: bool) -> Result<String, String> {
+    with_clipboard_privacy(app, move |app, guard| {
         #[cfg(target_os = "macos")]
         let text = unsafe {
             let _ = app;
@@ -101,7 +120,13 @@ pub(crate) fn read_public_clipboard_text(app: &tauri::AppHandle) -> Result<Strin
             .clipboard()
             .read_text()
             .map_err(|_| "Clipboard read failed".to_string())?;
-        Ok(guard.public_text(text))
+        let text = guard.public_text(text);
+        if for_history {
+            let mut history = HISTORY_COPY.lock().map_err(|_| "Clipboard unavailable")?;
+            Ok(history.read(text))
+        } else {
+            Ok(text)
+        }
     })
 }
 

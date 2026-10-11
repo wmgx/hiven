@@ -109,7 +109,7 @@
   "merge.cancel": "Cancel",
   "merge.continue": "Continue processing",
   "merge.chooseText": "Select texts",
-  "merge.instruction": "Choose 1–{max} across searches. Queue in order, compare two, or combine to continue.",
+  "merge.instruction": "Choose 1–{max} across searches. Copy combined text, compare two, or queue in order.",
   "merge.selectedTitle": "Selected order",
   "merge.selectionCount": "{count} / {max} selected",
   "merge.emptySelection": "Select items on the left, then arrange them here.",
@@ -167,5 +167,12 @@
   "queue.returnExternal": "Return to target app",
   "queue.platformUnavailable": "Sequential paste currently requires Linux X11. macOS, Windows and Wayland are not supported yet. Your selection is kept; the queue was not started.",
   "queue.shortcutConflict": "{shortcut} could not be registered; another shortcut may already use it. Your selection is kept. Resolve the conflict and retry.",
-  "queue.platformHint": "Currently available on Linux X11 only."
+  "queue.platformHint": "Currently available on Linux X11 only.",
+  "merge.custom": "Custom",
+  "merge.customSeparator": "Custom separator",
+  "merge.customSeparatorHint": "Exact separator; empty joins directly",
+  "merge.copy": "Copy combined",
+  "merge.copied": "Full combined text copied. History and selection are unchanged.",
+  "merge.copyFailed": "Could not copy all selected text. Your selection is kept; retry or remove unavailable items.",
+  "merge.tooLarge": "Combined text exceeds 1 MiB (UTF-8). Nothing was copied or truncated; reduce the selection or separator."
 }

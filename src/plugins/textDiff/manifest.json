@@ -4,13 +4,14 @@
   "displayNameI18n": {
     "zh": "文本对比"
   },
-  "version": "3.3.3",
+  "version": "3.4.0",
   "capabilities": [
     "command",
     "surface"
   ],
   "permissions": [
     "clipboard.read",
-    "clipboard.write"
+    "clipboard.write",
+    "ai.use"
   ]
 }

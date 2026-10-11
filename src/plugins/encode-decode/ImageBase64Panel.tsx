@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import { Button } from '@hiven/plugin-ui'
+import { saveClipboardPng } from './saveClipboardPng'
 import { decodeRaster, imageDataUri, inspectRaster, MAX_IMAGE_BYTES, parseImageBase64 } from './imageBase64'
 
 type Result = { uri: string; preview: string; png: Uint8Array; width: number; height: number }
@@ -53,6 +54,17 @@ export function ImageBase64Panel({ host, t, initialText }: PluginSurfaceProps) {
       <Button disabled={busy || !host.clipboard.readImage} onClick={() => void run(async (signal, current) => {
         const image = await host.clipboard.readImage!({ signal }); return load(image.bytes, signal, current, image.contentType)
       })}>{t('image.readClipboard')}</Button>
+      <Button disabled={busy || !host.clipboard.readImage} onClick={() => void run(async (signal, current) => {
+        const image = await host.clipboard.readImage!({ signal })
+        const info = inspectRaster(image.bytes, image.contentType)
+        const decoded = await decodeRaster(image.bytes, info, signal)
+        if (!current()) return 'image.cancelled'
+        try {
+          const saved = await saveClipboardPng(host.storage, decoded.png, current)
+          if (saved.status === 'cancelled') return 'image.saveClipboardCancelled'
+          return saved.pathCopied ? 'image.savedPathCopied' : 'image.savedPathCopyFailed'
+        } catch { return 'image.saveClipboardFailed' }
+      })}>{t('image.saveClipboard')}</Button>
       <Button disabled={busy} onClick={() => file.current?.click()}>{t('image.chooseFile')}</Button>
       <input ref={file} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(event) => {
         const selected = event.currentTarget.files?.[0]; event.currentTarget.value = ''

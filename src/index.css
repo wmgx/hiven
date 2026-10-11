@@ -6507,6 +6507,23 @@ body[data-theme='dark'] .global-launcher-panel .l-row.cmd-item.selected {
   opacity: 0.6;
 }
 
+/* Answers and their date/unit rules must not compete for one truncated line. */
+.l-row.is-direct-answer .r-main {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+}
+.l-row.is-direct-answer .r-title {
+  max-width: 100%;
+  line-height: 18px;
+}
+.l-row.is-direct-answer .r-desc {
+  flex: none;
+  font-size: 11px;
+  line-height: 14px;
+}
+.l-row.is-direct-answer .r-desc::before { content: none; }
+
 /* Light: small readable pill. Dark: demoted to faint trailing text (below). */
 .l-row .r-tag,
 .launcher-kind-tag {

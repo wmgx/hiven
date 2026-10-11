@@ -75,5 +75,10 @@
   "image.saved": "PNG 已保存。",
   "image.cancelled": "已取消。",
   "image.error": "操作未完成，请检查图片、权限或桌面支持后重试。输入已保留。",
-  "image.sizeError": "图片超过字节或像素限制。输入已保留。"
+  "image.sizeError": "图片超过字节或像素限制。输入已保留。",
+  "image.saveClipboard": "保存剪贴板图片并复制路径…",
+  "image.savedPathCopied": "PNG 已保存，完整文件路径已复制。",
+  "image.savedPathCopyFailed": "PNG 已保存，但路径复制失败。可在刚才选择的位置找到文件。",
+  "image.saveClipboardCancelled": "已取消保存，剪贴板未改变。",
+  "image.saveClipboardFailed": "PNG 保存失败，剪贴板未改变。请选择未使用的文件名及可写入的文件夹。"
 }

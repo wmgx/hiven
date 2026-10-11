@@ -75,5 +75,10 @@
   "image.saved": "PNG saved.",
   "image.cancelled": "Cancelled.",
   "image.error": "Could not complete this action. Check the image, permissions or desktop support and retry. Input is preserved.",
-  "image.sizeError": "Image exceeds the byte or pixel limits. Input is preserved."
+  "image.sizeError": "Image exceeds the byte or pixel limits. Input is preserved.",
+  "image.saveClipboard": "Save clipboard image & copy path…",
+  "image.savedPathCopied": "PNG saved. Full file path copied.",
+  "image.savedPathCopyFailed": "PNG saved, but its path could not be copied. Find the file in the location you selected.",
+  "image.saveClipboardCancelled": "Save cancelled. Clipboard unchanged.",
+  "image.saveClipboardFailed": "PNG could not be saved. Clipboard unchanged. Choose an unused filename and a writable folder."
 }

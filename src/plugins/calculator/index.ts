@@ -1,6 +1,7 @@
 import BigNumber from 'bignumber.js'
 import { getPluginHostSdk, textOutput, textError, type PanelPropsV2, type PluginDefinition, type PluginSurfaceProps, type TextInput, type LauncherDynamicContext, type LauncherItemContribution } from '@hiven/plugin'
 import { CalculatorSurface } from './CalculatorSurface'
+import { convertUnitQuery } from './unitConversion'
 import './style.css'
 
 // ─── Safe Math Parser ────────────────────────────────────────────────────────
@@ -603,6 +604,35 @@ const definition: PluginDefinition = {
   launcher: {
     dynamicItems(ctx: LauncherDynamicContext): LauncherItemContribution[] {
       const input = ctx.query
+      const conversion = convertUnitQuery(input)
+      if (conversion) {
+        if (!conversion.ok) {
+          const message = ctx.t(`units.error.${conversion.error}`)
+          return [{
+            id: 'unit-conversion-error',
+            display: { title: message, subtitle: ctx.t('units.syntax'), icon: 'Calculator' },
+            behavior: { type: 'perform' },
+            surfaces: ['global-launcher'],
+            directAnswer: true,
+            execute: () => ({ ok: false, message }),
+          }]
+        }
+        return [{
+          id: 'unit-conversion',
+          display: {
+            title: `${input.trim()} ${conversion.approximate ? '≈' : '='} ${conversion.text}`,
+            subtitle: ctx.t(conversion.dimension === 'data' ? 'units.dataHint' : 'units.copyHint'),
+            icon: 'Calculator',
+          },
+          behavior: { type: 'perform' },
+          surfaces: ['global-launcher'],
+          directAnswer: true,
+          async execute(ctx2) {
+            await ctx2.api.copyText(conversion.text)
+            return { ok: true, output: { choices: [{ id: 'copy', title: conversion.text, primaryAction: async () => { await ctx2.api.copyText(conversion.text) } }] } }
+          },
+        }]
+      }
       const result = safeCalculate(input)
       if (result === null) return []
       return [{

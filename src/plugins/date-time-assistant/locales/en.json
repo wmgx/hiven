@@ -44,5 +44,17 @@
   "action.copyDateTime": "Copy Date & Time",
   "action.copyDate": "Copy Date",
   "action.copyTimestamp": "Copy Timestamp",
-  "error.invalidDate": "Invalid date: {value}"
+  "error.invalidDate": "Invalid date: {value}",
+  "zone.beijing": "Beijing",
+  "zone.tokyo": "Tokyo",
+  "zone.utc": "UTC",
+  "zone.dayDelta": "{count}d",
+  "zone.fixed": "Fixed offset",
+  "zone.dateRules": "Zone rules for this date",
+  "zone.copy": "Enter to copy",
+  "zone.help": "Use 3pm EST or 2026-07-01 15:00 America/New_York",
+  "zone.error.zone": "Use EST, UTC±offset, or an IANA zone; other abbreviations are ambiguous",
+  "zone.error.date": "Enter a valid date and time",
+  "zone.error.gap": "This local time does not exist at the daylight saving transition",
+  "zone.error.fold": "This local time occurs twice; use an explicit UTC offset"
 }

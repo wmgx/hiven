@@ -20,6 +20,23 @@ export async function writeText(text: string, signal?: AbortSignal): Promise<voi
   await invoke('clipboard_write_text', { text })
 }
 
+/** Native history-only suppression; no web fallback can uphold this contract. */
+export async function writeTextWithoutHistory(text: string): Promise<void> {
+  if (!isTauriClipboardRuntime()) throw new Error('History-preserving copy requires native clipboard')
+  const { invoke } = await import('@tauri-apps/api/core')
+  await invoke('clipboard_write_text', { text, recordInHistory: false })
+}
+
+export async function readHistoryClipboardText(): Promise<string> {
+  if (!isTauriClipboardRuntime()) return readNativeClipboardText()
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    return (await invoke<string>('clipboard_read_history_text')) ?? ''
+  } catch {
+    return ''
+  }
+}
+
 export async function readImage(beforeRead?: () => void): Promise<import('@tauri-apps/api/image').Image> {
   const { invoke } = await import('@tauri-apps/api/core')
   const { Image } = await import('@tauri-apps/api/image')

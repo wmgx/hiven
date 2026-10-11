@@ -109,7 +109,7 @@
   "merge.cancel": "取消组合",
   "merge.continue": "继续处理",
   "merge.chooseText": "选择文本",
-  "merge.instruction": "可跨搜索选 1–{max} 条；按顺序加入队列，选两条可对比，也可拼接。",
+  "merge.instruction": "可跨搜索选 1–{max} 条；打包复制、选两条对比，或按顺序加入队列。",
   "merge.selectedTitle": "已选顺序",
   "merge.selectionCount": "已选 {count} / {max} 条",
   "merge.emptySelection": "勾选左侧记录，在此调整顺序。",
@@ -167,5 +167,12 @@
   "queue.returnExternal": "返回目标应用",
   "queue.platformUnavailable": "顺序粘贴目前仅支持 Linux X11，暂不支持 macOS、Windows 或 Wayland。已保留选择，未启用队列。",
   "queue.shortcutConflict": "无法注册 {shortcut}，可能已被其他快捷键占用。已保留选择，请解决冲突后重试。",
-  "queue.platformHint": "目前仅支持 Linux X11。"
+  "queue.platformHint": "目前仅支持 Linux X11。",
+  "merge.custom": "自定义",
+  "merge.customSeparator": "自定义分隔符",
+  "merge.customSeparatorHint": "原样使用；留空则直接连接",
+  "merge.copy": "打包复制",
+  "merge.copied": "完整文本已复制，历史和选择保持不变。",
+  "merge.copyFailed": "未能复制全部已选文本。选择已保留，请重试或移除无法读取的条目。",
+  "merge.tooLarge": "合并文本超过 1 MiB（UTF-8）。未复制或截断，请减少选择或缩短分隔符。"
 }

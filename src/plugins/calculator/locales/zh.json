@@ -58,5 +58,11 @@
   "surface.root": "开方",
   "surface.absolute": "绝对值",
   "surface.rounding": "取整",
-  "surface.powerHint": "乘方支持整数指数；开方使用 sqrt。round 四舍五入，floor 向下取整，ceil 向上取整。"
+  "surface.powerHint": "乘方支持整数指数；开方使用 sqrt。round 四舍五入，floor 向下取整，ceil 向上取整。",
+  "units.copyHint": "按 Enter 复制 · 最多 12 位有效数字；≈ 表示已舍入",
+  "units.dataHint": "按 Enter 复制 · KB = 1000 B；KiB = 1024 B；b = 比特，B = 字节",
+  "units.syntax": "试试 5 ft to cm、2 kg to lb、1 KiB to B · 单位符号区分大小写",
+  "units.error.dimension": "不能在不同量纲之间换算",
+  "units.error.unit": "不支持该单位或大小写形式",
+  "units.error.range": "数值超出范围（请使用 −30 到 30 的数量级）"
 }

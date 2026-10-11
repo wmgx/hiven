@@ -44,5 +44,17 @@
   "action.copyDateTime": "复制日期时间",
   "action.copyDate": "复制日期",
   "action.copyTimestamp": "复制时间戳",
-  "error.invalidDate": "无效日期：{value}"
+  "error.invalidDate": "无效日期：{value}",
+  "zone.beijing": "北京",
+  "zone.tokyo": "东京",
+  "zone.utc": "UTC",
+  "zone.dayDelta": "{count}天",
+  "zone.fixed": "固定偏移",
+  "zone.dateRules": "按此日期的时区规则",
+  "zone.copy": "回车复制",
+  "zone.help": "例如 3pm EST 或 2026-07-01 15:00 America/New_York",
+  "zone.error.zone": "请使用 EST、UTC±偏移或 IANA 时区；其他缩写存在歧义",
+  "zone.error.date": "请输入有效日期和时间",
+  "zone.error.gap": "夏令时切换跳过了此本地时间",
+  "zone.error.fold": "此本地时间重复出现两次；请指定 UTC 偏移"
 }
