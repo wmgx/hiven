@@ -27,4 +27,16 @@ node --experimental-strip-types scripts/test-history-diff-handoff.mts
 
 逻辑验证覆盖完整快照、删除/变化、迟到读取、UTF-8 边界、受限来源、owner 撤销和迟到返回回执。架构检查、TypeScript 检查、Vite 构建及内置插件释放逻辑通过；History 版本提升为 1.4.8。
 
-范围限制：此环境没有 Rust 工具链或运行中的桌面 bridge；未构建/启动 Tauri 桌面程序，未验证桌面窗口生命周期与 OS 外部应用粘贴。上述外部粘贴目标为独立浏览器页面，使用真实浏览器剪贴板路径。未部署或发布应用。
+## 原生补验（2026-10-11）
+
+代码仍为 `56ac506`，没有新增产品改动。用户目录恢复官方 Rust 与 Debian GTK/WebKit 依赖后，原生 debug 编译成功；复用产物完成官方 `tauri bundle --debug --ci --bundles appimage`，没有重建前端。使用官方 AppImage 便携 `.home` / `.config` profile 和 Xvfb，tauri-driver + WebKitWebDriver 建立真实 `wry` 会话。
+
+运行的是 AppImage 的原生 Tauri/WebKit 程序，debug 前端仍由本地 Vite devUrl 提供。确认 `__TAURI_INTERNALS__` 存在、浏览器 bridge 未启用，`get_config_dir` 指向 AppImage 独立 `.home/.local/hiven`。没有 mock clipboard、mock native provider 或自制 AppRun。
+
+从空白隔离历史开始，经真实 repository / native private storage 写入三条合成记录。记录功能仅临时开启展示，文本/图片/文件自动采集开关均关闭；不把此过程算作自动历史采集验证。
+
+原生 WebDriver 操作完成：分别搜索 ALPHA、BRAVO 后选择 → 进入原 Diff 并核对左右全文和顺序 → 返回保留 BRAVO 查询及两条选择 → 换第二条为 CHARLIE → 再对比并核对全文 → 点击右侧复制。对比之前的原生 X11 剪贴板哨兵未改变。随后在独立 Mousepad 窗口 Ctrl+V、Ctrl+S，保存的 589 字符与右侧快照精确一致。
+
+结束前确认三条 native 历史对象与初始对象完全相同，恢复原设置、删除本次合成记录，确认历史为空。没有读取真实用户历史或密钥，没有调用 AI。窗口、驱动与虚拟显示随后关闭。未部署、发布或合并 main。
+
+本地证据位于 `/workspace/hiven-native/`：`appimage-unified.log`、`native-result.json`、`native-after-copy.png`、`native-mousepad.png`、`external-paste.txt`。打包配置与修复原因见 [云环境官方 AppImage 验证](cloud-appimage-validation.md)。本轮验证 Linux X11 原生主链，不扩张为 macOS/Windows 或全量桌面生命周期验证。
