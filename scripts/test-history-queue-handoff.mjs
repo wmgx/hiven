@@ -39,7 +39,7 @@ function fixture() {
       calls.push({ command, args })
       if (command === 'history_queue_request') { requests.set(args.id, { ...args, items: args.items ?? [] }); emit('hiven://history-queue-request', args.id) }
       else if (command === 'history_queue_take') { const request = requests.get(args.id); requests.delete(args.id); return request }
-      else if (command === 'history_queue_reply') emit('hiven://history-queue-reply', args)
+      else if (command === 'history_queue_reply') { if (h.replyGate) await h.replyGate.promise; emit('hiven://history-queue-reply', args) }
       else if (command === 'history_queue_publish') emit('hiven://history-queue-status', args.status)
       else if (command === 'get_history_queue_availability') return 'can-attempt'
       else if (command === 'begin_history_queue_paste') return h.beginGate ? h.beginGate.promise : 'attempt'
@@ -62,11 +62,13 @@ function fixture() {
   modules['./plugins/clipboard-history/queue/clipboardPasteQueue'] = load('src/plugins/clipboard-history/queue/clipboardPasteQueue.ts')
   const api = load('src/historyPasteQueueHandoff.ts')
   h.stop = api.installHistoryPasteQueueHost({ notify: (status, outcome) => notices.push({ status, outcome }) })
-  h.bridge = api.createHistoryPasteQueueBridge({ source: 'builtin', pluginId: 'clipboard-history', isCurrent: () => true })
+  h.createBridge = (owner = { isCurrent: () => true }) => api.createHistoryPasteQueueBridge({ source: 'builtin', pluginId: 'clipboard-history', ...owner })
+  h.bridge = h.createBridge()
   h.next = () => handler?.()
   h.revoke = () => { allowed = false; subscriptions.forEach((fn) => fn()) }
   // Even a newly trusted bundled definition cannot inherit an old queue.
   h.replaceDefinition = () => { definition = { settings: {} }; subscriptions.forEach((fn) => fn()) }
+  h.expire = () => { for (const fn of [...timers.values()]) fn() }
   h.releaseCount = () => releaseCount
   return h
 }
@@ -130,6 +132,35 @@ const original = [{ id: 'a', text: '完整\r\n  synthetic A\n' }, { id: 'b', tex
   assert.equal((await h.bridge.getStatus()).phase, 'cancelled')
   assert.equal(h.releaseCount(), 1)
   assert.equal(h.notices.some(({ outcome }) => outcome === 'delivered'), false)
+  h.stop()
+}
+{
+  const h = fixture(); await flush()
+  let current = true
+  let invalidate = () => {}
+  const old = h.createBridge({ isCurrent: () => current, subscribeInvalidation: (fn) => { invalidate = fn; return () => {} } })
+  const gate = deferred(); h.replyGate = gate
+  const pending = old.getStatus()
+  const rejected = assert.rejects(pending, /QueueCancelledError/)
+  await flush(); current = false; invalidate()
+  await rejected
+  h.replyGate = null
+  assert.equal((await h.bridge.getStatus()).phase, 'idle', 'A replacement owner can read actual idle status')
+  gate.resolve(); await flush()
+  assert.equal((await h.bridge.getStatus()).phase, 'idle', 'Late old receipt cannot corrupt the replacement')
+  h.stop()
+}
+{
+  const h = fixture(); await flush()
+  const gate = deferred(); h.replyGate = gate
+  const read = h.bridge.getStatus()
+  const rejected = assert.rejects(read, /QueueCancelledError/, 'A current owner timeout still rejects rather than reporting ready')
+  await flush(); h.expire(); await rejected
+  gate.resolve(); await flush(); h.stop()
+}
+{
+  const h = fixture(); await flush(); h.revoke()
+  await assert.rejects(h.bridge.getStatus(), /QueueUnavailableError/, 'A rejected status request must not masquerade as a successful idle read')
   h.stop()
 }
 console.log('History queue handoff passed: explicit delivery, full snapshots, failure retry, cancellation, replacement fence and revocation')

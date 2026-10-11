@@ -235,7 +235,12 @@ export function createHistoryPasteQueueBridge(options: {
       if (!latest.sessionId) await rpc('status')
       if (latest.sessionId) await rpc('cancel', undefined, undefined, latest.sessionId)
     },
-    async getStatus() { check(); await rpc('status'); return latest },
+    async getStatus() {
+      check()
+      const reply = await rpc('status')
+      if (!reply.ok) throw new Error(reply.errorCode ?? 'QueueUnavailableError')
+      return latest
+    },
     subscribe(listener) {
       let active = true
       let stop = () => {}

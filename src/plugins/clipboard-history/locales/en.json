@@ -155,6 +155,7 @@
   "queue.ready": "Queue ready. Return to the target app; {shortcut} pastes one item at a time.",
   "queue.startFailed": "Could not start the queue. Your selection is kept. Reselect any changed or deleted item, then retry.",
   "queue.tooLarge": "The full texts exceed 1 MiB combined. Nothing was truncated. Remove an item and retry.",
+  "queue.statusLoading": "Loading paste queue…",
   "queue.statusFailed": "Could not read queue status. Reopen History to retry.",
   "queue.cancelFailed": "Could not cancel the queue. Retry before using its shortcut.",
   "queue.cancel": "Cancel queue",

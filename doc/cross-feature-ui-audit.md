@@ -15,7 +15,7 @@
 
 重新构建前端及原生 AppImage 后，通过实际系统键盘确认：编辑草稿时 Esc 保持窗口与全文；Enter 插入换行；Tab / Enter 可激活取消和保存；取消保留原文与搜索查询；选择模式下 Esc 取消选择而不隐藏窗口，随后普通 Esc 正常隐藏。截图及机器断言位于本次云环境 `/workspace/hiven-native/audit-11-escape-preserves-draft.png` 和 `audit-escape-result.json`。整体复审截图为同目录 `audit-01` 至 `audit-10`，属于临时环境证据，不是可长期访问的发布产物。
 
-重启后曾显示“无法读取队列状态”，按提示重新打开 History 后消失；本轮未定位冷启动时序原因，也不声称修复。既有队列流程验收见 `native-hud-history-acceptance.md`。
+重启后曾显示“无法读取队列状态”，按提示重新打开 History 后消失；本轮当时未定位。后续针对性的状态读取竞态修复与原生复验见 `history-queue-status-lifecycle.md`。既有队列流程验收见 `native-hud-history-acceptance.md`。
 
 类型检查、架构边界检查、`git diff --check`、前端构建与原生构建通过。未为 UI 添加单元测试。隔离 profile 已恢复历史记录关闭、各记录类别开关开启，测试队列已取消。
 

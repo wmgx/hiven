@@ -155,6 +155,7 @@
   "queue.ready": "队列已就绪。返回目标应用后，{shortcut} 每次粘贴一项。",
   "queue.startFailed": "无法启用队列，已保留选择。请重新选择已修改、删除的条目后重试。",
   "queue.tooLarge": "完整正文合计超过 1 MiB，未截断任何文本。请移除一条后重试。",
+  "queue.statusLoading": "正在读取粘贴队列…",
   "queue.statusFailed": "无法读取队列状态，请重新打开历史后重试。",
   "queue.cancelFailed": "取消队列失败，请重试后再使用队列快捷键。",
   "queue.cancel": "取消队列",

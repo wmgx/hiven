@@ -164,6 +164,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const [queueBusy, setQueueBusy] = useState(false)
   const [queueCancelling, setQueueCancelling] = useState(false)
   const [queueNotice, setQueueNotice] = useState<string | null>(null)
+  const [queueReadState, setQueueReadState] = useState<'loading' | 'ready' | 'failed'>('loading')
   const queueSubmissionRef = useRef<AbortController | null>(null)
   const queueStatusEpochRef = useRef(0)
   const queueShortcut = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌃⇧V' : 'Ctrl+Shift+V'
@@ -172,19 +173,30 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     if (!queueApi) return
     let active = true
     let observed = false
+    const owner = host.deliveryFeedbackOwner
+    const isCurrent = () => active && owner?.isCurrent() !== false
+    setQueueReadState('loading')
     const unsubscribe = queueApi.subscribe((status) => {
       observed = true
       queueStatusEpochRef.current += 1
-      if (active) {
+      if (isCurrent()) {
+        setQueueReadState('ready')
         setQueueStatus(status)
         if (status.busy || status.completed > 0 || status.phase === 'failed' || status.phase === 'cancelled') setQueueNotice(null)
       }
     })
     void Promise.resolve(queueApi.getStatus()).then((status) => {
-      if (active && !observed) setQueueStatus(status)
-    }).catch(() => { if (active) setQueueNotice(t('queue.statusFailed')) })
+      if (isCurrent() && !observed) {
+        setQueueStatus(status)
+        setQueueReadState('ready')
+      }
+    }).catch(() => {
+      // Native visibility can replace the owner before React cleans up this effect.
+      // Its cancelled read cannot mark the new owner's loading/ready state as failed.
+      if (isCurrent() && !observed) setQueueReadState('failed')
+    })
     return () => { active = false; unsubscribe() }
-  }, [queueApi, t])
+  }, [queueApi, host.deliveryFeedbackOwner])
   const compareSubmissionRef = useRef<AbortController | null>(null)
   const mergeSubmissionRef = useRef<AbortController | null>(null)
 
@@ -1078,10 +1090,11 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }, [selectedItem, selectedId, filteredItems, flatRows, virtualizer, handlePaste, handleReturnToLauncher, handleDelete, handleCopy, host, t, imeKeyDown, combining, cancelMerge, toggleMergeItem, titleDialog, textEdit, toggleQuickFavorite, loading, settings.enabled])
 
   const queueActive = Boolean(queueStatus && queueStatus.remaining > 0 && (queueStatus.phase === 'ready' || queueStatus.phase === 'failed'))
-  const queueFeedback = queueApi && (queueNotice || queueActive || queueStatus?.phase === 'completed' || queueStatus?.phase === 'cancelled') ? (
+  const queueReadNotice = queueReadState === 'failed' ? t('queue.statusFailed') : queueReadState === 'loading' ? t('queue.statusLoading') : null
+  const queueFeedback = queueApi && (queueNotice || queueReadNotice || queueActive || queueStatus?.phase === 'completed' || queueStatus?.phase === 'cancelled') ? (
     <div className="clipboard-history-queue-status">
       <span role="status">
-        {queueNotice || (queueStatus?.phase === 'cancelled' ? t('queue.cancelled') : queueStatus?.phase === 'completed' ? t('queue.completed') : queueStatus?.phase === 'failed' ? t('queue.failed', { shortcut: queueShortcut, position: (queueStatus?.completed ?? 0) + 1, remaining: queueStatus?.remaining ?? 0 }) : t('queue.progress', {
+        {queueNotice || queueReadNotice || (queueStatus?.phase === 'cancelled' ? t('queue.cancelled') : queueStatus?.phase === 'completed' ? t('queue.completed') : queueStatus?.phase === 'failed' ? t('queue.failed', { shortcut: queueShortcut, position: (queueStatus?.completed ?? 0) + 1, remaining: queueStatus?.remaining ?? 0 }) : t('queue.progress', {
           position: (queueStatus?.completed ?? 0) + 1,
           total: queueStatus?.total ?? 0,
           remaining: queueStatus?.remaining ?? 0,
