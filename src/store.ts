@@ -4,6 +4,7 @@ import { JEV_PRESETS } from './workspace/ai/jev'
 import type { Locale } from './i18n'
 import { migrateLocalStorageKey } from './utils/persistMigration'
 import type {
+  DiscoveredApp,
   LauncherSurfaceId,
   LauncherUsageBySurface,
   SystemLauncherItemKey,
@@ -34,6 +35,8 @@ import {
   type AppHotkeyBinding,
 } from './workspace/appHotkeys'
 import {
+  AppSearchAliasConflictError,
+  findAppSearchAliasConflicts,
   normalizeAppSearchAliases,
   parseAppSearchAliasInput,
   type AppSearchAliases,
@@ -187,7 +190,7 @@ interface AppState {
   updateSetting: (key: string, value: any) => void
   setAppHotkey: (binding: AppHotkeyBinding) => void
   removeAppHotkey: (appId: string) => void
-  setAppSearchAliases: (appId: string, aliases: string[]) => void
+  setAppSearchAliases: (appId: string, aliases: string[], installedApps?: readonly DiscoveredApp[]) => void
   toggleBuiltinDisabled: (name: string) => void
   toggleCustomDisabled: (name: string) => void
   locale: Locale
@@ -428,7 +431,7 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
         appHotkeys: removeAppHotkey(state.settings.appHotkeys ?? [], appId),
       },
     })),
-  setAppSearchAliases: (appId, aliases) => {
+  setAppSearchAliases: (appId, aliases, installedApps) => {
     if (typeof appId !== 'string' || !appId.trim() || appId !== appId.trim()
       || ['__proto__', 'prototype', 'constructor'].includes(appId)
       || /[\u0000-\u001f\u007f-\u009f]/.test(appId)
@@ -440,6 +443,12 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
     // Missing storage must fail explicitly, including persist's unavailable-storage fallback.
     if (!useAppStore.persist?.getOptions().storage) throw new Error('Application settings storage is unavailable.')
     const next = { ...readPersistedAppSearchAliases() }
+    // The editor supplies its installed catalog. Check the latest persisted
+    // aliases too, even if another window's storage event has not arrived yet.
+    if (installedApps) {
+      const conflicts = findAppSearchAliasConflicts(appId, parsed.aliases, installedApps, next)
+      if (conflicts.length) throw new AppSearchAliasConflictError(conflicts)
+    }
     if (parsed.aliases.length) next[appId] = parsed.aliases
     else delete next[appId]
     const before = get().settings.appSearchAliases

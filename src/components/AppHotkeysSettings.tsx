@@ -11,21 +11,25 @@ import type { DiscoveredApp } from '../workspace/launcher/types'
 import { Combobox } from '../plugin-ui'
 import { saveAppHotkey } from '../hotkeys/appHotkeys'
 import { showToast } from '../workspace/toast'
-import { getAppSearchAliases, parseAppSearchAliasInput } from '../workspace/appLauncher/appSearchAliases'
+import { AppSearchAliasConflictError, findAppSearchAliasConflicts, getAppSearchAliases, parseAppSearchAliasInput, type AppSearchAliasConflict } from '../workspace/appLauncher/appSearchAliases'
 import { searchableFieldsMatch } from '../workspace/searchRanking'
 
 type AliasDraft = { text: string; savedText: string; edited: boolean }
 
-function AppSearchAliasEditor({ app }: { app: DiscoveredApp }) {
+function AppSearchAliasEditor({ app, apps }: { app: DiscoveredApp; apps: readonly DiscoveredApp[] }) {
   const locale = useAppStore((s) => s.locale)
-  const savedAliases = useAppStore((s) => s.settings.appSearchAliases[app.appId])
+  const aliasMap = useAppStore((s) => s.settings.appSearchAliases)
+  const savedAliases = aliasMap[app.appId]
   const setAppSearchAliases = useAppStore((s) => s.setAppSearchAliases)
   const savedText = (savedAliases ?? []).join('\n')
   const [draft, setDraft] = useState<AliasDraft>({ text: savedText, savedText, edited: false })
   const [notice, setNotice] = useState('')
   const [saveError, setSaveError] = useState(false)
+  const [saveConflicts, setSaveConflicts] = useState<AppSearchAliasConflict[]>([])
   const fieldId = useId()
   const parsed = parseAppSearchAliasInput(draft.text)
+  const conflicts = parsed.ok ? findAppSearchAliasConflicts(app.appId, parsed.aliases, apps, aliasMap) : []
+  const shownConflicts = conflicts.length ? conflicts : saveConflicts
   const dirty = draft.edited
   const changedElsewhere = dirty && savedText !== draft.savedText
   const validationError = parsed.ok ? '' : t(locale, {
@@ -43,10 +47,17 @@ function AppSearchAliasEditor({ app }: { app: DiscoveredApp }) {
 
   const persist = (aliases: string[]) => {
     try {
-      setAppSearchAliases(app.appId, aliases)
+      setAppSearchAliases(app.appId, aliases, apps)
       setSaveError(false)
+      setSaveConflicts([])
       return true
-    } catch {
+    } catch (error) {
+      if (error instanceof AppSearchAliasConflictError) {
+        setSaveConflicts(error.conflicts)
+        setSaveError(false)
+        setNotice('')
+        return false
+      }
       setSaveError(true)
       setNotice('')
       return false
@@ -54,7 +65,7 @@ function AppSearchAliasEditor({ app }: { app: DiscoveredApp }) {
   }
 
   const save = () => {
-    if (!parsed.ok || !persist(parsed.aliases)) return
+    if (!parsed.ok || conflicts.length || !persist(parsed.aliases)) return
     const text = parsed.aliases.join('\n')
     setDraft({ text, savedText: text, edited: false })
     setNotice('settings.appSearchAliasesSaved')
@@ -64,6 +75,7 @@ function AppSearchAliasEditor({ app }: { app: DiscoveredApp }) {
     setDraft({ ...draft, text: '', edited: true })
     setSaveError(false)
     setNotice('')
+    setSaveConflicts([])
   }
 
   return (
@@ -76,20 +88,34 @@ function AppSearchAliasEditor({ app }: { app: DiscoveredApp }) {
           rows={4}
           value={draft.text}
           placeholder={t(locale, 'settings.appSearchAliasesPlaceholder')}
-          aria-describedby={`${fieldId}-hint${validationError ? ` ${fieldId}-error` : ''}`}
-          aria-invalid={Boolean(validationError)}
+          aria-describedby={`${fieldId}-hint${validationError ? ` ${fieldId}-error` : ''}${shownConflicts.length ? ` ${fieldId}-conflicts` : ''}`}
+          aria-invalid={Boolean(validationError || shownConflicts.length)}
           onChange={(event) => {
             setDraft({ ...draft, text: event.currentTarget.value, edited: true })
             setNotice('')
             setSaveError(false)
+            setSaveConflicts([])
           }}
         />
       </label>
       <p id={`${fieldId}-hint`} className="app-hotkeys-empty">{t(locale, 'settings.appSearchAliasesHint')}</p>
       {validationError ? <p id={`${fieldId}-error`} className="app-hotkeys-error" role="alert">{validationError}</p> : null}
+      {shownConflicts.length > 0 ? (
+        <div id={`${fieldId}-conflicts`} className="app-hotkeys-error" role="alert">
+          <p>{t(locale, 'settings.appSearchAliasesConflict')}</p>
+          <ul>{shownConflicts.map((conflict) => (
+            <li key={JSON.stringify([conflict.alias, conflict.appId])}>
+              {t(locale, 'settings.appSearchAliasesConflictItem', {
+                alias: conflict.alias,
+                name: conflict.nameI18n?.[locale] ?? conflict.name,
+              })}{conflict.displayPath ? ` (${conflict.displayPath})` : ''}
+            </li>
+          ))}</ul>
+        </div>
+      ) : null}
       {changedElsewhere ? <p className="app-hotkeys-empty" role="status">{t(locale, 'settings.appSearchAliasesChanged')}</p> : null}
       <div>
-        <button type="button" className="app-hotkeys-add-btn" disabled={!dirty || !parsed.ok} onClick={save}>
+        <button type="button" className="app-hotkeys-add-btn" disabled={!dirty || !parsed.ok || conflicts.length > 0} onClick={save}>
           {t(locale, 'settings.appSearchAliasesSave')}
         </button>{' '}
         <button type="button" className="app-hotkeys-add-btn" disabled={!draft.text} onClick={clear}>
@@ -98,6 +124,7 @@ function AppSearchAliasEditor({ app }: { app: DiscoveredApp }) {
         <button type="button" className="app-hotkeys-add-btn" disabled={!dirty} onClick={() => {
           setDraft({ text: savedText, savedText, edited: false })
           setSaveError(false)
+          setSaveConflicts([])
           setNotice('')
         }}>
           {t(locale, 'settings.appSearchAliasesDiscard')}
@@ -291,7 +318,7 @@ export function AppHotkeysSettings() {
             onChange={setAliasAppId}
           />
         </label>
-        {aliasApp ? <AppSearchAliasEditor key={aliasApp.appId} app={aliasApp} /> : null}
+        {aliasApp ? <AppSearchAliasEditor key={aliasApp.appId} app={aliasApp} apps={apps} /> : null}
       </div>
 
       {loadError ? <p className="app-hotkeys-error">{loadError}</p> : null}

@@ -455,6 +455,12 @@ const MAX_RANKED_RESULTS = 50
 
 type ScoredItem = { item: LauncherItem; index: number; score: number; band: number }
 
+function isInstalledAppNameExact(item: LauncherItem, query: string): boolean {
+  return item.kind === 'host' && isHostAppLauncherItem(item) &&
+    [item.display.title, ...Object.values(item.display.titleI18n ?? {})]
+      .some((name) => name?.trim().toLowerCase() === query)
+}
+
 export function rankLauncherItems(ctx: RankContext, items: LauncherItem[]): LauncherItem[] {
   // Initialize per-call cache
   searchableFieldsCache = new WeakMap()
@@ -476,10 +482,20 @@ export function rankLauncherItems(ctx: RankContext, items: LauncherItem[]): Laun
     ? items.filter((item) => item.kind === 'dynamic' || itemMatchesQuery(item, q, ctx.locale))
     : items.slice()
 
+  // Legacy aliases can collide with another installed app's actual name.
+  // In that case name relevance wins by one match tier, above bounded favorite
+  // and usage boosts. Unique aliases and empty-query favorites keep their order.
+  const hasAppAliasCollision = !!q && candidates.some((item) =>
+    item.kind === 'host' && isHostAppLauncherItem(item) &&
+    !isInstalledAppNameExact(item, q) &&
+    item.display.aliases?.some((alias) => alias.trim().toLowerCase() === q),
+  )
+
   let scored: ScoredItem[] = candidates.map((item, index) => ({
     item,
     index,
-    score: scoreLauncherItem(ctx, item, candidates),
+    score: scoreLauncherItem(ctx, item, candidates) +
+      (hasAppAliasCollision && isInstalledAppNameExact(item, q) ? 1000 : 0),
     // Product semantics are categorical: an automatic answer on empty input is
     // immediately useful, while fallback recall must stay behind live results.
     band: item.ranking?.fallback ? 0 : !q && item.directAnswer ? 2 : 1,

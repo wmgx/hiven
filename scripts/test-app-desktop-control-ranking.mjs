@@ -96,7 +96,7 @@ function item(systemKey, title, opts = {}) {
   return {
     systemKey,
     kind: opts.kind ?? 'plugin',
-    display: { title, aliases: opts.aliases },
+    display: { title, titleI18n: opts.titleI18n, aliases: opts.aliases },
     behavior: { type: 'perform' },
     staticPriority: opts.staticPriority,
     ranking: opts.ranking,
@@ -111,6 +111,38 @@ const now = 1_000_000_000_000
 const emptyUsage = usage.emptyUsageBySurface()
 const JWT_SAMPLE =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature'
+
+// Installed-app name collisions must not turn an old alias into the default
+// launch target. Exercise the actual mixed sorter, including its top-k path.
+{
+  const app = (id, name, opts = {}) => item(`host:app-launcher:app:${id}`, name, { kind: 'host', ...opts })
+  const vim = app('vim', 'Vim')
+  const mousepad = app('mousepad', 'Mousepad', { aliases: ['Vim', '合成记事本'], ranking: { installedAt: now } })
+  let history = emptyUsage
+  for (let i = 0; i < 100; i++) history = usage.recordSelection(history, 'global-launcher', mousepad.systemKey, now)
+  const ctx = { query: ' VIM ', locale: 'en', surfaceId: 'global-launcher', usage: history, now, favoriteKeys: [mousepad.systemKey] }
+  const rank = (rows, overrides = {}) => Array.from(ranking.rankLauncherItems({ ...ctx, ...overrides }, rows), (row) => row.systemKey)
+  assert.equal(rank([mousepad, vim])[0], vim.systemKey, 'real name beats a legacy conflicting alias even with favorite, usage and freshness')
+  assert.equal(rank([mousepad, vim], { query: '' })[0], mousepad.systemKey, 'empty-query favorite remains first')
+  assert.deepEqual(rank([vim, mousepad], { query: '合成记事本' }), [mousepad.systemKey], 'unique Chinese alias still finds its app')
+
+  const otherVim = app('vim-other', 'Vim')
+  assert.deepEqual(rank([mousepad, otherVim, vim]).slice(0, 2), [otherVim.systemKey, vim.systemKey], 'equivalent real names preserve input order')
+  const localized = app('localized', 'Editor', { titleI18n: { zh: 'Vim' }, aliases: ['Vim'] })
+  assert.equal(rank([mousepad, localized])[0], localized.systemKey, 'a catalog localized name is a real name, not an alias-only collision')
+
+  const many = Array.from({ length: 75 }, (_, i) => app(`alias-${i}`, `Editor ${i}`, { aliases: ['Vim'] }))
+  const top = rank([...many, mousepad, otherVim, vim])
+  assert.equal(top.length, 50)
+  assert.deepEqual(top.slice(0, 2), [otherVim.systemKey, vim.systemKey], 'partial sorting preserves exact-name priority and stable ties')
+
+  const plugin = item('plugin:example:launcher:vim', 'Other tool', { aliases: ['Vim'] })
+  const spoof = item('host:app-launcher:app:spoof', 'Other tool', { aliases: ['Vim'] })
+  assert.equal(ranking.scoreLauncherItem(ctx, plugin), 6000, 'plugin exact aliases retain their score')
+  assert.deepEqual(rank([plugin, vim]), [plugin.systemKey, vim.systemKey], 'no app alias collision leaves mixed exact-match order unchanged')
+  assert.deepEqual(rank([spoof, vim]), [spoof.systemKey, vim.systemKey], 'non-host rows cannot trigger the collision policy')
+  assert.deepEqual(rank([plugin, mousepad]).slice(0, 1), [mousepad.systemKey], 'alias-only queries retain existing favorite intent')
+}
 
 // --- 1. Strong jwt detection: app score < jwt tool score (even with heavy app usage) ---
 {
@@ -206,6 +238,12 @@ const hostAppSandbox = {
   logLauncherPerfDuration: () => {},
   launcherPerfNow: () => 0,
   normalizeHostAppEntries: hostAppIndex.normalizeHostAppEntries,
+  require: (id) => {
+    if (id === '../../store') return { useAppStore: { getState: () => ({ settings: { appSearchAliases: {} } }) } }
+    if (id === './appSearchAliases') return loadTs('src/workspace/appLauncher/appSearchAliases.ts')
+    if (id === './appLaunchError') return { rethrowAppLaunchError: (error) => { throw error } }
+    throw new Error('unexpected host app dependency: ' + id)
+  },
 }
 vm.runInNewContext(hostAppOut, hostAppSandbox)
 const hostApp = hostAppSandbox.module.exports

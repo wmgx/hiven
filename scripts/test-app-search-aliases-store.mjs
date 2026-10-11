@@ -226,4 +226,99 @@ check('changed shortcut definitions cannot inherit an old runtime success or err
   assert.deepEqual(plain(A.state().settings.quickEditorShortcut), { kind: 'double-modifier', modifier: 'Command' })
 })
 
+const installedApps = [
+  { appId, name: 'Notes', aliases: ['Own Notes'], platform: 'macos', source: 'applications' },
+  { appId: secondId, name: 'Chat', nameI18n: { zh: '聊天' }, aliases: ['Chat Client'],
+    platform: 'macos', source: 'applications', displayPath: '/Applications/Chat.app' },
+]
+
+check('conflicts identify installed names, localized names, discovered aliases and saved aliases', () => {
+  const aliases = ['  cHaT  ', '聊天', 'CHAT CLIENT', '沟通']
+  const map = { [secondId]: ['沟通'] }
+  const before = JSON.stringify({ installedApps, map })
+  const conflicts = A.findAppSearchAliasConflicts(appId, aliases, installedApps, map)
+  assert.deepEqual(plain(conflicts), aliases.map((alias) => ({ alias, appId: secondId,
+    name: 'Chat', nameI18n: { zh: '聊天' }, displayPath: '/Applications/Chat.app' })))
+  assert.equal(JSON.stringify({ installedApps, map }), before, 'inspection does not rewrite catalog or aliases')
+  assert.equal(A.findAppSearchAliasConflicts(appId, ['Chat', ' chat '], installedApps, map).length, 1)
+  assert.deepEqual(plain(A.findAppSearchAliasConflicts(appId,
+    ['Cha', 'Chat clients', 'liaotian', 'lt'], installedApps, map)), [], 'prefix, fuzzy and pinyin matches are not collisions')
+})
+
+check('own names and aliases and uninstalled alias metadata do not block guarded saves', () => {
+  const isolated = sharedStorage({ settings: { appSearchAliases: {
+    [appId]: ['自己的别名'], removed: ['已卸载别名'],
+  } } })
+  const editor = windowStore(isolated)
+  const aliases = ['Notes', 'Own Notes', '自己的别名', '已卸载别名']
+  editor.state().setAppSearchAliases(appId, aliases, installedApps)
+  assert.deepEqual(plain(isolated.persisted().settings.appSearchAliases), {
+    [appId]: aliases, removed: ['已卸载别名'],
+  })
+})
+
+check('legacy collisions remain readable and can be replaced or cleared without touching other apps', () => {
+  const isolated = sharedStorage({ settings: { appSearchAliases: {
+    [appId]: ['Chat', '共同别名'], [secondId]: ['共同别名'],
+  } } })
+  const before = plain(isolated.persisted())
+  const writes = isolated.writes
+  const editor = windowStore(isolated)
+  assert.deepEqual(plain(isolated.persisted()), before)
+  assert.equal(isolated.writes, writes, 'hydrating conflicting legacy metadata must not rewrite it')
+  assert.deepEqual(plain(editor.state().settings.appSearchAliases), before.settings.appSearchAliases)
+  editor.state().setAppSearchAliases(appId, ['独立别名'], installedApps)
+  assert.deepEqual(plain(isolated.persisted().settings.appSearchAliases), {
+    [appId]: ['独立别名'], [secondId]: ['共同别名'],
+  })
+  editor.state().setAppSearchAliases(appId, ['Chat']) // Existing two-argument API remains compatible.
+  editor.state().setAppSearchAliases(appId, [], installedApps)
+  assert.deepEqual(plain(isolated.persisted().settings.appSearchAliases), { [secondId]: ['共同别名'] })
+})
+
+check('guarded saves reject every exact collision without publishing or persisting a change', () => {
+  const isolated = sharedStorage({ settings: { appSearchAliases: {
+    [appId]: ['保留原名'], [secondId]: ['沟通'],
+  } } })
+  const editor = windowStore(isolated)
+  const before = plain(isolated.persisted())
+  const memory = editor.state().settings.appSearchAliases
+  const writes = isolated.writes
+  for (const alias of [' chat ', '聊天', 'CHAT CLIENT', '沟通']) {
+    assert.throws(() => editor.state().setAppSearchAliases(appId, [alias], installedApps), (error) => {
+      assert.ok(error instanceof editor.AppSearchAliasConflictError)
+      assert.equal(error.conflicts[0].appId, secondId)
+      assert.equal(error.conflicts[0].alias, alias.trim())
+      return true
+    })
+    assert.equal(editor.state().settings.appSearchAliases, memory)
+    assert.deepEqual(plain(isolated.persisted()), before)
+    assert.equal(isolated.writes, writes)
+  }
+})
+
+check('guarded save checks latest persisted aliases before a cross-window storage event arrives', () => {
+  const isolated = sharedStorage({ settings: { appSearchAliases: { [appId]: ['保留原名'] } } })
+  const editor = windowStore(isolated)
+  const other = windowStore(isolated)
+  other.state().setAppSearchAliases(secondId, ['新占用别名'], installedApps)
+  assert.equal(editor.state().settings.appSearchAliases[secondId], undefined, 'editor is deliberately stale')
+  const before = plain(isolated.persisted())
+  const memory = editor.state().settings.appSearchAliases
+  const writes = isolated.writes
+  assert.throws(() => editor.state().setAppSearchAliases(appId, ['新占用别名'], installedApps), (error) => {
+    assert.ok(error instanceof editor.AppSearchAliasConflictError)
+    assert.deepEqual(plain(error.conflicts.map(({ alias, appId }) => ({ alias, appId }))),
+      [{ alias: '新占用别名', appId: secondId }])
+    return true
+  })
+  assert.equal(editor.state().settings.appSearchAliases, memory)
+  assert.deepEqual(plain(isolated.persisted()), before)
+  assert.equal(isolated.writes, writes)
+  editor.state().setAppSearchAliases(appId, ['可以重试'], installedApps)
+  assert.deepEqual(plain(isolated.persisted().settings.appSearchAliases), {
+    [appId]: ['可以重试'], [secondId]: ['新占用别名'],
+  })
+})
+
 console.log(`App search aliases: ${passed} pure/store cases passed`)

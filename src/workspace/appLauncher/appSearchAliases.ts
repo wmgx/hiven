@@ -92,3 +92,43 @@ export function getAppSearchAliases(app: DiscoveredApp, aliasesMap: AppSearchAli
   }
   return aliases
 }
+
+export type AppSearchAliasConflict = {
+  alias: string
+  appId: string
+  name: string
+  nameI18n?: DiscoveredApp['nameI18n']
+  displayPath?: string
+}
+
+/** Exact human-name collisions only; existing persisted aliases are never rewritten. */
+export function findAppSearchAliasConflicts(
+  appId: string,
+  aliases: readonly string[],
+  installedApps: readonly DiscoveredApp[],
+  aliasesMap: AppSearchAliases,
+): AppSearchAliasConflict[] {
+  const conflicts: AppSearchAliasConflict[] = []
+  const seen = new Set<string>()
+  for (const alias of aliases) {
+    const key = alias.trim().toLowerCase()
+    if (!key) continue
+    for (const app of installedApps) {
+      if (app.appId === appId || !getAppSearchAliases(app, aliasesMap).some((name) => name.trim().toLowerCase() === key)) continue
+      const conflictKey = JSON.stringify([key, app.appId])
+      if (seen.has(conflictKey)) continue
+      seen.add(conflictKey)
+      conflicts.push({ alias, appId: app.appId, name: app.name, nameI18n: app.nameI18n, displayPath: app.displayPath })
+    }
+  }
+  return conflicts
+}
+
+export class AppSearchAliasConflictError extends Error {
+  readonly conflicts: AppSearchAliasConflict[]
+  constructor(conflicts: AppSearchAliasConflict[]) {
+    super('Application search alias conflicts')
+    this.name = 'AppSearchAliasConflictError'
+    this.conflicts = conflicts
+  }
+}
