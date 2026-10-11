@@ -34,5 +34,9 @@
   "surface.extractHint": "提取全部匹配的完整文本（最多 {limit} 条），按顺序换行连接，保留重复和空白。高亮仅用于定位。",
   "surface.emptyMatches": "当前匹配均为零长度，没有可提取的文本。",
   "error.continueFailed": "无法带回 Launcher，原文和匹配结果已保留，请重试。",
-  "error.invalid": "正则表达式或标记无效，请检查后重试。"
+  "error.invalid": "正则表达式或标记无效，请检查后重试。",
+  "execution.running": "正在测试表达式…",
+  "execution.timeout": "执行超过 1 秒，已停止。输入已保留，可修改表达式或文本后重试。",
+  "execution.failed": "无法启动正则执行进程。输入已保留，可修改后重试。",
+  "execution.cancelled": "执行已取消，可修改表达式或文本后重试。"
 }

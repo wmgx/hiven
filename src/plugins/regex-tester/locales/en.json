@@ -34,5 +34,9 @@
   "surface.extractHint": "Extract all whole matches (up to {limit}), joined with new lines. Keeps order, duplicates and whitespace. Highlighting only locates a match.",
   "surface.emptyMatches": "All matches are zero-length. There is no matched text to extract.",
   "error.continueFailed": "Could not return to Launcher. Your text and matches are still here. Try again.",
-  "error.invalid": "Invalid pattern or flags. Check the expression and try again."
+  "error.invalid": "Invalid pattern or flags. Check the expression and try again.",
+  "execution.running": "Testing expression…",
+  "execution.timeout": "Execution stopped after 1 second. Your input is kept. Edit the expression or text to try again.",
+  "execution.failed": "Could not start the regex worker. Your input is kept; edit to retry.",
+  "execution.cancelled": "Execution cancelled. Edit the expression or text to try again."
 }

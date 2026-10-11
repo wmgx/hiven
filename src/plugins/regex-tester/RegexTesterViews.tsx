@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { getPluginHostSdk, type PanelPropsV2, type PluginSurfaceProps } from '@hiven/plugin'
 import { Button, IconButton } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
-import { evaluateRegex, MAX_REGEX_MATCHES, type MatchResult } from './regexCore'
+import { MAX_REGEX_MATCHES, type MatchResult } from './regexCore'
+import { useRegexExecution } from './useRegexExecution'
 import { extractRegexMatches } from './extractMatches'
 
 const COMMON_FLAGS = ['g', 'i', 'm', 's', 'u'] as const
@@ -13,7 +14,8 @@ export function RegexTesterPluginPanel({ host, paneId }: PanelPropsV2<unknown>) 
   const paneText = hooks.usePaneText(paneId ?? '') ?? ''
   const [pattern, setPattern] = React.useState('')
   const [flags, setFlags] = React.useState('g')
-  const result = React.useMemo(() => evaluateRegex(pattern, flags, paneText), [flags, paneText, pattern])
+  const execution = useRegexExecution(pattern, flags, paneText)
+  const result = execution.result
 
   return (
     <div className="flex flex-col h-full overflow-hidden" style={{ background: 'var(--color-background-primary)' }}>
@@ -30,7 +32,7 @@ export function RegexTesterPluginPanel({ host, paneId }: PanelPropsV2<unknown>) 
         <button
           className="ml-auto text-[10px] px-1.5 py-0.5 rounded hover:opacity-80"
           style={{ background: 'var(--color-background-tertiary)', color: 'var(--color-text-secondary)' }}
-          onClick={host.close}
+          onClick={() => { execution.cancel(); host.close() }}
         >
           {t('panel.close')}
         </button>
@@ -43,7 +45,7 @@ export function RegexTesterPluginPanel({ host, paneId }: PanelPropsV2<unknown>) 
           style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}
           placeholder={t('panel.regex.pattern')}
           value={pattern}
-          onChange={(event) => setPattern(event.target.value)}
+          onChange={(event) => { execution.cancel(); setPattern(event.target.value) }}
           autoFocus
         />
         <span className="text-[10px] shrink-0" style={{ color: 'var(--color-text-tertiary)' }}>/</span>
@@ -52,17 +54,18 @@ export function RegexTesterPluginPanel({ host, paneId }: PanelPropsV2<unknown>) 
           style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}
           placeholder={t('panel.regex.flags')}
           value={flags}
-          onChange={(event) => setFlags(event.target.value)}
+          onChange={(event) => { execution.cancel(); setFlags(event.target.value) }}
         />
       </div>
 
-      <div className="flex-1 overflow-auto px-3 py-1.5">
-        {result.error && (
+      <div className="flex-1 overflow-auto px-3 py-1.5" aria-live="polite">
+        {result.status === 'running' || result.status === 'cancelled' ? <p role="status">{t(`execution.${result.status}`)}</p> : null}
+        {(result.status === 'invalid' || result.status === 'timeout' || result.status === 'failed') && (
           <div role="alert" className="text-[11px] py-1" style={{ color: 'var(--color-error-text)' }}>
-            {t('error.invalid')}
+            {t(result.status === 'invalid' ? 'error.invalid' : `execution.${result.status}`)}
           </div>
         )}
-        {!result.error && result.matches.length > 0 && (
+        {result.status === 'ready' && result.matches.length > 0 && (
           <div className="text-[11px]" style={{ color: 'var(--color-text-secondary)' }}>
             <span style={{ color: 'var(--color-success-text)' }}>
               {t(result.matches.length === 1 ? 'panel.regex.match' : 'panel.regex.matches', { count: result.matches.length })}
@@ -87,7 +90,7 @@ export function RegexTesterPluginPanel({ host, paneId }: PanelPropsV2<unknown>) 
             )}
           </div>
         )}
-        {!result.error && pattern && result.matches.length === 0 && (
+        {result.status === 'ready' && pattern && result.matches.length === 0 && (
           <div className="text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>
             {t('panel.regex.noMatches')}
           </div>
@@ -104,8 +107,9 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
   const [sourceText, setSourceText] = useState(props.initialText ?? 'hello 123\nworld 456')
   const [activeMatch, setActiveMatch] = useState(-1)
   const sourceRef = useRef<HTMLTextAreaElement>(null)
-  const result = useMemo(() => evaluateRegex(pattern, flags, sourceText), [flags, pattern, sourceText])
-  const extraction = useMemo(() => extractRegexMatches(result), [result])
+  const execution = useRegexExecution(pattern, flags, sourceText, host.deliveryFeedbackOwner)
+  const result = execution.result
+  const extraction = useMemo(() => result.status === 'ready' ? extractRegexMatches(result) : { status: 'invalid' as const, text: '' }, [result])
   const currentResultRef = useRef<typeof result | null>(result)
   currentResultRef.current = result
   const activeRef = useRef(true)
@@ -114,16 +118,20 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
   const handedOffResultRef = useRef<typeof result | null>(null)
   const [handedOffResult, setHandedOffResult] = useState<typeof result | null>(null)
   const [failedResult, setFailedResult] = useState<typeof result | null>(null)
+  const handoffRef = useRef<AbortController | null>(null)
   const sourceLines = sourceText ? sourceText.split('\n').length : 0
 
   useEffect(() => setActiveMatch(-1), [flags, pattern, sourceText])
   useEffect(() => {
     activeRef.current = true
-    return () => { activeRef.current = false }
+    return () => { activeRef.current = false; handoffRef.current?.abort() }
   }, [])
 
   // Revoke rendered actions immediately, before an input change commits a new render.
   const invalidateResult = () => {
+    execution.cancel()
+    handoffRef.current?.abort()
+    handoffRef.current = null
     currentResultRef.current = null
     actionEpochRef.current += 1
     // Hidden native surfaces remain mounted. Refresh the current button while
@@ -141,25 +149,29 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
     })
   }
 
-  const continueProcessing = () => {
+  const continueProcessing = async () => {
     if (!activeRef.current || actionEpochRef.current !== actionEpoch || currentResultRef.current !== result || extraction.status !== 'ready' || handedOffResultRef.current === result) return
+    const submission = new AbortController()
+    handoffRef.current = submission
     handedOffResultRef.current = result
     setHandedOffResult(result)
     setFailedResult(null)
+    const current = () => activeRef.current && !submission.signal.aborted && currentResultRef.current === result && handoffRef.current === submission
     try {
-      host.returnToLauncherWithObject({ kind: 'text', text: extraction.text, source: 'tool-result' })
+      const accepted = await host.returnToLauncherWithObject({ kind: 'text', text: extraction.text, source: 'tool-result' }, { signal: submission.signal })
+      if (!current() || accepted !== false) return
     } catch {
-      if (handedOffResultRef.current === result) {
-        handedOffResultRef.current = null
-        setHandedOffResult((current) => current === result ? null : current)
-      }
-      if (activeRef.current && currentResultRef.current === result) setFailedResult(result)
+      if (!current()) return
     }
+    handedOffResultRef.current = null
+    setHandedOffResult(null)
+    setFailedResult(result)
   }
 
   const revealMatch = (match: MatchResult, index: number) => {
     setActiveMatch(index)
     requestAnimationFrame(() => {
+      if (!activeRef.current || currentResultRef.current !== result || actionEpochRef.current !== actionEpoch) return
       const textarea = sourceRef.current
       if (!textarea) return
       textarea.focus()
@@ -239,25 +251,26 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
         <div className="regex-tester-surface__pane">
           <span className="regex-tester-surface__pane-header">
             <strong>{t('surface.matches')}</strong>
-            {!result.error && pattern ? (
+            {result.status === 'ready' && pattern ? (
               <small>{t(result.matches.length === 1 ? 'panel.regex.match' : 'panel.regex.matches', { count: result.matches.length })}</small>
             ) : null}
           </span>
-          <div className="regex-tester-surface__matches">
-            {result.error && (
+          <div className="regex-tester-surface__matches" aria-live="polite">
+            {result.status === 'running' || result.status === 'cancelled' ? <p role="status">{t(`execution.${result.status}`)}</p> : null}
+            {(result.status === 'invalid' || result.status === 'timeout' || result.status === 'failed') && (
               <div role="alert" className="regex-tester-surface__error">
-                <strong>{t('error.invalid')}</strong>
-                <code>{result.error}</code>
+                <strong>{t(result.status === 'invalid' ? 'error.invalid' : `execution.${result.status}`)}</strong>
+                {result.status === 'invalid' ? <code>{result.error}</code> : null}
               </div>
             )}
-            {!result.error && result.matches.length === 0 && (
+            {result.status === 'ready' && result.matches.length === 0 && (
               <div className="regex-tester-surface__empty">
                 <span aria-hidden="true">.*</span>
                 <strong>{pattern ? t('panel.regex.noMatches') : t('surface.enterPattern')}</strong>
                 <p>{pattern ? t('surface.noMatchesHint') : t('surface.enterPatternHint')}</p>
               </div>
             )}
-            {!result.error && result.matches.length > 0 && (
+            {result.status === 'ready' && result.matches.length > 0 && (
               <>
                 {result.matches.slice(0, 100).map((match, index) => (
                   <button
@@ -289,7 +302,7 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
             <p>{t('surface.extractHint', { limit: MAX_REGEX_MATCHES })}</p>
             {extraction.status === 'empty-matches' ? <p role="status">{t('surface.emptyMatches')}</p> : null}
             {failedResult === result ? <p role="alert">{t('error.continueFailed')}</p> : null}
-            <Button type="button" disabled={extraction.status !== 'ready' || handedOffResult === result} onClick={continueProcessing}>
+            <Button type="button" disabled={extraction.status !== 'ready' || handedOffResult === result} onClick={() => void continueProcessing()}>
               {t('surface.extractMatches', { count: result.matches.length })}
             </Button>
           </footer>
