@@ -199,9 +199,6 @@ export function startNativeValidationRelay(): () => void {
         releaseDetachedListeners(attachedClients)
         for (const request of data.requests ?? []) {
           try {
-            if (['capture_desktop_snapshot', 'poll_keyboard_observation', 'stop_keyboard_observation'].includes(request.command)) {
-              throw new Error('desktop-required')
-            }
             let value: unknown
             if (request.command === nativeStorageCommands.snapshot) {
               value = Object.fromEntries(Array.from({ length: localStorage.length }, (_, index) => {

@@ -33,9 +33,7 @@ mod text_material;
 mod toast_hud;
 mod history_paste_queue;
 pub mod desktop_bridge;
-pub mod desktop_capture;
 pub mod hotkeys;
-pub mod keyboard_observation;
 #[cfg(target_os = "linux")]
 mod linux_app_launch;
 #[cfg(target_os = "linux")]
@@ -7842,9 +7840,6 @@ pub fn run() {
             current_foreground_app_name,
             current_foreground_app_context,
             set_context_suggestions_enabled,
-            desktop_capture::capture_desktop_snapshot,
-            keyboard_observation::poll_keyboard_observation,
-            keyboard_observation::stop_keyboard_observation,
             discover_installed_apps,
             read_installed_app_icon_url,
             read_installed_app_icon_png,

@@ -32,7 +32,6 @@ import {
 import { startClipboardAgeTracker } from './launcher/clipboard/clipboardSnapshot'
 import { readNativeClipboardText } from './workspace/nativeClipboard'
 import { startNativeValidationRelay } from './workspace/webNativeBridge'
-import { startBehaviorObservation } from './observation/observer'
 
 // Register built-in panels
 import './panels/register'
@@ -85,7 +84,6 @@ function LauncherRuntimeApp() {
     let cleanupSettingsWatcher: (() => void) | undefined
     let cleanupPermissionWatcher: (() => void) | undefined
     let cleanupStartupPermissionWatcher: (() => void) | undefined
-    let cleanupObservation: (() => void) | undefined
 
     initConfigDir().then(async (dir) => {
       if (dir) {
@@ -108,7 +106,6 @@ function LauncherRuntimeApp() {
       }
 
       if (disposed) return
-      cleanupObservation = startBehaviorObservation()
       refreshHostApplicationIndexOnStartup()
       // Warm on-screen window list in idle time so first Global Launcher open is snappy.
       prefetchDesktopWindowsOnStartup()
@@ -128,7 +125,6 @@ function LauncherRuntimeApp() {
       cleanupSettingsWatcher?.()
       cleanupPermissionWatcher?.()
       cleanupStartupPermissionWatcher?.()
-      cleanupObservation?.()
       void stopAllPluginBackgrounds()
     }
   }, [])

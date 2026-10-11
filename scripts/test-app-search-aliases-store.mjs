@@ -33,6 +33,20 @@ check('retired learning opt-in is ignored without removing manual state or writi
   assert.equal(retained.writes, writes, 'loading does not rewrite or clear existing data')
 })
 
+check('retired observation enabled flags remain inert without rewriting legacy data', () => {
+  const retained = sharedStorage({ settings: {
+    behaviorObservation: { enabled: true, keyboardEnabled: true, intervalSeconds: 15 },
+    keyboardObservation: { enabled: true }, appSearchAliases: { [appId]: ['synthetic'] },
+  } })
+  const before = plain(retained.persisted())
+  const writes = retained.writes
+  const legacy = windowStore(retained)
+  assert.equal(legacy.state().settings.behaviorObservation.enabled, true)
+  assert.equal(legacy.state().settings.keyboardObservation.enabled, true)
+  assert.deepEqual(plain(retained.persisted()), before)
+  assert.equal(retained.writes, writes, 'inert legacy fields must not trigger a migration or recorder write')
+})
+
 check('parse accepts human multilingual names, trims and deduplicates case', () => {
   assert.deepEqual(plain(parse('  写作\nNOTES\r\nnotes\n 工作 📝 \n')), { ok: true, aliases: ['写作', 'NOTES', '工作 📝'] })
   assert.deepEqual(plain(parse(' \n\r\n ')), { ok: true, aliases: [] })

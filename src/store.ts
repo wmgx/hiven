@@ -2,7 +2,6 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { JEV_PRESETS } from './workspace/ai/jev'
 import type { Locale } from './i18n'
-import type { ScreenshotObserverSettings, KeyboardObserverSettings } from './observation/observer'
 import { migrateLocalStorageKey } from './utils/persistMigration'
 import type {
   LauncherSurfaceId,
@@ -162,8 +161,6 @@ interface AppState {
 
   // Settings
   settings: {
-    behaviorObservation?: ScreenshotObserverSettings
-    keyboardObservation?: KeyboardObserverSettings
     watchDirectory: string
     fontSize: number
     wordWrap: boolean
