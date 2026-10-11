@@ -16,6 +16,7 @@ import {
 import './workbench.css'
 
 type OutputAction = 'copy' | 'paste' | 'return'
+type ContinuationSnapshot = WorkbenchSelection & { inputText: string; appliedText: string }
 
 const DUPLICATE_GROUP_PAGE_SIZE = 20
 const DUPLICATE_LINE_PAGE_SIZE = 40
@@ -88,6 +89,9 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
   const activeRef = useRef(false)
   const currentResultRef = useRef<WorkbenchResult | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const [continuation, setContinuation] = useState<ContinuationSnapshot | null>(null)
+  const continuationRef = useRef<ContinuationSnapshot | null>(null)
+  const [confirmUndo, setConfirmUndo] = useState(false)
   const selected = WORKBENCH_OPERATIONS.find((item) => item.value === operation)!
   const category = selected.category
 
@@ -104,6 +108,7 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
       currentResultRef.current = null
       pendingRef.current?.controller.abort()
       pendingRef.current = null
+      continuationRef.current = null
     }
   }, [])
 
@@ -122,6 +127,7 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
 
   // Revoke pending callbacks before React commits the next input or operation.
   const update = (change: () => void) => {
+    setConfirmUndo(false)
     setDuplicatePage(0)
     delivery.invalidate()
     currentResultRef.current = null
@@ -164,7 +170,30 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
 
   const useResult = () => {
     if (!isCurrentResult() || result.status !== 'ready' || pendingRef.current) return
-    update(() => setInputText(result.text))
+    const snapshot = { inputText, operation, options: { ...options }, appliedText: result.text }
+    update(() => {
+      continuationRef.current = snapshot
+      setContinuation(snapshot)
+      setInputText(result.text)
+    })
+    inputRef.current?.focus()
+  }
+
+  const undoContinuation = (confirmed = false) => {
+    const snapshot = continuationRef.current
+    if (!activeRef.current || !snapshot || pendingRef.current) return
+    if (inputText !== snapshot.appliedText && !(confirmed && confirmUndo)) {
+      // Any subsequent input/option edit or exit invalidates this confirmation.
+      update(() => setConfirmUndo(true))
+      return
+    }
+    // Consume synchronously so a repeated activation cannot restore twice.
+    continuationRef.current = null
+    update(() => {
+      setContinuation(null)
+      setInputText(snapshot.inputText)
+      setSelection({ operation: snapshot.operation, options: { ...snapshot.options } })
+    })
     inputRef.current?.focus()
   }
 
@@ -266,6 +295,7 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
         <label className="text-workbench-operation">
           <span>{t('workbench.operation')}</span>
           <Select
+            key={category}
             aria-label={t('workbench.operation')}
             value={operation}
             options={WORKBENCH_OPERATIONS.filter((item) => item.category === category).map((item) => ({ value: item.value, label: t(item.label) }))}
@@ -383,16 +413,24 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
             spellCheck={false}
           />}
           <div className={`text-workbench-result-meta${delivery.feedback ? ` is-delivery is-${delivery.feedback.tone}` : ''}`} role="status" aria-live="polite">
-            <span>{delivery.feedback?.message ?? t(selected.label)}</span>
-            {!delivery.feedback && result.status === 'ready' ? <span>{t('meta.characters', { count: outputText.length })}</span> : null}
+            <span>{confirmUndo ? t('workbench.undoOverwriteWarning') : delivery.feedback?.message ?? t(selected.label)}</span>
+            {!confirmUndo && !delivery.feedback && result.status === 'ready' ? <span>{t('meta.characters', { count: outputText.length })}</span> : null}
           </div>
         </section>
       </main>
 
       <footer className="text-workbench-footer">
-        <Button type="button" variant="secondary" disabled={outputDisabled || operation === 'find-duplicates'} title={t('workbench.useResultDescription')} onClick={useResult}>
-          {t('workbench.useResult')}
-        </Button>
+        <div className="text-workbench-output-actions">
+          {confirmUndo ? <>
+            <Button type="button" variant="secondary" disabled={busy !== null} onClick={() => undoContinuation(true)}>{t('workbench.confirmUndo')}</Button>
+            <Button type="button" variant="ghost" onClick={() => { setConfirmUndo(false); inputRef.current?.focus() }}>{t('workbench.cancelUndo')}</Button>
+          </> : <>
+            <Button type="button" variant="secondary" disabled={outputDisabled || operation === 'find-duplicates'} title={t('workbench.useResultDescription')} onClick={useResult}>
+              {t('workbench.useResult')}
+            </Button>
+            {continuation ? <Button type="button" variant="ghost" disabled={busy !== null} title={t('workbench.undoDescription')} onClick={() => undoContinuation()}>{t('workbench.undo')}</Button> : null}
+          </>}
+        </div>
         <div className="text-workbench-output-actions">
           <Button type="button" variant="ghost" disabled={outputDisabled} title={t('workbench.returnDescription')} onClick={() => void deliver('return')}>
             <CornerDownLeft size={14} aria-hidden="true" />
