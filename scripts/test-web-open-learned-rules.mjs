@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Legacy URL-rule cleanup must remove automatic rules and retain manual ones. */
+/** Retired automatic rules remain stored and cannot regain launcher projection. */
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
@@ -62,15 +62,16 @@ const saved = { enabled: false, entries: [manual, ...oldAutomaticRules] }
 const before = structuredClone(saved)
 const migrated = plugin.settings.migrate(saved, 8)
 assert.equal(migrated.enabled, false)
-assert.equal(migrated.entries.length, 1)
+assert.equal(migrated.entries.length, 4)
 assert.deepEqual(JSON.parse(JSON.stringify(migrated.entries[0])), manual, 'manual rule fields and pattern survive migration')
+assert.deepEqual(JSON.parse(JSON.stringify(migrated.entries.slice(1))), oldAutomaticRules, 'retired automatic records survive migration')
 assert.deepEqual(saved, before, 'migration must not mutate stored settings')
 assert.deepEqual(
   JSON.parse(JSON.stringify(plugin.settings.migrate(migrated, 8))),
   JSON.parse(JSON.stringify(migrated)),
-  'cleanup is idempotent',
+  'migration is idempotent',
 )
-assert.equal(plugin.settings.migrate({ entries: oldAutomaticRules }, 8).entries.length, 0)
+assert.equal(plugin.settings.migrate({ entries: oldAutomaticRules }, 8).entries.length, 3)
 assert.equal(plugin.settings.migrate({ entries: [] }, 8).entries.length, 0, 'an explicitly empty rule list stays empty')
 assert.equal(plugin.settings.migrate(null, 8).entries.length, model.DEFAULT_WEB_QUICK_OPEN_SETTINGS.entries.length)
 assert.ok(cache.testMatchPattern(manual.matchPattern, 'LOG-123'), 'the manual rule remains usable after migration')
@@ -78,4 +79,4 @@ assert.equal(cache.testMatchPattern(manual.matchPattern, 'unrelated-query'), fal
 
 const source = readFileSync('src/plugins/web-open/index.tsx', 'utf8')
 assert.doesNotMatch(source, /registerSink\(['"]web-open['"]/, 'automatic URL learning must remain disabled')
-console.log('test-web-open-learned-rules: legacy cleanup passed')
+console.log('test-web-open-learned-rules: retired rule preservation passed')

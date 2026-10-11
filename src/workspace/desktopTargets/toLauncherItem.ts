@@ -6,7 +6,6 @@
  */
 
 import { pickLocale, type Locale } from '../../i18n'
-import { shouldSuggestFavorite } from '../launcher/favoriteSuggestion'
 import type { PersistableContentKind, PersistableLauncherPayload } from '../launcher/persistableRecents'
 import type { LauncherItem } from '../launcher/types'
 import { clampProviderPriority } from './constants'
@@ -134,20 +133,6 @@ export function shouldRecordUsage(target: DesktopTarget): boolean {
   )
 }
 
-/**
- * Kind pill shown instead of the generic label when something is worth keeping.
- * Inline rather than a palette key: this module builds host protocol defaults
- * and already carries its label table here.
- */
-const FAVORITE_SUGGESTION_LABEL = { en: 'Frequent', zh: '常去' } as const
-
-/** True if this target is already in the user's favorites, by either identity. */
-function isTargetFavorited(target: DesktopTarget, favoriteKeys?: readonly string[]): boolean {
-  if (!favoriteKeys?.length) return false
-  const persistKey = resolvePersistKey(target)
-  return favoriteKeys.some((key) => key === target.id || (persistKey ? key.endsWith(persistKey) : false))
-}
-
 function buildPersistPayload(
   target: DesktopTarget,
   systemKey: string,
@@ -206,18 +191,7 @@ export function desktopTargetToLauncherItem(
   const persistPayload = buildPersistPayload(target, target.id)
   const persistable = Boolean(persistPayload)
 
-  const base = resolveKindLabel(target, locale)
-  // A page visited like a habit but never kept gets a quiet "worth keeping" pill
-  // in place of its generic kind label — surfaced where the ⌘P that keeps it is
-  // already at hand, rather than interrupting to ask.
-  const suggestKeeping = shouldSuggestFavorite(
-    {
-      visits: target.visits ?? [],
-      isFavorite: isTargetFavorited(target, options.favoriteKeys),
-    },
-  )
-  const kindLabel = suggestKeeping ? undefined : base.kindLabel
-  const kindLabelI18n = suggestKeeping ? FAVORITE_SUGGESTION_LABEL : base.kindLabelI18n
+  const { kindLabel, kindLabelI18n } = resolveKindLabel(target, locale)
 
   const activate = options.activate ?? options.provider?.activate
 

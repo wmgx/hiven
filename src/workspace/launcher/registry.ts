@@ -577,7 +577,18 @@ export function getNearbySaveRunItem(run: LastSaveableRunState | null): Launcher
     return keys.length === Object.keys(params).length &&
       keys.every((key) => JSON.stringify(params[key]) === JSON.stringify(snapshot.savedParams[key]))
   }
-  if (listSavedActions().some((saved) => saved.baseActionKey === snapshot.actionKey &&
+  // Only a real configuration change warrants updating the originating artifact.
+  // Compare against its execution snapshot, not a potentially edited current row.
+  const sourceConfigurationChanged = (() => {
+    if (!snapshot.sourceSavedAction) return false
+    try {
+      const source = JSON.parse(snapshot.sourceSavedAction.snapshot)
+      return source?.id === snapshot.sourceSavedAction.id && source.baseActionKey === snapshot.actionKey &&
+        source.savedParams && typeof source.savedParams === 'object' && !Array.isArray(source.savedParams) &&
+        (source.outputIntent !== snapshot.outputIntent || !paramsMatch(source.savedParams))
+    } catch { return false }
+  })()
+  if (!sourceConfigurationChanged && listSavedActions().some((saved) => saved.baseActionKey === snapshot.actionKey &&
     saved.contractFingerprint === snapshot.contractFingerprint &&
     saved.actionPolicy.effect === snapshot.actionPolicy.effect &&
     saved.actionPolicy.learnable === snapshot.actionPolicy.learnable &&
@@ -588,6 +599,7 @@ export function getNearbySaveRunItem(run: LastSaveableRunState | null): Launcher
   })
   return createSaveLastRunItem({
     run: snapshot,
+    resolveBaseItems: () => filterAvailableLauncherItems(collectBaseCandidates(), 'global-launcher'),
     display: { title: title('en'), titleI18n: { zh: title('zh') }, icon: 'BookmarkPlus' },
     validate: () => {
       const current = resolveAction()

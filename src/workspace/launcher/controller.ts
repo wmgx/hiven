@@ -28,7 +28,6 @@ import type {
   LauncherResultAction,
   LauncherResultChoice,
   LauncherSurfaceId,
-  MiningRunSnapshot,
   OutputIntent,
   PluginLauncherApi,
 } from './types'
@@ -45,16 +44,8 @@ import {
   trackLatencyFrom,
   telemetryNow,
 } from '../telemetry'
-import {
-  appendExperienceEvent,
-  currentExperienceSessionId,
-  newExperienceId,
-} from '../experience/journal'
-import { classifyExperienceError } from '../experience/errorType'
-import type { ExperienceErrorType, ExperienceEvent, ExperienceRunStatus } from '../experience/types'
 import { isSafeExperienceIdentifier } from '../contentBoundary'
 import { extractSaveableParams } from '../experience/saveableParams'
-import { createMiningFingerprints } from '../experience/miningFingerprint'
 import { setLastSaveableRun } from '../savedActions/lastSaveableRun'
 import { touchSavedAction } from '../savedActions/store'
 import { bindPluginLauncherApi } from './pluginLifetime'
@@ -168,7 +159,6 @@ export type LauncherControllerDeps = {
   /** Notify subscribers of a state change. */
   onChange: (state: LauncherControllerState) => void
   /** Test/alternate sink injection; production defaults to the native journal. */
-  appendExperienceEvent?: (event: ExperienceEvent) => void
 }
 
 const emptyStorage: PluginPrivateStorageApi = {
@@ -237,7 +227,6 @@ export type SelectOptions = {
 // ─── Controller ───────────────────────────────────────────────────────────
 
 export class LauncherController {
-  private readonly experienceRunQueues = new WeakMap<CommittedRunContext, Promise<void>>()
   private state: LauncherControllerState
   private deps: LauncherControllerDeps
   private activePluginLifetime?: LauncherItem['pluginLifetime']
@@ -258,7 +247,6 @@ export class LauncherController {
   private suggestDebounceTimer: ReturnType<typeof setTimeout> | null = null
   /** Last journaled command id (for prev_command_id chain). */
   private lastJournalCommandId: string | null = null
-  private fallbackSessionId = newExperienceId('session')
 
   constructor(deps: LauncherControllerDeps) {
     this.deps = deps
@@ -355,7 +343,6 @@ export class LauncherController {
       clearTimeout(this.suggestDebounceTimer)
       this.suggestDebounceTimer = null
     }
-    this.fallbackSessionId = newExperienceId('session')
     this.activePluginLifetime = undefined
     this.pluginUnavailable = false
     this.invalidatePendingActions()
@@ -1488,14 +1475,10 @@ export class LauncherController {
 
   // ─── Execution plumbing ────────────────────────────────────────────────────
 
-  private recordExperience(event: ExperienceEvent): void {
-    ;(this.deps.appendExperienceEvent ?? appendExperienceEvent)(event)
-  }
-
   private committedRunFor(item: LauncherItem, via: CommitVia): CommittedRunContext | undefined {
     if (item.experienceRecord === false || !isSafeExperienceIdentifier(item.systemKey)) return undefined
     return {
-      runId: newExperienceId('run'),
+      runId: `run_${globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`}`,
       actionKey: item.systemKey,
       surfaceId: this.deps.surfaceId,
       via,
@@ -1503,99 +1486,10 @@ export class LauncherController {
     }
   }
 
-  private recordRunStarted(
-    run: CommittedRunContext,
-    miningSnapshot?: Promise<MiningRunSnapshot | null>,
-  ): void {
-    const event: ExperienceEvent = {
-      eventId: newExperienceId('event'),
-      ts: Date.now(),
-      sessionId: currentExperienceSessionId(this.fallbackSessionId),
-      runId: run.runId,
-      eventType: 'run.started',
-      actionKey: run.actionKey,
-      surfaceId: run.surfaceId,
-      via: run.via,
-      inputBinding: run.inputBinding,
-    }
-    if (!miningSnapshot) {
-      this.recordExperience(event)
-      return
-    }
-    const queued = miningSnapshot
-      .catch(() => null)
-      .then((snapshot) => {
-        if (snapshot) {
-          run.miningSnapshot = snapshot
-          event.inputFingerprint = snapshot.inputFingerprint
-          event.paramSignature = snapshot.paramSignature
-          event.safeParamsJson = snapshot.safeParamsJson
-        }
-        this.recordExperience(event)
-      })
-    this.experienceRunQueues.set(run, queued)
-    void queued.catch(() => {})
-  }
-
-  private queueExperience(run: CommittedRunContext, event: ExperienceEvent): void {
-    const pending = this.experienceRunQueues.get(run)
-    if (!pending) {
-      this.recordExperience(event)
-      return
-    }
-    const queued = pending
-      .catch(() => {})
-      .then(() => this.recordExperience(event))
-    this.experienceRunQueues.set(run, queued)
-    void queued.catch(() => {})
-  }
-
-  private recordRunFinished(
-    run: CommittedRunContext,
-    status: ExperienceRunStatus,
-    errorType?: ExperienceErrorType,
-  ): void {
-    this.queueExperience(run, {
-      eventId: newExperienceId('event'),
-      ts: Date.now(),
-      sessionId: currentExperienceSessionId(this.fallbackSessionId),
-      runId: run.runId,
-      eventType: 'run.finished',
-      actionKey: run.actionKey,
-      surfaceId: run.surfaceId,
-      via: run.via,
-      status,
-      errorType,
-    })
-  }
-
   private recordOutputApplied(run: CommittedRunContext, node: LauncherResultChoice | LauncherResultAction, updateLastRun = true): void {
     const outputIntent = getHostOutputIntent(node)
     if (!outputIntent) return
-    this.queueExperience(run, {
-      eventId: newExperienceId('event'),
-      ts: Date.now(),
-      sessionId: currentExperienceSessionId(this.fallbackSessionId),
-      runId: run.runId,
-      eventType: 'output.applied',
-      actionKey: run.actionKey,
-      surfaceId: run.surfaceId,
-      via: run.via,
-      outputIntent,
-      outputApplication: 'explicit',
-    })
     if (run.via === 'saved-action' && run.artifactId) {
-      this.queueExperience(run, {
-        eventId: newExperienceId('event'),
-        ts: Date.now(),
-        sessionId: currentExperienceSessionId(this.fallbackSessionId),
-        runId: run.runId,
-        eventType: 'artifact.invoked',
-        actionKey: run.actionKey,
-        surfaceId: run.surfaceId,
-        via: run.via,
-        artifactId: run.artifactId,
-      })
       try {
         touchSavedAction(run.artifactId)
       } catch (error) {
@@ -1610,6 +1504,7 @@ export class LauncherController {
           runId: run.runId,
           actionKey: run.saveActionKey ?? run.actionKey,
           ...run.saveSnapshot,
+          ...(run.sourceSavedAction ? { sourceSavedAction: run.sourceSavedAction } : {}),
           outputIntent,
           completedAt,
         })
@@ -1649,9 +1544,15 @@ export class LauncherController {
           generation: flowGeneration, materialGeneration: this.deps.getMaterialGeneration?.() }
       : undefined
     const committedRun = this.committedRunFor(item, via)
-    const saveActionKey = via === 'saved-action' && input.replacePreview ? item.savedActionBaseKey : undefined
-    if (committedRun && saveActionKey) committedRun.saveActionKey = saveActionKey
-    let miningSnapshot: Promise<MiningRunSnapshot | null> | undefined
+    const saveActionKey = via === 'saved-action' && input.inputBinding === 'prompt' &&
+      this.isExplicitTextPreview(item) && item.actionPolicy?.effect === 'pure'
+      ? item.savedActionBaseKey : undefined
+    if (committedRun && saveActionKey) {
+      committedRun.saveActionKey = saveActionKey
+      if (item.savedActionArtifactId && item.savedActionSnapshot) {
+        committedRun.sourceSavedAction = { id: item.savedActionArtifactId, snapshot: item.savedActionSnapshot }
+      }
+    }
     if (
       committedRun &&
       (via !== 'saved-action' || saveActionKey) &&
@@ -1669,15 +1570,6 @@ export class LauncherController {
           contractFingerprint: item.contractFingerprint,
           actionPolicy: item.actionPolicy,
         }
-        const api = this.apiFor(item)
-        const inputText = input.inputText ?? (
-          input.inputBinding === 'selection'
-            ? api.getSelectionText()
-            : input.inputBinding === 'active-text'
-              ? api.getActiveText()
-              : ''
-        )
-        if (via !== 'saved-action') miningSnapshot = createMiningFingerprints(inputText, saveable.params)
       } else {
         committedRun.saveBlocked = {
           blockedKeys: saveable.blockedKeys,
@@ -1685,7 +1577,6 @@ export class LauncherController {
         }
       }
     }
-    if (committedRun) this.recordRunStarted(committedRun, miningSnapshot)
 
     this.pendingItemKey = item.systemKey
     this.setState({ busy: true, error: null })
@@ -1694,7 +1585,7 @@ export class LauncherController {
     if (resolvedChoice) {
       await this.runChoiceAction(() => resolvedChoice.primaryAction(), sourceTitle,
         { via, systemKey: item.systemKey }, committedRun, resolvedChoice,
-        { item, recordUsage: input.recordUsage }, { finishRun: true })
+        { item, recordUsage: input.recordUsage })
       return
     }
 
@@ -1715,8 +1606,6 @@ export class LauncherController {
         return
       }
       if (this.invalidateUnavailablePlugin()) return
-      const failure = classifyExperienceError(error, 'provider-failed')
-      if (committedRun) this.recordRunFinished(committedRun, failure.status, failure.errorType)
       trackLatencyFrom(TelemetryEvents.launcherItemExecute, startedAt, {
         ...itemTelemetryProps(item),
         via,
@@ -1726,14 +1615,6 @@ export class LauncherController {
       return
     }
 
-    if (committedRun) {
-      if (result.ok) {
-        this.recordRunFinished(committedRun, 'success')
-      } else {
-        const failure = classifyExperienceError(new Error(result.message), 'provider-failed')
-        this.recordRunFinished(committedRun, failure.status, failure.errorType)
-      }
-    }
     trackLatencyFrom(TelemetryEvents.launcherItemExecute, startedAt, {
       ...itemTelemetryProps(item),
       via,
@@ -1766,7 +1647,7 @@ export class LauncherController {
     committedRun?: CommittedRunContext,
     actionNode?: LauncherResultChoice | LauncherResultAction,
     pendingUsage?: ResultFrame['pendingUsage'],
-    options: { retryFrame?: ResultFrame; finishRun?: boolean; intent?: OutputIntent } = {},
+    options: { retryFrame?: ResultFrame; intent?: OutputIntent } = {},
   ): Promise<void> {
     if (this.invalidateUnavailablePlugin() || this.activeDelivery) return
     const pluginLifetime = this.activePluginLifetime
@@ -1788,8 +1669,6 @@ export class LauncherController {
         this.invalidateUnavailablePlugin()
         return
       }
-      const failure = classifyExperienceError(error, 'output-failed')
-      if (committedRun && options.finishRun) this.recordRunFinished(committedRun, failure.status, failure.errorType)
       trackLatencyFrom(TelemetryEvents.launcherChoiceLatency, startedAt, { failed: true, ...extra })
       if (!isCurrent()) return
       this.failDelivery(error instanceof Error ? error.message : String(error), options.retryFrame)
@@ -1804,13 +1683,6 @@ export class LauncherController {
       : undefined
     const succeeded = launcherResult?.ok !== false
     trackLatencyFrom(TelemetryEvents.launcherChoiceLatency, startedAt, { terminal: !launcherResult, failed: !succeeded, ...extra })
-    if (committedRun && options.finishRun) {
-      if (succeeded) this.recordRunFinished(committedRun, 'success')
-      else {
-        const failure = classifyExperienceError(new Error(launcherResult?.ok === false ? launcherResult.message : ''), 'output-failed')
-        this.recordRunFinished(committedRun, failure.status, failure.errorType)
-      }
-    }
     // An already-started external delivery can finish after navigation. Record
     // what actually happened, without replacing LastRun or touching the new flow.
     if (committedRun && actionNode && succeeded) this.recordOutputApplied(committedRun, actionNode, isCurrent())

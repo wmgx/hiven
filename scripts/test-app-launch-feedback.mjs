@@ -59,7 +59,6 @@ const host = load('src/workspace/appLauncher/hostAppLauncher.ts', {
     },
   },
 })
-let id = 0
 const { LauncherController } = load('src/workspace/launcher/controller.ts', {
   './pluginLifetime': load('src/workspace/launcher/pluginLifetime.ts'),
   '../../i18n': i18n,
@@ -67,11 +66,8 @@ const { LauncherController } = load('src/workspace/launcher/controller.ts', {
   './output': { isOutputResult: (result) => result.ok && Boolean(result.output) },
   './foregroundSelectionCapture': {},
   '../telemetry': { TelemetryEvents: {}, itemTelemetryProps: () => ({}), trackBehavior() {}, trackLatencyFrom() {}, telemetryNow: () => 0 },
-  '../experience/journal': { newExperienceId: () => String(++id) },
-  '../experience/errorType': load('src/workspace/experience/errorType.ts'),
   '../contentBoundary': { isSafeExperienceIdentifier: () => false },
   '../experience/saveableParams': {},
-  '../experience/miningFingerprint': {},
   '../savedActions/lastSaveableRun': {},
   '../savedActions/store': {},
 })
@@ -141,7 +137,7 @@ const pluginDependencies = Object.fromEntries([
   '../effectRunner', '../toast', '../launcherHostSurfaceBridge', '../pluginSurfaceOpenRequest',
   '../pluginRegistry', '../pluginStorage', '../pluginPermissions', '../editorBridge',
   '../quickEditor/quickEditorRequests', '../quickEditor/quickEditorPaneSnapshot',
-  '../nativeClipboard', '../pluginPaste', '../pluginClipboard',
+  '../nativeClipboard', '../pluginPaste', '../pluginClipboard', '../../historyDiffHandoff',
 ].map((name) => [name, {}]))
 const { createPluginAppsApi } = load('src/workspace/launcher/pluginApi.ts', {
   ...pluginDependencies, '../appLauncher/appLaunchError': errors, '@tauri-apps/api/core': native,

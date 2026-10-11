@@ -48,22 +48,16 @@ export type BlockedSaveableRunSnapshot = {
   reason: 'unsaveable-non-default' | 'invalid-saveable-value'
 }
 
-export type MiningRunSnapshot = {
-  inputFingerprint: string
-  paramSignature: string
-  safeParamsJson: string
-}
-
 export type CommittedRunContext = {
   runId: string
   actionKey: string
   surfaceId: LauncherSurfaceId
   via: CommitVia
   inputBinding?: InputBinding
-  miningSnapshot?: MiningRunSnapshot
   saveSnapshot?: SaveableRunSnapshot
   /** An edited Saved Action saves the new settings under its underlying action. */
   saveActionKey?: string
+  sourceSavedAction?: { id: string; snapshot: string }
   saveBlocked?: BlockedSaveableRunSnapshot
   artifactId?: string
 }
@@ -695,8 +689,6 @@ export type LauncherItem = {
      */
     origin?: 'builtin' | 'learned'
   }
-  /** Only automatic habit results carry this runtime provenance and cancellation token. */
-  automaticLearningSignal?: AbortSignal
   /**
    * When true, selection writes to launcher usage for ranking.
    * Dynamic items must opt in with a stable systemKey; static items omit this (treated as true).

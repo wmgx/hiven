@@ -147,16 +147,14 @@ const monitoredLastRun = {
   setLastSaveableRun: (value) => { counters.lastRun += 1; lastRunModule.setLastSaveableRun(value) },
 }
 const host = loadModule('src/workspace/launcher/hostActions.ts', {
-  '../launcherHostSurfaceBridge': {}, '../../store': {}, './hostEditorActions': {},
-  '../windowManager/quickEditorWindow': {}, '../launcherBlurGuard': {}, '../experience/journal': {},
+  '../quickEditor/quickEditorStore': {}, '../launcherHostSurfaceBridge': {}, '../../store': {}, './hostEditorActions': {},
+  '../windowManager/quickEditorWindow': {}, '../launcherBlurGuard': {},
   '../savedActions/lastSaveableRun': monitoredLastRun, '../savedActions/store': store,
-  '../savedActions/events': { recordSavedActionEvent: () => { counters.events += 1 } },
   '../savedActions/compatibility': {}, '../savedActions/display': {}, '../../i18n': { translate },
 })
 const output = loadModule('src/workspace/launcher/output.ts', {
   './types': { normalizeLauncherSurfaceId: (value) => value }, '../../i18n': { translate },
 })
-let nextId = 0
 const controllerModule = loadModule('src/workspace/launcher/controller.ts', {
   './pluginLifetime': loadModule('src/workspace/launcher/pluginLifetime.ts'),
   '../usageJournal': { appendUsageJournal: async () => { counters.journal += 1 } },
@@ -165,13 +163,7 @@ const controllerModule = loadModule('src/workspace/launcher/controller.ts', {
     TelemetryEvents: new Proxy({}, { get: (_target, prop) => String(prop) }),
     itemTelemetryProps: () => ({}), trackBehavior: () => {}, trackLatencyFrom: () => {}, telemetryNow: () => 0,
   },
-  '../experience/journal': {
-    appendExperienceEvent: () => { counters.events += 1 }, currentExperienceSessionId: (fallback) => fallback,
-    newExperienceId: (prefix) => `${prefix}_rename-${++nextId}`,
-  },
-  '../experience/errorType': loadModule('src/workspace/experience/errorType.ts'),
   '../experience/saveableParams': loadModule('src/workspace/experience/saveableParams.ts'),
-  '../experience/miningFingerprint': {},
   '../savedActions/lastSaveableRun': monitoredLastRun,
   '../savedActions/store': { touchSavedAction: () => { counters.touches += 1 } },
   '../contentBoundary': loadModule('src/workspace/contentBoundary.ts'),

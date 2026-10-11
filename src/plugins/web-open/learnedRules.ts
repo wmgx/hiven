@@ -1,5 +1,5 @@
 /**
- * Identify legacy automatically learned quick-open rules during migration.
+ * Identify legacy automatically learned quick-open rules for non-destructive runtime filtering.
  * Automatic URL-template learning is disabled; hand-written rules stay intact.
  */
 import { AUTO_CREATED_TAG, type WebQuickOpenEntry } from './settings/model'

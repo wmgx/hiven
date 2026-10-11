@@ -39,7 +39,6 @@ const attachPolicy = load('src/launcher/clipboard/attachPolicy.ts', {
 const blocks = load('src/launcher/clipboard/objectBlock.ts', { '../../kits/content/index': content, './clipboardSnapshot': snapshot, './attachPolicy': attachPolicy })
 const material = load('src/launcher/clipboard/currentMaterial.ts')
 const pending = load('src/launcher/clipboard/pendingObjectBlock.ts')
-let serial = 0
 let inputReads = 0
 const forbidden = () => { inputReads++; throw new Error('Unexpected input acquisition or external delivery') }
 const { LauncherController } = load('src/workspace/launcher/controller.ts', {
@@ -48,11 +47,8 @@ const { LauncherController } = load('src/workspace/launcher/controller.ts', {
   './foregroundSelectionCapture': { captureForegroundSelectionText: forbidden },
   '../usageJournal': { appendUsageJournal: forbidden },
   '../telemetry': { TelemetryEvents: {}, itemTelemetryProps: () => ({}), trackBehavior: noop, trackLatencyFrom: noop, telemetryNow: () => 0 },
-  '../experience/journal': { newExperienceId: (prefix) => `${prefix}-${++serial}`, currentExperienceSessionId: (id) => id, appendExperienceEvent: forbidden },
-  '../experience/errorType': load('src/workspace/experience/errorType.ts'),
   '../contentBoundary': load('src/workspace/contentBoundary.ts'),
   '../experience/saveableParams': { extractSaveableParams: forbidden },
-  '../experience/miningFingerprint': { createMiningFingerprints: forbidden },
   '../savedActions/lastSaveableRun': lastRun,
   '../savedActions/store': { touchSavedAction: forbidden },
 })

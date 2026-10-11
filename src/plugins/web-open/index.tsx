@@ -364,15 +364,11 @@ function migrateWebQuickOpenSettings(stored: unknown): WebQuickOpenSettings {
           maxQueryHistory: clampMaxQueryHistory(
             typeof source.maxQueryHistory === 'number' ? source.maxQueryHistory : DEFAULT_MAX_QUERY_HISTORY,
           ),
-          // Preserve legacy provenance until the cleanup filter below can
-          // distinguish automatically learned rules from manual entries.
+          // Preserve retired automatic records without making them runnable.
           learnedFrom: typeof source.learnedFrom === 'string' ? source.learnedFrom : undefined,
           tags: Array.isArray(source.tags) ? source.tags.map(String).filter(Boolean) : undefined,
         }
-      })
-      // Generic URL-shape learning produced unrelated hard matches (for example
-      // a log ID substituted into a ChatGPT checkout URL). Keep manual rules.
-      .filter((entry) => !isAutoLearnedEntry(entry)),
+      }),
   }
   // Keep regex cache in sync when settings are loaded/migrated (replace semantics).
   replaceMatchPatternCache(
@@ -381,27 +377,6 @@ function migrateWebQuickOpenSettings(stored: unknown): WebQuickOpenSettings {
       .filter((pattern): pattern is string => typeof pattern === 'string' && pattern.trim().length > 0),
   )
   return migrated
-}
-
-/**
- * Declare this plugin's coverage to the self-learning novelty guard: the learner
- * must never re-propose a rule for inputs an existing quick-open pattern already
- * handles (e.g. a hand-coded logid → log tool). A shape is covered only when an
- * entry's matchPattern matches the token AND that entry opens the SAME host —
- * so a rule for one site never suppresses discovery of a different one.
- * Sync; re-registered on settings change.
- */
-function registerWebOpenCoverage(settings: WebQuickOpenSettings): void {
-  const rules = (settings.entries ?? [])
-    .filter((entry) => typeof entry.matchPattern === 'string' && entry.matchPattern.trim().length > 0)
-    .map((entry) => ({ pattern: entry.matchPattern as string, host: extractDomain(entry.urlTemplate) }))
-  getPluginHostSdk().coverage.register('web-open', (probe) =>
-    rules.some(
-      (rule) =>
-        testMatchPattern(rule.pattern, probe.token) &&
-        (!probe.host || !rule.host || rule.host === probe.host),
-    ),
-  )
 }
 
 export default definePlugin<WebQuickOpenSettings>({
@@ -435,7 +410,6 @@ export default definePlugin<WebQuickOpenSettings>({
     startup(ctx) {
       const settings = (ctx.settings as WebQuickOpenSettings | undefined) ?? DEFAULT_WEB_QUICK_OPEN_SETTINGS
       scheduleWarmFavicons(settings, ctx.storage, ctx.source, ctx.pluginId, ctx.network)
-      registerWebOpenCoverage(settings)
       applyBrowserCapability(settings)
     },
   },
@@ -451,7 +425,6 @@ export default definePlugin<WebQuickOpenSettings>({
     onChange(ctx) {
       const settings = ctx.value ?? DEFAULT_WEB_QUICK_OPEN_SETTINGS
       scheduleWarmFavicons(settings, ctx.storage, ctx.source, ctx.pluginId, ctx.network)
-      registerWebOpenCoverage(settings)
       applyBrowserCapability(settings)
     },
     modals: [

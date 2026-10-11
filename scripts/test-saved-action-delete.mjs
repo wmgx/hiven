@@ -113,13 +113,11 @@ const provider = loadModule('src/workspace/savedActions/provider.ts', {
   '../launcher/output': output, './compatibility': compatibility, './store': store, './display': display,
 })
 const host = loadModule('src/workspace/launcher/hostActions.ts', {
-  '../launcherHostSurfaceBridge': {}, '../../store': {}, './hostEditorActions': {},
-  '../windowManager/quickEditorWindow': {}, '../launcherBlurGuard': {}, '../experience/journal': {},
+  '../quickEditor/quickEditorStore': {}, '../launcherHostSurfaceBridge': {}, '../../store': {}, './hostEditorActions': {},
+  '../windowManager/quickEditorWindow': {}, '../launcherBlurGuard': {},
   '../savedActions/lastSaveableRun': monitoredLastRun, '../savedActions/store': store,
-  '../savedActions/events': { recordSavedActionEvent: () => { counters.events += 1 } },
   '../savedActions/compatibility': compatibility, '../savedActions/display': display, '../../i18n': i18n,
 })
-let nextId = 0
 const controllerModule = loadModule('src/workspace/launcher/controller.ts', {
   './pluginLifetime': loadModule('src/workspace/launcher/pluginLifetime.ts'),
   '../usageJournal': { appendUsageJournal: async () => { counters.journal += 1 } },
@@ -128,13 +126,7 @@ const controllerModule = loadModule('src/workspace/launcher/controller.ts', {
     TelemetryEvents: new Proxy({}, { get: (_target, prop) => String(prop) }),
     itemTelemetryProps: () => ({}), trackBehavior: () => {}, trackLatencyFrom: () => {}, telemetryNow: () => 0,
   },
-  '../experience/journal': {
-    appendExperienceEvent: () => { counters.events += 1 }, currentExperienceSessionId: (fallback) => fallback,
-    newExperienceId: (prefix) => `${prefix}_delete-${++nextId}`,
-  },
-  '../experience/errorType': loadModule('src/workspace/experience/errorType.ts'),
   '../experience/saveableParams': saveable,
-  '../experience/miningFingerprint': {},
   '../savedActions/lastSaveableRun': monitoredLastRun,
   '../savedActions/store': { touchSavedAction: () => { counters.touches += 1 } },
   '../contentBoundary': loadModule('src/workspace/contentBoundary.ts'),

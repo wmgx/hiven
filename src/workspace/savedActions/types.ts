@@ -15,6 +15,7 @@ export type LastSaveableRun = {
   contractFingerprint: string
   actionPolicy: ToolActionPolicy
   completedAt: number
+  sourceSavedAction?: { id: string; snapshot: string }
 }
 
 export type BlockedSaveableRun = {
@@ -49,6 +50,7 @@ export type SavedActionV1 = {
   contractFingerprint: string
   actionPolicy: ToolActionPolicy
   createdAt: number
+  updatedAt?: number
   lastInvokedAt?: number
   disabledReason?: SavedActionDisabledReason
 }

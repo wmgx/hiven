@@ -22,12 +22,7 @@ import { sanitizeSurfaces } from './identity'
 import { resolvePluginSettingsSource } from './pluginSource'
 import { pluginRegistry } from '../pluginRegistry'
 
-/**
- * Ranking nudge given to any plugin-declared direct answer. Deliberately below
- * the learned-rule baseline (see learning/frecency.ts firePriority, from 45), so
- * a rule the user actually taught ranks above a generic built-in answer — while
- * both still appear (learned never suppresses builtin).
- */
+/** Ranking nudge for a plugin-declared direct answer. */
 const PLUGIN_DIRECT_ANSWER_PRIORITY = 30
 
 /**

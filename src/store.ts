@@ -105,7 +105,7 @@ export type PluginSurfaceOpenTarget = {
   initialText?: string
 }
 
-export type LauncherHostSurfaceTarget = 'system-settings' | 'system-ai-settings' | 'system-plugins' | 'quick-editor' | 'learning-inbox'
+export type LauncherHostSurfaceTarget = 'system-settings' | 'system-ai-settings' | 'system-plugins' | 'quick-editor'
 
 interface AppState {
   // Editor command bar
@@ -169,8 +169,6 @@ interface AppState {
     wordWrap: boolean
     lineNumbers: boolean
     persistParams: boolean
-    /** Opt-in experiment: passive collection, automatic rules and their answers. */
-    automaticLearningEnabled: boolean
     theme: 'dark' | 'light'
     locale: Locale
     disabledBuiltins: string[]
@@ -215,18 +213,6 @@ function mergeShortcutRuntimeStatus(
   return JSON.stringify(normalized) === JSON.stringify(stripShortcutRuntimeStatus(current))
     ? current
     : normalized
-}
-
-// Other windows may persist unrelated settings before their storage event runs.
-// Only an explicit toggle may overwrite the latest persisted experiment choice.
-let automaticLearningWrite: boolean | undefined
-function persistedAutomaticLearningEnabled(fallback: boolean): boolean {
-  try {
-    const raw = localStorage.getItem('hiven-settings')
-    return raw ? JSON.parse(raw)?.state?.settings?.automaticLearningEnabled === true : false
-  } catch {
-    return fallback
-  }
 }
 
 // Keep newer per-app edits when another window persists an unrelated setting.
@@ -395,7 +381,6 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
     wordWrap: false,
     lineNumbers: true,
     persistParams: true,
-    automaticLearningEnabled: false,
     theme: 'dark',
     locale: 'en' as Locale,
     disabledBuiltins: [],
@@ -413,18 +398,13 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
   },
   updateSetting: (key, value) => {
     if (key === 'appSearchAliases') throw new Error('Save application search aliases with setAppSearchAliases.')
-    if (key === 'automaticLearningEnabled') automaticLearningWrite = value === true
-    try {
-      set((state) => {
-        const newSettings = { ...state.settings, [key]: value }
-        if (key === 'locale') {
-          return { settings: newSettings, locale: value as Locale }
-        }
-        return { settings: newSettings }
-      })
-    } finally {
-      automaticLearningWrite = undefined
-    }
+    set((state) => {
+      const newSettings = { ...state.settings, [key]: value }
+      if (key === 'locale') {
+        return { settings: newSettings, locale: value as Locale }
+      }
+      return { settings: newSettings }
+    })
   },
   setAppHotkey: (binding) => {
     const before = get().settings.appHotkeys
@@ -505,8 +485,6 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
   partialize: (state) => ({
     settings: {
       ...state.settings,
-      automaticLearningEnabled: automaticLearningWrite
-        ?? persistedAutomaticLearningEnabled(state.settings.automaticLearningEnabled === true),
       appSearchAliases: appSearchAliasesWrite
         ? state.settings.appSearchAliases
         : persistedAppSearchAliases(state.settings.appSearchAliases),
@@ -547,8 +525,8 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
 
     const merged = { ...current, ...persistedWithoutLegacyUsage }
     merged.settings = { ...current.settings, ...persistedState.settings }
-    // Older settings have no opt-in; never inherit a live window's old true.
-    merged.settings.automaticLearningEnabled = persistedState.settings?.automaticLearningEnabled === true
+    // Retired experiment configuration is ignored without touching stored learning records.
+    delete (merged.settings as unknown as Record<string, unknown>).automaticLearningEnabled
     merged.settings.globalPinnedLauncherShortcut = mergeShortcutRuntimeStatus(
       merged.settings.globalPinnedLauncherShortcut ?? current.settings.globalPinnedLauncherShortcut,
       current.settings.globalPinnedLauncherShortcut,
@@ -624,30 +602,12 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
   },
 }))
 
-let automaticLearningController = new AbortController()
-let automaticLearningEnabled = useAppStore.getState().settings.automaticLearningEnabled === true
-if (!automaticLearningEnabled) automaticLearningController.abort()
-useAppStore.subscribe((state) => {
-  const enabled = state.settings.automaticLearningEnabled === true
-  if (enabled === automaticLearningEnabled) return
-  automaticLearningEnabled = enabled
-  automaticLearningController.abort()
-  automaticLearningController = new AbortController()
-  if (!enabled) automaticLearningController.abort()
-})
-
-/** Capture once per automatic operation; stopping permanently invalidates this generation. */
-export function getAutomaticLearningSignal(): AbortSignal {
-  return automaticLearningController.signal
-}
-
 // Plugin settings (first-party) may clear recents without importing this module:
 // window.dispatchEvent(new CustomEvent(CLEAR_PERSISTABLE_RECENTS_EVENT))
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', (event) => {
     if ((event.key === 'hiven-settings' || event.key === null)
-      && (persistedAutomaticLearningEnabled(false) !== (useAppStore.getState().settings.automaticLearningEnabled === true)
-        || !appSearchAliasesEqual(
+      && (!appSearchAliasesEqual(
           persistedAppSearchAliases(useAppStore.getState().settings.appSearchAliases),
           useAppStore.getState().settings.appSearchAliases,
         )

@@ -30,9 +30,6 @@ import {
 } from './workspace/launcher/perf'
 import { startClipboardAgeTracker } from './launcher/clipboard/clipboardSnapshot'
 import { readNativeClipboardText } from './workspace/nativeClipboard'
-import { startPureTransformRunnerSync } from './workspace/learning/registryRunners'
-import { installLearningDebugHook, startAutomaticLearning } from './workspace/learning/learningController'
-import { refreshLearnedUrlRules } from './workspace/learning/fire'
 import { startNativeValidationRelay } from './workspace/webNativeBridge'
 import { startBehaviorObservation } from './observation/observer'
 
@@ -166,15 +163,7 @@ function LauncherRuntimeApp() {
   useEffect(() => {
     if (window.__HIVEN_WEB_NATIVE_BRIDGE__) return
     const stopTracker = startClipboardAgeTracker(readClipboardTextForAgeTracker)
-    const stopRunnerSync = startPureTransformRunnerSync()
-    const stopAutomaticLearning = startAutomaticLearning()
-    // Manual rules remain usable while the automatic experiment is stopped.
-    void refreshLearnedUrlRules()
-    // Devtools verification hook (window.__hivenLearning) — no user-facing UI yet.
-    installLearningDebugHook()
     return () => {
-      stopAutomaticLearning()
-      stopRunnerSync()
       stopTracker()
     }
   }, [])

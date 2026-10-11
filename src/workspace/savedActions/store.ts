@@ -24,7 +24,7 @@ function isSavedAction(value: unknown): value is SavedActionV1 {
   const allowedKeys = new Set([
     'schemaVersion', 'id', 'name', 'aliases', 'baseActionKey', 'savedParams',
     'inputBinding', 'outputIntent', 'contractFingerprint', 'actionPolicy',
-    'createdAt', 'lastInvokedAt', 'disabledReason',
+    'createdAt', 'updatedAt', 'lastInvokedAt', 'disabledReason',
   ])
   if (keys.some((key) => !allowedKeys.has(key))) return false
   const params = action.savedParams && typeof action.savedParams === 'object' && !Array.isArray(action.savedParams)
@@ -57,6 +57,7 @@ function isSavedAction(value: unknown): value is SavedActionV1 {
     typeof action.contractFingerprint === 'string' &&
     policyValid &&
     typeof action.createdAt === 'number' &&
+    (action.updatedAt === undefined || (typeof action.updatedAt === 'number' && Number.isFinite(action.updatedAt))) &&
     disabledReasonValid
 }
 
@@ -123,6 +124,7 @@ export function savedActionSnapshot(action: SavedActionV1): string {
     schemaVersion: action.schemaVersion,
     id: action.id,
     createdAt: action.createdAt,
+    updatedAt: action.updatedAt,
     name: action.name,
     aliases: action.aliases,
     baseActionKey: action.baseActionKey,
@@ -210,4 +212,39 @@ export function setSavedActionDisabledReason(id: string, disabledReason?: SavedA
   const { disabledReason: _previous, ...action } = actions[index]
   actions[index] = disabledReason ? { ...action, disabledReason } : action
   write(actions, false)
+}
+
+/** Explicit configuration edit: no asynchronous gap between the snapshot check and write. */
+export function updateSavedActionIfUnchanged(
+  id: string,
+  expectedSnapshot: string,
+  run: LastSaveableRun,
+): { status: 'updated' | 'unchanged'; action: SavedActionV1 } | { status: 'missing' | 'changed' | 'invalid' } {
+  const actions = readSavedActionsForEdit(true)
+  const target = savedActionDeleteTarget(actions, id, expectedSnapshot)
+  if (target.status !== 'ready') return target
+  const current = target.action
+  if (run.sourceSavedAction?.id !== id || run.sourceSavedAction.snapshot !== expectedSnapshot ||
+    run.inputBinding !== 'prompt' || current.inputBinding !== 'prompt' ||
+    run.actionPolicy.effect !== 'pure' || current.actionPolicy.effect !== 'pure' ||
+    run.actionKey !== current.baseActionKey || run.contractFingerprint !== current.contractFingerprint ||
+    run.actionPolicy.learnable !== current.actionPolicy.learnable ||
+    !['copy', 'return-to-launcher', 'open-quick-editor'].includes(run.outputIntent)) return { status: 'invalid' }
+  const updated: SavedActionV1 = {
+    ...current,
+    savedParams: structuredClone(run.savedParams),
+    outputIntent: run.outputIntent,
+    updatedAt: Math.max(Date.now(), (current.updatedAt ?? current.createdAt) + 1),
+  }
+  if (!isSavedAction(updated)) return { status: 'invalid' }
+  if (!savedActionConfigurationChanged(current, run)) return { status: 'unchanged', action: current }
+  actions[actions.indexOf(current)] = updated
+  write(actions)
+  return { status: 'updated', action: updated }
+}
+
+export function savedActionConfigurationChanged(action: SavedActionV1, run: LastSaveableRun): boolean {
+  const keys = Object.keys(action.savedParams)
+  return action.outputIntent !== run.outputIntent || keys.length !== Object.keys(run.savedParams).length ||
+    keys.some((key) => JSON.stringify(action.savedParams[key]) !== JSON.stringify(run.savedParams[key]))
 }

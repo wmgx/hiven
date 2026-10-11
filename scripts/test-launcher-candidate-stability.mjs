@@ -57,7 +57,7 @@ try {
     const slots = [], lanes = [], rankCalls = []
     let cursor = 0
     const app = {
-      locale: 'en', settings: { automaticLearningEnabled: true, appSearchAliases: {}, jevCommandSuggestion: {} },
+      locale: 'en', settings: { appSearchAliases: {}, jevCommandSuggestion: {} },
       launcherUsageBySurface: {}, launcherFavoriteKeys: [], launcherPersistableRecents: [],
       recordLauncherSelection() {}, recordPersistableLauncherSelection() {},
     }
@@ -224,20 +224,6 @@ try {
     h.options.objectBlockText = 'different material'
     h.render()
     assert.equal(h.rankCalls.length, count + 1, 'material remains a ranking dependency with empty visible lanes')
-  })
-
-  check('automatic learning disable and aborted rows still filter candidates', () => {
-    const h = fixture(), signal = new AbortController()
-    const learned = item('learned', { automaticLearningSignal: signal.signal })
-    h.publish(0, [learned], h.identity(0))
-    assert.ok(h.candidates.includes(learned))
-    h.app.settings.automaticLearningEnabled = false
-    h.render()
-    assert.ok(!h.candidates.includes(learned))
-    signal.abort()
-    h.app.settings.automaticLearningEnabled = true
-    h.render()
-    assert.ok(!h.candidates.includes(learned), 'aborted automatic results never reappear')
   })
 
   check('settings recollect static rows and permissions refresh actual discovery availability', () => {

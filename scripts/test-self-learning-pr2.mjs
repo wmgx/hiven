@@ -98,7 +98,6 @@ const outputModule = loadModule('src/workspace/launcher/output.ts', {
 })
 const snapshots = []
 const touchedArtifacts = []
-let nextId = 0
 const controllerModule = loadModule('src/workspace/launcher/controller.ts', {
   './pluginLifetime': loadModule('src/workspace/launcher/pluginLifetime.ts'),
   '../usageJournal': { appendUsageJournal: async () => {} },
@@ -111,12 +110,6 @@ const controllerModule = loadModule('src/workspace/launcher/controller.ts', {
     trackLatencyFrom: () => {},
     telemetryNow: () => 0,
   },
-  '../experience/journal': {
-    appendExperienceEvent: () => {},
-    currentExperienceSessionId: (fallback) => fallback,
-    newExperienceId: (prefix) => `${prefix}_pr2-${++nextId}`,
-  },
-  '../experience/errorType': loadModule('src/workspace/experience/errorType.ts'),
   '../experience/saveableParams': { extractSaveableParams },
   '../savedActions/lastSaveableRun': { setLastSaveableRun: (snapshot) => snapshots.push(structuredClone(snapshot)) },
   '../savedActions/store': { touchSavedAction: (id) => touchedArtifacts.push(id) },
@@ -140,7 +133,6 @@ const controller = new controllerModule.LauncherController({
   recordSelection: () => {},
   requestClose: () => {},
   onChange: () => {},
-  appendExperienceEvent: () => {},
 })
 const saveableItem = {
   systemKey: item.systemKey,
@@ -168,7 +160,6 @@ assert.doesNotMatch(JSON.stringify(snapshots), /PRIVATE_SELECTION_BODY|PRIVATE_A
 const blockedController = new controllerModule.LauncherController({
   surfaceId: 'editor-command-bar', api, locale: 'en', makeT: () => (key) => key,
   getSettings: () => ({}), recordSelection: () => {}, requestClose: () => {}, onChange: () => {},
-  appendExperienceEvent: () => {},
 })
 await blockedController.selectItem(saveableItem, { customizeParams: true })
 await blockedController.commitCurrentParam(', ')
@@ -180,7 +171,6 @@ const snapshotCountBeforeGlobalSelection = snapshots.length
 const globalSelectionController = new controllerModule.LauncherController({
   surfaceId: 'global-launcher', api, locale: 'en', makeT: () => (key) => key,
   getSettings: () => ({}), recordSelection: () => {}, requestClose: () => {}, onChange: () => {},
-  appendExperienceEvent: () => {},
 })
 await globalSelectionController.selectItem(saveableItem, { customizeParams: true })
 await globalSelectionController.commitCurrentParam(', ')
@@ -267,18 +257,13 @@ assert.equal((await unavailableInput.execute({
 })).ok, false)
 assert.equal(baseExecutions, 1, 'input-incompatible Saved Action must not run the base action')
 
-const invokedEvents = []
 const replayController = new controllerModule.LauncherController({
   surfaceId: 'global-launcher',
   api: { ...api, getSelectionText: () => 'alpha\nbeta' },
   locale: 'en', makeT: () => (key) => key, getSettings: () => ({}), recordSelection: () => {},
-  requestClose: () => {}, onChange: () => {}, appendExperienceEvent: (event) => invokedEvents.push(structuredClone(event)),
+  requestClose: () => {}, onChange: () => {},
 })
 await replayController.selectItem(replay)
-assert.deepEqual(invokedEvents.map((event) => event.eventType), [
-  'run.started', 'run.finished', 'output.applied', 'artifact.invoked',
-])
-assert.equal(invokedEvents.at(-1).artifactId, artifact.id)
 assert.deepEqual(touchedArtifacts, [artifact.id])
 assert.equal(savedActionDisabledReason({ ...artifact, outputIntent: 'insert' }, replayBase), undefined)
 const unavailableOutput = providerModule.projectSavedAction({ ...artifact, outputIntent: 'insert' }, replayBase)
@@ -296,7 +281,6 @@ assert.deepEqual(listSavedActions(), [], 'Artifact loader must reject unknown co
 const registrySource = readFileSync('src/workspace/launcher/registry.ts', 'utf8')
 assert.match(registrySource, /getSavedActionLauncherItems\(baseItems, \{/)
 
-const artifactEvents = []
 let savedCommandArgs
 const savedFromCommand = { ...artifact, id: 'artifact_command' }
 const hostActionsModule = loadModule('src/workspace/launcher/hostActions.ts', {
@@ -310,7 +294,6 @@ const hostActionsModule = loadModule('src/workspace/launcher/hostActions.ts', {
     deleteSavedAction: () => savedFromCommand,
     listSavedActions: () => [savedFromCommand],
   },
-  '../savedActions/events': { recordSavedActionEvent: (eventType, saved) => artifactEvents.push([eventType, saved.id]) },
   '../savedActions/compatibility': { isGlobalLauncherSavedActionOutput },
   '../savedActions/display': savedDisplayModule,
 })
@@ -331,7 +314,6 @@ await saveController.submitInput()
 assert.equal(saveController.getState().error, null)
 assert.equal(saveController.getState().frames.at(-1).kind, 'list')
 assert.deepEqual(Array.from(savedCommandArgs.aliases), [' csv|pipe', ' comma'])
-assert.deepEqual(artifactEvents, [['artifact.saved', 'artifact_command']])
 
 let unsupportedSaveCalls = 0
 const unsupportedHostActions = loadModule('src/workspace/launcher/hostActions.ts', {
@@ -348,7 +330,6 @@ assert.equal(unsupportedSaveCalls, 0, 'editor-only output must be rejected befor
 const deleteSuggestions = await deleteCommand.suggest({ inputText: '' })
 const deleteConfirmation = await deleteSuggestions.choices[0].primaryAction()
 await deleteConfirmation.output.choices[0].primaryAction()
-assert.deepEqual(artifactEvents.at(-1), ['artifact.deleted', 'artifact_command'])
 
 // Presentation uses the real store, compatibility, locale, provider, registry,
 // host registration and ranking logic. Only unrelated services are replaced;
@@ -414,7 +395,7 @@ const hostRegistration = loadModule('src/workspace/launcher/hostProvider.ts', {
   './hostActions': {
     getHostSavedActionItems: localizedHostActions.getHostSavedActionItems,
     getHostPaneControlItems: () => currentBaseItems,
-    getHostSystemPowerItems: () => [], getHostExperienceJournalItems: () => [],
+    getHostSystemPowerItems: () => [],
   },
   '../appLauncher/hostAppLauncher': { getHostAppLauncherStaticItems: () => [] },
   '../../workflow/pipelineLauncher': { getTextPipelineLauncherItems: () => [] },
@@ -529,4 +510,4 @@ assert.equal(savedRows().filter((row) => row.disabledReason).length, 0, 'restori
 assert.equal(JSON.stringify(listSavedActions()), beforeDescriptions, 'availability updates preserve each artifact and its settings')
 assert.equal(commandExecutions, 0)
 
-console.log('self-learning PR2 checks passed')
+console.log('manual Saved Action checks passed')

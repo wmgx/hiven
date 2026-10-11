@@ -26,7 +26,7 @@ try {
   const { LauncherController } = await vite.ssrLoadModule('/src/workspace/launcher/controller.ts')
   const { getHostOutputIntent } = await vite.ssrLoadModule('/src/workspace/launcher/output.ts')
   const { getLastSaveableRun } = await vite.ssrLoadModule('/src/workspace/savedActions/lastSaveableRun.ts')
-  const { createSavedAction, listSavedActions } = await vite.ssrLoadModule('/src/workspace/savedActions/store.ts')
+  const { createSavedAction, listSavedActions, savedActionSnapshot } = await vite.ssrLoadModule('/src/workspace/savedActions/store.ts')
   const { projectSavedAction } = await vite.ssrLoadModule('/src/workspace/savedActions/provider.ts')
   const { makePluginT } = await vite.ssrLoadModule('/src/i18n/pluginI18nRegistry.ts')
   registerBundledPluginPackages()
@@ -41,6 +41,7 @@ try {
   let failCopy = false
   let failReturn = false
   let pauseRun
+  let pauseDelivery
   const observed = (item) => ({
     ...item,
     executeWithParams: async (ctx, params) => {
@@ -60,7 +61,7 @@ try {
     getActiveText() { throw new Error('No implicit editor read') },
     getClipboardText() { throw new Error('No implicit clipboard read') },
     async copyText(text) { if (failCopy) throw new Error('Copy denied'); deliveries.push(['copy', text]) },
-    async returnToLauncher(text) { if (failReturn) throw new Error('Return denied'); deliveries.push(['return', text]) },
+    async returnToLauncher(text) { if (pauseDelivery) await pauseDelivery(); if (failReturn) throw new Error('Return denied'); deliveries.push(['return', text]) },
   }
   const controller = new LauncherController({
     surfaceId: 'global-launcher', api, locale: 'en',
@@ -212,6 +213,8 @@ try {
   const savedBefore = JSON.stringify(listSavedActions())
   await preview(saved, input)
   const savedResult = top()
+  const expectedSource = { id: artifact.id, snapshot: savedActionSnapshot(artifact) }
+  assert.deepEqual(savedResult.committedRun.sourceSavedAction, expectedSource, 'unedited preview already carries exact origin')
   assert.equal(getHostOutputIntent(savedResult.output.choices[0]), 'return-to-launcher')
   controller.editPreviewParam('indent', savedResult)
   controller.back()
@@ -234,6 +237,7 @@ try {
   await controller.activateChoice(top().output.choices[0])
   assert.equal(deliveries.at(-1)[0], 'return')
   const savedCompleted = structuredClone(await getLastSaveableRun())
+  assert.deepEqual(savedCompleted.sourceSavedAction, expectedSource, 'editing retains the original source snapshot')
   assert.equal(savedCompleted.runId, editedSavedResult.committedRun.runId)
   assert.equal(savedCompleted.actionKey, json.systemKey, 'edited Saved Action delivery is saveable under the real base action')
   assert.deepEqual(savedCompleted.savedParams, { indent: 4, sortKeys: false })
@@ -247,11 +251,13 @@ try {
   const nearby = getNearbySaveRunItem(savedCompleted)
   assert.ok(nearby)
   await controller.selectItem(nearby)
+  await new Promise((resolve) => setImmediate(resolve))
   assert.equal(top().kind, 'collect-input')
   assert.equal(top().inputText, '')
   controller.setInputText('Edited return settings')
+  await controller.refreshSuggestions()
   await controller.submitInput()
-  assert.equal(top().kind, 'list')
+  assert.equal(top().kind, 'collect-input', 'suggestion-backed save entry remains open after Save As')
   const newlySaved = listSavedActions().find((candidate) => candidate.id !== artifact.id)
   assert.ok(newlySaved)
   assert.equal(newlySaved.baseActionKey, json.systemKey)
@@ -262,7 +268,33 @@ try {
   assert.equal(top().output.choices[0].preview, editedSavedResult.output.choices[0].preview)
   assert.equal(getHostOutputIntent(top().output.choices[0]), 'return-to-launcher')
   await controller.activateChoice(top().output.choices[0])
-  assert.deepEqual(await getLastSaveableRun(), savedCompleted, 'unedited Saved Action replay retains the existing LastRun policy')
+  const replayCompleted = structuredClone(await getLastSaveableRun())
+  assert.deepEqual(replayCompleted.sourceSavedAction, { id: newlySaved.id, snapshot: savedActionSnapshot(newlySaved) },
+    'unedited replay records its actual source rather than the previous edited item')
+  assert.notEqual(replayCompleted.runId, savedCompleted.runId)
+  assert.deepEqual(replayCompleted.savedParams, newlySaved.savedParams)
+  assert.doesNotMatch(JSON.stringify(replayCompleted), /inputText|outputText|runtime-only/)
+
+  // A later saved item must not replace the captured source of this run.
+  await preview(saved, input)
+  const lateFrame = top()
+  createSavedAction(completed, 'Unrelated later tool', ['not-the-source'])
+  assert.deepEqual(lateFrame.committedRun.sourceSavedAction, expectedSource)
+  let releaseDelivery
+  pauseDelivery = () => new Promise((resolve) => { releaseDelivery = resolve })
+  const pendingDelivery = controller.activateChoice(lateFrame.output.choices[0])
+  assert.equal(controller.getState().busy, true)
+  controller.reset()
+  releaseDelivery()
+  await pendingDelivery
+  pauseDelivery = undefined
+  assert.deepEqual(await getLastSaveableRun(), replayCompleted, 'late successful delivery cannot replace current LastRun or its source')
+
+  await preview(saved, input)
+  failReturn = true
+  await controller.activateChoice(top().output.choices[0])
+  failReturn = false
+  assert.deepEqual(await getLastSaveableRun(), replayCompleted, 'failed unedited replay preserves the prior completed source')
   const legacy = projectSavedAction({ ...artifact, inputBinding: 'selection' }, formatter)
   assert.equal(legacy.params, undefined, 'legacy implicit input bindings have no editing projection')
 
@@ -331,7 +363,7 @@ try {
     assert.equal(top().kind, 'collect-input', 'saveability changes cannot restore the old committed save snapshot')
     assert.equal(top().inputText, input)
     assert.equal(runs.length, beforeContractChange)
-    assert.deepEqual(await getLastSaveableRun(), savedCompleted)
+    assert.deepEqual(await getLastSaveableRun(), replayCompleted)
   } finally { indentSpec.saveable = saveable }
 
   await preview(formatter, input, { indent: 4, sortKeys: true })
@@ -342,7 +374,7 @@ try {
   assert.equal(top().kind, 'collect-input', 'revoked plugin editing keeps the original input available')
   assert.equal(top().inputText, input)
   assert.ok(controller.getState().error)
-  assert.deepEqual(await getLastSaveableRun(), savedCompleted)
+  assert.deepEqual(await getLastSaveableRun(), replayCompleted)
   console.log('Preview parameter editing passed: exact single reruns, zero-run cancel, fresh intents, stale callbacks/material/plugin guards, Saved Return and LastRun timing')
 } finally {
   console.info = originalInfo

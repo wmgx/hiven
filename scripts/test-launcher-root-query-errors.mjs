@@ -85,10 +85,7 @@ try {
   }
 
   function assertRecordedFailure(h, selectedItem) {
-    const events = h.events.filter((event) => event.actionKey === selectedItem.systemKey)
-    assert.deepEqual(events.map((event) => event.eventType), ['run.started', 'run.finished'])
-    assert.notEqual(events[1].status, 'success', 'a dismissed error still records the actual failed run')
-    assert.ok(events[1].errorType)
+    assert.deepEqual(h.events, [], 'launcher execution no longer emits learning records')
     assert.deepEqual(h.selections, [])
     assert.equal(h.closed, 0)
   }
@@ -213,7 +210,7 @@ try {
       assert.equal(h.state().error, change ? null : 'Preparation failed')
       assert.equal(h.state().busy, false)
     }
-    assert.deepEqual(h.events, [], 'preparation keeps existing experience-recording semantics')
+    assert.deepEqual(h.events, [], 'preparation does not emit learning records')
   })
 
   await check('late preparation cannot release a newer run or show a stale disabled reason', async () => {

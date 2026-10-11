@@ -54,7 +54,7 @@ export function describeSavedAction(
       .filter((param) => param.saveable === true && Object.prototype.hasOwnProperty.call(artifact.savedParams, param.key))
       .map((param) => `${localizedDisplay(param.label, param.labelI18n, locale)}: ${paramValueLabel(param, artifact.savedParams[param.key], locale)}`)
     return [
-      translate(locale, 'palette', `learningOutput.${artifact.outputIntent}`),
+      translate(locale, 'palette', `savedOutput.${artifact.outputIntent}`),
       resolveDisplayTitle(action.display, locale),
       ...params,
     ].join(' · ')

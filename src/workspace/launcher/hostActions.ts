@@ -6,52 +6,14 @@ import type { LauncherItem } from './types'
 import { getHostEditorActionItems } from './hostEditorActions'
 import { isQuickEditorWindowOpen, showQuickEditorWindow } from '../windowManager/quickEditorWindow'
 import { clearStandaloneLauncherBlurDevtoolsSuppress, suppressStandaloneLauncherBlurForDevtools } from '../launcherBlurGuard'
-import {
-  clearAllExperienceEvents,
-  clearExperienceEventsSince,
-  exportExperienceEvents,
-  isExperienceLearningPaused,
-  setExperienceLearningPaused,
-} from '../experience/journal'
 import type { LastSaveableRunState } from '../savedActions/types'
 import { getLastSaveableRun } from '../savedActions/lastSaveableRun'
-import { createSavedAction, deleteSavedAction, deleteSavedActionIfUnchanged, getSavedActionForDelete, getSavedActionForRename, listSavedActions, renameSavedAction } from '../savedActions/store'
-import { recordSavedActionEvent } from '../savedActions/events'
-import { isGlobalLauncherSavedActionOutput } from '../savedActions/compatibility'
+import { createSavedAction, deleteSavedAction, deleteSavedActionIfUnchanged, getSavedActionForDelete, getSavedActionForRename, listSavedActions, renameSavedAction, savedActionConfigurationChanged, updateSavedActionIfUnchanged } from '../savedActions/store'
+import { isGlobalLauncherSavedActionOutput, savedActionDisabledReason } from '../savedActions/compatibility'
 import { describeSavedAction } from '../savedActions/display'
 import { translate } from '../../i18n'
 
 type SystemPowerAction = 'restart' | 'shutdown' | 'lock-screen'
-
-function confirmExperienceClear(
-  scope: 'today' | 'all',
-  clear: () => Promise<void>,
-): LauncherExecuteResult {
-  const all = scope === 'all'
-  return {
-    ok: true,
-    output: {
-      choices: [
-        {
-          id: `host.experience.clear-${scope}.confirm`,
-          title: all ? 'Confirm clearing all learning events' : "Confirm clearing today's learning events",
-          titleI18n: { zh: all ? '确认清除全部学习事件' : '确认清除今天的学习事件' },
-          tone: 'danger',
-          primaryAction: async () => {
-            await clear()
-          },
-        },
-        {
-          id: `host.experience.clear-${scope}.cancel`,
-          title: 'Cancel',
-          titleI18n: { zh: '取消' },
-          tone: 'muted',
-          primaryAction: async () => ({ ok: true, keepOpen: true }),
-        },
-      ],
-    },
-  }
-}
 
 async function performSystemPowerAction(action: SystemPowerAction): Promise<LauncherExecuteResult> {
   try {
@@ -117,113 +79,12 @@ export function getHostSystemPowerItems(): LauncherItem[] {
   ]
 }
 
-export function getHostExperienceJournalItems(): LauncherItem[] {
-  return [
-    {
-      systemKey: 'host:experience:learning-inbox',
-      kind: 'host',
-      display: {
-        title: 'Learning Inbox',
-        titleI18n: { zh: '学习收件箱' },
-        subtitle: 'Review repeated non-default actions',
-        subtitleI18n: { zh: '查看重复出现的非默认动作' },
-        icon: 'Inbox',
-        aliases: ['learning candidate', 'saved action candidate', '学习候选', '可能值得保存'],
-      },
-      behavior: { type: 'perform' },
-      surfaces: ['global-launcher'],
-      experienceRecord: false,
-      execute: async () => {
-        await requestOpenLauncherHostSurface('learning-inbox')
-        return { ok: true, keepOpen: true }
-      },
-    },
-    {
-      systemKey: 'host:experience:export',
-      kind: 'host',
-      display: {
-        title: 'Export Learning Events',
-        titleI18n: { zh: '导出学习事件' },
-        subtitle: 'Copy the no-content event log as JSON',
-        subtitleI18n: { zh: '将无正文事件日志复制为 JSON' },
-        icon: 'Download',
-        aliases: ['learning export', 'experience journal', '导出学习事件'],
-      },
-      behavior: { type: 'perform' },
-      surfaces: ['global-launcher'],
-      experienceRecord: false,
-      execute: async (ctx) => {
-        try {
-          await ctx.api.copyText(await exportExperienceEvents())
-          return { ok: true }
-        } catch (error) {
-          return { ok: false, message: error instanceof Error ? error.message : String(error) }
-        }
-      },
-    },
-    {
-      systemKey: 'host:experience:clear-today',
-      kind: 'host',
-      display: {
-        title: "Clear Today's Learning Events",
-        titleI18n: { zh: '清除今天的学习事件' },
-        subtitle: 'Delete events recorded since local midnight',
-        subtitleI18n: { zh: '删除本地时间今天零点后的事件' },
-        icon: 'CalendarX',
-        aliases: ['clear learning today', '清除今天学习事件'],
-      },
-      behavior: { type: 'perform' },
-      surfaces: ['global-launcher'],
-      experienceRecord: false,
-      execute: async () => confirmExperienceClear('today', async () => {
-          const midnight = new Date()
-          midnight.setHours(0, 0, 0, 0)
-          await clearExperienceEventsSince(midnight.getTime())
-      }),
-    },
-    {
-      systemKey: 'host:experience:clear-all',
-      kind: 'host',
-      display: {
-        title: 'Clear All Learning Events',
-        titleI18n: { zh: '清除全部学习事件' },
-        subtitle: 'Delete the complete local experience journal',
-        subtitleI18n: { zh: '删除全部本地学习事件' },
-        icon: 'Trash2',
-        aliases: ['clear all learning', '清除全部学习事件'],
-      },
-      behavior: { type: 'perform' },
-      surfaces: ['global-launcher'],
-      experienceRecord: false,
-      execute: async () => confirmExperienceClear('all', clearAllExperienceEvents),
-    },
-    {
-      systemKey: 'host:experience:pause',
-      kind: 'host',
-      display: {
-        title: 'Pause / Resume Personal Learning',
-        titleI18n: { zh: '暂停 / 恢复个性化学习' },
-        subtitle: 'Toggle Experience Journal recording',
-        subtitleI18n: { zh: '切换学习事件记录状态' },
-        icon: 'PauseCircle',
-        aliases: ['pause learning', 'resume learning', '暂停学习', '恢复学习'],
-      },
-      behavior: { type: 'perform' },
-      surfaces: ['global-launcher'],
-      experienceRecord: false,
-      execute: async () => {
-        setExperienceLearningPaused(!isExperienceLearningPaused())
-        return { ok: true }
-      },
-    },
-  ]
-}
-
 /** Shared naming flow for search and a nearby offer bound before it is displayed. */
 export function createSaveLastRunItem(options: {
   run?: LastSaveableRunState
   display?: LauncherItem['display']
   validate?: () => boolean
+  resolveBaseItems?: () => LauncherItem[]
 } = {}): LauncherItem {
   const offeredRun = options.run ? structuredClone(options.run) : undefined
   const saveLastItem: LauncherItem =
@@ -262,17 +123,94 @@ export function createSaveLastRunItem(options: {
         if (!isGlobalLauncherSavedActionOutput(lastRun.outputIntent)) {
           throw new Error(translate(ctx.locale, 'palette', 'savedActionEditorOutputUnsupported'))
         }
+        const source = lastRun.sourceSavedAction
+        const resolveUpdate = () => {
+          if (!source || lastRun.inputBinding !== 'prompt' || lastRun.actionPolicy.effect !== 'pure') return null
+          const target = getSavedActionForDelete(source.id, source.snapshot)
+          if (target.status !== 'ready') return target.status
+          const candidates = options.resolveBaseItems?.().filter((item) => item.systemKey === lastRun.actionKey) ?? []
+          const action = candidates.length === 1 ? candidates[0] : null
+          if (!action || action.executionMode !== 'explicit-text-preview' || action.actionPolicy?.effect !== 'pure' ||
+            action.pluginLifetime?.active === false || action.isExplicitTextPreviewAvailable?.() === false ||
+            action.disabledReason || target.action.inputBinding !== 'prompt' ||
+            target.action.baseActionKey !== lastRun.actionKey ||
+            savedActionDisabledReason(target.action, action) || savedActionDisabledReason(lastRun, action) ||
+            (options.validate && !options.validate())) return 'invalid'
+          return { action, saved: target.action }
+        }
+        const updateError = (locale: typeof ctx.locale, status: string) => translate(locale, 'palette',
+          status === 'missing' ? 'savedActionUpdateMissing' : status === 'changed' ? 'savedActionUpdateChanged' : 'savedActionUpdateUnavailable')
         return {
           ...saveLastItem,
           prepare: undefined,
+          ...(source ? {
+            display: { ...saveLastItem.display,
+              subtitle: translate('en', 'palette', 'savedActionUpdateOrSave'),
+              subtitleI18n: { zh: translate('zh', 'palette', 'savedActionUpdateOrSave') },
+            },
+            suggest: async (suggestCtx) => {
+              if (suggestCtx.inputText.trim()) return { choices: [] }
+              let target
+              try { target = resolveUpdate() } catch { target = 'invalid' as const }
+              if (!target) return { choices: [] }
+              if (typeof target !== 'string' && !savedActionConfigurationChanged(target.saved, lastRun)) return { choices: [] }
+              const title = (locale: typeof ctx.locale) => translate(locale, 'palette', 'savedActionUpdateOriginal', {
+                name: typeof target === 'string' ? '' : target.saved.name,
+              })
+              const summary = (locale: typeof ctx.locale) => {
+                if (typeof target === 'string') return updateError(locale, target)
+                const before = describeSavedAction(target.saved, target.action)
+                const after = describeSavedAction({ ...target.saved, savedParams: lastRun.savedParams, outputIntent: lastRun.outputIntent }, target.action)
+                return translate(locale, 'palette', 'savedActionUpdateDifference', {
+                  before: locale === 'zh' ? before.subtitleI18n.zh : before.subtitle,
+                  after: locale === 'zh' ? after.subtitleI18n.zh : after.subtitle,
+                })
+              }
+              return { choices: [{
+                id: `saved-action-update-${source.id}`,
+                title: title('en'), titleI18n: { zh: title('zh') },
+                subtitle: summary('en'), subtitleI18n: { zh: summary('zh') },
+                primaryAction: async () => {
+                  let current
+                  try { current = resolveUpdate() } catch { current = 'invalid' as const }
+                  if (!current || typeof current === 'string') return { ok: false as const, message: updateError(suggestCtx.locale, current ?? 'invalid') }
+                  return { ok: true as const, output: { choices: [
+                    {
+                      id: `saved-action-update-confirm-${source.id}`,
+                      title: translate('en', 'palette', 'savedActionUpdateConfirm', { name: current.saved.name }),
+                      titleI18n: { zh: translate('zh', 'palette', 'savedActionUpdateConfirm', { name: current.saved.name }) },
+                      subtitle: summary('en'), subtitleI18n: { zh: summary('zh') },
+                      primaryAction: async () => {
+                        try {
+                          const checked = resolveUpdate()
+                          if (!checked || typeof checked === 'string') return { ok: false as const, message: updateError(suggestCtx.locale, checked ?? 'invalid') }
+                          const result = updateSavedActionIfUnchanged(source.id, source.snapshot, lastRun)
+                          if (result.status === 'updated' || result.status === 'unchanged') return { ok: true as const, keepOpen: true }
+                          return { ok: false as const, message: updateError(suggestCtx.locale, result.status) }
+                        } catch {
+                          return { ok: false as const, message: translate(suggestCtx.locale, 'palette', 'savedActionUpdateFailed') }
+                        }
+                      },
+                    },
+                    {
+                      id: `saved-action-update-cancel-${source.id}`,
+                      title: translate('en', 'palette', 'savedActionUpdateCancel'),
+                      titleI18n: { zh: translate('zh', 'palette', 'savedActionUpdateCancel') },
+                      tone: 'muted' as const,
+                      primaryAction: async () => ({ ok: true as const, keepOpen: true }),
+                    },
+                  ] } }
+                },
+              }] }
+            },
+          } : {}),
           execute: async (inputCtx) => {
             if (options.validate && !options.validate()) return { ok: false, message: translate(inputCtx.locale, 'palette', 'savedActionOfferUnavailable') }
             const [rawName, ...rawAliasParts] = (inputCtx.input?.text ?? '').split('|')
             const rawAliases = rawAliasParts.join('|')
             if (!rawName?.trim()) return { ok: false, message: translate(inputCtx.locale, 'palette', 'savedActionNameRequired') }
             try {
-              const artifact = createSavedAction(lastRun, rawName, rawAliases.split(','))
-              recordSavedActionEvent('artifact.saved', artifact)
+              createSavedAction(lastRun, rawName, rawAliases.split(','))
               return { ok: true, keepOpen: true }
             } catch (error) {
               console.warn('[hiven] Failed to save Saved Action:', error)
@@ -426,7 +364,7 @@ export function getHostSavedActionItems(resolveBaseItems: () => LauncherItem[] =
     const { subtitle, subtitleI18n } = describeSavedAction(artifact, candidates.length === 1 ? candidates[0] : null, undefined, candidates.length > 1)
     return { subtitle, subtitleI18n }
   }
-  return [createSaveLastRunItem(),
+  return [createSaveLastRunItem({ resolveBaseItems }),
     {
       systemKey: 'host:saved-action:delete',
       kind: 'host',
@@ -471,8 +409,7 @@ export function getHostSavedActionItems(resolveBaseItems: () => LauncherItem[] =
                       tone: 'danger' as const,
                       primaryAction: async () => {
                         try {
-                          const removed = deleteSavedAction(artifact.id)
-                          if (removed) recordSavedActionEvent('artifact.deleted', removed)
+                          deleteSavedAction(artifact.id)
                           return { ok: true as const }
                         } catch {
                           return { ok: false as const, message: translate(ctx.locale, 'palette', 'savedActionDeleteFailed') }

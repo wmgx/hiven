@@ -1,7 +1,5 @@
 import { useEffect } from 'react'
 import type { LauncherHostSurfaceTarget, PluginSurfaceOpenTarget } from '../../store'
-import { useAppStore } from '../../store'
-import { t } from '../../i18n'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
 import { markSurfaceInstanceState, upsertSurfaceInstance } from '../../surfaces/registry'
 import { pluginSurfaceInstanceId } from '../../workspace/pluginSurfaceWindows'
@@ -73,9 +71,7 @@ export function useGlobalLauncherSurfaceRegistry({
     const kind = hostSurfaceTarget === 'system-plugins' ? 'plugins' : 'settings'
     const title = hostSurfaceTarget === 'system-plugins'
       ? 'Plugins'
-      : hostSurfaceTarget === 'learning-inbox'
-        ? t(useAppStore.getState().locale, 'palette.learningInboxTitle')
-        : 'Settings'
+      : 'Settings'
     upsertSurfaceInstance({
       id: `host-surface:${hostSurfaceTarget}`,
       kind,

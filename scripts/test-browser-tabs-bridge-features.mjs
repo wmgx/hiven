@@ -18,7 +18,6 @@ for (const path of [
   'src/plugins/web-open/browserTabsModel.ts',
   'src/plugins/web-open/browserProvider.ts',
   'src/workspace/desktopTargets/pluginApi.ts',
-  'src/workspace/learning/navigationSensor.ts',
   'src/workspace/desktopTargets/collectBridgeLauncherItems.ts',
 ]) {
   assert.ok(existsSync(join(root, path)), `${path} must exist`)
@@ -56,12 +55,6 @@ assert.match(api, /listHistory:/)
 assert.match(api, /listEvents:/)
 assert.match(api, /openUrl:/)
 assert.match(api, /setSourceConfig:/)
-
-const sensor = read('src/workspace/learning/navigationSensor.ts')
-assert.match(sensor, /listDesktopBridgeHistory/)
-assert.match(sensor, /listDesktopBridgeEvents/)
-assert.match(sensor, /tab\.opened/)
-assert.match(sensor, /tab\.activated/)
 
 const collect = read('src/workspace/desktopTargets/collectBridgeLauncherItems.ts')
 assert.match(collect, /t\.kind === 'tab' \|\| t\.kind === 'document'/)

@@ -16,12 +16,12 @@ import { registerBuiltinTextPipelines } from '../../workflow/pipeline'
 import { getWorkflowObjectLauncherItems } from '../../workflow/workflowLauncherAdapter'
 import {
   collectBaseCandidates,
+  filterAvailableLauncherItems,
   setHostLauncherDynamicItemsProvider,
   setHostLauncherItemsProvider,
 } from './registry'
-import { learnedLauncherItems } from '../learning/fire'
 import { measureLauncherPerf } from './perf'
-import { getHostExperienceJournalItems, getHostPaneControlItems, getHostSavedActionItems, getHostSystemPowerItems } from './hostActions'
+import { getHostPaneControlItems, getHostSavedActionItems, getHostSystemPowerItems } from './hostActions'
 import { registerPluginSurfacePanelProvider } from '../pluginSurfacePanelProvider'
 import { registerWorkflowOutputShelfPanelProvider } from '../workflowOutputShelfPanelProvider'
 
@@ -36,8 +36,7 @@ export function registerHostLauncherProviders(): void {
   setHostLauncherItemsProvider(() => [
     ...getHostPaneControlItems(),
     ...getHostSystemPowerItems(),
-    ...getHostExperienceJournalItems(),
-    ...getHostSavedActionItems(collectBaseCandidates),
+    ...getHostSavedActionItems(() => filterAvailableLauncherItems(collectBaseCandidates(), 'global-launcher')),
     ...getHostAppLauncherStaticItems(),
     ...getTextPipelineLauncherItems(),
     // Kill Process: first-level command → collect-input second level (suggest list).
@@ -100,15 +99,9 @@ export function registerHostLauncherProviders(): void {
           bridgePromise,
         ])
 
-        // Learned direct answers (reverse fire): a typed id → open the discovered
-        // page (D), or a matching input → the collapsed chain result (B). Sync +
-        // cached, so it never adds latency to the query path.
-        const learnedItems = learnedLauncherItems(q, ctx.locale)
-
         // Window vs tab de-dupe is soft ranking (title near-dup + capability tier),
         // not a host product filter that knows about browser plugins.
         return [
-          ...learnedItems,
           ...workflowItems,
           ...appItems,
           ...windowItems,

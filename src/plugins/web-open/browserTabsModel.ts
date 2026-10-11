@@ -1,7 +1,7 @@
 export type BrowserTabsSettings = {
   /** When true, register browser.chromium DesktopTargetProvider with the host. */
   enabled: boolean
-  /** Push recent browsing history to the host for search + learning. */
+  /** Push recent browsing history to the host for launcher search. */
   historyEnabled: boolean
   /** Browser-history age included in Global Launcher search. */
   historySearchDays: 3 | 5 | 7 | 30 | 60 | 90 | 365 | 'all'

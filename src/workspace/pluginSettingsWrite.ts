@@ -1,16 +1,6 @@
 /**
- * Plugin-initiated settings writes.
- *
- * Plugins could previously only READ their settings — everything that wrote them
- * went through the settings dialog. That left a plugin no way to persist
- * something it derived at runtime, which is exactly what claiming a learned rule
- * requires (see learning/ruleSink.ts).
- *
- * This routes such a write down the SAME path the settings UI uses: resolve
- * (with migration) → set (versioned, persisted) → onChange (write-through). The
- * onChange leg matters more than it looks: web-open re-registers its coverage
- * test there, so skipping it would let the learner re-learn a rule it just
- * handed over.
+ * Plugin-initiated settings writes use the same validated persistence and
+ * onChange path as explicit settings UI edits.
  */
 
 import { pluginRegistry } from './pluginRegistry'

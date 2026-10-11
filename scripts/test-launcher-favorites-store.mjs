@@ -233,13 +233,11 @@ check('a caught nested save failure restores the outer pending list and write ma
   assertSaved(storage, ['outer'])
 })
 
-check('favorites preserve aliases, shortcuts, learning choice and per-window shortcut status', () => {
+check('favorites preserve aliases, shortcuts and per-window shortcut status', () => {
   const { storage, A, B } = fixture()
   A.state().setAppSearchAliases('app:a', ['工作'])
-  A.state().updateSetting('automaticLearningEnabled', true)
   B.state().toggleLauncherFavorite('a', true)
   assert.deepEqual(plain(storage.persisted().settings.appSearchAliases), { 'app:a': ['工作'] })
-  assert.equal(storage.persisted().settings.automaticLearningEnabled, true)
   B.event()
   B.state().updateSetting('globalPinnedLauncherShortcut', {
     kind: 'accelerator', accelerator: 'Shift+Cmd+Space', registrationStatus: 'registered',

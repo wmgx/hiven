@@ -139,6 +139,7 @@ function loadPluginPaste({
   })
   const forbidden = () => { throw new Error('Unexpected unrelated I/O') }
   const launcherModule = loadModule('src/workspace/launcher/pluginApi.ts', {
+    '../../historyDiffHandoff': {},
     '../effectRunner': { openExternalUrl: forbidden },
     '../toast': { showToast: forbidden },
     '../launcherHostSurfaceBridge': { requestOpenLauncherHostSurface: forbidden },
@@ -569,7 +570,7 @@ const hostFactorySource = ts.transpileModule(`exports.build = () => { ${[...host
   const hiddenRef = { current: false }, lifetime = { active: true }
   const scope = h.recovery.createPasteRecoveryScope()
   const context = {
-    exports: {}, target, surfaceState, hiddenRef, pasteScope: scope,
+    exports: {}, target, surfaceState, hiddenRef, historyDiffRef: { current: null }, pasteScope: scope,
     mountedRef: { current: true }, activeTargetRef: { current: target }, activeStateRef: { current: surfaceState },
     presentation: 'plugin-surface-window', pluginRegistry: { getPluginLifetime: () => lifetime }, hostStorage: undefined,
     createPluginPaste: h.api.createPluginPaste, ...h.recovery,
@@ -692,22 +693,20 @@ try {
     const frame = controller.getState().frames.at(-1)
     assert.equal(frame.kind, 'result')
     await controller.activateSecondary(frame.output.choices[0], 'paste-to-foreground-app')
-    // Allow the controller's queued mining fingerprint/event chain to settle.
-    for (let i = 0; i < 10; i++) await new Promise(resolve => setTimeout(resolve, 5))
     const last = await getLastSaveableRun()
     const applied = events.filter(event => event.eventType === 'output.applied')
     if (scenario === 'early-close-control') {
       assert.equal(closed, 0)
       assert.equal(resets, 1)
       assert.equal(last.actionKey, seed.actionKey)
-      assert.equal(applied.length, 1)
+      assert.equal(applied.length, 0)
     } else if (scenario === 'caller-completes-success') {
       assert.equal(closed, 1)
       assert.equal(resets, 1)
       assert.equal(h.state.open, false)
       assert.equal(last.actionKey, item.systemKey)
       assert.equal(last.outputIntent, 'paste-to-foreground-app')
-      assert.equal(applied.length, 1)
+      assert.equal(applied.length, 0)
     } else {
       assert.equal(closed, 0)
       assert.equal(resets, 0)

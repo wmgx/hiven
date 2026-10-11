@@ -54,6 +54,7 @@ const runtime=load('src/workspace/pluginRuntime.ts',{
   '@tauri-apps/api/core':native,'@tauri-apps/plugin-fs':{watch:fail('watch')},'@tauri-apps/plugin-dialog':{open:fail('dialog')},
 },{localStorage,window:{localStorage}});
 const pluginApi=load('src/workspace/launcher/pluginApi.ts',{
+  '../../historyDiffHandoff':{},
   '../effectRunner':{openExternalUrl:async url=>state.opens.push(url)},'../toast':{showToast:no},
   '../launcherHostSurfaceBridge':{requestOpenLauncherHostSurface:fail('host surface')},'../pluginSurfaceOpenRequest':{openLauncherHostedPluginSurface:fail('plugin surface')},
   '../pluginRegistry':registry,'../pluginStorage':pluginStorage,'../pluginPermissions':permissions,'../editorBridge':editor,
@@ -67,9 +68,8 @@ const {LauncherController}=load('src/workspace/launcher/controller.ts',{
   './pluginLifetime':load('src/workspace/launcher/pluginLifetime.ts'),
   '../usageJournal':{appendUsageJournal:async()=>{}},'./output':output,'./foregroundSelectionCapture':{captureForegroundSelectionText:fail('foreground capture')},'../../i18n':i18n,
   '../telemetry':{TelemetryEvents:{},itemTelemetryProps:()=>({}),trackBehavior:no,trackLatencyFrom:no,telemetryNow:Date.now},
-  '../experience/journal':{appendExperienceEvent:no,currentExperienceSessionId:x=>x,newExperienceId:x=>x+'-id'},
-  '../experience/errorType':{classifyExperienceError:()=>({status:'failure',errorType:'output-failed'})},'../contentBoundary':{isSafeExperienceIdentifier:()=>true},
-  '../experience/saveableParams':{extractSaveableParams:()=>({ok:true,params:{}})},'../experience/miningFingerprint':{createMiningFingerprints:async()=>null},
+  '../contentBoundary':{isSafeExperienceIdentifier:()=>true},
+  '../experience/saveableParams':{extractSaveableParams:()=>({ok:true,params:{}})},
   '../savedActions/lastSaveableRun':{setLastSaveableRun:no},'../savedActions/store':{touchSavedAction:no},
 });
 // Actual web-open callbacks and history data, isolated from its optional browser UI.
@@ -96,6 +96,7 @@ const selection=load('src/components/launcher/GlobalLauncherSelection.ts',{
   './launcherParamShortcuts':load('src/components/launcher/launcherParamShortcuts.ts'),
 });
 const launcherRegistry=load('src/workspace/launcher/registry.ts',{
+  './settingsFieldSearch':{collectSettingsFieldSearchItems:()=>[]},
   '../../i18n':i18n,'../../i18n/pluginI18nRegistry':pluginI18n,'../pluginRegistry':registry,
   '../launcherHostSurfaceBridge':{requestOpenLauncherPluginSettingsSurface:fail('settings')},
   '../pluginSettingsStore':settings,'./types':types,'./identity':identity,'./pluginApi':pluginApi,
