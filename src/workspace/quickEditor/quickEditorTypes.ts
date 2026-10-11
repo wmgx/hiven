@@ -85,14 +85,6 @@ export interface QuickEditorActions {
   clearExternalVersionHistory: () => void
   openPanelV2: (instance: PanelInstanceV2) => void
   closePanelV2: (panelId: string) => void
-  /** Apply a remote overwrite (detached window sync) including history. */
-  applyOverwriteFromRemote: (input: {
-    paneId: QuickEditorPaneId
-    text: string
-    language?: string
-    languageSource?: 'manual' | 'auto'
-    externalVersionHistory?: QuickEditorExternalVersion[]
-  }) => boolean
   reset: () => void
 }
 

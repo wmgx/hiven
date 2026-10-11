@@ -5,16 +5,15 @@ import { loadInstalledPluginsFromStore } from '../workspace/pluginRuntime'
 import { registerBundledPluginPackages } from '../workspace/bundledPluginLoader'
 import { registerHostLauncherProviders } from '../workspace/launcher/hostProvider'
 import {
-  applyQuickEditorOverwrite,
   applyQuickEditorPaneRequest,
   applyQuickEditorSetPaneText,
-  isQuickEditorOverwriteRequest,
   isQuickEditorPaneRequest,
   isQuickEditorSetPaneTextRequest,
   QUICK_EDITOR_CREATE_PANE_EVENT,
-  QUICK_EDITOR_OVERWRITE_EVENT,
   QUICK_EDITOR_SET_PANE_TEXT_EVENT,
 } from '../workspace/quickEditor/quickEditorRequests'
+import { listenForQuickEditorOverwrites } from '../workspace/quickEditor/quickEditorOverwriteHandoff'
+import { useQuickEditorStore } from '../workspace/quickEditor/quickEditorStore'
 import { QuickEditorPanel } from '../components/quickEditor/QuickEditorPanel'
 import { ToastContainer } from '../components/workspace/ToastContainer'
 import {
@@ -85,9 +84,10 @@ export function QuickEditorDetachedView() {
           if (!isQuickEditorSetPaneTextRequest(event.payload)) return
           applyQuickEditorSetPaneText(event.payload)
         })
-        const overwriteCleanup = await listen<unknown>(QUICK_EDITOR_OVERWRITE_EVENT, (event) => {
-          if (!isQuickEditorOverwriteRequest(event.payload)) return
-          applyQuickEditorOverwrite(event.payload)
+        const overwriteCleanup = await listenForQuickEditorOverwrites((text, options) => {
+          if (disposed) throw new Error('QuickEditorClosed')
+          const paneId = useQuickEditorStore.getState().overwriteActiveText(text, options)
+          return { paneId, historyCount: useQuickEditorStore.getState().externalVersionHistory.length }
         })
         if (disposed) {
           createCleanup()

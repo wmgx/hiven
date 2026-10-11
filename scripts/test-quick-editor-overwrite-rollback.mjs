@@ -1,102 +1,103 @@
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync } from 'node:fs'
-
-assert.equal(existsSync('src/components/quickEditor/QuickEditorToolbar.tsx'), false, 'QuickEditorToolbar deleted')
-#!/usr/bin/env node
-/**
- * Quick Editor external-overwrite version history contracts.
- * Only external overwrite archives versions — user typing does not.
- */
-import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { createRequire } from 'node:module'
+import vm from 'node:vm'
+import ts from 'typescript'
+const require = createRequire(import.meta.url)
+const compile = (file) => ts.transpileModule(readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
+const entries = new Map()
+let rejectWrite = false, rejectRead = false
+const storage = { getItem: key => { if (rejectRead) throw new Error('StorageReadError'); return entries.get(key) ?? null }, setItem: (key, value) => { if (rejectWrite) throw new Error('QuotaExceededError'); entries.set(key, value) }, removeItem: key => entries.delete(key) }
+globalThis.localStorage = storage
+globalThis.window = { localStorage: storage }
+function store() {
+  const exports = {}
+  vm.runInNewContext(compile('src/workspace/quickEditor/quickEditorStore.ts'), { exports, require, localStorage: storage, console })
+  return exports.useQuickEditorStore
+}
+const sender = store(), destination = store()
+sender.getState().setText('stale sender')
+const a = 'A full draft\r\n完整草稿\n  trailing spaces  \n'
+destination.getState().setText(a)
+destination.getState().overwriteActiveText('B full replacement', { source: 'text' })
+assert.equal(sender.getState().text, 'stale sender')
+assert.equal(destination.getState().externalVersionHistory[0].text, a)
+assert.equal(JSON.parse(entries.get('hiven-quick-editor')).state.externalVersionHistory[0].text, a)
+assert.equal(store().getState().text, 'B full replacement', 'A newly created window hydrates the committed result')
+const c = 'C latest draft\n第二行\nEND-C'
+destination.getState().setText(c)
+const before = entries.get('hiven-quick-editor')
+const memoryBefore = destination.getState()
+rejectWrite = true
+assert.throws(() => destination.getState().overwriteActiveText('must not replace'), /QuotaExceeded/)
+assert.equal(destination.getState(), memoryBefore, 'Storage failure cannot publish replacement in memory')
+assert.equal(entries.get('hiven-quick-editor'), before, 'Storage failure preserves previous durable content')
+assert.throws(() => destination.getState().restoreExternalVersion(memoryBefore.externalVersionHistory[0].id), /QuotaExceeded/)
+assert.equal(destination.getState(), memoryBefore)
+rejectWrite = false
+destination.getState().overwriteActiveText('decoded tool output', { source: 'result' })
+assert.equal(destination.getState().externalVersionHistory[0].text, c)
+assert.equal(destination.getState().restoreExternalVersion(destination.getState().externalVersionHistory[0].id), true)
+assert.equal(store().getState().text, c, 'Restored full draft survives reopening')
+rejectRead = true
+const unread = store()
+assert.equal(unread.persist.hasHydrated(), false)
+const saved = entries.get('hiven-quick-editor')
+assert.throws(() => unread.getState().overwriteActiveText('must not overwrite unread draft'), /QuickEditorStorageUnavailable/)
+assert.equal(entries.get('hiven-quick-editor'), saved)
+rejectRead = false
+await sender.persist.rehydrate()
+assert.equal(sender.getState().text, c, 'Returning to inline editor refreshes the current saved draft')
 
-const root = process.cwd()
-const read = (path) => readFileSync(join(root, path), 'utf8')
-
-const types = read('src/workspace/quickEditor/quickEditorTypes.ts')
-const store = read('src/workspace/quickEditor/quickEditorStore.ts')
-const requests = read('src/workspace/quickEditor/quickEditorRequests.ts')
-const host = read('src/launcher/hosts/GlobalLauncherHost.tsx')
-const executor = read('src/launcher/clipboard/actionExecutor.ts')
-const recommendation = read('src/launcher/clipboard/actionRecommendation.ts')
-const output = read('src/workspace/launcher/output.ts')
-const pluginApi = read('src/workspace/launcher/pluginApi.ts')
-const historyUi = read('src/components/quickEditor/QuickEditorVersionHistory.tsx')
-const detached = read('src/views/QuickEditorDetachedView.tsx')
-const locale = read('src/i18n/locales/quickEditor.ts')
-const palette = read('src/i18n/locales/palette.ts')
-
-assert.match(types, /QuickEditorExternalVersion/, 'types must model external version entries')
-assert.match(types, /externalVersionHistory/, 'types must expose version history list')
-assert.match(types, /overwriteActiveText/, 'types must expose overwriteActiveText')
-assert.match(types, /restoreExternalVersion/, 'types must expose restoreExternalVersion')
-assert.doesNotMatch(types, /overwriteSnapshot/, 'legacy single-slot overwriteSnapshot must be gone from types')
-
-assert.match(store, /overwriteActiveText:\s*\(text/, 'store must implement overwriteActiveText')
-assert.match(store, /restoreExternalVersion:\s*\(versionId/, 'store must implement restoreExternalVersion')
-assert.match(store, /externalVersionHistory/, 'store must keep externalVersionHistory')
-assert.match(store, /QUICK_EDITOR_EXTERNAL_VERSION_LIMIT/, 'store must cap history length')
-assert.match(store, /pushExternalVersion/, 'store must only push history on overwrite path')
-// setText / setPaneText must not touch history
-assert.doesNotMatch(
-  store,
-  /setText:\s*\(text\)\s*=>\s*set\([\s\S]{0,120}externalVersionHistory/,
-  'setText must not write external version history',
-)
-assert.doesNotMatch(
-  store,
-  /setPaneText:[\s\S]{0,400}externalVersionHistory/,
-  'setPaneText must not write external version history',
-)
-
-assert.match(requests, /export async function overwriteQuickEditorText/, 'requests must expose overwrite API')
-assert.match(requests, /export async function restoreQuickEditorExternalVersion/, 'requests must expose version restore API')
-assert.match(requests, /QUICK_EDITOR_OVERWRITE_EVENT/, 'requests must define cross-window overwrite event')
-assert.match(requests, /externalVersionHistory/, 'overwrite payload must carry full history')
-assert.doesNotMatch(requests, /restoreQuickEditorOverwrite/, 'one-step undo restore API must be retired')
-
-assert.match(host, /overwriteQuickEditorText/, 'GlobalLauncher object actions must overwrite Quick Editor')
-assert.match(host, /pinnedObjectActionItems|object-action:/, 'Object Block must pin host open-to-quick-editor rows into the list')
-assert.match(
-  host,
-  /defaultOutput === ['"]open-editor['"]/,
-  'non-history text Object Blocks must pin open-editor destinations into the list',
-)
-assert.match(executor, /覆盖到快捷编辑器|Overwrite Quick Editor/, 'open-editor target label must describe overwrite')
-assert.match(recommendation, /open-history-in-quick-editor/, 'history text actions must offer Quick Editor destination')
-assert.match(recommendation, /open-in-quick-editor/, 'non-clipboard text blocks must offer Quick Editor destination')
-assert.match(output, /id:\s*['"]open-quick-editor['"]/, 'textResult must expose open-quick-editor secondary action')
-assert.match(pluginApi, /overwriteQuickEditorText\(text,[\s\S]*source:\s*['"]replace-active['"]/, 'default replaceActiveText must overwrite Quick Editor')
-
-const panel = read('src/components/quickEditor/QuickEditorPanel.tsx')
-const css = read('src/index.css')
-assert.match(panel, /QuickEditorVersionHistory/, 'version history icon lives on editor status bar trailing')
-assert.match(panel, /statusBarTrailing/, 'version history is wired into statusBarTrailing')
-assert.match(historyUi, /externalVersionHistory/, 'version history UI must read external history')
-assert.match(historyUi, /restoreQuickEditorExternalVersion/, 'version history UI must restore by id')
-assert.match(historyUi, /qe-version-trigger/, 'version history trigger must be an icon control')
-assert.match(historyUi, /createPortal/, 'version menu must portal to body to escape editor overflow / stacking')
-assert.match(historyUi, /qe-version-drawer/, 'version menu must use the full-height drawer shell')
-assert.match(historyUi, /qe-version-item/, 'versions render as dense rows')
-assert.match(historyUi, /qe-version-item__meta/, 'each row has a meta line')
-assert.match(historyUi, /qe-version-item__preview/, 'each row has a preview line')
-assert.match(historyUi, /formatRelativeTime|分钟前|Just now/, 'version rows should show relative time')
-assert.doesNotMatch(historyUi, /versionHistoryIndex/, 'dense rows drop vN index noise')
-assert.doesNotMatch(historyUi, /quick-editor-version-badge/, 'version history must not show a numeric badge on the icon')
-assert.match(
-  historyUi,
-  /className=\{`qe-version-trigger[\s\S]*?<History size=\{11\}/,
-  'status-bar trigger must be icon-only (History glyph, no text label)',
-)
-assert.match(css, /\.qe-version-trigger/, 'status-bar version icon styles must exist')
-assert.match(css, /\.qe-version-drawer/, 'drawer shell styles must exist')
-assert.match(css, /--qe-v-border/, 'popover must define high-contrast border tokens')
-assert.match(css, /\.qe-version-item__meta/, 'meta row styles must exist')
-assert.match(css, /\.qe-version-item__preview/, 'preview line styles must exist')
-assert.doesNotMatch(css, /\.qe-version-item__preview\s*\{[\s\S]{0,120}border:\s*1px solid/, 'preview is plain text, not a nested pill box')
-assert.match(detached, /QUICK_EDITOR_OVERWRITE_EVENT/, 'detached window must listen for overwrite sync')
-assert.match(locale, /versionHistory/, 'quickEditor i18n must include version history copy')
-assert.match(palette, /openQuickEditor/, 'palette i18n must include open-quick-editor label')
-
-console.log('quick-editor-overwrite-rollback: ok')
+const listeners = new Map(), timers = new Map(), packets = []
+let now = 1000, uuid = 0, timer = 0, holdRequest = false, dropReceipt = false
+function api(label) {
+  const emit = (name, payload, target) => {
+    packets.push({ name, payload, target })
+    if (holdRequest && name === 'hiven://quick-editor-overwrite') return Promise.resolve()
+    if (dropReceipt && name === 'hiven://quick-editor-overwrite-reply' && !payload.ready) return Promise.resolve()
+    for (const entry of [...(listeners.get(name) ?? [])]) if (!target || entry.label === target) entry.fn({ payload })
+    return Promise.resolve()
+  }
+  return { listen: async (name, fn) => { const entry = { label, fn }; const set = listeners.get(name) ?? new Set(); set.add(entry); listeners.set(name, set); return () => set.delete(entry) }, emit: (name,payload) => emit(name,payload), emitTo: (target,name,payload) => emit(name,payload,target) }
+}
+function handoff(label) {
+  const exports = {}, events = api(label)
+  vm.runInNewContext(compile('src/workspace/quickEditor/quickEditorOverwriteHandoff.ts'), { exports, require: id => { assert.equal(id, '@tauri-apps/api/event'); return events }, crypto: { randomUUID: () => `id-${++uuid}` }, Date: { now: () => now }, Number, Map, Promise, Error, setTimeout: fn => { timers.set(++timer,fn); return timer }, clearTimeout: id => timers.delete(id) })
+  return exports
+}
+const flush = async () => { for(let i=0;i<40;i++) await Promise.resolve() }
+const caller = handoff('launcher'), receiver = handoff('quick-editor')
+let commits = 0, stop
+const commit = (text, options) => { commits++; const paneId = destination.getState().overwriteActiveText(text, options); return { paneId, historyCount: destination.getState().externalVersionHistory.length } }
+const result = await caller.requestQuickEditorOverwrite('first acknowledged B', {}, async () => { stop = await receiver.listenForQuickEditorOverwrites(commit) })
+await flush()
+assert.ok(result.paneId)
+assert.equal(commits, 1, 'New window readiness delivers exactly once')
+const packet = packets.find(p => p.name === 'hiven://quick-editor-overwrite')
+await api('launcher').emitTo('quick-editor',packet.name,packet.payload)
+assert.equal(commits, 1, 'Duplicate delivery only replays receipt')
+stop(); stop = await receiver.listenForQuickEditorOverwrites(commit)
+await api('launcher').emitTo('quick-editor',packet.name,packet.payload)
+assert.equal(commits, 1, 'An old window generation cannot overwrite a new editor')
+rejectWrite = true
+const failedMemory = destination.getState()
+await assert.rejects(caller.requestQuickEditorOverwrite('rejected B', {}, async () => {}), /QuickEditorOverwriteFailed/)
+assert.equal(destination.getState(), failedMemory)
+rejectWrite = false
+holdRequest = true
+const pending = caller.requestQuickEditorOverwrite('expired B', {}, async () => {})
+const rejects = assert.rejects(pending, /QuickEditorOverwriteFailed/)
+await flush(); const late = packets.filter(p=>p.name===packet.name).at(-1)
+now += 8001; for(const fn of [...timers.values()]) fn(); await rejects
+holdRequest = false
+await api('launcher').emitTo('quick-editor', late.name, late.payload)
+assert.equal(destination.getState(), failedMemory, 'A late, expired request cannot mutate the draft')
+dropReceipt = true
+destination.getState().setText('recoverable if ack is lost')
+const lostAck = caller.requestQuickEditorOverwrite('committed with lost ack', {}, async () => {})
+const lostRejects = assert.rejects(lostAck, /QuickEditorOverwriteFailed/)
+await flush(); now += 8001; for(const fn of [...timers.values()]) fn(); await lostRejects
+assert.equal(store().getState().externalVersionHistory[0].text, 'recoverable if ack is lost')
+stop()
+console.log('Quick Editor: durable full-text archive/restore, failure preservation, readiness, duplicate/old-owner/expired delivery and lost-ack recovery passed')

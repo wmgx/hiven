@@ -1,3 +1,4 @@
+import { useQuickEditorStore } from '../quickEditor/quickEditorStore'
 import type { LauncherExecuteResult } from './types'
 import { requestOpenLauncherHostSurface } from '../launcherHostSurfaceBridge'
 import { useAppStore } from '../../store'
@@ -605,6 +606,8 @@ export function getHostPaneControlItems(): LauncherItem[] {
           await showQuickEditorWindow()
           return { ok: true }
         }
+        // A closed detached window may have a newer durable draft than this webview.
+        await useQuickEditorStore.persist.rehydrate()
         useAppStore.getState().openLauncherHostSurface('quick-editor')
         return { ok: true, keepOpen: true }
       },

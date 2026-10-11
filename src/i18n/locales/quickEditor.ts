@@ -1,6 +1,7 @@
 export default {
   en: {
     title: 'Quick Editor',
+    overwriteFailed: 'Could not confirm the replacement. Your draft remains in the editor or its history. Reopen Quick Editor before retrying.',
     detach: 'Detach to window',
     closeWindow: 'Close window',
     runCommand: 'Choose action…',
@@ -20,6 +21,7 @@ export default {
   },
   zh: {
     title: '快捷编辑器',
+    overwriteFailed: '未能确认替换完成，原草稿保留在编辑器或版本历史中。请重新打开快捷编辑器查看后再重试。',
     detach: '拆分为独立窗口',
     closeWindow: '关闭窗口',
     runCommand: '选择操作…',

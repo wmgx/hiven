@@ -1,19 +1,18 @@
 import { useAppStore } from '../../store'
-import { pickLocale } from '../../i18n'
+import { pickLocale, translate } from '../../i18n'
 import { showToast } from '../toast'
 import { useQuickEditorStore } from './quickEditorStore'
 import type {
-  QuickEditorExternalVersion,
   QuickEditorOverwriteOptions,
   QuickEditorPaneId,
 } from './quickEditorTypes'
 import { isQuickEditorWindowOpen, showQuickEditorWindow } from '../windowManager/quickEditorWindow'
 import { requestOpenLauncherHostSurface } from '../launcherHostSurfaceBridge'
 import { isNativeDesktopRuntime } from '../webNativeBridge'
+import { requestQuickEditorOverwrite } from './quickEditorOverwriteHandoff'
 
 export const QUICK_EDITOR_CREATE_PANE_EVENT = 'hiven://quick-editor-create-pane'
 export const QUICK_EDITOR_SET_PANE_TEXT_EVENT = 'hiven://quick-editor-set-pane-text'
-export const QUICK_EDITOR_OVERWRITE_EVENT = 'hiven://quick-editor-overwrite'
 
 export type QuickEditorPaneRequest = {
   text?: string
@@ -24,14 +23,6 @@ export type QuickEditorPaneRequest = {
 export type QuickEditorSetPaneTextRequest = {
   paneId: QuickEditorPaneId
   text: string
-}
-
-export type QuickEditorOverwriteRequest = {
-  paneId: QuickEditorPaneId
-  text: string
-  language?: string
-  languageSource?: 'manual' | 'auto'
-  externalVersionHistory: QuickEditorExternalVersion[]
 }
 
 export type OverwriteQuickEditorResult = {
@@ -85,6 +76,7 @@ export async function createQuickEditorPane(input: QuickEditorPaneRequest = {}):
     return undefined
   }
 
+  await useQuickEditorStore.persist.rehydrate()
   useAppStore.getState().openLauncherHostSurface('quick-editor')
   return useQuickEditorStore.getState().createPane({
     direction: normalizeDirection(input.direction),
@@ -155,31 +147,19 @@ export async function overwriteQuickEditorText(
   text: string,
   options: QuickEditorOverwriteOptions = {},
 ): Promise<OverwriteQuickEditorResult> {
-  const paneId = useQuickEditorStore.getState().overwriteActiveText(text, options)
-  const history = useQuickEditorStore.getState().externalVersionHistory
-  const payload: QuickEditorOverwriteRequest = {
-    paneId,
-    text,
-    language: options.language,
-    languageSource: options.language ? 'manual' : undefined,
-    externalVersionHistory: history,
-  }
-
-  if (isNativeDesktopRuntime()) {
-    try {
-      if (await isQuickEditorWindowOpen()) {
-        const { emit } = await import('@tauri-apps/api/event')
-        await emit(QUICK_EDITOR_OVERWRITE_EVENT, payload)
-      }
-    } catch (error) {
-      console.warn('[hiven] Failed to emit quick editor overwrite:', error)
-    }
-    await showQuickEditorSurface()
+  const detached = new URLSearchParams(window.location.search).get('window') === 'quick-editor'
+  let result: OverwriteQuickEditorResult
+  if (isNativeDesktopRuntime() && !detached) {
+    // The destination hydrates its own saved draft when newly opened, or reads its
+    // live draft when already open. Never archive the sender's stale store.
+    try { result = await requestQuickEditorOverwrite(text, options, showQuickEditorSurface) }
+    catch { throw new Error(translate(useAppStore.getState().locale, 'quickEditor', 'overwriteFailed')) }
   } else {
-    useAppStore.getState().openLauncherHostSurface('quick-editor')
+    const paneId = useQuickEditorStore.getState().overwriteActiveText(text, options)
+    result = { paneId, historyCount: useQuickEditorStore.getState().externalVersionHistory.length }
+    if (!detached) useAppStore.getState().openLauncherHostSurface('quick-editor')
   }
-
-  const historyCount = useQuickEditorStore.getState().externalVersionHistory.length
+  const { historyCount } = result
   const locale = useAppStore.getState().locale
   showToast(
     historyCount > 0
@@ -193,7 +173,7 @@ export async function overwriteQuickEditorText(
     3500,
   )
 
-  return { paneId, historyCount }
+  return result
 }
 
 /**
@@ -203,24 +183,6 @@ export async function restoreQuickEditorExternalVersion(versionId: string): Prom
   const restored = useQuickEditorStore.getState().restoreExternalVersion(versionId)
   if (!restored) return false
 
-  const state = useQuickEditorStore.getState()
-  if (isNativeDesktopRuntime()) {
-    try {
-      if (await isQuickEditorWindowOpen()) {
-        const { emit } = await import('@tauri-apps/api/event')
-        await emit(QUICK_EDITOR_OVERWRITE_EVENT, {
-          paneId: state.activePaneId,
-          text: state.text,
-          language: state.language,
-          languageSource: state.languageSource,
-          externalVersionHistory: state.externalVersionHistory,
-        } satisfies QuickEditorOverwriteRequest)
-      }
-    } catch (error) {
-      console.warn('[hiven] Failed to emit quick editor version restore sync:', error)
-    }
-  }
-
   const locale = useAppStore.getState().locale
   showToast(
     pickLocale(locale, '已恢复历史版本', 'Restored historical version'),
@@ -228,23 +190,4 @@ export async function restoreQuickEditorExternalVersion(versionId: string): Prom
     2500,
   )
   return true
-}
-
-export function applyQuickEditorOverwrite(input: QuickEditorOverwriteRequest): boolean {
-  return useQuickEditorStore.getState().applyOverwriteFromRemote(input)
-}
-
-export function isQuickEditorOverwriteRequest(value: unknown): value is QuickEditorOverwriteRequest {
-  if (!value || typeof value !== 'object') return false
-  const request = value as QuickEditorOverwriteRequest
-  return (
-    typeof request.paneId === 'string' &&
-    request.paneId.length > 0 &&
-    typeof request.text === 'string' &&
-    (request.language === undefined || typeof request.language === 'string') &&
-    (request.languageSource === undefined ||
-      request.languageSource === 'manual' ||
-      request.languageSource === 'auto') &&
-    Array.isArray(request.externalVersionHistory)
-  )
 }

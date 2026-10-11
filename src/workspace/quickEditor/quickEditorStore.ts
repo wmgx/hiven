@@ -1,4 +1,4 @@
-import { create } from 'zustand'
+import { create, type StoreApi } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type {
   QuickEditorExternalVersion,
@@ -95,8 +95,23 @@ const INITIAL_STATE: QuickEditorState = {
   panelInstancesV2: {},
 }
 
-export const useQuickEditorStore = create<QuickEditorStore>()(
-  persist(
+let publishCommittedState: StoreApi<QuickEditorStore>['setState']
+
+// External replacement must not publish B before the snapshot containing A is durable.
+// This store uses synchronous localStorage; keep the existing persist key and format.
+function commitReplacement(state: QuickEditorStore, patch: Partial<QuickEditorState>) {
+  if (!useQuickEditorStore.persist.hasHydrated()) throw new Error('QuickEditorStorageUnavailable')
+  const options = useQuickEditorStore.persist.getOptions()
+  if (!options.name) throw new Error('QuickEditorStorageUnavailable')
+  const next = { ...state, ...patch }
+  localStorage.setItem(options.name, JSON.stringify({
+    state: options.partialize ? options.partialize(next) : next,
+    version: options.version ?? 0,
+  }))
+  publishCommittedState(patch)
+}
+
+const quickEditorInitializer = persist<QuickEditorStore, [], [], Omit<QuickEditorState, 'panelInstancesV2'>>(
     (set, get) => ({
       ...INITIAL_STATE,
 
@@ -214,7 +229,7 @@ export const useQuickEditorStore = create<QuickEditorStore>()(
           state.externalVersionHistory,
           toExternalVersion(current, options.source),
         )
-        set({
+        commitReplacement(state, {
           ...withActivePane(state, {
             text,
             language,
@@ -243,7 +258,7 @@ export const useQuickEditorStore = create<QuickEditorStore>()(
           ? state.paneOrder
           : [...state.paneOrder, restoredPane.id]
         // Restore does not append history — only external overwrite does.
-        set({
+        commitReplacement(state, {
           panes,
           paneOrder,
           activePaneId: restoredPane.id,
@@ -264,36 +279,6 @@ export const useQuickEditorStore = create<QuickEditorStore>()(
         delete panelInstancesV2[panelId]
         return { panelInstancesV2 }
       }),
-      applyOverwriteFromRemote: (input) => {
-        const state = get()
-        const pane = state.panes[input.paneId] ?? activePaneSnapshot(state)
-        const nextPane: QuickEditorPaneState = {
-          ...pane,
-          id: input.paneId,
-          text: input.text,
-          language: input.language ?? pane.language,
-          languageSource: input.languageSource ?? (input.language ? 'manual' : pane.languageSource),
-          cursorPosition: { lineNumber: 1, column: 1 },
-        }
-        const panes = { ...state.panes, [nextPane.id]: nextPane }
-        const paneOrder = state.paneOrder.includes(nextPane.id)
-          ? state.paneOrder
-          : [...state.paneOrder, nextPane.id]
-        set({
-          panes,
-          paneOrder,
-          activePaneId: nextPane.id,
-          text: nextPane.text,
-          language: nextPane.language,
-          languageSource: nextPane.languageSource,
-          cursorPosition: nextPane.cursorPosition,
-          scrollPosition: nextPane.scrollPosition,
-          externalVersionHistory: input.externalVersionHistory === undefined
-            ? state.externalVersionHistory
-            : input.externalVersionHistory,
-        })
-        return true
-      },
       reset: () => set(INITIAL_STATE),
     }),
     {
@@ -373,5 +358,10 @@ export const useQuickEditorStore = create<QuickEditorStore>()(
         }
       },
     }
-  )
 )
+
+const withCommittedPublisher: typeof quickEditorInitializer = (set, get, api) => {
+  publishCommittedState = set
+  return quickEditorInitializer(set, get, api)
+}
+export const useQuickEditorStore = create<QuickEditorStore>()(withCommittedPublisher)
