@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { getPluginHostSdk, type PanelPropsV2, type PluginSurfaceProps } from '@hiven/plugin'
 import { Button, IconButton } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
 import { MAX_REGEX_MATCHES, type MatchResult } from './regexCore'
 import { useRegexExecution } from './useRegexExecution'
 import { extractRegexMatches } from './extractMatches'
+import { createAiCandidateSession, type AiCandidateState } from './aiCandidateSession'
+import { AiCandidateControls } from './AiCandidateControls'
 
 const COMMON_FLAGS = ['g', 'i', 'm', 's', 'u'] as const
 
@@ -105,6 +107,16 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
   const [pattern, setPattern] = useState('[a-z]+')
   const [flags, setFlags] = useState('g')
   const [sourceText, setSourceText] = useState(props.initialText ?? 'hello 123\nworld 456')
+  const [aiState, setAiState] = useState<AiCandidateState>({ status: 'idle' })
+  const aiSession = useRef<ReturnType<typeof createAiCandidateSession> | null>(null)
+  useLayoutEffect(() => {
+    const session = createAiCandidateSession(host.ai, setAiState)
+    aiSession.current = session
+    setAiState({ status: 'idle' })
+    const unsubscribe = host.deliveryFeedbackOwner?.subscribeInvalidation(() => session.invalidate())
+    return () => { unsubscribe?.(); session.dispose(); aiSession.current = null }
+  }, [host.ai, host.deliveryFeedbackOwner])
+  useLayoutEffect(() => { aiSession.current?.invalidate() }, [props.initialText])
   const [activeMatch, setActiveMatch] = useState(-1)
   const sourceRef = useRef<HTMLTextAreaElement>(null)
   const execution = useRegexExecution(pattern, flags, sourceText, host.deliveryFeedbackOwner)
@@ -129,6 +141,7 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
 
   // Revoke rendered actions immediately, before an input change commits a new render.
   const invalidateResult = () => {
+    aiSession.current?.invalidate()
     execution.cancel()
     handoffRef.current?.abort()
     handoffRef.current = null
@@ -151,6 +164,7 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
 
   const continueProcessing = async () => {
     if (!activeRef.current || actionEpochRef.current !== actionEpoch || currentResultRef.current !== result || extraction.status !== 'ready' || handedOffResultRef.current === result) return
+    aiSession.current?.invalidate()
     const submission = new AbortController()
     handoffRef.current = submission
     handedOffResultRef.current = result
@@ -233,6 +247,21 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
           ))}
         </fieldset>
       </div>
+
+      <AiCandidateControls
+        host={host} t={t} state={aiState}
+        invalidate={() => aiSession.current?.invalidate()}
+        generate={(input) => { if (host.deliveryFeedbackOwner?.isCurrent() !== false) void aiSession.current?.generate(input) }}
+        cancel={() => aiSession.current?.cancel()}
+        adopt={() => {
+          if (host.deliveryFeedbackOwner?.isCurrent() === false) return
+          const candidate = aiSession.current?.adopt()
+          if (!candidate) return
+          invalidateResult()
+          setPattern(candidate.pattern)
+          setFlags(candidate.flags)
+        }}
+      />
 
       <div className="regex-tester-surface__body">
         <label className="regex-tester-surface__pane regex-tester-surface__pane--source">
