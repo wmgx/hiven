@@ -50,6 +50,7 @@ export const statsRoute: TextToolRoute = {
 export const textToolRoutes = [
   ...lineOperationRoutes,
   { surfaceId: 'regex-escape', titleKey: 'regexEscape.title', group: 'lines', aliases: ['escape regex', 'regex escape', 'escape regexp', '正则转义', '正则字面量'] } satisfies TextToolRoute,
+  { surfaceId: 'find-duplicates', titleKey: 'duplicates.title', group: 'lines', aliases: ['find duplicate lines', 'find duplicates', 'duplicate line numbers', '查重复', '重复行定位', '重复行次数'] } satisfies TextToolRoute,
   ...caseOperationRoutes,
   statsRoute,
 ]

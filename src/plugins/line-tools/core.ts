@@ -74,6 +74,41 @@ export function dedupLines(text: string, ignoreCase: boolean): string {
   }).join('\n')
 }
 
+export type SourceLineRange = { line: number; start: number; end: number }
+export type DuplicateLineGroup = { text: string; occurrences: SourceLineRange[] }
+
+/** Preserve original offsets and every line, including blank/trailing lines. */
+export function sourceLineRanges(text: string): SourceLineRange[] {
+  if (!text.length) return []
+  const ranges: SourceLineRange[] = []
+  let start = 0
+  for (const match of text.matchAll(/\r\n|\r|\n/g)) {
+    ranges.push({ line: ranges.length + 1, start, end: match.index })
+    start = match.index + match[0].length
+  }
+  ranges.push({ line: ranges.length + 1, start, end: text.length })
+  return ranges
+}
+
+/** Same exact/lowercase key semantics as dedupLines; only explicit trim changes keys. */
+export function findDuplicateLines(text: string, options: { ignoreCase: boolean; trim: boolean }): DuplicateLineGroup[] {
+  const groups = new Map<string, DuplicateLineGroup>()
+  for (const occurrence of sourceLineRanges(text)) {
+    const original = text.slice(occurrence.start, occurrence.end)
+    const trimmed = options.trim ? original.trim() : original
+    const key = options.ignoreCase ? trimmed.toLowerCase() : trimmed
+    const existing = groups.get(key)
+    if (existing) existing.occurrences.push(occurrence)
+    else groups.set(key, { text: original, occurrences: [occurrence] })
+  }
+  return [...groups.values()].filter((group) => group.occurrences.length > 1)
+}
+
+/** Quoting makes empty lines, tabs and edge whitespace unambiguous in the report. */
+export function duplicateLineReport(groups: DuplicateLineGroup[]): string {
+  return groups.map((group) => `${JSON.stringify(group.text)} ×${group.occurrences.length} [${group.occurrences.map(({ line }) => line).join(', ')}]`).join('\n')
+}
+
 export function removeBlankLines(text: string): string {
   return text.split('\n').filter((line) => line.trim() !== '').join('\n')
 }

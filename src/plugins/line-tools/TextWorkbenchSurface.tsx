@@ -3,6 +3,7 @@ import { getPluginHostSdk, type PluginSurfaceProps } from '@hiven/plugin'
 import { Button, Checkbox, IconButton, SegmentedControl, Select, TextArea, TextInput, useToolDeliveryFeedback } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
 import { Check, ClipboardPaste, Copy, CornerDownLeft, TriangleAlert } from 'lucide-react'
+import { sourceLineRanges, type DuplicateLineGroup } from './core'
 import {
   DEFAULT_WORKBENCH_OPTIONS,
   WORKBENCH_OPERATIONS,
@@ -15,6 +16,35 @@ import {
 import './workbench.css'
 
 type OutputAction = 'copy' | 'paste' | 'return'
+
+const DUPLICATE_GROUP_PAGE_SIZE = 20
+const DUPLICATE_LINE_PAGE_SIZE = 40
+
+function DuplicateLineCard({ group, locateLine, t }: { group: DuplicateLineGroup; locateLine(line: number): void; t: PluginSurfaceProps['t'] }) {
+  const [page, setPage] = useState(0)
+  const lastPage = Math.floor((group.occurrences.length - 1) / DUPLICATE_LINE_PAGE_SIZE)
+  const currentPage = Math.min(page, lastPage)
+  const start = currentPage * DUPLICATE_LINE_PAGE_SIZE
+  return (
+    <article className="text-workbench-duplicate">
+      <div className="text-workbench-duplicate-heading">
+        <pre>{JSON.stringify(group.text)}</pre>
+        <span>{t('duplicates.count', { count: group.occurrences.length })}</span>
+      </div>
+      <div className="text-workbench-duplicate-lines">
+        <span>{t('duplicates.lines')}</span>
+        {group.occurrences.slice(start, start + DUPLICATE_LINE_PAGE_SIZE).map(({ line }) => (
+          <button type="button" key={line} data-duplicate-source-line={line} aria-label={t('duplicates.locate', { line })} onClick={() => locateLine(line)}>{line}</button>
+        ))}
+      </div>
+      {lastPage > 0 ? <div className="text-workbench-duplicate-pages">
+        <span>{t('duplicates.showingOccurrences', { from: start + 1, to: Math.min(start + DUPLICATE_LINE_PAGE_SIZE, group.occurrences.length), total: group.occurrences.length })}</span>
+        <button type="button" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>{t('duplicates.previous')}</button>
+        <button type="button" disabled={currentPage === lastPage} onClick={() => setPage(currentPage + 1)}>{t('duplicates.next')}</button>
+      </div> : null}
+    </article>
+  )
+}
 
 export type WorkbenchSelection = {
   operation: WorkbenchOperation
@@ -46,6 +76,7 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
   const { operation, options } = props.embedded?.selection ?? localSelection
   const setSelection = props.embedded?.onSelectionChange ?? setLocalSelection
   const [revision, setRevision] = useState(0)
+  const [duplicatePage, setDuplicatePage] = useState(0)
   const revisionRef = useRef(0)
   const [busy, setBusyState] = useState<OutputAction | null>(null)
   const reportBusy = props.embedded?.onBusyChange
@@ -91,6 +122,7 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
 
   // Revoke pending callbacks before React commits the next input or operation.
   const update = (change: () => void) => {
+    setDuplicatePage(0)
     delivery.invalidate()
     currentResultRef.current = null
     revisionRef.current += 1
@@ -134,6 +166,21 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
     if (!isCurrentResult() || result.status !== 'ready' || pendingRef.current) return
     update(() => setInputText(result.text))
     inputRef.current?.focus()
+  }
+
+  const locateLine = (line: number) => {
+    const input = inputRef.current
+    if (!input || !isCurrentResult()) return
+    // Textarea values normalize CRLF/CR to LF. Resolve against its actual value,
+    // while the report retains source line numbers and the original draft.
+    const range = sourceLineRanges(input.value)[line - 1]
+    if (!range) return
+    input.focus()
+    input.setSelectionRange(range.start, range.end)
+    const style = getComputedStyle(input)
+    const lineHeight = parseFloat(style.lineHeight) || 20
+    input.scrollTop = Math.max(0, parseFloat(style.paddingTop) + (line - 1) * lineHeight - input.clientHeight / 3)
+    input.scrollLeft = 0
   }
 
   const deliver = async (action: OutputAction) => {
@@ -184,9 +231,11 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
   }
 
   const outputText = result.status === 'ready' ? result.text : ''
-  const outputDisabled = result.status !== 'ready' || busy !== null
+  const duplicateGroups = result.status === 'ready' ? result.duplicates : undefined
+  const noDuplicates = duplicateGroups?.length === 0
+  const outputDisabled = result.status !== 'ready' || busy !== null || noDuplicates
   const resultStatus = result.status === 'ready'
-    ? t(outputText.length === 0 ? 'workbench.status.empty' : 'workbench.status.ready')
+    ? t(noDuplicates ? 'duplicates.none' : outputText.length === 0 ? 'workbench.status.empty' : 'workbench.status.ready')
     : t(result.status === 'error' ? 'workbench.status.error' : 'workbench.status.waiting')
 
   return (
@@ -255,6 +304,16 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
               {t(`workbench.cleanup.${key}`)}
             </Checkbox>
           )) : null}
+          {operation === 'find-duplicates' ? (
+            <>
+              <Checkbox checked={options.duplicateIgnoreCase} onChange={(event) => changeOption('duplicateIgnoreCase', (event.target as HTMLInputElement).checked)}>
+                {t('param.ignoreCase')}
+              </Checkbox>
+              <Checkbox checked={options.duplicateTrim} onChange={(event) => changeOption('duplicateTrim', (event.target as HTMLInputElement).checked)}>
+                {t('duplicates.trim')}
+              </Checkbox>
+            </>
+          ) : null}
           {(['separator', 'prefix', 'suffix', 'left', 'right'] as const).filter((key) => (
             operation === 'join' && key === 'separator'
             || operation === 'prepend' && key === 'prefix'
@@ -266,7 +325,7 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
               <TextInput value={options[key]} aria-label={t(`param.${key}`)} onChange={(event) => changeOption(key, event.currentTarget.value)} />
             </label>
           ))}
-          {!['json-format', 'sort', 'dedup', 'clean-list', 'join', 'prepend', 'append', 'wrap'].includes(operation) ? <span>{t(operation === 'regex-escape' ? 'regexEscape.hint' : operation === 'extract-urls' ? 'extractUrls.hint' : 'option.livePreview')}</span> : null}
+          {!['json-format', 'sort', 'dedup', 'clean-list', 'join', 'prepend', 'append', 'wrap', 'find-duplicates'].includes(operation) ? <span>{t(operation === 'regex-escape' ? 'regexEscape.hint' : operation === 'extract-urls' ? 'extractUrls.hint' : 'option.livePreview')}</span> : null}
         </div>
       </div>
 
@@ -284,6 +343,7 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
             aria-label={t('pane.input')}
             placeholder={t('workbench.inputPlaceholder')}
             spellCheck={false}
+            wrap={operation === 'find-duplicates' ? 'off' : 'soft'}
             onChange={(event) => update(() => setInputText(event.currentTarget.value))}
           />
         </section>
@@ -295,7 +355,19 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
               {resultStatus}
             </span>
           </div>
-          <TextArea
+          {duplicateGroups ? (
+            <div className="text-workbench-duplicates" data-launcher-scrollable aria-label={t('duplicates.title')}>
+              <p className="text-workbench-duplicates-hint">{t(noDuplicates ? 'duplicates.noneHint' : 'duplicates.hint')}</p>
+              {duplicateGroups.slice(duplicatePage * DUPLICATE_GROUP_PAGE_SIZE, (duplicatePage + 1) * DUPLICATE_GROUP_PAGE_SIZE).map((group) => (
+                <DuplicateLineCard key={`${revision}:${group.occurrences[0].line}`} group={group} locateLine={locateLine} t={t} />
+              ))}
+              {duplicateGroups.length > DUPLICATE_GROUP_PAGE_SIZE ? <div className="text-workbench-duplicate-pages">
+                <span>{t('duplicates.showingGroups', { from: duplicatePage * DUPLICATE_GROUP_PAGE_SIZE + 1, to: Math.min((duplicatePage + 1) * DUPLICATE_GROUP_PAGE_SIZE, duplicateGroups.length), total: duplicateGroups.length })}</span>
+                <button type="button" disabled={duplicatePage === 0} onClick={() => setDuplicatePage(duplicatePage - 1)}>{t('duplicates.previous')}</button>
+                <button type="button" disabled={(duplicatePage + 1) * DUPLICATE_GROUP_PAGE_SIZE >= duplicateGroups.length} onClick={() => setDuplicatePage(duplicatePage + 1)}>{t('duplicates.next')}</button>
+              </div> : null}
+            </div>
+          ) : <TextArea
             data-launcher-scrollable
             value={result.status === 'error' ? t(result.messageKey) : outputText}
             aria-label={t('workbench.result')}
@@ -303,7 +375,7 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
             placeholder={t(result.status === 'ready' ? 'workbench.emptyResult' : 'workbench.outputPlaceholder')}
             readOnly
             spellCheck={false}
-          />
+          />}
           <div className={`text-workbench-result-meta${delivery.feedback ? ` is-delivery is-${delivery.feedback.tone}` : ''}`} role="status" aria-live="polite">
             <span>{delivery.feedback?.message ?? t(selected.label)}</span>
             {!delivery.feedback && result.status === 'ready' ? <span>{t('meta.characters', { count: outputText.length })}</span> : null}
@@ -312,7 +384,7 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
       </main>
 
       <footer className="text-workbench-footer">
-        <Button type="button" variant="secondary" disabled={outputDisabled} title={t('workbench.useResultDescription')} onClick={useResult}>
+        <Button type="button" variant="secondary" disabled={outputDisabled || operation === 'find-duplicates'} title={t('workbench.useResultDescription')} onClick={useResult}>
           {t('workbench.useResult')}
         </Button>
         <div className="text-workbench-output-actions">

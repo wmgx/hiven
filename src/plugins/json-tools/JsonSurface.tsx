@@ -2,6 +2,8 @@ import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import { Button, Checkbox, IconButton, SegmentedControl, TextEditor, TextInput, getEditorTheme, useImeKeyboard, useToolDeliveryFeedback } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
+import { UrlQueryEditor } from './UrlQueryEditor'
+import { useJsonCursorPath } from './useJsonCursorPath'
 import { operationRoutes } from './routes'
 import {
   isQueryString,
@@ -29,6 +31,9 @@ const reverseOperations: Partial<Record<JsonOperation, JsonOperation>> = {
 
 export function JsonSurface(props: PluginSurfaceProps) {
   const { host, t } = props
+  const [cursorMessage, setCursorMessage] = useState('')
+  const inputCursor = useJsonCursorPath(host, t, setCursorMessage)
+  const outputCursor = useJsonCursorPath(host, t, setCursorMessage)
   const initialText = props.initialText ?? ''
   const [inputText, setInputText] = useState(initialText)
   const [operation, setOperation] = useState<JsonOperation>(() => operationRoutes.find((route) => route.id === props.surfaceId)?.id
@@ -78,6 +83,7 @@ export function JsonSurface(props: PluginSurfaceProps) {
     { value: 'expression', title: t('operation.expression'), group: 'json' },
     { value: 'yaml-to-json', title: t('operation.yamlToJson'), group: 'yaml' },
     { value: 'json-to-yaml', title: t('operation.jsonToYaml'), group: 'yaml' },
+    { value: 'url-query-edit', title: t('operation.urlQueryEdit'), group: 'query' },
     { value: 'query-to-json', title: t('operation.queryToJson'), group: 'query' },
     { value: 'json-to-query', title: t('operation.jsonToQuery'), group: 'query' },
     { value: 'escape', title: t('operation.escape'), group: 'string' },
@@ -96,6 +102,7 @@ export function JsonSurface(props: PluginSurfaceProps) {
   const hasOutput = Boolean(result?.ok && inputText.length > 0)
   const canReturnOutput = hasOutput && (operation === 'escape' || inputText.trim().length > 0)
   const outputLanguage = useMemo(() => {
+    if (operation === 'url-query-edit') return 'plaintext'
     if (operation === 'json-to-yaml') return 'yaml'
     try {
       JSON.parse(outputText)
@@ -251,6 +258,10 @@ export function JsonSurface(props: PluginSurfaceProps) {
           <section className="jt-pane">
             <div className="jt-pane-header">
               <strong>{t('pane.input')}</strong>
+              {activeGroup === 'json' && <div className="jt-pane-actions">
+                <Button type="button" variant="ghost" onClick={() => void inputCursor.copy('jsonPath')}>{t('cursor.jsonPath')}</Button>
+                <Button type="button" variant="ghost" onClick={() => void inputCursor.copy('pointer')}>{t('cursor.pointer')}</Button>
+              </div>}
               <Button type="button" variant="ghost" onClick={() => updateResult(() => setInputText(''))} disabled={!inputText}>
                 {t('action.clear')}
               </Button>
@@ -260,21 +271,25 @@ export function JsonSurface(props: PluginSurfaceProps) {
                 <TextEditor
                   {...editorAppearance}
                   value={inputText}
-                  language={operation === 'yaml-to-json' ? 'yaml' : operation === 'query-to-json' || operation === 'escape' ? 'plaintext' : 'json'}
+                  language={operation === 'yaml-to-json' ? 'yaml' : operation === 'query-to-json' || operation === 'url-query-edit' || operation === 'escape' ? 'plaintext' : 'json'}
                   onChange={(value) => updateResult(() => setInputText(value))}
                   optionOverrides={{
                     ariaLabel: t('pane.input'),
-                    placeholder: operation === 'yaml-to-json' ? t('surface.yamlPlaceholder')
+                    placeholder: operation === 'url-query-edit' ? t('surface.urlPlaceholder') : operation === 'yaml-to-json' ? t('surface.yamlPlaceholder')
                       : operation === 'query-to-json' ? t('surface.queryPlaceholder') : t('surface.inputPlaceholder'),
                     tabSize: indent,
                   }}
                   onReady={(editor) => {
+                    const cleanupCursor = inputCursor.onReady(editor)
                     editor.getDomNode()?.querySelector('[role="textbox"]')?.setAttribute('data-plugin-surface-autofocus', '')
                     editor.focus()
+                    return cleanupCursor
                   }}
                 />
               </Suspense>
             </div>
+            {operation === 'url-query-edit' && <UrlQueryEditor value={inputText} t={t} disabled={returning || copying}
+              onChange={(value) => updateResult(() => setInputText(value))} />}
           </section>
 
           <section className="jt-pane jt-pane-output">
@@ -299,6 +314,7 @@ export function JsonSurface(props: PluginSurfaceProps) {
               <Suspense fallback={editorLoading}>
                 <TextEditor
                   {...editorAppearance}
+                  onReady={outputCursor.onReady}
                   value={outputText}
                   language={outputLanguage}
                   optionOverrides={{
@@ -325,7 +341,7 @@ export function JsonSurface(props: PluginSurfaceProps) {
           <div className="jt-status-input">
             <span>{t('meta.characters', { count: inputText.length })}</span>
             <span className={delivery.feedback?.tone === 'error' || (result && !result.ok) ? 'jt-status-error' : ''}>
-              {delivery.feedback?.message ?? (result && !result.ok ? t('status.error') : hasOutput ? t('status.ready') : t('status.waiting'))}
+              {cursorMessage || delivery.feedback?.message || (result && !result.ok ? t('status.error') : hasOutput ? t('status.ready') : t('status.waiting'))}
             </span>
           </div>
           <div className="jt-status-output">

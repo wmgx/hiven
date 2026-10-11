@@ -126,3 +126,12 @@
   .jt-status-input, .jt-status-output { padding: 4px 10px; }
   .jt-status-count, .jt-expression kbd { display: none; }
 }
+
+.jt-url-query { flex: 0 0 auto; max-height: 45%; overflow: auto; padding: 8px 12px; border-top: 1px solid var(--jt-border); font-size: 11px; line-height: 1.5; }
+.jt-url-query p { margin: 0 0 6px; color: var(--color-text-secondary); }
+.jt-url-query summary { cursor: pointer; margin-bottom: 6px; }
+.jt-url-query-rows { display: flex; flex-direction: column; gap: 6px; }
+.jt-url-query-row { display: grid; grid-template-columns: 20px minmax(0, 1fr) minmax(0, 1.5fr) auto; gap: 4px; align-items: center; }
+.jt-url-query-row input { min-width: 0; width: 100%; }
+.jt-url-query-index { color: var(--color-text-tertiary); }
+.jt-url-query-encoding { grid-column: 2 / -1; color: var(--color-text-secondary); }

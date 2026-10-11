@@ -128,5 +128,17 @@
   "regexEscape.hint": "Pattern source, not a JS string · No execution · Empty input has no output",
   "regexEscape.empty": "Enter text to escape; empty input leaves the source and clipboard unchanged.",
   "extractUrls.title": "Extract URLs",
-  "extractUrls.hint": "HTTP(S) destinations only · One per line · Keeps order and duplicates · Never opens links or images"
+  "extractUrls.hint": "HTTP(S) destinations only · One per line · Keeps order and duplicates · Never opens links or images",
+  "duplicates.title": "Find Duplicate Lines",
+  "duplicates.trim": "Ignore edge whitespace",
+  "duplicates.none": "No duplicate lines",
+  "duplicates.noneHint": "No duplicates under these options. Source text is unchanged.",
+  "duplicates.hint": "Click a line number or use Tab + Enter to locate the source. Quoted text × count [source lines]; Copy includes all groups and occurrences.",
+  "duplicates.count": "{count} occurrences",
+  "duplicates.lines": "Lines",
+  "duplicates.locate": "Locate source line {line}",
+  "duplicates.showingOccurrences": "Occurrences {from}–{to} of {total}",
+  "duplicates.showingGroups": "Groups {from}–{to} of {total}",
+  "duplicates.previous": "Previous",
+  "duplicates.next": "Next"
 }

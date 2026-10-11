@@ -39,4 +39,9 @@ const formatFields = { id: formatRoute.id, title: '', aliases: formatRoute.alias
 assert.ok(['json for', 'geshihua', 'gsh'].every((query) => searchableFieldsMatch(formatFields, query, 'zh')), 'partial names, pinyin, and initials must find the same route')
 assert.equal(searchableFieldsMatch(formatFields, '{"json":"format"}', 'zh'), false)
 
+const fullUrl = 'https://example.test/search?q=hello+world&tag=one&tag=two&empty=#anchor'
+assert.deepEqual(processJson(fullUrl, { operation: 'url-query-edit' }), { ok: true, output: fullUrl })
+const invalidUrl = processJson('/relative?q=1', { operation: 'url-query-edit' })
+assert.equal(invalidUrl.ok, false)
+if (!invalidUrl.ok) assert.equal(invalidUrl.code, 'urlRequired')
 console.log('json-tools core tests passed')

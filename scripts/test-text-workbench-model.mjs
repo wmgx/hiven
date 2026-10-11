@@ -50,10 +50,11 @@ try {
     ['sql-in-number', 'sql-number', 'sqlin.number', {}],
   ]
   assert.deepEqual(lineOperationRoutes.map((route) => route.surfaceId), routes.map(([id]) => id))
-  assert.equal(new Set(operations.map(({ value }) => value)).size, 19)
+  assert.equal(new Set(operations.map(({ value }) => value)).size, 20)
   assert.equal(getWorkbenchOperation('main'), 'trim', 'main keeps its existing initial operation')
   assert.equal(getWorkbenchOperation('unknown'), 'trim')
   assert.equal(getWorkbenchOperation('regex-escape'), 'regex-escape')
+  assert.equal(getWorkbenchOperation('find-duplicates'), 'find-duplicates')
   assert.equal(plugin.ui.surfaces.find(({ id }) => id === 'main').component, TextWorkbenchSurface)
 
   const sample = "  B  \r\n\r\nb\nO'Brien\n B \n🙂"
@@ -131,6 +132,9 @@ try {
   assert.equal(ready(urlSource, 'extract-urls'), 'https://target.example\nhttps://target.example')
   assert.deepEqual(result('no links', 'extract-urls'), { status: 'error', messageKey: 'extractList.noUrls' })
   assert.equal(ready('https://recovered.example', 'extract-urls'), 'https://recovered.example', 'editing recovers without source replacement')
+  assert.equal(ready('A\nB\nA\nA', 'find-duplicates'), '"A" ×3 [1, 3, 4]')
+  assert.equal(ready('A\na\n A ', 'find-duplicates', { ignoreCase: true, trim: true }), '', 'other operation options do not silently change matching')
+  assert.equal(ready('A\na\n A ', 'find-duplicates', { duplicateIgnoreCase: true, duplicateTrim: true }), '"A" ×3 [1, 2, 3]')
   const regexTool = plugin.tools.find(({ id }) => id === 'line-tools.regex-escape')
   assert.equal(regexTool.run({ input: { text: 'a.b' }, output: { text: (text) => text } }), 'a\\.b')
   assert.equal(regexTool.run({ input: { text: '' }, output: { error: (error) => error }, t: (key) => key }), 'regexEscape.empty')

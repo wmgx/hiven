@@ -128,5 +128,17 @@
   "regexEscape.hint": "正则模式，非 JS 字符串 · 不执行 · 空输入不生成输出",
   "regexEscape.empty": "请输入要转义的文本；空输入不更改原文和剪贴板。",
   "extractUrls.title": "提取 URL",
-  "extractUrls.hint": "仅 HTTP(S) 目标 · 一行一个 · 保序保重复 · 不打开链接或图片"
+  "extractUrls.hint": "仅 HTTP(S) 目标 · 一行一个 · 保序保重复 · 不打开链接或图片",
+  "duplicates.title": "查重复行",
+  "duplicates.trim": "忽略首尾空白",
+  "duplicates.none": "未发现重复行",
+  "duplicates.noneHint": "按当前选项未发现重复行，原文保持不变。",
+  "duplicates.hint": "点击行号或 Tab + Enter 定位原文。引号内原文 × 次数 [原始行号]；复制包含全部分组和出现位置。",
+  "duplicates.count": "{count} 次",
+  "duplicates.lines": "行号",
+  "duplicates.locate": "定位原文第 {line} 行",
+  "duplicates.showingOccurrences": "出现位置 {from}–{to}，共 {total} 个",
+  "duplicates.showingGroups": "分组 {from}–{to}，共 {total} 组",
+  "duplicates.previous": "上一页",
+  "duplicates.next": "下一页"
 }

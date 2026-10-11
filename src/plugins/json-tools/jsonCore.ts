@@ -1,4 +1,5 @@
 import jsYaml from 'js-yaml'
+import { parseUrlQuery, UrlQueryError, type UrlQueryErrorCode } from './urlQueryCore'
 import { getPluginHostSdk } from '@hiven/plugin'
 
 export const { formatJson: jsonPrettify, compactJson: jsonCompact, sortKeys } = getPluginHostSdk().kits.textTransforms
@@ -7,6 +8,7 @@ export type JsonOperation =
   | 'format'
   | 'compact'
   | 'sort'
+  | 'url-query-edit'
   | 'query-to-json'
   | 'json-to-query'
   | 'escape'
@@ -26,7 +28,7 @@ export type JsonProcessResult =
   | { ok: true; output: string }
   | { ok: false; message: string; code?: JsonCoreErrorCode }
 
-export type JsonCoreErrorCode = 'objectRequired' | 'stringRequired' | 'expressionRequired' | 'finiteNumberRequired'
+export type JsonCoreErrorCode = UrlQueryErrorCode | 'objectRequired' | 'stringRequired' | 'expressionRequired' | 'finiteNumberRequired'
 
 export class JsonCoreError extends Error {
   readonly code: JsonCoreErrorCode
@@ -101,6 +103,9 @@ export function processJson(text: string, options: JsonProcessOptions): JsonProc
         return { ok: true, output: jsonCompact(text) }
       case 'sort':
         return { ok: true, output: sortJsonKeys(text) }
+      case 'url-query-edit':
+        parseUrlQuery(text)
+        return { ok: true, output: text }
       case 'query-to-json':
         return { ok: true, output: queryStringToJson(text) }
       case 'json-to-query':
@@ -120,7 +125,7 @@ export function processJson(text: string, options: JsonProcessOptions): JsonProc
     return {
       ok: false,
       message: error instanceof Error ? error.message : String(error),
-      code: error instanceof JsonCoreError ? error.code : undefined,
+      code: error instanceof JsonCoreError || error instanceof UrlQueryError ? error.code : undefined,
     }
   }
 }

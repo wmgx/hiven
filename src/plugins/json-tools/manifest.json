@@ -1,8 +1,16 @@
 {
   "pluginId": "json-tools",
   "displayName": "JSON / YAML Tools",
-  "displayNameI18n": { "zh": "JSON / YAML 工具" },
-  "version": "2.5.11",
-  "capabilities": ["command", "surface"],
-  "permissions": ["clipboard.write", "accessibility.paste"]
+  "displayNameI18n": {
+    "zh": "JSON / YAML 工具"
+  },
+  "version": "2.6.0",
+  "capabilities": [
+    "command",
+    "surface"
+  ],
+  "permissions": [
+    "clipboard.write",
+    "accessibility.paste"
+  ]
 }

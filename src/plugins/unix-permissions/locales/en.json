@@ -1,0 +1,20 @@
+{
+  "help": "Try chmod 755, permissions4755 or rwxr-xr-x. Parse only; no file paths or execution.",
+  "error.syntax": "Enter 3–4 octal digits or exactly 9 permission characters; commands and paths are not accepted.",
+  "error.octal": "Octal permissions require 3–4 digits from 0 to 7 (0000–7777).",
+  "error.symbolic": "Use rwx positions: s/S only for owner/group execute; t/T only for others execute.",
+  "owner": "Owner",
+  "group": "Group",
+  "others": "Others",
+  "read": "read",
+  "write": "write",
+  "execute": "execute/search",
+  "none": "no permissions",
+  "copy": "Enter: copy full explanation",
+  "meaning": "r/w/x: file read/write/execute; directory list/modify entries/search. Effective access also depends on ACLs, mount options and OS rules.",
+  "special.setuid": "setuid (4000): on supported executable files, execution can use the file owner’s effective UID; subject to OS rules.",
+  "special.setgid": "setgid (2000): supported executable files can use the file group’s effective GID; directories can pass their group to new entries.",
+  "special.sticky": "sticky (1000): on directories, removal/rename is restricted to the entry owner, directory owner or a privileged user.",
+  "special.case": "s/t include execute; S/T mean the special bit is set without execute.",
+  "localOnly": "Parsed locally; no chmod was executed and no file was accessed."
+}

@@ -7,13 +7,14 @@ import * as textTransforms from '../../src/kits/textTransforms/index.ts'
 // Installed plugins receive kits through the public SDK. Supply that binding
 // without starting the UI host, and run the unchanged cores in the same realm
 // as the kit so their native Error checks retain production semantics.
-function loadCore(relativePath) {
+function loadCore(relativePath, additionalDependencies = {}) {
   const source = readFileSync(new URL(relativePath, import.meta.url), 'utf8')
   const code = ts.transpileModule(source, { compilerOptions: {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true,
   } }).outputText
   const exports = {}
   const dependencies = {
+    ...additionalDependencies,
     'js-yaml': jsYaml,
     '@hiven/plugin': { getPluginHostSdk: () => ({ kits: { textTransforms } }) },
   }
@@ -24,5 +25,7 @@ function loadCore(relativePath) {
   return exports
 }
 
-export const jsonCore = loadCore('../../src/plugins/json-tools/jsonCore.ts')
+export const jsonCore = loadCore('../../src/plugins/json-tools/jsonCore.ts', {
+  './urlQueryCore': loadCore('../../src/plugins/json-tools/urlQueryCore.ts'),
+})
 export const encodeDecodeCore = loadCore('../../src/plugins/encode-decode/core.ts')

@@ -1,4 +1,4 @@
-import { cleanLineList, processLines, type LineOperation, type LineOptions } from './core'
+import { cleanLineList, processLines, findDuplicateLines, duplicateLineReport, type DuplicateLineGroup, type LineOperation, type LineOptions } from './core'
 import { lineOperationRoutes } from './routes'
 import { escapeRegexPattern } from './escapeRegexPattern'
 import { extractTextList } from './extractTextList'
@@ -15,17 +15,20 @@ export type WorkbenchOperation =
   | 'url-decode'
   | 'regex-escape'
   | 'extract-urls'
+  | 'find-duplicates'
 
 export type WorkbenchOptions = LineOptions & {
   indent: number
   trim: boolean
   removeBlank: boolean
   dedup: boolean
+  duplicateIgnoreCase: boolean
+  duplicateTrim: boolean
 }
 
 export type WorkbenchResult =
   | { status: 'idle' }
-  | { status: 'ready'; text: string }
+  | { status: 'ready'; text: string; duplicates?: DuplicateLineGroup[] }
   | { status: 'error'; messageKey: string }
 
 export type WorkbenchTextTransforms = {
@@ -43,6 +46,7 @@ export const WORKBENCH_OPERATIONS: readonly {
   { value: 'trim', category: 'text', label: 'trimWhitespace.title' },
   { value: 'remove-blank', category: 'text', label: 'removeBlankLines.title' },
   { value: 'dedup', category: 'text', label: 'dedup.title' },
+  { value: 'find-duplicates', category: 'text', label: 'duplicates.title' },
   { value: 'clean-list', category: 'text', label: 'cleanList.title' },
   { value: 'sort', category: 'text', label: 'sort.title' },
   { value: 'reverse', category: 'text', label: 'reverse.title' },
@@ -76,10 +80,13 @@ export const DEFAULT_WORKBENCH_OPTIONS: Readonly<WorkbenchOptions> = {
   trim: false,
   removeBlank: true,
   dedup: false,
+  duplicateIgnoreCase: false,
+  duplicateTrim: false,
 }
 
 export function getWorkbenchOperation(surfaceId?: string): WorkbenchOperation {
   if (surfaceId === 'regex-escape') return 'regex-escape'
+  if (surfaceId === 'find-duplicates') return 'find-duplicates'
   const operation = lineOperationRoutes.find((route) => route.surfaceId === surfaceId)?.operation
   if (operation === 'trim-whitespace') return 'trim'
   if (operation === 'remove-blank-lines') return 'remove-blank'
@@ -96,6 +103,10 @@ export function evaluateWorkbench(
   try {
     let text: string
     switch (operation) {
+      case 'find-duplicates': {
+        const duplicates = findDuplicateLines(inputText, { ignoreCase: options.duplicateIgnoreCase, trim: options.duplicateTrim })
+        return { status: 'ready', text: duplicateLineReport(duplicates), duplicates }
+      }
       case 'clean-list': text = cleanLineList(inputText, options); break
       case 'trim': text = processLines('trim-whitespace', inputText, options); break
       case 'remove-blank': text = processLines('remove-blank-lines', inputText, options); break
