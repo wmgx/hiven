@@ -7,7 +7,7 @@
 
 import { definePlugin } from '@hiven/plugin'
 import type { ClipboardHistorySettings } from './settings/model'
-import { DEFAULT_CLIPBOARD_HISTORY_SETTINGS } from './settings/model'
+import { DEFAULT_CLIPBOARD_HISTORY_SETTINGS, migrateClipboardHistorySettings } from './settings/model'
 import { ClipboardHistorySurface } from './surfaces/ClipboardHistorySurface'
 import { clipboardHistoryBackground } from './background/clipboardHistoryBackground'
 import { createClipboardHistoryRepository } from './storage/clipboardHistoryRepository'
@@ -70,8 +70,9 @@ export default definePlugin<ClipboardHistorySettings>({
   settings: {
     title: 'Clipboard History',
     titleI18n: { zh: '剪贴板历史' },
-    version: 1,
+    version: 2,
     defaultValue: DEFAULT_CLIPBOARD_HISTORY_SETTINGS,
+    migrate: migrateClipboardHistorySettings,
     schema: {
       sections: [
         {
@@ -117,25 +118,17 @@ export default definePlugin<ClipboardHistorySettings>({
             },
             {
               kind: 'number',
-              key: 'maxItems',
-              label: 'Maximum items',
-              labelI18n: { zh: '最大记录条数' },
-              icon: 'ListOrdered',
-              min: 10,
-              max: 10000,
-              step: 10,
-            },
-            {
-              kind: 'number',
-              key: 'retentionDays',
-              label: 'Retention days',
-              labelI18n: { zh: '保留天数' },
+              key: 'retentionMonths',
+              label: 'Retention months',
+              labelI18n: { zh: '保留月数' },
+              description: '1–12 UTC calendar months, default 3; no item-count limit. Favorites are exempt from automatic expiry. Earlier history stays protected until explicitly included. Expired or manually deleted items are recoverable for 30 days, then permanently deleted automatically. Turning off recording does not pause cleanup.',
+              descriptionI18n: { zh: '1–12 个 UTC 日历月，默认 3 个月，不限制条数。固定（收藏）项免自动过期；旧历史在明确纳入前受保护。过期或手动删除的条目可恢复 30 天，之后自动永久删除。停用记录不会暂停清理。' },
               icon: 'CalendarDays',
               min: 1,
-              max: 365,
+              max: 12,
               step: 1,
-              unit: 'days',
-              unitI18n: { zh: '天' },
+              unit: 'months',
+              unitI18n: { zh: '个月' },
             },
             {
               kind: 'number',
@@ -174,18 +167,6 @@ export default definePlugin<ClipboardHistorySettings>({
               requires: ['storage.blob'],
               min: 1,
               step: 1,
-              unit: 'MB',
-              storageScale: MB,
-            },
-            {
-              kind: 'number',
-              key: 'maxTotalCacheBytes',
-              label: 'Max total cache size',
-              labelI18n: { zh: '总缓存容量上限' },
-              icon: 'Database',
-              requires: ['storage.private'],
-              min: 1,
-              step: 10,
               unit: 'MB',
               storageScale: MB,
             },

@@ -524,12 +524,29 @@ export type PluginStoragePrunePolicy = {
   maxAgeDays?: number
 }
 
+/** New bounded/transactional methods require native storage; permissions remain storage.private. */
+export type PluginKvPageOptions = { prefix: string; after?: string; limit?: number; order?: 'asc' | 'desc' }
+export type PluginKvPage<T> = { entries: Array<{ key: string; value: T; updatedAt: number }>; nextCursor?: string }
+export type PluginKvArrayPageOptions = { key: string; path: string; afterIndex?: number; limit?: number }
+export type PluginKvArrayPage<T> = { entries: Array<{ index: number; value: T }>; nextIndex?: number }
+export type PluginKvBatch = {
+  /** undefined means absent; other values compare exact serialized JSON. */
+  checks?: Array<{ key: string; expected: unknown | undefined }>
+  operations: Array<{ type: 'set'; key: string; value: unknown } | { type: 'delete'; key: string }>
+}
+
 export type PluginPrivateStorageApi = {
   kv: {
     get<T = unknown>(key: string): Promise<T | undefined>
     set<T = unknown>(key: string, value: T): Promise<void>
     delete(key: string): Promise<void>
     list(prefix?: string): Promise<Array<{ key: string; updatedAt: number }>>
+    /** Live key-ordered exclusive cursor (not a frozen snapshot). At most 128 entries/16 MiB; oversized single values reject. */
+    page<T = unknown>(options: PluginKvPageOptions): Promise<PluginKvPage<T>>
+    /** Read an existing JSON array in SQLite without transferring its complete parent value. */
+    arrayPage<T = unknown>(options: PluginKvArrayPageOptions): Promise<PluginKvArrayPage<T>>
+    /** All checks and writes run in one native transaction; conflicts return committed:false. */
+    batch(input: PluginKvBatch): Promise<{ committed: boolean }>
   }
   blob: {
     put(input: { bytes: Uint8Array; contentType: string; extension?: string }): Promise<PluginBlobRef>

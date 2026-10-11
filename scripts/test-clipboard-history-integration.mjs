@@ -48,8 +48,8 @@ assert.match(
   'Clipboard history beforeOpen must not block paint on cold open when the in-memory cache is empty',
 )
 
-// entry.launcher is true (default or explicit)
-assert.match(indexContent, /launcher:\s*true/, 'Surface entry.launcher must be true')
+// The launcher entry declares its supported surface explicitly.
+assert.match(indexContent, /launcher:\s*\{\s*surfaces:\s*\[['"]global-launcher['"]\]/, 'Surface entry must opt into global-launcher')
 assert.match(indexContent, /shortcutBindable:\s*true/, 'Surface entry.shortcutBindable must be true')
 
 // aliases for launcher search
@@ -90,11 +90,11 @@ assert.match(indexContent, /key:\s*['"]enabled['"]/, 'Settings schema must inclu
 assert.match(indexContent, /key:\s*['"]recordText['"]/, 'Settings schema must include recordText')
 assert.match(indexContent, /key:\s*['"]recordImages['"]/, 'Settings schema must include recordImages')
 assert.match(indexContent, /key:\s*['"]recordFiles['"]/, 'Settings schema must include recordFiles')
-assert.match(indexContent, /key:\s*['"]maxItems['"]/, 'Settings schema must include maxItems')
-assert.match(indexContent, /key:\s*['"]retentionDays['"]/, 'Settings schema must include retentionDays')
+assert.doesNotMatch(indexContent, /key:\s*['"]maxItems['"]/, 'Retired count limit must not be offered')
+assert.match(indexContent, /key:\s*['"]retentionMonths['"]/, 'Settings schema must expose calendar-month retention')
 assert.match(indexContent, /key:\s*['"]maxTextBytes['"]/, 'Settings schema must include maxTextBytes')
 assert.match(indexContent, /key:\s*['"]maxImageBytes['"]/, 'Settings schema must include maxImageBytes')
-assert.match(indexContent, /key:\s*['"]maxTotalCacheBytes['"]/, 'Settings schema must include maxTotalCacheBytes')
+assert.doesNotMatch(indexContent, /key:\s*['"]maxTotalCacheBytes['"]/, 'Retired total-cache eviction must not be offered')
 
 // ─── 4. i18n completeness ───────────────────────────────────────────────────
 
@@ -106,8 +106,7 @@ const requiredKeys = [
   'settings.recordText',
   'settings.recordImages',
   'settings.recordFiles',
-  'settings.maxItems',
-  'settings.retentionDays',
+  'settings.retentionMonths',
   'settings.clearAll',
   'settings.clearAll.confirm',
   'surface.main.title',
@@ -198,7 +197,7 @@ assert.match(surfaceContent, /<SurfaceList[\s\S]{0,180}data-launcher-scrollable/
 assert.match(surfaceContent, /<SurfacePreview[\s\S]{0,180}data-launcher-scrollable/, 'Surface preview pane must opt into launcher window wheel scrolling')
 assert.match(surfaceContent, /clipboard-history-preview-content[\s\S]{0,120}data-launcher-scrollable/, 'Surface preview content must opt into launcher window wheel scrolling')
 assert.match(surfaceContent, /<SurfaceList|<SurfaceListItem|<SurfacePreview/, 'Surface must use plugin-ui list and preview primitives')
-assert.match(surfaceContent, /function\s+ClipboardHistoryItemRow[\s\S]{0,900}useRef<[\s\S]{0,360}scrollIntoView\(\{\s*block:\s*['"]nearest['"]\s*\}\)/, 'Selected clipboard history rows must scroll into view during keyboard navigation')
+assert.match(surfaceContent, /virtualizer\.scrollToIndex\(flatIndex,\s*\{\s*align:\s*['"]auto['"]/, 'Keyboard navigation must reveal the selected virtual row')
 assert.match(surfaceContent, /getMetaRows|meta\.firstCopied|meta\.lastCopied/, 'Surface must render detailed metadata for the selected item')
 assert.doesNotMatch(surfaceContent, /clipboard-history-copy-count|meta\.timesCopied/, 'Surface must not display copy-count UI')
 
@@ -225,16 +224,16 @@ assert.match(surfaceContent, /loading/, 'Surface must handle loading state')
 assert.match(surfaceContent, /settings\.enabled/, 'Surface must check settings.enabled')
 assert.match(cacheContent, /subscribeCachedIndex/, 'Clipboard history cache must expose change subscriptions for already-open surfaces')
 assert.match(surfaceContent, /subscribeCachedIndex/, 'Clipboard history surface must subscribe to cache updates so newly copied items appear while it is open')
-assert.match(surfaceContent, /indexToListItems/, 'Clipboard history surface must map subscribed index snapshots into list items without waiting for remount')
-assert.match(surfaceContent, /getFreshListItems/, 'Clipboard history surface must refresh from persisted storage, not only same-window cache')
-assert.match(surfaceContent, /handleFocus[\s\S]{0,200}addEventListener\(['"]focus['"]/, 'Clipboard history surface must poll persisted storage while open so launcher windows see main-window background captures')
+assert.match(surfaceContent, /refreshPage/, 'Cache notifications must refresh a bounded page')
+assert.match(surfaceContent, /repository\.getPage/, 'Surface must use persisted bounded pages')
+assert.match(surfaceContent, /onFocus[\s\S]{0,200}addEventListener\(['"]focus['"]/, 'Clipboard history surface must refresh persisted pages on focus across windows')
 
 // ─── 6. Background structure ─────────────────────────────────────────────────
 
 const bgContent = read('src/plugins/clipboard-history/background/clipboardHistoryBackground.ts')
 
-// Must not start when disabled
-assert.match(bgContent, /if\s*\(\s*!ctx\.settings\.enabled\s*\)/, 'Background must check ctx.settings.enabled')
+// Watching is conditional; lifecycle cleanup remains active when recording stops.
+assert.match(bgContent, /if\s*\(ctx\.settings\.enabled\)\s*unwatch/, 'Only clipboard watching depends on recording being enabled')
 
 // Must return stop function
 assert.match(bgContent, /return\s+stop/, 'Background must return stop function')

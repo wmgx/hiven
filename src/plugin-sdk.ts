@@ -99,6 +99,11 @@ export type {
   PluginPermissionSnapshot,
   // Plugin Storage types
   PluginPrivateStorageApi,
+  PluginKvPageOptions,
+  PluginKvPage,
+  PluginKvArrayPageOptions,
+  PluginKvArrayPage,
+  PluginKvBatch,
   PluginBlobRef,
   PluginBlobSaveResult,
   PluginStoragePrunePolicy,

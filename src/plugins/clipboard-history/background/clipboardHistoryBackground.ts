@@ -69,21 +69,34 @@ function buildAddItemInput(change: ClipboardChange): AddItemInput | null {
 export function createClipboardHistoryBackground(): PluginBackgroundContribution<ClipboardHistorySettings> {
   return {
     async start(ctx: PluginBackgroundContext<ClipboardHistorySettings>): Promise<PluginBackgroundStop | void> {
-      // Only start if enabled
-      if (!ctx.settings.enabled) {
-        return
-      }
-
       const repository = createClipboardHistoryRepository(ctx.storage)
       const watchOptions = buildWatchOptions(ctx.settings)
 
-      // Warm the in-memory index cache so Surface opens instantly
-      void repository.getListItems()
-
       let unwatch: (() => void) | null = null
+      const lifecycle = new AbortController()
+      let cleaning = false
+      const cleanup = async () => {
+        if (cleaning || lifecycle.signal.aborted) return
+        cleaning = true
+        try {
+          // Bounded catch-up on startup/resume and once per minute, independent
+          // of new clipboard changes or recording being enabled.
+          for (let batch = 0; batch < 8 && !lifecycle.signal.aborted; batch++) {
+            const pruned = await repository.pruneItems({ retentionMonths: ctx.settings.retentionMonths }, { signal: lifecycle.signal })
+            await repository.purgeExpiredTrash({ signal: lifecycle.signal })
+            if (!pruned.hasMore) break
+          }
+        } catch {
+          if (!lifecycle.signal.aborted) ctx.showMessage(ctx.t('error.retentionCleanup'), 'error')
+        } finally { cleaning = false }
+      }
+      void cleanup()
+      const cleanupTimer = setInterval(() => { void cleanup() }, 60_000)
+      const onResume = () => { void cleanup() }
+      if (typeof window !== 'undefined') window.addEventListener('focus', onResume)
 
       try {
-        unwatch = await ctx.clipboard.watch(watchOptions, async (change: ClipboardChange) => {
+        if (ctx.settings.enabled) unwatch = await ctx.clipboard.watch(watchOptions, async (change: ClipboardChange) => {
           try {
             // Filter based on settings
             if (change.kind === 'text' && !ctx.settings.recordText) return
@@ -95,12 +108,7 @@ export function createClipboardHistoryBackground(): PluginBackgroundContribution
 
             await repository.addItem(input)
 
-            // Prune after each addition
-            await repository.pruneItems({
-              maxItems: ctx.settings.maxItems,
-              retentionDays: ctx.settings.retentionDays,
-              maxTotalCacheBytes: ctx.settings.maxTotalCacheBytes,
-            })
+            void cleanup()
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error)
             ctx.showMessage(ctx.t('error.background', { message }), 'error')
@@ -109,11 +117,13 @@ export function createClipboardHistoryBackground(): PluginBackgroundContribution
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         ctx.showMessage(ctx.t('error.watcherStart', { message }), 'error')
-        return
       }
 
       // Return stop function for cleanup
       const stop: PluginBackgroundStop = () => {
+        lifecycle.abort()
+        clearInterval(cleanupTimer)
+        if (typeof window !== 'undefined') window.removeEventListener('focus', onResume)
         if (unwatch) {
           unwatch()
           unwatch = null

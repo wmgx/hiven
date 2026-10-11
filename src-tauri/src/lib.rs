@@ -24,6 +24,7 @@ mod ai_run_registry;
 mod ai_ollama;
 pub mod ai_xai;
 mod clipboard_privacy;
+mod plugin_kv_paging;
 mod paste_recovery;
 mod launcher_resize_state;
 mod plugin_png_export;
@@ -6196,6 +6197,27 @@ fn plugin_kv_list(
 }
 
 #[tauri::command]
+fn plugin_kv_page(source: String, plugin_id: String, options: plugin_kv_paging::PageOptions) -> Result<plugin_kv_paging::Page, String> {
+    validate_plugin_kv_namespace(&source, &plugin_id)?;
+    let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
+    plugin_kv_paging::page(&db.connection, &source, &plugin_id, options)
+}
+
+#[tauri::command]
+fn plugin_kv_array_page(source: String, plugin_id: String, options: plugin_kv_paging::ArrayPageOptions) -> Result<plugin_kv_paging::ArrayPage, String> {
+    validate_plugin_kv_namespace(&source, &plugin_id)?;
+    let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
+    plugin_kv_paging::array_page(&db.connection, &source, &plugin_id, options)
+}
+
+#[tauri::command]
+fn plugin_kv_batch(source: String, plugin_id: String, input: plugin_kv_paging::Batch) -> Result<plugin_kv_paging::BatchResult, String> {
+    validate_plugin_kv_namespace(&source, &plugin_id)?;
+    let mut db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
+    plugin_kv_paging::batch(&mut db.connection, &source, &plugin_id, input, current_millis_i64()?)
+}
+
+#[tauri::command]
 fn plugin_kv_usage(source: String, plugin_id: String) -> Result<PluginKvUsage, String> {
     validate_plugin_kv_namespace(&source, &plugin_id)?;
     let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
@@ -8100,6 +8122,9 @@ pub fn run() {
             plugin_kv_set,
             plugin_kv_delete,
             plugin_kv_list,
+            plugin_kv_page,
+            plugin_kv_array_page,
+            plugin_kv_batch,
             plugin_kv_usage,
             plugin_kv_prune,
             plugin_kv_clear,

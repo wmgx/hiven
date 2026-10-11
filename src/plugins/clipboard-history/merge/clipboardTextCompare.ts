@@ -26,7 +26,7 @@ export async function readHistoryCompareSnapshots(
     if (bytes > MAX_BYTES) throw new Error('TextTooLargeError')
   }
   // A deletion/change while full reads were pending must not revive an old item.
-  const index = await repository.getFreshListItems()
+  const index = await repository.getFreshListItems(selection.map((item) => item.id))
   requireCurrent()
   if (selection.some((selected) => !index.some((item) => item.id === selected.id && item.kind === 'text' && item.hash === selected.hash))) {
     throw new Error('ReadFailedError')

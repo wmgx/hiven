@@ -6,7 +6,7 @@
  * a non-Tauri browser preview fallback.
  */
 
-import type { PluginPrivateStorageApi, PluginBlobRef, PluginStoragePrunePolicy, PluginPermissionSnapshot } from './pluginTypes'
+import type { PluginPrivateStorageApi, PluginBlobRef, PluginStoragePrunePolicy, PluginPermissionSnapshot, PluginKvPageOptions, PluginKvPage, PluginKvArrayPageOptions, PluginKvArrayPage, PluginKvBatch } from './pluginTypes'
 import type { PluginSettingsSource } from './pluginSettingsStore'
 import { requirePluginPermissions } from './pluginPermissions'
 import { createPluginPngSaver, type PluginStorageOwner } from './pluginBlobExport'
@@ -124,6 +124,36 @@ export function createPluginPrivateStorage(
 
   return {
     kv: {
+      async page<T = unknown>(options: PluginKvPageOptions): Promise<PluginKvPage<T>> {
+        requireKv()
+        if (!isTauri()) throw new Error('Bounded storage requires native storage')
+        const result = await invoke<{ entries: Array<{ key: string; valueJson: string; updatedAt: number }>; nextCursor?: string }>('plugin_kv_page', { source, pluginId, options })
+        return { ...result, entries: result.entries.map(({ valueJson, ...entry }) => ({ ...entry, value: JSON.parse(valueJson) as T })) }
+      },
+
+      async arrayPage<T = unknown>(options: PluginKvArrayPageOptions): Promise<PluginKvArrayPage<T>> {
+        requireKv()
+        if (!isTauri()) throw new Error('Bounded storage requires native storage')
+        const result = await invoke<{ entries: Array<{ index: number; valueJson: string }>; nextIndex?: number }>('plugin_kv_array_page', { source, pluginId, options })
+        return { ...result, entries: result.entries.map(({ valueJson, ...entry }) => ({ ...entry, value: JSON.parse(valueJson) as T })) }
+      },
+
+      async batch(input: PluginKvBatch): Promise<{ committed: boolean }> {
+        requireKv()
+        if (!isTauri()) throw new Error('Atomic storage requires native storage')
+        const serialize = (value: unknown) => {
+          const json = JSON.stringify(value)
+          if (json === undefined) throw new Error('Plugin KV value must be JSON serializable')
+          return json
+        }
+        return invoke('plugin_kv_batch', { source, pluginId, input: {
+          checks: (input.checks ?? []).map(check => ({ key: check.key, expectedJson: check.expected === undefined ? null : serialize(check.expected) })),
+          operations: input.operations.map(operation => operation.type === 'set'
+            ? { type: 'set', key: operation.key, valueJson: serialize(operation.value) }
+            : { type: 'delete', key: operation.key }),
+        } })
+      },
+
       async get<T = unknown>(key: string): Promise<T | undefined> {
         requireKv()
         const raw = isTauri()

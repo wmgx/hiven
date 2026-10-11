@@ -1,34 +1,10 @@
 #!/usr/bin/env node
 // Production repository, synthetic in-memory storage; no user history or native clipboard.
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import ts from 'typescript'
-const dir = 'src/plugins/clipboard-history/storage/'
-const compiled = new Map()
-function moduleUrl(name) {
-  if (compiled.has(name)) return compiled.get(name)
-  let source = ts.transpileModule(readFileSync(`${dir}${name}.ts`, 'utf8'), {
-    compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 },
-  }).outputText
-  source = source.replace(/from ['"]\.\/(\w+)['"]/g, (_, dependency) => `from '${moduleUrl(dependency)}'`)
-  const url = `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`
-  compiled.set(name, url)
-  return url
-}
-const { createClipboardHistoryRepository } = await import(moduleUrl('clipboardHistoryRepository'))
-const data = new Map()
-let failIndexOnce = false
-const storage = {
-  kv: {
-    get: async (key) => structuredClone(data.get(key)),
-    set: async (key, value) => {
-      if (key === 'history/index' && failIndexOnce) { failIndexOnce = false; throw new Error('disk') }
-      data.set(key, structuredClone(value))
-    },
-    delete: async (key) => { data.delete(key) },
-  },
-  blob: { delete: async () => {} },
-}
+import { historyModule, syntheticHistoryStorage } from './lib/history-synthetic-storage.mjs'
+const { createClipboardHistoryRepository } = await import(historyModule('src/plugins/clipboard-history/storage/clipboardHistoryRepository.ts'))
+const memory = syntheticHistoryStorage()
+const storage = memory.storage
 const repo = createClipboardHistoryRepository(storage)
 const background = createClipboardHistoryRepository(storage)
 const original = await repo.addItem({ kind: 'text', text: 'original\n全文', hash: 'initial', byteSize: 16 })
@@ -49,9 +25,9 @@ await assert.rejects(repo.updateText(original.id, original.text, 'stale', 5000),
 await assert.rejects(repo.updateText(original.id, revised, '😀', 3), /tooLarge/)
 await assert.rejects(repo.updateText(original.id, revised, 'late', 5000, () => false), /cancelled/)
 assert.equal((await repo.getItem(original.id)).text, revised)
-failIndexOnce = true
-await assert.rejects(repo.updateText(original.id, revised, 'retry me', 5000), /disk/)
-assert.equal((await repo.getItem(original.id)).text, revised, 'failed index save restores original item')
+memory.failBatch((ops) => ops.some((op) => op.key === 'history/items/' + original.id))
+await assert.rejects(repo.updateText(original.id, revised, 'retry me', 5000), /atomic failure/)
+assert.equal((await repo.getItem(original.id)).text, revised, 'failed atomic save leaves the original item intact')
 await repo.updateText(original.id, revised, '', 5000)
 assert.equal((await repo.getItem(original.id)).text, '', 'empty edits preserve the exact text')
 await Promise.all([repo.toggleFavorite(original.id), background.toggleFavorite(original.id)])

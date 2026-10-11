@@ -13,6 +13,9 @@ export type ClipboardHistoryBase = {
   copyCount: number
   byteSize: number
   sourceApp?: string
+  deletedAt?: number
+  purgeAfter?: number
+  legacyProtected?: boolean
   /** Successful paste-to-foreground count (not the same as copyCount). */
   pasteCount?: number
   lastPastedAt?: number
@@ -116,12 +119,14 @@ export type AddItemInput = AddTextItemInput | AddImageItemInput | AddFilesItemIn
 // ─── Prune Policy ────────────────────────────────────────────────────────────
 
 export type ClipboardHistoryPrunePolicy = {
+  retentionMonths?: number
   maxItems?: number
   retentionDays?: number
   maxTotalCacheBytes?: number
 }
 
 export type PruneResult = {
+  hasMore?: boolean
   removedCount: number
   removedBytes: number
   removedBlobIds: string[]

@@ -174,6 +174,15 @@ const emptyStorage: PluginPrivateStorageApi = {
     set: async () => {},
     delete: async () => {},
     list: async () => [],
+    page: async () => {
+      throw new Error('Plugin storage is not available for this launcher item')
+    },
+    arrayPage: async () => {
+      throw new Error('Plugin storage is not available for this launcher item')
+    },
+    batch: async () => {
+      throw new Error('Plugin storage is not available for this launcher item')
+    },
   },
   blob: {
     put: async () => {

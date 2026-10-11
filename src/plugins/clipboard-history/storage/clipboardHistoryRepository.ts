@@ -1,39 +1,29 @@
-/**
- * Clipboard History Plugin — Repository
- *
- * Pure business logic for clipboard history management:
- * - Add items with deduplication
- * - CRUD operations
- * - Paste usage + favorites
- * - Prune by maxItems, retentionDays, maxTotalCacheBytes (favorites exempt)
- * - Blob cleanup on image deletion
- */
-
 import type { PluginPrivateStorageApi } from '@hiven/plugin'
-import { createClipboardHistoryStore, type ClipboardHistoryStore } from './clipboardHistoryStore'
 import { getCachedIndex, setCachedIndex, clearCachedIndex } from './clipboardHistoryCache'
-import type {
-  AddItemInput,
-  ClipboardHistoryItem,
-  ClipboardHistoryIndex,
-  ClipboardHistoryIndexEntry,
-  ClipboardHistoryPrunePolicy,
-  PruneResult,
-  ClipboardTextHistoryItem,
-  ClipboardImageHistoryItem,
-  ClipboardFilesHistoryItem,
-} from './clipboardHistoryTypes'
+import { matchesClipboardHistorySearch } from './clipboardHistorySearch'
+import { resolveClipboardHistoryRetentionMonths } from '../settings/model'
+import { createPagedHistoryStore, ROOT, ITEM, META, ORDER, FREQUENT, TRASH, TRASH_ID, GC, metadata, putMetadata, removeMetadata, hashKey, trashKey, blobIds, type HistoryMetadata, type TrashRecord, type Operation } from './clipboardHistoryPagedStore'
+import type { AddItemInput, ClipboardHistoryItem, ClipboardHistoryIndex, ClipboardHistoryPrunePolicy, PruneResult, ClipboardTextHistoryItem, ClipboardImageHistoryItem, ClipboardFilesHistoryItem } from './clipboardHistoryTypes'
 
+export type HistoryPageRequest = { query?: string; filter?: 'all' | 'text' | 'image' | 'files' | 'favorites' | 'frequent' | 'trash'; frequentThreshold?: number; cursor?: string; limit?: number; signal?: AbortSignal }
+export type HistoryPage = { items: ClipboardHistoryItem[]; nextCursor?: string; scanned: number }
+export type HistoryRetentionStatus = { legacyProtectedCount: number; trashCount: number; migrationComplete: boolean; hasPurgeable: boolean }
 export type ClipboardHistoryRepository = {
   addItem(input: AddItemInput): Promise<ClipboardHistoryItem>
   getItem(id: string): Promise<ClipboardHistoryItem | undefined>
+  getTrashItem(id: string): Promise<ClipboardHistoryItem | undefined>
   getAllItems(): Promise<ClipboardHistoryItem[]>
+  getPage(request?: HistoryPageRequest): Promise<HistoryPage>
   getListItems(): Promise<ClipboardHistoryItem[]>
-  getFreshListItems(): Promise<ClipboardHistoryItem[]>
+  getFreshListItems(ids?: readonly string[]): Promise<ClipboardHistoryItem[]>
   getListItemsSync(): ClipboardHistoryItem[] | null
+  getRetentionStatus(): Promise<HistoryRetentionStatus>
+  enableLegacyRetention(months: number): Promise<void>
+  restoreItem(id: string): Promise<ClipboardHistoryItem | undefined>
+  purgeExpiredTrash(options?: { signal?: AbortSignal }): Promise<PruneResult>
   deleteItem(id: string): Promise<void>
   clearAll(): Promise<void>
-  pruneItems(policy: ClipboardHistoryPrunePolicy): Promise<PruneResult>
+  pruneItems(policy: ClipboardHistoryPrunePolicy, options?: { signal?: AbortSignal }): Promise<PruneResult>
   findByHash(hash: string): Promise<ClipboardHistoryItem | undefined>
   recordPaste(id: string): Promise<ClipboardHistoryItem | undefined>
   toggleFavorite(id: string): Promise<ClipboardHistoryItem | undefined>
@@ -41,37 +31,20 @@ export type ClipboardHistoryRepository = {
   updateFavoriteTitle(id: string, title: string): Promise<ClipboardHistoryItem | undefined>
   updateText(id: string, expectedText: string, text: string, maxBytes: number, isCurrent?: () => boolean): Promise<ClipboardTextHistoryItem>
 }
-
-function generateId(): string {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+const DAY = 86_400_000
+const makeTextPreview = (text: string) => { const line = text.replace(/\n/g, ' ').trim(); return line.length > 200 ? `${line.slice(0, 200)}…` : line }
+const emptyPrune = (): PruneResult => ({ removedCount: 0, removedBytes: 0, removedBlobIds: [] })
+function requireCurrent(signal?: AbortSignal) { if (signal?.aborted) throw new Error('cancelled') }
+/** Calendar-month retention uses UTC timestamps, clamping month ends explicitly. */
+export function historyRetentionCutoff(now: number, months: number): number {
+  const date = new Date(now)
+  const day = date.getUTCDate()
+  date.setUTCDate(1)
+  date.setUTCMonth(date.getUTCMonth() - resolveClipboardHistoryRetentionMonths(months))
+  const lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate()
+  date.setUTCDate(Math.min(day, lastDay))
+  return date.getTime()
 }
-
-function makeTextPreview(text: string, maxLength = 200): string {
-  const singleLine = text.replace(/\n/g, ' ').trim()
-  if (singleLine.length <= maxLength) return singleLine
-  return singleLine.slice(0, maxLength) + '…'
-}
-
-function usageFieldsFromItem(item: ClipboardHistoryItem): Pick<
-  ClipboardHistoryIndexEntry,
-  'pasteCount' | 'lastPastedAt' | 'isFavorite' | 'favoriteTitle' | 'favoritedAt' | 'copyCount' | 'sourceApp' | 'lastCopiedAt'
-> {
-  return {
-    lastCopiedAt: item.lastCopiedAt,
-    copyCount: item.copyCount,
-    sourceApp: item.sourceApp,
-    pasteCount: item.pasteCount ?? 0,
-    lastPastedAt: item.lastPastedAt,
-    isFavorite: item.isFavorite ?? false,
-    favoriteTitle: item.favoriteTitle,
-    favoritedAt: item.favoritedAt,
-  }
-}
-
-function isFavoriteEntry(entry: ClipboardHistoryIndexEntry): boolean {
-  return entry.isFavorite === true
-}
-
 export function indexToListItems(index: ClipboardHistoryIndex): ClipboardHistoryItem[] {
   return index.entries.map((entry): ClipboardHistoryItem | null => {
     const base = {
@@ -102,399 +75,240 @@ export function indexToListItems(index: ClipboardHistoryIndex): ClipboardHistory
   }).filter(Boolean) as ClipboardHistoryItem[]
 }
 
-let writeTail: Promise<unknown> = Promise.resolve()
-
 export function createClipboardHistoryRepository(storage: PluginPrivateStorageApi): ClipboardHistoryRepository {
-  const store: ClipboardHistoryStore = createClipboardHistoryStore(storage)
-
-  /**
-   * Serialize index/item mutations. Clipboard watch fires onChange without awaiting,
-   * so concurrent addItem/prune used to race on read-modify-write of history/index
-   * and drop entries (intermittent "clipboard not recorded").
-   */
-  function withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
-    const run = writeTail.then(fn, fn)
-    writeTail = run.then(
-      () => undefined,
-      () => undefined,
-    )
-    return run
+  const store = createPagedHistoryStore(storage)
+  const notify = () => clearCachedIndex()
+  async function getItem(id: string) {
+    await store.ready()
+    const meta = await storage.kv.get<HistoryMetadata>(META + id)
+    if (!meta) return undefined
+    const body = await storage.kv.get<ClipboardHistoryItem>(ITEM + id)
+    return body ? { ...body, isFavorite: meta.isFavorite, favoriteTitle: meta.favoriteTitle, favoritedAt: meta.favoritedAt } : undefined
   }
-
-  /** Save index to storage and update in-memory cache. */
-  async function saveIndexAndCache(index: ClipboardHistoryIndex): Promise<void> {
-    await store.saveIndex(index)
-    setCachedIndex(index)
+  async function getTrashItem(id: string) {
+    await store.ready()
+    if (!await storage.kv.get<string>(TRASH_ID + id)) return undefined
+    return storage.kv.get<ClipboardHistoryItem>(ITEM + id)
   }
-
-  async function updateItemAndIndex(
-    id: string,
-    mutate: (item: ClipboardHistoryItem) => ClipboardHistoryItem,
-  ): Promise<ClipboardHistoryItem | undefined> {
-    const existing = await store.getItem(id)
-    if (!existing) return undefined
-    const updated = mutate(existing)
-    await store.saveItem(updated)
-    const index = await store.getIndex()
-    const entries = index.entries.map((entry) =>
-      entry.id === id ? { ...entry, ...usageFieldsFromItem(updated) } : entry,
-    )
-    await saveIndexAndCache({ entries, updatedAt: Date.now() })
-    return updated
-  }
-
-  async function findByHash(hash: string): Promise<ClipboardHistoryItem | undefined> {
-    const index = await store.getIndex()
-    const entry = index.entries.find((e) => e.hash === hash)
-    if (!entry) return undefined
-    return store.getItem(entry.id)
-  }
-
-  async function addItem(input: AddItemInput): Promise<ClipboardHistoryItem> {
-    const now = Date.now()
-    const index = await store.getIndex()
-
-    // Deduplication: if same hash exists, update it
-    const existingEntry = index.entries.find((e) => e.hash === input.hash)
-    if (existingEntry) {
-      const existing = await store.getItem(existingEntry.id)
-      if (existing) {
-        const updated: ClipboardHistoryItem = {
-          ...existing,
-          lastCopiedAt: now,
-          copyCount: existing.copyCount + 1,
-          sourceApp: input.sourceApp ?? existing.sourceApp,
+  async function getPage(request: HistoryPageRequest = {}): Promise<HistoryPage> {
+    await store.ready()
+    requireCurrent(request.signal)
+    const limit = Math.max(1, Math.min(100, Math.floor(request.limit ?? 100)))
+    const prefix = request.filter === 'trash' ? TRASH : request.filter === 'frequent' ? FREQUENT : ORDER
+    if (request.cursor && !request.cursor.startsWith(prefix)) throw new Error('Invalid history cursor')
+    const legacyEnabled = Boolean((await store.state()).legacyEnabledAt)
+    const items: ClipboardHistoryItem[] = []
+    let cursor = request.cursor
+    let scanned = 0
+    while (scanned < 512 && items.length < limit) {
+      requireCurrent(request.signal)
+      const page = await storage.kv.page<HistoryMetadata | TrashRecord>({ prefix, after: cursor, limit: Math.min(32, limit - items.length) })
+      for (const row of page.entries) {
+        requireCurrent(request.signal)
+        cursor = row.key
+        scanned++
+        const trash = request.filter === 'trash' ? row.value as TrashRecord : undefined
+        const meta = trash ? trash.metadata : row.value as HistoryMetadata
+        if (request.filter === 'favorites' && !meta.isFavorite) continue
+        if (request.filter === 'frequent' && (meta.pasteCount ?? 0) < (request.frequentThreshold ?? 3)) continue
+        if (['text', 'image', 'files'].includes(request.filter ?? '') && meta.kind !== request.filter) continue
+        const lite = indexToListItems({ entries: [meta], updatedAt: 0 })[0]
+        if (!lite) continue
+        if (request.query?.trim() && !matchesClipboardHistorySearch(lite, request.query)) {
+          if (lite.kind !== 'text') continue
+          const full = await storage.kv.get<ClipboardHistoryItem>(ITEM + meta.id)
+          requireCurrent(request.signal)
+          if (!full || !matchesClipboardHistorySearch(full, request.query)) continue
         }
-        await store.saveItem(updated)
-
-        // Move to top of index and update fields
-        const filtered = index.entries.filter((e) => e.id !== existingEntry.id)
-        const updatedEntry: ClipboardHistoryIndexEntry = {
-          ...existingEntry,
-          ...usageFieldsFromItem(updated),
-        }
-        filtered.unshift(updatedEntry)
-        await saveIndexAndCache({ entries: filtered, updatedAt: now })
-
-        return updated
+        items.push({ ...lite, ...(trash ? { deletedAt: trash.deletedAt, purgeAfter: trash.purgeAfter } : {}), legacyProtected: meta.legacy === true && !legacyEnabled })
       }
+      if (!page.nextCursor) return { items, scanned }
+      cursor = page.nextCursor
     }
-
-    // Create new item
-    const id = generateId()
-    let item: ClipboardHistoryItem
-
-    switch (input.kind) {
-      case 'text':
-        item = {
-          id,
-          kind: 'text',
-          hash: input.hash,
-          firstCopiedAt: now,
-          lastCopiedAt: now,
-          copyCount: 1,
-          pasteCount: 0,
-          byteSize: input.byteSize,
-          sourceApp: input.sourceApp,
-          text: input.text,
-          preview: makeTextPreview(input.text),
-        } satisfies ClipboardTextHistoryItem
-        break
-      case 'image':
-        item = {
-          id,
-          kind: 'image',
-          hash: input.hash,
-          firstCopiedAt: now,
-          lastCopiedAt: now,
-          copyCount: 1,
-          pasteCount: 0,
-          byteSize: input.byteSize,
-          sourceApp: input.sourceApp,
-          blobId: input.blobId,
-          previewBlobId: input.previewBlobId,
-          contentType: input.contentType,
-          width: input.width,
-          height: input.height,
-        } satisfies ClipboardImageHistoryItem
-        break
-      case 'files':
-        item = {
-          id,
-          kind: 'files',
-          hash: input.hash,
-          firstCopiedAt: now,
-          lastCopiedAt: now,
-          copyCount: 1,
-          pasteCount: 0,
-          byteSize: input.byteSize,
-          sourceApp: input.sourceApp,
-          paths: input.paths,
-          fileNames: input.fileNames,
-        } satisfies ClipboardFilesHistoryItem
-        break
+    return { items, scanned, nextCursor: cursor }
+  }
+  async function getFreshListItems(ids?: readonly string[]) {
+    await store.ready()
+    if (ids) {
+      if (ids.length > 20) throw new Error('Too many selected history items')
+      const records = await Promise.all(ids.map((id) => storage.kv.get<HistoryMetadata>(META + id)))
+      return indexToListItems({ entries: records.filter((item): item is HistoryMetadata => Boolean(item)), updatedAt: Date.now() })
     }
-
-    await store.saveItem(item)
-
-    // Add to top of index
-    const newEntry: ClipboardHistoryIndexEntry = {
-      id,
-      kind: input.kind,
-      hash: input.hash,
-      lastCopiedAt: now,
-      byteSize: input.byteSize,
-      sourceApp: input.sourceApp,
-      firstCopiedAt: now,
-      copyCount: 1,
-      pasteCount: 0,
-      isFavorite: false,
-      ...(input.kind === 'text' ? { preview: makeTextPreview(input.text) } : {}),
-      ...(input.kind === 'image' ? { contentType: input.contentType, width: input.width, height: input.height, previewBlobId: input.previewBlobId } : {}),
-      ...(input.kind === 'files' ? { fileNames: input.fileNames } : {}),
-    }
-    index.entries.unshift(newEntry)
-    await saveIndexAndCache({ entries: index.entries, updatedAt: now })
-
-    return item
+    const result = await getPage()
+    // Only the first bounded page is cached; mutation notifications invalidate it.
+    setCachedIndex({ entries: result.items.map((item) => metadata(item)), updatedAt: Date.now() })
+    return result.items
   }
-
-  async function getItem(id: string): Promise<ClipboardHistoryItem | undefined> {
-    return store.getItem(id)
+  async function findByHash(hash: string) {
+    await store.ready()
+    const id = await storage.kv.get<string>(hashKey(hash))
+    return id ? getItem(id) : undefined
   }
-
-  async function getAllItems(): Promise<ClipboardHistoryItem[]> {
-    const index = await store.getIndex()
-    const items = await Promise.all(
-      index.entries.map((entry) => store.getItem(entry.id))
-    )
-    return items.filter(Boolean) as ClipboardHistoryItem[]
-  }
-
-  async function getListItems(): Promise<ClipboardHistoryItem[]> {
-    const cached = getCachedIndex()
-    if (cached) return indexToListItems(cached)
-    const index = await store.getIndex()
-    setCachedIndex(index)
-    return indexToListItems(index)
-  }
-
-  async function getFreshListItems(): Promise<ClipboardHistoryItem[]> {
-    const index = await store.getIndex()
-    setCachedIndex(index)
-    return indexToListItems(index)
-  }
-
-  function getListItemsSync(): ClipboardHistoryItem[] | null {
-    const cached = getCachedIndex()
-    if (!cached) return null
-    return indexToListItems(cached)
-  }
-
-  async function recordPaste(id: string): Promise<ClipboardHistoryItem | undefined> {
-    const now = Date.now()
-    return updateItemAndIndex(id, (item) => ({
-      ...item,
-      pasteCount: (item.pasteCount ?? 0) + 1,
-      lastPastedAt: now,
-    }))
-  }
-
-  async function setFavorite(
-    id: string,
-    favorite: boolean,
-    title?: string,
-  ): Promise<ClipboardHistoryItem | undefined> {
-    const now = Date.now()
-    return updateItemAndIndex(id, (item) => {
-      if (!favorite) {
-        const { favoriteTitle: _t, favoritedAt: _a, ...rest } = item
-        return { ...rest, isFavorite: false, favoriteTitle: undefined, favoritedAt: undefined }
+  async function addItem(input: AddItemInput) {
+    const result = await store.mutate(async (state) => {
+      const id = await storage.kv.get<string>(hashKey(input.hash))
+      const prior = id ? await storage.kv.get<HistoryMetadata>(META + id) : undefined
+      const existing = prior ? await storage.kv.get<ClipboardHistoryItem>(ITEM + prior.id) : undefined
+      const now = Date.now()
+      if (prior && existing) {
+        const item = { ...existing, isFavorite: prior.isFavorite, favoriteTitle: prior.favoriteTitle, favoritedAt: prior.favoritedAt, lastCopiedAt: now, copyCount: existing.copyCount + 1, sourceApp: input.sourceApp ?? existing.sourceApp }
+        const meta = metadata(item, { legacy: prior.legacy, retentionStartedAt: prior.retentionStartedAt })
+        const unusedCapture = input.kind === 'image'
+          ? await store.discardUnusedCaptureBlobs([input.blobId, input.previewBlobId], blobIds(prior)) : []
+        return { result: item, operations: [...removeMetadata(prior), { type: 'set', key: ITEM + item.id, value: item }, ...putMetadata(meta), ...unusedCapture] }
       }
-      const trimmed = title?.trim()
-      return {
-        ...item,
-        isFavorite: true,
-        favoritedAt: item.favoritedAt ?? now,
-        favoriteTitle: trimmed ? trimmed : item.favoriteTitle,
-      }
+      const item = { ...input, id: `${now}-${Math.random().toString(36).slice(2, 10)}`, firstCopiedAt: now, lastCopiedAt: now, copyCount: 1, pasteCount: 0, isFavorite: false,
+        ...(input.kind === 'text' ? { preview: makeTextPreview(input.text) } : {}) } as ClipboardHistoryItem
+      const meta = metadata(item)
+      const operations: Operation[] = [{ type: 'set', key: ITEM + item.id, value: item }, ...putMetadata(meta), ...await store.adjustBlobs([{ meta, delta: 1 }])]
+      return { result: item, operations, next: { ...state, active: state.active + 1 } }
     })
+    notify(); return result
   }
-
-  async function updateFavoriteTitle(
-    id: string,
-    title: string,
-  ): Promise<ClipboardHistoryItem | undefined> {
-    return updateItemAndIndex(id, (item) => {
-      if (!item.isFavorite) return item
-      const trimmed = title.trim()
-      return {
-        ...item,
-        favoriteTitle: trimmed || undefined,
+  async function update(id: string, mutate: (item: ClipboardHistoryItem) => ClipboardHistoryItem, current = () => true) {
+    const result = await store.mutate(async () => {
+      const prior = await storage.kv.get<HistoryMetadata>(META + id)
+      const item = prior ? await storage.kv.get<ClipboardHistoryItem>(ITEM + id) : undefined
+      if (!current()) throw new Error('cancelled')
+      if (!item || !prior) return { operations: [], result: undefined }
+      const changed = mutate({ ...item, isFavorite: prior.isFavorite, favoriteTitle: prior.favoriteTitle, favoritedAt: prior.favoritedAt })
+      if (changed.hash !== prior.hash) {
+        const duplicate = await storage.kv.get<string>(hashKey(changed.hash))
+        if (duplicate && duplicate !== id) throw new Error('duplicate')
       }
+      const meta = metadata(changed, { legacy: prior.legacy, retentionStartedAt: prior.retentionStartedAt })
+      return { result: changed, operations: [...removeMetadata(prior), { type: 'set', key: ITEM + id, value: changed }, ...putMetadata(meta)] }
+    }, () => { if (!current()) throw new Error('cancelled') })
+    notify(); return result
+  }
+  async function softDelete(id: string, reason: 'manual' | 'expired', cutoff?: number, signal?: AbortSignal) {
+    const result = await store.mutate(async (state) => {
+      const prior = await storage.kv.get<HistoryMetadata>(META + id)
+      if (!prior) return { result: undefined, operations: [] }
+      if (reason === 'expired' && (prior.isFavorite || (prior.legacy && !state.legacyEnabledAt) || Math.max(prior.lastCopiedAt, prior.retentionStartedAt ?? 0, prior.legacy ? state.legacyEnabledAt ?? 0 : 0) >= (cutoff ?? 0))) return { result: undefined, operations: [] }
+      const now = Date.now()
+      const trash: TrashRecord = { metadata: prior, deletedAt: now, purgeAfter: now + 30 * DAY, reason }
+      return { result: prior, next: { ...state, active: state.active - 1, trash: state.trash + 1, legacy: state.legacy - (prior.legacy ? 1 : 0) },
+        operations: [...removeMetadata(prior), { type: 'set', key: trashKey(trash), value: trash }, { type: 'set', key: TRASH_ID + id, value: trashKey(trash) }] }
+    }, () => requireCurrent(signal))
+    if (result) notify()
+    return result
+  }
+  async function deleteItem(id: string) { await softDelete(id, 'manual') }
+  async function restoreItem(id: string) {
+    const result = await store.mutate(async (state) => {
+      const key = await storage.kv.get<string>(TRASH_ID + id)
+      const trash = key ? await storage.kv.get<TrashRecord>(key) : undefined
+      const body = trash ? await storage.kv.get<ClipboardHistoryItem>(ITEM + id) : undefined
+      if (!trash || !body || !key) return { result: undefined, operations: [] }
+      const duplicate = await storage.kv.get<string>(hashKey(body.hash))
+      if (duplicate && duplicate !== id) throw new Error('duplicate')
+      const meta = { ...trash.metadata, retentionStartedAt: Date.now() }
+      return { result: body, next: { ...state, active: state.active + 1, trash: state.trash - 1, legacy: state.legacy + (meta.legacy ? 1 : 0) },
+        operations: [{ type: 'delete', key }, { type: 'delete', key: TRASH_ID + id }, ...putMetadata(meta)] }
     })
+    notify(); return result
   }
-
-  async function updateText(id: string, expectedText: string, text: string, maxBytes: number, isCurrent: () => boolean): Promise<ClipboardTextHistoryItem> {
-    const index = await store.getIndex()
-    const existing = await store.getItem(id)
-    if (!isCurrent()) throw new Error('cancelled')
-    if (!index.entries.some((entry) => entry.id === id) || existing?.kind !== 'text') throw new Error('missing')
-    if (existing.text !== expectedText) throw new Error('changed')
-    const byteSize = new TextEncoder().encode(text).byteLength
-    if (byteSize > maxBytes) throw new Error('tooLarge')
-    // Same FNV-1a change identity as clipboard.watch's text: payload. This
-    // preserves deduplication when the edited text is later copied externally.
-    let hashValue = 2166136261
-    const payload = `text:${text}`
-    for (let index = 0; index < payload.length; index++) {
-      hashValue ^= payload.charCodeAt(index)
-      hashValue = Math.imul(hashValue, 16777619)
-    }
-    const hash = (hashValue >>> 0).toString(36)
-    if (index.entries.some((entry) => entry.id !== id && entry.hash === hash)) throw new Error('duplicate')
-    const updated = { ...existing, text, hash, byteSize, preview: makeTextPreview(text) }
-    await store.saveItem(updated)
-    try {
-      await saveIndexAndCache({ entries: index.entries.map((entry) => entry.id === id
-        ? { ...entry, hash, byteSize, preview: updated.preview } : entry), updatedAt: Date.now() })
-    } catch (error) {
-      // Keep a failed save retryable when index persistence fails.
-      await store.saveItem(existing)
-      throw error
-    }
-    return updated
+  async function getRetentionStatus(): Promise<HistoryRetentionStatus> {
+    await store.ready()
+    const state = await store.state()
+    const first = await storage.kv.page<TrashRecord>({ prefix: TRASH, limit: 1 })
+    return { legacyProtectedCount: state.legacyEnabledAt ? 0 : state.legacy, trashCount: state.trash, migrationComplete: state.phase === 'complete', hasPurgeable: (first.entries[0]?.value.purgeAfter ?? Infinity) <= Date.now() }
   }
-
-  async function deleteItem(id: string): Promise<void> {
-    const item = await store.getItem(id)
-    if (!item) return
-
-    // Clean up blobs for image items
-    if (item.kind === 'image') {
-      await store.deleteBlob(item.blobId)
-      await store.deleteBlob(item.previewBlobId)
-    }
-
-    await store.deleteItem(id)
-
-    // Remove from index
-    const index = await store.getIndex()
-    const filtered = index.entries.filter((e) => e.id !== id)
-    await saveIndexAndCache({ entries: filtered, updatedAt: Date.now() })
+  async function enableLegacyRetention(months: number) {
+    resolveClipboardHistoryRetentionMonths(months)
+    await store.mutate(async (state) => ({ result: undefined, operations: [], next: { ...state, legacyEnabledAt: state.legacyEnabledAt ?? Date.now() } }))
+    notify()
   }
-
-  async function clearAll(): Promise<void> {
-    const index = await store.getIndex()
-
-    // Clean up blobs for all image items
-    for (const entry of index.entries) {
-      if (entry.kind === 'image') {
-        const item = await store.getItem(entry.id)
-        if (item && item.kind === 'image') {
-          await store.deleteBlob(item.blobId)
-          await store.deleteBlob(item.previewBlobId)
-        }
-      }
+  async function collectBlobGarbage(signal?: AbortSignal) {
+    await store.ready()
+    const page = await storage.kv.page<string>({ prefix: GC, limit: 16 })
+    const removed: string[] = []
+    for (const row of page.entries) {
+      requireCurrent(signal)
+      // GC tombstones were atomically installed with the last-reference removal;
+      // add/restore cannot acquire that ID after this point, including other windows.
+      try { await storage.blob.delete(row.value); await storage.kv.delete(row.key); removed.push(row.value) } catch { /* Retry later; losing a file is worse than delaying cleanup. */ }
     }
-
-    await store.clear()
-    clearCachedIndex()
+    return removed
   }
-
-  async function pruneItems(policy: ClipboardHistoryPrunePolicy): Promise<PruneResult> {
-    const index = await store.getIndex()
-    const now = Date.now()
-    const toRemove: Set<string> = new Set()
-    let removedBytes = 0
-    const removedBlobIds: string[] = []
-
-    // Sort entries by lastCopiedAt descending (newest first) - index is already in this order
-    const entries = [...index.entries]
-
-    const markRemovable = (entry: ClipboardHistoryIndexEntry) => {
-      if (isFavoriteEntry(entry)) return
-      if (toRemove.has(entry.id)) return
-      toRemove.add(entry.id)
-      removedBytes += entry.byteSize
+  async function purgeExpiredTrash(options: { signal?: AbortSignal } = {}): Promise<PruneResult> {
+    await store.ready()
+    const result = emptyPrune()
+    const page = await storage.kv.page<TrashRecord>({ prefix: TRASH, limit: 32 })
+    for (const row of page.entries) {
+      requireCurrent(options.signal)
+      if (row.value.purgeAfter > Date.now()) break
+      const removed = await store.mutate(async (state) => {
+        requireCurrent(options.signal)
+        const trash = await storage.kv.get<TrashRecord>(row.key)
+        if (!trash || trash.purgeAfter > Date.now()) return { result: undefined, operations: [] }
+        const ops = await store.adjustBlobs([{ meta: trash.metadata, delta: -1 }])
+        return { result: trash.metadata, next: { ...state, trash: state.trash - 1 }, operations: [...ops, { type: 'delete', key: row.key }, { type: 'delete', key: TRASH_ID + trash.metadata.id }, { type: 'delete', key: ITEM + trash.metadata.id }] }
+      }, () => requireCurrent(options.signal))
+      if (removed) { result.removedCount++; result.removedBytes += removed.byteSize }
     }
-
-    // Prune by retentionDays
-    if (policy.retentionDays != null && policy.retentionDays > 0) {
-      const cutoff = now - policy.retentionDays * 24 * 60 * 60 * 1000
-      for (const entry of entries) {
-        if (entry.lastCopiedAt < cutoff) {
-          markRemovable(entry)
-        }
-      }
-    }
-
-    // Prune by maxItems (keep newest; favorites always kept)
-    if (policy.maxItems != null && policy.maxItems > 0) {
-      const remaining = entries.filter((e) => !toRemove.has(e.id))
-      if (remaining.length > policy.maxItems) {
-        const excess = remaining.slice(policy.maxItems)
-        for (const entry of excess) {
-          markRemovable(entry)
-        }
-      }
-    }
-
-    // Prune by maxTotalCacheBytes (keep newest; favorites always kept)
-    if (policy.maxTotalCacheBytes != null && policy.maxTotalCacheBytes > 0) {
-      const remaining = entries.filter((e) => !toRemove.has(e.id))
-      let totalBytes = remaining.reduce((sum, e) => sum + e.byteSize, 0)
-      // Remove oldest until under limit
-      for (let i = remaining.length - 1; i >= 0 && totalBytes > policy.maxTotalCacheBytes; i--) {
-        const entry = remaining[i]
-        if (isFavoriteEntry(entry)) continue
-        if (toRemove.has(entry.id)) continue
-        toRemove.add(entry.id)
-        totalBytes -= entry.byteSize
-        removedBytes += entry.byteSize
-      }
-    }
-
-    // Execute removals
-    for (const id of toRemove) {
-      const item = await store.getItem(id)
-      if (item && item.kind === 'image') {
-        removedBlobIds.push(item.blobId, item.previewBlobId)
-        await store.deleteBlob(item.blobId)
-        await store.deleteBlob(item.previewBlobId)
-      }
-      await store.deleteItem(id)
-    }
-
-    // Update index
-    const newEntries = entries.filter((e) => !toRemove.has(e.id))
-    await saveIndexAndCache({ entries: newEntries, updatedAt: now })
-
-    return {
-      removedCount: toRemove.size,
-      removedBytes,
-      removedBlobIds,
-    }
+    result.removedBlobIds = await collectBlobGarbage(options.signal)
+    if (result.removedCount) notify()
+    return result
   }
-
+  async function pruneItems(policy: ClipboardHistoryPrunePolicy, options: { signal?: AbortSignal } = {}): Promise<PruneResult> {
+    await store.ready()
+    const cutoff = historyRetentionCutoff(Date.now(), policy.retentionMonths ?? 3)
+    const result = emptyPrune()
+    const state = await store.state()
+    const cursorKey = ROOT + 'prune-cursor'
+    const cursor = await storage.kv.get<string>(cursorKey)
+    const page = await storage.kv.page<HistoryMetadata>({ prefix: ORDER, after: cursor, limit: 64, order: 'desc' })
+    for (const row of page.entries) {
+      requireCurrent(options.signal)
+      const entry = row.value
+      if (entry.isFavorite || (entry.legacy && !state.legacyEnabledAt) || Math.max(entry.lastCopiedAt, entry.retentionStartedAt ?? 0, entry.legacy ? state.legacyEnabledAt ?? 0 : 0) >= cutoff) continue
+      const removed = await softDelete(entry.id, 'expired', cutoff, options.signal)
+      if (removed) { result.removedCount++; result.removedBytes += removed.byteSize }
+    }
+    requireCurrent(options.signal)
+    if (page.nextCursor) await storage.kv.set(cursorKey, page.nextCursor)
+    else await storage.kv.delete(cursorKey)
+    result.hasMore = Boolean(page.nextCursor)
+    return result
+  }
+  async function clearAll() {
+    // Explicit clear traverses bounded pages and remains recoverable for 30 days.
+    let cursor: string | undefined
+    do {
+      const page = await getPage({ limit: 100, cursor })
+      for (const item of page.items) await deleteItem(item.id)
+      cursor = page.nextCursor
+    } while (cursor)
+  }
+  async function setFavorite(id: string, favorite: boolean, title?: string) {
+    return update(id, (item) => ({ ...item, isFavorite: favorite, favoriteTitle: favorite ? title?.trim() || item.favoriteTitle : undefined, favoritedAt: favorite ? item.favoritedAt ?? Date.now() : undefined }))
+  }
   return {
-    addItem: (input) => withWriteLock(() => addItem(input)),
-    updateText: (id, expectedText, text, maxBytes, isCurrent = () => true) => withWriteLock(() => updateText(id, expectedText, text, maxBytes, isCurrent)),
-    getItem,
-    getAllItems,
-    getListItems,
-    getFreshListItems,
-    getListItemsSync,
-    deleteItem: (id) => withWriteLock(() => deleteItem(id)),
-    clearAll: () => withWriteLock(() => clearAll()),
-    pruneItems: (policy) => withWriteLock(() => pruneItems(policy)),
-    findByHash,
-    recordPaste: (id) => withWriteLock(() => recordPaste(id)),
-    toggleFavorite: (id) => withWriteLock(async () => {
-      const item = await store.getItem(id)
-      return item ? setFavorite(id, !item.isFavorite) : undefined
-    }),
-    setFavorite: (id, favorite, title) => withWriteLock(() => setFavorite(id, favorite, title)),
-    updateFavoriteTitle: (id, title) => withWriteLock(() => updateFavoriteTitle(id, title)),
+    addItem, getItem, getTrashItem, getPage, getRetentionStatus, enableLegacyRetention, restoreItem, purgeExpiredTrash,
+    // Compatibility methods are bounded to one page. Cross-search snapshots pass
+    // their explicit selected IDs, never rely on a global list membership read.
+    getAllItems: () => getFreshListItems(), getListItems: () => getFreshListItems(), getFreshListItems,
+    getListItemsSync: () => { const cached = getCachedIndex(); return cached ? indexToListItems(cached) : null },
+    deleteItem, clearAll, pruneItems, findByHash,
+    recordPaste: (id) => update(id, (item) => ({ ...item, pasteCount: (item.pasteCount ?? 0) + 1, lastPastedAt: Date.now() })),
+    setFavorite,
+    toggleFavorite: (id) => update(id, (item) => ({ ...item, isFavorite: !item.isFavorite, favoritedAt: !item.isFavorite ? Date.now() : undefined, favoriteTitle: !item.isFavorite ? item.favoriteTitle : undefined })),
+    updateFavoriteTitle: (id, title) => update(id, (item) => item.isFavorite ? { ...item, favoriteTitle: title.trim() || undefined } : item),
+    updateText: async (id, expectedText, text, maxBytes, isCurrent = () => true) => {
+      const result = await update(id, (item) => {
+        if (item.kind !== 'text') throw new Error('missing')
+        if (item.text !== expectedText) throw new Error('changed')
+        const byteSize = new TextEncoder().encode(text).byteLength
+        if (byteSize > maxBytes) throw new Error('tooLarge')
+        let hash = 2166136261
+        const payload = `text:${text}`
+        for (let i = 0; i < payload.length; i++) { hash ^= payload.charCodeAt(i); hash = Math.imul(hash, 16777619) }
+        return { ...item, text, byteSize, hash: (hash >>> 0).toString(36), preview: makeTextPreview(text) }
+      }, isCurrent)
+      if (!result || result.kind !== 'text') throw new Error('missing')
+      return result
+    },
   }
 }

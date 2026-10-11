@@ -160,7 +160,7 @@ export async function copyClipboardTextBundle(
     () => {}, (error) => { failure = error }, customSeparator)
   requireCurrent()
   if (!preview) throw new Error(failure?.code ?? 'read-failed')
-  const index = await repository.getFreshListItems()
+  const index = await repository.getFreshListItems(selection.map((item) => item.id))
   requireCurrent()
   if (selection.some((selected) => !index.some((item) => item.id === selected.id && item.kind === 'text' && item.hash === selected.hash))) {
     throw new Error('read-failed')

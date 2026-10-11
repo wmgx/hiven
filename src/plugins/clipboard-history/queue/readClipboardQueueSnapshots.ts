@@ -30,7 +30,7 @@ export async function readClipboardQueueSnapshots(
   requireCurrent()
   const validated = validateQueueSnapshots(snapshots)
   let index
-  try { index = await repository.getFreshListItems() } catch { requireCurrent(); throw new Error('QueueReadError') }
+  try { index = await repository.getFreshListItems(selection.map((item) => item.id)) } catch { requireCurrent(); throw new Error('QueueReadError') }
   requireCurrent()
   if (selected.some(({ id, hash }) => !index.some((item) => item.id === id && item.kind === 'text' && item.hash === hash))) {
     throw new Error('QueueReadError')
