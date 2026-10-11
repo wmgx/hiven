@@ -122,7 +122,8 @@
 }
 
 .csv-tools-surface__statistics {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-height: 0;
   max-height: 130px;
   overflow: auto;
   padding: 7px 12px;
@@ -139,3 +140,22 @@
 }
 .csv-tools-surface__statistics-scope { opacity: 0.75; }
 .csv-tools-surface__statistics summary { cursor: pointer; }
+
+/* Match DataGrid's 36px header and 32px rows, including scrollbars/borders.
+   Statistics yield space before the table loses its first two usable rows. */
+.csv-tools-surface__grid-host {
+  min-height: calc(36px + 2 * 32px + 18px);
+}
+
+.csv-tools-surface__grid-wrap {
+  overflow: auto;
+}
+
+@media (max-width: 760px) and (max-height: 560px) {
+  .csv-tools-surface__control-group {
+    flex: 1 1 auto;
+  }
+  .csv-tools-surface__control-group--transform {
+    flex-basis: 100%;
+  }
+}
