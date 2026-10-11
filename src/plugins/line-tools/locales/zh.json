@@ -140,5 +140,9 @@
   "duplicates.showingOccurrences": "出现位置 {from}–{to}，共 {total} 个",
   "duplicates.showingGroups": "分组 {from}–{to}，共 {total} 组",
   "duplicates.previous": "上一页",
-  "duplicates.next": "下一页"
+  "duplicates.next": "下一页",
+  "cleanAgent.title": "清理 AI 终端文本",
+  "cleanAgent.description": "粘贴 AI CLI 文本，预览去除完整纯线条边框。完整复制结果，保留原文。",
+  "cleanAgent.ascii": "同时拆除完整 ASCII 盒框（+---+ / | |）",
+  "cleanAgent.hint": "默认仅处理完整纯线条 Unicode 盒框。两侧各去除一个边框填充空格，其余空白和管道符保留；残缺、带标题、嵌套、代码围栏内或宽度不确定的框保持原样。"
 }

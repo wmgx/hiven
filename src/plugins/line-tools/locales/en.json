@@ -140,5 +140,9 @@
   "duplicates.showingOccurrences": "Occurrences {from}–{to} of {total}",
   "duplicates.showingGroups": "Groups {from}–{to} of {total}",
   "duplicates.previous": "Previous",
-  "duplicates.next": "Next"
+  "duplicates.next": "Next",
+  "cleanAgent.title": "Clean Agent Text",
+  "cleanAgent.description": "Paste AI CLI text to preview removal of complete plain box borders. Copy the full result; keep the original.",
+  "cleanAgent.ascii": "Also unwrap complete ASCII boxes (+---+ / | |)",
+  "cleanAgent.hint": "Complete plain Unicode boxes only by default. Removes one padding space at each edge; keeps other spacing and pipes. Partial, titled, nested, fenced, and ambiguous-width boxes stay unchanged."
 }

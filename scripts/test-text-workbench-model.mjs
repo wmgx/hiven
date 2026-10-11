@@ -50,7 +50,10 @@ try {
     ['sql-in-number', 'sql-number', 'sqlin.number', {}],
   ]
   assert.deepEqual(lineOperationRoutes.map((route) => route.surfaceId), routes.map(([id]) => id))
-  assert.equal(new Set(operations.map(({ value }) => value)).size, 20)
+  assert.equal(new Set(operations.map(({ value }) => value)).size, 21)
+  assert.equal(getWorkbenchOperation('clean-agent-text'), 'clean-agent-text')
+  assert.equal(ready('╭─────╮\n│ cat │\n╰─────╯', 'clean-agent-text'), 'cat')
+  assert.equal(ready('+-----+\n| cat |\n+-----+', 'clean-agent-text', { cleanAgentAscii: true }), 'cat')
   assert.equal(getWorkbenchOperation('main'), 'trim', 'main keeps its existing initial operation')
   assert.equal(getWorkbenchOperation('unknown'), 'trim')
   assert.equal(getWorkbenchOperation('regex-escape'), 'regex-escape')

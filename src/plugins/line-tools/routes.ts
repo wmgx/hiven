@@ -49,6 +49,7 @@ export const statsRoute: TextToolRoute = {
 
 export const textToolRoutes = [
   ...lineOperationRoutes,
+  { surfaceId: 'clean-agent-text', titleKey: 'cleanAgent.title', group: 'lines', aliases: ['clean agent text', 'clean cli text', 'claude code', 'remove cli borders', '清理AI文本', '清理 AI 文本', '清理终端文本', '去除边框', '清理 Claude Code'] } satisfies TextToolRoute,
   { surfaceId: 'regex-escape', titleKey: 'regexEscape.title', group: 'lines', aliases: ['escape regex', 'regex escape', 'escape regexp', '正则转义', '正则字面量'] } satisfies TextToolRoute,
   { surfaceId: 'find-duplicates', titleKey: 'duplicates.title', group: 'lines', aliases: ['find duplicate lines', 'find duplicates', 'duplicate line numbers', '查重复', '重复行定位', '重复行次数'] } satisfies TextToolRoute,
   ...caseOperationRoutes,

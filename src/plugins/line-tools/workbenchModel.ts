@@ -2,6 +2,7 @@ import { cleanLineList, processLines, findDuplicateLines, duplicateLineReport, t
 import { lineOperationRoutes } from './routes'
 import { escapeRegexPattern } from './escapeRegexPattern'
 import { extractTextList } from './extractTextList'
+import { cleanAgentText } from './cleanAgentText'
 
 export type WorkbenchCategory = 'text' | 'json' | 'url'
 export type WorkbenchOperation =
@@ -9,6 +10,7 @@ export type WorkbenchOperation =
   | 'trim'
   | 'remove-blank'
   | 'clean-list'
+  | 'clean-agent-text'
   | 'json-format'
   | 'json-compact'
   | 'url-encode'
@@ -24,6 +26,7 @@ export type WorkbenchOptions = LineOptions & {
   dedup: boolean
   duplicateIgnoreCase: boolean
   duplicateTrim: boolean
+  cleanAgentAscii?: boolean
 }
 
 export type WorkbenchResult =
@@ -47,6 +50,7 @@ export const WORKBENCH_OPERATIONS: readonly {
   { value: 'remove-blank', category: 'text', label: 'removeBlankLines.title' },
   { value: 'dedup', category: 'text', label: 'dedup.title' },
   { value: 'find-duplicates', category: 'text', label: 'duplicates.title' },
+  { value: 'clean-agent-text', category: 'text', label: 'cleanAgent.title' },
   { value: 'clean-list', category: 'text', label: 'cleanList.title' },
   { value: 'sort', category: 'text', label: 'sort.title' },
   { value: 'reverse', category: 'text', label: 'reverse.title' },
@@ -85,6 +89,7 @@ export const DEFAULT_WORKBENCH_OPTIONS: Readonly<WorkbenchOptions> = {
 }
 
 export function getWorkbenchOperation(surfaceId?: string): WorkbenchOperation {
+  if (surfaceId === 'clean-agent-text') return 'clean-agent-text'
   if (surfaceId === 'regex-escape') return 'regex-escape'
   if (surfaceId === 'find-duplicates') return 'find-duplicates'
   const operation = lineOperationRoutes.find((route) => route.surfaceId === surfaceId)?.operation
@@ -107,6 +112,7 @@ export function evaluateWorkbench(
         const duplicates = findDuplicateLines(inputText, { ignoreCase: options.duplicateIgnoreCase, trim: options.duplicateTrim })
         return { status: 'ready', text: duplicateLineReport(duplicates), duplicates }
       }
+      case 'clean-agent-text': text = cleanAgentText(inputText, options.cleanAgentAscii === true); break
       case 'clean-list': text = cleanLineList(inputText, options); break
       case 'trim': text = processLines('trim-whitespace', inputText, options); break
       case 'remove-blank': text = processLines('remove-blank-lines', inputText, options); break

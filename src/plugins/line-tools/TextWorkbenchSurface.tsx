@@ -213,7 +213,8 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
         if (!isCurrent()) return
         delivery.invalidate()
         host.showMessage(t('toast.copied'), 'success')
-        host.complete()
+        // Cleaning CLI decoration is a preview workflow: keep its original available after copying.
+        if (operation !== 'clean-agent-text') host.complete()
       } else {
         const delivered = await host.paste.pasteText(result.text)
         if (!isCurrent()) return
@@ -304,6 +305,11 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
               {t(`workbench.cleanup.${key}`)}
             </Checkbox>
           )) : null}
+          {operation === 'clean-agent-text' ? (
+            <Checkbox checked={options.cleanAgentAscii === true} onChange={(event) => changeOption('cleanAgentAscii', (event.target as HTMLInputElement).checked)}>
+              {t('cleanAgent.ascii')}
+            </Checkbox>
+          ) : null}
           {operation === 'find-duplicates' ? (
             <>
               <Checkbox checked={options.duplicateIgnoreCase} onChange={(event) => changeOption('duplicateIgnoreCase', (event.target as HTMLInputElement).checked)}>
@@ -325,7 +331,7 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
               <TextInput value={options[key]} aria-label={t(`param.${key}`)} onChange={(event) => changeOption(key, event.currentTarget.value)} />
             </label>
           ))}
-          {!['json-format', 'sort', 'dedup', 'clean-list', 'join', 'prepend', 'append', 'wrap', 'find-duplicates'].includes(operation) ? <span>{t(operation === 'regex-escape' ? 'regexEscape.hint' : operation === 'extract-urls' ? 'extractUrls.hint' : 'option.livePreview')}</span> : null}
+          {!['json-format', 'sort', 'dedup', 'clean-list', 'join', 'prepend', 'append', 'wrap', 'find-duplicates'].includes(operation) ? <span>{t(operation === 'clean-agent-text' ? 'cleanAgent.hint' : operation === 'regex-escape' ? 'regexEscape.hint' : operation === 'extract-urls' ? 'extractUrls.hint' : 'option.livePreview')}</span> : null}
         </div>
       </div>
 

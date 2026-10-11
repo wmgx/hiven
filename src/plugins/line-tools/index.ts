@@ -105,7 +105,7 @@ export const lineToolsPlugin = definePlugin({
       id: `open-${route.surfaceId}`,
       display: {
         title: route.surfaceId === 'line-remove-blank' ? 'route.removeBlankLinesWorkbench' : route.titleKey,
-        subtitle: 'route.open',
+        subtitle: route.surfaceId === 'clean-agent-text' ? 'cleanAgent.description' : 'route.open',
         icon: route.group === 'case' ? 'CaseSensitive' : route.group === 'stats' ? 'ChartBar' : 'ArrowUpDown',
         aliases: route.aliases,
       },
