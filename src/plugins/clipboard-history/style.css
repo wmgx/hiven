@@ -1151,3 +1151,16 @@ body[data-theme='dark'] .clipboard-history-surface {
     flex-wrap: wrap;
   }
 }
+
+.clipboard-history-text-actions { display: flex; gap: 8px; margin-bottom: 8px; }
+.clipboard-history-text-edit { display: flex; flex-direction: column; gap: 10px; min-height: 300px; height: 100%; }
+.clipboard-history-text-edit p { margin: 0; color: var(--hiven-color-text-secondary); font-size: 12px; }
+.clipboard-history-text-edit textarea { flex: 1; min-height: 220px; resize: vertical; padding: 10px; color: inherit; background: var(--hiven-color-bg-primary); border: 1px solid var(--hiven-color-border); border-radius: 6px; font: inherit; white-space: pre; }
+.clipboard-history-text-edit [role="alert"] { color: var(--hiven-color-danger); }
+
+.clipboard-history-queue-status { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; flex-basis: 100%; min-width: 0; }
+.clipboard-history-queue-status > span { overflow-wrap: anywhere; }
+.clipboard-history-queue-status > span + span { color: var(--hiven-color-text-secondary); }
+.clipboard-history-merge-footer-actions { flex-wrap: wrap; }
+
+.clipboard-history-footer:has(.clipboard-history-queue-status) { flex-wrap: wrap; }

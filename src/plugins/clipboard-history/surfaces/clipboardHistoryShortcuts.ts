@@ -13,7 +13,7 @@ export function readClipboardHistoryShortcutFocus(
     withinSurface: target !== null && surface.contains(target),
     nativeButton: Boolean(target?.closest('button') && !target.closest('.clipboard-history-item')),
     // Match the existing Delete/Backspace ownership, including SELECT controls.
-    editing: activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'SELECT',
+    editing: activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'SELECT' || activeElement?.tagName === 'TEXTAREA',
   }
 }
 

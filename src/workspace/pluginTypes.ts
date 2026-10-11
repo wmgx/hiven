@@ -763,7 +763,26 @@ export type PluginSurfaceFeedbackOwner = {
   subscribeInvalidation(listener: () => void): () => void
 }
 
+/** Bundled History only. Session snapshots; never a generic plugin workflow. */
+export type HistoryPasteQueueStatus = {
+  sessionId: string
+  version: number
+  phase: 'idle' | 'ready' | 'failed' | 'completed' | 'cancelled'
+  busy: boolean
+  total: number
+  completed: number
+  remaining: number
+  currentId: string | null
+}
+export type HistoryPasteQueueBridge = {
+  start(snapshots: readonly Readonly<{ id: string; text: string }>[], options?: { signal?: AbortSignal }): Promise<boolean>
+  cancel(): Promise<void>
+  getStatus(): Promise<HistoryPasteQueueStatus>
+  subscribe(listener: (status: HistoryPasteQueueStatus) => void): () => void
+}
+
 export type PluginSurfaceHostApi = {
+  historyPasteQueue?: HistoryPasteQueueBridge
   /** Stable across ordinary renders; revoked on replacement, hide, or session expiry. */
   deliveryFeedbackOwner?: PluginSurfaceFeedbackOwner
   close(): void

@@ -25,14 +25,10 @@ assert.match(
   'clipboard history must hide after paste so its next open captures the current foreground app',
 )
 
-const handlePasteBlock =
-  surface.match(/const handlePaste = useCallback\(async \(item: ClipboardHistoryItem\) => \{[\s\S]*?\n  \}, \[host, t, repository, resetBrowser\]\)/)?.[0] ?? ''
+const handlePasteBlock = surface.slice(surface.indexOf('const handlePaste = useCallback'), surface.indexOf('const resolveFullItem = useCallback'))
 assert.ok(handlePasteBlock, 'ClipboardHistorySurface must define handlePaste')
-assert.match(
-  handlePasteBlock,
-  /if \(\(item\.kind === 'text' && !item\.text\) \|\| \(item\.kind === 'image' && !item\.blobId\) \|\| \(item\.kind === 'files' && item\.paths\.length === 0\)\)[\s\S]*repository\.getItem\(item\.id\)/,
-  'paste must load the full clipboard item before using index-only list data',
-)
+assert.match(handlePasteBlock, /const fullItem = await repository\.getItem\(item\.id\)/,
+  'paste re-reads full data, including already-loaded previews that may have changed or been deleted')
 assert.match(
   handlePasteBlock,
   /fullItem\.kind === 'text'[\s\S]*host\.paste\.pasteText\(fullItem\.text\)/,
@@ -48,11 +44,8 @@ assert.match(
   /fullItem\.kind === 'files'[\s\S]*host\.paste\.pasteFiles\(fullItem\.paths\)/,
   'file clipboard items must paste through host.paste.pasteFiles',
 )
-assert.match(
-  handlePasteBlock,
-  /result\?\.fallback === 'copied'[\s\S]*host\.showMessage\(result\.message, 'info'\)[\s\S]*host\.complete\(\)/,
-  'paste fallback copied results must be surfaced to the user as info',
-)
+assert.match(handlePasteBlock, /if \(!result\?\.ok\)[\s\S]*setPasteNotice/,
+  'failed delivery must retain the history selection and expose the host failure message')
 assert.match(
   handlePasteBlock,
   /recordPaste\(fullItem\.id\)/,
@@ -75,7 +68,7 @@ assert.match(
 )
 assert.match(
   handlePasteBlock,
-  /catch[\s\S]*host\.showMessage\(t\('error\.pasteFailed'\), 'error'\)/,
+  /catch[\s\S]*setPasteNotice\(t\('error\.pasteFailed'\)\)/,
   'paste failures must show a paste failed error instead of closing silently',
 )
 
@@ -83,12 +76,12 @@ assert.match(
 assert.match(surface, /const handleKeyDown = useCallback\(\(e: KeyboardEvent\) => \{/, 'must define handleKeyDown')
 assert.match(
   surface,
-  /e\.key === 'Enter' && \(e\.metaKey \|\| e\.ctrlKey\)[\s\S]*handleReturnToLauncher/,
+  /e\.key === 'Enter' && !e\.altKey && \(e\.metaKey \|\| e\.ctrlKey\)[\s\S]*handleReturnToLauncher/,
   '⌘/Ctrl+Enter must return selected item to launcher as Object Block',
 )
 assert.match(
   surface,
-  /else if \(e\.key === 'Enter'\)[\s\S]*handlePaste\(selectedItem\)/,
+  /else if \(e\.key === 'Enter' && !e\.altKey && !e\.shiftKey\)[\s\S]*handlePaste\(selectedItem\)/,
   'Enter must paste the selected visible item',
 )
 assert.match(

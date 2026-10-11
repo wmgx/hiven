@@ -143,13 +143,13 @@ const handlerCode = compile(`const handler = ${callback.getText(surfaceSource)}`
 function dispatch(key, target, options = {}) {
   const calls = []
   document.activeElement = options.activeElement ?? target
-  const selectedItem = { id: 'selected' }
+  const selectedItem = { id: 'selected', kind: 'text' }
   const context = {
     ...policy, Element, HTMLElement: Element, document,
-    titleDialog: null, combining: false, loading: false, settings: { enabled: true },
+    titleDialog: null, textEdit: null, combining: false, loading: false, settings: { enabled: true },
     selectedItem, selectedId: 'selected', filteredItems: [selectedItem], flatRows: [],
     imeKeyDown: { shouldIgnoreKeyDown: () => false },
-    handlePaste: () => calls.push('paste'), handleReturnToLauncher: () => calls.push('return'),
+    handlePaste: (_item, plain) => calls.push(plain ? 'plainPaste' : 'paste'), toggleQuickFavorite: () => calls.push('favorite'), handleReturnToLauncher: () => calls.push('return'),
     handleDelete: () => calls.push('delete'), handleCopy: () => calls.push('copy'),
     cancelMerge: () => calls.push('cancel-merge'), toggleMergeItem: () => calls.push('toggle-merge'),
     readDomSelectedText: () => '', setSelectedId: () => calls.push('selection'),
@@ -198,3 +198,14 @@ assert.deepEqual(dispatch('Delete', row, { context: { combining: true } }), unto
 assert.deepEqual(dispatch('Escape', search, { context: { combining: true } }), { calls: ['cancel-merge'], prevented: true, stopped: true })
 
 console.log('✓ Clipboard history shortcut eligibility, focus lifecycle and production handler passed')
+
+for (const target of [search, row, list]) {
+  assert.deepEqual(dispatch('Enter', target, { event: { altKey: true } }).calls, ['plainPaste'])
+  assert.deepEqual(dispatch('p', target, { event: { altKey: true, code: 'KeyP' } }).calls, ['favorite'])
+  assert.deepEqual(dispatch('π', target, { event: { altKey: true, code: 'KeyP' } }).calls, ['favorite'], 'macOS Option-produced character still resolves its physical P key')
+}
+assert.deepEqual(dispatch('Enter', search, { event: { altKey: true }, context: { selectedItem: { id: 'image', kind: 'image' } } }).calls, [])
+assert.deepEqual(dispatch('Enter', search, { event: { altKey: true, ctrlKey: true } }).calls, [])
+for (const event of [{ altKey: true }, { altKey: true, code: 'KeyP' }]) {
+  assert.deepEqual(dispatch('Enter', search, { event, context: { textEdit: {} } }), { ...untouched, stopped: true })
+}

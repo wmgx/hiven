@@ -489,9 +489,29 @@ pub(crate) fn restore_and_paste_owned(
     restore_and_paste_checked(target, || attempt.ensure_active())
 }
 
+/// A background hotkey may only paste into its still-focused external target.
+/// Unlike surface delivery it must never reactivate a target the user left.
+pub(crate) fn verify_focused_target(target: &Arc<PasteTarget>) -> PasteResult<()> {
+    ensure_current(target)?;
+    let session = target.captured.session.lock().map_err(error)?;
+    session.ensure_alive(target.captured.window)?;
+    if !session.focused(target.captured.window)? { return Err(error("the foreground target changed")); }
+    Ok(())
+}
+
+pub(crate) fn paste_focused_owned(target: Arc<PasteTarget>, attempt: &crate::paste_recovery::Attempt) -> PasteResult<()> {
+    restore_and_paste_with_policy(target, || attempt.ensure_active(), false)
+}
+
 fn restore_and_paste_checked(
     target: Arc<PasteTarget>,
     check_owner: impl Fn() -> PasteResult<()>,
+) -> PasteResult<()> {
+    restore_and_paste_with_policy(target, check_owner, true)
+}
+
+fn restore_and_paste_with_policy(
+    target: Arc<PasteTarget>, check_owner: impl Fn() -> PasteResult<()>, allow_restore: bool,
 ) -> PasteResult<()> {
     let _paste_lock = PASTE_LOCK.lock().map_err(error)?;
     check_owner()?;
@@ -500,6 +520,7 @@ fn restore_and_paste_checked(
     let session = captured.session.lock().map_err(error)?;
     session.ensure_alive(captured.window)?;
     if !session.focused(captured.window)? {
+        if !allow_restore { return Err(error("the foreground target changed")); }
         check_owner()?;
         session.request_activation(captured.window)?;
     }
@@ -509,6 +530,7 @@ fn restore_and_paste_checked(
         check_owner()?;
         ensure_current(&target)?;
         session.ensure_alive(captured.window)?;
+        if !allow_restore && !session.focused(captured.window)? { return Err(error("the foreground target changed")); }
         if session.focused(captured.window)? && session.keyboard_idle()? {
             let since = focused_since.get_or_insert_with(Instant::now);
             if since.elapsed() >= Duration::from_millis(100) {

@@ -16,6 +16,7 @@ import { createPluginNetwork } from '../../workspace/pluginNetwork'
 import { createPluginAi } from '../../workspace/ai/runtime'
 import { createPluginShell } from '../../workspace/pluginShell'
 import { isCurrentBundledDefinition } from '../../workspace/bundledPluginIdentity'
+import { createHistoryPasteQueueBridge } from '../../historyPasteQueueHandoff'
 import { createHistoryDiffReturnReceipt, prepareHistoryDiffTarget } from '../../historyDiffHandoff'
 import { createPluginSurfaceTextSaver } from '../../workspace/pluginSurfaceTextSave'
 import { acquireLauncherNativeDialogFocus } from '../../workspace/launcherBlurGuard'
@@ -390,6 +391,13 @@ export function PluginSurfaceRenderer({
     })
   }, [target, surfaceState, pasteScope, presentation, pasteOwnerVersion, appSettingsSession, launcherSettingsTarget, launcherSessionId])
 
+  const historyPasteQueue = useMemo(() => target.pluginId === 'clipboard-history'
+    && surfaceState && 'definition' in surfaceState
+    && isCurrentBundledDefinition(target.pluginId, target.source, surfaceState.definition)
+    ? createHistoryPasteQueueBridge({ source: target.source, pluginId: target.pluginId,
+      isCurrent: deliveryFeedbackOwner.isCurrent, subscribeInvalidation: deliveryFeedbackOwner.subscribeInvalidation }) : undefined,
+  [target, surfaceState, deliveryFeedbackOwner])
+
   if (surfaceState.status === 'loading-runtime' || ('target' in surfaceState && surfaceState.target !== target)) {
     return <PluginSurfaceMessage title={t(locale, 'palette.surfaceLoading')} />
   }
@@ -466,6 +474,7 @@ export function PluginSurfaceRenderer({
           permissions={surfaceState.permissions}
           initialText={target.initialText}
           host={{
+            historyPasteQueue,
             compareHistoryTexts: target.pluginId === 'clipboard-history' && isCurrentBundledDefinition(target.pluginId, target.source, surfaceState.definition) ? async (snapshots, options) => {
               const owner = deliveryFeedbackOwner
               if (!owner.isCurrent() || options?.signal?.aborted || historyDiffRef.current) return false

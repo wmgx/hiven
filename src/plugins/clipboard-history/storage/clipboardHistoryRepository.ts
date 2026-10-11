@@ -36,8 +36,10 @@ export type ClipboardHistoryRepository = {
   pruneItems(policy: ClipboardHistoryPrunePolicy): Promise<PruneResult>
   findByHash(hash: string): Promise<ClipboardHistoryItem | undefined>
   recordPaste(id: string): Promise<ClipboardHistoryItem | undefined>
+  toggleFavorite(id: string): Promise<ClipboardHistoryItem | undefined>
   setFavorite(id: string, favorite: boolean, title?: string): Promise<ClipboardHistoryItem | undefined>
   updateFavoriteTitle(id: string, title: string): Promise<ClipboardHistoryItem | undefined>
+  updateText(id: string, expectedText: string, text: string, maxBytes: number, isCurrent?: () => boolean): Promise<ClipboardTextHistoryItem>
 }
 
 function generateId(): string {
@@ -100,6 +102,8 @@ export function indexToListItems(index: ClipboardHistoryIndex): ClipboardHistory
   }).filter(Boolean) as ClipboardHistoryItem[]
 }
 
+let writeTail: Promise<unknown> = Promise.resolve()
+
 export function createClipboardHistoryRepository(storage: PluginPrivateStorageApi): ClipboardHistoryRepository {
   const store: ClipboardHistoryStore = createClipboardHistoryStore(storage)
 
@@ -108,7 +112,6 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
    * so concurrent addItem/prune used to race on read-modify-write of history/index
    * and drop entries (intermittent "clipboard not recorded").
    */
-  let writeTail: Promise<unknown> = Promise.resolve()
   function withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
     const run = writeTail.then(fn, fn)
     writeTail = run.then(
@@ -332,6 +335,37 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
     })
   }
 
+  async function updateText(id: string, expectedText: string, text: string, maxBytes: number, isCurrent: () => boolean): Promise<ClipboardTextHistoryItem> {
+    const index = await store.getIndex()
+    const existing = await store.getItem(id)
+    if (!isCurrent()) throw new Error('cancelled')
+    if (!index.entries.some((entry) => entry.id === id) || existing?.kind !== 'text') throw new Error('missing')
+    if (existing.text !== expectedText) throw new Error('changed')
+    const byteSize = new TextEncoder().encode(text).byteLength
+    if (byteSize > maxBytes) throw new Error('tooLarge')
+    // Same FNV-1a change identity as clipboard.watch's text: payload. This
+    // preserves deduplication when the edited text is later copied externally.
+    let hashValue = 2166136261
+    const payload = `text:${text}`
+    for (let index = 0; index < payload.length; index++) {
+      hashValue ^= payload.charCodeAt(index)
+      hashValue = Math.imul(hashValue, 16777619)
+    }
+    const hash = (hashValue >>> 0).toString(36)
+    if (index.entries.some((entry) => entry.id !== id && entry.hash === hash)) throw new Error('duplicate')
+    const updated = { ...existing, text, hash, byteSize, preview: makeTextPreview(text) }
+    await store.saveItem(updated)
+    try {
+      await saveIndexAndCache({ entries: index.entries.map((entry) => entry.id === id
+        ? { ...entry, hash, byteSize, preview: updated.preview } : entry), updatedAt: Date.now() })
+    } catch (error) {
+      // Keep a failed save retryable when index persistence fails.
+      await store.saveItem(existing)
+      throw error
+    }
+    return updated
+  }
+
   async function deleteItem(id: string): Promise<void> {
     const item = await store.getItem(id)
     if (!item) return
@@ -445,6 +479,7 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
 
   return {
     addItem: (input) => withWriteLock(() => addItem(input)),
+    updateText: (id, expectedText, text, maxBytes, isCurrent = () => true) => withWriteLock(() => updateText(id, expectedText, text, maxBytes, isCurrent)),
     getItem,
     getAllItems,
     getListItems,
@@ -455,6 +490,10 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
     pruneItems: (policy) => withWriteLock(() => pruneItems(policy)),
     findByHash,
     recordPaste: (id) => withWriteLock(() => recordPaste(id)),
+    toggleFavorite: (id) => withWriteLock(async () => {
+      const item = await store.getItem(id)
+      return item ? setFavorite(id, !item.isFavorite) : undefined
+    }),
     setFavorite: (id, favorite, title) => withWriteLock(() => setFavorite(id, favorite, title)),
     updateFavoriteTitle: (id, title) => withWriteLock(() => updateFavoriteTitle(id, title)),
   }

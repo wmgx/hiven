@@ -4,6 +4,7 @@
  */
 
 import { create } from 'zustand'
+import { dismissRoutedToast, routeToast } from './toastRouting'
 
 export type ToastLevel = 'info' | 'success' | 'error' | 'warning'
 
@@ -17,6 +18,10 @@ export interface ToastItem {
   message: string
   level: ToastLevel
   createdAt: number
+  /** Bounded desktop/cross-window delivery lifetime, including persistent toasts. */
+  expiresAt: number
+  /** Host-authored progress only; no user content. */
+  progress?: { completed: number; total: number }
   /** If true, toast will not auto-dismiss */
   persistent?: boolean
   /** Optional action button displayed in the toast */
@@ -31,7 +36,7 @@ interface ToastStore {
 
 export const useToastStore = create<ToastStore>((set) => ({
   toasts: [],
-  addToast: (item) => set((s) => ({ toasts: [...s.toasts, item] })),
+  addToast: (item) => set((s) => ({ toasts: [...s.toasts.filter((toast) => toast.id !== item.id), item] })),
   removeToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
 }))
 
@@ -39,7 +44,7 @@ export const useToastStore = create<ToastStore>((set) => ({
  * Show a toast notification.
  * @param message - The message to display
  * @param level - Toast severity level (default: 'info')
- * @param options - Optional: { durationMs, persistent, action }
+ * @param options - Optional: { durationMs, persistent, action, progress }
  *   - durationMs: auto-dismiss delay (default 3500ms)
  *   - persistent: if true, toast does not auto-dismiss (overrides durationMs)
  *   - action: optional { label, onClick } for an action button in the toast
@@ -48,7 +53,7 @@ export const useToastStore = create<ToastStore>((set) => ({
 export function showToast(
   message: string,
   level: ToastLevel = 'info',
-  options?: number | { durationMs?: number; persistent?: boolean; action?: ToastAction }
+  options?: number | { durationMs?: number; persistent?: boolean; action?: ToastAction; progress?: { completed: number; total: number } }
 ): string {
   const id = `toast-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`
 
@@ -64,8 +69,11 @@ export function showToast(
     action = options.action
   }
 
-  const item: ToastItem = { id, message, level, createdAt: Date.now(), persistent, action }
+  const createdAt = Date.now()
+  const desktopDuration = persistent ? 8000 : Math.min(15000, Math.max(1000, durationMs))
+  const item: ToastItem = { id, message, level, createdAt, expiresAt: createdAt + desktopDuration, persistent, action, progress: typeof options === 'object' ? options.progress : undefined }
   useToastStore.getState().addToast(item)
+  void routeToast(item, (toastId) => useToastStore.getState().removeToast(toastId))
 
   if (!persistent) {
     setTimeout(() => {
@@ -81,4 +89,5 @@ export function showToast(
  */
 export function dismissToast(id: string) {
   useToastStore.getState().removeToast(id)
+  dismissRoutedToast(id)
 }

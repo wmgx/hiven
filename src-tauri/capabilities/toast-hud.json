@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "toast-hud",
+  "description": "Read only transient status HUD events; no clipboard, files, shell or keyboard permissions.",
+  "windows": ["toast-hud"],
+  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
+}

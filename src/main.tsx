@@ -12,7 +12,7 @@ const isNativeTauriRuntime = Boolean((window as unknown as { __TAURI_INTERNALS__
 const windowType = new URLSearchParams(window.location.search).get('window') ?? (isNativeTauriRuntime ? null : 'launcher')
 if (windowType === 'launcher') {
   document.documentElement.dataset.window = 'launcher'
-} else if (windowType === 'plugin-surface' || windowType === 'quick-editor') {
+} else if (windowType === 'plugin-surface' || windowType === 'quick-editor' || windowType === 'toast-hud') {
   document.documentElement.dataset.window = windowType
 }
 
@@ -21,6 +21,7 @@ if (isNativeTauriRuntime) {
 }
 
 async function loadRootComponent(): Promise<ComponentType> {
+  if (windowType === 'toast-hud') return (await import('./components/ToastHud.tsx')).ToastHud
   if (windowType === 'plugin-surface') {
     const mod = await import('./components/PluginSurfaceWindow.tsx')
     return mod.PluginSurfaceWindow
@@ -69,7 +70,7 @@ async function initEditorCapableWindow() {
 }
 
 async function init() {
-  if (windowType === 'plugin-surface') {
+  if (windowType === 'plugin-surface' || windowType === 'toast-hud') {
     await initPluginSurfaceWindow()
     return
   }

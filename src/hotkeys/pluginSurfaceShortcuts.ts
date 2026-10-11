@@ -21,6 +21,9 @@ const currentAccelerators = new Map<string, string>()
 const currentRegistrations = new Map<string, { generation: number }>()
 let syncGeneration = 0
 let syncQueue: Promise<void> = Promise.resolve()
+// Host-owned, bounded lifetime interception of an already registered surface.
+// The host authorizes the plugin/permission before acquiring one.
+const shortcutInterceptors = new Map<string, { accelerator: string; handle: () => Promise<boolean>; pressed: boolean; release?: () => Promise<void> }>()
 
 export function installPluginSurfaceShortcutHotkeys(): () => void {
   if (installed) return () => {}
@@ -151,10 +154,16 @@ async function registerShortcut(
     }
     const registration = { generation }
     await register(accelerator, (event) => {
-      if (!installed || currentRegistrations.get(key) !== registration || registration.generation !== syncGeneration || event.state !== 'Pressed') return
+      if (!installed || currentRegistrations.get(key) !== registration || registration.generation !== syncGeneration) return
       const latest = usePluginSurfaceShortcutStore.getState().shortcuts[key]
       if (!latest || !latest.enabled || normalizeAccelerator(latest.accelerator) !== accelerator) return
-      void openSurfaceForShortcut(shortcut.target)
+      const interceptor = shortcutInterceptors.get(key)
+      if (interceptor && sameAccelerator(interceptor.accelerator, accelerator)) {
+        if (event.state === 'Released') { interceptor.pressed = false; return }
+        if (event.state !== 'Pressed' || interceptor.pressed || interceptor.release) return
+        interceptor.pressed = true
+        void interceptor.handle().then((handled) => { if (!handled) return openSurfaceForShortcut(shortcut.target) }).catch(() => undefined)
+      } else if (event.state === 'Pressed') void openSurfaceForShortcut(shortcut.target)
     })
     currentAccelerators.set(key, accelerator)
     currentRegistrations.set(key, registration)
@@ -275,4 +284,65 @@ function loadGlobalShortcutApi(): Promise<GlobalShortcutApi> {
 
 export function getPluginSurfaceShortcutDebugKey(target: PluginSurfaceOpenTarget): string {
   return pluginSurfaceShortcutKey(target)
+}
+
+
+function sameAccelerator(left: string, right: string): boolean {
+  const mac = /Mac|iPhone|iPad/.test(navigator.platform)
+  const canonical = (value: string) => value.toLowerCase().split('+').map((part) => {
+    if (['cmdorctrl', 'commandorcontrol', 'commandorctrl'].includes(part)) return mac ? 'command' : 'control'
+    if (part === 'ctrl') return 'control'
+    if (part === 'cmd') return 'command'
+    return part.trim()
+  }).sort().join('+')
+  return canonical(left) === canonical(right)
+}
+
+/** Narrow app-composition hook: only an existing permission-approved surface.
+ * It never takes an occupied key from another registrar and never persists a key.
+ */
+export async function acquireSurfaceShortcutInterceptor(
+  target: PluginSurfaceOpenTarget,
+  accelerator: string,
+  handle: () => Promise<boolean>,
+): Promise<() => Promise<void>> {
+  if (!isTauriRuntime() || !installed || !isBindableSurfaceTarget(target) || missingShortcutPermissions(target).length) throw new Error('QueueUnavailableError')
+  await syncQueue
+  const key = pluginSurfaceShortcutKey(target)
+  const previous = shortcutInterceptors.get(key)
+  if (previous?.release) await previous.release()
+  else if (previous) throw new Error('QueueShortcutConflictError')
+  const entry: { accelerator: string; handle: () => Promise<boolean>; pressed: boolean; release?: () => Promise<void> } = { accelerator, handle, pressed: false }
+  const registered = currentAccelerators.get(key)
+  let temporary = false
+  if (!registered || !sameAccelerator(registered, accelerator)) {
+    const { register, isRegistered } = await loadGlobalShortcutApi()
+    if (await isRegistered(accelerator)) throw new Error('QueueShortcutConflictError')
+    await register(accelerator, (event) => {
+      if (shortcutInterceptors.get(key) !== entry || !installed) return
+      if (event.state === 'Released') { entry.pressed = false; return }
+      if (event.state !== 'Pressed' || entry.pressed || entry.release) return
+      entry.pressed = true
+      void handle().catch(() => undefined)
+    })
+    temporary = true
+  }
+  shortcutInterceptors.set(key, entry)
+  let stopped = false
+  let releasing: Promise<void> | null = null
+  const stop = (): Promise<void> => {
+    if (stopped) return Promise.resolve()
+    if (releasing) return releasing
+    // Preserve this exact release capability on failure. A later cancel,
+    // controlled reload recovery, or acquisition can retry only our own key.
+    entry.release = stop
+    releasing = (async () => {
+      if (temporary && !await unregisterAccelerator(accelerator)) throw new Error('QueueShortcutReleaseError')
+      stopped = true
+      if (shortcutInterceptors.get(key) === entry) shortcutInterceptors.delete(key)
+      if (temporary && installed) await enqueueSync().catch(() => undefined)
+    })().finally(() => { releasing = null })
+    return releasing
+  }
+  return stop
 }

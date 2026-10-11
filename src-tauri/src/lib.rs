@@ -29,6 +29,8 @@ mod launcher_resize_state;
 mod plugin_png_export;
 mod host_text_export;
 mod text_material;
+mod toast_hud;
+mod history_paste_queue;
 pub mod desktop_bridge;
 pub mod desktop_capture;
 pub mod hotkeys;
@@ -1403,6 +1405,7 @@ fn attach_paste_window_events(window: &tauri::WebviewWindow) {
             }
         }
         tauri::WindowEvent::CloseRequested { .. } => {
+            toast_hud::invalidate_owner(export_window.app_handle(), &label);
             host_text_export::invalidate_window(&export_window);
             paste_recovery::invalidate_window(&label, Some(instance));
             if label == "launcher" {
@@ -1412,6 +1415,7 @@ fn attach_paste_window_events(window: &tauri::WebviewWindow) {
             }
         }
         tauri::WindowEvent::Destroyed => {
+            toast_hud::invalidate_owner(export_window.app_handle(), &label);
             host_text_export::invalidate_window(&export_window);
             paste_recovery::destroyed(&label, instance);
             if label == "launcher" {
@@ -1936,7 +1940,7 @@ async fn show_plugin_surface_window(
             .webview_windows()
             .into_iter()
             .find(|(window_label, window)| {
-                window_label != &label && window.is_focused().unwrap_or(false)
+                window_label != &label && window_label != "toast-hud" && window.is_focused().unwrap_or(false)
             })
             .map(|(window_label, _)| window_label);
         remember_previous_key_window_label(previous_key_window_label);
@@ -2138,10 +2142,12 @@ fn attach_plugin_surface_window_events(
             );
         }
         tauri::WindowEvent::CloseRequested { .. } => {
+            toast_hud::invalidate_owner(export_window.app_handle(), &label);
             host_text_export::invalidate_window(&export_window);
             paste_recovery::invalidate_window(&label, Some(instance));
         }
         tauri::WindowEvent::Destroyed => {
+            toast_hud::invalidate_owner(export_window.app_handle(), &label);
             host_text_export::invalidate_window(&export_window);
             if !paste_recovery::destroyed(&label, instance) {
                 return;
@@ -8055,6 +8061,16 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            history_paste_queue::history_queue_request,
+            history_paste_queue::history_queue_take,
+            history_paste_queue::history_queue_reply,
+            history_paste_queue::history_queue_publish,
+            history_paste_queue::get_history_queue_availability,
+            history_paste_queue::begin_history_queue_paste,
+            history_paste_queue::paste_history_queue_text,
+            toast_hud::route_toast,
+            toast_hud::hud_ready,
+            toast_hud::dismiss_toast,
             get_config_dir,
             init_config_dir,
             read_scripts_dir,

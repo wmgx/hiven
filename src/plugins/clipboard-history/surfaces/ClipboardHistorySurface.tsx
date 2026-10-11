@@ -45,6 +45,7 @@ import {
   type ClipboardTextMergeSeparator,
 } from '../merge/clipboardTextMerge'
 import { readHistoryCompareSnapshots } from '../merge/clipboardTextCompare'
+import { readClipboardQueueSnapshots } from '../queue/readClipboardQueueSnapshots'
 import { ClipboardTextMergePanel } from './ClipboardTextMergePanel'
 import { getClipboardHistoryMatchContext, getClipboardHistoryMatchSnippet } from './clipboardHistoryMatchContext'
 import {
@@ -66,6 +67,16 @@ type ImageHistoryItem = Extract<ClipboardHistoryItem, { kind: 'image' }>
 type MetaRow = {
   label: string
   value: string
+}
+
+type QueueStatus = Awaited<ReturnType<NonNullable<PluginSurfaceProps<ClipboardHistorySettings>['host']['historyPasteQueue']>['getStatus']>>
+
+type TextEditState = {
+  id: string
+  original: string
+  draft: string
+  busy: boolean
+  error: string | null
 }
 
 type FavoriteTitleDialogState = {
@@ -94,6 +105,30 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const [filter, setFilter] = useState<FilterKind>(() => initialFilter(props.surfaceId))
   const [loading, setLoading] = useState(!hasInitialCache)
   const [fullTextSearchState, setFullTextSearchState] = useState<'idle' | 'loading' | 'error'>('idle')
+  const [textEdit, setTextEdit] = useState<TextEditState | null>(null)
+  const editGeneration = useRef(0)
+  const editInputRef = useRef<HTMLTextAreaElement>(null)
+  const modifierLabel = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌥' : 'Alt+'
+  useEffect(() => {
+    const invalidate = () => {
+      editGeneration.current += 1
+      setTextEdit((current) => current?.busy ? { ...current, busy: false, error: t('edit.error.failed') } : current)
+    }
+    const unsubscribe = host.deliveryFeedbackOwner?.subscribeInvalidation(invalidate)
+    return () => { invalidate(); unsubscribe?.() }
+  }, [host, t])
+  useEffect(() => {
+    if (!textEdit) return
+    editInputRef.current?.focus()
+  }, [textEdit?.id])
+  useLayoutEffect(() => {
+    if (!textEdit) editGeneration.current += 1
+  }, [selectedId, query, filter, textEdit?.id])
+  const reportUnsavedChanges = host.setUnsavedChanges
+  useLayoutEffect(() => {
+    reportUnsavedChanges?.(Boolean(textEdit && (textEdit.busy || textEdit.draft !== textEdit.original)))
+  }, [textEdit, reportUnsavedChanges])
+  useLayoutEffect(() => () => reportUnsavedChanges?.(false), [reportUnsavedChanges])
   const [titleDialog, setTitleDialog] = useState<FavoriteTitleDialogState | null>(null)
   const [shortcutFocus, setShortcutFocus] = useState<ClipboardHistoryShortcutFocus>({
     withinSurface: false, nativeButton: false, editing: false,
@@ -125,6 +160,31 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const [comparing, setComparing] = useState(false)
   const [compareBusy, setCompareBusy] = useState(false)
   const [compareNotice, setCompareNotice] = useState<string | null>(null)
+  const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null)
+  const [queueBusy, setQueueBusy] = useState(false)
+  const [queueCancelling, setQueueCancelling] = useState(false)
+  const [queueNotice, setQueueNotice] = useState<string | null>(null)
+  const queueSubmissionRef = useRef<AbortController | null>(null)
+  const queueStatusEpochRef = useRef(0)
+  const queueShortcut = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌃⇧V' : 'Ctrl+Shift+V'
+  const queueApi = host.historyPasteQueue
+  useEffect(() => {
+    if (!queueApi) return
+    let active = true
+    let observed = false
+    const unsubscribe = queueApi.subscribe((status) => {
+      observed = true
+      queueStatusEpochRef.current += 1
+      if (active) {
+        setQueueStatus(status)
+        if (status.busy || status.completed > 0 || status.phase === 'failed' || status.phase === 'cancelled') setQueueNotice(null)
+      }
+    })
+    void Promise.resolve(queueApi.getStatus()).then((status) => {
+      if (active && !observed) setQueueStatus(status)
+    }).catch(() => { if (active) setQueueNotice(t('queue.statusFailed')) })
+    return () => { active = false; unsubscribe() }
+  }, [queueApi, t])
   const compareSubmissionRef = useRef<AbortController | null>(null)
   const mergeSubmissionRef = useRef<AbortController | null>(null)
 
@@ -135,6 +195,10 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
 
   const invalidateMerge = useCallback((cancelSubmission = true) => {
     if (cancelSubmission) {
+      queueSubmissionRef.current?.abort()
+      queueSubmissionRef.current = null
+      setQueueBusy(false)
+      setQueueNotice(null)
       compareSubmissionRef.current?.abort()
       compareSubmissionRef.current = null
       setCompareBusy(false)
@@ -222,6 +286,8 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }, [settings.enabled, cancelMerge])
 
   useEffect(() => () => {
+    queueSubmissionRef.current?.abort()
+    queueSubmissionRef.current = null
     compareSubmissionRef.current?.abort()
     compareSubmissionRef.current = null
     mergeSubmissionRef.current?.abort()
@@ -235,7 +301,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       mergeSuspendedRef.current = true
       // Showing Launcher blurs this window. Keep the submitted preview until its
       // receipt arrives; explicit draft edits/cancel still revoke the submission.
-      if (!mergeSubmissionRef.current && !compareSubmissionRef.current) {
+      if (!mergeSubmissionRef.current && !compareSubmissionRef.current && !queueSubmissionRef.current) {
         invalidateMerge(false)
         setMergeLoading(false)
       }
@@ -265,7 +331,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }, [combining, invalidateMerge])
 
   const continueMerge = useCallback(async () => {
-    if (mergeSubmissionRef.current || !settings.enabled || !combining || mergeSuspended || mergeSuspendedRef.current || !mergePreview || !mergeReader.isCurrent(mergePreview)) return
+    if (queueSubmissionRef.current || compareSubmissionRef.current || mergeSubmissionRef.current || !settings.enabled || !combining || mergeSuspended || mergeSuspendedRef.current || !mergePreview || !mergeReader.isCurrent(mergePreview)) return
     const text = mergePreview.text
     const submission = new AbortController()
     mergeSubmissionRef.current = submission
@@ -289,7 +355,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }, [settings.enabled, combining, mergePreview, mergeReader, host, cancelMerge, t, mergeSuspended])
 
   const compareHistory = useCallback(async () => {
-    if (compareSubmissionRef.current || mergeSubmissionRef.current || mergeIds.length !== 2 || !settings.enabled || !host.compareHistoryTexts) return
+    if (queueSubmissionRef.current || compareSubmissionRef.current || mergeSubmissionRef.current || mergeIds.length !== 2 || !settings.enabled || !host.compareHistoryTexts) return
     const submission = new AbortController()
     compareSubmissionRef.current = submission
     const owner = host.deliveryFeedbackOwner
@@ -321,6 +387,65 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       }
     }
   }, [mergeIds, settings.enabled, host, repository, t])
+
+  const startQueue = useCallback(async () => {
+    if (!queueApi || queueSubmissionRef.current || compareSubmissionRef.current || mergeSubmissionRef.current || !settings.enabled || !combining || mergeSuspendedRef.current || mergeIds.length === 0) return
+    const submission = new AbortController()
+    queueSubmissionRef.current = submission
+    const owner = host.deliveryFeedbackOwner
+    const isCurrent = () => queueSubmissionRef.current === submission && !submission.signal.aborted && owner?.isCurrent() !== false
+    const unsubscribe = owner?.subscribeInvalidation(() => submission.abort())
+    setQueueBusy(true)
+    setQueueNotice(null)
+    try {
+      const selection = mergeIds.map((id) => ({ id, hash: mergeItemsRef.current.get(id)?.hash ?? '' }))
+      const snapshots = await readClipboardQueueSnapshots(repository, selection, isCurrent)
+      if (!isCurrent()) return
+      const accepted = await queueApi.start(snapshots, { signal: submission.signal })
+      if (!isCurrent()) return
+      if (accepted) {
+        const epoch = queueStatusEpochRef.current
+        const status = await queueApi.getStatus()
+        if (isCurrent() && epoch === queueStatusEpochRef.current) {
+          setQueueStatus(status)
+          if (status.phase === 'ready' && status.completed === 0 && !status.busy) setQueueNotice(t('queue.ready', { shortcut: queueShortcut }))
+        }
+      } else setQueueNotice(t('queue.startFailed'))
+    } catch (error) {
+      if (isCurrent()) {
+        const message = error instanceof Error ? error.message : ''
+        const key = message === 'QueueSizeError' ? 'queue.tooLarge'
+          : message === 'QueuePlatformUnavailableError' ? 'queue.platformUnavailable'
+          : message === 'QueueShortcutConflictError' ? 'queue.shortcutConflict'
+          : 'queue.startFailed'
+        setQueueNotice(t(key, { shortcut: queueShortcut }))
+      }
+    } finally {
+      unsubscribe?.()
+      if (queueSubmissionRef.current === submission) {
+        queueSubmissionRef.current = null
+        setQueueBusy(false)
+      }
+    }
+  }, [queueApi, settings.enabled, combining, mergeIds, repository, host, t, queueShortcut])
+
+  const cancelQueue = useCallback(async () => {
+    if (!queueApi || queueCancelling) return
+    queueSubmissionRef.current?.abort()
+    queueSubmissionRef.current = null
+    setQueueBusy(false)
+    setQueueCancelling(true)
+    setQueueNotice(null)
+    const owner = host.deliveryFeedbackOwner
+    const isCurrent = () => owner?.isCurrent() !== false
+    try {
+      await queueApi.cancel()
+      const epoch = queueStatusEpochRef.current
+      const status = await queueApi.getStatus()
+      if (isCurrent() && epoch === queueStatusEpochRef.current) setQueueStatus(status)
+    } catch { if (isCurrent()) setQueueNotice(t('queue.cancelFailed')) }
+    finally { setQueueCancelling(false) }
+  }, [queueApi, queueCancelling, host, t])
 
   const applyListItems = useCallback((listItems: ClipboardHistoryItem[]) => {
     setItems((current) => {
@@ -491,7 +616,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     hasSelection: Boolean(selectedItem),
     loading,
     enabled: settings.enabled,
-    blocked: combining || Boolean(titleDialog),
+    blocked: combining || Boolean(titleDialog) || Boolean(textEdit),
     focus: shortcutFocus,
   })
 
@@ -560,20 +685,16 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     overscan: 8,
   })
 
-  const handlePaste = useCallback(async (item: ClipboardHistoryItem) => {
-    if (combining) return
+  const handlePaste = useCallback(async (item: ClipboardHistoryItem, plainTextOnly = false) => {
+    if (combining || textEdit || (plainTextOnly && item.kind !== 'text')) return
     const generation = ++pasteNoticeGenerationRef.current
     setPasteNotice(null)
     try {
-      // For list items from index, load full item for paste
-      let fullItem = item
-      if ((item.kind === 'text' && !item.text) || (item.kind === 'image' && !item.blobId) || (item.kind === 'files' && item.paths.length === 0)) {
-        const loaded = await repository.getItem(item.id)
-        if (!loaded) {
-          if (generation === pasteNoticeGenerationRef.current) setPasteNotice(t('error.pasteFailed'))
-          return
-        }
-        fullItem = loaded
+      // Always re-read: a loaded preview can have been edited or deleted elsewhere.
+      const fullItem = await repository.getItem(item.id)
+      if (!fullItem) {
+        if (generation === pasteNoticeGenerationRef.current) setPasteNotice(t('error.pasteFailed'))
+        return
       }
       if (generation !== pasteNoticeGenerationRef.current) return
 
@@ -598,7 +719,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     } catch {
       if (generation === pasteNoticeGenerationRef.current) setPasteNotice(t('error.pasteFailed'))
     }
-  }, [host, t, repository, resetBrowser, combining])
+  }, [host, t, repository, resetBrowser, combining, textEdit])
 
   const resolveFullItem = useCallback(async (item: ClipboardHistoryItem) => {
     if ((item.kind === 'text' && !item.text) || (item.kind === 'image' && !item.blobId) || (item.kind === 'files' && item.paths.length === 0)) {
@@ -639,8 +760,8 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         if (entry.kind === 'text' && updated.kind === 'text') {
           return {
             ...updated,
-            text: updated.text || entry.text,
-            preview: updated.preview || entry.preview,
+            text: updated.text,
+            preview: updated.preview,
           }
         }
         if (entry.kind === 'image' && updated.kind === 'image') {
@@ -662,6 +783,46 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     )
     setSelectedFullItem((current) => (current?.id === updated.id ? updated : current))
   }, [])
+
+  const openTextEdit = useCallback(async (item: ClipboardHistoryItem) => {
+    if (item.kind !== 'text' || textEdit) return
+    const generation = ++editGeneration.current
+    pasteNoticeGenerationRef.current += 1
+    try {
+      const full = await repository.getItem(item.id)
+      if (generation !== editGeneration.current || host.deliveryFeedbackOwner?.isCurrent() === false) return
+      if (full?.kind !== 'text') throw new Error('missing')
+      setTextEdit({ id: full.id, original: full.text, draft: full.text, busy: false, error: null })
+    } catch {
+      if (generation === editGeneration.current) setPasteNotice(t('edit.error.missing'))
+    }
+  }, [repository, host, textEdit, t])
+
+  const saveTextEdit = useCallback(async () => {
+    if (!textEdit || textEdit.busy || host.deliveryFeedbackOwner?.isCurrent() === false) return
+    const generation = ++editGeneration.current
+    setTextEdit({ ...textEdit, busy: true, error: null })
+    try {
+      const updated = await repository.updateText(textEdit.id, textEdit.original, textEdit.draft, settings.maxTextBytes, () => generation === editGeneration.current && host.deliveryFeedbackOwner?.isCurrent() !== false)
+      if (generation !== editGeneration.current || host.deliveryFeedbackOwner?.isCurrent() === false) return
+      applyItemUpdate(updated)
+      setTextEdit(null)
+      setPasteNotice(t('edit.saved'))
+      requestAnimationFrame(() => searchRef.current?.focus())
+    } catch (error) {
+      if (generation !== editGeneration.current) return
+      const code = error instanceof Error && ['missing', 'changed', 'tooLarge', 'duplicate'].includes(error.message) ? error.message : 'failed'
+      setTextEdit({ ...textEdit, busy: false, error: t(`edit.error.${code}`) })
+    }
+  }, [textEdit, repository, settings.maxTextBytes, applyItemUpdate, host, t])
+
+  const toggleQuickFavorite = useCallback(async (item: ClipboardHistoryItem) => {
+    try {
+      const updated = await repository.toggleFavorite(item.id)
+      if (updated) applyItemUpdate(updated)
+      else setPasteNotice(t('error.favoriteFailed'))
+    } catch { setPasteNotice(t('error.favoriteFailed')) }
+  }, [repository, applyItemUpdate, t])
 
   const openFavoriteTitleDialog = useCallback((item: ClipboardHistoryItem, mode: 'create' | 'edit') => {
     const fallback =
@@ -761,9 +922,13 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
 
   const itemContextMenuItems = useCallback((item: ClipboardHistoryItem): MenuItemSpec[] => [
     { key: 'paste', label: t('action.paste'), onSelect: () => void handlePaste(item) },
+    ...(item.kind === 'text' ? [
+      { key: 'plainPaste', label: t('action.pastePlain'), onSelect: () => void handlePaste(item, true) },
+      { key: 'editText', label: t('edit.action'), onSelect: () => void openTextEdit(item) },
+    ] : []),
     { key: 'copy', label: t('action.copy'), onSelect: () => void handleCopy(item) },
     { key: 'delete', label: t('action.delete'), danger: true, onSelect: () => handleDelete(item.id) },
-  ], [handlePaste, handleCopy, handleDelete, t])
+  ], [handlePaste, handleCopy, handleDelete, openTextEdit, t])
 
   const handleReturnToLauncher = useCallback(async (item: ClipboardHistoryItem) => {
     pasteNoticeGenerationRef.current += 1
@@ -828,6 +993,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.defaultPrevented || titleDialog) return
+    if (textEdit) { e.stopPropagation(); return }
     if (combining) {
       if (imeKeyDown.shouldIgnoreKeyDown(e)) return
       if (e.key === 'Escape') {
@@ -855,15 +1021,23 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       hasSelection: true,
       loading,
       enabled: settings.enabled,
-      blocked: combining || Boolean(titleDialog),
+      blocked: combining || Boolean(titleDialog) || Boolean(textEdit),
       focus,
     })
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+    if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.code === 'KeyP' || e.key.toLowerCase() === 'p')) {
+      if (!shortcuts.paste || imeKeyDown.shouldIgnoreKeyDown(e)) return
+      e.preventDefault()
+      void toggleQuickFavorite(selectedItem)
+    } else if (e.key === 'Enter' && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+      if (!shortcuts.paste || imeKeyDown.shouldIgnoreKeyDown(e)) return
+      e.preventDefault()
+      if (selectedItem.kind === 'text') void handlePaste(selectedItem, true)
+    } else if (e.key === 'Enter' && !e.altKey && (e.metaKey || e.ctrlKey)) {
       if (!shortcuts.returnToLauncher) return
       if (imeKeyDown.shouldIgnoreKeyDown(e)) return
       e.preventDefault()
       void handleReturnToLauncher(selectedItem)
-    } else if (e.key === 'Enter') {
+    } else if (e.key === 'Enter' && !e.altKey && !e.shiftKey) {
       if (!shortcuts.paste) return
       if (imeKeyDown.shouldIgnoreKeyDown(e)) return
       e.preventDefault()
@@ -901,13 +1075,32 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         if (flatIndex >= 0) virtualizer.scrollToIndex(flatIndex, { align: 'auto' })
       }
     }
-  }, [selectedItem, selectedId, filteredItems, flatRows, virtualizer, handlePaste, handleReturnToLauncher, handleDelete, handleCopy, host, t, imeKeyDown, combining, cancelMerge, toggleMergeItem, titleDialog, loading, settings.enabled])
+  }, [selectedItem, selectedId, filteredItems, flatRows, virtualizer, handlePaste, handleReturnToLauncher, handleDelete, handleCopy, host, t, imeKeyDown, combining, cancelMerge, toggleMergeItem, titleDialog, textEdit, toggleQuickFavorite, loading, settings.enabled])
+
+  const queueActive = Boolean(queueStatus && queueStatus.remaining > 0 && (queueStatus.phase === 'ready' || queueStatus.phase === 'failed'))
+  const queueFeedback = queueApi && (queueNotice || queueActive || queueStatus?.phase === 'completed' || queueStatus?.phase === 'cancelled') ? (
+    <div className="clipboard-history-queue-status">
+      <span role="status">
+        {queueNotice || (queueStatus?.phase === 'cancelled' ? t('queue.cancelled') : queueStatus?.phase === 'completed' ? t('queue.completed') : queueStatus?.phase === 'failed' ? t('queue.failed', { shortcut: queueShortcut, position: (queueStatus?.completed ?? 0) + 1, remaining: queueStatus?.remaining ?? 0 }) : t('queue.progress', {
+          position: (queueStatus?.completed ?? 0) + 1,
+          total: queueStatus?.total ?? 0,
+          remaining: queueStatus?.remaining ?? 0,
+          shortcut: queueShortcut,
+        }))}
+      </span>
+      {queueActive && <>
+        <span>{t('queue.snapshot')}</span>
+        <Button type="button" disabled={queueCancelling} onClick={() => void cancelQueue()}>{t('queue.cancel')}</Button>
+        <Button type="button" disabled={queueBusy || Boolean(textEdit)} onClick={() => host.close()}>{t('queue.returnExternal')}</Button>
+      </>}
+    </div>
+  ) : null
 
   const renderContent = () => {
     if (loading) {
       return (
         <div className="clipboard-history-main">
-          <div className="clipboard-history-list-pane">
+          <div className="clipboard-history-list-pane" {...(textEdit ? { inert: true } : {})}>
             <div className="clipboard-history-list-toolbar">
               <div className="clipboard-history-skeleton-bar clipboard-history-skeleton-filter" />
             </div>
@@ -939,7 +1132,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     return (
       <>
         <div className="clipboard-history-main">
-          <div className="clipboard-history-list-pane">
+          <div className="clipboard-history-list-pane" {...(textEdit ? { inert: true } : {})}>
             <div className="clipboard-history-list-toolbar">
               {combining ? (
                 <div className="clipboard-history-merge-instruction">
@@ -950,7 +1143,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                 className="clipboard-history-filter"
                 value={filter}
                 onChange={(value) => setFilter(value as FilterKind)}
-                disabled={loading || !settings.enabled}
+                disabled={loading || !settings.enabled || Boolean(textEdit)}
                 aria-label={t('filter.label')}
                 options={[
                   { value: 'all', label: t('filter.all') },
@@ -1054,16 +1247,34 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
               }}
             />
           ) : <ContextMenu
-            disabled={!selectedItem}
+            disabled={!selectedItem || Boolean(textEdit)}
             items={previewItem ? itemContextMenuItems(previewItem) : []}
             trigger={
               <SurfacePreview className="clipboard-history-preview" data-launcher-scrollable>
-                {!previewItem ? (
+                {textEdit ? (
+                  <div className="clipboard-history-text-edit">
+                    <strong>{t('edit.title')}</strong>
+                    <p>{t('edit.description')}</p>
+                    <textarea ref={editInputRef} aria-label={t('edit.title')} value={textEdit.draft}
+                      disabled={textEdit.busy} spellCheck={false}
+                      onChange={(event) => setTextEdit({ ...textEdit, draft: event.target.value, error: null })}
+                      onCompositionStart={imeKeyDown.onCompositionStart} onCompositionEnd={imeKeyDown.onCompositionEnd} />
+                    {textEdit.error && <p role="alert">{textEdit.error}</p>}
+                    <div className="clipboard-history-title-dialog-actions">
+                      <Button type="button" disabled={textEdit.busy} onClick={() => void saveTextEdit()}>{t(textEdit.busy ? 'edit.saving' : 'edit.save')}</Button>
+                      <Button type="button" disabled={textEdit.busy} onClick={() => { editGeneration.current += 1; setTextEdit(null); requestAnimationFrame(() => searchRef.current?.focus()) }}>{t('action.cancel')}</Button>
+                    </div>
+                  </div>
+                ) : !previewItem ? (
                   <SurfaceEmptyState>
                     {t('preview.empty')}
                   </SurfaceEmptyState>
                 ) : (
                   <>
+                    {previewItem.kind === 'text' && <div className="clipboard-history-text-actions">
+                      <ToolbarButton type="button" onClick={() => void openTextEdit(previewItem)}>{t('edit.action')}</ToolbarButton>
+                      <ToolbarButton type="button" onClick={() => void handlePaste(previewItem, true)}>{t('action.pastePlain')}</ToolbarButton>
+                    </div>}
                     <ClipboardHistoryPreviewContent item={previewItem} query={query} t={t} storage={host.storage} />
                     {previewItem.isFavorite && (
                       <div className="clipboard-history-favorite-title-bar">
@@ -1087,8 +1298,11 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         </div>
 
         {!combining && <SurfaceFooterHints className="clipboard-history-footer">
+          {queueFeedback}
           {pasteNotice ? <span role="status" style={{ color: 'var(--text-1, var(--hiven-color-text-primary))' }}>{pasteNotice}</span> : <>
             {shortcutHints.paste && <span>↵ {t('hint.paste')}</span>}
+            {shortcutHints.paste && selectedItem?.kind === 'text' && <span>{modifierLabel}↵ {t('hint.pastePlain')}</span>}
+            {shortcutHints.paste && <span>{modifierLabel}P {t('hint.favorite')}</span>}
             {shortcutHints.returnToLauncher && <span>{typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'}↵ {t('hint.returnToLauncher')}</span>}
             {shortcutHints.delete && <span>⌫ {t('hint.delete')}</span>}
           </>}
@@ -1114,6 +1328,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         {!combining && <IconButton
           type="button"
           label={t('action.back')}
+          disabled={Boolean(textEdit)}
           onClick={() => {
             setQuery('')
             host.requestBack()
@@ -1129,17 +1344,17 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
           onCompositionStart={imeKeyDown.onCompositionStart}
           onCompositionEnd={imeKeyDown.onCompositionEnd}
           placeholder={t('search.placeholder')}
-          disabled={loading || !settings.enabled}
+          disabled={loading || !settings.enabled || Boolean(textEdit)}
         />
         {!combining && settings.enabled && !loading && (
-          <Button type="button" onClick={startMerge}>
+          <Button type="button" disabled={Boolean(textEdit)} onClick={startMerge}>
             {t('merge.start')}
           </Button>
         )}
         {!combining && <Button
           type="button"
           variant="primary"
-          disabled={!selectedItem || loading || !settings.enabled}
+          disabled={!selectedItem || loading || !settings.enabled || Boolean(textEdit)}
           onClick={() => selectedItem && void handlePaste(selectedItem)}
         >
           {t('action.paste')}
@@ -1147,6 +1362,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         {!combining && <IconButton
           type="button"
           label={t('action.openSettings')}
+          disabled={Boolean(textEdit)}
           onClick={() => host.openSettings({ preserveSurface: true })}
         >
           <SettingsIcon size={17} />
@@ -1154,6 +1370,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         {!combining && <IconButton
           type="button"
           label={t('action.close')}
+          disabled={Boolean(textEdit)}
           onClick={() => {
             mergeReader.invalidate()
             setQuery('')
@@ -1168,19 +1385,23 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
 
       {combining && (
         <SurfaceFooterHints className="clipboard-history-footer clipboard-history-merge-footer">
+          {queueFeedback}
           <div className="clipboard-history-merge-footer-hints">
             {compareNotice ? <span role="status">{compareNotice}</span> : <span>↵ {t('merge.toggleSelection')}</span>}
             <span>Esc {t('merge.cancel')}</span>
           </div>
           <div className="clipboard-history-merge-footer-actions">
             <Button type="button" onClick={cancelMerge}>{t('merge.cancel')}</Button>
-            <Button type="button" disabled={mergeIds.length !== 2 || compareBusy || mergeLoading || mergeSuspended || !settings.enabled || !host.compareHistoryTexts} onClick={() => void compareHistory()}>
+            <Button type="button" disabled={queueBusy || mergeIds.length !== 2 || compareBusy || mergeLoading || mergeSuspended || !settings.enabled || !host.compareHistoryTexts} onClick={() => void compareHistory()}>
               {t(compareBusy ? 'compare.loading' : 'compare.action')}
             </Button>
+            {queueApi && <Button type="button" title={t('queue.platformHint')} disabled={queueBusy || queueCancelling || mergeIds.length === 0 || compareBusy || mergeSuspended || !settings.enabled} onClick={() => void startQueue()}>
+              {t(queueBusy ? 'queue.starting' : queueActive ? 'queue.replace' : 'queue.start')}
+            </Button>}
             <Button
               type="button"
               variant="primary"
-              disabled={!mergePreview || mergeLoading || compareBusy || mergeSuspended || !settings.enabled}
+              disabled={queueBusy || !mergePreview || mergeLoading || compareBusy || mergeSuspended || !settings.enabled}
               onClick={continueMerge}
             >
               {t('merge.continue')}

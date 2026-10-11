@@ -42,6 +42,7 @@ function buildBackgroundContext(
   pluginId: string,
   settings: unknown,
   requestedPermissions: readonly PluginPermission[],
+  isCurrent: () => boolean,
 ): PluginBackgroundContext<unknown> {
   const locale = useAppStore.getState().locale
   const permissions = getPluginPermissionSnapshot(source, pluginId, requestedPermissions)
@@ -60,7 +61,7 @@ function buildBackgroundContext(
     ai: createPluginAi(pluginId, source, permissions),
     t: makePluginT(pluginId, locale),
     showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error') {
-      showToast(message, level ?? 'info')
+      if (isCurrent()) showToast(message, level ?? 'info')
     },
   }
 }
@@ -96,7 +97,7 @@ async function startBackground(
     return
   }
 
-  const ctx = buildBackgroundContext(source, pluginId, settings, requestedPermissions)
+  const ctx = buildBackgroundContext(source, pluginId, settings, requestedPermissions, () => activeBackgrounds.get(key) === instance)
 
   try {
     const stopFn = await background.start(ctx)

@@ -1,0 +1,27 @@
+html[data-window='toast-hud'], html[data-window='toast-hud'] body, html[data-window='toast-hud'] #root {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  pointer-events: none;
+}
+.toast-hud {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 100%;
+  padding: 12px 16px;
+  background: var(--color-background-primary, #202124);
+  color: var(--color-text-primary, #f5f5f5);
+  border: 1px solid var(--color-border-secondary, #555);
+  border-radius: 12px;
+  font: 13px/1.4 var(--font-sans);
+}
+.toast-hud small { display: block; font-size: 10px; opacity: .6; }
+.toast-hud strong { display: block; font-size: 14px; }
+.toast-hud p { margin: 4px 0 0; font-size: 11px; opacity: .75; }
+.toast-hud__icon { font-size: 22px; color: var(--accent, #8baaff); }
+.toast-hud[data-level='error'] .toast-hud__icon { color: var(--color-error, #f87171); }
+.toast-hud[data-level='warning'] .toast-hud__icon { color: #d99b35; }

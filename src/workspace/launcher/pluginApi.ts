@@ -169,6 +169,7 @@ export function createPluginAppsApi(options: PluginLauncherApiOptions = {}): Plu
 }
 
 export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}): PluginLauncherApi {
+  const notificationOwner = options.pasteOwnerSource?.capture()
   return {
     getActiveText: () => readActiveText(),
     getSelectionText: () => readSelectionText(),
@@ -230,7 +231,7 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
       return { applied: [], errors: ['dispatchEffects is only available in the editor window'] }
     },
     showMessage: (message: string, level = 'info') => {
-      showToast(message, level)
+      if (notificationOwner?.isCurrent() !== false) showToast(message, level)
     },
     openDiffPage: (payload) => {
       openLauncherHostedPluginSurface(createDiffPageTarget(payload))

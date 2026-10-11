@@ -673,7 +673,7 @@ export function GlobalLauncherHost() {
       ...queryTelemetryProps(inputRef.current?.value ?? query),
     })
     resetLauncherSession()
-    void closeGlobalLauncherWindow({
+    return closeGlobalLauncherWindow({
       standaloneLauncher,
       overlay,
       hideOverlayWindow: !completed,
@@ -873,8 +873,16 @@ export function GlobalLauncherHost() {
     })
     if (!result || generation !== deliveryGenerationRef.current || !scope.isCurrent()) return
     if (!result.ok) { if (result.message) setDeliveryFailure({ message: result.message, isCurrent: scope.isCurrent }) }
-    else closeLauncherAfterAction()
-  }, [closeLauncherAfterAction, pastePreviewText])
+    else {
+      const closing = closeLauncherAfterAction()
+      const closedSession = useAppStore.getState().globalLauncherSessionId + (standaloneLauncher || overlay ? 1 : 0)
+      await closing
+      const current = useAppStore.getState()
+      if (current.globalLauncherSessionId === closedSession && !current.globalLauncherOpen) {
+        showToast(t(locale, action.startsWith('copy-') ? 'palette.copied' : 'hud.pasted'), 'success')
+      }
+    }
+  }, [closeLauncherAfterAction, locale, overlay, pastePreviewText, standaloneLauncher])
 
   const executeCurrentTextExport = useCallback(async (scope: CurrentTextExportScope) => {
     if (!standaloneLauncher || !isNativeDesktopRuntime() || !scope.isCurrent() || currentTextExportRef.current.isBusy()) return

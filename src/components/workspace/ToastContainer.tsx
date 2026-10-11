@@ -8,7 +8,8 @@ import { Copy } from 'lucide-react'
 import { useAppStore } from '../../store'
 import { translate } from '../../i18n'
 import { writeClipboardText } from '../../workspace/pluginClipboard'
-import { showToast, useToastStore, type ToastItem, type ToastLevel } from '../../workspace/toast'
+import { listenForRoutedToasts } from '../../workspace/toastRouting'
+import { dismissToast, showToast, useToastStore, type ToastItem, type ToastLevel } from '../../workspace/toast'
 
 const levelStyles: Record<ToastLevel, { bg: string; color: string }> = {
   info: { bg: 'var(--color-background-tertiary)', color: 'var(--color-text-primary)' },
@@ -26,7 +27,15 @@ type RenderedToast = ToastItem & { phase: 'enter' | 'shown' | 'exit' }
 
 export function ToastContainer() {
   const storeToasts = useToastStore((s) => s.toasts)
-  const removeToast = useToastStore((s) => s.removeToast)
+  useEffect(() => {
+    let disposed = false
+    let stop: (() => void) | undefined
+    void listenForRoutedToasts(
+      (item) => useToastStore.getState().addToast(item),
+      (id) => useToastStore.getState().removeToast(id),
+    ).then((cleanup) => { if (disposed) cleanup(); else stop = cleanup }).catch(() => {})
+    return () => { disposed = true; stop?.() }
+  }, [])
   const locale = useAppStore((s) => s.settings.locale)
   const [items, setItems] = useState<RenderedToast[]>([])
   const timersRef = useRef<Map<string, number>>(new Map())
@@ -93,7 +102,7 @@ export function ToastContainer() {
     setItems((prev) =>
       prev.map((t) => (t.id === id ? { ...t, phase: 'exit' } : t)),
     )
-    window.setTimeout(() => removeToast(id), EXIT_MS)
+    window.setTimeout(() => dismissToast(id), EXIT_MS)
   }
 
   if (items.length === 0) return null
