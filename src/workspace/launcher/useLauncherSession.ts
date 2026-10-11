@@ -487,7 +487,7 @@ export function useLauncherSession({
               setDesktopWindowRootSearchEnabled(launcherOpenRef.current && state.frames[state.frames.length - 1]?.kind === 'list')
             }
             const prev = prevControllerStateRef.current
-            if (prev && prev.busy === state.busy && prev.deliveryIntent === state.deliveryIntent && prev.error === state.error && prev.frames === state.frames) {
+            if (prev && prev.busy === state.busy && prev.deliveryIntent === state.deliveryIntent && prev.inputDraftLeave === state.inputDraftLeave && prev.error === state.error && prev.frames === state.frames) {
               return
             }
             prevControllerStateRef.current = state

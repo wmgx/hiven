@@ -50,6 +50,7 @@ export function useGlobalLauncherFocusSession({
   const didColdRekeyRef = useRef(false)
 
   const focusLauncherInput = useCallback(() => {
+    if (document.querySelector('[role="dialog"][data-open]')) return
     if (launcherNativeDialogFocus.isActive() || pasteRecoveryFocus.isActive()) return false
     const el = inputRef.current
     if (!el) return false
@@ -173,7 +174,7 @@ export function useGlobalLauncherCollectInputPreview({
   useEffect(() => {
     if (!open || !controllerState || controllerState.frames.length <= 1) return
     const topFrame = controllerState.frames[controllerState.frames.length - 1]
-    if (topFrame.kind !== 'collect-input') return
+    if (topFrame.kind !== 'collect-input' || controllerState.inputDraftLeave) return
     requestAnimationFrame(() => inputRef.current?.focus())
   }, [controllerState, inputRef, open])
 
@@ -181,7 +182,7 @@ export function useGlobalLauncherCollectInputPreview({
     if (!open || !controllerState || controllerState.frames.length <= 1) return
     if (controllerState.busy) return
     const topFrame = controllerState.frames[controllerState.frames.length - 1]
-    if (topFrame.kind !== 'collect-input') return
+    if (topFrame.kind !== 'collect-input' || controllerState.inputDraftLeave) return
     if (topFrame.item.behavior.type !== 'perform' || topFrame.item.inputPolicy == null) return
     if (topFrame.previewInputText === topFrame.inputText) return
     const timer = window.setTimeout(() => {
@@ -217,7 +218,7 @@ export function useGlobalLauncherHostEscape({
   onRootBack?: () => boolean
 }) {
   const handleHostEscape = useCallback((event: KeyboardEvent) => {
-    if (event.key !== 'Escape') return
+    if (event.key !== 'Escape' || event.isComposing || event.keyCode === 229) return
     // Dialog menus may portal beside the popup, outside its DOM ancestry.
     if (document.querySelector('[role="dialog"][data-open]')) return
     // Let an open tooltip consume Escape before the host leaves its page.

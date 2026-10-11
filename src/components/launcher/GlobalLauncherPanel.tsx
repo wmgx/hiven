@@ -1,3 +1,4 @@
+import { ConfirmDialog } from '../../plugin-ui'
 import { useCallback, useEffect, useMemo, useRef, type RefObject } from 'react'
 import { t, type Locale } from '../../i18n'
 import type { LauncherHostSurfaceTarget, PluginSurfaceOpenTarget } from '../../store'
@@ -388,6 +389,23 @@ export function GlobalLauncherPanel({
         selectedActionIndex={selectedActionIndex}
         onSelectedActionIndexChange={setSelectedActionIndex}
         onObjectActionController={onObjectActionController}
+      />
+      <ConfirmDialog
+        open={Boolean(controllerState?.inputDraftLeave)}
+        title={t(locale, 'palette.surfaceDiscardTitle')}
+        message={t(locale, 'palette.surfaceDiscardMessage')}
+        confirmLabel={t(locale, 'palette.surfaceDiscardConfirm')}
+        cancelLabel={t(locale, 'palette.surfaceDiscardCancel')}
+        defaultFocus="cancel"
+        onConfirm={() => {
+          const request = controllerState?.inputDraftLeave
+          if (request && controllerRef.current?.resolveInputDraftLeave(request, true)) focusSearchInputAfterBack()
+        }}
+        onCancel={() => {
+          const request = controllerState?.inputDraftLeave
+          if (request && controllerRef.current?.resolveInputDraftLeave(request, false))
+            requestAnimationFrame(() => inputRef.current?.focus())
+        }}
       />
     </LauncherView>
   )

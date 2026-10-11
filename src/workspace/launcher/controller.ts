@@ -130,7 +130,10 @@ export type LauncherFrame = ListFrame | CollectInputFrame | ParamInputFrame | Re
 
 // ─── State ─────────────────────────────────────────────────────────────────
 
+export type InputDraftLeave = { frame: CollectInputFrame | ParamInputFrame; action: 'back' | 'exit' }
+
 export type LauncherControllerState = {
+  inputDraftLeave?: InputDraftLeave | null
   surfaceId: LauncherSurfaceId
   /** Frame stack; the top frame is the active one. Always has a list base. */
   frames: LauncherFrame[]
@@ -239,6 +242,8 @@ export class LauncherController {
   private deps: LauncherControllerDeps
   private activePluginLifetime?: LauncherItem['pluginLifetime']
   private pluginUnavailable = false
+  private inputBaselines = new Map<LauncherItem, string>()
+  private confirmedDraftLeave = false
   private flowGeneration = 0
   /** Root search edits retire failure messages without cancelling an active action. */
   private rootQueryGeneration = 0
@@ -282,6 +287,7 @@ export class LauncherController {
 
   private setState(patch: Partial<LauncherControllerState>): void {
     if (patch.frames) {
+      if (patch.frames[patch.frames.length - 1] !== this.state.inputDraftLeave?.frame) patch.inputDraftLeave = null
       const top = patch.frames[patch.frames.length - 1]
       const output = top?.kind === 'result' ? top.output : top?.kind === 'collect-input' ? top.previewOutput : undefined
       const previous = this.topFrame()
@@ -344,6 +350,7 @@ export class LauncherController {
 
   /** Reset to the base list frame (e.g. when the launcher opens). */
   reset(): void {
+    this.inputBaselines.clear()
     if (this.suggestDebounceTimer != null) {
       clearTimeout(this.suggestDebounceTimer)
       this.suggestDebounceTimer = null
@@ -635,6 +642,7 @@ export class LauncherController {
     recordUsage = this.shouldRecord(item, {}),
     inputText?: string,
   ): CollectInputFrame {
+    if (!this.inputBaselines.has(item)) this.inputBaselines.set(item, inputText ?? item.initialInputText ?? '')
     const input = item.behavior.type === 'collect-input'
       ? item.behavior.input
       : {
@@ -663,6 +671,7 @@ export class LauncherController {
       return
     }
     if (this.state.busy && this.pendingItemKey === item.systemKey) return
+    this.inputBaselines.clear()
     this.activePluginLifetime = item.pluginLifetime
     this.pluginUnavailable = false
     this.invalidatePendingActions()
@@ -1363,6 +1372,39 @@ export class LauncherController {
     )
   }
 
+  private requestInputDraftLeave(action: 'back' | 'exit'): boolean {
+    if (this.confirmedDraftLeave || this.state.surfaceId !== 'global-launcher') return false
+    const frame = this.topFrame()
+    if (frame.kind !== 'collect-input' && frame.kind !== 'param-input') return false
+    if (frame.item.suggest || frame.item.metadataInput || frame.item.materialTextEdit) return false
+    if (action === 'back' && (frame.kind === 'collect-input' && frame.item.params?.length
+      || frame.kind === 'param-input' && frame.paramIndex > 0)) return false
+    const baseline = this.inputBaselines.get(frame.item)
+    if (baseline === undefined || frame.inputText === undefined || frame.inputText === baseline) return false
+    if (this.state.inputDraftLeave) return true
+    // Stop late results before showing the dialog; retain the text and error.
+    this.invalidatePendingActions()
+    if (frame.kind === 'collect-input' && frame.previewOutput) this.registerChoices(frame.previewOutput)
+    this.setState({ inputDraftLeave: { frame, action } })
+    return true
+  }
+
+  resolveInputDraftLeave(request: InputDraftLeave, discard: boolean): boolean {
+    if (this.state.inputDraftLeave !== request || this.topFrame() !== request.frame) return false
+    this.setState({ inputDraftLeave: null })
+    if (!discard) return true
+    this.confirmedDraftLeave = true
+    try { return request.action === 'exit' ? this.exitCommand() : this.back() }
+    finally { this.confirmedDraftLeave = false }
+  }
+
+  private markInputDelivered(): void {
+    for (const frame of this.state.frames) {
+      if ((frame.kind === 'collect-input' || frame.kind === 'param-input') && frame.inputText !== undefined)
+        this.inputBaselines.set(frame.item, frame.inputText)
+    }
+  }
+
   /**
    * Escape / empty ⌫: stack-style step back.
    * - param-input paramIndex > 0 → previous param, preserving the command draft
@@ -1379,6 +1421,7 @@ export class LauncherController {
       this.cancelPreviewParamEdit(current)
       return true
     }
+    if (this.requestInputDraftLeave('back')) return true
     this.invalidatePendingActions()
     this.prepareGeneration += 1
     if (this.state.frames.length <= 1) return false
@@ -1428,6 +1471,7 @@ export class LauncherController {
     if (expectedFrame && (expectedFrame.kind === 'param-input'
       ? current.kind !== 'param-input' || !this.matchesParamFrame(current, expectedFrame)
       : current.kind !== 'collect-input' || current.item !== expectedFrame.item)) return false
+    if (this.requestInputDraftLeave('exit')) return true
     this.invalidatePendingActions()
     this.prepareGeneration += 1
     if (this.state.frames.length <= 1) return false
@@ -1775,6 +1819,7 @@ export class LauncherController {
       this.failDelivery(launcherResult.message, options.retryFrame)
       return
     }
+    if (!(actionNode && 'tone' in actionNode && actionNode.tone === 'muted')) this.markInputDelivered()
     this.activeDelivery = null
     this.setState({ deliveryIntent: null })
     const usageToCommit = actionNode && 'tone' in actionNode && actionNode.tone === 'muted'
@@ -1857,6 +1902,7 @@ export class LauncherController {
       return
     }
     if (pendingUsage) {
+      this.markInputDelivered()
       this.recordSuccessfulSelection(pendingUsage.item, { recordUsage: pendingUsage.recordUsage })
     }
     if (result.keepOpen) {

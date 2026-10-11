@@ -50,6 +50,67 @@ try {
     return { controller, deliveries, top: () => controller.getState().frames.at(-1), closed: () => closed }
   }
 
+  // Leaving edited text is explicit; stale dialogs and late errors cannot own a new visit.
+  {
+    const h = harness()
+    const item = { ...json, params: undefined, executeWithParams: undefined, execute: async () => ({ ok: false, message: 'Synthetic invalid input' }) }
+    await h.controller.selectItem(item, { recordUsage: false })
+    h.controller.back()
+    assert.equal(h.top().kind, 'list', 'untouched empty input leaves immediately')
+    await h.controller.selectItem(item, { recordUsage: false })
+    h.controller.setInputText('{ synthetic invalid')
+    await h.controller.submitInput()
+    const error = h.controller.getState().error
+    assert.ok(error)
+    h.controller.back()
+    const request = h.controller.getState().inputDraftLeave
+    assert.ok(request)
+    h.controller.back()
+    assert.equal(h.controller.getState().inputDraftLeave, request)
+    assert.equal(h.top().inputText, '{ synthetic invalid')
+    h.controller.resolveInputDraftLeave(request, false)
+    assert.equal(h.controller.getState().error, error)
+    h.controller.exitCommand()
+    const replacement = h.controller.getState().inputDraftLeave
+    assert.equal(h.controller.resolveInputDraftLeave(request, true), false)
+    h.controller.resolveInputDraftLeave(replacement, true)
+    assert.equal(h.top().kind, 'list')
+    await h.controller.selectItem(item, { recordUsage: false })
+    h.controller.setInputText('changed'); h.controller.setInputText('')
+    h.controller.exitCommand()
+    assert.equal(h.top().kind, 'list', 'restoring the baseline is clean')
+    const delivered = { ...item, execute: async () => ({ ok: true, keepOpen: true }) }
+    await h.controller.selectItem(delivered, { recordUsage: false })
+    h.controller.setInputText('success')
+    await h.controller.submitInput()
+    h.controller.back()
+    assert.equal(h.controller.getState().inputDraftLeave, null, 'successful completion is clean')
+    const cancelled = { ...item, execute: async () => ({ ok: true, output: { choices: [
+      { id: 'cancel', title: 'Cancel', tone: 'muted', primaryAction: async () => ({ ok: true, keepOpen: true }) },
+    ] } }) }
+    await h.controller.selectItem(cancelled, { recordUsage: false })
+    h.controller.setInputText('uncommitted')
+    await h.controller.submitInput()
+    const result = h.top()
+    if (result.kind === 'result') await h.controller.activateChoice(result.output.choices[0])
+    while (h.top().kind === 'result') h.controller.back()
+    h.controller.exitCommand()
+    assert.ok(h.controller.getState().inputDraftLeave, 'a cancelled action cannot mark a draft delivered')
+    h.controller.resolveInputDraftLeave(h.controller.getState().inputDraftLeave, true)
+    let finish
+    const slow = { ...item, execute: () => new Promise(resolve => { finish = resolve }) }
+    await h.controller.selectItem(slow, { recordUsage: false })
+    h.controller.setInputText('pending')
+    const running = h.controller.submitInput()
+    await Promise.resolve()
+    h.controller.back()
+    const pending = h.controller.getState().inputDraftLeave
+    h.controller.resolveInputDraftLeave(pending, true)
+    finish({ ok: false, message: 'late synthetic error' }); await running
+    assert.equal(h.top().kind, 'list')
+    assert.equal(h.controller.getState().error, null)
+  }
+
   // Real random tool: correcting a failed range must keep the chosen count.
   {
     const h = harness('editor-command-bar')
@@ -155,6 +216,8 @@ try {
       assert.equal(h.top().inputText, undefined)
       h.controller.back()
     }
+    const leaveRequest = h.controller.getState().inputDraftLeave
+    if (leaveRequest) h.controller.resolveInputDraftLeave(leaveRequest, true)
     assert.deepEqual(h.controller.getState().frames, [{ kind: 'list' }])
     await h.controller.selectItem(json, { recordUsage: false })
     assert.equal(h.top().query, '2')
