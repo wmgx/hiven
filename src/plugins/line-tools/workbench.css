@@ -10,6 +10,8 @@
   font-family: var(--font, var(--hiven-font-ui));
 }
 
+.text-workbench--embedded { flex: 1; height: auto; }
+
 .text-workbench-header {
   flex: none;
   min-height: 60px;
@@ -38,7 +40,11 @@
 .text-workbench-operation { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .text-workbench-operation > span { color: var(--color-text-secondary); font-size: 11px; }
 .text-workbench-operation .hiven-ui-select { width: 190px; }
-.text-workbench-options { margin-left: auto; color: var(--color-text-tertiary); font-size: 11px; }
+.text-workbench-options { margin-left: auto; display: flex; align-items: center; flex-wrap: wrap; gap: 10px; color: var(--color-text-tertiary); font-size: 11px; }
+.text-workbench-options--cleanup { column-gap: 14px; }
+.text-workbench-option-field { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.text-workbench-option-field > span { color: var(--color-text-secondary); white-space: nowrap; }
+.text-workbench-option-field .hiven-ui-input { width: 100px; min-width: 64px; }
 
 .text-workbench-panes {
   flex: 1;

@@ -27,9 +27,14 @@ function load(path, dependencies = {}) {
 }
 const jsx = (type, props) => ({ type, props })
 const primitives = Object.fromEntries(['Button', 'Checkbox', 'IconButton', 'SegmentedControl', 'TextInput', 'TextEditor', 'TextArea', 'Select'].map(name => [name, name]))
+const lineCore = load('src/plugins/line-tools/core.ts')
+const lineRoutes = load('src/plugins/line-tools/routes.ts')
+const workbenchModel = load('src/plugins/line-tools/workbenchModel.ts', { './core': lineCore, './routes': lineRoutes })
 const specs = [
   { plugin: 'line-tools', component: 'TextToolsSurface', route: 'line-sort', input: 'b\r\na\r\n中文🙂',
-    core: load('src/plugins/line-tools/core.ts'), extras: { './routes': load('src/plugins/line-tools/routes.ts') } },
+    core: lineCore, extras: { './routes': lineRoutes },
+    actions: { 'action.useAsInput': 'workbench.useResult', 'action.continueProcessing': 'workbench.returnDescription',
+      'action.copy': 'action.copyDescription', 'action.pasteBack': 'action.pasteBackDescription' } },
   { plugin: 'encode-decode', component: 'EncodeDecodeSurface', route: 'base64-encode', input: 'a & b\r\n中文🙂',
     core: encodeDecodeCore },
   { plugin: 'formatter', component: 'FormatterSurface', route: 'css-format', input: 'a{color:red;}\r\n',
@@ -37,8 +42,9 @@ const specs = [
 ]
 const workbenchSpec = {
   plugin: 'line-tools', component: 'TextWorkbenchSurface', route: 'text-workbench', input: ' b  \n a ',
-  core: specs[0].core, extras: { './workbench.css': {} },
-  actions: { 'action.useAsInput': 'workbench.useResult', 'action.continueProcessing': 'workbench.returnDescription' },
+  core: lineCore, extras: { './workbenchModel': workbenchModel, './workbench.css': {} },
+  actions: { 'action.useAsInput': 'workbench.useResult', 'action.continueProcessing': 'workbench.returnDescription',
+    'action.copy': 'action.copyDescription', 'action.pasteBack': 'action.pasteBackDescription' },
 }
 const deliveryController = load('src/ui/toolDeliveryFeedback.ts')
 const tick = () => new Promise(resolve => setImmediate(resolve))
@@ -54,12 +60,12 @@ function nodes(tree) {
   return [tree, ...nodes(tree.props?.children)]
 }
 function harness(spec, { input = spec.input, legacyHost = false, copy = async () => {}, paste = async () => ({ ok: true }), handoff = async () => true } = {}) {
-  const slots = [], queuedEffects = []
-  let cursor = 0, view, mounted = true, host, needsRender = false
+  const frames = new Map([['root', { slots: [], cursor: 0 }]]), queuedEffects = []
+  let frame = frames.get('root'), view, mounted = true, host, needsRender = false
   const calls = { dirty: [], copied: [], pasted: [], returned: [], messages: [], complete: 0, back: 0, close: 0 }
   const props = { initialText: input, surfaceId: spec.route, t: key => key, appearance: { theme: 'dark' } }
   const useState = initial => {
-    const index = cursor++
+    const { slots } = frame, index = frame.cursor++
     if (!(index in slots)) slots[index] = typeof initial === 'function' ? initial() : initial
     return [slots[index], value => {
       const next = typeof value === 'function' ? value(slots[index]) : value
@@ -68,7 +74,7 @@ function harness(spec, { input = spec.input, legacyHost = false, copy = async ()
     }]
   }
   const useEffect = (setup, deps) => {
-    const index = cursor++, previous = slots[index]
+    const { slots } = frame, index = frame.cursor++, previous = slots[index]
     if (!previous || !deps || deps.some((value, offset) => !Object.is(value, previous.deps?.[offset]))) {
       queuedEffects.push(() => {
         previous?.cleanup?.()
@@ -77,7 +83,7 @@ function harness(spec, { input = spec.input, legacyHost = false, copy = async ()
     }
   }
   const useMemo = (factory, deps) => {
-    const index = cursor++, previous = slots[index]
+    const { slots } = frame, index = frame.cursor++, previous = slots[index]
     if (!previous || deps.some((value, offset) => !Object.is(value, previous.deps[offset]))) {
       slots[index] = { deps, value: factory() }
     }
@@ -92,14 +98,19 @@ function harness(spec, { input = spec.input, legacyHost = false, copy = async ()
   const { useToolDeliveryFeedback } = load('src/ui/useToolDeliveryFeedback.ts', {
     react, './toolDeliveryFeedback': deliveryController,
   })
-  const component = load(`src/plugins/${spec.plugin}/${spec.component}.tsx`, {
+  const dependencies = {
     react, 'react/jsx-runtime': { jsx, jsxs: jsx },
     '@hiven/plugin': { getPluginHostSdk: () => ({ kits: { content: { detectContent: () => [] }, textTransforms } }) },
     '@hiven/plugin-ui': { ...primitives, getEditorTheme: value => value, useToolDeliveryFeedback },
     '@hiven/plugin-ui/icons': { BackIcon: 'BackIcon', CloseIcon: 'CloseIcon' },
     'lucide-react': { ClipboardPaste: 'ClipboardPaste', CornerDownLeft: 'CornerDownLeft', Check: 'Check', Copy: 'Copy', TriangleAlert: 'TriangleAlert' },
     './core': spec.core, ...spec.extras,
-  })[spec.component]
+    './workbenchModel': workbenchModel, './workbench.css': {},
+  }
+  if (spec.component === 'TextToolsSurface') {
+    dependencies['./TextWorkbenchSurface'] = load('src/plugins/line-tools/TextWorkbenchSurface.tsx', dependencies)
+  }
+  const component = load(`src/plugins/${spec.plugin}/${spec.component}.tsx`, dependencies)[spec.component]
   const reporter = dirty => { if (mounted) calls.dirty.push(dirty) }
   const ownerListeners = new Set()
   let ownerActive = true, ownerRevision = 0
@@ -124,8 +135,28 @@ function harness(spec, { input = spec.input, legacyHost = false, copy = async ()
     do {
       assert.ok(commits++ < 20, 'hook updates must settle')
       needsRender = false
-      cursor = 0
-      view = component({ ...props, host })
+      const visited = new Set(['root'])
+      const resolve = (node, path) => {
+        if (!node || typeof node !== 'object') return node
+        if (Array.isArray(node)) return node.map((child, index) => resolve(child, `${path}.${index}`))
+        if (typeof node.type === 'function') {
+          const key = `${path}:${node.type.name}`
+          if (!frames.has(key)) frames.set(key, { slots: [], cursor: 0 })
+          visited.add(key)
+          const parent = frame
+          frame = frames.get(key); frame.cursor = 0
+          const child = node.type(node.props)
+          frame = parent
+          return resolve(child, key)
+        }
+        return { ...node, props: { ...node.props, children: resolve(node.props?.children, `${path}.children`) } }
+      }
+      frame = frames.get('root'); frame.cursor = 0
+      view = resolve(component({ ...props, host }), 'root')
+      for (const [key, removed] of frames) if (!visited.has(key)) {
+        for (const slot of removed.slots) slot?.cleanup?.()
+        frames.delete(key)
+      }
       queuedEffects.splice(0).forEach(run => run())
     } while (needsRender)
     return view
@@ -171,6 +202,12 @@ function harness(spec, { input = spec.input, legacyHost = false, copy = async ()
     get output() { return find(node => ((node.type === 'textarea' || node.type === 'TextArea') && node.props.readOnly)
       || (node.type === 'TextEditor' && node.props.optionOverrides?.readOnly)).value },
     edit(value) { const field = inputProps(); field.onChange(spec.plugin === 'formatter' ? value : { currentTarget: { value } }); render() },
+    clear() {
+      const button = nodes(view).find(node => typeof node.props?.onClick === 'function' && node.props.children === 'action.clear')
+      if (button) button.props.onClick()
+      else inputProps().onChange({ currentTarget: { value: '' } })
+      render()
+    },
     change(key, value) { find(node => node.props?.['aria-label'] === key).onChange({ currentTarget: { value } }); render() },
     async click(key) { await fire(key); await tick(); render() },
     async settle() { await tick(); render() },
@@ -179,8 +216,8 @@ function harness(spec, { input = spec.input, legacyHost = false, copy = async ()
       render()
     },
     replaceInitialText(value) { props.initialText = value; render() },
-    replayEffects() { for (const slot of slots) if (slot?.setup) { slot.cleanup?.(); slot.cleanup = slot.setup() } },
-    unmount() { mounted = false; for (const slot of slots) slot?.cleanup?.() },
+    replayEffects() { for (const current of frames.values()) for (const slot of current.slots) if (slot?.setup) { slot.cleanup?.(); slot.cleanup = slot.setup() } },
+    unmount() { mounted = false; for (const current of frames.values()) for (const slot of current.slots) slot?.cleanup?.() },
   }
 }
 
@@ -214,14 +251,14 @@ for (const spec of specs) {
     assert.deepEqual(h.calls.dirty, [false, true], 'unchanged renders do not report again')
     h.edit(spec.input)
     assert.equal(h.calls.dirty.at(-1), false)
-    h.fire('action.clear')
+    h.clear()
     assert.equal(h.input, '')
     assert.equal(h.calls.dirty.at(-1), true)
     h.edit(spec.input)
     assert.equal(h.calls.dirty.at(-1), false)
     const empty = harness(spec, { input: '' })
     assert.deepEqual(empty.calls.dirty, [false])
-    empty.edit(spec.input); empty.fire('action.clear')
+    empty.edit(spec.input); empty.clear()
     assert.deepEqual(empty.calls.dirty, [false, true, false])
   })
   await checkSurface('use output as input is a real edit and can be reverted', () => {
@@ -272,7 +309,7 @@ for (const spec of specs) {
     assert.equal(h.calls.dirty.at(-1), true)
     assert.equal(h.input, `${spec.input} `)
     const legacy = harness(spec, { legacyHost: true })
-    legacy.edit(`${spec.input} `); legacy.fire('action.clear')
+    legacy.edit(`${spec.input} `); legacy.clear()
     assert.deepEqual(legacy.calls.dirty, [])
   })
   for (const failed of [false, true]) await checkSurface(`copy ${failed ? 'failure' : 'success'} preserves dirty and completion ownership`, async () => {
@@ -320,8 +357,8 @@ for (const spec of specs) {
     assert.deepEqual(h.calls.returned, [{ kind: 'text', text: output, source: 'tool-result' }])
     assert.equal(h.calls.dirty.at(-1), true)
     receipt.resolve(accepted)
-    assert.equal(await pending, accepted)
-    h.render()
+    if (spec.component !== 'TextToolsSurface') assert.equal(await pending, accepted)
+    await h.settle()
     assert.equal(h.input, draft)
     assert.deepEqual(h.calls.dirty, [false, true])
     assert.equal(h.calls.complete + h.calls.back + h.calls.close, 0, 'acknowledged navigation remains owned by the host')
@@ -338,12 +375,20 @@ for (const spec of specs) {
 
 await check('line-tools: every parameter and group only changes derived output', () => {
   const h = harness(specs[0])
-  h.find(node => node.type === 'SegmentedControl').onChange('desc'); h.render()
+  h.find(node => node.props?.['aria-label'] === 'param.direction.label').onChange('desc'); h.render()
   h.find(node => node.type === 'Checkbox').onChange({ target: { checked: true } }); h.render()
-  for (const [operation, parameter] of [['join.title', 'separator'], ['prepend.title', 'prefix'], ['append.title', 'suffix'], ['wrap.title', 'left'], ['wrap.title', 'right']]) {
-    h.fire(operation); h.change(`param.${parameter}`, '|')
+  for (const [operation, parameter] of [['join', 'separator'], ['prepend', 'prefix'], ['append', 'suffix'], ['wrap', 'left'], ['wrap', 'right']]) {
+    h.change('workbench.operation', operation); h.change(`param.${parameter}`, '|')
   }
+  const wrapped = h.output
   h.fire('group.case'); h.fire('group.stats'); h.fire('group.lines')
+  assert.equal(h.find(node => node.props?.['aria-label'] === 'workbench.operation').value, 'wrap')
+  assert.equal(h.output, wrapped, 'returning from naming/statistics preserves the selected line operation and parameters')
+  assert.equal(h.find(node => node.props?.['aria-label'] === 'param.left').value, '|')
+  assert.equal(h.find(node => node.props?.['aria-label'] === 'param.right').value, '|')
+  h.change('workbench.operation', 'sort')
+  assert.equal(h.find(node => node.props?.['aria-label'] === 'param.direction.label').value, 'desc')
+  assert.equal(h.find(node => node.type === 'Checkbox').checked, true, 'inactive operation options also survive the round trip')
   assert.equal(h.input, specs[0].input)
   assert.deepEqual(h.calls.dirty, [false])
   h.edit(`${specs[0].input} edit`)
@@ -364,6 +409,33 @@ await check('line-tools: selecting a case result is clean; failure keeps edits',
   assert.deepEqual(h.calls.dirty, [false, true])
   assert.equal(h.calls.complete, 0)
 })
+for (const source of ['lines', 'case']) for (const action of ['copy', 'paste']) {
+  await check(`line-tools: ${source} ${action} locks group changes before commit and until settlement`, async () => {
+    const receipt = deferred(), target = source === 'lines' ? 'case' : 'lines'
+    const spec = { ...specs[0], route: source === 'lines' ? 'line-sort' : 'case-camel' }
+    const h = harness(spec, { copy: () => receipt.promise, paste: () => receipt.promise })
+    const switchGroup = h.action(`group.${target}`).onClick
+    const actionKey = action === 'paste' ? 'action.pasteBack' : source === 'case' ? 'case.copyLabel' : 'action.copy'
+    // Retain the old enabled callback, then start IO without a React commit.
+    h.action(actionKey).onClick()
+    switchGroup(); h.render()
+    assert.equal(h.action(`group.${source}`)['aria-pressed'], true)
+    assert.equal(h.action(`group.${target}`).disabled, true)
+    h.edit(`${spec.input} edit`)
+    switchGroup(); h.render()
+    assert.equal(h.action(`group.${source}`)['aria-pressed'], true, 'editing expires the result but cannot unlock issued IO')
+    assert.deepEqual(h.calls.dirty, [false, true], 'only the parent reports the shared draft')
+    receipt.resolve(action === 'paste' ? { ok: true } : undefined)
+    await h.settle()
+    assert.equal(h.calls.complete, 0, 'the pre-edit result never completes the edited session')
+    assert.equal(h.action(`group.${target}`).disabled, false)
+    h.fire(`group.${target}`)
+    assert.equal(h.input, `${spec.input} edit`, 'switching groups carries the same controlled input')
+    assert.deepEqual(h.calls.dirty, [false, true])
+    h.edit(spec.input)
+    assert.deepEqual(h.calls.dirty, [false, true, false])
+  })
+}
 await check('encode-decode: format and direction do not dirty even for invalid output', () => {
   const h = harness(specs[1])
   for (const key of ['direction.decode', 'format.jwt', 'format.url', 'direction.encode', 'format.html']) h.fire(key)
@@ -431,7 +503,7 @@ for (const spec of deliverySpecs) {
       if (trigger === 'edit') h.editWithoutRender(`${spec.input} changed`)
       if (trigger === 'replace input') h.action('action.useAsInput').onClick()
       if (trigger === 'parameter') {
-        if (spec.component === 'TextToolsSurface') h.find(node => node.type === 'SegmentedControl').onChange('desc')
+        if (spec.component === 'TextToolsSurface') h.find(node => node.props?.['aria-label'] === 'param.direction.label').onChange('desc')
         if (spec.component === 'EncodeDecodeSurface') h.action('format.url').onClick()
         if (spec.component === 'FormatterSurface') h.action('operation.compact').onClick()
         if (spec.component === 'TextWorkbenchSurface') h.find(node => node.type === 'Select').onChange({ currentTarget: { value: 'dedup' } })
@@ -451,7 +523,7 @@ for (const spec of deliverySpecs) {
         h.fire(action)
         if (trigger === 'edit') h.editWithoutRender(`${spec.input} changed`)
         if (trigger === 'parameter') {
-          if (spec.component === 'TextToolsSurface') h.find(node => node.type === 'SegmentedControl').onChange('desc')
+          if (spec.component === 'TextToolsSurface') h.find(node => node.props?.['aria-label'] === 'param.direction.label').onChange('desc')
           if (spec.component === 'EncodeDecodeSurface') h.action('format.url').onClick()
           if (spec.component === 'FormatterSurface') h.action('operation.compact').onClick()
           if (spec.component === 'TextWorkbenchSurface') h.find(node => node.type === 'Select').onChange({ currentTarget: { value: 'dedup' } })

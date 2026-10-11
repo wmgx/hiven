@@ -93,7 +93,7 @@ export const lineToolsPlugin = definePlugin({
         kind: 'custom-view' as const,
         title: 'Text Tools',
         titleI18n: { zh: '文本整理' },
-        component: TextToolsSurface,
+        component: route.group === 'lines' ? TextWorkbenchSurface : TextToolsSurface,
         entry: { launcher: false as const },
         shell: WORKSPACE_SHELL,
       })),

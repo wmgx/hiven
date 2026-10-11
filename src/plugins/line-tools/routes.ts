@@ -8,7 +8,7 @@ export type TextToolRoute = {
   operation?: LineOperation | CaseOperation
 }
 
-export const lineOperationRoutes: TextToolRoute[] = [
+export const lineOperationRoutes: (TextToolRoute & { group: 'lines'; operation: LineOperation })[] = [
   { surfaceId: 'line-sort', titleKey: 'sort.title', group: 'lines', operation: 'sort', aliases: ['sort lines', 'order lines', '行排序', '排序', 'hangpaixu'] },
   { surfaceId: 'line-dedup', titleKey: 'dedup.title', group: 'lines', operation: 'dedup', aliases: ['unique lines', 'dedup lines', 'remove duplicate lines', 'remove duplicates', '删除重复行', '行去重', '去重', 'quchong', 'hangquchong'] },
   { surfaceId: 'line-reverse', titleKey: 'reverse.title', group: 'lines', operation: 'reverse', aliases: ['reverse lines', 'flip lines', '行反转', '倒序'] },

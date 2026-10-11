@@ -1,63 +1,69 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { getPluginHostSdk, type PluginSurfaceProps } from '@hiven/plugin'
-import { Button, Checkbox, IconButton, SegmentedControl, Select, TextArea, useToolDeliveryFeedback } from '@hiven/plugin-ui'
+import { Button, Checkbox, IconButton, SegmentedControl, Select, TextArea, TextInput, useToolDeliveryFeedback } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
 import { Check, ClipboardPaste, Copy, CornerDownLeft, TriangleAlert } from 'lucide-react'
-import { dedupLines, removeBlankLines, trimLineWhitespace } from './core'
+import {
+  DEFAULT_WORKBENCH_OPTIONS,
+  WORKBENCH_OPERATIONS,
+  evaluateWorkbench,
+  getWorkbenchOperation,
+  type WorkbenchOperation,
+  type WorkbenchOptions,
+  type WorkbenchResult,
+} from './workbenchModel'
 import './workbench.css'
 
-type Category = 'text' | 'json' | 'url'
-type Operation = 'trim' | 'remove-blank' | 'dedup' | 'json-format' | 'json-compact' | 'url-encode' | 'url-decode'
-type Result = { status: 'idle' } | { status: 'ready'; text: string } | { status: 'error'; messageKey: string }
 type OutputAction = 'copy' | 'paste' | 'return'
 
-const operations: { value: Operation; category: Category; label: string }[] = [
-  { value: 'trim', category: 'text', label: 'trimWhitespace.title' },
-  { value: 'remove-blank', category: 'text', label: 'removeBlankLines.title' },
-  { value: 'dedup', category: 'text', label: 'dedup.title' },
-  { value: 'json-format', category: 'json', label: 'workbench.operation.jsonFormat' },
-  { value: 'json-compact', category: 'json', label: 'workbench.operation.jsonCompact' },
-  { value: 'url-encode', category: 'url', label: 'workbench.operation.urlEncode' },
-  { value: 'url-decode', category: 'url', label: 'workbench.operation.urlDecode' },
-]
+export type WorkbenchSelection = {
+  operation: WorkbenchOperation
+  options: WorkbenchOptions
+}
 
-export function TextWorkbenchSurface(props: PluginSurfaceProps) {
+type TextWorkbenchProps = PluginSurfaceProps & {
+  embedded?: {
+    inputText: string
+    onInputChange(text: string): void
+    selection: WorkbenchSelection
+    onSelectionChange: Dispatch<SetStateAction<WorkbenchSelection>>
+    onBusyChange(busy: boolean): void
+    invalidateRef: { current: (() => void) | null }
+  }
+}
+
+export function TextWorkbenchSurface(props: TextWorkbenchProps) {
   const { host, t } = props
   const { compactJson, formatJson, urlDecode, urlEncode } = getPluginHostSdk().kits.textTransforms
-  const [inputText, setInputText] = useState(props.initialText ?? '')
+  const [localInputText, setLocalInputText] = useState(props.initialText ?? '')
+  const inputText = props.embedded?.inputText ?? localInputText
+  const setInputText = props.embedded?.onInputChange ?? setLocalInputText
   const baseline = useRef(props.initialText ?? '')
-  const [operation, setOperation] = useState<Operation>('trim')
-  const [indent, setIndent] = useState(2)
-  const [ignoreCase, setIgnoreCase] = useState(false)
+  const [localSelection, setLocalSelection] = useState<WorkbenchSelection>(() => ({
+    operation: getWorkbenchOperation(props.surfaceId),
+    options: { ...DEFAULT_WORKBENCH_OPTIONS },
+  }))
+  const { operation, options } = props.embedded?.selection ?? localSelection
+  const setSelection = props.embedded?.onSelectionChange ?? setLocalSelection
   const [revision, setRevision] = useState(0)
   const revisionRef = useRef(0)
-  const [busy, setBusy] = useState<OutputAction | null>(null)
+  const [busy, setBusyState] = useState<OutputAction | null>(null)
+  const reportBusy = props.embedded?.onBusyChange
+  const setBusy = (action: OutputAction | null) => {
+    setBusyState(action)
+    reportBusy?.(action !== null)
+  }
   const pendingRef = useRef<{ action: OutputAction; controller: AbortController } | null>(null)
   const activeRef = useRef(false)
-  const currentResultRef = useRef<Result | null>(null)
+  const currentResultRef = useRef<WorkbenchResult | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
-  const selected = operations.find((item) => item.value === operation)!
+  const selected = WORKBENCH_OPERATIONS.find((item) => item.value === operation)!
   const category = selected.category
 
-  const result = useMemo<Result>(() => {
-    if (inputText.length === 0) return { status: 'idle' }
-    try {
-      let text: string
-      switch (operation) {
-        case 'trim': text = trimLineWhitespace(inputText); break
-        case 'remove-blank': text = removeBlankLines(inputText); break
-        case 'dedup': text = dedupLines(inputText, ignoreCase); break
-        case 'json-format': text = inputText.trim() ? formatJson(inputText, indent) : ''; break
-        case 'json-compact': text = inputText.trim() ? compactJson(inputText) : ''; break
-        case 'url-encode': text = urlEncode(inputText); break
-        case 'url-decode': text = urlDecode(inputText); break
-      }
-      return { status: 'ready', text }
-    } catch {
-      return { status: 'error', messageKey: category === 'json' ? 'workbench.error.json' : 'workbench.error.url' }
-    }
+  const result = useMemo<WorkbenchResult>(() => {
+    return evaluateWorkbench(inputText, operation, options, { compactJson, formatJson, urlDecode, urlEncode })
     // A revision gives identical-looking results a fresh identity after any edit or exit.
-  }, [inputText, operation, indent, ignoreCase, category, revision, compactJson, formatJson, urlDecode, urlEncode])
+  }, [inputText, operation, options, revision, compactJson, formatJson, urlDecode, urlEncode])
   const delivery = useToolDeliveryFeedback(result, host.deliveryFeedbackOwner)
 
   useLayoutEffect(() => {
@@ -75,10 +81,13 @@ export function TextWorkbenchSurface(props: PluginSurfaceProps) {
   }, [result])
 
   const hasUnsavedChanges = inputText !== baseline.current
-  const reportUnsavedChanges = host.setUnsavedChanges
+  // The existing naming/statistics shell owns its shared draft and dirty report.
+  const reportUnsavedChanges = props.embedded ? undefined : host.setUnsavedChanges
   useLayoutEffect(() => {
     reportUnsavedChanges?.(hasUnsavedChanges)
   }, [hasUnsavedChanges, reportUnsavedChanges])
+
+  useLayoutEffect(() => () => reportBusy?.(false), [reportBusy])
 
   // Revoke pending callbacks before React commits the next input or operation.
   const update = (change: () => void) => {
@@ -94,6 +103,26 @@ export function TextWorkbenchSurface(props: PluginSurfaceProps) {
     }
     setRevision(revisionRef.current)
     change()
+  }
+
+  // The containing shell must revoke this result before Back/Close can show an
+  // exit confirmation, even when that confirmation leaves the workbench mounted.
+  const exitInvalidationRef = props.embedded?.invalidateRef
+  useLayoutEffect(() => {
+    if (!exitInvalidationRef) return
+    const invalidate = () => update(() => {})
+    exitInvalidationRef.current = invalidate
+    return () => {
+      if (exitInvalidationRef.current === invalidate) exitInvalidationRef.current = null
+    }
+  })
+
+  const changeOption = <Key extends keyof WorkbenchOptions>(key: Key, value: WorkbenchOptions[Key]) => {
+    update(() => setSelection((current) => ({ ...current, options: { ...current.options, [key]: value } })))
+  }
+
+  const changeOperation = (next: WorkbenchOperation) => {
+    if (next !== operation) update(() => setSelection((current) => ({ ...current, operation: next })))
   }
 
   // The host is rebuilt on ordinary parent renders; it guards its own target lifetime.
@@ -161,8 +190,8 @@ export function TextWorkbenchSurface(props: PluginSurfaceProps) {
     : t(result.status === 'error' ? 'workbench.status.error' : 'workbench.status.waiting')
 
   return (
-    <section className="text-workbench" aria-label={t('workbench.title')} data-no-drag>
-      <header className="text-workbench-header">
+    <section className={`text-workbench${props.embedded ? ' text-workbench--embedded' : ''}`} aria-label={t('workbench.title')} data-no-drag>
+      {!props.embedded ? <header className="text-workbench-header">
         <IconButton type="button" label={t('action.back')} onClick={() => update(() => host.requestBack())}>
           <BackIcon size={14} strokeWidth={2} />
         </IconButton>
@@ -173,7 +202,7 @@ export function TextWorkbenchSurface(props: PluginSurfaceProps) {
         <IconButton type="button" label={t('action.close')} onClick={() => update(() => host.close())}>
           <CloseIcon size={14} strokeWidth={2} />
         </IconButton>
-      </header>
+      </header> : null}
 
       <div className="text-workbench-controls">
         <SegmentedControl
@@ -181,7 +210,7 @@ export function TextWorkbenchSurface(props: PluginSurfaceProps) {
           value={category}
           options={(['text', 'json', 'url'] as const).map((value) => ({ value, label: t(`workbench.category.${value}`) }))}
           onChange={(value) => {
-            if (value !== category) update(() => setOperation(operations.find((item) => item.category === value)!.value))
+            if (value !== category) changeOperation(WORKBENCH_OPERATIONS.find((item) => item.category === value)!.value)
           }}
         />
         <label className="text-workbench-operation">
@@ -189,26 +218,55 @@ export function TextWorkbenchSurface(props: PluginSurfaceProps) {
           <Select
             aria-label={t('workbench.operation')}
             value={operation}
-            options={operations.filter((item) => item.category === category).map((item) => ({ value: item.value, label: t(item.label) }))}
+            options={WORKBENCH_OPERATIONS.filter((item) => item.category === category).map((item) => ({ value: item.value, label: t(item.label) }))}
             onChange={(event) => {
-              const next = event.currentTarget.value as Operation
-              if (next !== operation) update(() => setOperation(next))
+              const next = event.currentTarget.value as WorkbenchOperation
+              changeOperation(next)
             }}
           />
         </label>
-        <div className="text-workbench-options">
+        <div className={`text-workbench-options${operation === 'clean-list' ? ' text-workbench-options--cleanup' : ''}`}>
           {operation === 'json-format' ? (
             <SegmentedControl
               aria-label={t('workbench.indent')}
-              value={String(indent)}
+              value={String(options.indent)}
               options={[2, 4].map((count) => ({ value: String(count), label: t('workbench.spaces', { count }) }))}
-              onChange={(value) => update(() => setIndent(Number(value)))}
+              onChange={(value) => changeOption('indent', Number(value))}
             />
-          ) : operation === 'dedup' ? (
-            <Checkbox checked={ignoreCase} onChange={(event) => update(() => setIgnoreCase((event.target as HTMLInputElement).checked))}>
+          ) : null}
+          {operation === 'sort' ? (
+            <SegmentedControl
+              aria-label={t('param.direction.label')}
+              value={options.direction}
+              options={[
+                { value: 'asc', label: t('param.direction.asc') },
+                { value: 'desc', label: t('param.direction.desc') },
+              ]}
+              onChange={(value) => changeOption('direction', value as WorkbenchOptions['direction'])}
+            />
+          ) : null}
+          {operation === 'sort' || operation === 'dedup' ? (
+            <Checkbox checked={options.ignoreCase} onChange={(event) => changeOption('ignoreCase', (event.target as HTMLInputElement).checked)}>
               {t('param.ignoreCase')}
             </Checkbox>
-          ) : <span>{t('option.livePreview')}</span>}
+          ) : null}
+          {operation === 'clean-list' ? (['trim', 'removeBlank', 'dedup'] as const).map((key) => (
+            <Checkbox key={key} checked={options[key]} title={t(`param.cleanList.${key}Hint`)} onChange={(event) => changeOption(key, (event.target as HTMLInputElement).checked)}>
+              {t(`workbench.cleanup.${key}`)}
+            </Checkbox>
+          )) : null}
+          {(['separator', 'prefix', 'suffix', 'left', 'right'] as const).filter((key) => (
+            operation === 'join' && key === 'separator'
+            || operation === 'prepend' && key === 'prefix'
+            || operation === 'append' && key === 'suffix'
+            || operation === 'wrap' && (key === 'left' || key === 'right')
+          )).map((key) => (
+            <label key={key} className="text-workbench-option-field">
+              <span>{t(`param.${key}`)}</span>
+              <TextInput value={options[key]} aria-label={t(`param.${key}`)} onChange={(event) => changeOption(key, event.currentTarget.value)} />
+            </label>
+          ))}
+          {!['json-format', 'sort', 'dedup', 'clean-list', 'join', 'prepend', 'append', 'wrap'].includes(operation) ? <span>{t('option.livePreview')}</span> : null}
         </div>
       </div>
 
