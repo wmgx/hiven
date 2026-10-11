@@ -1,7 +1,7 @@
 import { type MouseEvent as ReactMouseEvent, type MutableRefObject, type ReactNode, type RefObject } from 'react'
 import { t, type Locale } from '../../i18n'
 import { localized, type LauncherHostSurfaceTarget, type PluginSurfaceOpenTarget } from '../../store'
-import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
+import type { PluginSettingsDialogTarget } from '../../workspace/pluginSettingsStore'
 import type { CollectInputFrame, LauncherControllerState, ParamInputFrame, ResultFrame } from '../../workspace/launcher/controller'
 import type { LauncherResultChoice } from '../../workspace/launcher/types'
 import { LauncherParamStep, resolveParamValueLabel } from './LauncherParamStep'
@@ -97,7 +97,7 @@ export function GlobalLauncherFrameSwitch({
 }: {
   hostSurfaceTarget: LauncherHostSurfaceTarget | null
   hostSurfaceHeight: number
-  launcherSettingsTarget: { pluginId: string; source: PluginSettingsSource } | null
+  launcherSettingsTarget: PluginSettingsDialogTarget
   settingsHeight: number
   surfaceFrame: PluginSurfaceOpenTarget | null
   activeSurfaceFrame: GlobalLauncherActiveSurfaceFrame | null
@@ -188,6 +188,7 @@ export function GlobalLauncherFrameSwitch({
       <GlobalLauncherSettingsFrame
         pluginId={launcherSettingsTarget.pluginId}
         source={launcherSettingsTarget.source}
+        target={launcherSettingsTarget.target}
         locale={locale}
         height={settingsHeight}
         onClose={onSettingsClose}

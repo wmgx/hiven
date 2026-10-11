@@ -16,6 +16,12 @@ migrateLocalStorageKey('fluxtext-plugin-settings', PLUGIN_SETTINGS_KEY)
 
 export type PluginSettingsSource = 'builtin' | 'installed' | 'dev'
 
+/** Static schema identity only; never a setting value or an instruction to run. */
+export type PluginSettingsFieldTarget = {
+  sectionId: string
+  fieldKey: string
+}
+
 export type PluginSettingsRecord = {
   version: number
   value: unknown
@@ -30,6 +36,7 @@ export type PluginSettingsStore = {
 export type PluginSettingsDialogTarget = {
   pluginId: string
   source: PluginSettingsSource
+  target?: PluginSettingsFieldTarget
   presentation?: 'dialog' | 'global-launcher' | 'plugin-surface-window'
   context?: {
     surfaceId?: LauncherHostId

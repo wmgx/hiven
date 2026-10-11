@@ -652,6 +652,8 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
             defaultValue={stringifyJson(record[field.key])}
             disabled={disabled}
             onBlur={(event: ChangeEvent<HTMLTextAreaElement>) => {
+              // Merely navigating to and away from this field must not save.
+              if (event.currentTarget.value === stringifyJson(record[field.key])) return
               try {
                 setFieldValue(field.key, JSON.parse(event.currentTarget.value))
               } catch {
@@ -889,7 +891,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
         const fields = section.fields.filter(isRenderableField)
         if (fields.length === 0) return null
         return (
-          <section key={section.id} className="schema-section">
+          <section key={section.id} className="schema-section" data-settings-section-id={section.id} tabIndex={-1}>
             {(section.title || section.titleI18n || section.description || section.descriptionI18n) && (
               <header className="schema-section-header">
                 {localizeText(section.title, section.titleI18n) && (
@@ -902,7 +904,13 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
             )}
             <div className="schema-section-body">
               {fields.map((field) => (
-                <div key={field.kind === 'modal' || field.kind === 'action' ? field.id : field.key} className={`schema-field schema-field-${field.kind}`}>
+                <div
+                  key={field.kind === 'modal' || field.kind === 'action' ? field.id : field.key}
+                  className={`schema-field schema-field-${field.kind}`}
+                  data-settings-field-key={field.kind === 'modal' || field.kind === 'action' ? field.id : field.key}
+                  data-settings-field-kind={field.kind}
+                  data-settings-field-disabled={Boolean(field.disabled || permissionReason(permissions, field.requires, locale))}
+                >
                   {renderField(field)}
                 </div>
               ))}

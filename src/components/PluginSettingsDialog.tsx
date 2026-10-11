@@ -5,17 +5,18 @@
  * The plugin provides the body content via its settings.component.
  */
 
-import { Component, useCallback, useEffect, useMemo, useState, type ErrorInfo, type ReactNode } from 'react'
+import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from 'react'
 import { Dialog } from '@base-ui/react/dialog'
 import { X } from 'lucide-react'
 import { t } from '../i18n'
 import { makePluginT } from '../i18n/pluginI18nRegistry'
 import { useAppStore } from '../store'
 import { showToast } from '../workspace/toast'
-import { pluginRegistry } from '../workspace/pluginRegistry'
+import { pluginRegistry, usePluginRegistryVersion } from '../workspace/pluginRegistry'
 import {
   usePluginSettingsStore,
   type PluginSettingsSource,
+  type PluginSettingsFieldTarget,
 } from '../workspace/pluginSettingsStore'
 import { openExternalUrl } from '../workspace/effectRunner'
 import type { PluginSettingsContribution } from '../workspace/pluginTypes'
@@ -26,6 +27,7 @@ import { createPluginShell } from '../workspace/pluginShell'
 import { getPluginPermissionSnapshot, usePluginPermissionStore } from '../workspace/pluginPermissions'
 import { PluginSettingsSchemaRenderer } from './PluginSettingsSchemaRenderer'
 import { resolvePluginSettingsModal, type ResolvedPluginSettingsModal } from './pluginSettingsModalResolution'
+import { navigateToPluginSettingsField } from './pluginSettingsFieldNavigation'
 
 // ─── Error Boundary ──────────────────────────────────────────────────────────
 
@@ -91,7 +93,7 @@ export function PluginSettingsDialog() {
         <Dialog.Backdrop className={`plugin-settings-dialog-backdrop fixed inset-0 bg-black/40 z-[1200]${isClosing ? ' is-closing' : ''}`} />
         <Dialog.Popup
           aria-labelledby={titleId}
-          initialFocus={() => document.querySelector<HTMLElement>('[data-settings-dialog-close]')}
+          initialFocus={activeTarget.target ? false : () => document.querySelector<HTMLElement>('[data-settings-dialog-close]')}
           className={`fixed left-1/2 top-1/2 z-[1201] -translate-x-1/2 -translate-y-1/2 flex flex-col overflow-hidden plugin-settings-dialog-panel${isClosing ? ' is-closing' : ''}`}
           style={{
             width: fillsPluginWindow ? '100vw' : 'min(780px, calc(100vw - 40px))',
@@ -107,6 +109,7 @@ export function PluginSettingsDialog() {
           <PluginSettingsContent
             pluginId={activeTarget.pluginId}
             source={activeTarget.source}
+            target={target?.target}
             locale={locale}
             onClose={closeSettingsDialog}
             titleId={titleId}
@@ -122,17 +125,20 @@ export function PluginSettingsDialog() {
 export function PluginSettingsContent({
   pluginId,
   source,
+  target,
   locale,
   onClose,
   titleId,
 }: {
   pluginId: string
   source: PluginSettingsSource
+  target?: PluginSettingsFieldTarget
   locale: 'zh' | 'en'
   onClose: () => void
   titleId?: string
 }) {
   // Resolve the plugin's settings contribution from the registry
+  const registryVersion = usePluginRegistryVersion()
   const contribution = useMemo(() => {
     const registrySource = source === 'dev' ? 'dev' : 'production'
     const allCommands = pluginRegistry.getAllCommands()
@@ -147,7 +153,7 @@ export function PluginSettingsContent({
     // Also try directly via definition lookup
     const def = pluginRegistry.getPluginDefinition(pluginId, source === 'dev' ? 'dev' : 'production')
     return def?.settings as PluginSettingsContribution<unknown> | undefined
-  }, [pluginId, source])
+  }, [pluginId, source, registryVersion])
 
   if (!contribution) {
     return (
@@ -167,8 +173,10 @@ export function PluginSettingsContent({
 
   return (
     <SettingsDialogBody
+      key={`${source}:${pluginId}`}
       pluginId={pluginId}
       source={source}
+      target={target}
       contribution={contribution}
       locale={locale}
       onClose={onClose}
@@ -182,6 +190,7 @@ export function PluginSettingsContent({
 function SettingsDialogBody({
   pluginId,
   source,
+  target,
   contribution,
   locale,
   onClose,
@@ -189,12 +198,17 @@ function SettingsDialogBody({
 }: {
   pluginId: string
   source: PluginSettingsSource
+  target?: PluginSettingsFieldTarget
   contribution: PluginSettingsContribution<unknown>
   locale: 'zh' | 'en'
   onClose: () => void
   titleId?: string
 }) {
   const setPluginSettings = usePluginSettingsStore((s) => s.setPluginSettings)
+  const bodyRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    if (target && bodyRef.current) return navigateToPluginSettingsField(bodyRef.current, target)
+  }, [target])
   // Subscribe to the store record reactively so UI updates on setValue
   const storedRecord = usePluginSettingsStore((s) => s.pluginSettings[source][pluginId])
   // Observe the record itself so persisted/rehydrated grants update the body too.
@@ -381,7 +395,7 @@ function SettingsDialogBody({
       )}
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto px-5 py-4" data-launcher-scrollable>
+      <div ref={bodyRef} className="flex-1 overflow-y-auto px-5 py-4" data-launcher-scrollable data-settings-navigation-root={target ? '' : undefined} tabIndex={-1}>
         <SettingsErrorBoundary fallback={errorFallback}>
           {/* Prefer custom body when present (install guides, connection UI).
               Schema-only plugins keep the generated form renderer. */}

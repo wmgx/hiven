@@ -632,7 +632,7 @@ export function useLauncherSession({
       window.clearTimeout(timer)
       hostAbortRef.current?.abort()
     }
-  }, [appSearchAliases, automaticLearningEnabled, collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open, query])
+  }, [appSearchAliases, automaticLearningEnabled, collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open, query, pluginRegistryVersion, pluginPermissions])
 
   // ── Remote document Desktop Targets (feishu.docs, …) — progressive, slow debounce ──
   useEffect(() => {

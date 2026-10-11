@@ -1052,8 +1052,14 @@ export function GlobalLauncherHost() {
       void executeObjectAction(action, action.defaultOutput)
       return
     }
+    if (item.kind === 'domain' && item.domainItem.systemKey.startsWith('settings-field:')) {
+      // Enter on the default top row is an explicit destination too. Keep its
+      // identity while async results arrive behind the settings page.
+      const index = visibleFiltered.findIndex((candidate) => candidate.id === item.id)
+      if (index >= 0) setSelectedIndex(index)
+    }
     selectItem(item)
-  }, [clipboardBlock.cancelFileTextRead, executeCurrentTextAction, executeCurrentTextExport, executeObjectAction, objectActions, selectItem])
+  }, [clipboardBlock.cancelFileTextRead, executeCurrentTextAction, executeCurrentTextExport, executeObjectAction, objectActions, selectItem, setSelectedIndex, visibleFiltered])
 
 
   const beginDrag = useGlobalLauncherNativeDrag(standaloneLauncher)

@@ -53,6 +53,7 @@ import { freshLastSaveableRun } from '../savedActions/lastSaveableRun'
 import { savedActionDisabledReason } from '../savedActions/compatibility'
 import { listSavedActions } from '../savedActions/store'
 import type { LastSaveableRunState } from '../savedActions/types'
+import { collectSettingsFieldSearchItems } from './settingsFieldSearch'
 
 const DYNAMIC_QUERY_MAX_LENGTH = 500
 const DYNAMIC_PROVIDER_TIMEOUT_MS = 1000
@@ -390,7 +391,10 @@ export async function collectDynamicItems(
 
   const q = query.trim()
   const resolvedInputText = (q || inputText?.trim() || '')
-  if (resolvedInputText.length > DYNAMIC_QUERY_MAX_LENGTH) return []
+  if (signal?.aborted || resolvedInputText.length > DYNAMIC_QUERY_MAX_LENGTH) return []
+
+  const settingsFieldItems = includeHost ? collectSettingsFieldSearchItems(q, surfaceId) : []
+  if (settingsFieldItems.length > 0) onPartial?.({ kind: 'host', items: settingsFieldItems })
 
   const hostPromise: Promise<LauncherItem[]> = includeHost && hostDynamicItemsProvider
     ? measureLauncherPerf(
@@ -403,14 +407,16 @@ export async function collectDynamicItems(
       }),
     ).then((items) => {
       if (signal?.aborted) return []
-      onPartial?.({ kind: 'host', items })
-      return items
+      const combined = [...settingsFieldItems.filter((item) => item.pluginLifetime?.active !== false), ...items]
+      onPartial?.({ kind: 'host', items: combined })
+      return combined
     }).catch((error) => {
       console.warn('[launcher] host dynamic provider failed:', error)
-      if (!signal?.aborted) onPartial?.({ kind: 'host', items: [] })
-      return [] as LauncherItem[]
+      const remaining = signal?.aborted ? [] : settingsFieldItems.filter((item) => item.pluginLifetime?.active !== false)
+      if (!signal?.aborted) onPartial?.({ kind: 'host', items: remaining })
+      return remaining
     })
-    : Promise.resolve([])
+    : Promise.resolve(settingsFieldItems)
 
   if (!includePlugins || !resolvedInputText) {
     return await hostPromise

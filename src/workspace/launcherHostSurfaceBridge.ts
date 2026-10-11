@@ -1,5 +1,5 @@
 import { useAppStore, type LauncherHostSurfaceTarget } from '../store'
-import { usePluginSettingsStore, type PluginSettingsSource } from './pluginSettingsStore'
+import { usePluginSettingsStore, type PluginSettingsSource, type PluginSettingsFieldTarget } from './pluginSettingsStore'
 import { isNativeDesktopRuntime } from './webNativeBridge'
 import { showLauncherWindow } from './windowManager/launcherWindow'
 import { LAUNCHER_WINDOW_LABEL } from './windowManager/windowLabels'
@@ -11,7 +11,7 @@ const MAX_PENDING_AGE_MS = 30_000
 
 export type LauncherHostSurfaceOpenRequest =
   | { kind: 'host-surface'; target: LauncherHostSurfaceTarget }
-  | { kind: 'plugin-settings'; source: PluginSettingsSource; pluginId: string }
+  | { kind: 'plugin-settings'; source: PluginSettingsSource; pluginId: string; target?: PluginSettingsFieldTarget }
 
 type PendingLauncherHostSurfaceOpen = {
   request: LauncherHostSurfaceOpenRequest
@@ -22,8 +22,8 @@ export async function requestOpenLauncherHostSurface(target: LauncherHostSurface
   await requestOpenLauncherHostSurfaceRequest({ kind: 'host-surface', target })
 }
 
-export async function requestOpenLauncherPluginSettingsSurface(source: PluginSettingsSource, pluginId: string): Promise<void> {
-  await requestOpenLauncherHostSurfaceRequest({ kind: 'plugin-settings', source, pluginId })
+export async function requestOpenLauncherPluginSettingsSurface(source: PluginSettingsSource, pluginId: string, target?: PluginSettingsFieldTarget): Promise<void> {
+  await requestOpenLauncherHostSurfaceRequest({ kind: 'plugin-settings', source, pluginId, ...(target ? { target } : {}) })
 }
 
 export async function requestOpenLauncherHostSurfaceRequest(request: LauncherHostSurfaceOpenRequest): Promise<void> {
@@ -58,6 +58,7 @@ export function openLauncherHostSurfaceRequestLocally(request: LauncherHostSurfa
   usePluginSettingsStore.getState().openSettingsDialog({
     source: request.source,
     pluginId: request.pluginId,
+    ...(request.target ? { target: request.target } : {}),
     presentation: 'global-launcher',
     context: { surfaceId: 'global-launcher' },
   })
@@ -83,8 +84,16 @@ export function isLauncherHostSurfaceOpenRequest(value: unknown): value is Launc
   if (request.kind === 'host-surface') return isLauncherHostSurfaceTarget(request.target)
   if (request.kind === 'plugin-settings') {
     return isPluginSettingsSource(request.source) && typeof request.pluginId === 'string' && request.pluginId.length > 0
+      && (request.target === undefined || isPluginSettingsFieldTarget(request.target))
   }
   return false
+}
+
+function isPluginSettingsFieldTarget(value: unknown): value is PluginSettingsFieldTarget {
+  if (!value || typeof value !== 'object') return false
+  const target = value as Partial<PluginSettingsFieldTarget>
+  return typeof target.sectionId === 'string' && target.sectionId.length > 0
+    && typeof target.fieldKey === 'string' && target.fieldKey.length > 0
 }
 
 export function isLauncherHostSurfaceTarget(value: unknown): value is LauncherHostSurfaceTarget {

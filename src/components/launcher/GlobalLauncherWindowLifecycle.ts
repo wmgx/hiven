@@ -452,6 +452,9 @@ export function useFocusGlobalLauncherSurfaceShell({
     if (!surfaceFrame && !launcherSettingsTarget && !hostSurfaceTarget) return
     const frame = window.requestAnimationFrame(() => {
       const shell = panelRef.current?.querySelector<HTMLElement>('.global-launcher-surface-shell, .global-launcher-settings-shell, .global-launcher-host-surface-shell')
+      // A schema field request owns initial focus, including delayed rendering.
+      // Do not steal it back from the actual editor on a shell refresh.
+      if (launcherSettingsTarget && shell?.querySelector('[data-settings-navigation-root]')) return
       const focusTarget =
         shell?.querySelector<HTMLElement>('[data-plugin-surface-autofocus]') ??
         shell

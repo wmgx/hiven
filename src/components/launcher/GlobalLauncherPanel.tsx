@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, type RefObject } from 'react'
 import { t, type Locale } from '../../i18n'
 import type { LauncherHostSurfaceTarget, PluginSurfaceOpenTarget } from '../../store'
-import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
+import type { PluginSettingsDialogTarget } from '../../workspace/pluginSettingsStore'
 import type { CollectInputFrame, LauncherController, LauncherControllerState, ParamInputFrame, ResultFrame } from '../../workspace/launcher/controller'
 import type { LauncherExecuteResult, LauncherResultChoice } from '../../workspace/launcher/types'
 import { createDeleteSavedActionItem, createRenameSavedActionItem } from '../../workspace/launcher/hostActions'
@@ -31,7 +31,7 @@ type GlobalLauncherPanelProps = {
   busy: boolean
   panelStyle: React.CSSProperties
   beginDrag: (event: React.PointerEvent<HTMLElement>) => void
-  launcherSettingsTarget: { pluginId: string; source: PluginSettingsSource } | null
+  launcherSettingsTarget: PluginSettingsDialogTarget
   closeSettingsDialog: () => void
   focusSearchInputAfterBack: () => void
   surfaceFrame: PluginSurfaceOpenTarget | null
@@ -172,10 +172,10 @@ export function GlobalLauncherPanel({
   }, [controllerRef])
   const toggleLauncherFavorite = useAppStore((s) => s.toggleLauncherFavorite)
   const launcherFavoriteKeys = useAppStore((s) => s.launcherFavoriteKeys)
-  // X11 window tokens expire with the current search. Keep the rows searchable
-  // and executable, but exclude them from both pin controls and the shared handler.
+  // X11 tokens expire and settings fields exist only under an explicit query.
+  // Neither can be resolved as a pinned row after returning to empty search.
   const pinnableItemKeys = useMemo(() => new Set(
-    [...availableItemKeys].filter((key) => !key.startsWith('host.window:focus:native:x11:')),
+    [...availableItemKeys].filter((key) => !key.startsWith('host.window:focus:native:x11:') && !key.startsWith('settings-field:')),
   ), [availableItemKeys])
   const handleToggleFavorite = useCallback((item: GlobalLauncherItem) => {
     const key = item.kind === 'domain' ? item.domainItem.systemKey : item.id

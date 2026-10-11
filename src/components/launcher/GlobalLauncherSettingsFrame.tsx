@@ -1,18 +1,20 @@
 import { useCallback } from 'react'
 import type { Locale } from '../../i18n'
-import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
+import type { PluginSettingsSource, PluginSettingsFieldTarget } from '../../workspace/pluginSettingsStore'
 import { useLauncherEscapeInterceptor } from './launcherEscapeInterceptor'
 import { PluginSettingsContent } from '../PluginSettingsDialog'
 
 export function GlobalLauncherSettingsFrame({
   pluginId,
   source,
+  target,
   locale,
   height,
   onClose,
 }: {
   pluginId: string
   source: PluginSettingsSource
+  target?: PluginSettingsFieldTarget
   locale: Locale
   height: number
   onClose: () => void
@@ -35,6 +37,7 @@ export function GlobalLauncherSettingsFrame({
       <PluginSettingsContent
         pluginId={pluginId}
         source={source}
+        target={target}
         locale={locale}
         onClose={onClose}
       />
