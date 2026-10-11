@@ -37,3 +37,10 @@ export function resolveBundledTextPreviewRunner(
   const runner = bundled.runners.get(tool)
   return runner && runner === tool.explicitTextPreview?.run ? runner : undefined
 }
+
+/** Exact bundled provenance; an installed package cannot impersonate by ID. */
+export function isCurrentBundledDefinition(pluginId: string, source: string, definition: PluginDefinition | undefined): boolean {
+  return source === 'builtin' && !!definition
+    && bundledDefinitions.get(definition)?.pluginId === pluginId
+    && pluginRegistry.getPluginDefinition(pluginId, 'production') === definition
+}

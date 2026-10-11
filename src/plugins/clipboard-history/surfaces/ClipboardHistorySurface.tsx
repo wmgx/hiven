@@ -44,6 +44,7 @@ import {
   type ClipboardTextMergeError,
   type ClipboardTextMergeSeparator,
 } from '../merge/clipboardTextMerge'
+import { readHistoryCompareSnapshots } from '../merge/clipboardTextCompare'
 import { ClipboardTextMergePanel } from './ClipboardTextMergePanel'
 import { getClipboardHistoryMatchContext, getClipboardHistoryMatchSnippet } from './clipboardHistoryMatchContext'
 import {
@@ -121,6 +122,10 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const [mergeRetry, setMergeRetry] = useState(0)
   const [mergeSuspended, setMergeSuspended] = useState(false)
   const mergeSuspendedRef = useRef(false)
+  const [comparing, setComparing] = useState(false)
+  const [compareBusy, setCompareBusy] = useState(false)
+  const [compareNotice, setCompareNotice] = useState<string | null>(null)
+  const compareSubmissionRef = useRef<AbortController | null>(null)
   const mergeSubmissionRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
@@ -130,6 +135,11 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
 
   const invalidateMerge = useCallback((cancelSubmission = true) => {
     if (cancelSubmission) {
+      compareSubmissionRef.current?.abort()
+      compareSubmissionRef.current = null
+      setCompareBusy(false)
+      setComparing(false)
+      setCompareNotice(null)
       mergeSubmissionRef.current?.abort()
       mergeSubmissionRef.current = null
     }
@@ -212,6 +222,8 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }, [settings.enabled, cancelMerge])
 
   useEffect(() => () => {
+    compareSubmissionRef.current?.abort()
+    compareSubmissionRef.current = null
     mergeSubmissionRef.current?.abort()
     mergeSubmissionRef.current = null
     mergeReader.invalidate()
@@ -223,7 +235,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       mergeSuspendedRef.current = true
       // Showing Launcher blurs this window. Keep the submitted preview until its
       // receipt arrives; explicit draft edits/cancel still revoke the submission.
-      if (!mergeSubmissionRef.current) {
+      if (!mergeSubmissionRef.current && !compareSubmissionRef.current) {
         invalidateMerge(false)
         setMergeLoading(false)
       }
@@ -275,6 +287,40 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       setMergeRetry((current) => current + 1)
     }
   }, [settings.enabled, combining, mergePreview, mergeReader, host, cancelMerge, t, mergeSuspended])
+
+  const compareHistory = useCallback(async () => {
+    if (compareSubmissionRef.current || mergeSubmissionRef.current || mergeIds.length !== 2 || !settings.enabled || !host.compareHistoryTexts) return
+    const submission = new AbortController()
+    compareSubmissionRef.current = submission
+    const owner = host.deliveryFeedbackOwner
+    const isCurrent = () => compareSubmissionRef.current === submission && !submission.signal.aborted && owner?.isCurrent() !== false
+    setCompareBusy(true)
+    setCompareNotice(null)
+    try {
+      const selection = mergeIds.map((id, index) => {
+        const item = mergeItemsRef.current.get(id)
+        return { id, hash: item?.hash ?? '', title: t('compare.source', {
+          position: index + 1,
+          title: (item?.favoriteTitle || (item?.kind === 'text' ? item.preview : '') || t('merge.emptyText')).slice(0, 200),
+        }) }
+      })
+      const snapshots = await readHistoryCompareSnapshots(repository, selection, isCurrent)
+      if (!isCurrent()) return
+      setComparing(true)
+      const accepted = await host.compareHistoryTexts(snapshots, { signal: submission.signal })
+      if (isCurrent() && !accepted) setCompareNotice(t('compare.failed'))
+    } catch (error) {
+      if (isCurrent()) setCompareNotice(t(error instanceof Error && error.message === 'TextTooLargeError' ? 'compare.tooLarge' : 'compare.failed'))
+    } finally {
+      if (compareSubmissionRef.current === submission) {
+        compareSubmissionRef.current = null
+        setComparing(false)
+        setCompareBusy(false)
+        setMergeRetry((current) => current + 1)
+        requestAnimationFrame(() => searchRef.current?.focus())
+      }
+    }
+  }, [mergeIds, settings.enabled, host, repository, t])
 
   const applyListItems = useCallback((listItems: ClipboardHistoryItem[]) => {
     setItems((current) => {
@@ -1123,15 +1169,18 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       {combining && (
         <SurfaceFooterHints className="clipboard-history-footer clipboard-history-merge-footer">
           <div className="clipboard-history-merge-footer-hints">
-            <span>↵ {t('merge.toggleSelection')}</span>
+            {compareNotice ? <span role="status">{compareNotice}</span> : <span>↵ {t('merge.toggleSelection')}</span>}
             <span>Esc {t('merge.cancel')}</span>
           </div>
           <div className="clipboard-history-merge-footer-actions">
             <Button type="button" onClick={cancelMerge}>{t('merge.cancel')}</Button>
+            <Button type="button" disabled={mergeIds.length !== 2 || compareBusy || mergeLoading || mergeSuspended || !settings.enabled || !host.compareHistoryTexts} onClick={() => void compareHistory()}>
+              {t(compareBusy ? 'compare.loading' : 'compare.action')}
+            </Button>
             <Button
               type="button"
               variant="primary"
-              disabled={!mergePreview || mergeLoading || mergeSuspended || !settings.enabled}
+              disabled={!mergePreview || mergeLoading || compareBusy || mergeSuspended || !settings.enabled}
               onClick={continueMerge}
             >
               {t('merge.continue')}
@@ -1181,6 +1230,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
 
   // A real modal owns focus and Escape through the shared surface contract in
   // both Launcher and independent windows. The history underneath is unchanged.
+  if (comparing) return null
   return combining ? (
     <Dialog
       open

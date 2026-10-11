@@ -10,6 +10,7 @@
  * boundary for *plugin* items.
  */
 
+import { createDiffPageTarget } from '../../historyDiffHandoff'
 import { openExternalUrl } from '../effectRunner'
 import { showToast } from '../toast'
 import { requestOpenLauncherHostSurface } from '../launcherHostSurfaceBridge'
@@ -232,28 +233,7 @@ export function createPluginLauncherApi(options: PluginLauncherApiOptions = {}):
       showToast(message, level)
     },
     openDiffPage: (payload) => {
-      const original = payload?.original
-      const modified = payload?.modified
-      // Preserve pane binding metadata so TextDiffSurface can write edits back.
-      const serializeSide = (side: typeof original) => ({
-        sourceId: side?.sourceId,
-        kind: side?.kind,
-        paneId: side?.paneId,
-        origin: side?.origin,
-        title: side?.title ?? '',
-        language: side?.language,
-        text: side?.text ?? '',
-      })
-      const initialText = JSON.stringify({
-        original: serializeSide(original),
-        modified: serializeSide(modified),
-      })
-      openLauncherHostedPluginSurface({
-        source: 'builtin',
-        pluginId: 'text-diff',
-        surfaceId: 'main',
-        initialText,
-      })
+      openLauncherHostedPluginSurface(createDiffPageTarget(payload))
     },
     apps: createPluginAppsApi(options),
   }

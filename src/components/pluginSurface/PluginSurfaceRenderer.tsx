@@ -15,6 +15,8 @@ import { captureLauncherPasteOwner, combinePasteRecoveryOwners, createPasteRecov
 import { createPluginNetwork } from '../../workspace/pluginNetwork'
 import { createPluginAi } from '../../workspace/ai/runtime'
 import { createPluginShell } from '../../workspace/pluginShell'
+import { isCurrentBundledDefinition } from '../../workspace/bundledPluginIdentity'
+import { createHistoryDiffReturnReceipt, prepareHistoryDiffTarget } from '../../historyDiffHandoff'
 import { createPluginSurfaceTextSaver } from '../../workspace/pluginSurfaceTextSave'
 import { acquireLauncherNativeDialogFocus } from '../../workspace/launcherBlurGuard'
 import { ensurePluginRuntimeReady } from '../../workspace/pluginRuntimeBootstrap'
@@ -126,6 +128,9 @@ export function PluginSurfaceRenderer({
   const sessionRef = useRef<AppSettingsSession | null>(null)
   const handoffRef = useRef<{ controller: AbortController; promise: Promise<boolean> } | null>(null)
   const deliveredHandoffRef = useRef<{ owner: PluginSurfaceRendererState; input: string; block: ReturnType<typeof createPluginSurfaceObjectBlock> } | null>(null)
+  type HistoryDiffSession = { target: PluginSurfaceOpenTarget; owner: PluginSurfaceRendererState; finish: (accepted: boolean) => void }
+  const [historyDiff, setHistoryDiff] = useState<HistoryDiffSession | null>(null)
+  const historyDiffRef = useRef<HistoryDiffSession | null>(null)
   const [appSettingsSession, setAppSettingsSession] = useState<AppSettingsSession | null>(null)
   const finishAppSettings = useCallback((session: AppSettingsSession | null, completed = false) => {
     if (!session || sessionRef.current !== session) return
@@ -143,6 +148,7 @@ export function PluginSurfaceRenderer({
     if (ownedTarget && store.settingsDialogTarget === ownedTarget) store.closeSettingsDialog()
   }, [])
   const interruptSettings = useCallback(() => {
+    historyDiffRef.current?.finish(false)
     pasteScope.invalidate()
     // A closed/replaced surface cannot resume an old native save dialog after reopening.
     exportSessionRef.current += 1
@@ -406,7 +412,7 @@ export function PluginSurfaceRenderer({
   // Bind this host object now. A retained callback from before hide/reopen must
   // not capture the replacement generation when it eventually calls paste.
   const surfaceOwner = pasteScope.capture(
-    isCurrentSurface,
+    () => isCurrentSurface() && !historyDiffRef.current,
     presentation === 'plugin-surface-window' ? () => { hiddenRef.current = true } : undefined,
   )
   const launcherPasteOwner = presentation === 'global-launcher' ? captureLauncherPasteOwner({ complete: false }) : undefined
@@ -460,6 +466,25 @@ export function PluginSurfaceRenderer({
           permissions={surfaceState.permissions}
           initialText={target.initialText}
           host={{
+            compareHistoryTexts: target.pluginId === 'clipboard-history' && isCurrentBundledDefinition(target.pluginId, target.source, surfaceState.definition) ? async (snapshots, options) => {
+              const owner = deliveryFeedbackOwner
+              if (!owner.isCurrent() || options?.signal?.aborted || historyDiffRef.current) return false
+              const diffTarget = prepareHistoryDiffTarget(target.source, target.pluginId, snapshots)
+              await ensurePluginRuntimeReady('builtin')
+              if (!owner.isCurrent() || options?.signal?.aborted || historyDiffRef.current) return false
+              const definition = pluginRegistry.getPluginDefinition('text-diff', 'builtin')
+              if (!isCurrentBundledDefinition('text-diff', 'builtin', definition) || !definition?.ui?.surfaces?.some((surface) => surface.id === 'main')) return false
+              const receipt = createHistoryDiffReturnReceipt(owner, options?.signal, () => {
+                if (historyDiffRef.current !== session) return
+                historyDiffRef.current = null
+                if (mountedRef.current) setHistoryDiff(null)
+              })
+              const session: HistoryDiffSession = { target: diffTarget, owner: surfaceState, finish: receipt.finish }
+              historyDiffRef.current = session
+              receipt.start()
+              if (historyDiffRef.current === session) setHistoryDiff(session)
+              return receipt.promise
+            } : undefined,
             deliveryFeedbackOwner,
             close: () => requestLeave('close'),
             complete: () => {
@@ -616,6 +641,13 @@ export function PluginSurfaceRenderer({
             shell: createPluginShell(surfaceState.permissions),
             ai: createPluginAi(target.pluginId, target.source, surfaceState.permissions),
           }}
+        />
+      )}
+      {historyDiff && historyDiff.owner === surfaceState && (
+        <PluginSurfaceRenderer
+          target={historyDiff.target} locale={locale} presentation={presentation}
+          contextSurfaceId={contextSurfaceId}
+          onBack={() => historyDiff.finish(true)} onClose={() => historyDiff.finish(true)}
         />
       )}
       {appSettingsSession && appSettingsSession.target === target && appSettingsSession.owner === surfaceState && (

@@ -780,6 +780,11 @@ export type PluginSurfaceHostApi = {
    * host surface lifecycle. Older hosts may omit this capability.
    */
   openAppSettings?(options: { section: 'ai' }): Promise<void>
+  /** Bundled History only: exactly two snapshots, total <= 1 MiB UTF-8.
+   * Keeps History mounted; resolves on Diff return, false on interruption.
+   * No arbitrary plugin routing, clipboard reads/writes, or pane binding.
+   */
+  compareHistoryTexts?(snapshots: readonly Readonly<{ id: string; title: string; text: string }>[], options?: { signal?: AbortSignal }): Promise<boolean>
   detachToWindow(initialText?: string): void
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
   showToast(message: string, level?: 'info' | 'success' | 'warning' | 'error', options?: { action?: { label: string; onClick: () => void }; duration?: number }): string
