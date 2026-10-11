@@ -1,3 +1,4 @@
+import { beginSuggestionSession } from './workspace/launcher/contextSuggestionsStore'
 import { translate } from './i18n'
 import { installHistoryPasteQueueHost } from './historyPasteQueueHandoff'
 import { showToast } from './workspace/toast'
@@ -217,7 +218,8 @@ function LauncherRuntimeApp() {
   }, [])
 
   useEffect(() => {
-    const openLauncher = () => {
+    const openLauncher = (event?: { payload?: { originAppId?: string | null } }) => {
+      beginSuggestionSession(event?.payload?.originAppId)
       const eventReceivedAt = launcherPerfNow()
       // Correlates all frontend samples for this open in launcher-perf.ndjson.
       beginLauncherPerfOpenSession({ trigger: 'hiven://launcher-open' })
@@ -272,7 +274,7 @@ function LauncherRuntimeApp() {
     let disposed = false
     let unlisten: (() => void) | undefined
     import('@tauri-apps/api/event')
-      .then(({ listen }) => listen('hiven://launcher-open', openLauncher))
+      .then(({ listen }) => listen<{ originAppId?: string | null }>('hiven://launcher-open', openLauncher))
       .then((cleanup) => {
         if (disposed) cleanup()
         else unlisten = cleanup

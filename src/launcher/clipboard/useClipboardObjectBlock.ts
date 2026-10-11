@@ -98,6 +98,8 @@ export function useClipboardObjectBlock(params: {
    * forceAttach / history pending still work.
    */
   suppressAutoAttach?: () => boolean
+  /** Host-owned idle mode can avoid reading/attaching automatic clipboard material. Explicit handoffs still work. */
+  skipAutomaticRead?: () => boolean
   filePicker?: {
     choose: () => Promise<string | string[] | null>
     /** Captures the host's root controller identity before opening the native dialog. */
@@ -133,6 +135,8 @@ export function useClipboardObjectBlock(params: {
   /** User dismissed the token — do not re-stash on close. */
   const userDismissedRef = useRef(false)
   // Host often passes an inline suppress fn — keep in ref so open effect is stable.
+  const skipAutomaticReadRef = useRef(params.skipAutomaticRead)
+  skipAutomaticReadRef.current = params.skipAutomaticRead
   const suppressAutoAttachRef = useRef(suppressAutoAttach)
   suppressAutoAttachRef.current = suppressAutoAttach
   const filePickerRef = useRef(filePicker)
@@ -230,11 +234,11 @@ export function useClipboardObjectBlock(params: {
     const isReadCurrent = () => mountedRef.current && !cancelled && generation === materialGenerationRef.current &&
       clipboardGeneration === clipboardReadGenerationRef.current
     const readAfterFirstPaint = async () => {
-      if (!isReadCurrent() || userDismissedRef.current) return
+      if (!isReadCurrent() || userDismissedRef.current || skipAutomaticReadRef.current?.()) return
       const startedAt = launcherPerfNow()
       try {
         const text = await readClipboard()
-        if (!isReadCurrent() || userDismissedRef.current) return
+        if (!isReadCurrent() || userDismissedRef.current || skipAutomaticReadRef.current?.()) return
         // Never clobber a history handoff that landed while we were reading.
         if (isHandoffBlock(materialRef.current.block)) return
         logLauncherPerfDuration('clipboard-object-block:read', startedAt, {

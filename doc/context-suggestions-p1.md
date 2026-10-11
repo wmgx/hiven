@@ -1,0 +1,40 @@
+# “猜你想干”受限 P1（独立实验）
+
+从已推送 `dot/ai-reliability` 基线 `0ee4804` 建立本地 `dot/context-suggestions`。不修改日常分支，不包含时间模式、剪贴板信号、正文分析、workflow 或 LLM 预测；本轮不推送、合并、发布。
+
+## 产品边界
+
+- 默认关闭；设置页独立显式开关和清除。下一次打开全局启动器生效。
+- 仅真正空 query、空闲搜索根显示最多三条带解释建议。输入（含空格）、IME composition、浏览动作、材料/文件流程、忙碌、结果、设置/插件/权限页退出建议。
+- 建议是同一 launcher 列表的普通动作，显式选择后使用原执行流程，不自动执行。原全文搜索排序未改变。
+- 同一来源应用至少三个不同 session 的成功记录，才能解释为“在此应用中常用”。按真实时间序列的既有 2 天/45 天双尺度 frecency 排序；不足则按全局最近成功补位，解释“最近使用”。不迁移或伪造旧 usage 的应用历史。
+- 仅静态协议 actionKey 白名单；不接受动态条目、文档/窗口/URL/路径/已保存 workflow key。候选复用安装、权限、可用性过滤；收藏不重复，已建议动作从普通最近列表去重。
+- 打开时冻结来源及列表顺序。迟到候选/旧 foregroundApp 查询不插入本次建议；无建议时正常显示原来的最近列表。权限撤销或卸载可移除动作。
+- 开启期间暂停自动读取/附加 launcher 剪贴板，避免迟到 hint/block 替换键盘默认目标；主动粘贴、文件选择和显式材料交接仍可用。设置中明确说明此影响。既有其他剪贴板功能不属于本功能的新采集。
+
+## 数据与成功边界
+
+独立本地键 `hiven-context-suggestions-v1`。成功记录仅包含 `actionKey / originAppId|null / at / session`；无正文、标题、URL、路径、正文哈希、PID。最多 1000 条成功事件、1000 条指标 session，90 天逻辑保留；启动、读取/写入和窗口恢复时清理过期数据，应用不运行时不声称后台物理删除。
+
+controller 在异步准备前捕获来源/会话，成功 commit 才回调；参数输入、预览、失败、取消不增加成功记录。插件面板另在异步准备前捕获成功 observer。关闭/清除更新 epoch，旧回调不能回填；磁盘写入失败也以内存状态停止采集，显示保存错误并广播停止到其他窗口，统计失败不能打断原动作。
+
+本地指标按实际展示 session 去重：N 展示、S 明确选择、E 该建议尝试确认成功。输入/Esc 为未命中，不作负反馈。60% 仅是用户目标，当前无个人真实使用样本，未宣称达到。
+
+## 来源应用
+
+原生 show 之前捕获并随 open event 传入，不使用打开后 200ms 的实时 appName。
+
+- macOS：bundle ID，过滤本应用；未进行 macOS 实机验收。
+- Linux：已确认 X11 session 下被动读取活动窗口 WM_CLASS 的 resource class，以 `x11-class:` 标识；不读取窗口标题/正文，不新增 OS 权限。
+- Wayland、Windows、身份缺失或格式不可靠：null，诚实退回最近使用。未声称支持其应用推荐。
+
+## 验证记录
+
+- `npm run test:context-suggestions`：选择器、独立session门槛、去重、隐私白名单、保留上限、默认关闭、N/S/E、跨会话、清除/关闭及写入异常测试通过；真实 controller 成功/失败/取消/归属测试通过。
+- `npm run check:typecheck`、`npm run check:architecture`、`npm run build`、`git diff --check` 通过。
+- `npm run test:launcher-visible-items` 13 项通过。
+- `test:ime-enter-confirmation` 在基线 `0ee4804` 与本分支同样失败：既有 ClipboardHistorySurface 静态契约；`test:launcher-plugin-lifetime` 同样在原基线缺 `../../historyDiffHandoff` stub。未将其算作本次通过，也不扩展本轮修复范围。
+- 独立审查者复审排序、隐私、键盘和失败边界，当前无明确高优先级待修项。
+- 官方 Rust + Debian 用户目录工具链的 Linux 原生编译通过。隔离 Xvfb/Openbox、官方 AppImage portable profile、tauri-driver/WebKitWebDriver 链已通。发现增量构建曾嵌入旧dist，因此强制清理本任务 hiven target 后重新嵌入，并以原生页面 script hash 核对。最终前端 entry 为 `index-B_iATRDw.js`；真实 UI 最终验收结果待补。
+
+工具链/日志/原生截图位于独立 `/workspace/context-native/`，未读取真实用户 profile、账号或秘密。模拟元数据与真实外部 XTerm 来源的验收结果将分别记录，不把 Linux 结果外推至其他平台。

@@ -37,6 +37,7 @@
     "test:learning-source-scope-fire": "node scripts/test-learning-source-scope-fire.mjs",
     "test:launcher-direct-answer": "node scripts/test-launcher-direct-answer.mjs",
     "test:learning-autolearn": "node scripts/test-learning-autolearn.mjs",
+    "test:context-suggestions": "node scripts/test-context-suggestions.mjs && node scripts/test-context-suggestions-controller.mjs",
     "test:visit-frecency": "node scripts/test-visit-frecency.mjs",
     "test:browser-empty-open-recommend": "node scripts/test-browser-empty-open-recommend.mjs",
     "test:browser-search-open-vs-history-tag": "node scripts/test-browser-search-open-vs-history-tag.mjs",
