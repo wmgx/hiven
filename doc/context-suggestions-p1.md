@@ -35,6 +35,22 @@ controller 在异步准备前捕获来源/会话，成功 commit 才回调；参
 - `npm run test:launcher-visible-items` 13 项通过。
 - `test:ime-enter-confirmation` 在基线 `0ee4804` 与本分支同样失败：既有 ClipboardHistorySurface 静态契约；`test:launcher-plugin-lifetime` 同样在原基线缺 `../../historyDiffHandoff` stub。未将其算作本次通过，也不扩展本轮修复范围。
 - 独立审查者复审排序、隐私、键盘和失败边界，当前无明确高优先级待修项。
-- 官方 Rust + Debian 用户目录工具链的 Linux 原生编译通过。隔离 Xvfb/Openbox、官方 AppImage portable profile、tauri-driver/WebKitWebDriver 链已通。发现增量构建曾嵌入旧dist，因此强制清理本任务 hiven target 后重新嵌入，并以原生页面 script hash 核对。最终前端 entry 为 `index-B_iATRDw.js`；真实 UI 最终验收结果待补。
+- 官方 Rust + Debian 用户目录工具链的 Linux 原生编译通过。隔离 Xvfb/Openbox、官方 AppImage portable profile、tauri-driver/WebKitWebDriver 链已通。发现增量构建曾嵌入旧dist，因此强制清理本任务 hiven target 后重新嵌入，并以原生页面 script hash 核对。最终前端 entry 为 `index-B_iATRDw.js`；实际 `tauri://localhost` WebView script 与之精确匹配。
 
-工具链/日志/原生截图位于独立 `/workspace/context-native/`，未读取真实用户 profile、账号或秘密。模拟元数据与真实外部 XTerm 来源的验收结果将分别记录，不把 Linux 结果外推至其他平台。
+工具链/日志/原生截图位于独立 `/workspace/context-native/`，未读取真实用户 profile、账号或秘密。模拟元数据与真实外部 XTerm 来源的验收结果分别记录，不把 Linux 结果外推至其他平台。
+
+
+## 最终原生验收（2026-10-11）
+
+真实 Tauri AppImage + WebKitWebDriver（wry 0.55.1），Xvfb/Openbox，`DISPLAY=:91 XDG_SESSION_TYPE=x11`，官方 portable profile。全程未关闭 WebKit sandbox。页面入口、原生 IPC 与最终资源 hash 验证通过。
+
+- **真实来源/成功**：产品设置显式开启之前无 feature 存储键。开启后，从外部 XTerm 打开 launcher，使用真实 Enter 执行“设置”，记录来源为 `x11-class:xterm`；前三个独立成功 session 后显示“在此应用中常用”。未把 PID、窗口标题或 query 存入新记录。证据：`/workspace/context-native/real-xterm-evidence.json`、`real-xterm-suggestion.png`。
+- **键盘和指标**：聚焦 launcher 后，真实 Enter 与 Ctrl+1 均执行同一首条建议，S/E 均为 true；同一展示会话仅一条 N。输入后正常搜索成功仍记录历史，但不计为建议 S/E。证据：`real-keyboard-metrics.json`。
+- **IME/空格**：在真实原生 WebView 派发 compositionstart/end（模拟输入法事件），composition 期间发送真实系统 Enter，未执行动作；空格和普通输入立即撤下建议。此项不是安装中文输入法的完整实机验收。
+- **隔离合成数据**：仅在已显式开启的测试 profile 注入静态动作元数据，验证最多三条、同 key 去重、不把缺失 app 依据包装成应用推荐、未安装 key 排除、收藏不重复。打开后注入迟到元数据，行顺序与快捷键映射不变，N 不重计。证据：`synthetic-top3-frozen.json`、`synthetic-top3-frozen.png`。
+- **关闭/清除**：使用产品 UI 关闭后再次实际执行“设置”，事件/指标均不增长；产品 UI 清除后只有该功能记录/计数归零，其他 localStorage key 保留。测试结束为关闭、空记录。英文及中文设置文案真实 DOM/截图确认。证据：`native-boundary-results.json`、`disabled-cleared.png`、`zh-ui-evidence.json`、`settings-zh.png`。
+- **唤起成本**：真实 XTerm 验证时间窗内 12 个 `native:main-thread-open` 样本为 0–2ms（包含可见重开），仅限该环境，不外推性能承诺。
+
+验收限制：Openbox 下程序化 show/合成全局热键未稳定自动取得键盘焦点，测试用标准窗口管理器显式聚焦 launcher 后发送键盘事件；已验证键盘目标与执行映射，未宣称自动焦点/真实中文 IME 或 macOS/Windows/Wayland 全链通过。实现缺失来源时会回退最近使用。原生权限撤销/卸载的完整交互未实测，复用了现有严格 availability 过滤及执行检查。
+
+本地实现提交 `0c62554`，无远端新分支、无合并、无发布。环境断连提示后已实际复查，命令与文件持续可用；修改完整保存在独立本地分支。
