@@ -2,6 +2,8 @@ import BigNumber from 'bignumber.js'
 import { getPluginHostSdk, textOutput, textError, type PanelPropsV2, type PluginDefinition, type PluginSurfaceProps, type TextInput, type LauncherDynamicContext, type LauncherItemContribution } from '@hiven/plugin'
 import { CalculatorSurface } from './CalculatorSurface'
 import { convertUnitQuery } from './unitConversion'
+import { parseChineseNumeralQuery } from './chineseNumeral'
+import { parseRadixQuery } from './radixAnswer'
 import './style.css'
 
 // ─── Safe Math Parser ────────────────────────────────────────────────────────
@@ -426,6 +428,21 @@ function CalculatorWorkspace(props: PluginSurfaceProps) {
 
 // ─── Plugin Definition ───────────────────────────────────────────────────────
 
+function numberAnswerItem(id: string, title: string, subtitle: string, text?: string): LauncherItemContribution {
+  return {
+    id,
+    display: { title, subtitle, icon: 'Calculator' },
+    behavior: { type: 'perform' },
+    surfaces: ['global-launcher'],
+    directAnswer: true,
+    async execute(ctx) {
+      if (text === undefined) return { ok: false, message: title }
+      await ctx.api.copyText(text)
+      return { ok: true, output: { choices: [{ id: 'copy', title: text, primaryAction: async () => { await ctx.api.copyText(text) } }] } }
+    },
+  }
+}
+
 const definition: PluginDefinition = {
   ui: {
     surfaces: [
@@ -604,6 +621,25 @@ const definition: PluginDefinition = {
   launcher: {
     dynamicItems(ctx: LauncherDynamicContext): LauncherItemContribution[] {
       const input = ctx.query
+      const chinese = parseChineseNumeralQuery(input)
+      if (chinese) {
+        return [chinese.ok
+          ? numberAnswerItem('chinese-number', `${input.trim()} = ${chinese.text}`, ctx.t(`chinese.${chinese.mode}Hint`), chinese.text)
+          : numberAnswerItem('chinese-number-error', ctx.t(`chinese.error.${chinese.error}`), ctx.t('chinese.syntax'))]
+      }
+      const radix = parseRadixQuery(input)
+      if (radix) {
+        if (!radix.ok) return [numberAnswerItem('radix-answer-error', ctx.t(`radix.error.${radix.error}`), ctx.t('radix.syntax'))]
+        const text = radix.answers.length === 1
+          ? radix.answers[0].text
+          : radix.answers.map((answer) => `${ctx.t(`radix.base.${answer.base}`)}: ${answer.text}`).join('\n')
+        return [numberAnswerItem(
+          'radix-answer',
+          `${input.trim()} = ${radix.answers.map((answer) => answer.text).join(' · ')}`,
+          ctx.t('radix.copyHint', { bases: radix.answers.map((answer) => ctx.t(`radix.base.${answer.base}`)).join(' / ') }),
+          text,
+        )]
+      }
       const conversion = convertUnitQuery(input)
       if (conversion) {
         if (!conversion.ok) {

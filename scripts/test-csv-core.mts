@@ -384,4 +384,57 @@ function table(headers: string[], rows: string[][]): Table {
   }), { name: 'AbortError' })
 }
 
+// Markdown serializes complete source data, including exact JSON keys and CSV cells.
+{
+  const source = JSON.stringify([
+    { ' spaced ': 'a|b', '': 'empty key', nested: { text: '<tag>\\path' }, nothing: null },
+    { later: ['x', 'y'], ' spaced ': 'first\nsecond' },
+    JSON.parse('{"__proto__":"literal"}'),
+  ])
+  const parsed = parseSource(source)
+  assert.equal(parsed.ok, true)
+  if (parsed.ok) {
+    assert.deepEqual(parsed.table.headers, [' spaced ', '', 'nested', 'nothing', 'later', '__proto__'])
+    assert.equal(parsed.table.rows[0][0], 'a|b')
+    assert.equal(parsed.table.rows[0][1], 'empty key')
+    assert.equal(parsed.table.rows[0][5], '', 'missing prototype-named keys remain blank')
+    assert.equal(parsed.table.rows[2][5], 'literal')
+    assert.equal(parsed.table.rows[1][4], '["x","y"]')
+    const full = await processFullSource(source, {
+      delimiter: 'auto', header: 'auto', output: 'markdown',
+      transforms: { dropEmpty: false, dedupe: false, transpose: false },
+    })
+    assert.equal(full.output, toOutput(parsed.table, 'markdown'))
+    assert.ok(full.output.includes('a&#124;b'))
+    assert.ok(full.output.includes('first<br>second'))
+    assert.ok(full.output.includes('&lt;tag&gt;'))
+    assert.equal(full.output.split('\n').length, 5)
+  }
+  for (const invalid of ['[1,2]', '[null]', '[["a"]]', '{"a":1}']) {
+    assert.equal(parseSource(invalid).ok, false, invalid)
+  }
+  // Explicit fixture uses RFC4180 doubled quotes and a quoted embedded newline.
+  const actual = 'name,note\nA,"line1\nline2 | ""quoted"""\n'
+  const parsedCsv = parseSource(actual, 'comma', 'first-row')
+  assert.equal(parsedCsv.ok, true)
+  if (parsedCsv.ok) {
+    assert.equal(toOutput(parsedCsv.table, 'markdown'), '| name | note |\n| --- | --- |\n| A | line1<br>line2 &#124; "quoted" |')
+  }
+  const big = 'id,note\n' + Array.from({ length: 1601 }, (_, i) => `${i},row-${i}`).join('\n')
+  const full = await processFullSource(big, {
+    delimiter: 'comma', header: 'first-row', output: 'markdown',
+    transforms: { dropEmpty: false, dedupe: false, transpose: false },
+  })
+  assert.equal(full.rowCount, 1601)
+  assert.ok(full.output.endsWith('| 1600 | row-1600 |'))
+  const wider = 'a\n1,tail'
+  const parsedWider = parseSource(wider, 'comma', 'first-row')
+  assert.equal(parsedWider.ok, true)
+  if (parsedWider.ok) assert.deepEqual(parsedWider.table, table(['a', 'column_2'], [['1', 'tail']]))
+  const widerFull = await processFullSource(wider, {
+    delimiter: 'comma', header: 'first-row', output: 'markdown',
+    transforms: { dropEmpty: false, dedupe: false, transpose: false },
+  })
+  assert.ok(widerFull.output.endsWith('| 1 | tail |'))
+}
 console.log('csv-core tests passed')

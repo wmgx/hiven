@@ -56,5 +56,15 @@
   "zone.error.zone": "Use EST, UTC±offset, or an IANA zone; other abbreviations are ambiguous",
   "zone.error.date": "Enter a valid date and time",
   "zone.error.gap": "This local time does not exist at the daylight saving transition",
-  "zone.error.fold": "This local time occurs twice; use an explicit UTC offset"
+  "zone.error.fold": "This local time occurs twice; use an explicit UTC offset",
+  "cron.everyMinutes": "Every {count} minutes",
+  "cron.fields": "Minute {minute}; hour {hour}; day {day}; month {month}; weekday {weekday}",
+  "cron.next": "Next {time} ({zone})",
+  "cron.dayOr": "Neither day field starts with *: OR; DST gaps skipped, repeated times both count",
+  "cron.dayRule": "Either day field starts with *: AND; DST gaps skipped, repeated times both count",
+  "cron.copy": "Enter to copy · preview only",
+  "cron.help": "Five fields: minute hour day month weekday; e.g. */5 * * * *",
+  "cron.error.syntax": "Use standard five-field cron; seconds, Quartz symbols, macros and extra fields are unsupported",
+  "cron.error.zone": "The local time zone is unavailable",
+  "cron.error.unreachable": "No matching date within the next eight years"
 }

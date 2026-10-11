@@ -14,7 +14,7 @@ const transpiled = ts.transpileModule(source, {
   },
 }).outputText
 
-const fixedEpochMs = Date.UTC(2026, 5, 10, 4, 5, 6)
+let fixedEpochMs = Date.UTC(2026, 5, 10, 4, 5, 6)
 class FixedDate extends Date {
   constructor(value) {
     super(value === undefined ? fixedEpochMs : value)
@@ -30,6 +30,10 @@ const zoneModule = { exports: {} }
 vm.runInNewContext(ts.transpileModule(readFileSync('src/plugins/date-time-assistant/timeZoneAnswer.ts', 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023 },
 }).outputText, { module: zoneModule, exports: zoneModule.exports, Date: FixedDate, Intl })
+const cronModule = { exports: {} }
+vm.runInNewContext(ts.transpileModule(readFileSync('src/plugins/date-time-assistant/cronAnswer.ts', 'utf8'), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023 },
+}).outputText, { module: cronModule, exports: cronModule.exports, Date: FixedDate, Intl })
 const module = { exports: {} }
 const context = vm.createContext({
   Date: FixedDate,
@@ -41,6 +45,7 @@ const context = vm.createContext({
   module,
   exports: module.exports,
   require(specifier) {
+    if (specifier === './cronAnswer') return cronModule.exports
     if (specifier === './timeZoneAnswer') return zoneModule.exports
     if (specifier === '@hiven/plugin') {
       return {
@@ -227,3 +232,26 @@ assert.equal(badItems.length, 1)
 const badResult = await badItems[0].execute({ api: { copyText() { assert.fail('invalid zone must not copy') } } })
 assert.equal(badResult.ok, false)
 console.log('date time assistant checks passed')
+
+assert.equal((await values('*/5 * * * *')).length, 1, 'Cron returns one keyboard-copy action')
+assert.match((await values('*/5 * * * *'))[0], /^\*\/5 \* \* \* \* ·/)
+assert.equal((await values('0 0 ? * MON')).length, 0, 'Invalid cron must not copy')
+
+const initialEpoch = fixedEpochMs
+const cronTranslate = (key, args = {}) => `${key} ${JSON.stringify(args)}`
+const idleCron = (await provider({ query: '*/5 * * * *', locale: 'en', settings: {}, t: cronTranslate }))[0]
+assert.match(idleCron.display.title, /2026-06-10 12:10:00/)
+fixedEpochMs += 7 * 60_000
+const freshCopies = []
+const idleResult = await idleCron.execute({ api: { copyText: async (text) => freshCopies.push(text) } })
+assert.equal(idleResult.ok, true)
+assert.equal(freshCopies.length, 1)
+assert.match(freshCopies[0], /2026-06-10 12:15:00/)
+assert.doesNotMatch(freshCopies[0], /2026-06-10 12:10:00/)
+assert.match(freshCopies[0], /Asia\/Shanghai/)
+fixedEpochMs = NaN
+const invalidNowResult = await idleCron.execute({ api: { copyText: async () => assert.fail('Failed refresh must not copy the cached next occurrence') } })
+assert.equal(invalidNowResult.ok, false)
+assert.match(invalidNowResult.message, /cron.error.syntax/)
+fixedEpochMs = initialEpoch
+console.log('Cron dynamic execution refresh and failure checks passed')

@@ -64,5 +64,20 @@
   "units.syntax": "Try 5 ft to cm, 2 kg to lb, 1 KiB to B · Unit symbols are case-sensitive",
   "units.error.dimension": "Cannot convert between different dimensions",
   "units.error.unit": "Unsupported unit or letter case",
-  "units.error.range": "Value out of range (use exponents from −30 to 30)"
+  "units.error.range": "Value out of range (use exponents from −30 to 30)",
+  "chinese.integerHint": "Enter to copy Chinese uppercase integer · No currency units",
+  "chinese.moneyHint": "Enter to copy CNY uppercase amount · Yuan, jiao, fen; exact cents",
+  "chinese.syntax": "Try 大写 12345 or 金额大写 12345.67",
+  "chinese.error.invalid": "Use decimal digits with an optional sign; no commas or scientific notation",
+  "chinese.error.integer": "Integer uppercase requires a whole number; use 金额大写 for amounts",
+  "chinese.error.precision": "Amounts allow at most two decimal places; no rounding is applied",
+  "chinese.error.range": "Supported magnitude: at most 16 integer digits (through 兆)",
+  "radix.copyHint": "Enter copies {bases} in full · Negative values use a sign, not two’s complement",
+  "radix.syntax": "Try 0xFF, 255 to hex, or bin 1010 to dec · Maximum 256 digits",
+  "radix.error.invalid": "Invalid integer for the specified base",
+  "radix.error.limit": "Base conversion accepts at most 256 input digits",
+  "radix.base.2": "Binary",
+  "radix.base.8": "Octal",
+  "radix.base.10": "Decimal",
+  "radix.base.16": "Hex"
 }

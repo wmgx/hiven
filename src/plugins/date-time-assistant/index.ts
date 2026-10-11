@@ -1,4 +1,5 @@
 import { definePlugin, getPluginHostSdk, textError, textOutput, type TextInput, type LauncherDynamicContext, type LauncherItemContribution, type PluginSurfaceProps, type PluginToolSurfaces } from '@hiven/plugin'
+import { parseCronAnswer } from './cronAnswer'
 import { parseTimeZoneAnswer } from './timeZoneAnswer'
 import type { DateTimeConversionResult } from './DateTimeSurface'
 
@@ -562,6 +563,33 @@ export const dateTimeAssistantPlugin = definePlugin({
       const input = ctx.query
       if (!input) return []
       const now = new Date()
+      const cron = parseCronAnswer(input, now)
+      if (cron) {
+        if (!cron.ok) return [{
+          id: 'dt-cron-error', display: { title: ctx.t(`cron.error.${cron.error}`), subtitle: ctx.t('cron.help'), icon: 'Clock' },
+          behavior: { type: 'perform' }, surfaces: ['global-launcher'], directAnswer: true,
+          execute() { return { ok: false, message: ctx.t(`cron.error.${cron.error}`) } },
+        }]
+        const value = cron.value
+        const description = value.everyMinutes !== undefined
+          ? ctx.t('cron.everyMinutes', { count: value.everyMinutes })
+          : ctx.t('cron.fields', { minute: value.fields[0], hour: value.fields[1], day: value.fields[2], month: value.fields[3], weekday: value.fields[4] })
+        const next = ctx.t('cron.next', { time: value.next, zone: value.zone })
+        const rule = ctx.t(value.dayOr ? 'cron.dayOr' : 'cron.dayRule')
+        return [{
+          id: 'dt-cron-answer', display: { title: `${description} · ${next}`, subtitle: `${rule} · ${ctx.t('cron.copy')}`, icon: 'Clock' },
+          behavior: { type: 'perform' }, surfaces: ['global-launcher'], directAnswer: true,
+          async execute(execution) {
+            // The suggestion may have been idle across its next occurrence. Keep
+            // its displayed zone, but recompute against the time of activation.
+            const fresh = parseCronAnswer(input, new Date(), value.zone)
+            if (!fresh?.ok) return { ok: false, message: ctx.t(`cron.error.${fresh?.error ?? 'syntax'}`) }
+            const freshNext = ctx.t('cron.next', { time: fresh.value.next, zone: fresh.value.zone })
+            await execution.api.copyText(`${fresh.value.expression} · ${description} · ${freshNext} · ${rule}`)
+            return { ok: true }
+          },
+        }]
+      }
       const zoneResult = parseTimeZoneAnswer(input, now)
       if (zoneResult) {
         if (!zoneResult.ok) return [{

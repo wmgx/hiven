@@ -4,6 +4,7 @@
  */
 
 import { filterRowsBySql, filterRowsByText } from './csvSqlFilter'
+import { escapeMarkdownCell } from './markdownCell'
 
 export type DelimiterMode = 'auto' | 'comma' | 'tab' | 'semicolon' | 'pipe'
 export type HeaderMode = 'auto' | 'first-row' | 'no-header'
@@ -61,7 +62,7 @@ export function detectInputKind(text: string): 'json' | 'csv' {
   if (!(t.startsWith('[') || t.startsWith('{'))) return 'csv'
   try {
     const value = JSON.parse(t)
-    if (Array.isArray(value)) return 'json'
+    if (value !== null && typeof value === 'object') return 'json'
     return 'csv'
   } catch {
     return 'csv'
@@ -284,7 +285,12 @@ function parseCsvText(
 
   if (useHeader) {
     const headers = (matrix[0] ?? []).map((h, i) => normalizeHeader(h, i))
-    const width = headers.length
+    const width = matrix.reduce((max, row) => Math.max(max, row.length), headers.length)
+    while (headers.length < width) {
+      let name = `column_${headers.length + 1}`
+      while (headers.includes(name)) name += '_'
+      headers.push(name)
+    }
     const rows = matrix.slice(1).map((row) => {
       const next = row.slice(0, width)
       while (next.length < width) next.push('')
@@ -336,9 +342,10 @@ function parseJsonArray(text: string, limits?: ParseLimits): ParseResult {
       }
     }
   }
-  const headers = headerSet.map((h, i) => normalizeHeader(h, i))
+  // JSON property names are exact data, including whitespace and empty keys.
+  const headers = headerSet
   const rows = objects.map((obj) => headers.map((h) => {
-    const v = obj[h]
+    const v = Object.prototype.hasOwnProperty.call(obj, h) ? obj[h] : undefined
     if (v === null || v === undefined) return ''
     if (typeof v === 'string') return v
     return JSON.stringify(v)
@@ -483,10 +490,6 @@ function tableObjects(table: Table): Array<Record<string, string>> {
 function jsonStringify(value: unknown, style: JsonStyle): string {
   if (style.minify) return JSON.stringify(value)
   return JSON.stringify(value, null, style.indent)
-}
-
-function escapeMarkdownCell(value: string): string {
-  return value.replace(/\|/g, '\\|').replace(/\r?\n/g, ' ')
 }
 
 function quoteSqlIdent(name: string): string {
@@ -727,7 +730,12 @@ function matrixToCsvTable(matrix: string[][], delimiter: string, headerMode: Hea
   const useHeader = headerMode === 'first-row' || (headerMode === 'auto' && matrix.length > 1)
   if (useHeader) {
     const headers = (matrix[0] ?? []).map((h, i) => normalizeHeader(h, i))
-    const width = headers.length
+    const width = matrix.reduce((max, row) => Math.max(max, row.length), headers.length)
+    while (headers.length < width) {
+      let name = `column_${headers.length + 1}`
+      while (headers.includes(name)) name += '_'
+      headers.push(name)
+    }
     const rows = matrix.slice(1).map((row) => {
       const next = row.slice(0, width)
       while (next.length < width) next.push('')

@@ -652,7 +652,9 @@ export function CsvSurface(props: PluginSurfaceProps) {
   }, [canReturnOutput, getCompleteOutput, host, output, owner, resultRevision, t])
 
   const errorMessage = !parsed.ok
-    ? localizedText(t, 'error.generic', 'Parse error: {message}', { message: parsed.message })
+    ? parsed.message === 'JSON input must be an array of objects'
+      ? t('error.jsonObjects')
+      : localizedText(t, 'error.generic', 'Parse error: {message}', { message: parsed.message })
     : ''
 
   const cols = finalTable?.headers.length ?? 0
@@ -1573,6 +1575,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
 
         {mainView === 'output' ? (
           <div className="csv-tools-surface__output-wrap">
+            {output === 'markdown' ? <div className="csv-tools-surface__output-hint">{t('output.markdownRules')}</div> : null}
             {sortColumns.length > 0 || (filterMode === 'text' ? globalFilter : sqlFilter).trim() ? (
               <div className="csv-tools-surface__output-hint">{t('table.filterScope')}</div>
             ) : null}

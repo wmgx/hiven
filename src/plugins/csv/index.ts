@@ -50,7 +50,7 @@ const OPERATION_ROUTES = [
   { id: 'to-ndjson', title: 'route.toNdjson', aliases: ['csv to ndjson', 'csv to jsonl', 'csv to json lines', 'csv转jsonl', 'csv转json行'] },
   { id: 'to-csv', title: 'route.jsonToCsv', aliases: ['json to csv', 'json2csv', 'json转csv', 'json 转 csv'] },
   { id: 'to-tsv', title: 'route.toTsv', aliases: ['csv to tsv', 'json to tsv', 'table to tsv', 'csv转tsv', '转tsv'] },
-  { id: 'to-markdown', title: 'route.toMarkdown', aliases: ['csv to markdown', 'table to markdown', 'csv table', 'csv转markdown', '转markdown表格'] },
+  { id: 'to-markdown', title: 'route.toMarkdown', aliases: ['csv to markdown', 'json to markdown', 'json markdown table', 'json转markdown', 'json 转 markdown', 'JSON转表格', 'table to markdown', 'csv table', 'csv转markdown', '转markdown表格'] },
   { id: 'to-sql', title: 'route.toSql', aliases: ['csv to sql', 'csv sql insert', 'table to sql', 'csv转sql', '生成sql insert'] },
 ] as const
 

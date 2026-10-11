@@ -7,10 +7,14 @@ import vm from 'node:vm'
 import ts from 'typescript'
 
 const require = createRequire(import.meta.url)
-const unitModule = { exports: {} }
-vm.runInNewContext(ts.transpileModule(readFileSync('src/plugins/calculator/unitConversion.ts', 'utf8'), {
-  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023, esModuleInterop: true },
-}).outputText, { require, module: unitModule, exports: unitModule.exports })
+const localModules = new Map()
+for (const name of ['unitConversion', 'chineseNumeral', 'radixAnswer']) {
+  const localModule = { exports: {} }
+  vm.runInNewContext(ts.transpileModule(readFileSync(`src/plugins/calculator/${name}.ts`, 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023, esModuleInterop: true },
+  }).outputText, { require, module: localModule, exports: localModule.exports })
+  localModules.set(`./${name}`, localModule.exports)
+}
 const source = readFileSync('src/plugins/calculator/index.ts', 'utf8')
 const transpiled = ts.transpileModule(source, {
   compilerOptions: {
@@ -29,7 +33,7 @@ const context = vm.createContext({
   isFinite,
   isNaN,
   require(id) {
-    if (id === './unitConversion') return unitModule.exports
+    if (localModules.has(id)) return localModules.get(id)
     if (id === './CalculatorSurface') return { CalculatorSurface: () => null }
     if (id === './style.css') return {}
     if (id === '@hiven/plugin') return {
@@ -161,5 +165,22 @@ const invalidUnit = plugin.launcher.dynamicItems({ ...unitContext, query: '1 m t
 assert.equal((await invalidUnit.execute(unitContext)).ok, false)
 assert.deepEqual(copied, ['1024 B'], 'invalid dimensions never overwrite clipboard')
 await assert.rejects(unitItems[0].execute({ api: { copyText: async () => { throw new Error('clipboard unavailable') } } }), /clipboard unavailable/)
+
+for (const [query, expected] of [['大写 12345', '壹万贰仟叁佰肆拾伍'], ['金额大写 123.45', '壹佰贰拾叁元肆角伍分'], ['0xFF', 'radix.base.10: 255\nradix.base.2: 0b11111111'], ['-255 to hex', '-0xFF']]) {
+  const answers = plugin.launcher.dynamicItems({ ...unitContext, query })
+  assert.equal(answers.length, 1, 'one compact answer per explicit query')
+  const before = copied.length
+  assert.equal((await answers[0].execute(unitContext)).ok, true)
+  assert.equal(copied.length, before + 1)
+  assert.equal(copied.at(-1), expected)
+}
+for (const query of ['金额大写 1.001', '0b102']) {
+  const before = copied.length
+  const answer = plugin.launcher.dynamicItems({ ...unitContext, query })[0]
+  assert.equal((await answer.execute(unitContext)).ok, false)
+  assert.equal(copied.length, before)
+}
+assert.equal(plugin.launcher.dynamicItems({ ...unitContext, query: '12345' }).length, 0, 'plain numbers are not claimed')
+assert.equal(plugin.launcher.dynamicItems({ ...unitContext, query: '12+4' })[0].id, 'calc-result', 'ordinary calculation unchanged')
 
 console.log('calculator command mode checks passed')

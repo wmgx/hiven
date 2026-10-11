@@ -64,5 +64,20 @@
   "units.syntax": "试试 5 ft to cm、2 kg to lb、1 KiB to B · 单位符号区分大小写",
   "units.error.dimension": "不能在不同量纲之间换算",
   "units.error.unit": "不支持该单位或大小写形式",
-  "units.error.range": "数值超出范围（请使用 −30 到 30 的数量级）"
+  "units.error.range": "数值超出范围（请使用 −30 到 30 的数量级）",
+  "chinese.integerHint": "按 Enter 复制中文大写整数 · 不带货币单位",
+  "chinese.moneyHint": "按 Enter 复制人民币大写金额 · 明确元角分整，精确到分",
+  "chinese.syntax": "试试 大写 12345 或 金额大写 12345.67",
+  "chinese.error.invalid": "请输入可带正负号的十进制数字，不支持逗号或科学记数法",
+  "chinese.error.integer": "整数大写仅接受整数；金额请使用“金额大写”",
+  "chinese.error.precision": "金额最多两位小数，不自动舍入",
+  "chinese.error.range": "整数部分最多 16 位（最高使用兆单位）",
+  "radix.copyHint": "按 Enter 完整复制{bases} · 负数带符号，不使用补码",
+  "radix.syntax": "试试 0xFF、255 to hex 或 bin 1010 to dec · 最多 256 位输入数字",
+  "radix.error.invalid": "该进制的整数格式无效",
+  "radix.error.limit": "进制换算最多接受 256 位输入数字",
+  "radix.base.2": "二进制",
+  "radix.base.8": "八进制",
+  "radix.base.10": "十进制",
+  "radix.base.16": "十六进制"
 }

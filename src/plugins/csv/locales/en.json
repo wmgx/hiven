@@ -88,7 +88,7 @@
   "route.csvToJson": "CSV to JSON",
   "route.jsonToCsv": "JSON to CSV",
   "route.toTsv": "Convert to TSV",
-  "route.toMarkdown": "Convert to Markdown Table",
+  "route.toMarkdown": "CSV / JSON → Markdown table",
   "route.toSql": "Convert to SQL INSERT",
   "route.open": "Open in CSV Tools",
   "route.toArray": "CSV → 2D Array",
@@ -109,5 +109,7 @@
   "toast.saveUnsupported": "This environment does not support native Save As. Use the desktop app to save; your complete result is still here.",
   "toast.saveUnavailable": "The save dialog is unavailable. Your complete result is still here; try again.",
   "toast.saveBusy": "Another save is in progress. Your complete result is still here; try again when it finishes.",
-  "toast.saveFailed": "Could not save the complete result. Your result is still here; try again."
+  "toast.saveFailed": "Could not save the complete result. Your result is still here; try again.",
+  "output.markdownRules": "Literal cells: line breaks become <br>; HTML and Markdown syntax are escaped. JSON requires an array of objects: columns follow first-seen keys (object key order), missing/null cells are blank, nested values use compact JSON. Empty and whitespace keys are preserved. Extra CSV fields receive generated column names.",
+  "error.jsonObjects": "JSON input must be an array containing only objects (no single object, primitive, nested-array, or null rows)."
 }

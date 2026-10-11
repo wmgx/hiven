@@ -88,7 +88,7 @@
   "route.csvToJson": "CSV 转 JSON",
   "route.jsonToCsv": "JSON 转 CSV",
   "route.toTsv": "转换为 TSV",
-  "route.toMarkdown": "转换为 Markdown 表格",
+  "route.toMarkdown": "CSV / JSON → Markdown 表格",
   "route.toSql": "转换为 SQL INSERT",
   "route.open": "在 CSV Tools 中打开",
   "route.toArray": "CSV → 二维数组",
@@ -109,5 +109,7 @@
   "toast.saveUnsupported": "当前环境不支持原生另存，请在桌面应用中保存。完整结果仍保留。",
   "toast.saveUnavailable": "无法打开保存对话框，完整结果仍保留，请重试。",
   "toast.saveBusy": "另一次保存正在进行，完整结果仍保留，请稍后重试。",
-  "toast.saveFailed": "保存完整结果失败，结果仍保留，请重试。"
+  "toast.saveFailed": "保存完整结果失败，结果仍保留，请重试。",
+  "output.markdownRules": "单元格按纯文本输出：换行变为 <br>，HTML 和 Markdown 语法转义。JSON 仅接受对象数组：按对象键首次出现顺序生成列，缺失值/null 留空，嵌套值用紧凑 JSON；保留空键和含空格键。CSV 多出字段自动补列名。",
+  "error.jsonObjects": "JSON 必须是对象数组，不接受单个对象或含基本值、数组、null 的行。"
 }

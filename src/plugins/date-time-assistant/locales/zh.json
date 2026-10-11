@@ -56,5 +56,15 @@
   "zone.error.zone": "请使用 EST、UTC±偏移或 IANA 时区；其他缩写存在歧义",
   "zone.error.date": "请输入有效日期和时间",
   "zone.error.gap": "夏令时切换跳过了此本地时间",
-  "zone.error.fold": "此本地时间重复出现两次；请指定 UTC 偏移"
+  "zone.error.fold": "此本地时间重复出现两次；请指定 UTC 偏移",
+  "cron.everyMinutes": "每{count}分钟",
+  "cron.fields": "分钟 {minute}；小时 {hour}；日期 {day}；月份 {month}；星期 {weekday}",
+  "cron.next": "下次 {time}（{zone}）",
+  "cron.dayOr": "日期、星期均非*开头，满足其一；DST空缺跳过，重复各算一次",
+  "cron.dayRule": "日期或星期以*开头，两者须同时满足；DST空缺跳过，重复各算一次",
+  "cron.copy": "回车复制 · 仅预览，不创建任务",
+  "cron.help": "五字段：分钟 小时 日期 月份 星期；例如 */5 * * * *",
+  "cron.error.syntax": "仅支持标准五字段 Cron；不支持秒字段、Quartz 特殊符号、宏或附加字段",
+  "cron.error.zone": "无法读取本地时区",
+  "cron.error.unreachable": "未来八年内没有满足条件的日期"
 }
