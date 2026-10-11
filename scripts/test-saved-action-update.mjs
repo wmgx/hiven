@@ -83,7 +83,9 @@ seed()
 base = { ...base, contractFingerprint: 'v2' }
 assert.equal((await confirm.output.choices[0].primaryAction()).ok, false, 'current contract is re-resolved')
 base = { ...base, contractFingerprint: 'v1' }
-assert.equal((await confirm.output.choices[0].primaryAction()).ok, true)
+const successfulUpdate = await confirm.output.choices[0].primaryAction()
+assert.equal(successfulUpdate.ok, true)
+assert.notEqual(successfulUpdate.keepOpen, true, 'successful confirmation must not retain its stale source offer')
 seed()
 item = await prepare()
 assert.equal((await item.suggest({ ...ctx, inputText: 'Separate' })).choices.length, 0)

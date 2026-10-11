@@ -185,7 +185,8 @@ export function createSaveLastRunItem(options: {
                           const checked = resolveUpdate()
                           if (!checked || typeof checked === 'string') return { ok: false as const, message: updateError(suggestCtx.locale, checked ?? 'invalid') }
                           const result = updateSavedActionIfUnchanged(source.id, source.snapshot, lastRun)
-                          if (result.status === 'updated' || result.status === 'unchanged') return { ok: true as const, keepOpen: true }
+                          // Finish the confirmation so its old source snapshot cannot remain actionable.
+                          if (result.status === 'updated' || result.status === 'unchanged') return { ok: true as const }
                           return { ok: false as const, message: updateError(suggestCtx.locale, result.status) }
                         } catch {
                           return { ok: false as const, message: translate(suggestCtx.locale, 'palette', 'savedActionUpdateFailed') }
