@@ -74,7 +74,7 @@ export function PluginSurfaceWindow() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
+      if (event.key !== 'Escape' || event.defaultPrevented) return
       // A settings overlay owns Escape before the independent window hides.
       if (document.querySelector('[role="dialog"][data-open]')) return
       if (document.querySelector('[role="tooltip"][data-open]')) return
@@ -83,9 +83,10 @@ export function PluginSurfaceWindow() {
       event.stopPropagation()
       void hideCurrentWindow(target)
     }
-    window.addEventListener('keydown', onKeyDown, true)
+    // Plugin editors and dialogs handle Escape first; this is only the window fallback.
+    window.addEventListener('keydown', onKeyDown)
     return () => {
-      window.removeEventListener('keydown', onKeyDown, true)
+      window.removeEventListener('keydown', onKeyDown)
     }
   }, [target])
 
