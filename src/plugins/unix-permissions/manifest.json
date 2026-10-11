@@ -2,7 +2,7 @@
   "pluginId": "unix-permissions",
   "displayName": "Unix Permissions",
   "displayNameI18n": { "zh": "Unix 权限解析" },
-  "version": "1.0.0",
+  "version": "1.0.1",
   "capabilities": ["instant-suggestion"],
   "permissions": ["clipboard.write"]
 }

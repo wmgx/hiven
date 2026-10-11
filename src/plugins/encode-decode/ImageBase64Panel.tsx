@@ -5,7 +5,7 @@ import { saveClipboardPng } from './saveClipboardPng'
 import { decodeRaster, imageDataUri, inspectRaster, MAX_IMAGE_BYTES, parseImageBase64 } from './imageBase64'
 
 type Result = { uri: string; preview: string; png: Uint8Array; width: number; height: number }
-export function ImageBase64Panel({ host, t, initialText }: PluginSurfaceProps) {
+export function ImageBase64Panel({ host, t, initialText, surfaceId }: PluginSurfaceProps) {
   const [text, setText] = useState(initialText ?? '')
   const [result, setResult] = useState<Result | null>(null)
   const [busy, setBusy] = useState(false)
@@ -54,7 +54,7 @@ export function ImageBase64Panel({ host, t, initialText }: PluginSurfaceProps) {
       <Button disabled={busy || !host.clipboard.readImage} onClick={() => void run(async (signal, current) => {
         const image = await host.clipboard.readImage!({ signal }); return load(image.bytes, signal, current, image.contentType)
       })}>{t('image.readClipboard')}</Button>
-      <Button disabled={busy || !host.clipboard.readImage} onClick={() => void run(async (signal, current) => {
+      <Button autoFocus={surfaceId === 'image-save'} disabled={busy || !host.clipboard.readImage} onClick={() => void run(async (signal, current) => {
         const image = await host.clipboard.readImage!({ signal })
         const info = inspectRaster(image.bytes, image.contentType)
         const decoded = await decodeRaster(image.bytes, info, signal)

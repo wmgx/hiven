@@ -80,5 +80,7 @@
   "image.savedPathCopied": "PNG saved. Full file path copied.",
   "image.savedPathCopyFailed": "PNG saved, but its path could not be copied. Find the file in the location you selected.",
   "image.saveClipboardCancelled": "Save cancelled. Clipboard unchanged.",
-  "image.saveClipboardFailed": "PNG could not be saved. Clipboard unchanged. Choose an unused filename and a writable folder."
+  "image.saveClipboardFailed": "PNG could not be saved. Clipboard unchanged. Choose an unused filename and a writable folder.",
+  "image.saveRouteTitle": "Save screenshot to file",
+  "image.saveRouteDescription": "Open image tools · choose Save clipboard image, then a PNG location; full path is copied"
 }

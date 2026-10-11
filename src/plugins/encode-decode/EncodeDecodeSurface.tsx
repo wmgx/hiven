@@ -41,7 +41,7 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
   useLayoutEffect(() => {
     reportUnsavedChanges?.(hasUnsavedChanges)
   }, [hasUnsavedChanges, reportUnsavedChanges])
-  const [imageMode, setImageMode] = useState(props.surfaceId === 'image-base64')
+  const [imageMode, setImageMode] = useState(props.surfaceId === 'image-base64' || props.surfaceId === 'image-save')
   const [format, setFormat] = useState<EncodeDecodeFormat>(initial.format)
   const [direction, setDirection] = useState<EncodeDecodeDirection>(initial.direction)
   const [busy, setBusy] = useState<'copy' | 'paste' | 'return' | null>(null)

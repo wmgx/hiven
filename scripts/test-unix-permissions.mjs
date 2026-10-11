@@ -10,6 +10,10 @@ try {
   const path = join(dir, 'core.mjs')
   await writeFile(path, ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText)
   const { decodePermissions, parsePermissionQuery: parse } = await import(pathToFileURL(path))
+  for (const intent of ['Unix权限', 'Unix 权限解析', '权限解析', 'unix permissions', 'Unix permission parser']) {
+    assert.equal(parse(intent).error, 'syntax')
+    assert.equal(parse(`${intent} 755`).value.symbolic, 'rwxr-xr-x')
+  }
   assert.equal(parse('chmod 755').value.symbolic, 'rwxr-xr-x')
   assert.equal(parse('permissions755').value.octal, '0755')
   assert.equal(parse('权限 4755').value.symbolic, 'rwsr-xr-x')

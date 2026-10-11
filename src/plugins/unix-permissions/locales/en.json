@@ -1,5 +1,5 @@
 {
-  "help": "Try chmod 755, permissions4755 or rwxr-xr-x. Parse only; no file paths or execution.",
+  "help": "Append a mode: unix permissions 755, permissions 4755 or rwxr-xr-x. Edit the query to change the mode; Enter copies the explanation. Parse only; no file access.",
   "error.syntax": "Enter 3–4 octal digits or exactly 9 permission characters; commands and paths are not accepted.",
   "error.octal": "Octal permissions require 3–4 digits from 0 to 7 (0000–7777).",
   "error.symbolic": "Use rwx positions: s/S only for owner/group execute; t/T only for others execute.",

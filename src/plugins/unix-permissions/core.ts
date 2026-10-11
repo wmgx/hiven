@@ -25,7 +25,7 @@ export function decodePermissions(mode: number): PermissionValue {
 
 export function parsePermissionQuery(query: string): PermissionAnswer | null {
   const trimmed = query.trim()
-  const prefix = /^(?:chmod\b|permissions?(?=\s|\d|$)|权限(?=\s|\d|$))\s*/i.exec(trimmed)
+  const prefix = /^(?:chmod\b|(?:unix\s+)?permissions?(?:\s+(?:parser|parse|explain))?(?=\s|\d|$)|(?:unix\s*)?权限(?:解析)?(?=\s|\d|$))\s*/i.exec(trimmed)
   if (!prefix && !/^[rwxstST-]{9}$/.test(trimmed)) return null
   const input = prefix ? trimmed.slice(prefix[0].length) : trimmed
   if (/^\d+$/.test(input)) {

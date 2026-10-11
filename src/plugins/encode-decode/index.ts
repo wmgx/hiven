@@ -39,7 +39,8 @@ const WORKSPACE_SHELL = {
   resizable: true,
 }
 const OPERATION_ROUTES = [
-  { id: 'image-base64', title: 'image.title', aliases: ['image base64', 'data uri', '图片base64', '图片编码', 'save screenshot', 'save clipboard image', 'screenshot png', '截图存为文件', '保存剪贴板图片'] },
+  { id: 'image-save', title: 'image.saveRouteTitle', aliases: ['save screenshot', 'save clipboard image', 'screenshot png', '截图保存文件', '截图存为文件', '保存截图', '保存剪贴板图片'] },
+  { id: 'image-base64', title: 'image.title', aliases: ['image base64', 'data uri', '图片base64', '图片编码'] },
   { id: 'base64-encode', title: 'base64.encode.title', aliases: ['base64 encode', 'encode base64', 'b64 encode', 'base64编码', 'base64 编码'] },
   { id: 'base64-decode', title: 'base64.decode.title', aliases: ['base64 decode', 'decode base64', 'b64 decode', 'base64解码', 'base64 解码'] },
   { id: 'url-encode', title: 'url.encode.title', aliases: ['url encode', 'encode url', 'urlencode', 'url编码', 'url 编码'] },
@@ -92,7 +93,7 @@ export const encodeDecodePlugin = definePlugin({
       id: `open-${route.id}`,
       display: {
         title: route.id === 'base64-decode' ? 'route.base64DecodeWorkbench' : route.title,
-        subtitle: 'route.open',
+        subtitle: route.id === 'image-save' ? 'image.saveRouteDescription' : 'route.open',
         icon: 'Binary',
         aliases: [...route.aliases],
       },
