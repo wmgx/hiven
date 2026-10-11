@@ -34,6 +34,26 @@ try {
   const rank = (items, query, locale) => rankLauncherItems({ query, locale, surfaceId: 'global-launcher', usage: {}, now: Date.now() }, items)
   const fieldRows = (items) => items.filter((item) => item.systemKey.startsWith('settings-field:'))
 
+  // App AI navigation uses fixed public labels, independent of field/value indexing.
+  const { getHostPaneControlItems } = await vite.ssrLoadModule('/src/workspace/launcher/hostActions.ts')
+  const { useAppStore } = await vite.ssrLoadModule('/src/store.ts')
+  const { isLauncherHostSurfaceTarget } = await vite.ssrLoadModule('/src/workspace/launcherHostSurfaceBridge.ts')
+  const appItems = getHostPaneControlItems()
+  for (const query of ['ChatGPT', 'AI settings', 'settings ai', 'AI 设置', '人工智能设置']) {
+    for (const locale of ['en', 'zh']) {
+      const matches = rank(appItems, query, locale).filter((item) => item.systemKey === 'host:view:ai-settings')
+      assert.equal(matches.length, 1, `${locale}: ${query} has exactly one AI settings entry`)
+      assert.equal(rank(appItems, query, locale)[0].systemKey, 'host:view:ai-settings')
+    }
+  }
+  const aiEntry = appItems.find((item) => item.systemKey === 'host:view:ai-settings')
+  const tool = { ...aiEntry, systemKey: 'test:ai-tool', display: { title: 'AI Summary', aliases: ['ai writing'] }, ranking: undefined }
+  assert.equal(rank([aiEntry, tool], 'AI', 'en')[0].systemKey, tool.systemKey)
+  assert.equal(rank(appItems, 'PRIVATE_CREDENTIAL_SENTINEL', 'en').length, 0)
+  assert.equal(isLauncherHostSurfaceTarget('system-ai-settings'), true)
+  await aiEntry.execute({ surfaceId: 'global-launcher', locale: 'en' })
+  assert.equal(useAppStore.getState().launcherHostSurfaceTarget, 'system-ai-settings')
+
   for (const query of ['', ' ', 'settings', 'settings ', '设置', '图片', 'image', 'settingsimage', '设置图片', 'reset settings image']) {
     assert.equal(search.parseSettingsFieldSearchQuery(query), null, `must not activate on ${JSON.stringify(query)}`)
   }

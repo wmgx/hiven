@@ -540,6 +540,27 @@ export function getHostPaneControlItems(): LauncherItem[] {
       },
     },
     {
+      systemKey: 'host:view:ai-settings',
+      kind: 'host',
+      display: {
+        title: 'AI settings',
+        titleI18n: { zh: 'AI 设置' },
+        subtitle: 'Open AI services and model settings',
+        subtitleI18n: { zh: '打开 AI 服务与模型设置' },
+        icon: 'Settings',
+        aliases: ['ChatGPT', 'AI settings', 'settings ai', 'AI services', 'AI 设置', '设置 AI', '人工智能设置', '人工智能 设置'],
+      },
+      behavior: { type: 'perform' },
+      surfaces: ['global-launcher'],
+      requiredCapabilities: ['settings'],
+      // Keep equally matching tool titles ahead of this navigation shortcut.
+      ranking: { scoreBias: -100 },
+      execute: async () => {
+        await requestOpenLauncherHostSurface('system-ai-settings')
+        return { ok: true, keepOpen: true }
+      },
+    },
+    {
       systemKey: 'host:view:devtools',
       kind: 'host',
       display: {

@@ -85,7 +85,7 @@ export function GlobalLauncherSystemSurfaceFrame({
         onClose={onClose}
       />
       <div className="global-launcher-body" style={{ height: bodyHeight, maxHeight: bodyHeight, overflow: 'hidden' }}>
-        <SystemSettingsSurface initialTab={target === 'system-plugins' ? 'plugins' : 'settings'} />
+        <SystemSettingsSurface key={target} initialTab={target === 'system-plugins' ? 'plugins' : target === 'system-ai-settings' ? 'ai' : 'settings'} />
       </div>
     </div>
   )

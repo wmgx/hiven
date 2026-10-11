@@ -105,7 +105,7 @@ export type PluginSurfaceOpenTarget = {
   initialText?: string
 }
 
-export type LauncherHostSurfaceTarget = 'system-settings' | 'system-plugins' | 'quick-editor' | 'learning-inbox'
+export type LauncherHostSurfaceTarget = 'system-settings' | 'system-ai-settings' | 'system-plugins' | 'quick-editor' | 'learning-inbox'
 
 interface AppState {
   // Editor command bar
