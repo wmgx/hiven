@@ -1,0 +1,5 @@
+{
+  "result.copy": "Copy {format} · {hex} · sRGB",
+  "provider.title": "Color Conversion",
+  "provider.subtitle": "Convert hex colors to RGB, HSL and OKLCH"
+}

@@ -1,0 +1,15 @@
+{
+  "title": "File Paths", "back": "Back", "close": "Close",
+  "sourceHint": "Paste or type paths, one per line. File-manager clipboard metadata is not available here; use Copy Path in your file manager and paste its text. No files are opened.",
+  "source": "Source paths", "output": "Converted paths", "formatLabel": "Output format",
+  "format.posix": "POSIX separators", "format.uri": "file:// URI", "format.relative": "Relative path", "format.name": "File name",
+  "styleLabel": "Source syntax", "style.auto": "Detect drive / UNC", "style.unix": "Unix", "style.windows": "Windows",
+  "base": "Base directory (absolute path)", "baseHint": "Required for relative paths. Enter the directory you want to resolve from; no project or working directory is assumed.",
+  "lexicalHint": "String conversion only: no file access, existence checks, shell expansion or symlink resolution. Relative output uses /; Windows comparison ignores case. For //server/share or relative Windows paths, choose Windows.",
+  "copy": "Copy complete output", "copying": "Copying…", "copied": "Paths copied", "copyFailed": "Could not copy. Your source and output are preserved; try again.",
+  "error.invalid": "Invalid path or file URI. Use one unquoted path per line, without blank lines or control characters. URI query, fragment and encoded separators are unsupported.",
+  "error.absolute": "This operation needs an absolute path. Windows drive-relative and drive-less rooted paths are ambiguous; include the drive or UNC share.",
+  "error.base": "Enter an absolute base directory to create relative paths.",
+  "error.root": "Relative paths require the same path syntax and root (Unix root, Windows drive, or UNC share).",
+  "error.limit": "Input is too large: at most 1,048,576 characters, 10,000 paths, and a 32,768-character base. Nothing was truncated."
+}

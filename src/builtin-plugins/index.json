@@ -1,10 +1,10 @@
 {
-  "version": 115,
+  "version": 116,
   "packages": [
     {
       "pluginId": "encode-decode",
       "dir": "encode-decode",
-      "version": "2.5.10"
+      "version": "2.6.0"
     },
     {
       "pluginId": "formatter",
@@ -95,6 +95,16 @@
       "pluginId": "user-commands",
       "dir": "user-commands",
       "version": "1.0.3"
+    },
+    {
+      "pluginId": "color-tools",
+      "dir": "color-tools",
+      "version": "1.0.0"
+    },
+    {
+      "pluginId": "file-paths",
+      "dir": "file-paths",
+      "version": "1.0.0"
     }
   ]
 }

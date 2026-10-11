@@ -1,3 +1,4 @@
+import { ImageBase64Panel } from './ImageBase64Panel'
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import { Button, IconButton, useToolDeliveryFeedback } from '@hiven/plugin-ui'
@@ -40,6 +41,7 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
   useLayoutEffect(() => {
     reportUnsavedChanges?.(hasUnsavedChanges)
   }, [hasUnsavedChanges, reportUnsavedChanges])
+  const [imageMode, setImageMode] = useState(props.surfaceId === 'image-base64')
   const [format, setFormat] = useState<EncodeDecodeFormat>(initial.format)
   const [direction, setDirection] = useState<EncodeDecodeDirection>(initial.direction)
   const [busy, setBusy] = useState<'copy' | 'paste' | 'return' | null>(null)
@@ -60,6 +62,7 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
 
   const chooseFormat = (nextFormat: EncodeDecodeFormat) => {
     update(() => {
+      setImageMode(false)
       setFormat(nextFormat)
       if (nextFormat === 'jwt') setDirection('decode')
     })
@@ -154,15 +157,17 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
           <button
             key={item}
             type="button"
-            className={item === format ? 'is-active' : ''}
-            aria-pressed={item === format}
+            className={!imageMode && item === format ? 'is-active' : ''}
+            aria-pressed={!imageMode && item === format}
             onClick={() => chooseFormat(item)}
           >
             {t(`format.${item}`)}
           </button>
         ))}
+        <button type="button" className={imageMode ? 'is-active' : ''} aria-pressed={imageMode} onClick={() => update(() => setImageMode(true))}>{t('image.title')}</button>
       </nav>
 
+      {imageMode ? <ImageBase64Panel {...props} /> : <>
       <nav className="encode-directions" aria-label={t('direction.label')}>
         {(format === 'jwt' ? ['decode'] : ['encode', 'decode']).map((item) => (
           <button
@@ -239,6 +244,7 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
         </span>
         <span>{t('meta.characters', { count: result.output.length })}</span>
       </footer>
+      </>}
     </section>
   )
 }

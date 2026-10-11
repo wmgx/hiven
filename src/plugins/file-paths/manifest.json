@@ -1,0 +1,8 @@
+{
+  "pluginId": "file-paths",
+  "displayName": "File Paths",
+  "displayNameI18n": { "zh": "文件路径转换" },
+  "version": "1.0.0",
+  "capabilities": ["surface"],
+  "permissions": ["clipboard.write"]
+}
