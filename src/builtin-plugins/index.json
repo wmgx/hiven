@@ -1,5 +1,5 @@
 {
-  "version": 118,
+  "version": 119,
   "packages": [
     {
       "pluginId": "encode-decode",
@@ -64,7 +64,7 @@
     {
       "pluginId": "clipboard-history",
       "dir": "clipboard-history",
-      "version": "1.6.0"
+      "version": "2.0.2"
     },
     {
       "pluginId": "web-open",

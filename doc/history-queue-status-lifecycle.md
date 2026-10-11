@@ -26,3 +26,25 @@ History 发布版本为 1.6.1，内置包索引为 118。交接逻辑测试覆�
 - Cancel queue：显示取消完成，保留文本选择。最后退出选择，恢复历史记录关闭、各记录类别开关开启。
 
 临时证据在 `/workspace/hiven-native/queue-cold-after-{idle,ready,failure,cancelled}.png` 与 `queue-cold-after-result.json`。类型检查、架构检查、差异检查、构建和针对性交接测试通过。验证范围仅 Linux X11、隔离 profile 与合成数据；macOS、Windows、Wayland 未验证。未调用真实 API、未访问用户密钥。
+
+## 暂停记录导致的确定性拒绝（2.0.2）
+
+保留策略验收后再次观察到读取失败，本次在原隔离 profile、单个存活 Hiven 进程、同一 `launcher` 窗口中记录完整不含正文的原生 status 请求／回执，并只改变录入开关：
+
+- 录入关闭：36 ms 返回 `ok:false`、`errorCode:QueueUnavailableError`、`phase:idle`。
+- 录入开启但文本／图片／文件三类采集均关闭：44 ms 返回 `ok:true`、`errorCode:null`。
+- 再次关闭录入：112 ms 返回相同 `QueueUnavailableError`。
+
+请求通过同一 `history_queue_request → take → reply` 通道，UUID 与回执一致；builtin History 没有显式权限覆盖。相同进程开启录入就通过，证明当前插件身份、声明权限和调用通道均可通过。全部响应远短于 8 秒超时；没有并发旧进程、没有旧 session 延迟回执。原始非秘密证据为隔离目录 `queue-root-cause-before.json`，界面截图为 `queue-recording-disabled-before.png`。
+
+具体根因是 `historyPasteQueueHandoff.allowed()` 仍检查 History 的 `settings.enabled`，并在所有队列请求（包括只读状态）前统一拒绝。这个字段现在只表示暂停后台采集，不能否定用户对既有历史的显式操作。本次与 e790085 修复的旧 owner 晚回执竞态不同；保留那个修复及其拒绝／超时反馈，不吞错误或添加重试。
+
+修复只解除录入开关与队列授权的耦合；继续要求当前可信 bundled History、原声明的三项权限、当前 owner、原生限定窗口和平台检查。插件撤销、权限撤销与定义替换仍使队列失效。录入开关变化不再取消已经显式创建的快照队列。版本为 History 2.0.2，内置包索引 119。
+
+针对性回归先在旧实现复现 `QueueUnavailableError`，修复后验证暂停录入下读取 idle、显式 start、切换录入后仍 ready、cancel、权限撤销仍拒绝；这些步骤不执行粘贴或真实 API。原有 owner 失效、晚回执、超时和权限拒绝用例保留。
+
+真实桌面复验使用隔离 profile、合成文本和实际安装的 2.0.2：录入始终关闭，打开 History 读取 idle 成功（29 ms）；跨搜索选择两条合成文本，点击加入队列，读取 ready／remaining=2 成功（61 ms）；点击取消队列，读取 cancelled 成功（18 ms）。三个回执均为 `ok:true`、`errorCode:null`，读取失败横幅消失。截图为 `queue-recording-disabled-after-{idle,ready,cancelled}.png`，完整非秘密回执在 `queue-recording-after.json`；此次未触发粘贴快捷键。类型、架构、差异检查、前端与原生构建及针对性测试通过。
+
+另有独立的验收环境配置问题：首次启动 driver 未设置 `XDG_SESSION_TYPE`，状态读取已成功，但 Start 正确报告平台不支持。确认实际运行 Xvfb／xfwm4 且具备 XTEST 后，以 `XDG_SESSION_TYPE=x11` 重启 driver 完成上述流程；没有修改或绕过应用平台检查。该问题不是读取状态失败的根因，原回执保留在 `queue-after-platform-preflight.json`。本次验证仅 Linux X11；macOS、Windows、Wayland 未验证。
+
+顺带复核保留策略：条目实际进入回收区后起算 30 天，到期会在后续有界后台维护中永久删除，并按引用数清理图片；不是无限恢复，也不保证恰好到点执行。固定／未纳入的旧记录豁免自动过期，但用户主动删除同样进入该恢复周期。旧库迁移只加保护标记，用户明确纳入后从确认当天重新起算完整保留期，不因升级立即按原年龄删除。恢复撤销原删除计划并重设保留起点。本次只审查代码，不对真实历史执行任何清理。

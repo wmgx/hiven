@@ -6,7 +6,7 @@ import ts from 'typescript'
 // Actual composition and queue state machine; no native clipboard or API calls.
 const flush = async () => { for (let i = 0; i < 35; i++) await Promise.resolve() }
 const deferred = () => { let resolve; const promise = new Promise((done) => { resolve = done }); return { promise, resolve } }
-function fixture() {
+function fixture(recordingEnabled = true) {
   const listeners = new Map(), requests = new Map(), timers = new Map(), calls = [], notices = [], subscriptions = []
   let uuid = 0, timerId = 0, allowed = true, handler, releaseCount = 0
   const h = { calls, notices, beginGate: null, pasteGate: null, failPaste: false }
@@ -29,7 +29,7 @@ function fixture() {
       usePluginPermissionStore: { subscribe },
     },
     './workspace/pluginSurfaceShortcuts': { usePluginSurfaceShortcutStore: { subscribe: () => () => {} } },
-    './workspace/pluginSettingsStore': { resolvePluginSettings: () => ({ value: { enabled: true } }), usePluginSettingsStore: { subscribe } },
+    './workspace/pluginSettingsStore': { resolvePluginSettings: () => ({ value: { enabled: recordingEnabled } }), usePluginSettingsStore: { subscribe } },
     './workspace/bundledPluginIdentity': { isCurrentBundledDefinition: () => true },
     '@tauri-apps/api/event': { listen: async (name, fn) => {
       const set = listeners.get(name) ?? new Set(); set.add(fn); listeners.set(name, set)
@@ -65,6 +65,7 @@ function fixture() {
   h.createBridge = (owner = { isCurrent: () => true }) => api.createHistoryPasteQueueBridge({ source: 'builtin', pluginId: 'clipboard-history', ...owner })
   h.bridge = h.createBridge()
   h.next = () => handler?.()
+  h.setRecording = (value) => { recordingEnabled = value; subscriptions.forEach((fn) => fn()) }
   h.revoke = () => { allowed = false; subscriptions.forEach((fn) => fn()) }
   // Even a newly trusted bundled definition cannot inherit an old queue.
   h.replaceDefinition = () => { definition = { settings: {} }; subscriptions.forEach((fn) => fn()) }
@@ -73,6 +74,20 @@ function fixture() {
   return h
 }
 const original = [{ id: 'a', text: '完整\r\n  synthetic A\n' }, { id: 'b', text: 'synthetic B' }]
+{
+  const h = fixture(false); await flush()
+  assert.equal((await h.bridge.getStatus()).phase, 'idle', 'Paused recording must not reject queue status')
+  await h.bridge.start(original)
+  assert.equal((await h.bridge.getStatus()).remaining, 2, 'Explicit existing-history queue is usable while capture is paused')
+  h.setRecording(true); h.setRecording(false); await flush()
+  assert.equal((await h.bridge.getStatus()).phase, 'ready', 'Recording toggles do not cancel explicitly queued snapshots')
+  await h.bridge.cancel()
+  assert.equal((await h.bridge.getStatus()).phase, 'cancelled')
+  assert.equal(h.calls.some(({ command }) => command === 'paste_history_queue_text'), false, 'Status/start/cancel do not paste')
+  h.revoke(); await flush()
+  await assert.rejects(h.bridge.getStatus(), /QueueUnavailableError/, 'Paused recording does not bypass permission revocation')
+  h.stop()
+}
 {
   const h = fixture(); await flush()
   await h.bridge.start(original)

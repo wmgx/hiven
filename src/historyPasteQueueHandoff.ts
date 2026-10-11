@@ -6,7 +6,6 @@ import { registerHotkeyReloadParticipant } from './hotkeys/pageReload'
 import { pluginRegistry } from './workspace/pluginRegistry'
 import { getPluginPermissionSnapshot, missingPluginPermissions, usePluginPermissionStore } from './workspace/pluginPermissions'
 import { usePluginSurfaceShortcutStore } from './workspace/pluginSurfaceShortcuts'
-import { resolvePluginSettings, usePluginSettingsStore } from './workspace/pluginSettingsStore'
 import { isCurrentBundledDefinition } from './workspace/bundledPluginIdentity'
 
 const TARGET = { source: 'builtin' as const, pluginId: 'clipboard-history', surfaceId: 'main' }
@@ -23,7 +22,7 @@ export type HistoryPasteQueueNotice = 'ready' | 'delivered' | 'failed' | 'cancel
 function allowed(): boolean {
   const entry = pluginRegistry.getAllPluginDefinitions().find((entry) => entry.pluginId === TARGET.pluginId && entry.source === 'production')
   if (!entry || !isCurrentBundledDefinition(TARGET.pluginId, 'builtin', entry.definition)) return false
-  if (entry.definition.settings && (resolvePluginSettings('builtin', TARGET.pluginId, entry.definition.settings).value as { enabled?: boolean }).enabled === false) return false
+  // The History setting only pauses capture; existing-history actions remain explicit.
   const requested = pluginRegistry.getPluginPermissions(TARGET.pluginId, 'builtin')
   return REQUIRED.every((permission) => requested.includes(permission))
     && missingPluginPermissions(getPluginPermissionSnapshot('builtin', TARGET.pluginId, requested), [...REQUIRED]).length === 0
@@ -152,7 +151,6 @@ export function installHistoryPasteQueueHost(options: { notify?: (status: Histor
   stops.push(pluginRegistry.subscribe(() => {
     if (!allowed() || (sessionId && sessionDefinition !== pluginRegistry.getPluginDefinition(TARGET.pluginId, 'production'))) cancelQueue()
   }))
-  stops.push(usePluginSettingsStore.subscribe(() => { if (!allowed()) cancelQueue() }))
   stops.push(usePluginPermissionStore.subscribe(() => { if (!allowed()) cancelQueue() }))
   stops.push(usePluginSurfaceShortcutStore.subscribe((state, previous) => {
     // User edits invalidate the temporary ownership instead of silently moving
