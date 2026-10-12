@@ -11,7 +11,7 @@ import {
 } from 'react-data-grid'
 import 'react-data-grid/lib/styles.css'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Checkbox, IconButton, SearchField, SegmentedControl, Select, TextInput } from '@hiven/plugin-ui'
+import { Checkbox, IconButton, SearchField, SegmentedControl, Select, TextInput, useImeKeyboard } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
 import {
   applyTransforms,
@@ -244,6 +244,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
   const [mainView, setMainView] = useState<MainView>(() => props.surfaceId === 'main'
     ? 'table'
     : initial.source ? 'output' : 'source')
+  const sqlIme = useImeKeyboard()
   const sqlInputRef = useRef<HTMLInputElement>(null)
   const dragSelectRef = useRef<{
     active: boolean
@@ -1435,6 +1436,8 @@ export function CsvSurface(props: PluginSurfaceProps) {
                     <div className="csv-tools-surface__sql-wrap">
                       <TextInput
                         ref={sqlInputRef}
+                        onCompositionStart={sqlIme.onCompositionStart}
+                        onCompositionEnd={sqlIme.onCompositionEnd}
                         className="csv-tools-surface__filter csv-tools-surface__filter--sql"
                         value={sqlFilter}
                         onChange={(event) => {
@@ -1455,10 +1458,12 @@ export function CsvSurface(props: PluginSurfaceProps) {
                         }}
                         onFocus={() => setSqlSuggestOpen(true)}
                         onBlur={() => {
+                          sqlIme.onBlur()
                           // delay so mousedown on suggestion can fire
                           window.setTimeout(() => setSqlSuggestOpen(false), 120)
                         }}
                         onKeyDown={(event) => {
+                          if (sqlIme.shouldIgnoreKeyDown(event)) return
                           if (!sqlSuggestOpen || sqlCompletions.items.length === 0) return
                           if (event.key === 'ArrowDown') {
                             event.preventDefault()

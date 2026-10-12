@@ -180,6 +180,9 @@ export function QuickEditorCommandOverlay() {
       // Synthesize a minimal React-like event for the shared handler.
       const synthetic = {
         key: event.key,
+        isComposing: event.isComposing,
+        keyCode: event.keyCode,
+        nativeEvent: event,
         code: event.code,
         preventDefault: () => event.preventDefault(),
         stopPropagation: () => event.stopPropagation(),

@@ -33,7 +33,7 @@ import type {
 } from '../workspace/pluginTypes'
 import { describePluginPermission } from '../workspace/pluginPermissions'
 import { translate, type Locale } from '../i18n'
-import { NumberField, Select, Switch } from '../plugin-ui'
+import { NumberField, Select, Switch, useImeKeyboard } from '../plugin-ui'
 
 type PluginSettingsSchemaRendererProps<TSettings = unknown> = {
   schema: PluginSettingsSchema<TSettings>
@@ -228,6 +228,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
   onRunAction,
   permissions,
 }: PluginSettingsSchemaRendererProps<TSettings>) {
+  const aliasIme = useImeKeyboard()
   const localizeText = (text: string | undefined, textI18n?: Partial<Record<Locale, string>>) =>
     localize(text, textI18n, locale, translateText)
   const record = getSettingsRecord(value)
@@ -316,6 +317,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
     const itemLabel = renderControlLabel(label, description)
 
     function commitAliasInput(event: KeyboardEvent<HTMLInputElement>) {
+      if (aliasIme.shouldIgnoreKeyDown(event)) return
       const input = event.currentTarget
       if (event.key === 'Backspace' && input.value === '') {
         const current = Array.isArray(value) ? value.map(String) : []
@@ -414,7 +416,9 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
                 </button>
               </span>
             ))}
-            <input className="wr-alias-in" type="text" placeholder={placeholder} onKeyDown={commitAliasInput} />
+            <input className="wr-alias-in" type="text" placeholder={placeholder} onKeyDown={commitAliasInput}
+              onCompositionStart={aliasIme.onCompositionStart} onCompositionEnd={aliasIme.onCompositionEnd}
+              onBlur={aliasIme.onBlur} />
           </div>
         </label>
       )

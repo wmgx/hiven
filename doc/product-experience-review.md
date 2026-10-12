@@ -185,3 +185,15 @@ running 状态在 bind 前置真的独立缺陷未改；此前失败实例的直
 现在每次页面打开仅持有一次有界焦点交接：只等待插件明确标记的 data-plugin-surface-autofocus 控件，最多十秒；初始外壳只聚焦一次。控件就绪后交接并释放所有监听，不选中内容、不设光标位置。用户指针、键盘（包括 Tab）、滚动、触摸、其他焦点或窗口失焦立即撤销；页面替换、离开与销毁释放旧 owner。已有子控件的 autoFocus 和设置字段导航继续拥有焦点。Diff 通过编辑器 ready 回调将左侧真实文本输入标记为初始目标；kit 仅透传通用 ready 回调。text-diff 3.4.2、发行索引 133。未修改 macOS native resize/responder 保护，也未加入“时间转换”别名。
 
 独立生命周期审查及 test:surface-initial-focus 通过，覆盖延迟就绪、已有焦点、交互撤销、旧 owner、销毁、超时与重新打开。类型、架构、前端与 Linux 原生构建通过。真实验收仅用原隔离 HOME/XDG 和合成文本，通过原生 WebKit + 物理键盘完成：去重打开即输入三行、去重输出正确、移动光标后保持位置、确认丢弃后回到“去重”查询；JSON 对比冷加载时显式目标尚未出现，真实 Tab 将焦点移到返回按钮，Monaco 就绪后仍保留该焦点；随后连续两次进入均直接在左侧输入合成 JSON，返回保留“JSON对比”查询。没有 dispatch 模拟键盘，也没有调用真实 API。focus-dedup-ready.png、focus-diff-user-tab.png、focus-diff-ready-1.png 均已看图。macOS 本机未在此 Linux 环境重验。
+
+## IME 确认 Enter 的局部契约修复
+
+只读复核发现 Launcher、参数步骤、历史搜索已共享 IME guard；旧 test:ime-enter-confirmation 的历史正则误抓多选 Enter 分支，不能视为粘贴漏防护。真实风险位于设置 string-list 别名输入、CSV SQL 建议输入，以及 Quick Editor 结果页捕获监听的事件包装：前两者未先检查 IME，后者丢失原生 isComposing/keyCode 回退。
+
+别名与 SQL 输入复用已有 useImeKeyboard，组合中与上屏后既有 120ms 保护窗口内不提交/补全，正常后续 Enter 保持原动作；没有新增窗口时长或全局禁止 Enter。输入失焦清除跟踪状态，generation 隔离迟到的旧清理与新一轮 composition。Quick Editor 包装保留 isComposing、keyCode 与 nativeEvent。CSV 1.11.4，发行索引 134。
+
+独立审查通过。旧历史正则段替换为当前生产 handler 的行为检查；新增测试直接提取生产别名、SQL、历史、包装与 hook，覆盖 native/React composing、229、tracked 状态、上屏窗口、121ms 后明确第二次 Enter、普通 Tab/箭头/Backspace、取消/blur 与旧清理隔离。所有这些 IME 证据都是合成事件与合成时钟，不是物理输入法验收。类型、架构、前端和 Linux 原生构建通过，未调用真实 API。
+
+真实普通交互只使用隔离 HOME/XDG 和合成数据：浏览器规则输入普通 Enter 添加合成别名，删除恢复默认，再输入未提交草稿、Escape 取消、重开确认未保存；CSV 输入两行合成表，SQL 的 SEL + Enter 补全为 SELECT，离开再进入后同样可补全，完整 SELECT * FROM data 正常显示两行；Quick Editor Ctrl+K 打开命令入口，Enter 执行 Split Pane Right，Ctrl+W 关闭空分栏，再打开并 Escape 取消，既有 43 字符合成草稿保留。ime-alias-enter.png、ime-sql-query.png、ime-quickeditor-restored.png 已检视。临时别名已移除，未安装扩展/输入法或改系统设置。
+
+环境没有可用中文 IME，真实候选确认、macOS/Windows 输入法端到端仍未验证，不能据此宣称跨平台彻底闭环。另观察到 CSV 建议打开时 Escape 由现有宿主优先处理并返回搜索，本次仅验离开/重进状态，不改建议菜单的 Escape 优先级。

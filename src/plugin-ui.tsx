@@ -197,11 +197,26 @@ function CheckIcon() {
 
 export function useImeKeyboard() {
   const isImeComposingRef = useRef(false)
+  const compositionGeneration = useRef(0)
 
   return {
     isImeComposingRef,
-    onCompositionStart: () => startImeComposition(isImeComposingRef),
-    onCompositionEnd: () => finishImeComposition(isImeComposingRef),
+    onCompositionStart: () => {
+      compositionGeneration.current += 1
+      startImeComposition(isImeComposingRef)
+    },
+    onCompositionEnd: () => {
+      const generation = compositionGeneration.current
+      finishImeComposition(isImeComposingRef, (clear) => {
+        window.setTimeout(() => {
+          if (compositionGeneration.current === generation) clear()
+        }, 0)
+      })
+    },
+    onBlur: () => {
+      compositionGeneration.current += 1
+      isImeComposingRef.current = false
+    },
     shouldIgnoreKeyDown: (event: Parameters<typeof shouldIgnoreImeKeyDown>[0]) =>
       shouldIgnoreImeKeyDown(event, isImeComposingRef),
   }
