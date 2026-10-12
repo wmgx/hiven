@@ -209,3 +209,11 @@ CSV 对源文本、结果参数与文件来源上报未保存状态，空白未�
 独立审查、局部 Escape 生命周期检查、CSV 生产 callback 回归、IME 合成事件检查、类型、架构、前端及 Linux 原生构建通过。测试覆盖 scope/focus/visibility/owner、卸载与替换、组合输入、空稿与取消、完整结果保留、正常 handoff、迟到回执及交付权限续期。IME 与迟到回执证据为合成事件/受控异步，不代表真实中文输入法验收。
 
 最终 Linux 原生 UI 用隔离 HOME/XDG、物理键盘与合成表完成：空页 Escape 无确认；SQL 建议打开并选中 age 列与 SQL 文本，首 Esc 仅关建议，第二 Esc 提示；Keep editing 后逐字核对源 CSV、SQL 和列选择；Back 按钮取消/明确放弃；再次进入空白；改源后 Esc 明确放弃；另一合成稿取消退出后成功 Return to Search，材料进入既有动作列表。csv-escape-fix-before.png、csv-escape-fix-first.png、csv-escape-fix-confirm.png、csv-escape-fix-handoff.png 已检视。结束移除合成 Object Block。独立插件窗口的共享判定通过逻辑检查，本次真实流程在 Launcher 宿主验收；未安装输入法/扩展、改系统权限、调用真实 API或使用真实历史。
+
+## 图片 Base64 新载入失败后的旧结果保护
+
+真实复现：先载入有效合成 PNG，再选择损坏 PNG，旧预览和完整 URI 仍保留，但复制/保存按钮继续可用；点击复制会交付旧图片并覆盖失败提示。现在只在新载入实际开始时撤销旧结果的交付资格，失败仍保留预览，在原状态区短提示“旧预览未更新，暂不可复制或保存”，三个交付按钮禁用。新成功恢复；文件选择取消不算载入，不废掉有效结果。结果引用同时拦截旧按钮回调，沿用既有 revision、abort 与 owner 隔离迟到异步。独立“保存剪贴板图片并复制路径”不依赖预览资格，保持原行为。中英文同步，encode-decode 2.7.3、发行索引 136。
+
+独立审查、生产组件 callback 逻辑检查、类型、架构、前端与 Linux 原生构建通过。逻辑检查覆盖空文件取消、损坏/超限、成功纠正、旧交付回调、晚回执、tab/owner 撤销以及独立截图保存；这些受控异步证据不冒充真实桌面乱序复现。
+
+真实 Linux 验收仅用原隔离 HOME/XDG、暂停的历史和合成图片：64×32 成功载入 → 损坏文件失败 → 旧预览/URI 完整保留且三按钮禁用 → 切换 URL 再回来仍禁用 → 换成不同的 37×19 图片成功 → 显式复制完整 data URI，与源文件全部字节一致 → 原生 Save File 保存 PNG，尺寸和全部像素一致。返回搜索再进入时无旧结果恢复。WebDriver 会抑制 HTML 文件选择器，因此另用同一隔离 profile 直接启动应用，以物理鼠标打开真实 Select File、Escape 取消；用哨兵替换外部剪贴板后点击 Copy data URI，确认仍复制取消前的完整结果，解码后全部像素一致。image-stale-fixed-failure.png、image-stale-fixed-corrected.png、image-stale-native-picker.png、image-stale-native-cancel-valid.png 已检视。未改历史设置、安装依赖或使用真实 API/密钥；macOS/Windows 未重验。

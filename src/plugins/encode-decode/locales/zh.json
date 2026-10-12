@@ -85,5 +85,7 @@
   "image.saveRouteDescription": "打开图片工具 · 选择保存剪贴板图片，再选择 PNG 位置；完成后复制完整路径",
   "image.saveTaskHint": "将已复制的截图保存为 PNG 文件，并复制文件路径。",
   "image.limits": "支持的格式与大小限制",
-  "image.openWorkbench": "打开图片与文本编解码"
+  "image.openWorkbench": "打开图片与文本编解码",
+  "image.loadError": "无法载入此图片。",
+  "image.previousNotUpdated": "旧预览未更新，暂不可复制或保存。"
 }

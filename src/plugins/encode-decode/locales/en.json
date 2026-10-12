@@ -85,5 +85,7 @@
   "image.saveRouteDescription": "Open image tools · choose Save clipboard image, then a PNG location; full path is copied",
   "image.saveTaskHint": "Save the copied screenshot as a PNG file and copy its path.",
   "image.limits": "Supported formats and size limits",
-  "image.openWorkbench": "Open image and text encoding tools"
+  "image.openWorkbench": "Open image and text encoding tools",
+  "image.loadError": "Could not load this image.",
+  "image.previousNotUpdated": "Previous preview was not updated. Copy and save are unavailable."
 }
