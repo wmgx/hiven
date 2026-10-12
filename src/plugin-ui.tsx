@@ -1,7 +1,10 @@
+import { registerLocalEscapeLayer } from './utils/localEscapeLayer'
 import {
   forwardRef,
   lazy,
   useRef,
+  useLayoutEffect,
+  type RefObject,
   useState,
   type ButtonHTMLAttributes,
   type ComponentPropsWithoutRef,
@@ -193,6 +196,29 @@ function CheckIcon() {
       <path d="M20 6 9 17l-5-5" />
     </svg>
   )
+}
+
+/** Scoped inline popup ownership. No global key listener or cross-page interception. */
+export function useLocalEscapeLayer({ open, triggerRef, popupRef, owner, composingRef, onDismiss }: {
+  open: boolean
+  triggerRef: RefObject<HTMLElement | null>
+  popupRef: RefObject<HTMLElement | null>
+  owner?: { isCurrent(): boolean; subscribeInvalidation(listener: () => void): () => void }
+  composingRef: RefObject<boolean>
+  onDismiss: () => void
+}) {
+  useLayoutEffect(() => {
+    const trigger = triggerRef.current
+    const popup = popupRef.current
+    if (!open || !trigger || !popup || !owner?.isCurrent()) return
+    const unregister = registerLocalEscapeLayer({
+      trigger, popup, isCurrent: () => owner.isCurrent(),
+      isComposing: () => composingRef.current,
+      dismiss: onDismiss,
+    })
+    const unsubscribe = owner.subscribeInvalidation(unregister)
+    return () => { unregister(); unsubscribe() }
+  }, [open, triggerRef, popupRef, owner, composingRef, onDismiss])
 }
 
 export function useImeKeyboard() {

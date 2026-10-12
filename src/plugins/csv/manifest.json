@@ -2,7 +2,7 @@
   "pluginId": "csv",
   "displayName": "CSV / TSV Converter",
   "displayNameI18n": { "zh": "CSV / TSV 转换" },
-  "version": "1.11.4",
+  "version": "1.11.5",
   "capabilities": ["command"],
   "permissions": ["clipboard.write"]
 }

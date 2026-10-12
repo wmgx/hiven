@@ -78,8 +78,13 @@ for (const flags of [{ isComposing: true, keyCode: 13 }, { isComposing: false, k
   for (const key of ['Tab', 'ArrowDown', 'ArrowUp']) csvHandler(event({ key }))
   assert.deepEqual([edits, completions, moved], [0, 0, 0])
   assert.equal(back.prevented, false)
-  csvHandler(event({ key: 'Escape' })); assert.equal(closed, 1)
+  csvHandler(event({ key: 'Escape' })); assert.equal(closed, 0, 'IME owns Escape before the SQL popup')
   ime.onBlur(); now += 121
+  for (const extra of [{ nativeEvent: { isComposing: true } }, { keyCode: 229 }]) {
+    csvHandler(event({ key: 'Escape', ...extra }))
+  }
+  assert.equal(closed, 0)
+  csvHandler(event({ key: 'Escape' })); assert.equal(closed, 1, 'ordinary Escape closes only the popup')
   aliasHandler(event({ key: 'Backspace', currentTarget: { value: '' } }))
   csvHandler(event({ key: 'Tab' })); csvHandler(event({ key: 'ArrowDown' }))
   assert.deepEqual([edits, completions, moved], [1, 1, 1], 'ordinary controls work after cancellation/blur')

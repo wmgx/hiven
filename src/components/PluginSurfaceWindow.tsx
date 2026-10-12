@@ -1,3 +1,4 @@
+import { consumeLocalEscapeLayer } from '../utils/localEscapeLayer'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore, type PluginSurfaceOpenTarget } from '../store'
 import type { PluginSettingsSource } from '../workspace/pluginSettingsStore'
@@ -15,6 +16,7 @@ import './PluginSurfaceWindow.css'
 type WindowEntry = { id: string; target: PluginSurfaceOpenTarget }
 
 export function PluginSurfaceWindow() {
+  const bodyRef = useRef<HTMLDivElement>(null)
   const locale = useAppStore((s) => s.locale)
   const theme = useAppStore((s) => s.settings.theme)
   const t = useT('workspace')
@@ -202,6 +204,7 @@ export function PluginSurfaceWindow() {
       if (document.querySelector('[role="dialog"][data-open]')) return
       if (document.querySelector('[role="tooltip"][data-open]')) return
       if (isImeComposingRef.current || event.isComposing || (event as unknown as { keyCode: number }).keyCode === 229) return
+      if (consumeLocalEscapeLayer(event, bodyRef.current)) return
       event.preventDefault()
       event.stopPropagation()
       void hide()
@@ -230,7 +233,7 @@ export function PluginSurfaceWindow() {
             <button className="plugin-surface-window-close" type="button" onClick={() => { void hide() }}>×</button>
           </div>
         )}
-        <div className="plugin-surface-window-body">
+        <div ref={bodyRef} className="plugin-surface-window-body">
           {[active, staged].filter((entry): entry is Entry => Boolean(entry)).map((entry) => (
             <div key={entry.id} style={{ height: '100%', display: staged && entry !== staged ? 'none' : undefined }}>
               <DraftReportingSurface

@@ -121,6 +121,7 @@ export function PluginSurfaceRenderer({
   activeStateRef.current = surfaceState
   const mountedRef = useRef(false)
   const hiddenRef = useRef(false)
+  const leaveIntentListeners = useMemo(() => new Set<() => void>(), [target, surfaceState, suspensionOwner])
   const leaveOwner = useMemo<PluginSurfaceLeaveOwner>(() => {
     const lifetime = pluginRegistry.getPluginLifetime(target.pluginId, target.source)
     const owner: PluginSurfaceLeaveOwner = {
@@ -129,12 +130,22 @@ export function PluginSurfaceRenderer({
         && surfaceState.target === target && !hiddenRef.current && !suspendedRef.current && suspensionOwnerRef.current === suspensionOwner && lifetime.active,
       interruptPending: () => {
         if (!owner.isCurrent()) return
+        for (const listener of leaveIntentListeners) {
+          // A plugin may revoke its work, but cannot veto the host's navigation.
+          try { listener() } catch { /* Continue notifying and honour the user's exit. */ }
+        }
         interruptSettingsRef.current()
         refreshPasteOwner((version) => version + 1)
       },
     }
     return owner
-  }, [target, surfaceState, suspensionOwner])
+  }, [target, surfaceState, suspensionOwner, leaveIntentListeners])
+  const subscribeLeaveIntent = useCallback((listener: () => void) => {
+    if (!leaveOwner.isCurrent()) return () => {}
+    leaveIntentListeners.add(listener)
+    return () => { leaveIntentListeners.delete(listener) }
+  }, [leaveOwner, leaveIntentListeners])
+  useLayoutEffect(() => () => leaveIntentListeners.clear(), [leaveIntentListeners])
   const setUnsavedChanges = useCallback((hasUnsavedChanges: boolean) => {
     if (leaveOwner.isCurrent()) onUnsavedChangesChange?.(hasUnsavedChanges, leaveOwner)
   }, [leaveOwner, onUnsavedChangesChange])
@@ -529,6 +540,7 @@ export function PluginSurfaceRenderer({
             },
             requestBack: () => requestLeave('back'),
             setUnsavedChanges: onUnsavedChangesChange ? setUnsavedChanges : undefined,
+            subscribeLeaveIntent: onUnsavedChangesChange ? subscribeLeaveIntent : undefined,
             openSettings: (options) => {
               if (!isCurrentSurface()) return
               interruptSettings()

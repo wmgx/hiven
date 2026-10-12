@@ -12,6 +12,7 @@
     "build:desktop:native:debug": "tauri build --debug --no-bundle",
     "lint": "eslint .",
     "check:architecture": "node scripts/check-architecture.mjs",
+    "test:local-escape-layer": "node scripts/test-local-escape-layer.mjs",
     "test:surface-initial-focus": "node scripts/test-surface-initial-focus.mjs",
     "test:settings-field-search": "node scripts/test-settings-field-search.mjs && node scripts/test-settings-field-navigation.mjs",
     "check:reachability": "node scripts/check-reachability.mjs",

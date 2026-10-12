@@ -11,7 +11,7 @@ import {
 } from 'react-data-grid'
 import 'react-data-grid/lib/styles.css'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Checkbox, IconButton, SearchField, SegmentedControl, Select, TextInput, useImeKeyboard } from '@hiven/plugin-ui'
+import { Checkbox, IconButton, SearchField, SegmentedControl, Select, TextInput, useImeKeyboard, useLocalEscapeLayer } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
 import {
   applyTransforms,
@@ -216,8 +216,9 @@ function initialOutput(surfaceId: string): OutputMode {
 
 export function CsvSurface(props: PluginSurfaceProps) {
   const { host, t } = props
-  // New hosts keep saveText stable for one surface owner, even when theme or settings rerender.
-  const owner = host.saveText ?? host
+  // Draft lifetime survives a renewed delivery lease (cancelled exit or handoff).
+  // Legacy hosts fall back to their stable export callback.
+  const owner = host.subscribeLeaveIntent ?? host.saveText ?? host
   const initial = resolveInitialSource(props.initialText)
   const [sourceText, setSourceText] = useState(initial.source)
   const [linkedFileLabel, setLinkedFileLabel] = useState<string | undefined>(initial.fileLabel)
@@ -246,6 +247,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
     : initial.source ? 'output' : 'source')
   const sqlIme = useImeKeyboard()
   const sqlInputRef = useRef<HTMLInputElement>(null)
+  const sqlPopupRef = useRef<HTMLUListElement>(null)
   const dragSelectRef = useRef<{
     active: boolean
     start: { rowId: number; columnKey: string }
@@ -328,6 +330,24 @@ export function CsvSurface(props: PluginSurfaceProps) {
   // middle edits must never make an earlier full result eligible for a new handoff.
   const resultParameters = JSON.stringify([delimiter, header, output, minify, indent, tableName, dropEmpty, dedupe, transpose, filterMode, globalFilter, sqlFilter, sortColumns])
   const fullReturnSnapshotRef = useRef<{ sourceText: string; parameters: string } | null>(null)
+  const draftBaseline = useRef({ sourceText, resultParameters, linkedFileLabel })
+  const dirty = sourceText !== draftBaseline.current.sourceText
+    || resultParameters !== draftBaseline.current.resultParameters
+    || linkedFileLabel !== draftBaseline.current.linkedFileLabel
+  const reportUnsavedChanges = host.setUnsavedChanges
+  useLayoutEffect(() => { reportUnsavedChanges?.(dirty) }, [dirty, reportUnsavedChanges])
+  // Host Back/Escape revokes delivery before showing the existing confirmation.
+  // Keep source, options and selection intact so cancelling resumes this draft.
+  useLayoutEffect(() => host.subscribeLeaveIntent?.(() => {
+    fileReadRef.current = null
+    setFileReadingOwner(null)
+    cancelSubmissions()
+    abortRef.current?.abort()
+    abortRef.current = null
+    // Completed full results are part of the retained draft, not pending work.
+    setFullJob((job) => job.status === 'running' ? { status: 'idle' } : job)
+  }), [host.subscribeLeaveIntent, cancelSubmissions])
+
 
   const deferredSource = useDeferredValue(sourceText)
   const isSourceStale = deferredSource !== sourceText
@@ -719,6 +739,15 @@ export function CsvSurface(props: PluginSurfaceProps) {
     return getSqlCompletions(sqlFilter, sqlCursor, tableHeaders)
   }, [filterMode, sqlCursor, sqlFilter, tableHeaders])
 
+  useLocalEscapeLayer({
+    open: mainView === 'table' && filterMode === 'sql' && sqlSuggestOpen && sqlCompletions.items.length > 0,
+    triggerRef: sqlInputRef,
+    popupRef: sqlPopupRef,
+    owner: host.deliveryFeedbackOwner,
+    composingRef: sqlIme.isImeComposingRef,
+    onDismiss: () => setSqlSuggestOpen(false),
+  })
+
   const applySqlCompletion = useCallback(
     (item: SqlCompletionItem) => {
       const { from, to } = sqlCompletions
@@ -1067,7 +1096,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
           type="button"
           className="csv-tools-surface__back"
           label={localizedText(t, 'action.back', 'Back')}
-          onClick={() => updateResult(() => host.requestBack())}
+          onClick={() => host.requestBack()}
         >
           <BackIcon size={14} strokeWidth={2} />
           <span className="csv-tools-surface__back-root">hiven</span>
@@ -1148,7 +1177,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
             type="button"
             className="csv-tools-surface__ib csv-tools-surface__ib--close"
             label={localizedText(t, 'action.close', 'Close')}
-            onClick={() => updateResult(() => host.close())}
+            onClick={() => host.close()}
           >
             <CloseIcon size={14} strokeWidth={2} />
           </IconButton>
@@ -1486,6 +1515,10 @@ export function CsvSurface(props: PluginSurfaceProps) {
                             return
                           }
                           if (event.key === 'Escape') {
+                            if (sqlIme.isImeComposingRef.current || event.nativeEvent?.isComposing
+                              || event.keyCode === 229 || event.nativeEvent?.keyCode === 229) return
+                            event.preventDefault()
+                            event.stopPropagation()
                             setSqlSuggestOpen(false)
                           }
                         }}
@@ -1501,7 +1534,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
                         autoComplete="off"
                       />
                       {sqlSuggestOpen && sqlCompletions.items.length > 0 ? (
-                        <ul className="csv-tools-surface__sql-suggest" role="listbox">
+                        <ul ref={sqlPopupRef} className="csv-tools-surface__sql-suggest" role="listbox">
                           {sqlCompletions.items.map((item, index) => (
                             <li key={`${item.kind}-${item.label}-${index}`}>
                               <button

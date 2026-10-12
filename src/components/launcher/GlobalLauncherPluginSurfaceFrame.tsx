@@ -1,3 +1,4 @@
+import { consumeLocalEscapeLayer } from '../../utils/localEscapeLayer'
 import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import { t, type Locale } from '../../i18n'
 import type { PluginSurfaceOpenTarget } from '../../store'
@@ -32,6 +33,7 @@ export function GlobalLauncherPluginSurfaceFrame({
   onClose: () => void
   onUnsavedChangesReport?: (report: LauncherSurfaceUnsavedChangesReport) => void
 }) {
+  const shellRef = useRef<HTMLDivElement>(null)
   const bodyHeight = breadcrumbTitle ? shellHeight - BREADCRUMB_HEIGHT : shellHeight
   const activeTargetRef = useRef(target)
   activeTargetRef.current = target
@@ -114,6 +116,7 @@ export function GlobalLauncherPluginSurfaceFrame({
       setPendingLeave(null)
       return true
     }
+    if (consumeLocalEscapeLayer(event, shellRef.current)) return true
     // Let the editor close its find widget before navigating out of the surface.
     if (event.target instanceof Element && event.target.closest('.monaco-editor')?.querySelector('.find-widget.visible')) return true
     event.preventDefault()
@@ -125,6 +128,7 @@ export function GlobalLauncherPluginSurfaceFrame({
 
   return (
     <div
+      ref={shellRef}
       className="global-launcher-surface-shell flex flex-col min-h-0 outline-none"
       tabIndex={-1}
       style={fillsWindow

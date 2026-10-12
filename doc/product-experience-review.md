@@ -197,3 +197,15 @@ running 状态在 bind 前置真的独立缺陷未改；此前失败实例的直
 真实普通交互只使用隔离 HOME/XDG 和合成数据：浏览器规则输入普通 Enter 添加合成别名，删除恢复默认，再输入未提交草稿、Escape 取消、重开确认未保存；CSV 输入两行合成表，SQL 的 SEL + Enter 补全为 SELECT，离开再进入后同样可补全，完整 SELECT * FROM data 正常显示两行；Quick Editor Ctrl+K 打开命令入口，Enter 执行 Split Pane Right，Ctrl+W 关闭空分栏，再打开并 Escape 取消，既有 43 字符合成草稿保留。ime-alias-enter.png、ime-sql-query.png、ime-quickeditor-restored.png 已检视。临时别名已移除，未安装扩展/输入法或改系统设置。
 
 环境没有可用中文 IME，真实候选确认、macOS/Windows 输入法端到端仍未验证，不能据此宣称跨平台彻底闭环。另观察到 CSV 建议打开时 Escape 由现有宿主优先处理并返回搜索，本次仅验离开/重进状态，不改建议菜单的 Escape 优先级。
+
+## CSV SQL 建议的 Escape 层级与草稿保护
+
+在 34479dc 上真实复现：SQL 建议可见时一次 Escape 由 window 捕获阶段直接返回搜索，输入框自己的冒泡处理没有机会执行；CSV 未上报 dirty，重新进入后源表与 SQL 已清空。这违背已有“局部浮层先关闭，再退出页面”的交互约定。
+
+新增最窄的 plugin-ui 局部 Escape 声明：仅当前宿主范围内、当前 owner 有效、触发控件/建议层确实可见且拥有真实焦点时可关闭 inline popup；无全局键盘订阅，不允许插件控制别的页面。失效/卸载撤销，旧清理不覆盖新声明。Launcher 插件页与独立插件窗口共用该判定，原 IME、对话框、Select、Monaco 查找等优先级保留，不批量重写其它工具。CSV 首次 Escape 只关闭建议，保留表、SQL、列选择与文本选区；再次 Escape 进入现有未保存确认。
+
+CSV 对源文本、结果参数与文件来源上报未保存状态，空白未修改页直接返回。返回/关闭按钮调用同一宿主确认；继续编辑保留完整结果与选择，明确放弃才退出。宿主新增当前 surface owner 的 subscribeLeaveIntent 通知，只用于确认前撤销 pending 工作、无导航否决能力，旧 owner 和卸载自动清理。CSV 撤销晚文件读取、全量处理、保存、返回及复制完成回执，但保留已完成缓存。通知与成功交付的 owner 更新分离；CSV 使用稳定的草稿订阅身份，不再因 saveText 输出权限续期而清空完整结果或自取消正常带回搜索。CSV 1.11.5，发行索引 135。
+
+独立审查、局部 Escape 生命周期检查、CSV 生产 callback 回归、IME 合成事件检查、类型、架构、前端及 Linux 原生构建通过。测试覆盖 scope/focus/visibility/owner、卸载与替换、组合输入、空稿与取消、完整结果保留、正常 handoff、迟到回执及交付权限续期。IME 与迟到回执证据为合成事件/受控异步，不代表真实中文输入法验收。
+
+最终 Linux 原生 UI 用隔离 HOME/XDG、物理键盘与合成表完成：空页 Escape 无确认；SQL 建议打开并选中 age 列与 SQL 文本，首 Esc 仅关建议，第二 Esc 提示；Keep editing 后逐字核对源 CSV、SQL 和列选择；Back 按钮取消/明确放弃；再次进入空白；改源后 Esc 明确放弃；另一合成稿取消退出后成功 Return to Search，材料进入既有动作列表。csv-escape-fix-before.png、csv-escape-fix-first.png、csv-escape-fix-confirm.png、csv-escape-fix-handoff.png 已检视。结束移除合成 Object Block。独立插件窗口的共享判定通过逻辑检查，本次真实流程在 Launcher 宿主验收；未安装输入法/扩展、改系统权限、调用真实 API或使用真实历史。

@@ -810,6 +810,8 @@ export type PluginSurfaceHostApi = {
   requestBack(): void
   /** Report local edits for active Launcher exit confirmation. No content is retained by the host. */
   setUnsavedChanges?(hasUnsavedChanges: boolean): void
+  /** Revoke pending work before this draft's exit confirmation; grants no navigation control. */
+  subscribeLeaveIntent?(listener: () => void): () => void
   /** Opt in to retaining the mounted Launcher surface beneath a settings dialog. */
   openSettings(options?: { preserveSurface?: boolean }): void
   /**

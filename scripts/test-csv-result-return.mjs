@@ -80,7 +80,7 @@ const plain = (value) => JSON.parse(JSON.stringify(value))
 function harness({ input = 'name,value\none,1\ntwo,2', operation = 'to-json', outcome = () => true, copyOutcome = () => Promise.resolve(), saveOutcome = () => ({ status: 'saved' }), saveAvailable = true, process = core.processFullSource } = {}) {
   const slots = [], effects = []
   let cursor = 0, view, mounted = true, changed = false, deferredInput, processing = false
-  const calls = { handoff: [], messages: [], copied: [], browserCopied: [], saves: [], navigation: 0, complete: 0, back: 0, close: 0, detach: 0 }
+  const calls = { handoff: [], messages: [], copied: [], browserCopied: [], saves: [], navigation: 0, complete: 0, back: 0, close: 0, detach: 0, dirty: [] }
   const useState = (initial) => {
     const index = cursor++
     if (!(index in slots)) slots[index] = typeof initial === 'function' ? initial() : initial
@@ -114,15 +114,21 @@ function harness({ input = 'name,value\none,1\ntwo,2', operation = 'to-json', ou
   const { CsvSurface } = load(surfacePath, {
     react, 'react/jsx-runtime': { jsx: () => null, jsxs: () => null },
     'react-data-grid': {}, 'react-data-grid/lib/styles.css': {},
-    '@hiven/plugin-ui': {}, '@hiven/plugin-ui/icons': {},
+    '@hiven/plugin-ui': { useImeKeyboard: () => ({ isImeComposingRef: { current: false }, shouldIgnoreKeyDown: () => false }), useLocalEscapeLayer: () => {} }, '@hiven/plugin-ui/icons': {},
     './csvCore': { ...core, processFullSource: process }, './csvSqlFilter': sql, './csvFileInput': fileInput, './columnStatistics': statistics,
   }, source, { requestAnimationFrame: (fn) => fn(), window: { addEventListener() {}, removeEventListener() {} }, navigator: { clipboard: { writeText: async (text) => { calls.browserCopied.push(text) } } } })
+  const leaveListeners = new Set()
+  const deliveryListeners = new Set()
   const makeHost = () => {
     const result = {
+      setUnsavedChanges: (dirty) => calls.dirty.push(dirty),
+      subscribeLeaveIntent: (listener) => { leaveListeners.add(listener); return () => leaveListeners.delete(listener) },
+      deliveryFeedbackOwner: { isCurrent: () => true, subscribeInvalidation: (listener) => { deliveryListeners.add(listener); return () => deliveryListeners.delete(listener) } },
       returnToLauncherWithObject: (block, options) => {
+        for (const listener of deliveryListeners) listener()
         calls.handoff.push({ block: plain(block), signal: options.signal, host: result })
         return Promise.resolve(outcome(block, options)).then((accepted) => {
-          if (accepted === true && !options.signal.aborted && mounted && result === host) calls.navigation++
+          if (accepted === true && !options.signal.aborted && mounted && result.subscribeLeaveIntent === host.subscribeLeaveIntent) calls.navigation++
           return accepted
         })
       },
@@ -131,7 +137,7 @@ function harness({ input = 'name,value\none,1\ntwo,2', operation = 'to-json', ou
         return Promise.resolve(saveOutcome(text, options))
       } : undefined,
       showMessage: (...args) => calls.messages.push(args),
-      requestBack: () => { calls.back++ }, close: () => { calls.close++ }, detachToWindow: () => { calls.detach++ },
+      requestBack: () => { for (const listener of leaveListeners) listener(); calls.back++ }, close: () => { for (const listener of leaveListeners) listener(); calls.close++ }, detachToWindow: () => { calls.detach++ },
       complete: () => calls.complete++,
       clipboard: { writeText: async (text) => { calls.copied.push(text); await copyOutcome() } },
     }
@@ -150,7 +156,7 @@ function harness({ input = 'name,value\none,1\ntwo,2', operation = 'to-json', ou
     return view
   }
   render()
-  return { calls, render, get view() { return view },
+  return { calls, render, leaveIntent() { for (const listener of leaveListeners) listener(); render() }, get view() { return view },
     edit(name, value, rerender = true) {
       view.edits[name]({ target: { value: String(value), checked: Boolean(value) } })
       if (rerender) render()
@@ -168,6 +174,7 @@ function harness({ input = 'name,value\none,1\ntwo,2', operation = 'to-json', ou
     draft: () => plain(Object.fromEntries(['sourceText', 'delimiter', 'header', 'output', 'minify', 'indent', 'tableName', 'dropEmpty', 'dedupe', 'transpose'].map((key) => [key, view[key]]))),
     replaceHost() { host = makeHost(); render() },
     rerenderHost() { host = { ...host }; render() },
+    renewDelivery() { const prior = host; host = { ...host, saveText: prior.saveText ? (...args) => prior.saveText(...args) : undefined, deliveryFeedbackOwner: { ...prior.deliveryFeedbackOwner } }; render() },
     unmount() { mounted = false; for (const slot of slots) slot?.cleanup?.() },
     replayEffects() { for (const slot of slots) if (slot?.setup) { slot.cleanup?.(); slot.cleanup = slot.setup() } },
   }
@@ -881,5 +888,50 @@ await check('clipboard late host rejection cannot bypass permission or report on
   assert.deepEqual(h.calls.browserCopied, [])
   assert.deepEqual(h.calls.messages, [])
   assert.equal(h.calls.complete, 0)
+})
+await check('empty draft stays clean; edit and cancelled leave preserve full result and retry', async () => {
+  const h = harness({ input: '' })
+  assert.equal(h.calls.dirty.at(-1), false)
+  h.edit('SourceText', 'name,value\none,1\ntwo,2')
+  assert.equal(h.calls.dirty.at(-1), true)
+  await h.full()
+  const draft = h.draft(), full = h.view.fullOutputRef.current
+  h.leaveIntent()
+  assert.deepEqual(h.draft(), draft)
+  assert.equal(h.view.fullOutputRef.current, full)
+  assert.equal(h.view.fullJob.status, 'done')
+  await h.view.returnOutput(); h.render()
+  assert.equal(h.calls.navigation, 1, 'normal handoff owner invalidation must not self-cancel')
+  assert.equal(h.calls.handoff.at(-1).signal.aborted, false)
+})
+await check('leave intent cancels pending receipt, keeps draft, permits retry', async () => {
+  const gate = deferred(); let first = true
+  const h = harness({ outcome: () => { if (first) { first = false; return gate.promise } return true } })
+  const pending = h.view.returnOutput(); const draft = h.draft()
+  h.leaveIntent(); assert.equal(h.calls.handoff[0].signal.aborted, true)
+  gate.resolve(true); await pending; h.render()
+  assert.equal(h.calls.navigation, 0); assert.deepEqual(h.draft(), draft)
+  await h.view.returnOutput(); assert.equal(h.calls.navigation, 1)
+})
+await check('copy completion after leave intent cannot close kept draft', async () => {
+  const gate = deferred(), h = harness({ copyOutcome: () => gate.promise })
+  h.view.setMainView('source'); h.render(); h.view.handleCopyPrimary()
+  const draft = h.draft(); h.leaveIntent(); gate.resolve()
+  await new Promise((resolve) => setTimeout(resolve, 0)); h.render()
+  assert.equal(h.calls.complete, 0); assert.deepEqual(h.draft(), draft)
+})
+await check('delivery lease renewal preserves draft owner through pending handoff and cancelled exit', async () => {
+  const gate = deferred(), h = harness({ outcome: () => gate.promise })
+  await h.full()
+  const full = h.view.fullOutputRef.current, draft = h.draft()
+  const pending = h.view.returnOutput()
+  h.renewDelivery()
+  assert.equal(h.calls.handoff[0].signal.aborted, false, 'normal saveText renewal must not abort handoff')
+  assert.equal(h.view.fullOutputRef.current, full)
+  gate.resolve(false); await pending; h.render()
+  h.leaveIntent(); h.renewDelivery()
+  assert.equal(h.view.fullOutputRef.current, full, 'cancelled exit retains completed full result across lease replacement')
+  assert.equal(h.view.fullJob.status, 'done'); assert.deepEqual(h.draft(), draft)
+  assert.equal(h.view.returning, false)
 })
 console.log(`CSV result return: ${passed} production-module logic scenarios passed`)
