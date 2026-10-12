@@ -1,6 +1,6 @@
 {
   "title": "文件路径转换", "back": "返回", "close": "关闭",
-  "sourceHint": "粘贴或输入路径，每行一条。此处暂不支持读取文件管理器剪贴板元数据；请先在文件管理器中“复制路径”，再粘贴路径文本。不会打开文件。",
+  "sourceHint": "请在文件管理器中“复制路径”，再粘贴路径文本；此处不读取文件管理器剪贴板元数据。",
   "source": "原始路径", "output": "转换后路径", "formatLabel": "输出格式",
   "format.posix": "POSIX 分隔符", "format.uri": "file:// URI", "format.relative": "相对路径", "format.name": "纯文件名",
   "styleLabel": "来源语法", "style.auto": "识别盘符 / UNC", "style.unix": "Unix", "style.windows": "Windows",
@@ -11,5 +11,7 @@
   "error.absolute": "此操作需要绝对路径。Windows 盘符相对路径及无盘符根路径有歧义，请补全盘符或 UNC 共享目录。",
   "error.base": "请填写绝对基准目录后再生成相对路径。",
   "error.root": "相对路径需要相同的路径语法和根目录（Unix 根、Windows 盘符或 UNC 共享目录）。",
-  "error.limit": "输入过大：最多 1,048,576 个字符、10,000 条路径，基准目录最多 32,768 个字符。未截断任何内容。"
+  "error.limit": "输入过大：最多 1,048,576 个字符、10,000 条路径，基准目录最多 32,768 个字符。未截断任何内容。",
+  "help": "路径转换帮助",
+  "sourcePlaceholder": "粘贴路径，每行一条"
 }

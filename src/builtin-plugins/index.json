@@ -1,5 +1,5 @@
 {
-  "version": 127,
+  "version": 128,
   "packages": [
     {
       "pluginId": "encode-decode",
@@ -104,7 +104,7 @@
     {
       "pluginId": "file-paths",
       "dir": "file-paths",
-      "version": "1.0.0"
+      "version": "1.0.1"
     }
   ]
 }

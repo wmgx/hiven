@@ -497,7 +497,12 @@ export function AiSubscriptionsContent() {
                   {t(chatGptFeedback.key)}
                 </p>
               )}
-              {!requiresAccount && <p className="px-4 pb-3 text-xs" style={{ color: 'var(--color-text-secondary)' }}>{t('ollamaLocalBoundary')}</p>}
+              {!requiresAccount && (
+                <details className="px-4 pb-3 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                  <summary className="cursor-pointer">{t('ollamaLocalHelp')}</summary>
+                  <p className="mt-2">{t('ollamaLocalBoundary')}</p>
+                </details>
+              )}
               {ready && <AiQuotaUsage provider={provider} locale={locale} t={t} />}
             </div>
           )

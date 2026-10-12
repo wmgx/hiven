@@ -20,10 +20,18 @@ struct Entry {
     deadline: u64,
     receipt: Receipt,
 }
+struct Draft {
+    instance: u64,
+    generation: String,
+    revision: u64,
+    material: bool,
+    dirty: bool,
+}
 #[derive(Default)]
 struct Handoffs {
     next: u64,
     entries: HashMap<String, Entry>,
+    drafts: HashMap<String, Draft>,
 }
 fn valid_target(label: &str) -> bool {
     let parts: Vec<_> = label.split(':').collect();
@@ -47,6 +55,22 @@ fn expire(entry: &mut Entry, now: u64) {
     if now >= entry.deadline { settle(entry, "expired"); }
 }
 impl Handoffs {
+    fn register_draft(&mut self, label: &str, instance: u64) {
+        self.drafts.insert(label.into(), Draft { instance, generation: "initial".into(), revision: 0, material: false, dirty: false });
+    }
+    fn report_draft(&mut self, label: &str, instance: u64, generation: &str, revision: u64, dirty: bool) -> bool {
+        let Some(draft) = self.drafts.get_mut(label) else { return false };
+        if draft.instance != instance || draft.generation != generation || revision <= draft.revision { return false; }
+        draft.revision = revision;
+        draft.dirty = dirty;
+        true
+    }
+    fn retain_draft(&self, label: &str, instance: u64) -> bool {
+        self.drafts.get(label).is_some_and(|draft| draft.instance == instance && (draft.material || draft.dirty))
+    }
+    fn remove_draft(&mut self, label: &str, instance: u64) {
+        if self.drafts.get(label).is_some_and(|draft| draft.instance == instance) { self.drafts.remove(label); }
+    }
     fn begin(&mut self, source: &str, target: &str, text: String, now: u64) -> Result<Receipt, String> {
         if !valid_target(target) || !valid_source(source) || source == target {
             return Err("PluginSurfaceHandoffInvalidTarget".into());
@@ -79,6 +103,14 @@ impl Handoffs {
         if entry.receipt.id != id { return "expired".into(); }
         if entry.receipt.status == "pending" {
             let result = if accepted && source_alive(&entry.source) { "accepted" } else { "rejected" };
+            if result == "accepted" {
+                if let Some(draft) = self.drafts.get_mut(target) {
+                    draft.generation = id.into();
+                    draft.revision = 0;
+                    draft.material = entry.receipt.initial_text.as_ref().is_some_and(|text| !text.is_empty());
+                    draft.dirty = false;
+                }
+            }
             settle(entry, result);
         }
         entry.receipt.status.clone()
@@ -108,6 +140,26 @@ fn now() -> u64 {
 pub(crate) fn invalidate_window(label: &str) {
     if let Ok(mut state) = state().lock() { state.invalidate(label); }
 }
+pub(crate) fn register_draft_window(label: &str, instance: u64) {
+    if let Ok(mut state) = state().lock() { state.register_draft(label, instance); }
+}
+pub(crate) fn retain_draft_window(label: &str, instance: u64) -> bool {
+    state().lock().map(|state| state.retain_draft(label, instance)).unwrap_or(true)
+}
+pub(crate) fn remove_draft_window(label: &str, instance: u64) {
+    if let Ok(mut state) = state().lock() { state.remove_draft(label, instance); }
+}
+#[tauri::command]
+pub(crate) fn plugin_surface_draft_instance(caller: tauri::WebviewWindow) -> Result<u64, String> {
+    if !valid_target(caller.label()) { return Err("PluginSurfaceHandoffWrongOwner".into()); }
+    super::paste_recovery::window_instance(caller.label()).ok_or_else(|| "PluginSurfaceHandoffWrongOwner".into())
+}
+#[tauri::command(rename_all = "camelCase")]
+pub(crate) fn plugin_surface_draft_report(caller: tauri::WebviewWindow, instance: u64, generation: String, revision: u64, dirty: bool) -> Result<bool, String> {
+    if !valid_target(caller.label()) { return Err("PluginSurfaceHandoffWrongOwner".into()); }
+    if !super::paste_recovery::is_window_current(caller.label(), instance) { return Ok(false); }
+    Ok(state().lock().map_err(|_| "PluginSurfaceHandoffUnavailable")?.report_draft(caller.label(), instance, &generation, revision, dirty))
+}
 #[tauri::command(rename_all = "camelCase")]
 pub(crate) fn plugin_surface_handoff_begin(caller: tauri::WebviewWindow, label: String, initial_text: String) -> Result<Receipt, String> {
     state().lock().map_err(|_| "PluginSurfaceHandoffUnavailable")?.begin(caller.label(), &label, initial_text, now())
@@ -136,6 +188,34 @@ pub(crate) fn plugin_surface_handoff_cancel(caller: tauri::WebviewWindow, label:
 mod tests {
     use super::*;
     const TARGET: &str = "plugin-surface:builtin:tool:main";
+    #[test]
+    fn drafts_survive_hide_and_stale_reports_but_empty_windows_are_collectable() {
+        let mut s = Handoffs::default();
+        s.register_draft(TARGET, 1);
+        assert!(!s.retain_draft(TARGET, 1));
+        assert!(s.report_draft(TARGET, 1, "initial", 2, true));
+        assert!(!s.report_draft(TARGET, 1, "initial", 1, false));
+        s.invalidate(TARGET); // hide/close cancels transfers, never the existing draft.
+        assert!(s.retain_draft(TARGET, 1));
+        let a = s.begin("launcher", TARGET, "new full material".into(), 0).unwrap();
+        s.finish(TARGET, &a.id, false, |_| true, 1);
+        assert!(s.retain_draft(TARGET, 1)); // Failed staging cannot clear the old draft.
+        let b = s.begin("launcher", TARGET, "new full material".into(), 2).unwrap();
+        s.finish(TARGET, &b.id, true, |_| true, 3);
+        assert!(!s.report_draft(TARGET, 1, "initial", 99, false));
+        assert!(s.report_draft(TARGET, 1, &b.id, 1, false));
+        assert!(s.retain_draft(TARGET, 1)); // An unchanged incoming material still matters.
+        let c = s.begin("launcher", TARGET, "".into(), 4).unwrap();
+        s.finish(TARGET, &c.id, true, |_| true, 5);
+        assert!(!s.retain_draft(TARGET, 1)); // Explicit accepted empty replacement releases it.
+        s.register_draft(TARGET, 2);
+        assert!(s.report_draft(TARGET, 2, "initial", 1, true));
+        s.remove_draft(TARGET, 1);
+        assert!(s.retain_draft(TARGET, 2));
+        assert!(!s.report_draft(TARGET, 1, "initial", 100, false));
+        assert!(s.report_draft(TARGET, 2, "initial", 2, false));
+        assert!(!s.retain_draft(TARGET, 2));
+    }
     #[test]
     fn accepted_receipt_is_stable_and_drops_text() {
         let mut s = Handoffs::default();

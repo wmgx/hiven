@@ -9,15 +9,17 @@ import { ConfirmDialog } from '../plugin-ui'
 import { invoke } from '@tauri-apps/api/core'
 import { PluginSettingsDialog } from './PluginSettingsDialog'
 import { ToastContainer } from './workspace/ToastContainer'
-import { PluginSurfaceRenderer, usePluginSurfaceRendersTitlebar, usePluginSurfaceTitle } from './pluginSurface/PluginSurfaceRenderer'
+import { PluginSurfaceRenderer, type PluginSurfaceLeaveOwner, usePluginSurfaceRendersTitlebar, usePluginSurfaceTitle } from './pluginSurface/PluginSurfaceRenderer'
 import './PluginSurfaceWindow.css'
+
+type WindowEntry = { id: string; target: PluginSurfaceOpenTarget }
 
 export function PluginSurfaceWindow() {
   const locale = useAppStore((s) => s.locale)
   const theme = useAppStore((s) => s.settings.theme)
   const t = useT('workspace')
   const baseTarget = useMemo(() => parseTargetFromUrl(), [])
-  type Entry = { id: string; target: PluginSurfaceOpenTarget }
+  type Entry = WindowEntry
   type Request = { id: string; initialText: string; status: string }
   const [active, setActive] = useState<Entry | null>(null)
   const activeRef = useRef<Entry | null>(null)
@@ -27,6 +29,24 @@ export function PluginSurfaceWindow() {
   const stagedRef = useRef<Entry | null>(null)
   const settlingRef = useRef(false)
   const aliveRef = useRef(false)
+  const draftRevision = useRef(0)
+  const draftInstance = useRef<number | null>(null)
+  const draftReportRef = useRef<{ generation: string; revision: number; dirty: boolean } | null>(null)
+  const flushDraftReport = useCallback(async () => {
+    const report = draftReportRef.current
+    if (!report || !isTauriRuntime()) return
+    try {
+      if (draftInstance.current === null) draftInstance.current = await invoke<number>('plugin_surface_draft_instance')
+      await invoke('plugin_surface_draft_report', { ...report, instance: draftInstance.current })
+      if (draftReportRef.current === report) draftReportRef.current = null
+    } catch { /* The next receipt poll retries without dropping the draft report. */ }
+  }, [])
+  const reportDraft = useCallback((entry: WindowEntry, dirty: boolean, owner: PluginSurfaceLeaveOwner) => {
+    // Cleanup, hidden owners, and staging are not statements that the active draft is empty.
+    if (activeRef.current !== entry || !owner.isCurrent()) return
+    draftReportRef.current = { generation: entry.id, revision: ++draftRevision.current, dirty }
+    void flushDraftReport()
+  }, [flushDraftReport])
   const [targetReady, setTargetReady] = useState(false)
   const target = active?.target ?? staged?.target ?? baseTarget
   const title = usePluginSurfaceTitle(target, locale)
@@ -88,6 +108,7 @@ export function PluginSurfaceWindow() {
       if (busy || settlingRef.current || !baseTarget) return
       busy = true
       try {
+        await flushDraftReport()
         // Poll only the receipt while waiting; do not shuttle a large snapshot
         // through IPC on every tick while the user considers the old draft.
         const previous = pendingRef.current
@@ -131,7 +152,7 @@ export function PluginSurfaceWindow() {
       const request = pendingRef.current
       if (request) void invoke('plugin_surface_handoff_finish', { id: request.id, accepted: false }).catch(() => undefined)
     }
-  }, [baseTarget, clearPending, stageRequest])
+  }, [baseTarget, clearPending, stageRequest, flushDraftReport])
 
   useEffect(() => {
     if (!target) return
@@ -212,15 +233,14 @@ export function PluginSurfaceWindow() {
         <div className="plugin-surface-window-body">
           {[active, staged].filter((entry): entry is Entry => Boolean(entry)).map((entry) => (
             <div key={entry.id} style={{ height: '100%', display: staged && entry !== staged ? 'none' : undefined }}>
-              <PluginSurfaceRenderer
-                target={entry.target}
+              <DraftReportingSurface
+                entry={entry}
                 locale={locale}
-                presentation="plugin-surface-window"
-                contextSurfaceId="plugin-surface-window"
                 suspended={Boolean(staged)}
                 onHandoffReady={entry === staged ? (ok) => { void ready(entry, ok) } : undefined}
                 onBack={() => { void hide() }}
                 onClose={() => { void hide() }}
+                reportDraft={reportDraft}
               />
             </div>
           ))}
@@ -240,6 +260,23 @@ export function PluginSurfaceWindow() {
       <ToastContainer />
     </div>
   )
+}
+
+function DraftReportingSurface({ entry, reportDraft, ...props }: {
+  entry: WindowEntry
+  reportDraft: (entry: WindowEntry, dirty: boolean, owner: PluginSurfaceLeaveOwner) => void
+  locale: 'zh' | 'en'
+  suspended: boolean
+  onHandoffReady?: (ready: boolean) => void
+  onBack: () => void
+  onClose: () => void
+}) {
+  // Stable callback prevents ordinary parent rerenders from masquerading as owner cleanup.
+  const onUnsavedChangesChange = useCallback((dirty: boolean, owner: PluginSurfaceLeaveOwner) => {
+    reportDraft(entry, dirty, owner)
+  }, [entry, reportDraft])
+  return <PluginSurfaceRenderer {...props} target={entry.target} presentation="plugin-surface-window"
+    contextSurfaceId="plugin-surface-window" onUnsavedChangesChange={onUnsavedChangesChange} />
 }
 
 function parseTargetFromUrl(): PluginSurfaceOpenTarget | null {

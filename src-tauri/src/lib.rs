@@ -2074,6 +2074,7 @@ fn attach_plugin_surface_window_events(
     destroy_timeout_ms: u64,
 ) {
     let instance = paste_recovery::register_window(&label, Some(destroy_timeout_ms));
+    plugin_surface_handoff::register_draft_window(&label, instance);
     let export_window = window.clone();
     window.on_window_event(move |event| match event {
         tauri::WindowEvent::Focused(false) => {
@@ -2122,11 +2123,20 @@ fn attach_plugin_surface_window_events(
                 destroy_timeout_ms,
             );
         }
-        tauri::WindowEvent::CloseRequested { .. } => {
+        tauri::WindowEvent::CloseRequested { api, .. } => {
+            // Native close follows the same draft-preserving hide policy as Escape.
+            api.prevent_close();
+            if !paste_recovery::is_window_current(&label, instance) { return; }
             toast_hud::invalidate_owner(export_window.app_handle(), &label);
             plugin_surface_handoff::invalidate_window(&label);
             host_text_export::invalidate_window(&export_window);
             paste_recovery::invalidate_window(&label, Some(instance));
+            let token = touch_plugin_surface_window(&label);
+            let _ = export_window.hide();
+            let last_active_at = now_millis();
+            let _ = surface_registry_mark_record_state(&label, "hidden", last_active_at);
+            emit_surface_registry_mark_state(&app, &label, "hidden", last_active_at);
+            schedule_plugin_surface_window_destroy(app.clone(), label.clone(), token, destroy_timeout_ms);
         }
         tauri::WindowEvent::Destroyed => {
             toast_hud::invalidate_owner(export_window.app_handle(), &label);
@@ -2135,6 +2145,7 @@ fn attach_plugin_surface_window_events(
             if !paste_recovery::destroyed(&label, instance) {
                 return;
             }
+            plugin_surface_handoff::remove_draft_window(&label, instance);
             clear_plugin_surface_window_token(&label);
             let last_active_at = now_millis();
             let destroyed_surface = plugin_surface_registry_record(
@@ -2173,6 +2184,7 @@ fn schedule_plugin_surface_window_destroy(
             // instance so an old timer cannot destroy a recreated label.
             if current_plugin_surface_window_token(&label) != Some(token)
                 || !paste_recovery::is_window_current(&label, instance)
+                || plugin_surface_handoff::retain_draft_window(&label, instance)
             {
                 return;
             }
@@ -7824,6 +7836,8 @@ pub fn run() {
             close_quick_editor_window,
             show_plugin_surface_window,
             hide_plugin_surface_window,
+            plugin_surface_handoff::plugin_surface_draft_instance,
+            plugin_surface_handoff::plugin_surface_draft_report,
             plugin_surface_handoff::plugin_surface_handoff_begin,
             plugin_surface_handoff::plugin_surface_handoff_peek,
             plugin_surface_handoff::plugin_surface_handoff_status,

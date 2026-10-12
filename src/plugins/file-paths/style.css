@@ -8,8 +8,14 @@
 .file-paths-surface input,.file-paths-surface textarea { width:100%; box-sizing:border-box; border:1px solid var(--color-border-tertiary); border-radius:6px; padding:10px; color:inherit; background:var(--color-background-secondary); font-family:monospace; }
 .file-paths-surface textarea { flex:1; min-height:100px; resize:none; }
 .file-paths-editors { display:grid; grid-template-columns:1fr 1fr; gap:12px; flex:1; min-height:130px; }
-.file-paths-note,.file-paths-surface small,.file-paths-surface [role=status] { color:var(--color-text-secondary); font-size:12px; white-space:pre-wrap; overflow-wrap:anywhere; margin:0; }
-.file-paths-surface footer { display:flex; justify-content:flex-end; }
+.file-paths-help,.file-paths-surface small,.file-paths-surface [role=status] { color:var(--color-text-secondary); font-size:12px; white-space:pre-wrap; overflow-wrap:anywhere; margin:0; }
+.file-paths-surface footer { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
+.file-paths-surface footer > button { flex:none; }
+.file-paths-help { min-width:0; line-height:1.5; }
+.file-paths-help summary { cursor:pointer; }
+.file-paths-help p { margin:8px 0 0; }
+.file-paths-help summary:focus-visible { outline:2px solid var(--hiven-color-accent); outline-offset:2px; }
+.file-paths-surface textarea::placeholder { color:var(--color-text-tertiary); }
 @media (max-width:700px) { .file-paths-editors { grid-template-columns:1fr; overflow:auto; } }
 
 .file-paths-surface button:focus-visible,.file-paths-surface input:focus-visible,.file-paths-surface textarea:focus-visible { outline:2px solid var(--hiven-color-accent); outline-offset:2px; }
