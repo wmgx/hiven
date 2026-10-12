@@ -1,5 +1,7 @@
 .curl-inspector { box-sizing: border-box; height: 100%; overflow: auto; padding: 18px; font: 13px/1.5 var(--hiven-font-ui); color: var(--hiven-color-text-primary); }
 .curl-inspector h2 { font-size: 19px; margin: 0 0 6px; }
+.curl-header { display: flex; align-items: center; gap: 10px; position: sticky; top: -18px; z-index: 1; margin: -18px -18px 10px; padding: 12px 18px; background: var(--hiven-color-bg-primary, #1e1e1e); }
+.curl-header h2 { flex: 1; margin: 0; }
 .curl-inspector h3 { font-size: 14px; margin: 14px 0 4px; }
 .curl-inspector p { margin: 5px 0 10px; color: var(--hiven-color-text-secondary); }
 .curl-inspector button { border: 1px solid var(--hiven-color-border); border-radius: 5px; padding: 4px 9px; background: var(--hiven-color-bg-secondary); color: inherit; cursor: pointer; font: inherit; }

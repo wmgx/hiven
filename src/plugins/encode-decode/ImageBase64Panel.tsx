@@ -5,27 +5,47 @@ import { saveClipboardPng } from './saveClipboardPng'
 import { decodeRaster, imageDataUri, inspectRaster, MAX_IMAGE_BYTES, parseImageBase64 } from './imageBase64'
 
 type Result = { uri: string; preview: string; png: Uint8Array; width: number; height: number }
-export function ImageBase64Panel({ host, t, initialText, surfaceId }: PluginSurfaceProps) {
+type ImagePanelProps = PluginSurfaceProps & {
+  active: boolean
+  saveFocused: boolean
+  onShowWorkbench(): void
+  onDirtyChange(dirty: boolean): void
+  invalidateRef: { current: (() => void) | null }
+}
+export function ImageBase64Panel({ host, t, initialText, active, saveFocused, onShowWorkbench, onDirtyChange, invalidateRef }: ImagePanelProps) {
   const [text, setText] = useState(initialText ?? '')
   const [result, setResult] = useState<Result | null>(null)
   const [busy, setBusy] = useState(false)
-  const [status, setStatus] = useState('image.hint')
+  const [status, setStatus] = useState('')
+  const activeRef = useRef(active)
+  activeRef.current = active
   const revision = useRef(0)
   const controller = useRef<AbortController | null>(null)
   const pending = useRef(false)
   const file = useRef<HTMLInputElement>(null)
   const invalidate = () => { revision.current++; controller.current?.abort(); controller.current = null }
   useLayoutEffect(() => {
-    const stop = host.deliveryFeedbackOwner?.subscribeInvalidation(invalidate)
+    const stop = host.deliveryFeedbackOwner?.subscribeInvalidation(() => {
+      invalidate()
+      if (pending.current) { setBusy(false); setStatus('image.cancelled') }
+    })
     return () => { invalidate(); stop?.() }
   }, [host.deliveryFeedbackOwner])
-  useLayoutEffect(() => { host.setUnsavedChanges?.(text !== (initialText ?? '')) }, [text, initialText, host.setUnsavedChanges])
+  useLayoutEffect(() => { onDirtyChange(text !== (initialText ?? '')) }, [text, initialText, onDirtyChange])
+  useLayoutEffect(() => {
+    const interrupt = () => {
+      invalidate()
+      if (pending.current) { setBusy(false); setStatus('image.cancelled') }
+    }
+    invalidateRef.current = interrupt
+    return () => { if (invalidateRef.current === interrupt) invalidateRef.current = null }
+  }, [invalidateRef])
   const run = async (operation: (signal: AbortSignal, current: () => boolean) => Promise<string>) => {
-    if (pending.current || host.deliveryFeedbackOwner?.isCurrent() === false) return
+    if (!activeRef.current || pending.current || host.deliveryFeedbackOwner?.isCurrent() === false) return
     invalidate()
     const token = revision.current
     const abort = new AbortController(); controller.current = abort
-    const current = () => revision.current === token && !abort.signal.aborted && host.deliveryFeedbackOwner?.isCurrent() !== false
+    const current = () => activeRef.current && revision.current === token && !abort.signal.aborted && host.deliveryFeedbackOwner?.isCurrent() !== false
     pending.current = true; setBusy(true); setStatus('image.busy')
     try { const next = await operation(abort.signal, current); if (current()) setStatus(next) }
     catch (error) { if (current()) setStatus(error instanceof Error && error.message === 'size' ? 'image.sizeError' : 'image.error') }
@@ -38,7 +58,7 @@ export function ImageBase64Panel({ host, t, initialText, surfaceId }: PluginSurf
     return 'image.ready'
   }
   const deliver = (action: 'uri' | 'copy' | 'save') => run(async (_signal, current) => {
-    if (!result) return 'image.hint'
+    if (!result) return ''
     if (action === 'uri') { await host.clipboard.writeText(result.uri); return 'image.copied' }
     const blob = await host.storage.blob.put({ bytes: result.png, contentType: 'image/png', extension: 'png' })
     try {
@@ -48,13 +68,13 @@ export function ImageBase64Panel({ host, t, initialText, surfaceId }: PluginSurf
       return saved.status === 'saved' ? 'image.saved' : 'image.cancelled'
     } finally { await host.storage.blob.delete(blob.blobId) }
   })
-  return <main className="image-base64-panel" data-launcher-scrollable>
-    <p>{t('image.hint')}</p>
+  return <main className="image-base64-panel" hidden={!active} data-launcher-scrollable>
+    {saveFocused && <p>{t('image.saveTaskHint')}</p>}
     <div className="image-base64-actions">
-      <Button disabled={busy || !host.clipboard.readImage} onClick={() => void run(async (signal, current) => {
+      {!saveFocused && <Button disabled={busy || !host.clipboard.readImage} onClick={() => void run(async (signal, current) => {
         const image = await host.clipboard.readImage!({ signal }); return load(image.bytes, signal, current, image.contentType)
-      })}>{t('image.readClipboard')}</Button>
-      <Button autoFocus={surfaceId === 'image-save'} disabled={busy || !host.clipboard.readImage} onClick={() => void run(async (signal, current) => {
+      })}>{t('image.readClipboard')}</Button>}
+      <Button variant={saveFocused ? 'primary' : undefined} autoFocus={saveFocused} disabled={busy || !host.clipboard.readImage} onClick={() => void run(async (signal, current) => {
         const image = await host.clipboard.readImage!({ signal })
         const info = inspectRaster(image.bytes, image.contentType)
         const decoded = await decodeRaster(image.bytes, info, signal)
@@ -65,7 +85,7 @@ export function ImageBase64Panel({ host, t, initialText, surfaceId }: PluginSurf
           return saved.pathCopied ? 'image.savedPathCopied' : 'image.savedPathCopyFailed'
         } catch { return 'image.saveClipboardFailed' }
       })}>{t('image.saveClipboard')}</Button>
-      <Button disabled={busy} onClick={() => file.current?.click()}>{t('image.chooseFile')}</Button>
+      {!saveFocused && <Button disabled={busy} onClick={() => file.current?.click()}>{t('image.chooseFile')}</Button>}
       <input ref={file} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(event) => {
         const selected = event.currentTarget.files?.[0]; event.currentTarget.value = ''
         if (selected) void run(async (signal, current) => {
@@ -74,8 +94,8 @@ export function ImageBase64Panel({ host, t, initialText, surfaceId }: PluginSurf
         })
       }} />
     </div>
-    <label className="image-base64-input">{t('image.input')}<textarea data-launcher-scrollable value={text} spellCheck={false} onChange={(event) => {
-      invalidate(); setText(event.currentTarget.value); setResult(null); setBusy(false); setStatus('image.hint')
+    {!saveFocused && <><label className="image-base64-input">{t('image.input')}<textarea data-launcher-scrollable value={text} spellCheck={false} onChange={(event) => {
+      invalidate(); setText(event.currentTarget.value); setResult(null); setBusy(false); setStatus('')
     }} /></label>
     <div className="image-base64-actions">
       <Button disabled={busy || !text.trim()} onClick={() => void run(async (signal, current) => {
@@ -92,6 +112,10 @@ export function ImageBase64Panel({ host, t, initialText, surfaceId }: PluginSurf
         <Button disabled={busy} onClick={() => void deliver('save')}>{t('image.save')}</Button>
       </div>
     </>}
-    <p role="status" aria-live="polite">{t(status)}</p>
+    </>}
+    {saveFocused && busy && <Button onClick={() => { invalidate(); setBusy(false); setStatus('image.cancelled') }}>{t('image.cancel')}</Button>}
+    {status && <p role="status" aria-live="polite">{t(status)}</p>}
+    <details><summary>{t('image.limits')}</summary><p>{t('image.hint')}</p></details>
+    {saveFocused && <Button variant="ghost" onClick={onShowWorkbench}>{t('image.openWorkbench')}</Button>}
   </main>
 }

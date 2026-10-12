@@ -12,6 +12,9 @@ function keepSelection(options: Array<{ value: string; label: string }>, value: 
 export function SummarySurface({ host, initialText, t }: PluginSurfaceProps) {
   const [session] = useState(() => new SummarySession(initialText ?? ''))
   const snapshot = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot)
+  const reportUnsavedChanges = host.setUnsavedChanges
+  const dirty = snapshot.text !== (initialText ?? '')
+  useLayoutEffect(() => { reportUnsavedChanges?.(dirty) }, [reportUnsavedChanges, dirty])
   const settingsVisit = useRef<object | null>(null)
   const mounted = useRef(false)
   useLayoutEffect(() => {
@@ -66,8 +69,8 @@ export function SummarySurface({ host, initialText, t }: PluginSurfaceProps) {
     })
   }
   const leave = (back: boolean) => {
-    session.dispose()
-    settingsVisit.current = null
+    // The host may keep this draft when the user cancels leaving.
+    // Actual unmount owns cancellation and disposal.
     if (back) host.requestBack()
     else host.close()
   }
@@ -100,7 +103,7 @@ export function SummarySurface({ host, initialText, t }: PluginSurfaceProps) {
         </div>
       </div>
 
-      <p className="ai-summary-explanation">{t('surface.sendHint')} {t('surface.outputHint')}</p>
+      <details className="ai-summary-explanation"><summary>{t('surface.aboutGeneration')}</summary><p>{t('surface.sendHint')} {t('surface.outputHint')}</p></details>
 
       <main className="ai-summary-editors">
         <section className="ai-summary-pane">
@@ -115,7 +118,7 @@ export function SummarySurface({ host, initialText, t }: PluginSurfaceProps) {
 
       <footer className="ai-summary-footer">
         <div className="ai-summary-status" role={snapshot.phase === 'error' ? 'alert' : 'status'}>
-          <span>{snapshot.suspended ? t('status.settings') : snapshot.phase === 'error' ? t(`error.${snapshot.errorCode ?? 'provider'}`) : t(`status.${snapshot.phase}`)}</span>
+          <span>{snapshot.suspended ? t('status.settings') : snapshot.phase === 'error' ? t(`error.${snapshot.errorCode ?? 'provider'}`) : snapshot.phase === 'idle' ? '' : t(`status.${snapshot.phase}`)}</span>
           {snapshot.errorDetail && <details><summary>{t('readiness.diagnostic')}</summary><p>{snapshot.errorDetail}</p></details>}
         </div>
         <div className="ai-summary-actions">

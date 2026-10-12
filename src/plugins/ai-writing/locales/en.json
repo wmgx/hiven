@@ -1,4 +1,5 @@
 {
+  "surface.aboutGeneration": "About generation and your text",
   "surface.title": "AI Summary",
   "surface.sendHint": "Only Generate sends this text to the provider and model shown above. Editing does not send a request.",
   "surface.outputHint": "Summary language follows the source. The point limit is a preference; review the result before using it. Model limits and remaining quota are not verified here.",

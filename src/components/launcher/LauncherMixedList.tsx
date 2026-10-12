@@ -136,6 +136,8 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
   const combineTagAndQuickSelect = showTag && showQuickSelect
   const iconSlotClass = appIcon ? 'r-app' : avatarIcon ? 'r-ico r-avatar' : 'r-ico'
   const isX11Window = item.id.startsWith('host.window:focus:native:x11:')
+  const answerDetails = item.domainItem.directAnswer
+    ? [item.title, item.subtitle].filter(Boolean).join('\n') : undefined
 
   useEffect(() => {
     // Keyboard nav only — hover selection already keeps the row under the cursor.
@@ -167,7 +169,8 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
         type="button"
         tabIndex={-1}
         className="launcher-row-main"
-        aria-label={isX11Window ? [item.title, item.subtitle, tag, item.shortcut ?? quickSelectLabel].filter(Boolean).join(', ') : undefined}
+        title={answerDetails}
+        aria-label={isX11Window ? [item.title, item.subtitle, tag, item.shortcut ?? quickSelectLabel].filter(Boolean).join(', ') : answerDetails}
         disabled={item.disabled}
         onClick={handleClick}
       >

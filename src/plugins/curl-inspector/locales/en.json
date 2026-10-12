@@ -1,5 +1,7 @@
 {
   "title": "cURL Inspector",
+  "back": "Back",
+  "close": "Close",
   "privacy": "Local parsing only. Paste inside this tool, never into launcher search. No request, shell, file access or automatic clipboard capture.",
   "source": "Original cURL command",
   "hint": "POSIX quotes and backslash continuations; curl URL, -X, -H, -d, --data-raw, --url and -I only. Maximum 100,000 characters. Values stay hidden until explicitly shown.",

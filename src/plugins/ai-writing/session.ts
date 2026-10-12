@@ -37,7 +37,7 @@ export class SummarySession {
   private revision = 0
   private metadataGeneration = 0
   private run?: { revision: number; controller: AbortController }
-  private outputAction?: object
+  private outputAction?: AbortController
   private snapshot: SummarySnapshot
   private initialText: string
 
@@ -65,6 +65,7 @@ export class SummarySession {
     this.revision += 1
     const oldRun = this.run
     this.run = undefined
+    this.outputAction?.abort()
     this.outputAction = undefined
     oldRun?.controller.abort()
   }
@@ -202,7 +203,7 @@ export class SummarySession {
   async useOutput(action: 'copy' | 'continue', expected: SummarySnapshot, host: OutputHost, messages: OutputMessages): Promise<void> {
     if (!this.canUseOutput(expected)) return
     const revision = this.revision
-    const token = {}
+    const token = new AbortController()
     this.outputAction = token
     const current = () => this.revision === revision && this.outputAction === token && Boolean(this.ai)
     this.publish({ outputBusy: true })
@@ -211,7 +212,8 @@ export class SummarySession {
         await host.clipboard.writeText(expected.preview)
         if (current()) host.showMessage(messages.copied, 'success')
       } else {
-        await host.returnToLauncherWithObject({ kind: 'text', text: expected.preview, source: 'tool-result' })
+        const accepted = await host.returnToLauncherWithObject({ kind: 'text', text: expected.preview, source: 'tool-result' }, { signal: token.signal })
+        if (accepted === false && current()) host.showMessage(messages.continueFailed, 'error')
       }
     } catch {
       if (current()) host.showMessage(action === 'copy' ? messages.copyFailed : messages.continueFailed, 'error')

@@ -2,7 +2,7 @@
   "pluginId": "ai-writing",
   "displayName": "AI Writing",
   "displayNameI18n": { "zh": "AI 写作", "en": "AI Writing" },
-  "version": "1.0.0",
+  "version": "1.0.1",
   "capabilities": ["ui"],
   "permissions": ["ai.use", "clipboard.write"]
 }

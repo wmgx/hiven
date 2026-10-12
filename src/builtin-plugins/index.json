@@ -1,10 +1,10 @@
 {
-  "version": 126,
+  "version": 127,
   "packages": [
     {
       "pluginId": "encode-decode",
       "dir": "encode-decode",
-      "version": "2.7.1"
+      "version": "2.7.2"
     },
     {
       "pluginId": "formatter",
@@ -39,17 +39,17 @@
     {
       "pluginId": "date-time-assistant",
       "dir": "date-time-assistant",
-      "version": "1.7.1"
+      "version": "1.10.3"
     },
     {
       "pluginId": "translate",
       "dir": "translate",
-      "version": "1.0.22"
+      "version": "1.0.23"
     },
     {
       "pluginId": "ai-writing",
       "dir": "ai-writing",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "pluginId": "regex-tester",
@@ -64,7 +64,7 @@
     {
       "pluginId": "clipboard-history",
       "dir": "clipboard-history",
-      "version": "2.0.3"
+      "version": "2.0.4"
     },
     {
       "pluginId": "web-open",

@@ -592,7 +592,7 @@ export const dateTimeAssistantPlugin = definePlugin({
         const next = ctx.t('cron.next', { time: value.next, zone: value.zone })
         const rule = ctx.t(value.dayOr ? 'cron.dayOr' : 'cron.dayRule')
         return [{
-          id: 'dt-cron-answer', display: { title: `${description} · ${next}`, subtitle: `${rule} · ${ctx.t('cron.copy')}`, icon: 'Clock' },
+          id: 'dt-cron-answer', display: { title: next, subtitle: `${ctx.t('cron.copy')} · ${description} · ${rule}`, icon: 'Clock' },
           behavior: { type: 'perform' }, surfaces: ['global-launcher'], directAnswer: true,
           async execute(execution) {
             // The suggestion may have been idle across its next occurrence. Keep

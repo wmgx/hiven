@@ -2,6 +2,8 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { load } from './ai-runtime-test-harness.mjs'
+import vm from 'node:vm'
+import ts from 'typescript'
 
 const prompt = load('src/plugins/ai-writing/prompt.ts', {})
 const streaming = load('src/plugins/ai-writing/stream.ts', { './prompt': prompt })
@@ -40,7 +42,7 @@ class EventQueue {
   [Symbol.asyncIterator]() { return this }
 }
 function harness(options = {}) {
-  const calls = { providers: 0, preflight: [], stream: [], messages: [], copied: [], continued: [] }
+  const calls = { providers: 0, preflight: [], stream: [], messages: [], copied: [], continued: [], continueSignals: [] }
   const listeners = new Set()
   const queues = []
   const ai = {
@@ -51,7 +53,7 @@ function harness(options = {}) {
   }
   const host = {
     clipboard: { writeText: async (value) => { calls.copied.push(value); await options.copy?.() } },
-    returnToLauncherWithObject: (value) => { calls.continued.push(value); return options.continue?.() },
+    returnToLauncherWithObject: (value, config) => { calls.continued.push(value); calls.continueSignals.push(config?.signal); return options.continue?.() },
     showMessage: (text, level) => calls.messages.push({ text, level }),
   }
   return { ai, host, calls, queues, listeners, change() { for (const listener of [...listeners]) listener() } }
@@ -327,6 +329,74 @@ for (const failure of ['error', 'end', 'cancel', 'empty']) {
   session.dispose()
 }
 
+// A refused async host handoff retains the complete result and releases the retry lock.
+{
+  const h = harness({ continue: async () => false })
+  const session = await configured(h)
+  await finish(h, session, 'full retained result\r\n尾行')
+  await session.useOutput('continue', session.getSnapshot(), h.host, messages)
+  assert.equal(session.canUseOutput(), true)
+  assert.equal(session.getSnapshot().preview, 'full retained result\r\n尾行')
+  assert.deepEqual(h.calls.messages, [{ text: 'continue failed', level: 'error' }])
+  await session.useOutput('continue', session.getSnapshot(), h.host, messages)
+  assert.equal(h.calls.continued.length, 2)
+  session.dispose()
+}
+
+// Evaluate the renderer's real resolved-lifetime and JSX host AI expressions.
+// Ordinary host rerenders must not act like an AI replacement while a receipt is pending.
+{
+  const renderer = ts.createSourceFile('renderer.tsx', readFileSync('src/components/pluginSurface/PluginSurfaceRenderer.tsx', 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+  let resolvedExpression
+  let aiExpression
+  const visit = (node) => {
+    if (ts.isVariableDeclaration(node) && node.name.getText(renderer) === 'resolved') resolvedExpression = node.initializer
+    if (ts.isJsxAttribute(node) && node.name.getText(renderer) === 'host') {
+      const object = node.initializer?.expression
+      if (object && ts.isObjectLiteralExpression(object)) {
+        aiExpression = object.properties.find((property) => property.name?.getText(renderer) === 'ai')?.initializer
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(renderer)
+  assert.ok(resolvedExpression && aiExpression)
+  const printer = ts.createPrinter()
+  const evaluate = (expression, context) => vm.runInNewContext(`(${printer.printNode(ts.EmitHint.Expression, expression, renderer)})`, context)
+  const gate = deferred()
+  const h = harness({ continue: () => gate.promise })
+  let handles = 0
+  const context = {
+    target: { pluginId: 'ai-writing', source: 'builtin' }, definition: {}, surface: {}, permissions: {}, missingPermissions: [],
+    createPluginAi: () => { handles++; return { ...h.ai } },
+  }
+  const resolved = evaluate(resolvedExpression, context)
+  const renderedAi = () => evaluate(aiExpression, { ...context, surfaceState: resolved })
+  const stableAi = renderedAi()
+  const session = new SummarySession(source)
+  session.setAi(stableAi)
+  await session.refresh()
+  session.setSelection(explicit.providerId, explicit.agentId)
+  await settle()
+  await finish(h, session, 'complete result retained during host refresh')
+  const using = session.useOutput('continue', session.getSnapshot(), h.host, messages)
+  for (let i = 0; i < 3; i++) {
+    const nextAi = renderedAi()
+    assert.equal(nextAi, stableAi, 'paste owner/status rerender preserves the AI handle')
+  }
+  assert.equal(handles, 1)
+  assert.equal(h.calls.continueSignals[0].aborted, false)
+  assert.equal(session.getSnapshot().preview, 'complete result retained during host refresh')
+  gate.resolve(false)
+  await using
+  assert.equal(session.canUseOutput(), true)
+  assert.deepEqual(h.calls.messages, [{ text: 'continue failed', level: 'error' }])
+  // A newly resolved definition/permission lifetime deliberately gets a fresh handle.
+  const replacement = evaluate(resolvedExpression, { ...context, definition: {}, permissions: {} })
+  assert.notEqual(evaluate(aiExpression, { surfaceState: replacement }), stableAi)
+  session.dispose()
+}
+
 // Late output-action success/failure cannot touch a new draft, result, or action.
 for (const action of ['copy', 'continue']) {
   for (const outcome of ['resolve', 'reject']) {
@@ -337,6 +407,7 @@ for (const action of ['copy', 'continue']) {
     const output = session.getSnapshot()
     const using = session.useOutput(action, output, h.host, messages)
     session.setText('new original')
+    if (action === 'continue') assert.equal(h.calls.continueSignals[0].aborted, true, 'editing cancels the pending host handoff')
     await finish(h, session, 'new complete result')
     if (outcome === 'resolve') gate.resolve()
     else gate.reject(new Error('late failure'))
@@ -366,7 +437,7 @@ for (const action of ['copy', 'continue']) {
 {
   const manifest = JSON.parse(readFileSync('src/plugins/ai-writing/manifest.json', 'utf8'))
   assert.equal(manifest.pluginId, 'ai-writing')
-  assert.equal(manifest.version, '1.0.0')
+  assert.equal(manifest.version, '1.0.1')
   assert.deepEqual(manifest.permissions.sort(), ['ai.use', 'clipboard.write'])
   const en = JSON.parse(readFileSync('src/plugins/ai-writing/locales/en.json', 'utf8'))
   const zh = JSON.parse(readFileSync('src/plugins/ai-writing/locales/zh.json', 'utf8'))

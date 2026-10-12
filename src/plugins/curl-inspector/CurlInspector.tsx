@@ -1,10 +1,16 @@
-import { useMemo, useState } from 'react'
+import { useLayoutEffect, useMemo, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
+import { IconButton } from '@hiven/plugin-ui'
+import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
 import { CurlParseError, parseCurl } from './core'
 
 export function CurlInspector({ host, t }: PluginSurfaceProps) {
   // Deliberately ignore initialText: a curl command belongs here, never in a launcher query.
   const [source, setSource] = useState('')
+  const reportUnsavedChanges = host.setUnsavedChanges
+  useLayoutEffect(() => {
+    reportUnsavedChanges?.(source.length > 0)
+  }, [source, reportUnsavedChanges])
   const [visible, setVisible] = useState<Set<string>>(new Set())
   const [status, setStatus] = useState('')
   const result = useMemo(() => {
@@ -32,7 +38,12 @@ export function CurlInspector({ host, t }: PluginSurfaceProps) {
       : window.getSelection()?.toString() ?? ''
     if (text) void copy(text)
   }} onCut={(event) => { event.preventDefault(); setStatus(t('cut.hint')) }}>
-    <h2>{t('title')}</h2><p>{t('privacy')}</p>
+    <header className="curl-header">
+      <IconButton type="button" label={t('back')} onClick={() => host.requestBack()}><BackIcon size={14} strokeWidth={2} /></IconButton>
+      <h2>{t('title')}</h2>
+      <IconButton type="button" label={t('close')} onClick={() => host.close()}><CloseIcon size={14} strokeWidth={2} /></IconButton>
+    </header>
+    <p>{t('privacy')}</p>
     <label htmlFor="curl-source">{t('source')}</label>
     <div className="curl-source-actions">
       <button type="button" onClick={() => toggle('source')}>{t(visible.has('source') ? 'hide.source' : 'show.source')}</button>

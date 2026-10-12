@@ -177,6 +177,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const [queueBusy, setQueueBusy] = useState(false)
   const [queueCancelling, setQueueCancelling] = useState(false)
   const [queueNotice, setQueueNotice] = useState<string | null>(null)
+  const [queueObserved, setQueueObserved] = useState(false)
   const [queueReadState, setQueueReadState] = useState<'loading' | 'ready' | 'failed'>('loading')
   const queueSubmissionRef = useRef<AbortController | null>(null)
   const queueStatusEpochRef = useRef(0)
@@ -209,10 +210,12 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     const owner = host.deliveryFeedbackOwner
     const isCurrent = () => active && owner?.isCurrent() !== false
     setQueueReadState('loading')
+    setQueueObserved(false)
     const unsubscribe = queueApi.subscribe((status) => {
       observed = true
       queueStatusEpochRef.current += 1
       if (isCurrent()) {
+        setQueueObserved(true)
         setQueueReadState('ready')
         setQueueStatus(status)
         if (status.busy || status.completed > 0 || status.phase === 'failed' || status.phase === 'cancelled') setQueueNotice(null)
@@ -1116,12 +1119,11 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }, [selectedItem, selectedId, filteredItems, flatRows, virtualizer, handlePaste, handleReturnToLauncher, handleDelete, handleCopy, host, t, imeKeyDown, combining, cancelMerge, toggleMergeItem, titleDialog, textEdit, toggleQuickFavorite, loading, settings.enabled, filter, legacyDialog])
 
   const queueActive = Boolean(queueStatus && queueStatus.remaining > 0 && (queueStatus.phase === 'ready' || queueStatus.phase === 'failed'))
-  const queueAvailabilityNotice = queueAvailability === 'can-attempt' ? null : t(queueAvailability === 'unsupported' ? 'queue.unsupported' : queueAvailability === 'loading' ? 'queue.checking' : 'queue.unknown')
   const queueReadNotice = queueReadState === 'failed' ? t('queue.statusFailed') : queueReadState === 'loading' ? t('queue.statusLoading') : null
-  const queueFeedback = queueApi && (queueAvailabilityNotice || queueNotice || queueReadNotice || queueActive || queueStatus?.phase === 'completed' || queueStatus?.phase === 'cancelled') ? (
+  const queueFeedback = queueApi && (queueNotice || queueActive || (queueObserved && (queueStatus?.phase === 'completed' || queueStatus?.phase === 'cancelled'))) ? (
     <div className="clipboard-history-queue-status">
       <span role="status">
-        {queueAvailabilityNotice || queueNotice || queueReadNotice || (queueStatus?.phase === 'cancelled' ? t('queue.cancelled') : queueStatus?.phase === 'completed' ? t('queue.completed') : queueStatus?.phase === 'failed' ? t('queue.failed', { shortcut: queueShortcut, position: (queueStatus?.completed ?? 0) + 1, remaining: queueStatus?.remaining ?? 0 }) : t('queue.progress', {
+        {queueNotice || (queueActive ? queueReadNotice : null) || (queueStatus?.phase === 'cancelled' ? t('queue.cancelled') : queueStatus?.phase === 'completed' ? t('queue.completed') : queueStatus?.phase === 'failed' ? t('queue.failed', { shortcut: queueShortcut, position: (queueStatus?.completed ?? 0) + 1, remaining: queueStatus?.remaining ?? 0 }) : t('queue.progress', {
           position: (queueStatus?.completed ?? 0) + 1,
           total: queueStatus?.total ?? 0,
           remaining: queueStatus?.remaining ?? 0,
@@ -1166,7 +1168,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
               {combining ? (
                 <div className="clipboard-history-merge-instruction">
                   <strong>{t('merge.chooseText')}</strong>
-                  <span>{t('merge.instruction', { min: CLIPBOARD_TEXT_MERGE_MIN_ITEMS, max: CLIPBOARD_TEXT_MERGE_MAX_ITEMS })}</span>
                 </div>
               ) : <SegmentedControl
                 className="clipboard-history-filter"
@@ -1433,9 +1434,8 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         </IconButton>}
       </div>
 
-      {!combining && <SurfaceFooterHints className="clipboard-history-footer">
-        <span>{t(filter === 'trash' ? 'retention.trashHint' : 'retention.summary', { months: resolveClipboardHistoryRetentionMonths(settings.retentionMonths) })}</span>
-        {!settings.enabled && <span>{t('retention.recordingPaused')}</span>}
+      {!combining && (filter === 'trash' || (retentionStatus?.legacyProtectedCount ?? 0) > 0 || fullTextSearchState === 'loading') && <SurfaceFooterHints className="clipboard-history-footer">
+        {filter === 'trash' && <span>{t('retention.trashHint')}</span>}
         {retentionStatus && retentionStatus.legacyProtectedCount > 0 && <>
           <span>{t('retention.legacyProtected', { count: retentionStatus.legacyProtectedCount })}</span>
           <Button type="button" disabled={retentionBusy || !retentionStatus.migrationComplete || Boolean(textEdit)} onClick={() => setLegacyDialog(true)}>{t('retention.enableLegacy')}</Button>
@@ -1457,7 +1457,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
             <Button type="button" disabled={queueBusy || mergeIds.length !== 2 || compareBusy || mergeLoading || mergeSuspended || !host.compareHistoryTexts} onClick={() => void compareHistory()}>
               {t(compareBusy ? 'compare.loading' : 'compare.action')}
             </Button>
-            {queueApi && <Button type="button" title={queueAvailabilityNotice || t('queue.platformHint')} disabled={queueAvailability !== 'can-attempt' || queueBusy || queueCancelling || mergeIds.length === 0 || compareBusy || mergeSuspended} onClick={() => void startQueue()}>
+            {queueApi && queueAvailability === 'can-attempt' && <Button type="button" disabled={queueBusy || queueCancelling || mergeIds.length === 0 || compareBusy || mergeSuspended} onClick={() => void startQueue()}>
               {t(queueBusy ? 'queue.starting' : queueActive ? 'queue.replace' : 'queue.start')}
             </Button>}
             <Button type="button" variant="primary" disabled={queueBusy || !mergePreview || mergeLoading || compareBusy || mergeSuspended} onClick={() => void copyMerge()}>

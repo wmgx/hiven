@@ -36,7 +36,10 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
   const [initial] = useState(() => initialOperation(initialText, props.surfaceId))
   const [inputText, setInputText] = useState(initialText)
   const baseline = useRef(initialText)
-  const hasUnsavedChanges = inputText !== baseline.current
+  const [imageDirty, setImageDirty] = useState(false)
+  const imageInvalidation = useRef<(() => void) | null>(null)
+  const [saveFocused, setSaveFocused] = useState(props.surfaceId === 'image-save')
+  const hasUnsavedChanges = inputText !== baseline.current || imageDirty
   const reportUnsavedChanges = host.setUnsavedChanges
   useLayoutEffect(() => {
     reportUnsavedChanges?.(hasUnsavedChanges)
@@ -84,6 +87,7 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
   }, [])
 
   const update = (change: () => void) => {
+    imageInvalidation.current?.()
     delivery.invalidate()
     pendingRef.current?.controller.abort()
     // Keep an issued clipboard/paste write locked until it settles.
@@ -146,13 +150,13 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
         <IconButton type="button" label={t('action.back')} onClick={() => update(() => host.requestBack())}>
           <BackIcon size={14} strokeWidth={2} />
         </IconButton>
-        <strong>{t('surface.title')}</strong>
+        <strong>{t(saveFocused ? 'image.saveRouteTitle' : 'surface.title')}</strong>
         <IconButton type="button" label={t('action.close')} onClick={() => update(() => host.close())}>
           <CloseIcon size={14} strokeWidth={2} />
         </IconButton>
       </header>
 
-      <nav className="encode-formats" aria-label={t('format.label')}>
+      {!saveFocused && <nav className="encode-formats" aria-label={t('format.label')}>
         {FORMATS.map((item) => (
           <button
             key={item}
@@ -165,9 +169,10 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
           </button>
         ))}
         <button type="button" className={imageMode ? 'is-active' : ''} aria-pressed={imageMode} onClick={() => update(() => setImageMode(true))}>{t('image.title')}</button>
-      </nav>
+      </nav>}
 
-      {imageMode ? <ImageBase64Panel {...props} /> : <>
+      <ImageBase64Panel {...props} active={imageMode} saveFocused={saveFocused} onShowWorkbench={() => setSaveFocused(false)} onDirtyChange={setImageDirty} invalidateRef={imageInvalidation} />
+      {!imageMode && <>
       <nav className="encode-directions" aria-label={t('direction.label')}>
         {(format === 'jwt' ? ['decode'] : ['encode', 'decode']).map((item) => (
           <button

@@ -1,4 +1,5 @@
 {
+  "surface.aboutGeneration": "生成与原文说明",
   "surface.title": "AI 摘要",
   "surface.sendHint": "仅点击“生成”才会把原文发送给上方显示的服务商和模型。编辑文字不会发送请求。",
   "surface.outputHint": "摘要语言跟随原文。要点上限是生成偏好，使用前请核对结果。此处不保证模型限制或剩余额度。",

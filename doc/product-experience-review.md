@@ -1,0 +1,96 @@
+# 产品体验审查覆盖记录
+
+更新：2026-10-12。目标是检查真实任务能否清楚、安全地完成，并减少与当前任务无关的常驻说明。本轮不是所有平台、所有操作的全面验收。
+
+## 证据与边界
+
+使用隔离 Linux 原生测试 profile、合成文本和图片。没有调用真实 AI、翻译或账户 API，没有使用用户材料或配置凭据，没有真实 macOS / Windows 验证。
+
+覆盖标记：**任务**表示实际执行指定流程；**画面**表示截图或界面文本观察，不能证明完整交互；**静态**表示源码检查；**未覆盖**表示本轮没有足够证据。不同入口的覆盖不可相互替代。此前专项验证仅作背景，不计作本轮重测。
+
+源码目录核对为 **23 个顶层插件**；`src/builtin-plugins/index.json` 当前列出 21 个包，另有 `curl-inspector`、`unix-permissions` 源码入口。`web-open/extension/manifest.json` 属于浏览器扩展，不是第 24 个工具。下列清单按产品入口分六组，不以 manifest 数量冒充功能覆盖。
+
+截图保存在本次环境 `/workspace/hiven-native/`。这些本地截图不是仓库永久附件；环境失效后不能仅凭文件名声称可重新检视。`audit-color.png`、`audit-crypto.png` 是搜索未命中画面，不能当作工具页面证据。颜色使用 `audit-color-answer.png`；哈希使用 `audit-hash.png` / `.txt`。
+
+## 六组入口清单
+
+### 1. 搜索、导航与系统页面
+
+入口：Launcher 搜索与内容对象、动作浏览、Settings、AI services、Plugins、插件设置、QuickEditor、独立工具窗口。
+
+- **画面**：Launcher 搜索、颜色与 Unix 权限答案、Settings 初屏；对应 `audit-launcher*.png`、`audit-settings.png`、`audit-color-answer.png`、`audit-unix-answer.png`。Settings 图仅显示当前可见区域，不算所有标签和设置项验收。
+- **任务**：本轮编辑草稿后离开/返回的复现，见第 2、5 组。此前独立工具窗口接收、取消与替换已专项实测，本轮不重复计入。
+- **静态**：系统路由与入口清单；macOS 焦点相关 native 路径由主审查跟进。
+- **未覆盖**：本轮完整插件安装/更新、全部设置项、所有快捷键、QuickEditor 全流程、真实 macOS 焦点修复结果。Linux 截图不能证明 macOS 行为。
+
+响应式导航问题已修复并实际验收：561–720px 横排标签继承 `width: 100%`，导致其它导航项隐藏；现在该断点使用 `width: auto`。在 660px 宽的真实窗口内，三个标签都完整可见，逐一点击 Settings / AI services / Plugins 并确认对应内容。最终证据为 `review-final-settings-narrow.png`、`review-final-settings-ai.png`、`review-final-settings-plugins.png`；前期两张错位命名截图不作最终证据。
+
+### 2. 文本、结构化数据与对比
+
+插件：`encode-decode`、`formatter`、`json-tools`、`line-tools`、`csv`、`regex-tester`、`text-diff`、`text-explode`。
+
+- **画面**：文本、JSON、CSV、正则入口，Text Diff 与 Text Explode 空态，以及 Encode / Decode 的 Image ⇄ Base64 标签；对应 `audit-text`、`audit-json`、`audit-csv`、`audit-regex` 和 `audit-image-*`。
+- **任务**：Image ⇄ Base64 输入合成稿后换标签再返回，已复现稿件消失；修复后用合成 PNG 的完整 data URI 恢复图片，切到 URL 再切回，输入、预览和复制全文一致；Escape 选择 Keep editing 仍保留。Regex 的两个默认合成匹配已实际提取并带回搜索，未用模型。
+- **静态**：插件与标签状态所有权；本轮不重跑已验证的 CSV 全量算法、完整导出或正则超时。
+- **未覆盖**：本轮 Formatter、Text Explode 的完整任务；全部 JSON/文本/编码操作；Diff 全部模式。先前 Diff 跨窗口专项验证不代表本组全量通过。
+
+### 3. 剪贴板与历史
+
+插件：`clipboard-history`。相关宿主入口：Launcher 剪贴板推荐、附加内容对象、返回搜索。
+
+- **画面**：改前 `history-density-before.png`，改后 `history-density-after-browse.png`、`history-density-after-single.png`、`history-density-after-multi.png`，以及设置说明图。改后普通浏览不再被保留规则与平台不可用横幅上下夹住；一条选择与两条选择状态清楚区分，顺序和组合全文预览可见。
+- **任务**：主验收执行跨搜索选择合成文本、检查单选/双选操作状态；截图本身不证明剪贴板交付全文，具体交付以主验收记录为准。
+- **静态与最终画面**：保留规则留在 Settings；不可用的顺序粘贴入口隐藏；实际执行中的取消、返回外部及失败反馈保留。`review-final-history-browse.png`、`review-final-history-2.png` 已独立复核：多选说明整行已消失，顺序、181 字符全文预览与对比/复制/继续处理操作完整可见，无视觉阻断。
+- **未覆盖**：本轮所有图片/文件粘贴目标、其他平台队列能力、所有历史恢复及永久删除分支。旧终态状态只读返回不再自动展示；本次执行的终态及真实失败仍保留。
+
+### 4. 本地计算、生成与格式答案
+
+插件：`calculator`、`date-time-assistant`、`random`、`color-tools`、`crypto`、`unix-permissions`。
+
+- **画面/界面文本**：计算器、日期转换、cron 预览、随机数、颜色答案、SHA-256 参数入口、Unix 权限答案；对应 `audit-calculator`、`audit-date`、`audit-cron`、`audit-random`、`audit-color-answer`、`audit-hash`、`audit-unix-answer`。颜色实际答案已独立看图，原始未命中搜索图已排除。
+- **静态**：入口目录核对。
+- **未覆盖**：全部算法结果、错误边界、复制全文、参数往返和随机生成所有类别。看到结果卡不等于验证计算正确。
+
+### 5. AI、翻译与账户连接
+
+插件：`ai-writing`、`translate`、`feishu`、`web-open`。
+
+- **任务**：AI Summary 输入合成稿后离开再返回，改前已真实复现正文丢失。修复后主验收实际使用 Escape / Back 触发弃稿确认，选择 Keep editing 保留全文；`review-final-ai-draft.png`、`review-final-ai-confirm.png` 已独立看图，保留按钮有可见焦点，正文与任务操作未被布局遮挡。此结论只覆盖本地草稿保护，不覆盖真实生成。
+- **画面/界面文本**：AI Summary 无 provider/model 状态、Translate 空闲页面；仅观察配置入口及输入区，不读取或配置凭据。
+- **画面**：AI services 无可用 provider 的配置页（当前文件名为 `audit-settings-plugins.png`），没有点击连接、刷新或生成。Ollama 长说明可后续收至 details，属于密度候选，不扩大本轮关键修复。
+- **静态**：入口及草稿保护边界。
+- **未覆盖**：真实生成/翻译、远端失败与计费、飞书登录和资料操作、浏览器扩展连接、活动标签和浏览器权限。不得把无凭据的空态检查描述为连接能力通过。
+
+### 6. 文件路径、图像与开发者工具
+
+插件：`file-paths`、`qr-code`、`curl-inspector`、`user-commands`。图像编码在第 2 组，避免重复计数。
+
+- **画面/界面文本**：路径转换空态、二维码生成入口、cURL Inspector 空态；对应 `audit-paths`、`audit-qr`、`audit-curl`。路径和 cURL 页的说明占据上下两处位置，但尚无证据表明阻断任务。
+- **任务**：主验收确认 cURL Inspector 可用 Escape 返回；鼠标返回入口缺失已补 SDK 返回/关闭；输入合成 example.invalid 命令后分别点击返回/关闭，Keep editing 均保留全文，明确弃稿后离开，没有发送请求。
+- **静态**：入口清单核对。
+- **未覆盖**：二维码扫描/相机、完整图片导出链路、全部路径语法、cURL 解析边界、自定义命令执行/编辑。未发网络请求、执行用户脚本或操作用户文件。
+
+## 最高价值的三个共性结论
+
+1. **工作中的材料应归明确的页面或任务所有，切标签/离开不能静默丢弃。** AI Summary 和图像编码已有真实复现，应先修数据保护，再谈排版。离开确认、标签保留及取消重试必须分别验收，不能只增加一条提示。
+2. **主要界面优先显示材料与下一步动作。** History 删除常驻规则/平台横幅已有清楚的前后画面对照；实际失败和执行中的取消仍应显示。AI、路径、图像、cURL 的常驻说明密度可作为后续有证据的精简候选，不能以统一删文案替代任务判断。
+3. **导航与焦点需要平台和动作证据。** 搜索未命中不等于工具已审查；能 Escape 返回不等于鼠标导航完备；Linux 成功不等于 macOS 焦点问题已解决。记录实际触发、焦点位置和返回后的材料，避免把静态推测写成验收通过。
+
+## 修复后验收与剩余边界
+
+本组完成 History、AI Summary/Translate、图片编解码、Cron 答案、cURL 导航和 Settings 窄屏导航的修复。独立代码审查、改后截图审查、TypeScript、架构检查、前端与 Linux 原生构建通过。关键逻辑使用合成宿主验证，无真实 API；既有综合文本测试另有 `escapeRegexPattern` 缺失测试桩的历史阻塞，不为使它通过改产品逻辑。
+
+真实 Linux UI 补验：
+
+1. History 浏览和零/一/两条选择：无保留期/平台横幅，不可用队列按钮隐藏，合并复制可用；Escape 退回浏览且输入焦点保留。保留规则在原设置仍可查，保留/删除算法未改。不可用条件是 Linux 进程会话标记模拟，不是 macOS 实测。
+2. AI Summary：编辑合成原文，Escape/Back 弃稿确认，Keep editing 保全文，明确 Discard 后离开。没有生成、翻译、配置凭据。AI/Translate 交付拒绝后的保留与重试及权限代际由无网络逻辑验证，不宣称真实模型交付验收。
+3. 图片：完整 PNG data URI 的输入、预览、复制跨标签一致；离开取消保稿。聚焦的图片保存入口打开真实 Save File 对话框，取消后完整合成 PNG 剪贴板不变。完整保存成功链路复用此前专项记录，本轮不虚称重跑。
+4. cURL：鼠标返回/关闭可达，取消离开保留源命令；所有解析本地执行。
+5. Cron：下次执行的完整日期、偏移和时区成为主行，规则按需可查；原复制数据契约由逻辑回归验证。
+6. Settings：660px 窄窗口三个标签直接可见并逐一进入，最终画面已检查。没有新增外部连接。
+
+光标优先修复另见 `launcher-caret-stability.md`，已独立提交 `4e7d9f9`：结果高度更新重复调用 Tao resizable setter，引发 macOS 原生 firstResponder 重设。修复前 Linux 未复现；修复后 Linux 连续输入、中间插删、选区替换、清空重输通过。macOS 因果来自锁定依赖源码，不能把修后 Linux 通过称为命中用户 Mac 的实测证明；物理中文 IME 未验。
+
+全入口静态清单与已见页面不等于所有流程全量通过。仍未覆盖：真实 AI/翻译与账户、浏览器扩展/标签权限、二维码相机、全部格式/文件边界、所有插件安装更新/设置项、QuickEditor/独立窗口本轮完整往返，以及 macOS/Windows 实机。不得调用真实 API 来填满覆盖率。
+
+剩余同类常驻说明候选仅列两处，未擅自修改：AI services 的 Ollama 信任说明、File Paths 的顶部能力说明与底部转换规则。应按任务收至合适的按需位置，同时保留连接与路径语义所需信息，不能机械删字。

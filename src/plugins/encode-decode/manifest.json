@@ -4,7 +4,7 @@
   "displayNameI18n": {
     "zh": "编解码"
   },
-  "version": "2.7.1",
+  "version": "2.7.2",
   "capabilities": [
     "command",
     "surface"

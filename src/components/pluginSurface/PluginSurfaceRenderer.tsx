@@ -43,6 +43,8 @@ type ResolvedPluginSurface = {
   definition: PluginDefinition<unknown>
   surface: PluginUiSurfaceContribution<unknown>
   permissions: PluginPermissionSnapshot
+  // One handle per resolved definition/permission lifetime, not per host render.
+  ai: PluginSurfaceHostApi['ai']
   missingPermissions: PluginPermission[]
 }
 
@@ -299,6 +301,7 @@ export function PluginSurfaceRenderer({
           definition,
           surface,
           permissions,
+          ai: createPluginAi(target.pluginId, target.source, permissions),
           missingPermissions,
         }
 
@@ -338,7 +341,7 @@ export function PluginSurfaceRenderer({
           }),
           network: createPluginNetwork(permissions),
           shell: createPluginShell(permissions),
-          ai: createPluginAi(target.pluginId, target.source, permissions),
+          ai: resolved.ai,
         })
 
         preparationScope.invalidate()
@@ -685,7 +688,7 @@ export function PluginSurfaceRenderer({
             }),
             network: createPluginNetwork(surfaceState.permissions),
             shell: createPluginShell(surfaceState.permissions),
-            ai: createPluginAi(target.pluginId, target.source, surfaceState.permissions),
+            ai: surfaceState.ai,
           }}
         />
         {onHandoffReady && <PluginSurfaceCommitted onCommit={() => { if (!crashedRef.current && activeStateRef.current === surfaceState) onHandoffReady(true) }} />}

@@ -193,6 +193,9 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
   const [targetLang, setTargetLang] = useState<TargetLanguageCode>(initialProfile?.defaultTargetLang ?? settings.defaultTargetLang ?? 'smart')
   const initialText = props.initialText?.trim()
   const [inputText, setInputText] = useState(initialText ?? '')
+  const reportUnsavedChanges = host.setUnsavedChanges
+  const dirty = inputText !== (initialText ?? '')
+  useLayoutEffect(() => { reportUnsavedChanges?.(dirty) }, [reportUnsavedChanges, dirty])
   const [view, setView] = useState<TranslationView>({ identity: '', outputText: '', status: { kind: 'idle' } })
   const [usageByProfile, setUsageByProfile] = useState(() => new Map(settings.profiles.map((profile) => [profile.id, profile.usedChars])))
   const usageRef = useRef(usageByProfile)
@@ -250,9 +253,12 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
   const outputRef = useRef<TranslationOutput | null>(null)
   outputRef.current = availableOutput
   const outputActionRef = useRef<TranslationOutput['view'] | null>(null)
+  const returnSubmissionRef = useRef<AbortController | null>(null)
   const [outputActionView, setOutputActionView] = useState<TranslationOutput['view'] | null>(null)
 
   const cancelCurrentRun = useCallback(() => {
+    returnSubmissionRef.current?.abort()
+    returnSubmissionRef.current = null
     const run = runRef.current
     runRef.current = null
     outputRef.current = null
@@ -453,21 +459,26 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
     }
   }
 
-  const continueProcessing = () => {
+  const continueProcessing = async () => {
     const output = availableOutput
     if (!canUseOutput(output) || outputActionRef.current === output.view) return
     outputActionRef.current = output.view
     setOutputActionView(output.view)
+    const submission = new AbortController()
+    returnSubmissionRef.current = submission
     try {
-      host.returnToLauncherWithObject({ kind: 'text', text: output.view.outputText, source: 'tool-result' })
-      cancelCurrentRun()
+      const accepted = await host.returnToLauncherWithObject({ kind: 'text', text: output.view.outputText, source: 'tool-result' }, { signal: submission.signal })
+      if (!canUseOutput(output)) return
+      if (accepted === false) host.showMessage(t('toast.continueFailed'), 'error')
+      else cancelCurrentRun()
     } catch {
+      if (canUseOutput(output)) host.showMessage(t('toast.continueFailed'), 'error')
+    } finally {
+      if (returnSubmissionRef.current === submission) returnSubmissionRef.current = null
       if (outputActionRef.current === output.view) {
         outputActionRef.current = null
-        setOutputActionView((current) => current === output.view ? null : current)
+        if (mountedRef.current) setOutputActionView((current) => current === output.view ? null : current)
       }
-      if (!canUseOutput(output)) return
-      host.showMessage(t('toast.continueFailed'), 'error')
     }
   }
 
@@ -482,7 +493,7 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
   return (
     <section className="translate-surface" aria-label={localizedText(t, 'surface.title', 'Translate')}>
       <header className="translate-surface__header">
-        <IconButton type="button" label={localizedText(t, 'action.back', 'Back')} onClick={() => { cancelCurrentRun(); host.requestBack() }}>
+        <IconButton type="button" label={localizedText(t, 'action.back', 'Back')} onClick={() => host.requestBack()}>
           <BackIcon size={14} strokeWidth={2} />
         </IconButton>
         <span className="translate-surface__title">{localizedText(t, 'surface.title', 'Translate')}</span>
@@ -493,7 +504,7 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
         {(status.kind === 'stopped' || status.kind === 'settings-paused' || status.kind === 'error') && (
           <Button type="button" onClick={retryTranslation} disabled={!canRetry}>{t('action.retry')}</Button>
         )}
-        <IconButton type="button" label={t('action.continueProcessing')} disabled={!availableOutput || outputActionView === view} onClick={continueProcessing}>
+        <IconButton type="button" label={t('action.continueProcessing')} disabled={!availableOutput || outputActionView === view} onClick={() => { void continueProcessing() }}>
           <ArrowRight size={16} />
         </IconButton>
         <Button type="button" variant="primary" disabled={!availableOutput || outputActionView === view} onClick={() => void copyOutput()}>
@@ -502,7 +513,7 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
         <IconButton type="button" label={t('action.translationSettings')} onClick={openSettings}>
           <SettingsIcon size={16} />
         </IconButton>
-        <IconButton type="button" label={localizedText(t, 'action.close', 'Close')} onClick={() => { cancelCurrentRun(); host.close() }}>
+        <IconButton type="button" label={localizedText(t, 'action.close', 'Close')} onClick={() => host.close()}>
           <CloseIcon size={14} strokeWidth={2} />
         </IconButton>
       </header>

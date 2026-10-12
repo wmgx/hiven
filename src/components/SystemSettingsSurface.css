@@ -170,6 +170,7 @@ body[data-theme='dark'] .system-settings-content,
   }
 
   .system-settings-tab {
+    width: auto;
     flex: 0 0 auto;
     min-width: 0;
     justify-content: center;
