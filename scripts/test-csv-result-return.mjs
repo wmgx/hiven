@@ -80,7 +80,7 @@ const plain = (value) => JSON.parse(JSON.stringify(value))
 function harness({ input = 'name,value\none,1\ntwo,2', operation = 'to-json', outcome = () => true, copyOutcome = () => Promise.resolve(), saveOutcome = () => ({ status: 'saved' }), saveAvailable = true, process = core.processFullSource } = {}) {
   const slots = [], effects = []
   let cursor = 0, view, mounted = true, changed = false, deferredInput, processing = false
-  const calls = { handoff: [], messages: [], copied: [], saves: [], navigation: 0, complete: 0, back: 0, close: 0, detach: 0 }
+  const calls = { handoff: [], messages: [], copied: [], browserCopied: [], saves: [], navigation: 0, complete: 0, back: 0, close: 0, detach: 0 }
   const useState = (initial) => {
     const index = cursor++
     if (!(index in slots)) slots[index] = typeof initial === 'function' ? initial() : initial
@@ -116,7 +116,7 @@ function harness({ input = 'name,value\none,1\ntwo,2', operation = 'to-json', ou
     'react-data-grid': {}, 'react-data-grid/lib/styles.css': {},
     '@hiven/plugin-ui': {}, '@hiven/plugin-ui/icons': {},
     './csvCore': { ...core, processFullSource: process }, './csvSqlFilter': sql, './csvFileInput': fileInput, './columnStatistics': statistics,
-  }, source, { requestAnimationFrame: (fn) => fn(), window: { addEventListener() {}, removeEventListener() {} }, navigator: { clipboard: { writeText: () => Promise.reject(Error('no browser clipboard')) } } })
+  }, source, { requestAnimationFrame: (fn) => fn(), window: { addEventListener() {}, removeEventListener() {} }, navigator: { clipboard: { writeText: async (text) => { calls.browserCopied.push(text) } } } })
   const makeHost = () => {
     const result = {
       returnToLauncherWithObject: (block, options) => {
@@ -856,4 +856,30 @@ for (const action of ['edit', 'replaceHost', 'newerRead']) await check(`late UTF
   assert.equal(h.view.readingFile, false)
 })
 
+
+await check('clipboard host rejection cannot bypass permission and keeps source retryable', async () => {
+  let denied = true
+  const h = harness({ copyOutcome: () => denied ? Promise.reject(Error('Plugin permission required: clipboard.write')) : Promise.resolve() })
+  h.view.setMainView('source'); h.render()
+  const draft = h.draft()
+  h.view.handleCopyPrimary(); await new Promise((resolve) => setTimeout(resolve, 0)); h.render()
+  assert.deepEqual(h.calls.browserCopied, [], 'available browser clipboard must not bypass the host rejection')
+  assert.equal(h.calls.messages.at(-1)[1], 'error')
+  assert.equal(h.calls.complete, 0)
+  assert.deepEqual(h.draft(), draft)
+  denied = false
+  h.view.handleCopyPrimary(); await new Promise((resolve) => setTimeout(resolve, 0)); h.render()
+  assert.equal(h.calls.copied.at(-1), draft.sourceText)
+  assert.equal(h.calls.messages.at(-1)[1], 'success')
+})
+await check('clipboard late host rejection cannot bypass permission or report on a new owner', async () => {
+  const receipt = deferred(), h = harness({ copyOutcome: () => receipt.promise })
+  h.view.setMainView('source'); h.render(); h.view.handleCopyPrimary()
+  h.replaceHost()
+  receipt.reject(Error('revoked'))
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.deepEqual(h.calls.browserCopied, [])
+  assert.deepEqual(h.calls.messages, [])
+  assert.equal(h.calls.complete, 0)
+})
 console.log(`CSV result return: ${passed} production-module logic scenarios passed`)

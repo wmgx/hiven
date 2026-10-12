@@ -6,7 +6,7 @@ import ts from 'typescript'
 const code = ts.transpileModule(readFileSync('src/plugins/text-explode/outputActionGate.ts', 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2023 },
 }).outputText
-const { createExplodeOutputGate } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`)
+const { createExplodeOutputGate, settleExplodeHandoff } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`)
 const snapshot = (gate, text = 'Current assembled preview') => ({ text, revision: gate.getRevision() })
 let passed = 0
 function check(name, run) {
@@ -85,3 +85,53 @@ check('late settlement of an obsolete handoff does not consume the newer draft',
 })
 
 console.log(`Text Explode output gate passed: ${passed} revision and native-output concurrency cases`)
+
+
+for (const failure of [false, undefined, 'reject']) {
+  const gate = createExplodeOutputGate(), output = snapshot(gate, '完整选择\r\nlast')
+  gate.begin(output)
+  const result = await settleExplodeHandoff(output, gate, async () => {
+    if (failure === 'reject') throw Error('synthetic failure')
+    return failure
+  }, () => true)
+  assert.equal(result, 'failed')
+  assert.equal(gate.begin(output), true, 'failed/refused receipt releases the same selection for retry')
+  assert.equal(output.text, '完整选择\r\nlast')
+  assert.equal(await settleExplodeHandoff(output, gate, async () => true, () => true), 'accepted')
+  assert.equal(gate.begin(output), false)
+}
+for (const change of ['edit', 'unmount']) {
+  const gate = createExplodeOutputGate(), output = snapshot(gate)
+  gate.begin(output)
+  let resolve
+  let active = true
+  let signal
+  const pending = settleExplodeHandoff(output, gate, (s) => { signal = s; return new Promise((done) => { resolve = done }) }, () => active)
+  assert.equal(gate.begin(output), false, 'pending host receipt keeps the output single-flight')
+  if (change === 'unmount') active = false
+  gate.invalidate()
+  assert.equal(signal.aborted, true)
+  resolve(true)
+  assert.equal(await pending, 'stale')
+  assert.equal(gate.begin(snapshot(gate)), true, 'late acceptance cannot consume the next selection')
+}
+console.log('Text Explode async handoff passed: exact selection retention, false/reject retry, acceptance, and stale-owner abort (synthetic host).')
+
+
+// Back/Close intent is not draft deletion: it invalidates a pending native writer
+// before the discard dialog, while Keep editing can reuse the exact selection.
+for (const action of ['copy', 'paste', 'continue']) {
+  const gate = createExplodeOutputGate()
+  const text = 'same selection\r\n尾行'
+  const pending = snapshot(gate, text)
+  gate.begin(pending)
+  const signal = gate.signal(pending)
+  gate.invalidate() // requestBack/close before host confirmation
+  assert.equal(gate.isCurrent(pending), false, `${action}: late completion cannot close the kept draft`)
+  assert.equal(signal.aborted, true)
+  gate.finish(pending, action === 'continue')
+  const kept = snapshot(gate, text)
+  assert.equal(gate.begin(kept), true, `${action}: Keep editing retains a retryable selection`)
+  assert.equal(kept.text, pending.text)
+}
+console.log('Text Explode navigation intent revokes in-flight delivery without consuming the kept selection.')

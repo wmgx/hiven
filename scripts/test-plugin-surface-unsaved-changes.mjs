@@ -180,7 +180,13 @@ function rendererHarness({ guarded = true, presentation = 'global-launcher' } = 
   const target = { pluginId: 'synthetic', source: 'builtin' }, state = { status: 'ready' }, lifetime = { active: true }
   state.target = target
   const calls = { back: 0, close: 0, interrupt: 0, reports: [], requests: [] }
+  const suspensionOwner = {}
+  let deliveryCurrent = true
   const context = { exports: {}, target, surfaceState: state, lifetime, presentation,
+    suspensionOwner, suspensionOwnerRef: { current: suspensionOwner }, suspendedRef: { current: false },
+    surfaceOwner: { isCurrent: () => deliveryCurrent },
+    interruptSettingsRef: { current: () => { calls.interrupt++; deliveryCurrent = false } },
+    refreshPasteOwner: () => {},
     mountedRef: { current: true }, activeTargetRef: { current: target }, activeStateRef: { current: state }, hiddenRef: { current: false },
     pluginRegistry: { getPluginLifetime: () => lifetime }, useMemo: (factory) => factory(), useCallback: (callback) => callback,
     onUnsavedChangesChange: (dirty, value) => calls.reports.push({ dirty, owner: value }),
@@ -193,6 +199,23 @@ function rendererHarness({ guarded = true, presentation = 'global-launcher' } = 
   vm.runInNewContext(compile(code), context, { filename: rendererPath })
   return { calls, context, api: context.exports.api }
 }
+check('capture-phase Escape revokes old output completion while keeping the draft owner', () => {
+  const renderer = rendererHarness()
+  const frame = frameHarness()
+  frame.view.onUnsavedChangesChange(true, renderer.api.owner)
+  frame.view.escapeHandler({ key: 'Escape', preventDefault() {}, stopPropagation() {} })
+  frame.render()
+  assert.equal(renderer.calls.interrupt, 1)
+  assert.equal(renderer.api.owner.isCurrent(), true, 'draft remains owned for Keep editing')
+  renderer.api.complete()
+  assert.equal(renderer.calls.close, 0, 'late copy/paste completion cannot dismiss the confirmation')
+  frame.view.cancelLeave(); frame.render()
+  renderer.api.complete()
+  assert.equal(renderer.calls.close, 0, 'Keep editing never revives an old completion callback')
+  const fresh = rendererHarness()
+  fresh.api.complete()
+  assert.equal(fresh.calls.close, 1, 'a fresh post-cancel delivery can complete normally')
+})
 check('renderer asks before interruption; successful completion stays raw', () => {
   const h = rendererHarness()
   h.api.setUnsavedChanges(true); h.api.back(); h.api.close()

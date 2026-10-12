@@ -1,4 +1,5 @@
 import { format as sqlFormat } from 'sql-formatter'
+import { compactSql, layoutCss } from './lexical.ts'
 import { formatXml, XmlFormatterError, type XmlFormatterErrorCode } from './xml.ts'
 
 export type FormatterLanguage = 'sql' | 'css' | 'xml'
@@ -24,32 +25,9 @@ export const formatterRoutes: {
   { id: 'xml-compact', language: 'xml', operation: 'compact', titleKey: 'xml.compact.title', aliases: ['xml compact', 'xml minify', 'compact xml', 'minify xml', 'xml压缩', 'xml 压缩', 'xml yasuo', 'xml ys'] },
 ]
 
-function cssPrettify(text: string): string {
-  return text
-    .replace(/\s*\{\s*/g, ' {\n  ')
-    .replace(/\s*\}\s*/g, '\n}\n')
-    .replace(/\s*;\s*/g, ';\n  ')
-    .replace(/ {2}\n\}/g, '\n}')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-}
-
-function cssCompact(text: string): string {
-  return text
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/\s+/g, ' ')
-    .replace(/\s*([{}:;,])\s*/g, '$1')
-    .replace(/;}/g, '}')
-    .trim()
-}
-
-function sqlCompact(text: string): string {
-  return text.replace(/--[^\n]*/g, '').replace(/\s+/g, ' ').trim()
-}
-
 export function formatText(language: FormatterLanguage, operation: FormatterOperation, text: string): string {
-  if (language === 'sql') return operation === 'format' ? sqlFormat(text) : sqlCompact(text)
-  if (language === 'css') return operation === 'format' ? cssPrettify(text) : cssCompact(text)
+  if (language === 'sql') return operation === 'format' ? sqlFormat(text) : compactSql(text)
+  if (language === 'css') return layoutCss(text, operation === 'compact')
   return formatXml(text, operation)
 }
 

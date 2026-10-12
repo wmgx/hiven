@@ -69,7 +69,7 @@ function settingsInterrupted(): Error {
 }
 
 /** Internal renderer identity, revoked on replacement, unload, or lifetime expiry. */
-export type PluginSurfaceLeaveOwner = { isCurrent: () => boolean }
+export type PluginSurfaceLeaveOwner = { isCurrent: () => boolean; interruptPending?: () => void }
 
 export type PluginSurfaceRendererProps = {
   target: PluginSurfaceOpenTarget
@@ -123,11 +123,17 @@ export function PluginSurfaceRenderer({
   const hiddenRef = useRef(false)
   const leaveOwner = useMemo<PluginSurfaceLeaveOwner>(() => {
     const lifetime = pluginRegistry.getPluginLifetime(target.pluginId, target.source)
-    return {
+    const owner: PluginSurfaceLeaveOwner = {
       isCurrent: () => mountedRef.current && activeTargetRef.current === target
         && activeStateRef.current === surfaceState && surfaceState.status === 'ready'
         && surfaceState.target === target && !hiddenRef.current && !suspendedRef.current && suspensionOwnerRef.current === suspensionOwner && lifetime.active,
+      interruptPending: () => {
+        if (!owner.isCurrent()) return
+        interruptSettingsRef.current()
+        refreshPasteOwner((version) => version + 1)
+      },
     }
+    return owner
   }, [target, surfaceState, suspensionOwner])
   const setUnsavedChanges = useCallback((hasUnsavedChanges: boolean) => {
     if (leaveOwner.isCurrent()) onUnsavedChangesChange?.(hasUnsavedChanges, leaveOwner)
@@ -519,7 +525,7 @@ export function PluginSurfaceRenderer({
             deliveryFeedbackOwner,
             close: () => requestLeave('close'),
             complete: () => {
-              if (presentation === 'global-launcher') leaveSurface(onClose)
+              if (presentation === 'global-launcher' && surfaceOwner.isCurrent()) leaveSurface(onClose)
             },
             requestBack: () => requestLeave('back'),
             setUnsavedChanges: onUnsavedChangesChange ? setUnsavedChanges : undefined,

@@ -893,15 +893,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
         host.showMessage(localizedText(t, 'toast.copied', 'Copied'), 'success')
         if (complete) host.complete()
       } catch {
-        if (!isCurrent()) return
-        try {
-          await navigator.clipboard.writeText(text)
-          if (!isCurrent()) return
-          host.showMessage(localizedText(t, 'toast.copied', 'Copied'), 'success')
-          if (complete) host.complete()
-        } catch {
-          if (isCurrent()) host.showMessage(localizedText(t, 'toast.copyFailed', 'Copy failed'), 'error')
-        }
+        if (isCurrent()) host.showMessage(localizedText(t, 'toast.copyFailed', 'Copy failed'), 'error')
       } finally {
         pendingCopiesRef.current -= 1
       }

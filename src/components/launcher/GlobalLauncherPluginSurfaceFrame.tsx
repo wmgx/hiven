@@ -75,6 +75,9 @@ export function GlobalLauncherPluginSurfaceFrame({
     const changes = changesRef.current
     if (changes?.dirty && changes.owner.isCurrent()) {
       if (pendingRef.current) return
+      // Capture-phase Escape and chrome navigation share this synchronous revocation.
+      // Keep the renderer/draft owner alive so cancelling can resume fresh actions.
+      changes.owner.interruptPending?.()
       const pending = { action, target, owner: changes.owner }
       pendingRef.current = pending
       setPendingLeave(pending)

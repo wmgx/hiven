@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import { Button, IconButton, ToolbarButton, useImeKeyboard } from '@hiven/plugin-ui'
 import { CloseIcon } from '@hiven/plugin-ui/icons'
 import { Bomb } from 'lucide-react'
 import { assembleFromSelection, isSelectableToken, tokenize, type ExplodeToken } from '../tokenize'
-import { createExplodeOutputGate } from '../outputActionGate'
+import { createExplodeOutputGate, settleExplodeHandoff } from '../outputActionGate'
 
 /** Matches the launcher's own query_change debounce so the explode replay doesn't fire per keystroke. */
 const COMMIT_DEBOUNCE_MS = 280
@@ -59,8 +59,8 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
 
   useEffect(() => {
     activeRef.current = true
-    return () => { activeRef.current = false }
-  }, [])
+    return () => { activeRef.current = false; outputGate.invalidate() }
+  }, [outputGate])
 
   // Live typing feel: input reacts every keystroke, explode/re-tokenize settles
   // after a short pause so the canvas doesn't re-burst on every character.
@@ -73,6 +73,10 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
   const [selection, setSelection] = useState(() => ({ tokens, indexes: new Set<number>() }))
   // A selection belongs to the exact token array it was made from.
   const selected = selection.tokens === tokens ? selection.indexes : EMPTY_SELECTION
+  const reportUnsavedChanges = host.setUnsavedChanges
+  // Initial material and fragment selection are work, even before the source is edited.
+  const hasDraft = inputValue.length > 0 || inputValue !== initial || selected.size > 0
+  useLayoutEffect(() => { reportUnsavedChanges?.(hasDraft) }, [reportUnsavedChanges, hasDraft])
   const setSelected = useCallback((next: React.SetStateAction<Set<number>>) => {
     invalidateOutput()
     setSelection((previous) => {
@@ -291,27 +295,24 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
     }
   }
 
-  const continueProcessing = () => {
+  const continueProcessing = async () => {
     if (!activeRef.current || !outputReady || !outputGate.begin(output)) return
+    setOutputPending(true)
     try {
-      host.returnToLauncherWithObject({ kind: 'text', text: output.text, source: 'tool-result' })
-      outputGate.finish(output, true)
-      if (activeRef.current) setHandedOffRevision(output.revision)
-    } catch {
-      outputGate.finish(output)
-      if (activeRef.current && outputGate.isCurrent(output)) host.showMessage(t('error.continueFailed'), 'error')
+      const result = await settleExplodeHandoff(output, outputGate,
+        (signal) => host.returnToLauncherWithObject({ kind: 'text', text: output.text, source: 'tool-result' }, { signal }),
+        () => activeRef.current)
+      if (result === 'accepted') setHandedOffRevision(output.revision)
+      else if (result === 'failed') host.showMessage(t('error.continueFailed'), 'error')
+    } finally {
+      if (activeRef.current) setOutputPending(false)
     }
   }
 
-  const requestBack = useCallback(() => {
-    invalidateOutput()
-    host.requestBack()
-  }, [host, invalidateOutput])
-
-  const close = () => {
-    invalidateOutput()
-    host.close()
-  }
+  // Navigation intent revokes pending delivery, but leaves source and selection
+  // intact if the host's discard confirmation is cancelled.
+  const requestBack = useCallback(() => { invalidateOutput(); host.requestBack() }, [host, invalidateOutput])
+  const close = () => { invalidateOutput(); host.close() }
 
   const handleInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter') {
@@ -445,7 +446,7 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
             ? t(copyFeedback.error ? 'error.copyFailed' : 'message.copied')
             : t('action.copy')}
         </Button>
-        <Button disabled={outputDisabled} onClick={continueProcessing}>
+        <Button disabled={outputDisabled} onClick={() => { void continueProcessing() }}>
           {t('action.continueProcessing')}
         </Button>
         <Button variant="primary" disabled={outputDisabled} onClick={() => void confirmPaste()}>

@@ -2,6 +2,7 @@
   "pluginId": "random",
   "displayName": "Random",
   "displayNameI18n": { "zh": "随机生成" },
-  "version": "1.2.2",
-  "capabilities": ["command", "surface"]
+  "version": "1.2.3",
+  "capabilities": ["command", "surface"],
+  "permissions": ["clipboard.write"]
 }
