@@ -839,7 +839,14 @@ async fn configure_launcher_window(
             let min_height = if request.resizable { request.min_height.unwrap_or(1.0).min(available_height) } else { 1.0 };
             let min_size = request.resizable.then(|| LogicalSize::new(min_width, min_height));
             window.set_min_size(min_size).map_err(|error| error.to_string())?;
-            window.set_resizable(request.resizable).map_err(|error| error.to_string())?;
+            // Tao's macOS setter changes styleMask and makes its parent NSView
+            // first responder even when the value is unchanged. Search-height
+            // updates must not displace WKWebView's keyboard/caret responder.
+            // A failed state read aborts this request, rather than guessing or
+            // adding a focus/rekey loop while the user is typing or composing.
+            if window.is_resizable().map_err(|error| error.to_string())? != request.resizable {
+                window.set_resizable(request.resizable).map_err(|error| error.to_string())?;
+            }
             // A constraint-only update retains the user's dimensions unless a
             // changed minimum or monitor work area requires fitting them.
             // Webview innerWidth may still reflect the previous tool after a

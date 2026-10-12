@@ -30,6 +30,13 @@ const files = {
   tauriLib: read('src-tauri/src/lib.rs'),
 }
 
+// Native size-only updates must not call Tao's side-effectful style-mask setter.
+// Keep the fallible read in the guard: unknown state must abort, not force a setter.
+assert.match(files.tauriLib, /if window\.is_resizable\(\)\.map_err\(\|error\| error\.to_string\(\)\)\? != request\.resizable \{\s*window\.set_resizable\(request\.resizable\)\.map_err\(\|error\| error\.to_string\(\)\)\?;\s*\}/,
+  'native launcher resizing must change the resizable flag only when necessary')
+assert.equal((files.tauriLib.match(/window\.set_resizable\(request\.resizable\)/g) ?? []).length, 1,
+  'no unguarded duplicate resizable setter may run after the guard')
+
 function readNumberConstant(source, name) {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const match = source.match(new RegExp(`const\\s+${escaped}(?::\\s*[^=]+)?\\s*=\\s*([0-9.]+)`))
