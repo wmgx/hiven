@@ -312,3 +312,51 @@ try {
   else process.env.TZ = originalTimeZone
 }
 console.log('Timestamp answers retain target-time DST offset, repeated-hour identity and millisecond precision through both copies')
+
+const calendarOriginalTZ = process.env.TZ
+try {
+  const explicitCases = [
+    ['2000-01-01T00:00:00Z', '2000-01-01T00:00:00.000Z'],
+    ['2026-03-08 02:30:00+00:00', '2026-03-08T02:30:00.000Z'],
+    ['2026-03-08 02:30:00 UTC+0', '2026-03-08T02:30:00.000Z'],
+    ['2026-03-08T02:30:00Z', '2026-03-08T02:30:00.000Z'],
+    ['2026-03-08 02:30:00Z', '2026-03-08T02:30:00.000Z'],
+    ['2026-11-01 01:30:00-04:00', '2026-11-01T05:30:00.000Z'],
+    ['2026-11-01 01:30:00-05:00', '2026-11-01T06:30:00.000Z'],
+    ['2026-1-1 00:30:00.1 GMT+14', '2025-12-31T10:30:00.100Z'],
+    ['2026-01-01 00:30:00.12+14:00', '2025-12-31T10:30:00.120Z'],
+    ['2024-2-29 UTC+0', '2024-02-29T00:00:00.000Z'],
+  ]
+  const invalid = ['2026-02-30 02:30:00+00:00', '2026-02-30 02:30:00Z', '2025-02-29T00:00:00Z',
+    '2026-13-01 00:00:00+00:00', '2026-01-00 00:00:00+00:00',
+    '2026-03-08 24:00:00+00:00', '2026-03-08 02:60:00+00:00',
+    '2026-03-08 02:30:60+00:00', '2026-03-08 02:30:00+14:01',
+    '2026-03-08 02:30:00 UTC+25', '2026-03-08 02:30:00 +',
+    '2026-03-08T02:30:00Z+08:00', '2026-03-08T02:30:00+08:00Z',
+    '2026-03-08 02:30:00 UTC+8 +09:00']
+  for (const zone of ['UTC', 'America/New_York', 'Asia/Shanghai']) {
+    process.env.TZ = zone
+    for (const [input, iso] of explicitCases) {
+      const expected = String(Date.parse(iso))
+      assert.ok((await values(input)).includes(expected), `${zone}: instant ${input}`)
+      assert.equal(runTimestampCommand(input), expected, `${zone}: command ${input}`)
+      assert.equal(convertForSurface(input, 'UTC+8').value?.unixMilliseconds, expected, `${zone}: surface ${input}`)
+    }
+    for (const input of invalid) {
+      assert.deepEqual(await values(input), [], `${zone}: invalid instant ${input}`)
+      assert.equal(runTimestampCommandOutput(input)?.kind, 'error', `${zone}: invalid command ${input}`)
+      assert.equal(convertForSurface(input, 'UTC+8').ok, false, `${zone}: invalid surface ${input}`)
+    }
+    for (const input of ['2026-03-08 02:30:00', '2026-03-08']) {
+      const expected = String(new Date(input).getTime())
+      assert.ok((await values(input)).includes(expected), 'unqualified instant dates retain existing local Date semantics')
+      assert.equal(runTimestampCommand(input), expected, 'unqualified command dates retain existing local Date semantics')
+    }
+    assert.equal(convertForSurface('2026-03-08 02:30:00', 'UTC').value?.unixMilliseconds,
+      String(Date.parse('2026-03-08T02:30:00Z')), 'surface-selected offset also avoids host DST normalization')
+  }
+} finally {
+  if (calendarOriginalTZ === undefined) delete process.env.TZ
+  else process.env.TZ = calendarOriginalTZ
+}
+console.log('Explicit calendar offsets are host-independent; invalid fields/offsets rejected and unqualified local semantics preserved')

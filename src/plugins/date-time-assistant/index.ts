@@ -35,18 +35,17 @@ function formatOffsetLabel(offsetMinutes: number): string {
 }
 
 function parseTzSuffix(str: string): { body: string; offsetMinutes: number | undefined } {
+  if (/\dZ$/i.test(str)) return { body: str.slice(0, -1), offsetMinutes: 0 }
   const namedMatch = str.match(/\s+((?:utc|gmt)\s*(?:[+-]\s*\d{1,2}(?::?\d{2})?)?|z)\s*$/i)
   if (namedMatch) {
     const offset = parseTimezoneToken(namedMatch[1])
-    if (offset !== null) {
-      return { body: str.slice(0, namedMatch.index!).trim(), offsetMinutes: offset }
-    }
+    return { body: str.slice(0, namedMatch.index!).trim(), offsetMinutes: offset ?? undefined }
   }
 
   const match = str.match(/\s*([+-])(\d{1,2})(?::?(\d{2}))?\s*$/)
   if (!match) {
     const bare = str.match(/\s*[+-]\s*$/)
-    if (bare) return { body: str.slice(0, bare.index!).trim(), offsetMinutes: -(new Date().getTimezoneOffset()) }
+    if (bare) return { body: str.slice(0, bare.index!).trim(), offsetMinutes: undefined }
     return { body: str, offsetMinutes: undefined }
   }
 
@@ -58,6 +57,28 @@ function parseTzSuffix(str: string): { body: string; offsetMinutes: number | und
   }
   const offset = parseOffsetValue(match[1], match[2], match[3])
   return { body, offsetMinutes: offset ?? undefined }
+}
+
+/** Explicit wall-clock fields never pass through the host's local DST rules. */
+function parseOffsetCalendar(body: string, offsetMinutes: number): Date {
+  const match = body.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[Tt ](\d{1,2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?)?$/)
+  if (!match) return new Date(NaN)
+  const [, y, mo, d, h = '0', mi = '0', sec = '0', fraction = ''] = match
+  const [year, month, day, hour, minute, second] = [y, mo, d, h, mi, sec].map(Number)
+  const milliseconds = Number(fraction.padEnd(3, '0'))
+  const wall = new Date(0)
+  wall.setUTCFullYear(year, month - 1, day)
+  wall.setUTCHours(hour, minute, second, milliseconds)
+  if (wall.getUTCFullYear() !== year || wall.getUTCMonth() !== month - 1 || wall.getUTCDate() !== day
+    || wall.getUTCHours() !== hour || wall.getUTCMinutes() !== minute || wall.getUTCSeconds() !== second) return new Date(NaN)
+  return new Date(wall.getTime() - offsetMinutes * 60_000)
+}
+
+function parseCalendarInput(input: string, selectedOffset?: number): Date {
+  const { body, offsetMinutes } = parseTzSuffix(input)
+  if (body !== input && offsetMinutes === undefined) return new Date(NaN)
+  const offset = offsetMinutes ?? selectedOffset
+  return offset === undefined ? new Date(input) : parseOffsetCalendar(body, offset)
 }
 
 function tryParseTimestamp(value: string): number {
@@ -73,7 +94,7 @@ function formatTimestamp(date: Date, unit: 's' | 'ms'): string {
 function parseOffsetValue(sign: string, hoursText: string, minutesText?: string): number | null {
   const hours = parseInt(hoursText, 10)
   const minutes = parseInt(minutesText || '0', 10)
-  if (hours > 14 || minutes > 59) return null
+  if (hours > 14 || minutes > 59 || (hours === 14 && minutes !== 0)) return null
   return (sign === '+' ? 1 : -1) * (hours * 60 + minutes)
 }
 
@@ -240,17 +261,10 @@ function parseDateForTimestampSuggestions(value: string): ParsedResult[] {
   const trimmed = value.trim()
   if (!/\d{4}-\d{1,2}-\d{1,2}/.test(trimmed)) return []
 
-  const { body, offsetMinutes } = parseTzSuffix(trimmed)
-  let date = new Date(body)
-  if (Number.isNaN(date.getTime())) date = new Date(trimmed)
+  const date = parseCalendarInput(trimmed)
   if (Number.isNaN(date.getTime())) return []
-  if (offsetMinutes !== undefined) {
-    const localOffsetMinutes = -date.getTimezoneOffset()
-    const utcMs = date.getTime() + (localOffsetMinutes - offsetMinutes) * 60000
-    date = new Date(utcMs)
-  }
 
-  const year = date.getFullYear()
+  const year = parseTzSuffix(trimmed).offsetMinutes === undefined ? date.getFullYear() : date.getUTCFullYear()
   if (year < 2000 || year > 2100) return []
 
   return [
@@ -312,19 +326,14 @@ function convertTimestampText(text: string, params: Record<string, unknown>, inP
     const tsMs = tryParseTimestamp(body)
 
     try {
+      if (body !== trimmed && offsetMinutes === undefined) throw new TimestampConversionError(trimmed)
       if (!Number.isNaN(tsMs)) {
         const result = formatOffsetDateTime(new Date(tsMs), offsetMinutes)
         return showOriginal ? `${trimmed} -> ${result}` : result
       }
 
-      let date = new Date(body)
-      if (Number.isNaN(date.getTime())) date = new Date(trimmed)
+      const date = parseCalendarInput(trimmed)
       if (Number.isNaN(date.getTime())) throw new TimestampConversionError(trimmed)
-      if (offsetMinutes !== undefined) {
-        const localOffsetMinutes = -date.getTimezoneOffset()
-        const utcMs = date.getTime() + (localOffsetMinutes - offsetMinutes) * 60000
-        date = new Date(utcMs)
-      }
       const result = formatTimestamp(date, unit)
       return showOriginal ? `${trimmed} -> ${result}` : result
     } catch (error: unknown) {
@@ -358,20 +367,6 @@ export function convertForSurface(input: string, offsetToken: string): DateTimeC
     }
   }
 
-  if (/T.*Z$/i.test(trimmed)) {
-    const date = new Date(trimmed)
-    if (Number.isNaN(date.getTime())) return { ok: false }
-    return {
-      ok: true,
-      value: {
-        dateTime: formatOffsetDateTime(date, 0),
-        unixSeconds: formatTimestamp(date, 's'),
-        unixMilliseconds: formatTimestamp(date, 'ms'),
-        offsetLabel: formatOffsetLabel(0),
-      },
-    }
-  }
-
   const parsedInput = parseTzSuffix(trimmed)
   if (parsedInput.body !== trimmed && parsedInput.offsetMinutes === undefined) return { ok: false }
   const offsetMinutes = parsedInput.offsetMinutes ?? selectedOffset
@@ -381,13 +376,7 @@ export function convertForSurface(input: string, offsetToken: string): DateTimeC
   if (!Number.isNaN(timestamp)) {
     date = new Date(timestamp)
   } else {
-    const dateSource = /^\d{4}-\d{1,2}-\d{1,2}$/.test(parsedInput.body)
-      ? `${parsedInput.body}T00:00:00`
-      : parsedInput.body
-    date = new Date(dateSource)
-    if (Number.isNaN(date.getTime())) return { ok: false }
-    const localOffsetMinutes = -date.getTimezoneOffset()
-    date = new Date(date.getTime() + (localOffsetMinutes - offsetMinutes) * 60000)
+    date = parseCalendarInput(trimmed, selectedOffset)
   }
   if (Number.isNaN(date.getTime())) return { ok: false }
 
