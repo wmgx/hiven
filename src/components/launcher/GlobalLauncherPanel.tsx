@@ -186,7 +186,8 @@ export function GlobalLauncherPanel({
     try {
       // Preserve the Add/Remove intent shown in this render, even if another
       // window has already changed the same key before its storage event arrives.
-      toggleLauncherFavorite(key, !launcherFavoriteKeys.includes(key))
+      toggleLauncherFavorite(key, !launcherFavoriteKeys.includes(key),
+        key.startsWith('host:app-launcher:app:') ? item.title : undefined)
     } catch {
       showToast(t(locale, 'palette.favoriteSaveFailed'), 'error')
     }

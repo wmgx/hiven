@@ -269,4 +269,109 @@ check('a rollback subscriber preserves the still-pending outer pin when saving r
   assertSaved(storage, ['recovery', 'outer'])
 })
 
+const appA = 'host:app-launcher:app:linux:desktop-entry:synthetic-a.desktop'
+const appB = 'host:app-launcher:app:linux:desktop-entry:synthetic-b.desktop'
+const labels = (store) => plain(store.state().launcherFavoriteLabels)
+function assertLabels(storage, expected) {
+  assert.deepEqual(plain(storage.persisted().launcherFavoriteLabels), expected)
+  assert.deepEqual(labels(windowStore(storage)), expected)
+}
+
+check('legacy favorite keys stay unnamed and unsafe or orphan labels are discarded on hydration', () => {
+  const legacy = windowStore(sharedStorage({ launcherFavoriteKeys: [appA] }))
+  assert.deepEqual(labels(legacy), {})
+  const malformed = windowStore(sharedStorage({ launcherFavoriteKeys: [appA, 'plugin:document'],
+    launcherFavoriteLabels: { [appA]: '/private/file', [appB]: 'Removed', 'plugin:document': 'Private title' } }))
+  assert.deepEqual(labels(malformed), {})
+  assert.deepEqual(keys(malformed), [appA, 'plugin:document'])
+})
+
+check('pin label updates survive reload while unlabeled pins preserve existing safe metadata', () => {
+  const { storage, A } = fixture()
+  A.state().toggleLauncherFavorite(appA, true, ' 合成应用 ')
+  assertLabels(storage, { [appA]: '合成应用' })
+  A.state().toggleLauncherFavorite(appA, true)
+  assertLabels(storage, { [appA]: '合成应用' })
+  A.state().toggleLauncherFavorite(appA, true, 'Updated app')
+  assertLabels(storage, { [appA]: 'Updated app' })
+  A.state().toggleLauncherFavorite(appA, true, 'https://private.example')
+  A.state().toggleLauncherFavorite('plugin:document', true, 'Private document')
+  assertLabels(storage, { [appA]: 'Updated app' })
+  assertSaved(storage, ['plugin:document', appA])
+})
+
+check('latest keys and labels merge before storage events and unpin cannot be resurrected', () => {
+  const { storage, A, B } = fixture()
+  A.state().toggleLauncherFavorite(appA, true, 'First app')
+  B.state().setLocale('zh')
+  assertLabels(storage, { [appA]: 'First app' })
+  B.state().toggleLauncherFavorite(appB, true, 'Second app')
+  assertLabels(storage, { [appA]: 'First app', [appB]: 'Second app' })
+  A.state().toggleLauncherFavorite(appA, false, 'Must not retain')
+  B.state().setLocale('en')
+  assertSaved(storage, [appB])
+  assertLabels(storage, { [appB]: 'Second app' })
+  B.state().toggleLauncherFavorite('plugin:tool', true, 'Not an app')
+  assertLabels(storage, { [appB]: 'Second app' })
+  B.event()
+  assert.deepEqual(labels(B), { [appB]: 'Second app' })
+})
+
+check('label-only storage changes hydrate without echo writes', () => {
+  const { storage, A, B } = fixture({ launcherFavoriteKeys: [appA], launcherFavoriteLabels: { [appA]: 'Old' } })
+  A.state().toggleLauncherFavorite(appA, true, 'Current')
+  const writes = storage.writes
+  B.event()
+  B.event()
+  assert.equal(B.hydrations, 1)
+  assert.deepEqual(labels(B), { [appA]: 'Current' })
+  assert.equal(storage.writes, writes)
+})
+
+check('failed pin, rename and unpin restore both label and key snapshots', () => {
+  const { storage, A } = fixture({ launcherFavoriteKeys: [appA], launcherFavoriteLabels: { [appA]: 'Saved' } })
+  const before = storage.getItem('hiven-settings')
+  storage.failWrites = true
+  for (const [key, pin, label] of [[appB, true, 'Unsaved'], [appA, true, 'Unsaved rename'], [appA, false]]) {
+    assert.throws(() => A.state().toggleLauncherFavorite(key, pin, label), /Synthetic storage write failure/)
+    assert.deepEqual(keys(A), [appA])
+    assert.deepEqual(labels(A), { [appA]: 'Saved' })
+    assert.equal(storage.getItem('hiven-settings'), before)
+  }
+  storage.failWrites = false
+  A.state().toggleLauncherFavorite(appA, false)
+  assertLabels(storage, {})
+})
+
+check('nested edits preserve pending labels and a failed inner edit restores the outer pair', () => {
+  const { storage, A } = fixture()
+  let nested = false
+  A.useAppStore.subscribe((state) => {
+    if (nested || !state.launcherFavoriteKeys.includes(appA)) return
+    nested = true
+    storage.failWrites = true
+    assert.throws(() => state.toggleLauncherFavorite(appB, true, 'Failed inner'), /Synthetic storage write failure/)
+    storage.failWrites = false
+    assert.deepEqual(labels(A), { [appA]: 'Outer' })
+    state.toggleLauncherFavorite(appB, true, 'Inner')
+    state.setLocale('zh')
+  })
+  A.state().toggleLauncherFavorite(appA, true, 'Outer')
+  assertSaved(storage, [appB, appA])
+  assertLabels(storage, { [appA]: 'Outer', [appB]: 'Inner' })
+})
+
+for (const mode of ['clear', 'remove', 'legacy']) {
+  check(`${mode} removes labels too and a stale writer cannot revive them`, () => {
+    const { storage, A, B } = fixture({ launcherFavoriteKeys: [appA], launcherFavoriteLabels: { [appA]: 'Saved' } })
+    if (mode === 'clear') storage.clear()
+    else if (mode === 'remove') storage.removeItem('hiven-settings')
+    else storage.setItem('hiven-settings', JSON.stringify({ state: { launcherFavoriteKeys: [appA] }, version: 0 }))
+    A.event(mode === 'clear' ? null : 'hiven-settings')
+    assert.deepEqual(labels(A), {})
+    B.state().setLocale('zh')
+    assertLabels(storage, {})
+  })
+}
+
 console.log(`Launcher favorites: ${passed} store cases passed`)

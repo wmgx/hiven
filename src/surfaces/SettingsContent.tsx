@@ -12,6 +12,7 @@ import { useT } from '../i18n'
 import { pickLocale } from '../i18n/pickLocale'
 import { ShortcutRecorder } from '../components/ShortcutRecorder'
 import { AppHotkeysSettings } from '../components/AppHotkeysSettings'
+import { PinnedEntriesSettings } from '../components/PinnedEntriesSettings'
 import { cancelAiProviderLogin, listAiProviders, loginAiProvider, logoutAiProvider, refreshAiProvider } from '../workspace/ai/runtime'
 import { createAiLoginSession, type AiLoginSessionSnapshot } from '../workspace/ai/loginSession'
 import type { AiProviderDescriptor, AiReasoningEffort } from '../workspace/ai/types'
@@ -98,6 +99,9 @@ export function SettingsContent() {
       </SettingGroup>
 
       <SettingGroup title={t('hotkeys')}>
+        <SettingsListRow stacked icon={<Command size={15} strokeWidth={2} />} name={t('pinnedEntries')} desc={t('pinnedEntriesInfo')}>
+          <PinnedEntriesSettings />
+        </SettingsListRow>
         <SettingsListRow icon={<Command size={15} strokeWidth={2} />} name={t('globalPinnedLauncherShortcut')} desc={t('globalPinnedLauncherShortcutInfo')}>
           <ShortcutRecorder
             value={settings.globalPinnedLauncherShortcut ?? { kind: 'double-modifier', modifier: 'Command' }}

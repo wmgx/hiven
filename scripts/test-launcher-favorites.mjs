@@ -69,3 +69,24 @@ assert.match(recSrc, /RECOMMENDED_ACTIONS_MAX\s*=\s*5/, 'recommended actions cap
 assert.match(recSrc, /\.slice\(0,\s*RECOMMENDED_ACTIONS_MAX\)/, 'merge path applies cap')
 
 console.log('✓ test-launcher-favorites passed')
+
+const appKey = 'host:app-launcher:app:linux:desktop-entry:synthetic.desktop'
+const otherKey = 'host:app-launcher:app:linux:desktop-entry:removed.desktop'
+const plain = (value) => JSON.parse(JSON.stringify(value))
+assert.equal(fav.normalizeLauncherFavoriteLabel(appKey, '  合成应用 📝  '), '合成应用 📝')
+assert.equal(fav.normalizeLauncherFavoriteLabel(appKey, '📝'.repeat(80)), '📝'.repeat(80))
+for (const label of [null, 42, '', ' ', 'x'.repeat(81), '📝'.repeat(81), 'line\nbreak', 'line\rbreak',
+  'tab\there', 'bad\0name', 'bad\u0085name', 'line\u2028break', 'line\u2029break',
+  '/tmp/private', 'folder/private', 'C:\\private', 'https://example.com', 'mailto:private@example.com']) {
+  assert.equal(fav.normalizeLauncherFavoriteLabel(appKey, label), undefined, JSON.stringify(label))
+}
+for (const key of ['plugin:doc:private', 'host:app-launcher:refresh', 'host:app-launcher:app:',
+  'host:app-launcher:app: ', ` ${appKey}`, `${appKey}\n`]) {
+  assert.equal(fav.normalizeLauncherFavoriteLabel(key, 'Synthetic'), undefined, key)
+}
+const rawLabels = { [appKey]: '  Synthetic  ', [otherKey]: 'Removed', 'plugin:doc:private': 'Private document' }
+assert.deepEqual(plain(fav.normalizeLauncherFavoriteLabels(rawLabels, [appKey, 'plugin:doc:private'])), { [appKey]: 'Synthetic' })
+Object.defineProperty(rawLabels, appKey, { get() { throw new Error('Do not execute persisted accessors') } })
+assert.deepEqual(plain(fav.normalizeLauncherFavoriteLabels(rawLabels, [appKey])), {})
+for (const raw of [null, [], 'invalid', 7]) assert.deepEqual(plain(fav.normalizeLauncherFavoriteLabels(raw, [appKey])), {})
+console.log('PASS safe installed-app favorite labels, retained keys only, no truncation or getter execution')

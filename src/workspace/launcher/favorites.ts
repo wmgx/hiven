@@ -7,6 +7,35 @@
 
 import type { SystemLauncherItemKey } from './types'
 
+export type LauncherFavoriteLabels = Record<string, string>
+
+/** Only installed-app display names may be kept; content/plugin titles are not metadata. */
+export function normalizeLauncherFavoriteLabel(itemKey: string, raw: unknown): string | undefined {
+  const prefix = 'host:app-launcher:app:'
+  if (!itemKey.startsWith(prefix) || !itemKey.slice(prefix.length).trim()
+    || itemKey !== itemKey.trim() || /[\u0000-\u001f\u007f-\u009f]/.test(itemKey)
+    || typeof raw !== 'string' || /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(raw)) return undefined
+  const label = raw.trim()
+  if (!label || Array.from(label).length > 80 || /[/\\]/.test(label)
+    || /^[a-z][a-z\d+.-]*:/i.test(label)) return undefined
+  return label
+}
+
+/** Missing labels stay missing; orphan labels cannot revive removed favorites. */
+export function normalizeLauncherFavoriteLabels(
+  raw: unknown,
+  favorites: readonly SystemLauncherItemKey[],
+): LauncherFavoriteLabels {
+  const labels: LauncherFavoriteLabels = {}
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return labels
+  for (const key of favorites) {
+    const descriptor = Object.getOwnPropertyDescriptor(raw, key)
+    const label = normalizeLauncherFavoriteLabel(key, descriptor?.value)
+    if (label !== undefined) labels[key] = label
+  }
+  return labels
+}
+
 export function emptyLauncherFavorites(): SystemLauncherItemKey[] {
   return []
 }

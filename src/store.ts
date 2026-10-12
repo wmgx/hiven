@@ -25,6 +25,9 @@ import {
 import {
   emptyLauncherFavorites,
   normalizeLauncherFavorites,
+  normalizeLauncherFavoriteLabels,
+  normalizeLauncherFavoriteLabel,
+  type LauncherFavoriteLabels,
   toggleLauncherFavorite,
 } from './workspace/launcher/favorites'
 import {
@@ -148,7 +151,8 @@ interface AppState {
    * Boosted on empty open via ranking favoriteBoost; toggle with ⌘P.
    */
   launcherFavoriteKeys: SystemLauncherItemKey[]
-  toggleLauncherFavorite: (itemKey: SystemLauncherItemKey, pinned?: boolean) => void
+  launcherFavoriteLabels: LauncherFavoriteLabels
+  toggleLauncherFavorite: (itemKey: SystemLauncherItemKey, pinned?: boolean, label?: string) => void
 
   /**
    * Plugin-opted durable content recents (contacts / chats / docs snapshots).
@@ -241,21 +245,29 @@ function appSearchAliasesEqual(left: AppSearchAliases, right: AppSearchAliases):
 // Preserve the newest pins when a stale window saves another field. Only an
 // explicit pin/unpin writes this window's list; nested subscribers share it.
 let launcherFavoritesWrite = false
-function readPersistedLauncherFavorites(): SystemLauncherItemKey[] {
+type LauncherFavoritesSnapshot = Pick<AppState, 'launcherFavoriteKeys' | 'launcherFavoriteLabels'>
+function readPersistedLauncherFavorites(): LauncherFavoritesSnapshot {
   const raw = localStorage.getItem('hiven-settings')
-  return normalizeLauncherFavorites(raw ? JSON.parse(raw)?.state?.launcherFavoriteKeys : undefined)
+  const state = raw ? JSON.parse(raw)?.state : undefined
+  const launcherFavoriteKeys = normalizeLauncherFavorites(state?.launcherFavoriteKeys)
+  return { launcherFavoriteKeys,
+    launcherFavoriteLabels: normalizeLauncherFavoriteLabels(state?.launcherFavoriteLabels, launcherFavoriteKeys) }
 }
 
-function persistedLauncherFavorites(fallback: SystemLauncherItemKey[]): SystemLauncherItemKey[] {
+function persistedLauncherFavorites(fallback: LauncherFavoritesSnapshot): LauncherFavoritesSnapshot {
   try {
     return readPersistedLauncherFavorites()
   } catch {
-    return fallback
+    return { launcherFavoriteKeys: fallback.launcherFavoriteKeys,
+      launcherFavoriteLabels: normalizeLauncherFavoriteLabels(fallback.launcherFavoriteLabels, fallback.launcherFavoriteKeys) }
   }
 }
 
-function launcherFavoritesEqual(left: SystemLauncherItemKey[], right: SystemLauncherItemKey[]): boolean {
-  return left.length === right.length && left.every((key, index) => key === right[index])
+function launcherFavoritesEqual(left: LauncherFavoritesSnapshot, right: LauncherFavoritesSnapshot): boolean {
+  return left.launcherFavoriteKeys.length === right.launcherFavoriteKeys.length
+    && left.launcherFavoriteKeys.every((key, index) => key === right.launcherFavoriteKeys[index])
+    && Object.keys(left.launcherFavoriteLabels).length === Object.keys(right.launcherFavoriteLabels).length
+    && Object.entries(left.launcherFavoriteLabels).every(([key, label]) => right.launcherFavoriteLabels[key] === label)
 }
 
 export const useAppStore = create<AppState>()(persist((set, get) => ({
@@ -331,23 +343,27 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
   })),
 
   launcherFavoriteKeys: emptyLauncherFavorites(),
-  toggleLauncherFavorite: (itemKey, pinned) => {
+  launcherFavoriteLabels: {},
+  toggleLauncherFavorite: (itemKey, pinned, label) => {
     if (!useAppStore.persist?.getOptions().storage) throw new Error('Application settings storage is unavailable.')
-    const before = get().launcherFavoriteKeys
+    const before = { launcherFavoriteKeys: get().launcherFavoriteKeys, launcherFavoriteLabels: get().launcherFavoriteLabels }
     // Synchronous subscribers run before persist writes. Build nested edits on
     // the pending local list so they cannot discard the outer pin/unpin.
     const base = launcherFavoritesWrite ? before : readPersistedLauncherFavorites()
-    const next = toggleLauncherFavorite(base, itemKey, pinned)
+    const next = toggleLauncherFavorite(base.launcherFavoriteKeys, itemKey, pinned)
+    const nextLabels = normalizeLauncherFavoriteLabels(base.launcherFavoriteLabels, next)
+    const safeLabel = normalizeLauncherFavoriteLabel(itemKey.trim(), label)
+    if (next.includes(itemKey.trim()) && safeLabel !== undefined) nextLabels[itemKey.trim()] = safeLabel
     const previousWrite = launcherFavoritesWrite
     launcherFavoritesWrite = true
     try {
-      set({ launcherFavoriteKeys: next })
+      set({ launcherFavoriteKeys: next, launcherFavoriteLabels: nextLabels })
     } catch (error) {
       // Restore a failed edit only if no subscriber has made a newer one.
-      if (get().launcherFavoriteKeys === next) {
+      if (get().launcherFavoriteKeys === next && get().launcherFavoriteLabels === nextLabels) {
         launcherFavoritesWrite = previousWrite
         try {
-          set({ launcherFavoriteKeys: before })
+          set(before)
         } catch {
           // Persist publishes first, so memory is restored even if this fails.
         }
@@ -500,9 +516,9 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
     locale: state.locale,
     savedActionParams: state.savedActionParams,
     launcherUsageBySurface: state.launcherUsageBySurface,
-    launcherFavoriteKeys: launcherFavoritesWrite
-      ? state.launcherFavoriteKeys
-      : persistedLauncherFavorites(state.launcherFavoriteKeys),
+    ...(launcherFavoritesWrite
+      ? { launcherFavoriteKeys: state.launcherFavoriteKeys, launcherFavoriteLabels: state.launcherFavoriteLabels }
+      : persistedLauncherFavorites(state)),
     launcherPersistableRecents: state.launcherPersistableRecents,
   }),
   merge: (persisted, current) => {
@@ -591,6 +607,10 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
       persistedState.launcherFavoriteKeys,
     )
 
+    merged.launcherFavoriteLabels = normalizeLauncherFavoriteLabels(
+      persistedState.launcherFavoriteLabels, merged.launcherFavoriteKeys,
+    )
+
     const recents = persistedState.launcherPersistableRecents
     merged.launcherPersistableRecents = Array.isArray(recents)
       ? recents.filter(
@@ -618,8 +638,8 @@ if (typeof window !== 'undefined') {
           useAppStore.getState().settings.appSearchAliases,
         )
         || !launcherFavoritesEqual(
-          persistedLauncherFavorites(useAppStore.getState().launcherFavoriteKeys),
-          useAppStore.getState().launcherFavoriteKeys,
+          persistedLauncherFavorites(useAppStore.getState()),
+          useAppStore.getState(),
         ))) {
       // Rehydrate does not persist a stale snapshot back to the other window.
       void useAppStore.persist.rehydrate()
