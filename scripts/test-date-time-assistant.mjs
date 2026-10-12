@@ -277,3 +277,38 @@ assert.doesNotMatch(relativeCopies[1], /2026-06-07/)
 assert.equal((await values('1 month ago')).length, 0)
 fixedEpochMs = initialEpoch
 console.log('Relative dynamic answers keep an explicit base, copy full values, and respond to changed input')
+
+// Only this process changes TZ; the system clock and desktop timezone stay intact.
+const originalTimeZone = process.env.TZ
+try {
+  const cases = [
+    ['UTC', '2025-12-31T10:30:00.000Z', '2025-12-31 10:30:00+00:00'],
+    ['Asia/Kathmandu', '2025-12-31T10:30:00.123Z', '2025-12-31 16:15:00.123+05:45'],
+    ['America/New_York', '2026-01-15T12:00:00.000Z', '2026-01-15 07:00:00-05:00'],
+    ['America/New_York', '2026-07-15T12:00:00.000Z', '2026-07-15 08:00:00-04:00'],
+    ['America/New_York', '2026-11-01T05:30:00.000Z', '2026-11-01 01:30:00-04:00'],
+    ['America/New_York', '2026-11-01T06:30:00.000Z', '2026-11-01 01:30:00-05:00'],
+  ]
+  for (const [zone, iso, expected] of cases) {
+    process.env.TZ = zone
+    const epoch = Date.parse(iso)
+    const queries = [String(epoch), `timestamp ${epoch}`]
+    if (epoch % 1000 === 0) queries.push(String(epoch / 1000))
+    for (const query of queries) {
+      const items = await provider({ query, locale: 'en', settings: {}, t: (key) => key })
+      assert.equal(items.length, 1)
+      const item = items[0]
+      assert.equal(item.display.title, `${query} -> ${expected}`)
+      const copies = []
+      const result = await item.execute({ api: { copyText: async (text) => copies.push(text) } })
+      await result.output.choices[0].primaryAction()
+      assert.deepEqual(copies, [expected, expected], 'both copy paths equal the displayed offset-bearing value')
+      assert.equal(Date.parse(copies[0].replace(' ', 'T')), epoch, 'copied value uniquely identifies the original instant')
+      assert.ok((await values(copies[0])).includes(String(epoch)), 're-search preserves the timestamp value and milliseconds')
+    }
+  }
+} finally {
+  if (originalTimeZone === undefined) delete process.env.TZ
+  else process.env.TZ = originalTimeZone
+}
+console.log('Timestamp answers retain target-time DST offset, repeated-hour identity and millisecond precision through both copies')

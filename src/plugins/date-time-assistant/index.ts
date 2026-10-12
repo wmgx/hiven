@@ -278,10 +278,16 @@ function parseTimestampForSuggestion(value: string): ParsedResult | null {
   if (!date || Number.isNaN(date.getTime())) return null
   const year = date.getFullYear()
   if (year < 2000 || year > 2100) return null
+  // Offset belongs to this instant, including its local daylight-saving rule.
+  // Keep millisecond input reversible instead of dropping invisible precision.
+  const formatted = formatOffsetDateTime(date)
+  const valueWithOffset = date.getMilliseconds()
+    ? formatted.replace(/([+-]\d{2}:\d{2})$/, `.${pad(date.getMilliseconds(), 3)}$1`)
+    : formatted
   return {
     kind: 'datetime',
-    display: formatLocalDateTime(date),
-    value: formatLocalDateTime(date),
+    display: valueWithOffset,
+    value: valueWithOffset,
     actionLabelKey: 'action.copyDateTime',
   }
 }
