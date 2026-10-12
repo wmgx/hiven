@@ -6500,6 +6500,10 @@ body[data-theme='dark'] .global-launcher-panel .l-row.cmd-item.selected {
   white-space: nowrap;
 }
 
+.l-row .r-main.has-subtitle-detail .r-title {
+  max-width: 50%;
+}
+
 .l-row .r-desc::before {
   content: '·';
   margin-right: 6px;

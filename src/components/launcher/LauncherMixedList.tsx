@@ -136,6 +136,7 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
   const combineTagAndQuickSelect = showTag && showQuickSelect
   const iconSlotClass = appIcon ? 'r-app' : avatarIcon ? 'r-ico r-avatar' : 'r-ico'
   const isX11Window = item.id.startsWith('host.window:focus:native:x11:')
+  const subtitleDetail = item.domainItem.display.subtitlePresentation?.detail
   const answerDetails = item.domainItem.directAnswer
     ? [item.title, item.subtitle].filter(Boolean).join('\n') : undefined
 
@@ -169,8 +170,8 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
         type="button"
         tabIndex={-1}
         className="launcher-row-main"
-        title={answerDetails}
-        aria-label={isX11Window ? [item.title, item.subtitle, tag, item.shortcut ?? quickSelectLabel].filter(Boolean).join(', ') : answerDetails}
+        title={subtitleDetail ? [item.title, subtitleDetail].join('\n') : answerDetails}
+        aria-label={subtitleDetail ? [item.title, subtitleDetail, tag, item.shortcut ?? quickSelectLabel].filter(Boolean).join(', ') : isX11Window ? [item.title, item.subtitle, tag, item.shortcut ?? quickSelectLabel].filter(Boolean).join(', ') : answerDetails}
         disabled={item.disabled}
         onClick={handleClick}
       >
@@ -184,14 +185,14 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
         )}
       </span>
 
-      <div className="r-main">
+      <div className={`r-main${subtitleDetail ? ' has-subtitle-detail' : ''}`}>
         {isX11Window ? <WindowTitle title={item.title} ranges={item.matchRanges} /> : (
           <span className="r-title launcher-item-title">
             <HighlightedTitle title={item.title} ranges={item.matchRanges} />
           </span>
         )}
         {item.subtitle && (
-          <span className="r-desc">{item.subtitle}</span>
+          <span className="r-desc" title={subtitleDetail}>{item.subtitle}</span>
         )}
       </div>
       {item.shortcut && !quickSelectLabel && (

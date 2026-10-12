@@ -1,3 +1,4 @@
+import { browserUrlPresentation } from './browserUrlPresentation'
 /**
  * browser.chromium DesktopTargetProvider — implemented via host SDK only
  * (no workspace deep imports). Same protocol Feishu / editor adapters will use.
@@ -165,6 +166,7 @@ async function buildEmptyOpenTargets() {
       kind: kind as 'tab' | 'document',
       title: dto.title,
       subtitle: dto.subtitle ?? dto.appName ?? undefined,
+      subtitlePresentation: browserUrlPresentation(dto.url),
       appName: dto.appName ?? undefined,
       appStableKey: dto.appName ?? dto.sourceId,
       keywords: [dto.title, dto.url ?? '', dto.appName ?? ''].filter(Boolean),
@@ -235,6 +237,7 @@ export function createChromiumTabsProvider(): DesktopTargetProvider {
             kind: kind as 'tab' | 'document',
             title: dto.title,
             subtitle: dto.subtitle ?? dto.appName ?? undefined,
+            subtitlePresentation: browserUrlPresentation(dto.url),
             appName: dto.appName ?? undefined,
             appStableKey: dto.appName ?? dto.sourceId,
             keywords: [dto.title, dto.url ?? '', dto.appName ?? ''].filter(Boolean),

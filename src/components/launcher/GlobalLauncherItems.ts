@@ -30,7 +30,7 @@ export function buildGlobalLauncherItems({
       ? stripWindowQueryPrefix(q).rest
       : q
     const match = titleQuery ? computeTitleMatchRanges(title, titleQuery, locale) : undefined
-    const rawSubtitle = resolveDisplaySubtitle(domainItem.display, locale) ?? ''
+    const rawSubtitle = domainItem.display.subtitlePresentation?.text ?? resolveDisplaySubtitle(domainItem.display, locale) ?? ''
     // Subtitle is now always rendered (not just on selection), so a subtitle
     // that only repeats the title case-insensitively ("Settings" / "settings")
     // is pure noise once it's permanently on screen — drop it.

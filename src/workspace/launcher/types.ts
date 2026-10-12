@@ -196,6 +196,8 @@ export type LauncherItemDisplay = {
   title: string
   titleI18n?: Partial<Record<Locale, string>>
   subtitle?: string
+  /** Optional compact rendering; original subtitle remains the search input. */
+  subtitlePresentation?: { text: string; detail: string }
   subtitleI18n?: Partial<Record<Locale, string>>
   icon?: IconRef
   /** Extra search terms (aliases) used by ranking but not shown as primary. */

@@ -19,6 +19,8 @@ export type DesktopTarget = {
   kind: DesktopTargetKind
   title: string
   subtitle?: string
+  /** Presentation only; never replaces subtitle/keywords used for ranking. */
+  subtitlePresentation?: { text: string; detail: string }
   appName?: string
   /** Stable app identity for usage aggregation (bundle id / stable name). */
   appStableKey?: string

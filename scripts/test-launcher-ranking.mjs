@@ -21,7 +21,7 @@ function loadTs(path, importStubs) {
     if (id === 'pinyin-pro') return { pinyin: (t) => t } // identity stub; tests use ascii
     throw new Error('unexpected require: ' + id)
   }
-  const sandbox = { exports: moduleExports, module: { exports: moduleExports }, console, require: requireShim }
+  const sandbox = { exports: moduleExports, module: { exports: moduleExports }, console, URL, require: requireShim }
   vm.runInNewContext(out, sandbox)
   return sandbox.module.exports
 }
@@ -409,5 +409,46 @@ assert.equal(
   liveTab.systemKey,
   'a live tab ranks above a stronger text match from browser history',
 )
+
+// Browser presentation is applied only after ranking; original URL search/action survive.
+{
+  const { browserUrlPresentation } = loadTs('src/plugins/web-open/browserUrlPresentation.ts', [])
+  const mapperExports = {}
+  const mapperCode = ts.transpileModule(readFileSync('src/components/launcher/GlobalLauncherItems.ts', 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023 },
+  }).outputText
+  const imports = {
+    '../../workspace/launcher/display': display,
+    '../../workspace/pluginSurfaceShortcuts': { usePluginSurfaceShortcutStore: { getState: () => ({ shortcuts: {} }) } },
+    '../../workspace/searchRanking': searchRanking,
+    '../../workspace/desktopControl/windows': { stripWindowQueryPrefix: (query) => ({ rest: query }) },
+  }
+  vm.runInNewContext(mapperCode, {
+    exports: mapperExports, module: { exports: mapperExports },
+    require: (id) => { assert.ok(id in imports, `unexpected mapper import ${id}`); return imports[id] },
+  })
+  const raw = 'https://docs.example.invalid/a%2Fb?token=syntheticneedle#section'
+  const original = item('browser.chromium:tab:presentation', 'Same title', { kind: 'host' })
+  original.display.subtitle = raw
+  original.display.aliases = [raw]
+  original.execute = () => raw // Frozen original action input, independent of presentation.
+  const presented = { ...original, display: { ...original.display, subtitlePresentation: browserUrlPresentation(raw) } }
+  const other = item('browser.chromium:tab:other', 'Same title', { kind: 'host' })
+  for (const query of ['Same title', 'syntheticneedle', 'a%2Fb']) {
+    const context = { query, locale: 'en', surfaceId: 'global-launcher', usage: usage.emptyUsageBySurface(), now }
+    const baseline = ranking.rankLauncherItems(context, [other, original])
+    const ranked = ranking.rankLauncherItems(context, [other, presented])
+    assert.deepEqual(Array.from(ranked, (row) => row.systemKey), Array.from(baseline, (row) => row.systemKey))
+    assert.ok(ranked.some((row) => row.systemKey === original.systemKey), 'original query/path is still searchable')
+    const mapped = mapperExports.buildGlobalLauncherItems({ rankedLauncherItems: ranked, query, locale: 'en' })
+    assert.deepEqual(Array.from(mapped, (row) => row.id), Array.from(ranked, (row) => row.systemKey), 'mapping cannot reorder results')
+    const row = mapped.find((entry) => entry.id === original.systemKey)
+    assert.equal(row.subtitle, 'docs.example.invalid/a%2Fb?…#…')
+    assert.equal(row.domainItem.display.subtitle, raw)
+    assert.equal(row.domainItem.display.subtitlePresentation.detail, raw)
+    assert.equal(row.domainItem.execute, original.execute)
+    assert.equal(row.domainItem.execute(), raw)
+  }
+}
 
 console.log('✓ test-launcher-ranking passed')

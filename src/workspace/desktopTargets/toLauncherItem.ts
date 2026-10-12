@@ -211,6 +211,7 @@ export function desktopTargetToLauncherItem(
       title: target.title,
       titleI18n: target.titleI18n,
       subtitle: target.subtitle,
+      subtitlePresentation: target.subtitlePresentation,
       subtitleI18n: target.subtitleI18n,
       icon: target.icon,
       aliases: [
