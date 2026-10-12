@@ -9,10 +9,14 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{LazyLock, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::Emitter;
+
+mod server_lifecycle;
+static SERVER_LIFECYCLE: LazyLock<server_lifecycle::ServerLifecycle> =
+    LazyLock::new(server_lifecycle::ServerLifecycle::default);
 
 const BROWSER_BRIDGE_SNAPSHOT_EVENT: &str = "hiven://browser-bridge-snapshot";
 const BROWSER_BRIDGE_EVENTS_EVENT: &str = "hiven://browser-bridge-events";
@@ -133,7 +137,6 @@ struct SourceState {
 #[derive(Debug, Default)]
 struct BridgeState {
     sources: HashMap<String, SourceState>,
-    started: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -287,19 +290,15 @@ fn is_fresh(last: Option<Instant>) -> bool {
 /// Start the loopback HTTP bridge once (idempotent).
 pub fn start_desktop_bridge_server(app_handle: tauri::AppHandle) {
     let _ = APP_HANDLE.set(app_handle);
-    let mut guard = match bridge_state().lock() {
-        Ok(g) => g,
-        Err(_) => return,
-    };
-    if guard.started {
+    let Some(lease) = SERVER_LIFECYCLE.try_start() else {
         return;
-    }
-    guard.started = true;
-    drop(guard);
+    };
 
-    thread::Builder::new()
+    let result = thread::Builder::new()
         .name("hiven-desktop-bridge".into())
-        .spawn(|| {
+        .spawn(move || {
+            // Dropped on bind failure, server exit, panic, or failed thread creation.
+            let lease = lease;
             let addr = format!("127.0.0.1:{}", DESKTOP_BRIDGE_PORT);
             let listener = match TcpListener::bind(&addr) {
                 Ok(l) => l,
@@ -308,7 +307,11 @@ pub fn start_desktop_bridge_server(app_handle: tauri::AppHandle) {
                     return;
                 }
             };
-            let _ = listener.set_nonblocking(false);
+            if let Err(error) = listener.set_nonblocking(false) {
+                eprintln!("[hiven] desktop bridge listener setup failed: {}", error);
+                return;
+            }
+            lease.listening();
             eprintln!("[hiven] desktop bridge listening on {}", addr);
             for stream in listener.incoming() {
                 match stream {
@@ -328,13 +331,17 @@ pub fn start_desktop_bridge_server(app_handle: tauri::AppHandle) {
                             }
                         }
                     }
+                    Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
                     Err(error) => {
                         eprintln!("[hiven] desktop bridge accept error: {}", error);
+                        break;
                     }
                 }
             }
-        })
-        .ok();
+        });
+    if let Err(error) = result {
+        eprintln!("[hiven] desktop bridge thread start failed: {}", error);
+    }
 }
 
 fn handle_http(mut stream: TcpStream) -> Result<(), String> {
@@ -989,7 +996,7 @@ pub fn desktop_bridge_status() -> Result<DesktopBridgeStatus, String> {
         })
         .collect();
     Ok(DesktopBridgeStatus {
-        running: guard.started,
+        running: SERVER_LIFECYCLE.running(),
         port: DESKTOP_BRIDGE_PORT,
         sources,
     })

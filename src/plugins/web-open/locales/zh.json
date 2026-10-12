@@ -47,7 +47,7 @@
   "settings.refresh": "刷新状态",
   "settings.disabled": "已关闭（不向 Launcher 注册）",
   "settings.desktopUnavailable": "桌面端未就绪",
-  "settings.bridgeDown": "桥接未运行",
+  "settings.bridgeDown": "桥接未运行，请重启 Hiven。",
   "settings.waiting": "等待浏览器扩展连接…",
   "settings.connectedShort": "已连接",
   "settings.connectedDetail": "{tabs} 个标签 · {history} 条历史 · 端口 {port}",

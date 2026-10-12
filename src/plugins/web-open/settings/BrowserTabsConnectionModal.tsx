@@ -114,7 +114,7 @@ export function BrowserTabsConnectionModal(props: PluginSettingsModalBodyProps<W
     return () => window.clearInterval(timer)
   }, [refresh])
 
-  const connected = value.enabled && Boolean(bridge?.fresh)
+  const connected = value.enabled && Boolean(bridge?.running && bridge.fresh)
   const statusTone: 'on' | 'off' | 'muted' = !value.enabled ? 'muted' : connected ? 'on' : 'off'
   const statusLabel = (() => {
     if (!value.enabled) return t('settings.disabled')
@@ -124,7 +124,7 @@ export function BrowserTabsConnectionModal(props: PluginSettingsModalBodyProps<W
     return t('settings.connectedShort') // e.g. "已连接"
   })()
   const statusDetail =
-    value.enabled && bridge?.fresh
+    connected && bridge
       ? t('settings.connectedDetail', { tabs: bridge.targetCount, history: bridge.historyCount, port: bridge.port })
       : null
 

@@ -166,3 +166,13 @@ File Paths 将上下两处说明收进一个默认折叠的帮助区，增加可
 真实验收使用原隔离 HOME/XDG、Xvfb 和 Linux 原生 WebKit，在一次应用启动后的同一页面完成，performance.timeOrigin 不变，查询始终为合成的 bridge sentinel：空列表→两个 snapshot 标签出现→选中第二条→同 id 改标题与完整 URL→空 snapshot 两条消失→等待来源过期后新 snapshot 重连出现→Enter 的扩展队列请求仍为原 id/windowId。所有更新无需刷新页面或重新输入查询，输入焦点和仍存在的选中目标保持。bridge-native-updated.png、bridge-native-reconnected.png 已看图；结束清空合成 snapshot。验收覆盖原生 UI 与扩展协议，未声称真实浏览器扩展已执行标签切换。
 
 running 状态在 bind 前置真的独立缺陷未改；此前失败实例的直接启动原因仍缺日志，未将它归为本次刷新问题，也未扩展自动重连工程。
+
+## 桥接监听状态准确性
+
+修复独立的 started-before-bind 缺陷：线程创建前仅占用启动状态，实际 bind 和 listener 设置成功后才对外报告 running。唯一生命周期 lease 防止并发重复启动；未启动的线程闭包被释放、绑定/设置失败、服务退出或线程展开时均复位，不会由旧 owner 清除新 owner。accept 被中断时继续，其余错误退出并清理状态，未增加自动重连或新操作入口。
+
+现有浏览器连接页同时要求 running 与 fresh 才显示已连接；未运行时用原状态位置简短提示重启 Hiven，保留 Refresh status 仅查询状态的含义。中英文同步，浏览器插件 1.12.13、发行索引 132。
+
+在隔离 Linux 原生环境先结束自己的 Hiven 进程，再由自己的合成 TCP listener 占用 127.0.0.1:19246；新 Hiven 日志明确 Address already in use，原生状态返回 running=false，连接页显示 Bridge not running. Restart Hiven.，端口响应仍属于测试 listener。释放自己的 listener 后点击 Refresh status 仍正确报告未运行；通过既有重启方式恢复 Hiven，日志确认监听成功且 running=true。随后正常 snapshot 入口送入一条合成标签，真实连接页显示 Connected、1 tabs、0 history、port 19246。失败与恢复截图 bridge-status-failed.png、bridge-status-recovered.png 已检视。结束清空合成 snapshot，测试 listener 已退出，没有抢占其他服务、修改网络权限或调用外网/真实 API，也未重复标签整套验收。
+
+独立审查通过；实际生产生命周期模块的 Rust 检查覆盖真实临时端口绑定失败与释放重试、未启动闭包释放、展开退出，以及并发唯一持有。类型、架构、前端和 Linux 原生构建通过，原生仍有既有警告。线程创建资源耗尽没有在真实桌面上人为制造，由闭包释放检查覆盖其清理路径；真实浏览器扩展最终切换仍未验。
