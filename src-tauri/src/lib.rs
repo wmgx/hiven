@@ -4660,6 +4660,7 @@ fn list_macos_desktop_windows_raw() -> Result<Vec<DesktopWindow>, String> {
     Ok(Vec::new())
 }
 
+#[cfg(target_os = "linux")]
 #[derive(Clone, Copy, serde::Deserialize)]
 struct DesktopWindowSearchRequest {
     explicit: bool,
@@ -4692,13 +4693,19 @@ fn get_desktop_window_search_session(window: tauri::WebviewWindow) -> Result<Des
     { Err("x11-window-unsupported".into()) }
 }
 
+#[cfg(target_os = "linux")]
 #[tauri::command]
 fn release_desktop_window_search_session(window: tauri::WebviewWindow, request: DesktopWindowSearchRequest) -> Result<(), String> {
     if window.label() != "launcher" { return Err("x11-window-expired".into()); }
-    #[cfg(target_os = "linux")]
-    { linux_x11_windows::release(&request) }
-    #[cfg(not(target_os = "linux"))]
-    { let _ = request; Ok(()) }
+    linux_x11_windows::release(&request)
+}
+
+// Other platforms never create an X11 search session or deserialize its tokens.
+#[cfg(not(target_os = "linux"))]
+#[tauri::command]
+fn release_desktop_window_search_session(window: tauri::WebviewWindow) -> Result<(), String> {
+    if window.label() != "launcher" { return Err("x11-window-expired".into()); }
+    Ok(())
 }
 
 #[cfg(target_os = "linux")]

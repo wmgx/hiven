@@ -4,11 +4,13 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
-use tauri::{Emitter, Manager};
+use tauri::Emitter;
+#[cfg(target_os = "linux")]
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
 const HISTORY: &str = "plugin-surface:builtin:clipboard-history:main";
 const MAX_BYTES: usize = 1024 * 1024;
+#[cfg(target_os = "linux")]
 const TARGET: &str = "history-paste-queue";
 #[derive(Clone, Deserialize, Serialize)]
 pub(crate) struct Item { id: String, text: String }
