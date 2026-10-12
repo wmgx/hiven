@@ -176,3 +176,12 @@ running 状态在 bind 前置真的独立缺陷未改；此前失败实例的直
 在隔离 Linux 原生环境先结束自己的 Hiven 进程，再由自己的合成 TCP listener 占用 127.0.0.1:19246；新 Hiven 日志明确 Address already in use，原生状态返回 running=false，连接页显示 Bridge not running. Restart Hiven.，端口响应仍属于测试 listener。释放自己的 listener 后点击 Refresh status 仍正确报告未运行；通过既有重启方式恢复 Hiven，日志确认监听成功且 running=true。随后正常 snapshot 入口送入一条合成标签，真实连接页显示 Connected、1 tabs、0 history、port 19246。失败与恢复截图 bridge-status-failed.png、bridge-status-recovered.png 已检视。结束清空合成 snapshot，测试 listener 已退出，没有抢占其他服务、修改网络权限或调用外网/真实 API，也未重复标签整套验收。
 
 独立审查通过；实际生产生命周期模块的 Rust 检查覆盖真实临时端口绑定失败与释放重试、未启动闭包释放、展开退出，以及并发唯一持有。类型、架构、前端和 Linux 原生构建通过，原生仍有既有警告。线程创建资源耗尽没有在真实桌面上人为制造，由闭包释放检查覆盖其清理路径；真实浏览器扩展最终切换仍未验。
+
+
+## 工具打开后的初始输入焦点
+
+中文任务入口验收发现，去重页与 JSON 对比页打开后停在 surface 外壳，真实键盘输入没有进入编辑器。宿主原先只在下一帧查找目标，错过了异步工具/Monaco 的就绪时间。
+
+现在每次页面打开仅持有一次有界焦点交接：只等待插件明确标记的 data-plugin-surface-autofocus 控件，最多十秒；初始外壳只聚焦一次。控件就绪后交接并释放所有监听，不选中内容、不设光标位置。用户指针、键盘（包括 Tab）、滚动、触摸、其他焦点或窗口失焦立即撤销；页面替换、离开与销毁释放旧 owner。已有子控件的 autoFocus 和设置字段导航继续拥有焦点。Diff 通过编辑器 ready 回调将左侧真实文本输入标记为初始目标；kit 仅透传通用 ready 回调。text-diff 3.4.2、发行索引 133。未修改 macOS native resize/responder 保护，也未加入“时间转换”别名。
+
+独立生命周期审查及 test:surface-initial-focus 通过，覆盖延迟就绪、已有焦点、交互撤销、旧 owner、销毁、超时与重新打开。类型、架构、前端与 Linux 原生构建通过。真实验收仅用原隔离 HOME/XDG 和合成文本，通过原生 WebKit + 物理键盘完成：去重打开即输入三行、去重输出正确、移动光标后保持位置、确认丢弃后回到“去重”查询；JSON 对比冷加载时显式目标尚未出现，真实 Tab 将焦点移到返回按钮，Monaco 就绪后仍保留该焦点；随后连续两次进入均直接在左侧输入合成 JSON，返回保留“JSON对比”查询。没有 dispatch 模拟键盘，也没有调用真实 API。focus-dedup-ready.png、focus-diff-user-tab.png、focus-diff-ready-1.png 均已看图。macOS 本机未在此 Linux 环境重验。

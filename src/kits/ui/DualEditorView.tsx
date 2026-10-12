@@ -54,6 +54,7 @@ export function DualEditorView({
   leftStickyScrollEnabled = false,
   rightStickyScrollEnabled = false,
   leftAriaLabel,
+  onLeftReady,
   rightAriaLabel,
 }: {
   leftText: string
@@ -75,6 +76,7 @@ export function DualEditorView({
   monacoTheme?: string
   leftStickyScrollEnabled?: boolean
   rightStickyScrollEnabled?: boolean
+  onLeftReady?: (editor: MonacoEditor.IStandaloneCodeEditor) => (() => void) | void
   leftAriaLabel?: string
   rightAriaLabel?: string
 }) {
@@ -150,6 +152,7 @@ export function DualEditorView({
       rangeDecorations={leftRangeDecorations}
       onChange={onLeftChange}
       onFocus={onLeftFocus}
+      onReady={onLeftReady}
       onScrollChange={syncFrom('left')}
     />
   )

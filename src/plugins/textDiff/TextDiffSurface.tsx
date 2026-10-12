@@ -406,6 +406,11 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
           lineNumbers={appearance.lineNumbers}
           wordWrap={appearance.wordWrap}
           monacoTheme={appearance.theme === 'dark' ? 'flux-vscode-dark' : 'flux-vscode-light'}
+          onLeftReady={(editor) => {
+            const input = editor.getDomNode()?.querySelector('[role="textbox"]')
+            input?.setAttribute('data-plugin-surface-autofocus', '')
+            return () => input?.removeAttribute('data-plugin-surface-autofocus')
+          }}
           leftAriaLabel={t('surface.original')}
           rightAriaLabel={t('surface.modified')}
         />
