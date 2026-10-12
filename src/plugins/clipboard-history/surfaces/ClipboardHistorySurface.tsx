@@ -182,6 +182,26 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const queueStatusEpochRef = useRef(0)
   const queueShortcut = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌃⇧V' : 'Ctrl+Shift+V'
   const queueApi = host.historyPasteQueue
+  const [queueAvailability, setQueueAvailability] = useState<'loading' | 'can-attempt' | 'unsupported' | 'unknown'>('loading')
+  useEffect(() => {
+    if (!queueApi) return
+    let active = true
+    let epoch = 0
+    const owner = host.deliveryFeedbackOwner
+    const refresh = () => {
+      const ticket = ++epoch
+      setQueueAvailability('loading')
+      // Unknown/loading never enables delivery; late replies cannot revive an owner.
+      void queueApi.getAvailability().then((value) => {
+        if (active && ticket === epoch && owner?.isCurrent() !== false) setQueueAvailability(value)
+      }).catch(() => {
+        if (active && ticket === epoch && owner?.isCurrent() !== false) setQueueAvailability('unknown')
+      })
+    }
+    refresh()
+    window.addEventListener('focus', refresh)
+    return () => { active = false; epoch += 1; window.removeEventListener('focus', refresh) }
+  }, [queueApi, host.deliveryFeedbackOwner])
   useEffect(() => {
     if (!queueApi) return
     let active = true
@@ -434,7 +454,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }, [mergeIds, settings.enabled, host, repository, t])
 
   const startQueue = useCallback(async () => {
-    if (!queueApi || queueSubmissionRef.current || compareSubmissionRef.current || mergeSubmissionRef.current || !combining || mergeSuspendedRef.current || mergeIds.length === 0) return
+    if (!queueApi || queueAvailability !== 'can-attempt' || queueSubmissionRef.current || compareSubmissionRef.current || mergeSubmissionRef.current || !combining || mergeSuspendedRef.current || mergeIds.length === 0) return
     const submission = new AbortController()
     queueSubmissionRef.current = submission
     const owner = host.deliveryFeedbackOwner
@@ -443,6 +463,10 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     setQueueBusy(true)
     setQueueNotice(null)
     try {
+      const availability = await queueApi.getAvailability()
+      if (!isCurrent()) return
+      setQueueAvailability(availability)
+      if (availability !== 'can-attempt') throw new Error('QueuePlatformUnavailableError')
       const selection = mergeIds.map((id) => ({ id, hash: mergeItemsRef.current.get(id)?.hash ?? '' }))
       const snapshots = await readClipboardQueueSnapshots(repository, selection, isCurrent)
       if (!isCurrent()) return
@@ -472,7 +496,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         setQueueBusy(false)
       }
     }
-  }, [queueApi, settings.enabled, combining, mergeIds, repository, host, t, queueShortcut])
+  }, [queueApi, queueAvailability, settings.enabled, combining, mergeIds, repository, host, t, queueShortcut])
 
   const cancelQueue = useCallback(async () => {
     if (!queueApi || queueCancelling) return
@@ -1092,11 +1116,12 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }, [selectedItem, selectedId, filteredItems, flatRows, virtualizer, handlePaste, handleReturnToLauncher, handleDelete, handleCopy, host, t, imeKeyDown, combining, cancelMerge, toggleMergeItem, titleDialog, textEdit, toggleQuickFavorite, loading, settings.enabled, filter, legacyDialog])
 
   const queueActive = Boolean(queueStatus && queueStatus.remaining > 0 && (queueStatus.phase === 'ready' || queueStatus.phase === 'failed'))
+  const queueAvailabilityNotice = queueAvailability === 'can-attempt' ? null : t(queueAvailability === 'unsupported' ? 'queue.unsupported' : queueAvailability === 'loading' ? 'queue.checking' : 'queue.unknown')
   const queueReadNotice = queueReadState === 'failed' ? t('queue.statusFailed') : queueReadState === 'loading' ? t('queue.statusLoading') : null
-  const queueFeedback = queueApi && (queueNotice || queueReadNotice || queueActive || queueStatus?.phase === 'completed' || queueStatus?.phase === 'cancelled') ? (
+  const queueFeedback = queueApi && (queueAvailabilityNotice || queueNotice || queueReadNotice || queueActive || queueStatus?.phase === 'completed' || queueStatus?.phase === 'cancelled') ? (
     <div className="clipboard-history-queue-status">
       <span role="status">
-        {queueNotice || queueReadNotice || (queueStatus?.phase === 'cancelled' ? t('queue.cancelled') : queueStatus?.phase === 'completed' ? t('queue.completed') : queueStatus?.phase === 'failed' ? t('queue.failed', { shortcut: queueShortcut, position: (queueStatus?.completed ?? 0) + 1, remaining: queueStatus?.remaining ?? 0 }) : t('queue.progress', {
+        {queueAvailabilityNotice || queueNotice || queueReadNotice || (queueStatus?.phase === 'cancelled' ? t('queue.cancelled') : queueStatus?.phase === 'completed' ? t('queue.completed') : queueStatus?.phase === 'failed' ? t('queue.failed', { shortcut: queueShortcut, position: (queueStatus?.completed ?? 0) + 1, remaining: queueStatus?.remaining ?? 0 }) : t('queue.progress', {
           position: (queueStatus?.completed ?? 0) + 1,
           total: queueStatus?.total ?? 0,
           remaining: queueStatus?.remaining ?? 0,
@@ -1432,7 +1457,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
             <Button type="button" disabled={queueBusy || mergeIds.length !== 2 || compareBusy || mergeLoading || mergeSuspended || !host.compareHistoryTexts} onClick={() => void compareHistory()}>
               {t(compareBusy ? 'compare.loading' : 'compare.action')}
             </Button>
-            {queueApi && <Button type="button" title={t('queue.platformHint')} disabled={queueBusy || queueCancelling || mergeIds.length === 0 || compareBusy || mergeSuspended} onClick={() => void startQueue()}>
+            {queueApi && <Button type="button" title={queueAvailabilityNotice || t('queue.platformHint')} disabled={queueAvailability !== 'can-attempt' || queueBusy || queueCancelling || mergeIds.length === 0 || compareBusy || mergeSuspended} onClick={() => void startQueue()}>
               {t(queueBusy ? 'queue.starting' : queueActive ? 'queue.replace' : 'queue.start')}
             </Button>}
             <Button type="button" variant="primary" disabled={queueBusy || !mergePreview || mergeLoading || compareBusy || mergeSuspended} onClick={() => void copyMerge()}>

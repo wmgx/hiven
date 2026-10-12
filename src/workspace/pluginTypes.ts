@@ -793,6 +793,7 @@ export type HistoryPasteQueueStatus = {
   currentId: string | null
 }
 export type HistoryPasteQueueBridge = {
+  getAvailability(): Promise<'can-attempt' | 'unsupported' | 'unknown'>
   start(snapshots: readonly Readonly<{ id: string; text: string }>[], options?: { signal?: AbortSignal }): Promise<boolean>
   cancel(): Promise<void>
   getStatus(): Promise<HistoryPasteQueueStatus>

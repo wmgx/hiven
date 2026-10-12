@@ -13,6 +13,16 @@ const REQUEST = 'hiven://history-queue-request'
 const REPLY = 'hiven://history-queue-reply'
 const STATUS = 'hiven://history-queue-status'
 const REQUIRED = ['clipboard.write', 'accessibility.paste', 'globalShortcut.register'] as const
+type QueueAvailability = 'can-attempt' | 'unsupported' | 'unknown'
+async function readQueueAvailability(): Promise<QueueAvailability> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      import('@tauri-apps/api/core').then(({ invoke }) => invoke<string>('get_history_queue_availability')).then((value): QueueAvailability => value === 'can-attempt' || value === 'unsupported' ? value : 'unknown'),
+      new Promise<QueueAvailability>((resolve) => { timer = setTimeout(() => resolve('unknown'), 8_000) }),
+    ])
+  } finally { if (timer) clearTimeout(timer) }
+}
 const emptyStatus = (): HistoryPasteQueueStatus => ({ sessionId: '', version: 0, phase: 'idle', busy: false, total: 0, completed: 0, remaining: 0, currentId: null })
 type Snapshot = Readonly<{ id: string; text: string }>
 type Request = { id: string; action: 'start' | 'cancel' | 'status'; items: Snapshot[]; sessionId?: string }
@@ -117,7 +127,7 @@ export function installHistoryPasteQueueHost(options: { notify?: (status: Histor
         try {
         await previousStart
         if (cancelled.has(request.id)) throw new Error('QueueCancelledError')
-        if (await invoke<string>('get_history_queue_availability') !== 'can-attempt') throw new Error('QueuePlatformUnavailableError')
+        if (await readQueueAvailability() !== 'can-attempt') throw new Error('QueuePlatformUnavailableError')
         const snapshots = validateQueueSnapshots(request.items)
         const requestedGeneration = ++generation
         const requestedDefinition = pluginRegistry.getPluginDefinition(TARGET.pluginId, 'production')
@@ -220,7 +230,33 @@ export function createHistoryPasteQueueBridge(options: {
       }).catch(() => finish(undefined, new Error('QueueUnavailableError')))
     })
   }
+  const getAvailability = async (): Promise<'can-attempt' | 'unsupported' | 'unknown'> => {
+    check()
+    return new Promise((resolve, reject) => {
+      let finished = false
+      let stopOwner = () => {}
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const finish = (value?: 'can-attempt' | 'unsupported' | 'unknown', error?: Error) => {
+        if (finished) return
+        finished = true
+        if (timer) clearTimeout(timer)
+        stopOwner()
+        if (error) reject(error); else resolve(value ?? 'unknown')
+      }
+      stopOwner = options.subscribeInvalidation?.(() => finish(undefined, new Error('QueueCancelledError'))) ?? (() => {})
+      if (finished) { stopOwner(); return }
+      timer = setTimeout(() => finish('unknown'), 8_000)
+      void Promise.resolve().then(async () => {
+        if (finished) return
+        check()
+        const value = await readQueueAvailability()
+        check() // A late result cannot authorize a replaced surface owner.
+        finish(value === 'can-attempt' || value === 'unsupported' ? value : 'unknown')
+      }).catch(() => finish(undefined, new Error('QueueUnavailableError')))
+    })
+  }
   return {
+    getAvailability,
     async start(snapshots, options) {
       check()
       const validated = validateQueueSnapshots(snapshots)

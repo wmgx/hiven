@@ -154,11 +154,12 @@ pub(crate) async fn paste_history_queue_text(app: tauri::AppHandle, window: taur
 }
 
 #[tauri::command]
-pub(crate) fn get_history_queue_availability() -> &'static str {
+pub(crate) fn get_history_queue_availability(window: tauri::WebviewWindow) -> Result<&'static str, String> {
+    if !["launcher", HISTORY].contains(&window.label()) { return Err("QueueUnavailableError".into()); }
     #[cfg(target_os = "linux")]
-    { if crate::linux_x11_paste::can_attempt() { "can-attempt" } else { "unsupported" } }
+    { Ok(if crate::linux_x11_paste::can_attempt() { "can-attempt" } else { "unsupported" }) }
     #[cfg(not(target_os = "linux"))]
-    { "unsupported" }
+    { Ok("unsupported") }
 }
 
 #[cfg(test)]

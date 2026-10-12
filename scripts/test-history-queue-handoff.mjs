@@ -41,7 +41,7 @@ function fixture(recordingEnabled = true) {
       else if (command === 'history_queue_take') { const request = requests.get(args.id); requests.delete(args.id); return request }
       else if (command === 'history_queue_reply') { if (h.replyGate) await h.replyGate.promise; emit('hiven://history-queue-reply', args) }
       else if (command === 'history_queue_publish') emit('hiven://history-queue-status', args.status)
-      else if (command === 'get_history_queue_availability') return 'can-attempt'
+      else if (command === 'get_history_queue_availability') return h.availabilityGate ? h.availabilityGate.promise : (h.availability ?? 'can-attempt')
       else if (command === 'begin_history_queue_paste') return h.beginGate ? h.beginGate.promise : 'attempt'
       else if (command === 'paste_history_queue_text') { if (h.pasteGate) await h.pasteGate.promise; if (h.failPaste) throw new Error('synthetic failure') }
       else if (command !== 'cancel_paste_attempt') throw new Error(`Unexpected command ${command}`)
@@ -176,6 +176,44 @@ const original = [{ id: 'a', text: '完整\r\n  synthetic A\n' }, { id: 'b', tex
 {
   const h = fixture(); await flush(); h.revoke()
   await assert.rejects(h.bridge.getStatus(), /QueueUnavailableError/, 'A rejected status request must not masquerade as a successful idle read')
+  h.stop()
+}
+{
+  const h = fixture(); await flush()
+  assert.equal(await h.bridge.getAvailability(), 'can-attempt')
+  h.availability = 'unsupported'
+  assert.equal(await h.bridge.getAvailability(), 'unsupported')
+  await assert.rejects(h.bridge.start(original), /QueuePlatformUnavailableError/)
+  assert.equal((await h.bridge.getStatus()).remaining, 0)
+  assert.equal(h.calls.some(({ command }) => command === 'begin_history_queue_paste'), false)
+  h.availability = 'unexpected-native-value'
+  assert.equal(await h.bridge.getAvailability(), 'unknown')
+  const foreign = h.createBridge({ source: 'installed' })
+  await assert.rejects(foreign.getAvailability(), /QueueUnavailableError/)
+  let current = true, invalidate = () => {}
+  const old = h.createBridge({ isCurrent: () => current, subscribeInvalidation: (fn) => { invalidate = fn; return () => {} } })
+  const gate = deferred(); h.availabilityGate = gate
+  const pending = old.getAvailability()
+  const rejected = assert.rejects(pending, /QueueCancelledError/)
+  await flush(); current = false; invalidate(); await rejected
+  gate.resolve('can-attempt'); await flush()
+  h.availabilityGate = deferred()
+  const timed = h.bridge.getAvailability(); await flush(); h.expire()
+  assert.equal(await timed, 'unknown', 'Timeout must never authorize queue start')
+  h.availabilityGate.resolve('can-attempt'); await flush()
+  h.stop()
+}
+{
+  const h = fixture(); await flush()
+  const gate = deferred(); h.availabilityGate = gate
+  const pending = h.bridge.start(original)
+  const rejected = assert.rejects(pending, /QueueCancelledError|QueuePlatformUnavailableError/)
+  await flush(); h.expire(); await rejected; await flush()
+  h.availabilityGate = null
+  await h.bridge.start(original)
+  assert.equal((await h.bridge.getStatus()).remaining, 2, 'A timed-out preflight cannot block the next start lane')
+  gate.resolve('can-attempt'); await flush()
+  assert.equal((await h.bridge.getStatus()).remaining, 2)
   h.stop()
 }
 console.log('History queue handoff passed: explicit delivery, full snapshots, failure retry, cancellation, replacement fence and revocation')
