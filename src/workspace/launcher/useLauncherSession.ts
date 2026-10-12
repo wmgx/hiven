@@ -1,10 +1,11 @@
 import { getSuggestionSession, recordSuggestionSuccess } from './contextSuggestionsStore'
 import { captureLauncherPasteOwner, checkPendingPasteRecovery } from '../pasteRecovery'
-import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type MutableRefObject } from 'react'
 import { makePluginT } from '../../i18n/pluginI18nRegistry'
 import { translate } from '../../i18n'
 import { detectContent } from '../../kits/content'
 import { useAppStore } from '../../store'
+import { subscribeDesktopTargets, getDesktopTargetsVersion } from '../desktopTargets/registry'
 import { pluginRegistry, usePluginRegistryVersion } from '../pluginRegistry'
 import { resolvePluginSettings, usePluginSettingsStore } from '../pluginSettingsStore'
 import type { ContributionSource } from '../pluginTypes'
@@ -136,7 +137,7 @@ function useFrameBatchedLauncherItems() {
     inputIdentity: null,
     items: [],
   })
-  const pendingRef = useRef<{ inputIdentity: string | null; items: LauncherItem[] } | null>(null)
+  const pendingRef = useRef<{ inputIdentity: string | null; items: LauncherItem[]; isCurrent?: () => boolean } | null>(null)
   const frameRef = useRef<number | null>(null)
 
   const apply = useCallback((items: LauncherItem[], inputIdentity: string | null) => {
@@ -158,14 +159,14 @@ function useFrameBatchedLauncherItems() {
     apply(items, inputIdentity)
   }, [apply])
 
-  const setItemsNextFrame = useCallback((items: LauncherItem[], inputIdentity: string) => {
-    pendingRef.current = { inputIdentity, items }
+  const setItemsNextFrame = useCallback((items: LauncherItem[], inputIdentity: string, isCurrent?: () => boolean) => {
+    pendingRef.current = { inputIdentity, items, isCurrent }
     if (frameRef.current !== null) return
     frameRef.current = requestAnimationFrame(() => {
       frameRef.current = null
       const pending = pendingRef.current
       pendingRef.current = null
-      if (pending) apply(pending.items, pending.inputIdentity)
+      if (pending && (!pending.isCurrent || pending.isCurrent())) apply(pending.items, pending.inputIdentity)
     })
   }, [apply])
 
@@ -203,6 +204,7 @@ export function useLauncherSession({
   const recordPersistableLauncherSelection = useAppStore((s) => s.recordPersistableLauncherSelection)
   const rankingNow = useMemo(() => Date.now(), [open])
   const pluginRegistryVersion = usePluginRegistryVersion()
+  const desktopTargetsVersion = useSyncExternalStore(subscribeDesktopTargets, getDesktopTargetsVersion)
   // toolsFor and launcher.itemsFor depend on live settings; recollect after edits.
   const pluginSettings = usePluginSettingsStore((s) => s.pluginSettings)
   const pluginPermissions = usePluginPermissionStore((s) => s.permissions)
@@ -616,7 +618,7 @@ export function useLauncherSession({
           if (hostQueryRef.current !== q) return
           if (update.kind !== 'host') return
           const applyStartedAt = launcherPerfNow()
-          setHostDynamicItemsNextFrame(filterDynamicForSurface(update.items, normalizedHostId), inputIdentity)
+          setHostDynamicItemsNextFrame(filterDynamicForSurface(update.items, normalizedHostId), inputIdentity, () => !abortController.signal.aborted)
           logLauncherPerfDuration('session:host-dynamic-partial-apply', applyStartedAt, {
             itemCount: update.items.length,
           })
@@ -637,7 +639,7 @@ export function useLauncherSession({
       window.clearTimeout(timer)
       hostAbortRef.current?.abort()
     }
-  }, [appSearchAliases, collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open, query, pluginRegistryVersion, pluginPermissions])
+  }, [appSearchAliases, collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open, query, pluginRegistryVersion, pluginPermissions, desktopTargetsVersion])
 
   // ── Remote document Desktop Targets (feishu.docs, …) — progressive, slow debounce ──
   useEffect(() => {

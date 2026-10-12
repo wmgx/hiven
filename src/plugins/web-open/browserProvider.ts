@@ -1,3 +1,4 @@
+import { createBrowserIndexRefresh } from './browserIndexRefresh'
 import { browserUrlPresentation } from './browserUrlPresentation'
 /**
  * browser.chromium DesktopTargetProvider — implemented via host SDK only
@@ -52,28 +53,15 @@ const HISTORY_SCORE_BIAS = -160
  */
 const HISTORY_RANK_STEP_BIAS = 4
 
-let cachedBrowserTargets: DesktopBridgeTargetDto[] = []
-let cachedBrowserHistory: DesktopBridgeHistoryDto[] = []
-let cachedBrowserHealthy = false
-let configuredHistorySearchDays: BrowserTabsSettings['historySearchDays'] = 5
-
-/** Refresh off the query path; launcher filtering reads these arrays only. */
-export async function refreshChromiumBrowserIndex(): Promise<void> {
-  const { bridge } = getPluginHostSdk().desktopTargets
-  try {
-    const [status, targets, history] = await Promise.all([
-      bridge.status(),
-      bridge.listTargets(CHROMIUM_SOURCE_ID),
-      bridge.listHistory(CHROMIUM_SOURCE_ID),
-    ])
-    cachedBrowserTargets = targets
-    cachedBrowserHistory = history
-    const source = status?.sources.find((item) => item.sourceId === CHROMIUM_SOURCE_ID)
-    cachedBrowserHealthy = Boolean(status?.running && (source?.fresh || (source?.historyCount ?? 0) > 0))
-  } catch {
-    // Keep the last usable index while the extension is disconnected.
-  }
+type BrowserIndex = {
+  targets: DesktopBridgeTargetDto[]
+  history: DesktopBridgeHistoryDto[]
+  healthy: boolean
+  active: boolean
+  listeners: Set<() => void>
 }
+let configuredHistorySearchDays: BrowserTabsSettings['historySearchDays'] = 5
+let currentRegistration: { stop: () => void } | undefined
 
 function nativeIdFromTargetId(sourceId: string, kind: string, id: string): string {
   const prefix = `${sourceId}:${kind}:`
@@ -112,9 +100,9 @@ function compactHistoryUrl(rawUrl: string): string {
  * a tab carries no visit stats of its own. Thin, stale, and unknown tabs remain
  * searchable but do not become passive recommendations just because they're open.
  */
-async function buildEmptyOpenTargets() {
-  const tabs = cachedBrowserTargets
-  const history = cachedBrowserHistory
+async function buildEmptyOpenTargets(index: BrowserIndex) {
+  const tabs = index.targets
+  const history = index.history
   if (tabs.length === 0) return []
 
   const statsByUrl = new Map<
@@ -185,25 +173,29 @@ async function buildEmptyOpenTargets() {
   })
 }
 
-export function createChromiumTabsProvider(): DesktopTargetProvider {
+function createChromiumTabsProvider(index: BrowserIndex): DesktopTargetProvider {
   return {
     id: CHROMIUM_SOURCE_ID,
     title: 'Browser Tabs',
     titleI18n: { en: 'Browser Tabs', zh: '浏览器标签' },
     priority: 10,
+    subscribe(listener) {
+      index.listeners.add(listener)
+      return () => { index.listeners.delete(listener) }
+    },
     async health() {
-      return cachedBrowserHealthy
+      return index.active && index.healthy
         ? { ok: true }
         : { ok: false, reason: 'extension not connected' }
     },
     async list(ctx) {
-      if (ctx.surfaceId !== 'global-launcher') return []
+      if (!index.active || ctx.surfaceId !== 'global-launcher') return []
       const q = ctx.query.trim()
       // Empty open: surface the pages worth returning to, ranked by how you
       // actually use them (see buildEmptyOpenTargets).
-      if (!q) return buildEmptyOpenTargets()
+      if (!q) return buildEmptyOpenTargets(index)
 
-      const raw = cachedBrowserTargets
+      const raw = index.targets
       // When the query is a link already open in the browser, focus that tab
       // (primary) instead of opening a duplicate. Precise page identity, not a
       // fuzzy substring; the identity hit is kept + surfaced first regardless of
@@ -258,8 +250,8 @@ export function createChromiumTabsProvider(): DesktopTargetProvider {
 
       const historySearchDays = configuredHistorySearchDays
       const history = historySearchDays === 'all'
-        ? cachedBrowserHistory
-        : cachedBrowserHistory.filter((item) =>
+        ? index.history
+        : index.history.filter((item) =>
             item.lastVisitTime == null ||
             item.lastVisitTime >= Date.now() - historySearchDays * 24 * 60 * 60 * 1000,
           )
@@ -364,13 +356,43 @@ export function createChromiumTabsProvider(): DesktopTargetProvider {
   }
 }
 
-export function registerChromiumTabsProvider(): void {
-  getPluginHostSdk().desktopTargets.registerProvider(createChromiumTabsProvider())
-  void refreshChromiumBrowserIndex()
-}
-
-export function unregisterChromiumTabsProvider(): void {
-  getPluginHostSdk().desktopTargets.unregisterProvider(CHROMIUM_SOURCE_ID)
+/** Registration owns the cache and all outstanding refresh receipts. */
+export function registerChromiumTabsProvider() {
+  currentRegistration?.stop()
+  const index: BrowserIndex = { targets: [], history: [], healthy: false, active: true, listeners: new Set() }
+  const { desktopTargets } = getPluginHostSdk()
+  const refresh = createBrowserIndexRefresh(async () => {
+    desktopTargets.bridge.invalidateCache()
+    const [status, targets, history] = await Promise.all([
+      desktopTargets.bridge.status(),
+      desktopTargets.bridge.listTargets(CHROMIUM_SOURCE_ID),
+      desktopTargets.bridge.listHistory(CHROMIUM_SOURCE_ID),
+    ])
+    const source = status?.sources.find((item) => item.sourceId === CHROMIUM_SOURCE_ID)
+    return { targets, history, healthy: Boolean(status?.running && (source?.fresh || (source?.historyCount ?? 0) > 0)) }
+  }, (next) => {
+    if (!index.active) return
+    const changed = index.healthy !== next.healthy ||
+      JSON.stringify(index.targets) !== JSON.stringify(next.targets) ||
+      JSON.stringify(index.history) !== JSON.stringify(next.history)
+    Object.assign(index, next)
+    if (changed) for (const listener of index.listeners) listener()
+  })
+  const registration = {
+    refresh: refresh.request,
+    stop() {
+      index.active = false
+      refresh.stop()
+      if (currentRegistration === registration) {
+        currentRegistration = undefined
+        desktopTargets.unregisterProvider(CHROMIUM_SOURCE_ID)
+      }
+      index.listeners.clear()
+    },
+  }
+  currentRegistration = registration
+  desktopTargets.registerProvider(createChromiumTabsProvider(index))
+  return registration
 }
 
 export function pushChromiumBridgeConfig(settings: Partial<BrowserTabsSettings> | null | undefined): void {

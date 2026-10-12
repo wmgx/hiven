@@ -29,6 +29,7 @@ type BackgroundInstance = {
   source: PluginSettingsSource
   pluginId: string
   stop: PluginBackgroundStop | null
+  controller: AbortController
 }
 
 const activeBackgrounds = new Map<string, BackgroundInstance>()
@@ -43,12 +44,14 @@ function buildBackgroundContext(
   settings: unknown,
   requestedPermissions: readonly PluginPermission[],
   isCurrent: () => boolean,
+  signal: AbortSignal,
 ): PluginBackgroundContext<unknown> {
   const locale = useAppStore.getState().locale
   const permissions = getPluginPermissionSnapshot(source, pluginId, requestedPermissions)
   const storage = createPluginPrivateStorage(source, pluginId, permissions)
 
   return {
+    signal,
     pluginId,
     locale,
     settings,
@@ -76,8 +79,9 @@ async function startBackground(
   // Claim the slot before awaiting: a later disable/restart invalidates this start.
   const key = backgroundKey(source, pluginId)
   const previous = activeBackgrounds.get(key)
-  const instance: BackgroundInstance = { key, source, pluginId, stop: null }
+  const instance: BackgroundInstance = { key, source, pluginId, stop: null, controller: new AbortController() }
   activeBackgrounds.set(key, instance)
+  previous?.controller.abort()
   try {
     const stopping = Promise.resolve(previous?.stop?.())
     instance.stop = () => stopping
@@ -97,7 +101,7 @@ async function startBackground(
     return
   }
 
-  const ctx = buildBackgroundContext(source, pluginId, settings, requestedPermissions, () => activeBackgrounds.get(key) === instance)
+  const ctx = buildBackgroundContext(source, pluginId, settings, requestedPermissions, () => activeBackgrounds.get(key) === instance, instance.controller.signal)
 
   try {
     const stopFn = await background.start(ctx)
@@ -108,6 +112,7 @@ async function startBackground(
     instance.stop = stopFn ?? null
   } catch (error) {
     if (activeBackgrounds.get(key) === instance) activeBackgrounds.delete(key)
+    instance.controller.abort()
     console.error(`[background] Failed to start background for plugin "${pluginId}":`, error)
   }
 }
@@ -117,6 +122,7 @@ async function stopBackground(source: PluginSettingsSource, pluginId: string): P
   const instance = activeBackgrounds.get(key)
   if (!instance) return
   activeBackgrounds.delete(key)
+  instance.controller.abort()
 
   try {
     if (instance.stop) {

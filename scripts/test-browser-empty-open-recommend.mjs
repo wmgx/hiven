@@ -33,7 +33,7 @@ const collect = readFileSync(
   )
   assert.match(
     src,
-    /if \(!q\) return buildEmptyOpenTargets\(\)/,
+    /if \(!q\) return buildEmptyOpenTargets\(index\)/,
     'empty open delegates to the recommendation builder',
   )
 }

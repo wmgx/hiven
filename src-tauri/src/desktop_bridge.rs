@@ -14,6 +14,7 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::Emitter;
 
+const BROWSER_BRIDGE_SNAPSHOT_EVENT: &str = "hiven://browser-bridge-snapshot";
 const BROWSER_BRIDGE_EVENTS_EVENT: &str = "hiven://browser-bridge-events";
 static APP_HANDLE: OnceLock<tauri::AppHandle> = OnceLock::new();
 
@@ -32,7 +33,7 @@ const MAX_HTTP_BODY_BYTES: usize = 2 * 1024 * 1024;
 // Validation relays JSON-encoded byte arrays; a permitted 10 MB image can expand to ~40 MB.
 const MAX_VALIDATION_RESULT_BODY_BYTES: usize = 64 * 1024 * 1024;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BridgeTarget {
     pub id: String,
@@ -691,15 +692,25 @@ fn apply_snapshot(source_id: &str, body: &str) -> Result<(u16, String), String> 
         .lock()
         .map_err(|_| "bridge lock poisoned".to_string())?;
     let entry = guard.sources.entry(source_id.to_string()).or_default();
+    let changed = entry.targets != targets || !is_fresh(entry.last_seen);
     entry.targets = targets;
     entry.last_seen = Some(Instant::now());
     if parsed.app_name.is_some() {
         entry.app_name = parsed.app_name;
     }
-    Ok((
-        200,
-        serde_json::json!({ "ok": true, "count": entry.targets.len() }).to_string(),
-    ))
+    let count = entry.targets.len();
+    drop(guard);
+    // Invalidation only: snapshots include reconnects and removals without page events.
+    // Never copy tab content into this notification or emit while holding the state lock.
+    if changed {
+        if let Some(app_handle) = APP_HANDLE.get() {
+            let _ = app_handle.emit(
+                BROWSER_BRIDGE_SNAPSHOT_EVENT,
+                serde_json::json!({ "sourceId": source_id }),
+            );
+        }
+    }
+    Ok((200, serde_json::json!({ "ok": true, "count": count }).to_string()))
 }
 
 fn take_commands(source_id: &str) -> Result<(u16, String), String> {

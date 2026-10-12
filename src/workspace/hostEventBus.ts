@@ -10,6 +10,7 @@ export type HivenEvent<TType extends string, TPayload> = {
 }
 
 export type HivenHostEvents = {
+  'browser.snapshot': HivenEvent<'browser.snapshot', Record<string, never>>
   'browser.opened': HivenEvent<'browser.opened', BrowserEventPayload>
   'browser.activated': HivenEvent<'browser.activated', BrowserEventPayload>
 }
@@ -35,7 +36,7 @@ function isTauriRuntime(): boolean {
 function publishBrowserEvent(
   type: keyof HivenHostEvents,
   sourceId: string,
-  payload: BrowserEventPayload,
+  payload: BrowserEventPayload | Record<string, never>,
 ): void {
   const event = {
     type,
@@ -49,13 +50,24 @@ function publishBrowserEvent(
 function ensureNativeListener(): Promise<void> {
   if (!isTauriRuntime()) return Promise.resolve()
   nativeListener ??= import('@tauri-apps/api/event').then(async ({ listen }) => {
-    await listen<NativeBrowserBridgeBatch>('hiven://browser-bridge-events', ({ payload }) => {
-      if (!payload?.sourceId || !Array.isArray(payload.events)) return
-      for (const { type, sourceId: _sourceId, ...event } of payload.events) {
-        if (type === 'tab.opened') publishBrowserEvent('browser.opened', payload.sourceId, event)
-        if (type === 'tab.activated') publishBrowserEvent('browser.activated', payload.sourceId, event)
-      }
+    const stopSnapshot = await listen<{ sourceId?: string }>('hiven://browser-bridge-snapshot', ({ payload }) => {
+      if (payload?.sourceId) publishBrowserEvent('browser.snapshot', payload.sourceId, {})
     })
+    try {
+      await listen<NativeBrowserBridgeBatch>('hiven://browser-bridge-events', ({ payload }) => {
+        if (!payload?.sourceId || !Array.isArray(payload.events)) return
+        for (const { type, sourceId: _sourceId, ...event } of payload.events) {
+          if (type === 'tab.opened') publishBrowserEvent('browser.opened', payload.sourceId, event)
+          if (type === 'tab.activated') publishBrowserEvent('browser.activated', payload.sourceId, event)
+        }
+      })
+    } catch (error) {
+      stopSnapshot()
+      throw error
+    }
+  }).catch((error) => {
+    nativeListener = null
+    throw error
   })
   return nativeListener
 }
@@ -65,7 +77,12 @@ export const hivenEventBus: HivenEventBusApi = {
     const bucket = listeners.get(type) ?? new Set()
     bucket.add(listener as (event: never) => void)
     listeners.set(type, bucket)
-    await ensureNativeListener()
+    try {
+      await ensureNativeListener()
+    } catch (error) {
+      bucket.delete(listener as (event: never) => void)
+      throw error
+    }
     return () => bucket.delete(listener as (event: never) => void)
   },
 }

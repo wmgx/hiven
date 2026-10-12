@@ -17,16 +17,41 @@ import type {
 
 const providers = new Map<DesktopTargetSourceId, DesktopTargetProvider>()
 
+const providerSubscriptions = new Map<DesktopTargetSourceId, () => void>()
+const changeListeners = new Set<() => void>()
+let targetsVersion = 0
+function targetsChanged(): void {
+  ++targetsVersion
+  for (const listener of changeListeners) listener()
+}
+export const getDesktopTargetsVersion = () => targetsVersion
+export function subscribeDesktopTargets(listener: () => void): () => void {
+  changeListeners.add(listener)
+  return () => { changeListeners.delete(listener) }
+}
+
 export function registerDesktopTargetProvider(provider: DesktopTargetProvider): void {
+  providerSubscriptions.get(provider.id)?.()
+  providerSubscriptions.delete(provider.id)
   providers.set(provider.id, provider)
+  const stop = provider.subscribe?.(() => {
+    if (providers.get(provider.id) === provider) targetsChanged()
+  })
+  if (stop) providerSubscriptions.set(provider.id, stop)
+  targetsChanged()
 }
 
 export function unregisterDesktopTargetProvider(id: DesktopTargetSourceId): void {
-  providers.delete(id)
+  providerSubscriptions.get(id)?.()
+  providerSubscriptions.delete(id)
+  if (providers.delete(id)) targetsChanged()
 }
 
 export function clearDesktopTargetProviders(): void {
+  for (const stop of providerSubscriptions.values()) stop()
+  providerSubscriptions.clear()
   providers.clear()
+  targetsChanged()
 }
 
 export function listDesktopTargetProviders(): DesktopTargetProvider[] {

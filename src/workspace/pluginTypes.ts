@@ -921,6 +921,8 @@ export type PluginUiContribution<TSettings = unknown> = {
 export type PluginBackgroundStop = () => void | Promise<void>
 
 export type PluginBackgroundContext<TSettings = unknown> = {
+  /** Aborted synchronously on stop/replacement, including while start is awaiting. */
+  signal: AbortSignal
   pluginId: string
   locale: Locale
   settings: TSettings

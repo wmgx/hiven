@@ -46,7 +46,7 @@ export function settingsWindow(storage, { backgrounds = false } = {}) {
     },
     removeEventListener: (type, listener) => events.get(type)?.delete(listener),
   }
-  const context = createContext({ window, localStorage: storage, console, fetch: forbidden, TextEncoder })
+  const context = createContext({ window, localStorage: storage, console, fetch: forbidden, TextEncoder, AbortController, setInterval: () => 1, clearInterval: () => {} })
   function load(file) {
     if (mocks.has(file)) return mocks.get(file)
     if (modules.has(file)) return modules.get(file).exports
@@ -87,7 +87,7 @@ export function settingsWindow(storage, { backgrounds = false } = {}) {
       return () => { counts.stops++; if (changeHandler === handler) changeHandler = undefined }
     } }),
   })
-  mocks.set(path('src/workspace/toast.ts'), { showToast: forbidden })
+  mocks.set(path('src/workspace/toast.ts'), { showToast: () => {} })
   mocks.set(path('src/i18n/pluginI18nRegistry.ts'), { makePluginT: () => (key) => key })
   mocks.set(path('src/plugins/clipboard-history/storage/clipboardHistoryRepository.ts'), {
     createClipboardHistoryRepository: () => ({

@@ -111,6 +111,8 @@ export type DesktopTargetProvider = {
   listTimeoutMs?: number
   list(ctx: DesktopTargetQueryContext): Promise<DesktopTarget[]> | DesktopTarget[]
   activate?(target: DesktopTarget, ctx: DesktopTargetActivateContext): Promise<void>
+  /** Notify when cached results change; callbacks must not perform query-time I/O. */
+  subscribe?(listener: () => void): () => void
   health?(): Promise<{ ok: boolean; reason?: string }>
 }
 

@@ -74,6 +74,7 @@ export type DesktopBridgeSourceConfig = {
   idleTimeoutMinutes: number
 }
 
+let listGeneration = 0
 const LIST_TTL_MS = 1500
 let listCache: { fetchedAt: number; sourceId: string | null; targets: DesktopBridgeTargetDto[] } | null = null
 
@@ -97,11 +98,12 @@ export async function listDesktopBridgeTargets(sourceId?: string): Promise<Deskt
   if (listCache && listCache.sourceId === key && now - listCache.fetchedAt < LIST_TTL_MS) {
     return listCache.targets
   }
+  const generation = listGeneration
   try {
     const targets = await invoke<DesktopBridgeTargetDto[]>('list_desktop_bridge_targets', {
       sourceId: sourceId ?? null,
     })
-    listCache = { fetchedAt: now, sourceId: key, targets }
+    if (generation === listGeneration) listCache = { fetchedAt: now, sourceId: key, targets }
     return targets
   } catch {
     return []
@@ -251,5 +253,6 @@ export function filterBridgeTargets(
 
 /** Invalidate list cache (e.g. after activate). */
 export function invalidateDesktopBridgeListCache(): void {
+  ++listGeneration
   listCache = null
 }

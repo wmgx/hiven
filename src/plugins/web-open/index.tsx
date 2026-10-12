@@ -42,25 +42,11 @@ import {
 import {
   CHROMIUM_SOURCE_ID,
   pushChromiumBridgeConfig,
-  refreshChromiumBrowserIndex,
   registerChromiumTabsProvider,
-  unregisterChromiumTabsProvider,
 } from './browserProvider'
 import { normalizeBrowserTabsSettings } from './browserTabsModel'
 import { BrowserTabsConnectionModal } from './settings/BrowserTabsConnectionModal'
 
-/**
- * Apply the optional live-browser capability from merged settings: register the
- * Chromium tab/history/focus provider and push extension config. Gated on
- * settings.browser.enabled; a no-op-safe path when no extension/bridge is present
- * (the provider's health() simply reports not-connected).
- */
-function applyBrowserCapability(settings: WebQuickOpenSettings): void {
-  const browser = normalizeBrowserTabsSettings(settings.browser)
-  if (browser.enabled) registerChromiumTabsProvider()
-  else unregisterChromiumTabsProvider()
-  pushChromiumBridgeConfig(browser)
-}
 
 function resolveEntryHistoryLimit(entry: WebQuickOpenEntry): number {
   return clampMaxQueryHistory(entry.maxQueryHistory ?? DEFAULT_MAX_QUERY_HISTORY)
@@ -382,27 +368,50 @@ function migrateWebQuickOpenSettings(stored: unknown): WebQuickOpenSettings {
 export default definePlugin<WebQuickOpenSettings>({
   background: {
     async start(ctx) {
-      let refreshTimer: ReturnType<typeof setTimeout> | undefined
-      const scheduleRefresh = () => {
-        if (refreshTimer) clearTimeout(refreshTimer)
-        refreshTimer = setTimeout(() => void refreshChromiumBrowserIndex(), 2_000)
+      const browser = normalizeBrowserTabsSettings(ctx.settings.browser)
+      pushChromiumBridgeConfig(browser)
+      if (!ctx.settings.enabled || !browser.enabled) return
+      if (ctx.signal.aborted) return
+      const index = registerChromiumTabsProvider()
+      const stops: Array<() => void> = []
+      let stopped = false
+      const stop = () => {
+        if (stopped) return
+        stopped = true
+        ctx.signal.removeEventListener('abort', stop)
+        for (const unsubscribe of stops) unsubscribe()
+        index.stop()
       }
-      const stopOpened = await getPluginHostSdk().events.subscribe('browser.opened', (event) => {
-        if (event.source.channel !== CHROMIUM_SOURCE_ID || !event.payload.url) return
-        void importBrowserQueryHistory(ctx.storage, ctx.settings.entries, [{
-          url: event.payload.url,
-          lastVisitTime: event.payload.ts,
-        }])
-        scheduleRefresh()
-      })
-      const stopActivated = await getPluginHostSdk().events.subscribe('browser.activated', (event) => {
-        if (event.source.channel === CHROMIUM_SOURCE_ID) scheduleRefresh()
-      })
-      return () => {
-        stopOpened()
-        stopActivated()
-        if (refreshTimer) clearTimeout(refreshTimer)
+      ctx.signal.addEventListener('abort', stop, { once: true })
+      const keep = (unsubscribe: () => void) => {
+        if (stopped) unsubscribe()
+        else stops.push(unsubscribe)
       }
+      try {
+        const events = getPluginHostSdk().events
+        keep(await events.subscribe('browser.snapshot', (event) => {
+          if (!stopped && event.source.channel === CHROMIUM_SOURCE_ID) index.refresh()
+        }))
+        if (stopped) return stop
+        keep(await events.subscribe('browser.opened', (event) => {
+          if (stopped || event.source.channel !== CHROMIUM_SOURCE_ID || !event.payload.url) return
+          void importBrowserQueryHistory(ctx.storage, ctx.settings.entries, [{
+            url: event.payload.url,
+            lastVisitTime: event.payload.ts,
+          }])
+          index.refresh()
+        }))
+        if (stopped) return stop
+        keep(await events.subscribe('browser.activated', (event) => {
+          if (!stopped && event.source.channel === CHROMIUM_SOURCE_ID) index.refresh()
+        }))
+        // Subscribe first, then read: a snapshot arriving during setup is not lost.
+        if (!stopped) index.refresh()
+      } catch (error) {
+        stop()
+        throw error
+      }
+      return stop
     },
   },
   hooks: {
@@ -410,7 +419,6 @@ export default definePlugin<WebQuickOpenSettings>({
     startup(ctx) {
       const settings = (ctx.settings as WebQuickOpenSettings | undefined) ?? DEFAULT_WEB_QUICK_OPEN_SETTINGS
       scheduleWarmFavicons(settings, ctx.storage, ctx.source, ctx.pluginId, ctx.network)
-      applyBrowserCapability(settings)
     },
   },
 
@@ -425,7 +433,6 @@ export default definePlugin<WebQuickOpenSettings>({
     onChange(ctx) {
       const settings = ctx.value ?? DEFAULT_WEB_QUICK_OPEN_SETTINGS
       scheduleWarmFavicons(settings, ctx.storage, ctx.source, ctx.pluginId, ctx.network)
-      applyBrowserCapability(settings)
     },
     modals: [
       {
