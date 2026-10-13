@@ -1,10 +1,13 @@
 #!/usr/bin/env npx tsx
 import assert from 'node:assert/strict'
+import { joinClipboardTexts } from '../src/plugins/clipboard-history/merge/clipboardTextMerge.ts'
 import {
   applyTransforms,
   applyTableQuery,
   detectInputKind,
   parseSource,
+  parseDelimited,
+  parseDelimitedAsync,
   processFullSource,
   toOutput,
   type OutputMode,
@@ -18,6 +21,48 @@ import {
 
 function table(headers: string[], rows: string[][]): Table {
   return { headers, rows }
+}
+
+// Explicit quoted empty records carry data; unquoted blank lines keep their old semantics.
+{
+  for (const ending of ['', '\r\n']) {
+    const source = 'text\r\n""\r\n"x"\r\n""' + ending
+    const expected = [['text'], [''], ['x'], ['']]
+    assert.deepEqual(parseDelimited(source, ','), expected)
+    assert.deepEqual(await parseDelimitedAsync(source, ','), expected)
+    assert.deepEqual(parseDelimited(source, ',', { maxRows: 2 }), expected.slice(0, 2))
+    assert.deepEqual(parseDelimited(source, ',', { maxRows: 4 }), expected)
+  }
+  for (const source of ['""', '""\n', '""\n\n']) {
+    assert.deepEqual(parseDelimited(source, ','), [['']])
+    assert.deepEqual(await parseDelimitedAsync(source, ','), [['']])
+  }
+  for (const [source, expected] of [
+    ['', []], ['\n', []], ['text\n\nx\n\n', [['text'], ['x']]],
+    ['text\n \n', [['text'], [' ']]],
+  ] as [string, string[][]][]) {
+    assert.deepEqual(parseDelimited(source, ','), expected)
+    assert.deepEqual(await parseDelimitedAsync(source, ','), expected)
+  }
+}
+
+// History's structured merge preserves each complete item through the real CSV pipeline.
+{
+  const texts = ['跨行\n中文', 'comma, and "quotes"', '  首尾空白  ', '', '001', '=literal', '']
+  const source = joinClipboardTexts(texts, 'csv')
+  const expected = texts.map(text => ({ text }))
+  const parsed = parseSource(source, 'auto', 'auto')
+  assert.equal(parsed.ok, true)
+  if (parsed.ok) {
+    assert.deepEqual(parsed.table, table(['text'], texts.map(text => [text])))
+    assert.deepEqual(JSON.parse(toOutput(parsed.table, 'objects')), expected)
+  }
+  const full = await processFullSource(source, {
+    delimiter: 'auto', header: 'auto', output: 'objects',
+    transforms: { dropEmpty: false, dedupe: false, transpose: false },
+  })
+  assert.equal(full.rowCount, texts.length)
+  assert.deepEqual(JSON.parse(full.output), expected)
 }
 
 // ─── quoted comma ───────────────────────────────────────────────────────────

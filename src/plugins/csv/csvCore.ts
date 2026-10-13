@@ -155,6 +155,8 @@ export function parseDelimited(text: string, delimiter: string, limits?: ParseLi
   let row: string[] = []
   let field = ''
   let inQuotes = false
+  let rowHasQuotedField = false
+  let lastRowHadQuotedField = false
   let i = 0
   const maxRows = limits?.maxRows
 
@@ -163,12 +165,14 @@ export function parseDelimited(text: string, delimiter: string, limits?: ParseLi
     field = ''
   }
   const pushRow = () => {
-    // Ignore a single trailing empty row created by a final newline
-    if (row.length === 1 && row[0] === '' && rows.length > 0) {
+    // Keep explicitly quoted empty records; preserve existing blank-line handling.
+    if (!rowHasQuotedField && row.length === 1 && row[0] === '' && rows.length > 0) {
       row = []
       return
     }
     rows.push(row)
+    lastRowHadQuotedField = rowHasQuotedField
+    rowHasQuotedField = false
     row = []
   }
 
@@ -194,6 +198,7 @@ export function parseDelimited(text: string, delimiter: string, limits?: ParseLi
 
     if (ch === '"') {
       inQuotes = true
+      rowHasQuotedField = true
       i++
       continue
     }
@@ -229,7 +234,7 @@ export function parseDelimited(text: string, delimiter: string, limits?: ParseLi
   }
 
   // Final field/row if content remains or file didn't end with newline
-  if (field.length > 0 || row.length > 0 || text.length === 0) {
+  if (rowHasQuotedField || field.length > 0 || row.length > 0 || text.length === 0) {
     pushField()
     // Don't push completely empty document as a row of one empty cell when input was empty
     if (!(rows.length === 0 && row.length === 1 && row[0] === '' && text.trim() === '')) {
@@ -240,7 +245,7 @@ export function parseDelimited(text: string, delimiter: string, limits?: ParseLi
   // Strip trailing empty row from final newline
   if (rows.length > 0) {
     const last = rows[rows.length - 1]
-    if (last.length === 1 && last[0] === '') rows.pop()
+    if (!lastRowHadQuotedField && last.length === 1 && last[0] === '') rows.pop()
   }
 
   return rows
@@ -630,6 +635,8 @@ export async function parseDelimitedAsync(
   let row: string[] = []
   let field = ''
   let inQuotes = false
+  let rowHasQuotedField = false
+  let lastRowHadQuotedField = false
   let i = 0
   let sinceYield = 0
   const total = Math.max(text.length, 1)
@@ -639,11 +646,13 @@ export async function parseDelimitedAsync(
     field = ''
   }
   const pushRow = () => {
-    if (row.length === 1 && row[0] === '' && rows.length > 0) {
+    if (!rowHasQuotedField && row.length === 1 && row[0] === '' && rows.length > 0) {
       row = []
       return
     }
     rows.push(row)
+    lastRowHadQuotedField = rowHasQuotedField
+    rowHasQuotedField = false
     row = []
   }
 
@@ -667,6 +676,7 @@ export async function parseDelimitedAsync(
       sinceYield++
     } else if (ch === '"') {
       inQuotes = true
+      rowHasQuotedField = true
       i++
       sinceYield++
     } else if (ch === delimiter) {
@@ -707,7 +717,7 @@ export async function parseDelimitedAsync(
     throw new Error('Quoted field unterminated')
   }
 
-  if (field.length > 0 || row.length > 0 || text.length === 0) {
+  if (rowHasQuotedField || field.length > 0 || row.length > 0 || text.length === 0) {
     pushField()
     if (!(rows.length === 0 && row.length === 1 && row[0] === '' && text.trim() === '')) {
       pushRow()
@@ -716,7 +726,7 @@ export async function parseDelimitedAsync(
 
   if (rows.length > 0) {
     const last = rows[rows.length - 1]
-    if (last.length === 1 && last[0] === '') rows.pop()
+    if (!lastRowHadQuotedField && last.length === 1 && last[0] === '') rows.pop()
   }
 
   hooks?.onProgress?.({ phase: 'parse', ratio: 0.55 })

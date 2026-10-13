@@ -1,5 +1,5 @@
 {
-  "version": 140,
+  "version": 141,
   "packages": [
     {
       "pluginId": "encode-decode",
@@ -29,7 +29,7 @@
     {
       "pluginId": "csv",
       "dir": "csv",
-      "version": "1.11.6"
+      "version": "1.11.7"
     },
     {
       "pluginId": "calculator",
@@ -64,7 +64,7 @@
     {
       "pluginId": "clipboard-history",
       "dir": "clipboard-history",
-      "version": "2.0.6"
+      "version": "2.0.7"
     },
     {
       "pluginId": "web-open",

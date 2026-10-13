@@ -49,6 +49,33 @@ async function check(name, run) {
   catch (error) { error.message = `${name}: ${error.message}`; throw error }
 }
 
+await check('single-column CSV preserves full bodies and explicit selection order', async () => {
+  const texts = ['  中文, "quoted"\r\nsecond\nend  ', '', '001', '=literal', '']
+  const expected = 'text\r\n"  中文, ""quoted""\r\nsecond\nend  "\r\n""\r\n"001"\r\n"=literal"\r\n""'
+  assert.equal(joinClipboardTexts(texts, 'csv', 'ignored'), expected)
+  const ids = texts.map((_, i) => String(i)), test = session()
+  const preview = await test.read(ids, 'csv', async id => textItem(id, texts[Number(id)]))
+  assert.equal(preview.text, expected)
+  let written
+  await copyClipboardTextBundle({
+    getItem: async id => textItem(id, texts[Number(id)]),
+    getFreshListItems: async () => ids.map(id => textItem(id, texts[Number(id)])),
+  }, ids.map(id => ({ id, hash: id })), 'csv', '', () => true, async text => { written = text })
+  assert.equal(written, expected)
+})
+
+await check('CSV byte limit includes header, quotes, escaping and row boundaries', async () => {
+  const test = session(), size = CLIPBOARD_TEXT_MERGE_MAX_BYTES
+  const exact = await test.read(['a', 'b'], 'csv', async id => textItem(id, id === 'a' ? 'x'.repeat(size - 12) : ''))
+  assert.equal(new TextEncoder().encode(exact.text).byteLength, size)
+  assert.equal(await test.read(['a', 'b'], 'csv', async id => textItem(id, id === 'a' ? 'x'.repeat(size - 11) : '')), undefined)
+  assert.equal(test.state.errors.at(-1).code, 'too-large')
+  assert.equal(test.reader.isCurrent(exact), false)
+  assert.equal(await test.read(['a', 'b'], 'csv', async id => textItem(id, id === 'a' ? '"'.repeat(size / 2) : '')), undefined)
+  assert.equal(test.state.errors.at(-1).code, 'too-large')
+  assert.equal(await test.read(['a', 'b'], 'csv', async id => textItem(id, id === 'a' ? '中'.repeat(Math.floor(size / 3)) : '')), undefined)
+})
+
 await check('explicit text selection is stable across changing list/search order', () => {
   let ids = Object.freeze([])
   const history = [textItem('a'), textItem('b'), textItem('c')]

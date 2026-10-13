@@ -5,7 +5,7 @@ export const CLIPBOARD_TEXT_MERGE_MIN_ITEMS = 2
 export const CLIPBOARD_TEXT_MERGE_MAX_ITEMS = 20
 
 export const CLIPBOARD_TEXT_MERGE_MAX_BYTES = 1024 * 1024
-export type ClipboardTextMergeSeparator = 'newline' | 'blankline' | 'custom'
+export type ClipboardTextMergeSeparator = 'newline' | 'blankline' | 'custom' | 'csv'
 
 export type ClipboardTextMergePreview = Readonly<{
   ids: readonly string[]
@@ -53,6 +53,9 @@ export function moveClipboardTextMergeSelection(
 
 /** Do not trim, normalize line endings, deduplicate, or fall back to list previews. */
 export function joinClipboardTexts(texts: readonly string[], separator: ClipboardTextMergeSeparator, customSeparator = ''): string {
+  // A stable column name and quoted cells preserve item boundaries, including
+  // empty bodies, embedded newlines and quotes. Values remain literal text.
+  if (separator === 'csv') return `text\r\n${texts.map(text => `"${text.replace(/"/g, '""')}"`).join('\r\n')}`
   return texts.join(resolveClipboardTextSeparator(separator, customSeparator))
 }
 
@@ -131,7 +134,12 @@ export function createClipboardTextMergeReader() {
         if (bytes > CLIPBOARD_TEXT_MERGE_MAX_BYTES) { onError({ code: 'too-large' }); return }
         texts.push(result.text)
       }
-      const preview = Object.freeze({ ids, text: joinClipboardTexts(texts, separator, customSeparator), separator })
+      const text = joinClipboardTexts(texts, separator, customSeparator)
+      // CSV escaping can grow well beyond the raw body total.
+      if (new TextEncoder().encode(text).byteLength > CLIPBOARD_TEXT_MERGE_MAX_BYTES) {
+        onError({ code: 'too-large' }); return
+      }
+      const preview = Object.freeze({ ids, text, separator })
       currentPreview = preview
       onReady(preview)
       return preview

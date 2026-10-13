@@ -77,6 +77,7 @@ export function ClipboardTextMergePanel({
             { value: 'newline', label: t('merge.newline') },
             { value: 'blankline', label: t('merge.blankline') },
             { value: 'custom', label: t('merge.custom') },
+            { value: 'csv', label: t('merge.csv') },
           ]}
         />
       </div>
