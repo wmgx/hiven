@@ -1,4 +1,7 @@
 {
+  "action.continue": "Continue processing",
+  "action.returning": "Returning…",
+  "error.returnFailed": "Could not continue processing. Your result is preserved; try again.",
   "surface.title": "QR Code",
   "mode.generate": "Generate",
   "mode.scan": "Scan",

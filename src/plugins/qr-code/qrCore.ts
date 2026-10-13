@@ -92,7 +92,7 @@ export function decodeQrFromImageData(imageData: ImageData): string | null {
   const result = jsQR(imageData.data, imageData.width, imageData.height, {
     inversionAttempts: 'attemptBoth',
   })
-  const text = result?.data?.trim()
+  const text = result?.data
   return text ? text : null
 }
 

@@ -1,5 +1,5 @@
 {
-  "version": 139,
+  "version": 140,
   "packages": [
     {
       "pluginId": "encode-decode",
@@ -74,7 +74,7 @@
     {
       "pluginId": "qr-code",
       "dir": "qr-code",
-      "version": "1.0.10"
+      "version": "1.0.11"
     },
     {
       "pluginId": "feishu",

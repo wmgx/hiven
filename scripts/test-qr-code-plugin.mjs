@@ -139,6 +139,9 @@ const { saveQrImage } = loadTs('src/plugins/qr-code/saveQrImage.ts', { './qrCore
 const payload = 'Hiven QA123'
 const generated = await core.generateQrDataUrl(payload)
 const { PNG } = nodeRequire('pngjs')
+const exactPayload = '  合成 QR%20text\nsecond line\n  '
+const exactPng = PNG.sync.read(await nodeRequire('qrcode').toBuffer(exactPayload, { width: 320 }))
+assert.equal(core.decodeQrFromImageData(exactPng), exactPayload, 'QR decoding preserves leading/trailing whitespace and newlines')
 for (const outcome of ['saved', 'cancelled', 'error']) {
   const calls = []
   let bytes

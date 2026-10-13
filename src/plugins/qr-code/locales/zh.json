@@ -1,4 +1,7 @@
 {
+  "action.continue": "继续处理",
+  "action.returning": "正在带回…",
+  "error.returnFailed": "未能继续处理，识别结果已保留，可重试。",
   "surface.title": "二维码",
   "mode.generate": "生成",
   "mode.scan": "识别",
