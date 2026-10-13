@@ -16,16 +16,7 @@ export const settle = async () => { for (let i = 0; i < 12; i++) await Promise.r
 
 export function sharedSettingsStorage() {
   const values = new Map()
-  const queues = new Map()
-  // One shared lock domain for independent VM windows; no real browser I/O.
-  const locks = { request(name, callback) {
-    const previous = queues.get(name) ?? Promise.resolve()
-    const result = previous.then(() => callback({ name, mode: 'exclusive' }))
-    queues.set(name, result.catch(() => {}))
-    return result
-  } }
   return {
-    locks,
     writes: 0,
     failWrite: () => undefined,
     getItem: (key) => values.get(key) ?? null,
@@ -44,7 +35,7 @@ export function settingsWindow(storage, { backgrounds = false } = {}) {
   const events = new Map()
   const modules = new Map()
   const mocks = new Map()
-  const counts = { starts: 0, watches: 0, stops: 0, otherStarts: 0, captures: [], retention: [] }
+  const counts = { starts: 0, watches: 0, stops: 0, otherStarts: 0, captures: [] }
   let changeHandler
   const forbidden = () => { throw new Error('External I/O is forbidden in plugin settings tests') }
   const window = {
@@ -55,7 +46,7 @@ export function settingsWindow(storage, { backgrounds = false } = {}) {
     },
     removeEventListener: (type, listener) => events.get(type)?.delete(listener),
   }
-  const context = createContext({ window, localStorage: storage, navigator: { locks: storage.locks }, structuredClone, console, fetch: forbidden, TextEncoder, AbortController, setInterval: () => 1, clearInterval: () => {} })
+  const context = createContext({ window, localStorage: storage, console, fetch: forbidden, TextEncoder, AbortController, setInterval: () => 1, clearInterval: () => {} })
   function load(file) {
     if (mocks.has(file)) return mocks.get(file)
     if (modules.has(file)) return modules.get(file).exports
@@ -102,8 +93,7 @@ export function settingsWindow(storage, { backgrounds = false } = {}) {
     createClipboardHistoryRepository: () => ({
       getListItems: async () => [],
       addItem: async (input) => counts.captures.push(input.text),
-      pruneItems: async (policy) => { counts.retention.push(policy.retentionMonths); return { hasMore: false } },
-      purgeExpiredTrash: async () => {},
+      pruneItems: async () => undefined,
     }),
   })
   const { DEFAULT_CLIPBOARD_HISTORY_SETTINGS: defaults } = load(path('src/plugins/clipboard-history/settings/model.ts'))
@@ -118,20 +108,12 @@ export function settingsWindow(storage, { backgrounds = false } = {}) {
       settings: { defaultValue: {} }, background: { start() { counts.otherStarts++ } },
     } },
   ]
-  const lifetime = { active: true }
-  mocks.set(path('src/workspace/pluginRegistry.ts'), { pluginRegistry: {
-    getAllPluginDefinitions: () => entries,
-    getPluginDefinition: id => entries.find(entry => entry.pluginId === id)?.definition,
-    getPluginLifetime: () => lifetime,
-    getPluginPermissions: id => entries.find(entry => entry.pluginId === id)?.permissions ?? [],
-  } })
-  mocks.set(path('src/workspace/launcher/pluginApi.ts'), { createPluginLauncherStorage: () => ({}) })
-  const { usePluginSettingsStore: store, resolvePluginSettings, ensureCommittedPluginSettings } = load(path('src/workspace/pluginSettingsStore.ts'))
+  mocks.set(path('src/workspace/pluginRegistry.ts'), { pluginRegistry: { getAllPluginDefinitions: () => entries } })
+  const { usePluginSettingsStore: store, resolvePluginSettings } = load(path('src/workspace/pluginSettingsStore.ts'))
   const permissions = load(path('src/workspace/pluginPermissions.ts'))
   const manager = backgrounds ? load(path('src/workspace/pluginBackgroundManager.ts')) : undefined
   return {
-    store, defaults, manager, permissions, manifest, counts, definition, ensureCommittedPluginSettings, lifetime,
-    updateOwn: (updater) => load(path('src/workspace/pluginSettingsWrite.ts')).updateOwnPluginSettings(manifest.pluginId, 'builtin', updater),
+    store, defaults, manager, permissions, manifest, counts,
     enabled: () => resolvePluginSettings('builtin', manifest.pluginId, definition.settings).value.enabled,
     setEnabled: (enabled) => store.getState().setPluginSettings('builtin', manifest.pluginId, { ...defaults, enabled }, 1),
     event(key = settingsKey, extra = {}) {

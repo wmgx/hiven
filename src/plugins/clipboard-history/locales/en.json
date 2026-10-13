@@ -198,7 +198,5 @@
   "retention.protectedItem": "Earlier record protected until explicitly included",
   "retention.restoreUntil": "Restore before",
   "retention.empty": "No recoverable items. Active history is unchanged.",
-  "retention.recordingPaused": "Recording paused · Browsing, recovery and scheduled cleanup remain available",
-  "settings.shortenTitle": "Shorten retention from {from} to {to} months?",
-  "settings.shortenMessage": "Expired items move to Recently deleted and can be restored for 30 days, then are permanently deleted automatically. Favorites are unaffected."
+  "retention.recordingPaused": "Recording paused · Browsing, recovery and scheduled cleanup remain available"
 }

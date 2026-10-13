@@ -14,8 +14,7 @@ import { useAppStore } from '../store'
 import { showToast } from '../workspace/toast'
 import { pluginRegistry, usePluginRegistryVersion } from '../workspace/pluginRegistry'
 import {
-  usePluginSettingsStore, PluginSettingsCommitError, resolvePluginSettings,
-  type PluginSettingsRecord,
+  usePluginSettingsStore,
   type PluginSettingsSource,
   type PluginSettingsFieldTarget,
 } from '../workspace/pluginSettingsStore'
@@ -269,92 +268,46 @@ function SettingsDialogBody({
     [permissions],
   )
 
-  type Change = { next: unknown; expected: PluginSettingsRecord | null; generation: number;
-    confirmation: ReturnType<NonNullable<PluginSettingsContribution<unknown>['confirmChange']>> }
-  const [pendingChange, setPendingChange] = useState<Change | null>(null)
-  const [saving, setSaving] = useState(false)
-  const [saveError, setSaveError] = useState('')
-  const changeGeneration = useRef(0)
-  const active = useRef(true)
-  const savingRef = useRef(false)
-  const cancelButton = useRef<HTMLButtonElement>(null)
-  const settingsOwner = usePluginSettingsStore((state) => state.settingsDialogTarget)
-  const ownerRef = useRef(settingsOwner)
-  const cancelChange = useCallback(() => {
-    changeGeneration.current++
-    setPendingChange(null)
-    setSaveError('')
-  }, [])
-  useLayoutEffect(() => {
-    active.current = true
-    cancelChange()
-    return () => { active.current = false; changeGeneration.current++ }
-  }, [contribution, source, pluginId, cancelChange])
-  useLayoutEffect(() => {
-    if (settingsOwner !== ownerRef.current) { cancelChange(); ownerRef.current = settingsOwner }
-  }, [settingsOwner, cancelChange])
-  useLayoutEffect(() => {
-    if (pendingChange && !savingRef.current && JSON.stringify(storedRecord ?? null) !== JSON.stringify(pendingChange.expected)) {
-      cancelChange()
-      setSaveError(t(locale, 'scripts.settingsSaveConflict'))
-    }
-  }, [storedRecord, pendingChange, cancelChange, locale])
+  const notifySettingsChange = useCallback((next: unknown) => {
+    if (!contribution.onChange) return
+    void Promise.resolve(
+      contribution.onChange({
+        value: next,
+        pluginId,
+        source,
+        storage: settingsHost.storage,
+        network: settingsNetwork,
+        shell: settingsShell,
+        ai: settingsHost.ai,
+      }),
+    ).catch((error) => {
+      console.warn(`[hiven] Plugin settings onChange failed for "${pluginId}":`, error)
+    })
+  }, [contribution, pluginId, source, settingsHost.ai, settingsHost.storage, settingsNetwork, settingsShell])
 
-  const submitChange = async (change: Change) => {
-    const owner = settingsOwner
-    const current = () => !!owner && owner.source === source && owner.pluginId === pluginId && active.current && pluginRegistry.getPluginDefinition(pluginId, source)?.settings === contribution
-      && changeGeneration.current === change.generation
-      && usePluginSettingsStore.getState().settingsDialogTarget === owner
-    if (!current() || savingRef.current) return
-    savingRef.current = true; setSaving(true); setSaveError('')
-    try {
-      await setPluginSettings(source, pluginId, change.next, currentVersion, { expected: change.expected, isCurrent: current })
-      if (!current()) return
-      setPendingChange(null)
-      // This is an application callback after a successful durable commit,
-      // not the save operation. Never roll back an already committed policy.
-      if (contribution.onChange) {
-        try {
-          await contribution.onChange({ value: change.next, pluginId, source, storage: settingsHost.storage,
-            network: settingsNetwork, shell: settingsShell, ai: settingsHost.ai })
-        } catch {
-          if (current()) setSaveError(t(locale, 'scripts.settingsApplyFailed'))
-        }
-      }
-    } catch (error) {
-      if (!current()) return
-      if (error instanceof PluginSettingsCommitError && error.code === 'cancelled') return
-      if (error instanceof PluginSettingsCommitError && error.code === 'conflict') {
-        setPendingChange(null)
-        setSaveError(t(locale, 'scripts.settingsSaveConflict'))
-      } else setSaveError(t(locale, 'scripts.settingsSaveFailed'))
-    } finally {
-      savingRef.current = false
-      if (active.current) setSaving(false)
-    }
-  }
-  const requestChange = (build: (current: unknown) => unknown) => {
-    if (!active.current || savingRef.current || !settingsOwner
-      || settingsOwner.source !== source || settingsOwner.pluginId !== pluginId
-      || usePluginSettingsStore.getState().settingsDialogTarget !== settingsOwner
-      || pluginRegistry.getPluginDefinition(pluginId, source)?.settings !== contribution) return
-    const generation = ++changeGeneration.current
-    setPendingChange(null); setSaveError('')
-    try {
-      const expected = structuredClone(usePluginSettingsStore.getState().getPluginSettings(source, pluginId) ?? null)
-      const resolved = resolvePluginSettings(source, pluginId, contribution)
-      if (resolved.migrationError) throw new Error(resolved.migrationError)
-      const previous = resolved.value
-      const next = structuredClone(build(structuredClone(previous)))
-      const confirmation = contribution.confirmChange?.(structuredClone(previous), structuredClone(next)) ?? null
-      const change = { next, expected, generation, confirmation }
-      if (confirmation) setPendingChange(change)
-      else void submitChange(change)
-    } catch { setSaveError(t(locale, 'scripts.settingsSaveFailed')) }
-  }
-  const setValue = (next: unknown) => requestChange(() => next)
-  const updateValue = (patch: Partial<unknown>) => requestChange((previous) => ({ ...(previous as Record<string, unknown>), ...patch }))
-  const resetValue = () => requestChange(() => contribution.defaultValue)
+  const setValue = useCallback(
+    (next: unknown) => {
+      setPluginSettings(source, pluginId, next, currentVersion)
+      notifySettingsChange(next)
+    },
+    [setPluginSettings, source, pluginId, currentVersion, notifySettingsChange]
+  )
+
+  const updateValue = useCallback(
+    (patch: Partial<unknown>) => {
+      const current = usePluginSettingsStore.getState().getPluginSettings(source, pluginId)
+      const currentValue = current?.value ?? contribution.defaultValue
+      const next = { ...(currentValue as Record<string, unknown>), ...(patch as Record<string, unknown>) }
+      setPluginSettings(source, pluginId, next, currentVersion)
+      notifySettingsChange(next)
+    },
+    [setPluginSettings, source, pluginId, currentVersion, contribution.defaultValue, notifySettingsChange]
+  )
+
+  const resetValue = useCallback(() => {
+    setPluginSettings(source, pluginId, contribution.defaultValue, currentVersion)
+    notifySettingsChange(contribution.defaultValue)
+  }, [setPluginSettings, source, pluginId, contribution.defaultValue, currentVersion, notifySettingsChange])
 
   const openExternal = useCallback(async (url: string) => {
     await openExternalUrl(url)
@@ -420,7 +373,7 @@ function SettingsDialogBody({
         <button
           className="flex items-center justify-center w-7 h-7 rounded-md"
           style={{ color: 'var(--color-text-tertiary)', background: 'transparent' }}
-          onClick={() => { cancelChange(); onClose() }}
+          onClick={onClose}
           title={t(locale, 'scripts.settingsClose')}
           aria-label={t(locale, 'scripts.settingsClose')}
           data-settings-dialog-close
@@ -441,9 +394,8 @@ function SettingsDialogBody({
         </div>
       )}
 
-      {saveError && !pendingChange && <p role="alert" className="px-5 text-[13px]">{saveError}</p>}
       {/* Body */}
-      <div ref={bodyRef} aria-busy={saving || undefined} inert={saving || undefined} className="flex-1 overflow-y-auto px-5 py-4" data-launcher-scrollable data-settings-navigation-root={target ? '' : undefined} tabIndex={-1}>
+      <div ref={bodyRef} className="flex-1 overflow-y-auto px-5 py-4" data-launcher-scrollable data-settings-navigation-root={target ? '' : undefined} tabIndex={-1}>
         <SettingsErrorBoundary fallback={errorFallback}>
           {/* Prefer custom body when present (install guides, connection UI).
               Schema-only plugins keep the generated form renderer. */}
@@ -469,22 +421,6 @@ function SettingsDialogBody({
           )}
         </SettingsErrorBoundary>
       </div>
-
-      {pendingChange?.confirmation && <Dialog.Root open onOpenChange={(open) => { if (!open) cancelChange() }}>
-        <Dialog.Portal>
-          <Dialog.Backdrop className="fixed inset-0 bg-black/40 z-[1220]" />
-          <Dialog.Popup className="plugin-settings-modal-panel fixed left-1/2 top-1/2 z-[1221] -translate-x-1/2 -translate-y-1/2 w-[min(440px,calc(100%-40px))] rounded-lg p-5"
-            style={{ background: 'var(--panel)', border: '1px solid var(--border)' }} initialFocus={cancelButton}>
-            <Dialog.Title className="text-[14px] font-semibold">{pluginT(pendingChange.confirmation.title, pendingChange.confirmation.values)}</Dialog.Title>
-            <Dialog.Description className="mt-3 text-[13px]">{pluginT(pendingChange.confirmation.message, pendingChange.confirmation.values)}</Dialog.Description>
-            {saveError && <p role="alert" className="mt-3 text-[13px]">{saveError}</p>}
-            <div className="mt-4 flex justify-end gap-3">
-              <button ref={cancelButton} type="button" onClick={cancelChange}>{t(locale, 'scripts.cancel')}</button>
-              <button type="button" disabled={saving} onClick={() => void submitChange(pendingChange)}>{t(locale, saving ? 'scripts.settingsSaving' : 'scripts.settingsConfirmSave')}</button>
-            </div>
-          </Dialog.Popup>
-        </Dialog.Portal>
-      </Dialog.Root>}
 
       {activeSettingsModalTarget && SettingsModalComponent && (
         <Dialog.Root open onOpenChange={(open) => { if (!open && !isSettingsModalClosing) setSettingsModalTarget(null) }}>

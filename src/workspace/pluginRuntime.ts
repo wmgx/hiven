@@ -145,10 +145,10 @@ function pluginSettingsSourceForRecord(record: InstalledPlugin): 'builtin' | 'in
   return record.source === 'builtin' ? 'builtin' : 'installed'
 }
 
-async function clearPluginHostState(source: PluginSettingsSource, pluginId: string, options: { clearStorage: boolean }): Promise<void> {
+function clearPluginHostState(source: PluginSettingsSource, pluginId: string, options: { clearStorage: boolean }): void {
   usePluginSurfaceShortcutStore.getState().clearPluginShortcuts(source, pluginId)
   usePluginPermissionStore.getState().clearPluginPermissions(source, pluginId)
-  await usePluginSettingsStore.getState().removePluginSettings(source, pluginId)
+  usePluginSettingsStore.getState().removePluginSettings(source, pluginId)
   if (options.clearStorage) {
     clearPluginPrivateStorage(source, pluginId)
   }
@@ -606,7 +606,7 @@ export async function uninstallPlugin(pluginId: string): Promise<void> {
         rootPath: installedRoot,
         pluginId,
       })
-      await clearPluginHostState(source, pluginId, { clearStorage: true })
+      clearPluginHostState(source, pluginId, { clearStorage: true })
     }
     usePluginStore.getState().uninstallPlugin(pluginId)
   }).finally(() => {
@@ -784,7 +784,7 @@ export function unwatchDevPlugin(pluginId: string): void {
 /**
  * Remove a dev plugin from the dev registry.
  */
-export async function removeDevPlugin(pluginId: string): Promise<void> {
+export function removeDevPlugin(pluginId: string): void {
   const { devPlugins, removeDevPlugin: removeFromStore } = usePluginStore.getState()
   const record = devPlugins[pluginId]
   if (!record) return
@@ -799,7 +799,7 @@ export async function removeDevPlugin(pluginId: string): Promise<void> {
 
   cleanupPluginEditorContributions(pluginId, panelIds)
 
-  await clearPluginHostState('dev', pluginId, { clearStorage: true })
+  clearPluginHostState('dev', pluginId, { clearStorage: true })
   removeFromStore(pluginId)
 }
 

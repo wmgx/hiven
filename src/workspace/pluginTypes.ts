@@ -465,8 +465,6 @@ export type PluginSettingsContribution<TSettings = unknown> = {
   defaultValue: TSettings
   migrate?: (stored: unknown, fromVersion: number) => TSettings
   schema?: PluginSettingsSchema<TSettings>
-  /** Pure pre-commit confirmation; returns plugin locale keys, never performs I/O. */
-  confirmChange?: (previous: TSettings, next: TSettings) => { title: string; message: string; values?: Record<string, string | number> } | null
   modals?: PluginSettingsModalContribution<TSettings>[]
   component?: ComponentType<PluginSettingsBodyProps<TSettings>>
   /**
