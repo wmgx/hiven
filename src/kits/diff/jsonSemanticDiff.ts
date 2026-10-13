@@ -6,6 +6,8 @@
  * - Arrays: ordered by index
  */
 
+import { hasJsonNumberRisk } from './jsonNumberFidelity'
+
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export type JsonValue =
@@ -38,6 +40,7 @@ export interface JsonParseResult {
   error?: string
   line?: number
   column?: number
+  reason?: 'number-fidelity'
 }
 
 export interface JsonDiffViewModel {
@@ -69,6 +72,7 @@ export function relaxJsonText(text: string): string {
 
 export function parseJson(text: string): JsonParseResult {
   const jsonText = text.replace(/^\uFEFF/, '')
+  if (hasJsonNumberRisk(jsonText)) return { ok: false, reason: 'number-fidelity', error: 'JSON number fidelity unavailable' }
   try {
     return { ok: true, value: JSON.parse(jsonText) }
   } catch {

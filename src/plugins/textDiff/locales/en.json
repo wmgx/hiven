@@ -65,5 +65,6 @@
   "explain.failure.response": "The response was empty, incomplete or too long. Your input is preserved; retry.",
   "explain.failure.changed": "AI selection changed. Review the displayed provider and model, then retry.",
   "explain.failure.timeout": "Explanation timed out and was cancelled. Your text is preserved; retry.",
-  "explain.recheck": "Check again"
+  "explain.recheck": "Check again",
+  "diff.numberFidelityFallback": "Some numbers cannot be processed faithfully. Comparing original text; formatting is unavailable."
 }

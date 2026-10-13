@@ -65,5 +65,6 @@
   "explain.failure.response": "回复为空、不完整或过长；输入已保留，可重试。",
   "explain.failure.changed": "AI 选择已改变，请核对显示的提供方及模型后重试。",
   "explain.failure.timeout": "解释超时，已取消；文本保留，可重试。",
-  "explain.recheck": "重新检查"
+  "explain.recheck": "重新检查",
+  "diff.numberFidelityFallback": "部分数值无法保真处理，已按原文本对比；格式化暂不可用。"
 }

@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict'
-import {
+import { createJiti } from 'jiti'
+
+const {
   buildDiffTree,
   buildSideLines,
   computeJsonDiff,
   computeJsonLineHighlights,
   formatJsonPreserveKeyOrder,
   parseJson,
-} from '../src/kits/diff/jsonSemanticDiff.ts'
+} = await createJiti(import.meta.url).import('../src/kits/diff/jsonSemanticDiff.ts')
 
 function changesOf(left, right) {
   return computeJsonDiff(left, right)
@@ -123,6 +125,59 @@ function kinds(changes) {
     formatJsonPreserveKeyOrder('{"a":1,}'),
     '{\n  "a": 1\n}',
   )
+}
+
+{
+  // Numeric fidelity is a precondition for semantic comparison and rewriting.
+  // Even exactly representable integers outside the safe range are declined:
+  // callers must not infer that every adjacent identifier remains distinguishable.
+  const risky = [
+    '9007199254740992', '9007199254740993', '-9007199254740992',
+    '0.12345678901234567890', '0.12345678901234567891',
+    '1.0000000000000001', '1e309', '-1e309', '1e-400', '-1e-400',
+    '-0', '-0.0', '-0e999999999999999999999999',
+  ]
+  for (const token of risky) {
+    for (const text of [token, `{"nested":[{"value":${token}}]}`, `\uFEFF{"value":${token},}`]) {
+      const parsed = parseJson(text)
+      assert.equal(parsed.ok, false, `must decline lossy numeric source: ${text}`)
+      assert.equal(parsed.reason, 'number-fidelity', `must explain numeric fallback: ${text}`)
+      assert.equal(formatJsonPreserveKeyOrder(text), null, `must not rewrite numeric source: ${text}`)
+      assert.equal(computeJsonLineHighlights(text, '{"value":1}'), null, 'unsafe left requests text fallback')
+      assert.equal(computeJsonLineHighlights('{"value":1}', text), null, 'unsafe right requests text fallback')
+    }
+  }
+
+  const safe = [
+    '0.1', '0.10', '1e3', '1000.00', '9007199254740991', '-9007199254740991',
+    '0', '0.0', '0e999999999999999999999999', '0e-999999999999999999999999',
+    '5e-324',
+  ]
+  for (const token of safe) {
+    const text = `{"nested":[${token},],}`
+    assert.equal(parseJson(text).ok, true, `ordinary/round-trippable number remains supported: ${token}`)
+    assert.notEqual(formatJsonPreserveKeyOrder(text), null, `safe number can format: ${token}`)
+  }
+
+  // Numeric-looking string values and keys, escaped quotes and backslashes are
+  // opaque; scanning must resume after them to inspect actual numeric values.
+  const strings = {
+    '9007199254740993': '0.12345678901234567891',
+    quoted: '"id":9007199254740993',
+    escaped: '\\" -0 1e309 1e-400',
+    nested: ['9007199254740993', '-0'],
+  }
+  const text = JSON.stringify(strings)
+  assert.equal(parseJson(text).ok, true, 'numbers inside strings are not numeric risks')
+  assert.deepEqual(JSON.parse(formatJsonPreserveKeyOrder(text)), strings, 'format preserves quoted content')
+  assert.equal(parseJson(text.replace(/}$/, ',"actual":9007199254740993}')).reason, 'number-fidelity')
+
+  const equivalents = computeJsonLineHighlights(
+    '{"a":0.10,"b":1e3,"nested":{"z":1.0,"a":0e999999999999999999999999}}',
+    '{ "nested": {"a":0,"z":1e0}, "b":1000.00,"a":0.1 }',
+  )
+  assert.ok(equivalents, 'safe decimal/exponent forms retain semantic mode')
+  assert.deepEqual(equivalents.changes, [], 'key order and equivalent numeric spellings remain noise-free')
 }
 
 {

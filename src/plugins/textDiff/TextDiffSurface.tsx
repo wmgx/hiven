@@ -3,7 +3,6 @@ import type { PluginSurfaceProps } from '@hiven/plugin'
 import { Menu } from '@hiven/plugin-ui'
 import { getPluginDiffHost, type DiffSource } from '@hiven/plugin-diff'
 import { DiffExplanation } from './DiffExplanation'
-import { canUseSemanticJsonDiff } from './autoDiffMode'
 import { useDiffSourceText } from './useDiffSourceText'
 import { createDiffSourceReader } from './sourceReadLifetime'
 import { createDiffSideCopier, type DiffCopySide } from './copySideText'
@@ -134,6 +133,8 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
   const [modifiedSource, setModifiedSource] = useState(payload.modified)
   const [originalText, writeOriginalText] = useDiffSourceText(originalSource)
   const [modifiedText, writeModifiedText] = useDiffSourceText(modifiedSource)
+  const currentTexts = useRef({ original: originalText, modified: modifiedText })
+  currentTexts.current = { original: originalText, modified: modifiedText }
   const [originalReader] = useState(createDiffSourceReader)
   const [modifiedReader] = useState(createDiffSourceReader)
   const [sideCopier] = useState(createDiffSideCopier)
@@ -144,11 +145,13 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
     setCopyRevision(sideCopier.invalidate())
   }, [sideCopier])
   const setOriginalText = useCallback((text: string) => {
+    currentTexts.current.original = text
     invalidateCopy()
     originalReader.invalidate()
     writeOriginalText(text)
   }, [invalidateCopy, originalReader, writeOriginalText])
   const setModifiedText = useCallback((text: string) => {
+    currentTexts.current.modified = text
     invalidateCopy()
     modifiedReader.invalidate()
     writeModifiedText(text)
@@ -197,10 +200,11 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [originalText, modifiedText])
 
-  const jsonAvailable = useMemo(
-    () => canUseSemanticJsonDiff(debouncedOriginal, debouncedModified),
-    [debouncedOriginal, debouncedModified],
-  )
+  const liveJson = useMemo(() => [parseJson(originalText), parseJson(modifiedText)], [originalText, modifiedText, parseJson])
+  const jsonPair = useMemo(() => [parseJson(debouncedOriginal), parseJson(debouncedModified)], [debouncedOriginal, debouncedModified, parseJson])
+  const numberRisk = liveJson.some(side => side.reason === 'number-fidelity')
+  const comparedNumberRisk = jsonPair.some(side => side.reason === 'number-fidelity')
+  const jsonAvailable = !numberRisk && jsonPair.every(side => side.ok)
 
   const renderMode: DiffMode = diffMode === 'json' && jsonAvailable ? 'json' : 'text'
 
@@ -254,16 +258,18 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
 
   /** Pretty-print both sides without sorting keys; only rewrites parseable sides. */
   const handleFormat = useCallback(() => {
-    const left = formatJsonPreserveKeyOrder(originalText)
-    const right = formatJsonPreserveKeyOrder(modifiedText)
+    const { original, modified } = currentTexts.current
+    if ([parseJson(original), parseJson(modified)].some(side => side.reason === 'number-fidelity')) return
+    const left = formatJsonPreserveKeyOrder(original)
+    const right = formatJsonPreserveKeyOrder(modified)
     if (left != null) setOriginalText(left)
     if (right != null) setModifiedText(right)
-  }, [formatJsonPreserveKeyOrder, originalText, modifiedText, setOriginalText, setModifiedText])
+  }, [parseJson, formatJsonPreserveKeyOrder, setOriginalText, setModifiedText])
 
   const canFormat = useMemo(() => {
     if (diffMode !== 'json') return false
-    return parseJson(originalText).ok || parseJson(modifiedText).ok
-  }, [parseJson, diffMode, originalText, modifiedText])
+    return !numberRisk && !comparedNumberRisk && liveJson.some(side => side.ok)
+  }, [liveJson, numberRisk, comparedNumberRisk, diffMode])
 
   const handleDetach = useCallback(() => {
     leaveSurface()
@@ -419,7 +425,7 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
       {diffMode === 'json' && renderMode === 'text' && (
         <div className="td-fallback" role="status">
           <span className="td-fallback-dot" aria-hidden />
-          {t('diff.fallbackToText')}
+          {t(numberRisk || comparedNumberRisk ? 'diff.numberFidelityFallback' : 'diff.fallbackToText')}
         </div>
       )}
 
