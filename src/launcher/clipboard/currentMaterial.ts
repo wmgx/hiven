@@ -56,6 +56,12 @@ export function canEditMaterialText(block: LauncherObjectBlock | null): boolean 
     block.kind !== 'image' && block.kind !== 'files' && !block.payloadImage && !block.payloadFiles)
 }
 
+/** Full text only: previews, file paths and masked material never form a pair. */
+export function getMaterialTextPair(current: CurrentMaterial): { previous: string; current: string } | null {
+  if (!canEditMaterialText(current.previousBlock) || !canEditMaterialText(current.block)) return null
+  return { previous: current.previousBlock!.payloadText!, current: current.block!.payloadText! }
+}
+
 /** Textarea uses LF; keep unchanged text exact and preserve uniform CRLF drafts. */
 export function reconcileMaterialTextInput(previous: string, next: string): string {
   if (previous === next) return previous

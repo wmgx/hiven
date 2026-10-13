@@ -39,6 +39,7 @@ import { TelemetryEvents, trackBehavior } from '../../workspace/telemetry'
 import {
   acceptMaterialHandoff,
   canEditMaterialText,
+  getMaterialTextPair,
   discardCurrentMaterial,
   forgetPreviousMaterial,
   replaceCurrentMaterial,
@@ -66,6 +67,8 @@ export type ClipboardObjectBlockState = {
   markBlockConsumed: (options?: { preservePending?: boolean }) => void
   canRestorePreviousMaterial: boolean
   restorePreviousMaterial: () => void
+  /** Only the host can capture both full texts from this material generation. */
+  beginTextPair: () => { previous: string; current: string; isCurrent: () => boolean } | null
   canEditText: boolean
   /** Bound to the displayed material/session; null for a stale entry button. */
   beginTextEdit: () => { text: string; commit: (text: string) => boolean } | null
@@ -468,6 +471,14 @@ export function useClipboardObjectBlock(params: {
     setPendingObjectBlock(next.block, { persist: true, silent: true })
   }, [clearExitTimer, publishMaterial, material])
 
+  const beginTextPair = useCallback(() => {
+    const isCurrent = () => mountedRef.current && openRef.current && !userDismissedRef.current &&
+      !isExiting && materialRef.current === material && materialGenerationRef.current === renderedGeneration
+    if (!isCurrent()) return null
+    const pair = getMaterialTextPair(material)
+    return pair ? { ...pair, isCurrent } : null
+  }, [material, renderedGeneration, isExiting])
+
   const beginTextEdit = useCallback(() => {
     const isCurrent = () => mountedRef.current && openRef.current && !userDismissedRef.current &&
       materialRef.current === material && materialGenerationRef.current === renderedGeneration
@@ -610,6 +621,7 @@ export function useClipboardObjectBlock(params: {
     restorePreviousMaterial: restoreMaterial,
     canEditText: open && !isExiting && canEditMaterialText(block),
     beginTextEdit,
+    beginTextPair,
     canReadFileText: open && !isExiting && Boolean(getAttachedTextFilePath(block)),
     canPickTextFile: open && Boolean(filePicker),
     isPickingTextFile,

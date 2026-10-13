@@ -1,3 +1,7 @@
+import { isCurrentBundledDefinition } from '../../workspace/bundledPluginIdentity'
+import { CURRENT_MATERIAL_COMPARE_ACTION, createMaterialComparison, type MaterialTextPair } from '../../currentMaterialCompare'
+import { ensurePluginRuntimeReady } from '../../workspace/pluginRuntimeBootstrap'
+import { openLauncherHostedPluginSurface } from '../../workspace/pluginSurfaceOpenRequest'
 import { selectContextSuggestions, type Suggestion } from '../../workspace/launcher/contextSuggestions'
 import { beginSuggestionSession, endSuggestionSession, getSuggestionSession, recordSuggestionSelected, recordSuggestionShown, useSuggestionSettings } from '../../workspace/launcher/contextSuggestionsStore'
 import { filterAvailableLauncherItems } from '../../workspace/launcher/registry'
@@ -5,7 +9,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useAppStore } from '../../store'
 import { useShallow } from 'zustand/react/shallow'
 import { t, pickLocale } from '../../i18n'
-import { usePluginRegistryVersion } from '../../workspace/pluginRegistry'
+import { pluginRegistry, usePluginRegistryVersion } from '../../workspace/pluginRegistry'
 import { usePluginSettingsStore } from '../../workspace/pluginSettingsStore'
 import { useGlobalLauncherResultFrame } from '../../components/launcher/GlobalLauncherResults'
 import { buildGlobalLauncherItems, type GlobalLauncherItem } from '../../components/launcher/GlobalLauncherItems'
@@ -114,6 +118,8 @@ export function GlobalLauncherHost() {
   const deliveryGenerationRef = useRef(0)
   const currentTextDeliveryRef = useRef(createCurrentTextDelivery(setCurrentTextBusy))
   const currentTextScopesRef = useRef(new WeakMap<LauncherItem, CurrentTextActionScope>())
+  const materialComparisonRef = useRef(createMaterialComparison())
+  const materialComparisonScopesRef = useRef(new WeakMap<LauncherItem, MaterialTextPair>())
   const currentTextExportRef = useRef(createCurrentTextExport())
   const currentTextExportScopesRef = useRef(new WeakMap<LauncherItem, CurrentTextExportScope>())
   const textExportLifetimeRef = useRef(0)
@@ -549,6 +555,23 @@ export function GlobalLauncherHost() {
           domainItem,
         }
       })
+    const pair = clipboardBlock.beginTextPair()
+    const compareTitles = { en: t('en', 'palette.comparePreviousMaterial'), zh: t('zh', 'palette.comparePreviousMaterial') }
+    if (pair && (!q || compareTitles.en.toLowerCase().includes(q) || compareTitles.zh.includes(q) || CURRENT_MATERIAL_COMPARE_ACTION.includes(q))) {
+      const title = t(locale, 'palette.comparePreviousMaterial')
+      const domainItem: LauncherItem = {
+        systemKey: `object-action:${CURRENT_MATERIAL_COMPARE_ACTION}`,
+        kind: 'host', display: { title, titleI18n: compareTitles, kindLabel: kindLabel.en, kindLabelI18n: kindLabel },
+        behavior: { type: 'perform' }, execute: async () => ({ ok: true, keepOpen: true }),
+        experienceRecord: false, recordUsage: false,
+      }
+      const queryGeneration = textExportQueryGenerationRef.current
+      const lifetime = textExportLifetimeRef.current
+      materialComparisonScopesRef.current.set(domainItem, { ...pair, isCurrent: () =>
+        textExportMountedRef.current && textExportLifetimeRef.current === lifetime &&
+        textExportQueryGenerationRef.current === queryGeneration && pair.isCurrent() && textScope.isCurrent() })
+      items.push({ kind: 'domain', id: domainItem.systemKey, title, subtitle: '', domainItem })
+    }
     // Host-only export has its own empty-text eligibility and no plugin output route.
     if (canExportCurrentText({ block, nativeDesktop: isNativeDesktopRuntime(), standaloneLauncher })) {
       const titleI18n = { en: t('en', 'palette.saveCurrentText'), zh: t('zh', 'palette.saveCurrentText') }
@@ -582,7 +605,7 @@ export function GlobalLauncherHost() {
       }
     }
     return items
-  }, [clipboardBlock.block, clipboardBlock.getMaterialGeneration, clipboardBlock.hasMaterial, controllerRef, controllerState, locale, objectActions, rankingQuery, standaloneLauncher])
+  }, [clipboardBlock.block, clipboardBlock.beginTextPair, clipboardBlock.getMaterialGeneration, clipboardBlock.hasMaterial, controllerRef, controllerState, locale, objectActions, rankingQuery, standaloneLauncher])
 
   const composedRankedItems = useMemo(() => {
     if (
@@ -1109,6 +1132,29 @@ export function GlobalLauncherHost() {
       : item.id.startsWith('history-object-action:')
         ? item.id.slice('history-object-action:'.length)
         : null
+    if (objectActionId === CURRENT_MATERIAL_COMPARE_ACTION) {
+      const pair = item.kind === 'domain' ? materialComparisonScopesRef.current.get(item.domainItem) : undefined
+      if (!pair?.isCurrent()) return
+      clipboardBlock.cancelFileTextRead()
+      setDeliveryFailure(null)
+      void materialComparisonRef.current(pair, {
+        prepare: () => ensurePluginRuntimeReady('builtin'),
+        available: () => {
+          const definition = pluginRegistry.getPluginDefinition('text-diff', 'builtin')
+          return isCurrentBundledDefinition('text-diff', 'builtin', definition) &&
+            pluginRegistry.getPluginLifetime('text-diff', 'builtin').active &&
+            Boolean(definition?.ui?.surfaces?.some(surface => surface.id === 'main'))
+        },
+        titles: { previous: t(locale, 'palette.previousMaterial'), current: t(locale, 'palette.currentMaterial') },
+        open: openLauncherHostedPluginSurface,
+      }).then(error => {
+        if (error && pair.isCurrent()) setDeliveryFailure({
+          message: t(locale, error === 'too-large' ? 'palette.materialComparisonTooLarge' : 'palette.materialComparisonUnavailable'),
+          isCurrent: pair.isCurrent,
+        })
+      })
+      return
+    }
     if (objectActionId === CURRENT_TEXT_EXPORT_ACTION) {
       const scope = item.kind === 'domain' ? currentTextExportScopesRef.current.get(item.domainItem) : undefined
       if (!scope?.isCurrent()) return
@@ -1143,7 +1189,7 @@ export function GlobalLauncherHost() {
       if (index >= 0) setSelectedIndex(index)
     }
     selectItem(item, customizeParams)
-  }, [clipboardBlock.cancelFileTextRead, executeCurrentTextAction, executeCurrentTextExport, executeObjectAction, objectActions, selectItem, setSelectedIndex, visibleFiltered, showingSuggestions, suggestionSession, currentSuggestionKeys])
+  }, [clipboardBlock.cancelFileTextRead, executeCurrentTextAction, executeCurrentTextExport, executeObjectAction, objectActions, selectItem, setSelectedIndex, visibleFiltered, showingSuggestions, suggestionSession, currentSuggestionKeys, locale])
 
 
   const beginDrag = useGlobalLauncherNativeDrag(standaloneLauncher)
