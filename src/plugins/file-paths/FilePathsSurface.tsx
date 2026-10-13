@@ -41,11 +41,11 @@ export function FilePathsSurface({ host, t, initialText = '' }: PluginSurfacePro
       <strong>{t('title')}</strong>
       <IconButton label={t('close')} onClick={() => update(() => host.close())}><CloseIcon size={14} /></IconButton>
     </header>
-    <nav aria-label={t('formatLabel')}><span>{t('formatLabel')}</span>{(['posix', 'uri', 'relative', 'name'] as PathFormat[]).map((item) =>
+    <nav aria-label={t('formatLabel')}><span>{t('formatLabel')}</span>{(['posix', 'uri', 'relative', 'name', 'markdown-image'] as PathFormat[]).map((item) =>
       <button type="button" key={item} aria-pressed={format === item} onClick={() => update(() => setFormat(item))}>{t(`format.${item}`)}</button>)}</nav>
     <nav aria-label={t('styleLabel')}><span>{t('styleLabel')}</span>{(['auto', 'unix', 'windows'] as PathStyle[]).map((item) =>
       <button type="button" key={item} aria-pressed={style === item} onClick={() => update(() => setStyle(item))}>{t(`style.${item}`)}</button>)}</nav>
-    {format === 'relative' && <label>{t('base')}<input aria-label={t('base')} value={base} onChange={(event) => update(() => setBase(event.target.value))} /><small>{t('baseHint')}</small></label>}
+    {(format === 'relative' || format === 'markdown-image') && <label>{t(format === 'markdown-image' ? 'documentBase' : 'base')}<input aria-label={t(format === 'markdown-image' ? 'documentBase' : 'base')} value={base} onChange={(event) => update(() => setBase(event.target.value))} /><small>{t('baseHint')}</small></label>}
     <div className="file-paths-editors">
       <label>{t('source')}<textarea aria-label={t('source')} placeholder={t('sourcePlaceholder')} spellCheck={false} value={source} onChange={(event) => update(() => setSource(event.target.value))} /></label>
       <label>{t('output')}<textarea aria-label={t('output')} spellCheck={false} readOnly value={result.output} /></label>

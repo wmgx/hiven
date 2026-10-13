@@ -13,5 +13,9 @@
   "error.root": "Relative paths require the same path syntax and root (Unix root, Windows drive, or UNC share).",
   "error.limit": "Input is too large: at most 1,048,576 characters, 10,000 paths, and a 32,768-character base. Nothing was truncated.",
   "help": "Path conversion help",
-  "sourcePlaceholder": "Paste paths, one per line"
+  "sourcePlaceholder": "Paste paths, one per line",
+  "format.markdown-image": "Markdown images",
+  "documentBase": "Document directory (absolute path)",
+  "error.directory": "This path identifies a directory. Enter an image file path; files are not read or checked.",
+  "error.output-limit": "Markdown output exceeds 1 MiB (UTF-8). Reduce the path list or use a closer document directory. Nothing was truncated."
 }

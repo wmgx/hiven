@@ -1,6 +1,7 @@
-export type PathFormat = 'posix' | 'uri' | 'relative' | 'name'
+export type PathFormat = 'posix' | 'uri' | 'relative' | 'name' | 'markdown-image'
 export type PathStyle = 'auto' | 'unix' | 'windows'
-export type PathErrorCode = 'empty' | 'invalid' | 'absolute' | 'base' | 'root' | 'limit'
+export type PathErrorCode = 'empty' | 'invalid' | 'absolute' | 'base' | 'root' | 'limit' | 'directory' | 'output-limit'
+export const MARKDOWN_IMAGE_MAX_BYTES = 1024 * 1024
 export class PathTransformError extends Error {
   readonly code: PathErrorCode
   constructor(code: PathErrorCode) { super(code); this.code = code }
@@ -77,7 +78,14 @@ function transformOne(raw: string, format: PathFormat, base: string, style: Path
   const targetParts = normalized(path), baseParts = normalized(from)
   let shared = 0
   while (shared < targetParts.length && shared < baseParts.length && equal(targetParts[shared], baseParts[shared])) shared++
-  return [...baseParts.slice(shared).map(() => '..'), ...targetParts.slice(shared)].join('/') || '.'
+  const relative = [...baseParts.slice(shared).map(() => '..'), ...targetParts.slice(shared)]
+  if (format === 'markdown-image') {
+    // Only syntactically known directories are rejected; no existence or image
+    // type is inferred. An ancestor of the explicit base is also a directory.
+    if (path.trailing || ['.', '..'].includes(path.parts.at(-1) ?? '') || targetParts.length === shared) return fail('directory')
+    return `![](${relative.map(encode).join('/')})`
+  }
+  return relative.join('/') || '.'
 }
 /** Pure string conversion: no filesystem/clipboard reads, expansion or CWD assumptions. */
 export function transformPaths(source: string, format: PathFormat, base = '', style: PathStyle = 'auto'): string {
@@ -87,6 +95,17 @@ export function transformPaths(source: string, format: PathFormat, base = '', st
   // One optional terminal newline is a text-list delimiter, not an extra pathname.
   if (paths.at(-1) === '') paths.pop()
   if (paths.length > 10_000) return fail('limit')
-  try { return paths.map((path) => transformOne(path, format, base, style)).join('\n') }
+  try {
+    if (format !== 'markdown-image') return paths.map((path) => transformOne(path, format, base, style)).join('\n')
+    const output: string[] = []
+    let bytes = 0
+    for (const path of paths) {
+      const line = transformOne(path, format, base, style)
+      bytes += new TextEncoder().encode(line).byteLength + (output.length ? 1 : 0)
+      if (bytes > MARKDOWN_IMAGE_MAX_BYTES) return fail('output-limit')
+      output.push(line)
+    }
+    return output.join('\n')
+  }
   catch (error) { if (error instanceof URIError) return fail('invalid'); throw error }
 }
