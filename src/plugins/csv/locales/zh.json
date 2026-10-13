@@ -1,4 +1,6 @@
 {
+  "surface.loadFailed": "表格工具加载失败，可重试或返回。",
+  "action.retry": "重试",
   "surface.title": "CSV Tools",
   "surface.subtitle": "表格转换",
   "surface.loading": "正在加载表格工具…",

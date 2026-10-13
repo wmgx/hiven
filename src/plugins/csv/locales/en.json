@@ -1,4 +1,6 @@
 {
+  "surface.loadFailed": "Table tools could not be loaded. Try again or go back.",
+  "action.retry": "Retry",
   "surface.title": "CSV Tools",
   "surface.subtitle": "Table convert",
   "surface.loading": "Loading table tools…",

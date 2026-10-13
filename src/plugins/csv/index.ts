@@ -3,34 +3,59 @@
  * Opens in launcher tool-shell (in-place), not a detached window.
  */
 
-import { createElement, lazy, Suspense } from 'react'
+import { Component, createElement, lazy, Suspense } from 'react'
 import { definePlugin, type PluginSurfaceProps } from '@hiven/plugin'
+import { createEntryLoader, EntryStylesheetError, identifyStylesheetFailure } from './entryLoader'
 import './style.css'
 
-const CsvSurface = lazy(async () => {
+const entry = createEntryLoader(async () => {
   const module = await import('./CsvSurface')
   return { default: module.CsvSurface }
-})
+}, error => identifyStylesheetFailure(error, document))
+
+class CsvEntry extends Component<PluginSurfaceProps> {
+  state = { Surface: lazy(entry.read), error: undefined as EntryStylesheetError | undefined, retrying: false }
+  private active = true
+  private pending = false
+
+  static getDerivedStateFromError(error: unknown) {
+    // Ordinary render/module errors retain the host's existing crash behavior.
+    if (!(error instanceof EntryStylesheetError)) throw error
+    return { error }
+  }
+
+  componentDidMount() { this.active = true }
+  componentWillUnmount() { this.active = false }
+
+  retry = () => {
+    if (this.pending || !this.active) return
+    this.pending = true
+    this.setState({ retrying: true })
+    void entry.retry().then(() => {
+      if (this.active) this.setState({ Surface: lazy(entry.read), error: undefined, retrying: false })
+    }, error => {
+      if (this.active) this.setState({ error, retrying: false })
+    }).finally(() => { this.pending = false })
+  }
+
+  render() {
+    const { error, retrying, Surface } = this.state
+    if (error && !(error instanceof EntryStylesheetError)) throw error
+    const fallback = createElement(
+      'section',
+      { className: 'csv-tools-surface csv-tools-surface__empty--start', 'aria-busy': !error || retrying },
+      createElement('p', { role: 'status' }, this.props.t(error ? (retrying ? 'surface.loading' : 'surface.loadFailed') : 'surface.loading')),
+      error && createElement('button', { type: 'button', className: 'csv-tools-surface__file-btn',
+        'aria-disabled': retrying, onClick: this.retry }, this.props.t('action.retry')),
+      createElement('button', { type: 'button', className: 'csv-tools-surface__file-btn',
+        onClick: () => this.props.host.requestBack() }, this.props.t('action.back')),
+    )
+    return error ? fallback : createElement(Suspense, { fallback }, createElement(Surface, this.props))
+  }
+}
 
 function LazyCsvSurface(props: PluginSurfaceProps) {
-  // Import failures reach the host's localized surface error/back boundary.
-  // React caches a rejected lazy import; reopening alone does not retry it.
-  return createElement(
-    Suspense,
-    {
-      fallback: createElement(
-        'section',
-        { className: 'csv-tools-surface csv-tools-surface__empty--start', 'aria-busy': true },
-        createElement('p', { role: 'status' }, props.t('surface.loading')),
-        createElement('button', {
-          type: 'button',
-          className: 'csv-tools-surface__file-btn',
-          onClick: () => props.host.requestBack(),
-        }, props.t('action.back')),
-      ),
-    },
-    createElement(CsvSurface, props),
-  )
+  return createElement(CsvEntry, props)
 }
 
 const WORKSPACE_SHELL = {

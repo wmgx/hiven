@@ -34,6 +34,7 @@ vm.runInNewContext(compiled, {
       lazyComponents.push(component)
       return component
     } }
+    if (name === './entryLoader') return { createEntryLoader: read => ({ read }), identifyStylesheetFailure() {}, EntryStylesheetError: Error }
     if (name === './style.css') return {}
     throw new Error(`Unexpected eager dependency: ${name}`)
   },
@@ -48,7 +49,7 @@ const routeIds = ['to-json', 'to-array', 'to-columns', 'to-keyed', 'to-ndjson', 
 const surfaces = plugin.ui.surfaces
 assert.deepEqual(Array.from(surfaces, surface => surface.id), ['main', ...routeIds])
 assert.deepEqual(Array.from(plugin.launcher.items, item => item.id), routeIds.map(id => `open-${id}`))
-assert.equal(factories.length, 1)
+assert.equal(factories.length, 0)
 assert.equal(imports.length, 0, 'Registering CSV must not load the table implementation')
 
 const main = surfaces[0]
@@ -88,8 +89,9 @@ for (const locale of ['en', 'zh']) {
       host: { requestBack() {} }, initialText: material,
     }
     const element = surface.component(props)
-    const child = React.Children.only(element.props.children)
-    assert.equal(child.type, lazyComponents[0])
+    const instance = new element.type(element.props)
+    const child = React.Children.only(instance.render().props.children)
+    assert.equal(child.type, lazyComponents.at(-1))
     assert.deepEqual(Object.keys(child.props).sort(), Object.keys(props).sort())
     for (const key of Object.keys(props)) assert.equal(child.props[key], props[key], `${surface.id}: ${key}`)
   }
