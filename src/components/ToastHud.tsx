@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { translate } from '../i18n'
-import type { ToastLevel } from '../workspace/toast'
+import type { HudReceipt, ToastLevel } from '../workspace/toast'
 import './ToastHud.css'
 
-type HudToast = { id: string; level: ToastLevel; expiresAt: number; locale: 'zh' | 'en'; theme: 'dark' | 'light'; progress?: { completed: number; total: number } }
+type HudToast = { receipt?: HudReceipt; id: string; level: ToastLevel; expiresAt: number; locale: 'zh' | 'en'; theme: 'dark' | 'light'; progress?: { completed: number; total: number } }
 type HudUpdate = { revision: number; toast: HudToast | null }
 
 export function ToastHud() {
@@ -34,6 +34,6 @@ export function ToastHud() {
   const t = (key: string) => translate(toast.locale, 'hud', key)
   return <div className="toast-hud" data-theme={toast.theme} data-level={toast.level} role={toast.level === 'error' ? 'alert' : 'status'}>
     <span className="toast-hud__icon" aria-hidden="true">{toast.level === 'success' ? '✓' : toast.level === 'info' ? 'i' : '!'}</span>
-    <div><small>{t('title')}</small><strong>{t(toast.level)}</strong><p>{toast.progress ? translate(toast.locale, 'hud', 'queue.progress', { completed: toast.progress.completed, total: toast.progress.total, remaining: toast.progress.total - toast.progress.completed }) : t('details')}</p></div>
+    <div><small>{t('title')}</small><strong>{t(toast.receipt ? `result.${toast.receipt.result}` : toast.level)}</strong><p>{toast.progress ? translate(toast.locale, 'hud', 'queue.progress', { completed: toast.progress.completed, total: toast.progress.total, remaining: toast.progress.total - toast.progress.completed }) : toast.receipt ? '' : t('details')}</p></div>
   </div>
 }

@@ -217,3 +217,14 @@ const original = [{ id: 'a', text: '完整\r\n  synthetic A\n' }, { id: 'b', tex
   h.stop()
 }
 console.log('History queue handoff passed: explicit delivery, full snapshots, failure retry, cancellation, replacement fence and revocation')
+
+{
+  const h = fixture(); await flush()
+  await h.bridge.start(original)
+  h.failPaste = true
+  await h.next()
+  assert.equal(h.notices.at(-1).outcome, 'failed')
+  h.stop()
+  assert.equal(h.notices.at(-1).outcome, 'cancelled', 'Internal stop/reload revokes retained-item feedback')
+  assert.equal(h.notices.at(-1).status.remaining, 0)
+}

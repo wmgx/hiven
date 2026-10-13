@@ -8,6 +8,10 @@ import { dismissRoutedToast, routeToast } from './toastRouting'
 
 export type ToastLevel = 'info' | 'success' | 'error' | 'warning'
 
+/** Host-only fixed results. Never populated from plugin text or error messages. */
+export type HudResult = 'copied' | 'pasted' | 'copy-failed' | 'paste-failed' | 'copied-paste-failed' | 'queue-ready' | 'queue-pasted' | 'queue-failed'
+export type HudReceipt = { operation: string; revision: number; result: HudResult }
+
 export interface ToastAction {
   label: string
   onClick: () => void
@@ -22,6 +26,7 @@ export interface ToastItem {
   expiresAt: number
   /** Host-authored progress only; no user content. */
   progress?: { completed: number; total: number }
+  hud?: HudReceipt
   /** If true, toast will not auto-dismiss */
   persistent?: boolean
   /** Optional action button displayed in the toast */
@@ -36,7 +41,10 @@ interface ToastStore {
 
 export const useToastStore = create<ToastStore>((set) => ({
   toasts: [],
-  addToast: (item) => set((s) => ({ toasts: [...s.toasts.filter((toast) => toast.id !== item.id), item] })),
+  addToast: (item) => set((s) => {
+    if (item.hud && s.toasts.some(old => old.hud?.operation === item.hud!.operation && old.hud.revision >= item.hud!.revision)) return s
+    return { toasts: [...s.toasts.filter(old => old.id !== item.id && (!item.hud || old.hud?.operation !== item.hud.operation)), item] }
+  }),
   removeToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
 }))
 
@@ -53,8 +61,11 @@ export const useToastStore = create<ToastStore>((set) => ({
 export function showToast(
   message: string,
   level: ToastLevel = 'info',
-  options?: number | { durationMs?: number; persistent?: boolean; action?: ToastAction; progress?: { completed: number; total: number } }
+  options?: number | { durationMs?: number; persistent?: boolean; action?: ToastAction; progress?: { completed: number; total: number }; hud?: HudReceipt }
 ): string {
+  const hud = typeof options === 'object' ? options.hud : undefined
+  const existing = hud && useToastStore.getState().toasts.find(item => item.hud?.operation === hud.operation && item.hud.revision >= hud.revision)
+  if (existing) return existing.id
   const id = `toast-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`
 
   let persistent = false
@@ -71,7 +82,7 @@ export function showToast(
 
   const createdAt = Date.now()
   const desktopDuration = persistent ? 8000 : Math.min(15000, Math.max(1000, durationMs))
-  const item: ToastItem = { id, message, level, createdAt, expiresAt: createdAt + desktopDuration, persistent, action, progress: typeof options === 'object' ? options.progress : undefined }
+  const item: ToastItem = { id, message, level, createdAt, expiresAt: createdAt + desktopDuration, persistent, action, hud: typeof options === 'object' ? options.hud : undefined, progress: typeof options === 'object' ? options.progress : undefined }
   useToastStore.getState().addToast(item)
   void routeToast(item, (toastId) => useToastStore.getState().removeToast(toastId))
 

@@ -98,6 +98,7 @@ export function installHistoryPasteQueueHost(options: { notify?: (status: Histor
     generation += 1
     if (startingId) cancelled.add(startingId)
     queue.cancel()
+    options.notify?.(status(), 'cancelled')
     void releaseShortcut().catch(() => undefined)
   }
   const next = async (): Promise<boolean> => {
@@ -173,6 +174,7 @@ export function installHistoryPasteQueueHost(options: { notify?: (status: Histor
     alive = false
     generation += 1
     queue.dispose()
+    options.notify?.(status(), 'cancelled')
     for (const cleanup of stops) cleanup()
     void releaseShortcut().catch(() => undefined)
     installedStop = null

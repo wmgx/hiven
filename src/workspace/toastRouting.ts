@@ -26,7 +26,7 @@ export async function routeToast(item: ToastItem, removeLocal: (id: string) => v
     // Original text and action callbacks never enter the desktop HUD.
     const target = await invoke<string | null>('route_toast', {
       id: item.id, level: item.level, expiresAt: item.expiresAt,
-      progress: item.progress, sequence: issuedSequence, locale: locale === 'zh' ? 'zh' : 'en', theme,
+      progress: item.progress, receipt: item.hud, sequence: issuedSequence, locale: locale === 'zh' ? 'zh' : 'en', theme,
     })
     if (!target || target === getCurrentWindow().label) return
     ticket.target = target

@@ -784,3 +784,41 @@ pub(crate) fn suggestion_origin() -> Option<String> {
     if class.is_empty() || class.len() > 160 || !class.bytes().all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b)) { return None; }
     Some(format!("x11-class:{}", class.to_ascii_lowercase()))
 }
+
+/// A bounded, read-only identity query for passive feedback routing. No titles or content.
+pub(crate) fn foreground_is_external() -> Option<bool> {
+    if !is_x11_session(std::env::var("XDG_SESSION_TYPE").ok().as_deref(),
+        std::env::var("WAYLAND_DISPLAY").ok().as_deref()) { return None; }
+    let (connection, screen) = connect().ok()?;
+    connection.stream().budget(Duration::from_millis(100)).ok()?;
+    let root = connection.setup().roots.get(screen)?.root;
+    let active = connection.intern_atom(true, b"_NET_ACTIVE_WINDOW").ok()?.reply().ok()?.atom;
+    let reply = property(&connection, root, active, AtomEnum::WINDOW.into(), 2).ok()?;
+    let window = hud_active_window(&reply)?;
+    if window == 0 { return None; }
+    let pid_atom = connection.intern_atom(true, b"_NET_WM_PID").ok()?.reply().ok()?.atom;
+    let pid = property_scalar(&connection, window, pid_atom, AtomEnum::CARDINAL).ok()??;
+    (pid != 0).then_some(pid != std::process::id())
+}
+
+fn hud_active_window(reply: &GetPropertyReply) -> Option<u32> {
+    if reply.type_ != u32::from(AtomEnum::WINDOW) || reply.format != 32 || reply.bytes_after != 0 { return None; }
+    let values: Vec<_> = reply.value32()?.collect();
+    // Some X11 WMs expose the native unsigned-long slot with a zero high word.
+    match values.as_slice() { [window] | [window, 0] if *window != 0 => Some(*window), _ => None }
+}
+#[cfg(test)]
+mod hud_foreground_tests {
+    use super::*;
+    #[test]
+    fn accepts_only_one_window_or_zero_padded_window() {
+        let mut reply = GetPropertyReply { format: 32, sequence: 0, length: 1, type_: AtomEnum::WINDOW.into(), bytes_after: 0, value_len: 1, value: 42u32.to_ne_bytes().to_vec() };
+        assert_eq!(hud_active_window(&reply), Some(42));
+        reply.value.extend_from_slice(&0u32.to_ne_bytes());
+        assert_eq!(hud_active_window(&reply), Some(42));
+        reply.value[4] = 1;
+        assert_eq!(hud_active_window(&reply), None);
+        reply.bytes_after = 4;
+        assert_eq!(hud_active_window(&reply), None);
+    }
+}

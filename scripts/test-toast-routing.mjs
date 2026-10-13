@@ -145,3 +145,22 @@ for (const target of ['launcher', 'editor:1']) {
   assert.equal(added.length, 1)
 }
 console.log('Toast routing passed: privacy, issue epoch, late dismissal, expiry, single destination and cleanup')
+
+{
+  const h = fixture()
+  const hud = { operation: '00000000-0000-4000-8000-000000000000', revision: 1, result: 'paste-failed' }
+  const first = h.toast.showToast('PRIVATE_BODY', 'error', { hud, durationMs: 6000 })
+  h.tick(1000)
+  h.toast.showToast('safe retry', 'success', { hud: { ...hud, revision: 2, result: 'pasted' } })
+  h.toast.showToast('late failure', 'error', { hud })
+  assert.equal(h.items().length, 1)
+  assert.equal(h.items()[0].hud.result, 'pasted')
+  h.toast.dismissToast(first)
+  assert.equal(h.items().length, 1, 'Old dismissal cannot clear the replacement')
+  await flush()
+  const payloads = h.calls.filter(call => call.command === 'route_toast').map(call => call.payload)
+  assert.equal(payloads.at(-1).receipt.result, 'pasted')
+  assert.equal(JSON.stringify(payloads).includes('PRIVATE_BODY'), false)
+  h.tick(3600)
+  assert.equal(h.items().length, 0)
+}

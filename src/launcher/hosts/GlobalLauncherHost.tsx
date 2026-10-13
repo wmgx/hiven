@@ -43,7 +43,6 @@ import { executeRecommendedAction } from '../clipboard/actionExecutor'
 import { recommendActionsForBlock, type RecommendedAction, type RecommendedOutputTarget } from '../clipboard/actionRecommendation'
 import { createPluginClipboard, writeClipboardText } from '../../workspace/pluginClipboard'
 import { createGlobalLauncherPluginApi } from '../clipboard/globalLauncherApi'
-import type { LauncherExecuteResult } from '../../workspace/launcher/types'
 import { createPluginPaste } from '../../workspace/pluginPaste'
 import { cancelPendingPasteRecovery, captureLauncherPasteOwner, isPasteCancelled } from '../../workspace/pasteRecovery'
 import { LAUNCHER_NEW_SESSION_EVENT } from '../../workspace/launcherWindowEvents'
@@ -116,6 +115,7 @@ export function GlobalLauncherHost() {
   const [currentTextBusy, setCurrentTextBusy] = useState(false)
   const [deliveryFailure, setDeliveryFailure] = useState<{ message: string; isCurrent: () => boolean } | null>(null)
   const deliveryGenerationRef = useRef(0)
+  const hudMaterialRef = useRef<{ block: unknown; id: string } | null>(null)
   const currentTextDeliveryRef = useRef(createCurrentTextDelivery(setCurrentTextBusy))
   const currentTextScopesRef = useRef(new WeakMap<LauncherItem, CurrentTextActionScope>())
   const materialComparisonRef = useRef(createMaterialComparison())
@@ -927,7 +927,7 @@ export function GlobalLauncherHost() {
   })
 
 
-  const pastePreviewText = useCallback(async (text: string, isCurrent: () => boolean, options?: { historyText?: boolean; via?: string }): Promise<LauncherExecuteResult> => {
+  const pastePreviewText = useCallback(async (text: string, isCurrent: () => boolean, options?: { historyText?: boolean; via?: string }): Promise<{ ok: true } | { ok: false; message: string; fallback?: 'copied' | 'none' }> => {
     const startedAt = telemetryNow()
     trackBehavior(TelemetryEvents.pasteText, { textLength: text.length, via: options?.via ?? 'result-preview' })
     const permissions = options?.historyText
@@ -943,7 +943,7 @@ export function GlobalLauncherHost() {
     if (isPasteCancelled(result)) return { ok: false, message: '' }
     if (!result.ok) {
       // A clipboard fallback is recoverable, but is not a delivered output.
-      return { ok: false, message: result.message || t(locale, 'palette.quickEntryError') }
+      return { ok: false, message: result.message || t(locale, 'palette.quickEntryError'), fallback: result.fallback }
     }
     return { ok: true }
 
@@ -953,6 +953,8 @@ export function GlobalLauncherHost() {
   const executeCurrentTextAction = useCallback(async (scope: CurrentTextActionScope, action: CurrentTextDeliveryAction) => {
     if (!scope.isCurrent()) return
     const generation = ++deliveryGenerationRef.current
+    if (hudMaterialRef.current?.block !== scope.block) hudMaterialRef.current = { block: scope.block, id: crypto.randomUUID() }
+    const operation = hudMaterialRef.current.id
     setDeliveryFailure(null)
     const result = await currentTextDeliveryRef.current({
       ...scope,
@@ -963,14 +965,20 @@ export function GlobalLauncherHost() {
       }),
     })
     if (!result || generation !== deliveryGenerationRef.current || !scope.isCurrent()) return
-    if (!result.ok) { if (result.message) setDeliveryFailure({ message: result.message, isCurrent: scope.isCurrent }) }
+    if (!result.ok) {
+      if (result.message) {
+        setDeliveryFailure({ message: result.message, isCurrent: scope.isCurrent })
+        const outcome = action.startsWith('copy-') ? 'copy-failed' : result.fallback === 'copied' ? 'copied-paste-failed' : 'paste-failed'
+        showToast(t(locale, `hud.result.${outcome}`), 'error', { durationMs: 6000, hud: { operation, revision: generation, result: outcome } })
+      }
+    }
     else {
       const closing = closeLauncherAfterAction()
       const closedSession = useAppStore.getState().globalLauncherSessionId + (standaloneLauncher || overlay ? 1 : 0)
       await closing
       const current = useAppStore.getState()
       if (current.globalLauncherSessionId === closedSession && !current.globalLauncherOpen) {
-        showToast(t(locale, action.startsWith('copy-') ? 'palette.copied' : 'hud.pasted'), 'success')
+        showToast(t(locale, action.startsWith('copy-') ? 'palette.copied' : 'hud.pasted'), 'success', { hud: { operation, revision: generation, result: action.startsWith('copy-') ? 'copied' : 'pasted' } })
       }
     }
   }, [closeLauncherAfterAction, locale, overlay, pastePreviewText, standaloneLauncher])

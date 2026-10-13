@@ -43,7 +43,7 @@ export function captureCurrentTextDeliveryScope(params: {
   }
 }
 
-type DeliveryResult = { ok: true } | { ok: false; message: string }
+type DeliveryResult = { ok: true } | { ok: false; message: string; fallback?: 'copied' | 'none' }
 
 /** One host delivery at a time; late completion never owns a newer material/session. */
 export function createCurrentTextDelivery(onBusyChange: (busy: boolean) => void = () => {}) {

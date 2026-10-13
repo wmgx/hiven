@@ -1,7 +1,7 @@
 import { beginSuggestionSession } from './workspace/launcher/contextSuggestionsStore'
 import { translate } from './i18n'
 import { installHistoryPasteQueueHost } from './historyPasteQueueHandoff'
-import { showToast } from './workspace/toast'
+import { dismissToast, showToast } from './workspace/toast'
 import { useEffect, useRef } from 'react'
 import { useAppStore } from './store'
 import type { GlobalLauncherPosition } from './store'
@@ -145,15 +145,26 @@ function LauncherRuntimeApp() {
   useEffect(() => isNativeDesktopRuntime() ? installPluginSurfaceShortcutHotkeys() : undefined, [])
   useEffect(() => isNativeDesktopRuntime() ? installAppHotkeys() : undefined, [])
   useEffect(() => isNativeDesktopRuntime() ? installQuickEditorHotkeys() : undefined, [])
-  useEffect(() => isNativeDesktopRuntime() ? installHistoryPasteQueueHost({
-    notify: (status, outcome) => {
+  useEffect(() => {
+    if (!isNativeDesktopRuntime()) return
+    let session = '', operation = '', lastNotice: string | undefined
+    const stop = installHistoryPasteQueueHost({ notify: (status, outcome) => {
+      if (outcome === 'cancelled' || status.sessionId !== session) {
+        if (lastNotice) dismissToast(lastNotice)
+        lastNotice = undefined
+        if (outcome === 'cancelled') return
+        session = status.sessionId
+        operation = crypto.randomUUID()
+      }
       const locale = useAppStore.getState().settings.locale
-      showToast(translate(locale, 'hud', `queue.${outcome}`), outcome === 'failed' ? 'error' : outcome === 'delivered' ? 'success' : 'info', {
+      lastNotice = showToast(translate(locale, 'hud', `queue.${outcome}`), outcome === 'failed' ? 'error' : outcome === 'delivered' ? 'success' : 'info', {
         durationMs: outcome === 'failed' ? 6000 : 3500,
         progress: status.total ? { completed: status.completed, total: status.total } : undefined,
+        hud: { operation, revision: status.version, result: outcome === 'failed' ? 'queue-failed' : outcome === 'delivered' ? 'queue-pasted' : 'queue-ready' },
       })
-    },
-  }) : undefined, [])
+    } })
+    return () => { stop(); if (lastNotice) dismissToast(lastNotice) }
+  }, [])
 
   // Background clipboard age clock: first see = unknown baseline; real changes get known changedAt.
   // Prevents Global Launcher open from treating long-sitting clipboard as "just copied".

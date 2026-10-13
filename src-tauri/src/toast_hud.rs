@@ -21,6 +21,25 @@ pub(crate) enum Locale { Zh, En }
 pub(crate) enum Theme { Light, Dark }
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct Progress { completed: u32, total: u32 }
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum ResultKind { Copied, Pasted, CopyFailed, PasteFailed, CopiedPasteFailed, QueueReady, QueuePasted, QueueFailed }
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Receipt { operation: String, revision: u64, result: ResultKind }
+impl Receipt {
+    fn valid(&self, level: &Level) -> bool {
+        let bytes = self.operation.as_bytes();
+        let uuid = bytes.len() == 36 && bytes.iter().enumerate().all(|(i, c)| {
+            if [8, 13, 18, 23].contains(&i) { *c == b'-' } else { c.is_ascii_hexdigit() }
+        });
+        uuid && self.revision <= 9_007_199_254_740_991 && match self.result {
+            ResultKind::Copied | ResultKind::Pasted | ResultKind::QueuePasted => matches!(level, Level::Success),
+            ResultKind::QueueReady => matches!(level, Level::Info),
+            _ => matches!(level, Level::Error),
+        }
+    }
+}
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct Snapshot {
@@ -30,6 +49,7 @@ pub(crate) struct Snapshot {
     locale: Locale,
     theme: Theme,
     progress: Option<Progress>,
+    receipt: Option<Receipt>,
 }
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct HudUpdate { revision: u64, toast: Option<Snapshot> }
@@ -43,6 +63,7 @@ struct State {
     ready: bool,
     latest_sequence: u64,
     revision: u64,
+    receipts: HashMap<(String, String), (u64, u64)>,
 }
 impl State {
     fn accept(&mut self, owner: &str, sequence: u64, id: &str, expires_at: u64, now: u64) -> bool {
@@ -55,6 +76,24 @@ impl State {
         self.latest_sequence = sequence;
         self.sequences.insert(owner.into(), sequence);
         true
+    }
+    fn accept_receipt(&mut self, owner: &str, receipt: Option<&Receipt>, now: u64) -> bool {
+        self.receipts.retain(|_, (_, until)| *until > now);
+        let Some(receipt) = receipt else { return true; };
+        let key = (owner.to_owned(), receipt.operation.clone());
+        if self.receipts.get(&key).is_some_and(|(revision, _)| receipt.revision <= *revision) { return false; }
+        // Bound metadata without discarding live anti-replay entries.
+        if !self.receipts.contains_key(&key) && self.receipts.len() >= 256 { return false; }
+        self.receipts.insert(key, (receipt.revision, now.saturating_add(MAX_LIFETIME)));
+        true
+    }
+    fn protects_failure(&self, owner: &str, receipt: Option<&Receipt>, level: &Level, now: u64) -> bool {
+        self.pending.as_ref().is_some_and(|pending| {
+            let same_operation = pending.owner == owner && pending.snapshot.receipt.as_ref().zip(receipt)
+                .is_some_and(|(old, new)| old.operation == new.operation);
+            pending.snapshot.expires_at > now && matches!(pending.snapshot.level, Level::Error)
+                && !matches!(level, Level::Error) && !same_operation
+        })
     }
     fn cancel(&mut self, owner: &str, id: &str) -> bool {
         // Bounded per-owner tombstones cover dismiss-before-route races.
@@ -74,13 +113,45 @@ fn registry() -> &'static Mutex<State> { static STATE: OnceLock<Mutex<State>> = 
 fn trace(stage: &'static str) { super::log_launcher_perf("native:hud.lifecycle", Instant::now(), stage); }
 fn now() -> u64 { SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64 }
 fn surface(label: &str) -> bool { label == "launcher" || label == "main" || label == "quick-editor" || label.starts_with("plugin-surface:") || label.starts_with("editor:") }
-fn visible_target(app: &tauri::AppHandle, owner: &str) -> Option<String> {
-    let mut windows: Vec<_> = app.webview_windows().into_iter()
-        .filter(|(label, window)| surface(label) && window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false))
-        .collect();
-    windows.sort_by_key(|(label, window)| (label != owner, !window.is_focused().unwrap_or(false), label.clone()));
-    windows.first().map(|(label, _)| label.clone())
+// Own key windows take precedence over OS frontmost app (macOS non-activating panels).
+// Err is unknown, never evidence that an external app owns the keyboard.
+fn foreground_target(app: &tauri::AppHandle, owner: &str) -> Result<Option<String>, ()> {
+    let windows = app.webview_windows();
+    let mut focused = Vec::new();
+    let mut unknown = false;
+    for (label, window) in &windows {
+        if !surface(label) { continue; }
+        match window.is_focused() {
+            Ok(true) => focused.push(label.clone()),
+            Ok(false) => {},
+            Err(_) => unknown = true,
+        }
+    }
+    focused.sort_by_key(|label| (label != owner, label.clone()));
+    if let Some(label) = focused.first() { return Ok(Some(label.clone())); }
+    if unknown { return Err(()); }
+    if external_foreground() == Some(true) { Ok(None) } else { Err(()) }
 }
+#[cfg(target_os = "linux")]
+fn external_foreground() -> Option<bool> { super::linux_x11_windows::foreground_is_external() }
+#[cfg(target_os = "macos")]
+fn external_foreground() -> Option<bool> {
+    super::current_foreground_process_id().filter(|pid| *pid != 0).map(|pid| pid != std::process::id())
+}
+#[cfg(target_os = "windows")]
+fn external_foreground() -> Option<bool> {
+    use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
+    unsafe {
+        let window = GetForegroundWindow();
+        if window.0.is_null() { return None; }
+        let mut pid = 0;
+        GetWindowThreadProcessId(window, Some(&mut pid));
+        (pid != 0).then_some(pid != std::process::id())
+    }
+}
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+fn external_foreground() -> Option<bool> { None }
+
 fn hide(app: &tauri::AppHandle) {
     trace("hide-enter");
     let update = {
@@ -108,7 +179,7 @@ fn show_current(app: &tauri::AppHandle) -> Result<HudUpdate, String> {
     let pending = { registry().lock().map_err(|_| "hud-unavailable")?.pending.clone() };
     let Some(pending) = pending else { hide(app); return current_update(); };
     trace("show-visible-query-enter");
-    let valid = pending.snapshot.expires_at > now() && visible_target(app, &pending.owner).is_none();
+    let valid = pending.snapshot.expires_at > now() && matches!(foreground_target(app, &pending.owner), Ok(None));
     trace("show-visible-query-returned");
     let (update, ready, cleared) = {
         let mut state = registry().lock().map_err(|_| "hud-unavailable")?;
@@ -169,27 +240,35 @@ async fn ui<T: Send + 'static>(app: tauri::AppHandle, work: impl FnOnce(&tauri::
     rx.await.map_err(|_| "hud-unavailable")?
 }
 #[tauri::command]
-pub(crate) async fn route_toast(app: tauri::AppHandle, window: tauri::WebviewWindow, id: String, sequence: u64, level: Level, expires_at: u64, locale: Locale, theme: Theme, progress: Option<Progress>) -> Result<Option<String>, String> {
+pub(crate) async fn route_toast(app: tauri::AppHandle, window: tauri::WebviewWindow, id: String, sequence: u64, level: Level, expires_at: u64, locale: Locale, theme: Theme, progress: Option<Progress>, receipt: Option<Receipt>) -> Result<Option<String>, String> {
     trace("route-enter");
     let owner = window.label().to_owned();
-    if !surface(&owner) || id.is_empty() || id.len() > 160 || progress.as_ref().is_some_and(|p| !(1..=20).contains(&p.total) || p.completed > p.total) { return Err("hud-unavailable".into()); }
+    if receipt.as_ref().is_some_and(|r| !r.valid(&level)) || !surface(&owner) || id.is_empty() || id.len() > 160 || progress.as_ref().is_some_and(|p| !(1..=20).contains(&p.total) || p.completed > p.total) { return Err("hud-unavailable".into()); }
     let timer_owner = owner.clone();
     let timer_id = id.clone();
     let (target, needs_hud) = ui(app.clone(), move |app| {
         trace("route-ui-enter");
         let mut state = registry().lock().map_err(|_| "hud-unavailable")?;
         if !state.accept(&owner, sequence, &id, expires_at, now()) { return Ok((None, false)); }
+        if !state.accept_receipt(&owner, receipt.as_ref(), now()) { return Ok((None, false)); }
+        if state.protects_failure(&owner, receipt.as_ref(), &level, now()) { return Ok((None, false)); }
+        let replacing = state.pending.is_some();
         state.pending = None;
         drop(state);
         trace("route-ui-accepted");
-        hide(app);
         trace("route-visible-query-enter");
-        if let Some(target) = visible_target(app, &owner) { trace("route-visible-target"); return Ok((Some(target), false)); }
+        match foreground_target(app, &owner) {
+            Ok(Some(target)) => { hide(app); trace("route-visible-target"); return Ok((Some(target), false)); },
+            Err(()) => { hide(app); return Ok((None, false)); },
+            Ok(None) => {},
+        }
+        // Updating the single card must not unmap/remap it between receipts.
+        if !replacing { hide(app); }
         trace("route-visible-query-returned");
         {
             let mut state = registry().lock().map_err(|_| "hud-unavailable")?;
             state.revision = state.revision.saturating_add(1);
-            state.pending = Some(Pending { owner, sequence, snapshot: Snapshot { id, level, expires_at, locale, theme, progress } });
+            state.pending = Some(Pending { owner, sequence, snapshot: Snapshot { id, level, expires_at, locale, theme, progress, receipt } });
         }
         Ok((None, true))
     }).await?;
@@ -229,7 +308,7 @@ pub(crate) async fn route_toast(app: tauri::AppHandle, window: tauri::WebviewWin
                 if log_poll { trace("poll-first-enter"); }
                 let pending = { registry().lock().map_err(|_| "hud-unavailable")?.pending.clone() };
                 let Some(pending) = pending.filter(|p| p.sequence == sequence && p.owner == timer_owner && p.snapshot.id == timer_id) else { return Ok(false); };
-                let expired = pending.snapshot.expires_at <= now() || visible_target(app, &pending.owner).is_some();
+                let expired = pending.snapshot.expires_at <= now() || !matches!(foreground_target(app, &pending.owner), Ok(None));
                 let cleared = {
                     let mut state = registry().lock().map_err(|_| "hud-unavailable")?;
                     if !same_pending(state.pending.as_ref(), &pending) { return Ok(false); }
@@ -290,12 +369,40 @@ mod tests {
     #[test]
     fn dismissal_is_owner_and_id_scoped() {
         let mut s = State::default();
-        s.pending = Some(Pending { owner: "launcher".into(), sequence: 12, snapshot: Snapshot { id: "new".into(), level: Level::Success, expires_at: 200, locale: Locale::En, theme: Theme::Dark, progress: None } });
+        s.pending = Some(Pending { owner: "launcher".into(), sequence: 12, snapshot: Snapshot { id: "new".into(), level: Level::Success, expires_at: 200, locale: Locale::En, theme: Theme::Dark, progress: None, receipt: None } });
         assert!(!s.cancel("launcher", "old"));
         assert!(!s.cancel("editor:1", "new"));
         assert!(s.pending.is_some());
         assert!(s.cancel("launcher", "new"));
         assert!(s.pending.is_none());
+    }
+    fn receipt(revision: u64, result: ResultKind) -> Receipt {
+        Receipt { operation: "00000000-0000-4000-8000-000000000000".into(), revision, result }
+    }
+    #[test]
+    fn receipts_are_bounded_fixed_and_monotonic() {
+        let mut state = State::default();
+        let first = receipt(1, ResultKind::Copied);
+        assert!(first.valid(&Level::Success));
+        assert!(!first.valid(&Level::Error));
+        assert!(serde_json::from_str::<Receipt>(r#"{"operation":"path","revision":1,"result":"private-text"}"#).is_err());
+        assert!(!Receipt { operation: "/private/path".into(), ..first.clone() }.valid(&Level::Success));
+        assert!(state.accept_receipt("launcher", Some(&first), 100));
+        assert!(!state.accept_receipt("launcher", Some(&first), 101));
+        assert!(state.accept_receipt("launcher", Some(&receipt(2, ResultKind::Copied)), 102));
+        assert!(!state.accept_receipt("launcher", Some(&first), 103));
+    }
+    #[test]
+    fn failure_survives_unrelated_success_but_retry_can_resolve_it() {
+        let mut state = State::default();
+        state.pending = Some(Pending { owner: "launcher".into(), sequence: 1, snapshot: Snapshot {
+            id: "notice".into(), level: Level::Error, expires_at: 1000, locale: Locale::En, theme: Theme::Dark,
+            progress: None, receipt: Some(receipt(1, ResultKind::PasteFailed)),
+        } });
+        assert!(state.protects_failure("launcher", None, &Level::Success, 100));
+        assert!(state.protects_failure("editor:1", Some(&receipt(2, ResultKind::Pasted)), &Level::Success, 100));
+        assert!(!state.protects_failure("launcher", Some(&receipt(2, ResultKind::Pasted)), &Level::Success, 100));
+        assert!(!state.protects_failure("launcher", None, &Level::Success, 1000));
     }
     #[test]
     fn hud_is_not_an_eligible_surface() { assert!(!surface(LABEL)); assert!(surface("launcher")); assert!(surface("plugin-surface:builtin:x:y")); }
