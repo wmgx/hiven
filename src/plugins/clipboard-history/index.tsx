@@ -7,7 +7,7 @@
 
 import { definePlugin } from '@hiven/plugin'
 import type { ClipboardHistorySettings } from './settings/model'
-import { DEFAULT_CLIPBOARD_HISTORY_SETTINGS, migrateClipboardHistorySettings } from './settings/model'
+import { DEFAULT_CLIPBOARD_HISTORY_SETTINGS, migrateClipboardHistorySettings, resolveClipboardHistoryRetentionMonths } from './settings/model'
 import { ClipboardHistorySurface } from './surfaces/ClipboardHistorySurface'
 import { clipboardHistoryBackground } from './background/clipboardHistoryBackground'
 import { createClipboardHistoryRepository } from './storage/clipboardHistoryRepository'
@@ -68,6 +68,11 @@ const CLIPBOARD_HISTORY_SHELL = {
 
 export default definePlugin<ClipboardHistorySettings>({
   settings: {
+    confirmChange(previous, next) {
+      const from = resolveClipboardHistoryRetentionMonths(previous.retentionMonths)
+      const to = resolveClipboardHistoryRetentionMonths(next.retentionMonths)
+      return to < from ? { title: 'settings.shortenTitle', message: 'settings.shortenMessage', values: { from, to } } : null
+    },
     title: 'Clipboard History',
     titleI18n: { zh: '剪贴板历史' },
     version: 2,

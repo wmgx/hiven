@@ -198,5 +198,7 @@
   "retention.protectedItem": "旧记录受保护，明确纳入后才适用保留期",
   "retention.restoreUntil": "请在此时间前恢复",
   "retention.empty": "暂无可恢复条目，正常历史保持不变。",
-  "retention.recordingPaused": "已暂停新记录 · 仍可浏览、恢复，并继续到期清理"
+  "retention.recordingPaused": "已暂停新记录 · 仍可浏览、恢复，并继续到期清理",
+  "settings.shortenTitle": "将保留期从 {from} 缩短为 {to} 个月？",
+  "settings.shortenMessage": "超期记录将进入回收区，30 天内可恢复，之后自动永久删除。固定项不受影响。"
 }

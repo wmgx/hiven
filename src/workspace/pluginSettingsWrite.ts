@@ -22,34 +22,38 @@ import {
  * is a capability handed to a plugin about itself, not a general write API.
  * Fails soft: a plugin that cannot persist must not break the app.
  */
-export function updateOwnPluginSettings<T>(
+export async function updateOwnPluginSettings<T>(
   pluginId: string,
   settingsSource: PluginSettingsSource,
   updater: (current: T) => T,
-): void {
+): Promise<void> {
   try {
-    // Matched on pluginId alone: a definition's `source` is the narrower
-    // production/dev origin, not the builtin/installed/dev settings bucket the
-    // caller passes, so comparing the two would never match.
-    const entry = pluginRegistry
-      .getAllPluginDefinitions()
-      .find((candidate) => candidate.pluginId === pluginId)
-    const contribution = entry?.definition?.settings
+    const definition = pluginRegistry.getPluginDefinition(pluginId, settingsSource)
+    const lifetime = pluginRegistry.getPluginLifetime(pluginId, settingsSource)
+    const contribution = definition?.settings
+    const isCurrent = () => lifetime.active && pluginRegistry.getPluginDefinition(pluginId, settingsSource) === definition
     if (!contribution) return
 
-    const { value } = resolvePluginSettings<T>(settingsSource, pluginId, {
+    const { value, migrationError } = resolvePluginSettings<T>(settingsSource, pluginId, {
       version: contribution.version,
       defaultValue: contribution.defaultValue as T,
       migrate: contribution.migrate as ((stored: unknown, from: number) => T) | undefined,
     })
 
-    const next = updater(value)
+    if (migrationError) throw new Error(migrationError)
+    const expected = usePluginSettingsStore.getState().getPluginSettings(settingsSource, pluginId) ?? null
+    const next = updater(structuredClone(value))
     if (next == null || next === value) return
 
     const version = contribution.version ?? 1
-    usePluginSettingsStore.getState().setPluginSettings(settingsSource, pluginId, next, version)
+    await usePluginSettingsStore.getState().setPluginSettings(settingsSource, pluginId, next, version, {
+      expected, isCurrent,
+      validate() {
+        if (contribution.confirmChange?.(structuredClone(value), structuredClone(next))) throw new Error('Settings change requires confirmation in Settings')
+      },
+    })
 
-    if (!contribution.onChange) return
+    if (!isCurrent() || !contribution.onChange) return
     const permissions = pluginRegistry.getPluginPermissions(pluginId, settingsSource)
     const snapshot = getPluginPermissionSnapshot(settingsSource, pluginId, permissions)
     void Promise.resolve(

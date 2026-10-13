@@ -6,11 +6,22 @@
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { migrateLocalStorageKey } from '../utils/persistMigration'
 import type { LauncherHostId } from './launcher/types'
 
 const PLUGIN_SETTINGS_KEY = 'hiven-plugin-settings'
-migrateLocalStorageKey('fluxtext-plugin-settings', PLUGIN_SETTINGS_KEY)
+const LEGACY_SETTINGS_KEY = 'fluxtext-plugin-settings'
+const SETTINGS_LOCK = 'hiven:plugin-settings:write'
+
+export type PluginSettingsCommitOptions = {
+  expected?: PluginSettingsRecord | null
+  isCurrent?: () => boolean
+  validate?: (current: PluginSettingsRecord | undefined) => void
+}
+
+export class PluginSettingsCommitError extends Error {
+  readonly code: 'conflict' | 'cancelled' | 'unavailable'
+  constructor(code: 'conflict' | 'cancelled' | 'unavailable') { super(code); this.code = code }
+}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -57,11 +68,11 @@ interface PluginSettingsStoreState {
   /** Get resolved settings for a plugin (with migration and default fallback) */
   getPluginSettings: (source: PluginSettingsSource, pluginId: string) => PluginSettingsRecord | undefined
 
-  /** Set plugin settings value (write-through, immediate persist) */
-  setPluginSettings: (source: PluginSettingsSource, pluginId: string, value: unknown, version: number) => void
+  /** Commit under the cross-window lock; publish only after durable persistence */
+  setPluginSettings: (source: PluginSettingsSource, pluginId: string, value: unknown, version: number, options?: PluginSettingsCommitOptions) => Promise<void>
 
   /** Remove plugin settings */
-  removePluginSettings: (source: PluginSettingsSource, pluginId: string) => void
+  removePluginSettings: (source: PluginSettingsSource, pluginId: string) => Promise<void>
 
   /** Open settings dialog */
   openSettingsDialog: (target: NonNullable<PluginSettingsDialogTarget>) => void
@@ -73,9 +84,6 @@ interface PluginSettingsStoreState {
 // ─── Store Implementation ────────────────────────────────────────────────────
 
 const sources = ['builtin', 'installed', 'dev'] as const
-// A subscriber can save again before the outer persist write finishes.
-const pendingWrites = new Map<PluginSettingsSource, Map<string, number>>()
-
 function sameRecord(a: PluginSettingsRecord | undefined, b: PluginSettingsRecord | undefined): boolean {
   if (a === b) return true
   try {
@@ -112,112 +120,67 @@ function persistedSettings(value: unknown): PluginSettingsStore {
   })) as PluginSettingsStore
 }
 
-/** Read at write time: a delayed storage event must not let this window overwrite another. */
-function latestSettings(
-  current: PluginSettingsStore,
-  durableTarget?: { source: PluginSettingsSource; pluginId: string },
-): PluginSettingsStore {
-  if (typeof window === 'undefined') return current
-  const raw = window.localStorage.getItem(PLUGIN_SETTINGS_KEY)
-  const latest = persistedSettings(raw === null ? undefined : JSON.parse(raw).state)
-  for (const [source, plugins] of pendingWrites) {
-    latest[source] = { ...latest[source] }
-    for (const pluginId of plugins.keys()) {
-      if (durableTarget?.source === source && durableTarget.pluginId === pluginId) continue
-      const record = current[source][pluginId]
-      if (record === undefined) delete latest[source][pluginId]
-      else latest[source][pluginId] = record
-    }
-  }
-  return reconcileSettings(current, latest)
+/** Read-only legacy fallback; every actual write remains under the same lock. */
+function readSettingsEnvelope() {
+  const raw = window.localStorage.getItem(PLUGIN_SETTINGS_KEY) ?? window.localStorage.getItem(LEGACY_SETTINGS_KEY)
+  return raw === null ? null : JSON.parse(raw)
 }
 
 export const usePluginSettingsStore = create<PluginSettingsStoreState>()(
   persist(
     (set, get) => {
-      const writeRecord = (source: PluginSettingsSource, pluginId: string, attemptedRecord: PluginSettingsRecord | undefined) => {
-        const previousSettings = latestSettings(get().pluginSettings)
-        const previousRecord = previousSettings[source][pluginId]
-        const pending = pendingWrites.get(source) ?? new Map<string, number>()
-        pendingWrites.set(source, pending)
-        pending.set(pluginId, (pending.get(pluginId) ?? 0) + 1)
-        try {
-          const next = { ...previousSettings[source] }
-          if (attemptedRecord === undefined) delete next[pluginId]
-          else next[pluginId] = attemptedRecord
-          set({ pluginSettings: { ...previousSettings, [source]: next } })
-        } catch (error) {
-          // Persist writes after notifying subscribers; a newer record must survive.
-          if (get().pluginSettings[source][pluginId] === attemptedRecord) {
-            try {
-              set((state) => {
-                let latest = state.pluginSettings
-                let rollbackRecord = previousRecord
-                try {
-                  latest = latestSettings(latest, { source, pluginId })
-                  const durableRecord = latest[source][pluginId]
-                  // Another window may have saved this same record during notification.
-                  if (!sameRecord(durableRecord, previousRecord) && !sameRecord(durableRecord, attemptedRecord)) {
-                    rollbackRecord = durableRecord
-                  }
-                } catch {
-                  // A read failure during persist must not prevent memory rollback.
-                }
-                const next = { ...latest[source] }
-                if (rollbackRecord === undefined) delete next[pluginId]
-                else next[pluginId] = rollbackRecord
-                return { pluginSettings: { ...latest, [source]: next } }
-              })
-            } catch {
-              // Memory is restored before a second persistence failure; keep the original error.
-            }
+      const publish = (settings: PluginSettingsStore) => set({ pluginSettings: reconcileSettings(get().pluginSettings, settings) })
+      const writeRecord = async (source: PluginSettingsSource, pluginId: string, attempted: PluginSettingsRecord | undefined, options: PluginSettingsCommitOptions = {}) => {
+        const expected = structuredClone(options.expected === undefined ? get().pluginSettings[source][pluginId] ?? null : options.expected)
+        const record = attempted === undefined ? undefined : structuredClone(attempted)
+        if (!globalThis.navigator?.locks?.request) throw new PluginSettingsCommitError('unavailable')
+        await navigator.locks.request(SETTINGS_LOCK, () => {
+          if (options.isCurrent?.() === false) throw new PluginSettingsCommitError('cancelled')
+          const envelope = readSettingsEnvelope()
+          const latest = persistedSettings(envelope?.state)
+          if (!sameRecord(latest[source][pluginId], expected ?? undefined)) {
+            publish(latest)
+            throw new PluginSettingsCommitError('conflict')
           }
-          throw error
-        } finally {
-          const depth = (pending.get(pluginId) ?? 1) - 1
-          if (depth > 0) pending.set(pluginId, depth)
-          else pending.delete(pluginId)
-          if (pending.size === 0) pendingWrites.delete(source)
-        }
+          options.validate?.(latest[source][pluginId])
+          if (options.isCurrent?.() === false) throw new PluginSettingsCommitError('cancelled')
+          const next = { ...latest, [source]: { ...latest[source] } }
+          if (record === undefined) delete next[source][pluginId]
+          else next[source][pluginId] = record
+          // No await between validation and durable commit. Never notify a
+          // background about a candidate that failed to persist.
+          window.localStorage.setItem(PLUGIN_SETTINGS_KEY, JSON.stringify({ ...envelope, state: { ...envelope?.state, pluginSettings: next }, version: envelope?.version ?? 0 }))
+          publish(next)
+        })
       }
       return {
         pluginSettings: { builtin: {}, installed: {}, dev: {} },
         settingsDialogTarget: null,
-        getPluginSettings: (source, pluginId) => get().pluginSettings[source][pluginId] ?? undefined,
-        setPluginSettings: (source, pluginId, value, version) => writeRecord(source, pluginId, { version, value }),
+        getPluginSettings: (source, pluginId) => get().pluginSettings[source][pluginId],
+        setPluginSettings: (source, pluginId, value, version, options) => writeRecord(source, pluginId, { version, value }, options),
         removePluginSettings: (source, pluginId) => writeRecord(source, pluginId, undefined),
-        openSettingsDialog: (target) => set((state) => ({
-          pluginSettings: latestSettings(state.pluginSettings),
-          settingsDialogTarget: target,
-        })),
-        closeSettingsDialog: () => {
-          try {
-            set({ settingsDialogTarget: null })
-          } catch (error) {
-            // The transient target is already cleared before persist writes.
-            console.warn('[hiven] Could not persist plugin settings dismissal:', error)
-          }
+        openSettingsDialog: (target) => {
+          publish(persistedSettings(readSettingsEnvelope()?.state))
+          set({ settingsDialogTarget: target })
         },
+        closeSettingsDialog: () => set({ settingsDialogTarget: null }),
       }
     },
     {
       name: PLUGIN_SETTINGS_KEY,
-      // Transient dialog changes must not write this window's stale settings back.
-      partialize: (state) => ({ pluginSettings: latestSettings(state.pluginSettings) }),
-      merge: (persisted, current) => ({
-        ...current,
-        pluginSettings: reconcileSettings(current.pluginSettings, persistedSettings(persisted)),
-      }),
-    }
-  )
+      // Zustand owns hydration only. Transient UI changes must never create
+      // hidden writers outside the cross-window commit lock.
+      storage: { getItem: () => readSettingsEnvelope(), setItem() {}, removeItem() {} },
+      partialize: (state) => ({ pluginSettings: state.pluginSettings }),
+      merge: (persisted, current) => ({ ...current, pluginSettings: reconcileSettings(current.pluginSettings, persistedSettings(persisted)) }),
+    },
+  ),
 )
 
 if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
   window.addEventListener('storage', (event) => {
-    if (event.key !== PLUGIN_SETTINGS_KEY && event.key !== null) return
+    if (event.key !== PLUGIN_SETTINGS_KEY && event.key !== LEGACY_SETTINGS_KEY && event.key !== null) return
     if (event.storageArea !== window.localStorage) return
-    // Read the current durable value, never event.newValue (events can be delayed).
-    // Zustand rehydrate updates subscribers without persisting back or sharing dialog state.
     void usePluginSettingsStore.persist.rehydrate()
   })
 }
@@ -270,8 +233,7 @@ export function resolvePluginSettings<TSettings>(
           migrationError: 'migration_returned_null',
         }
       }
-      // Persist migrated value
-      usePluginSettingsStore.getState().setPluginSettings(source, pluginId, migrated, currentVersion)
+      // Pure display projection. Backgrounds must await committed migration.
       return { value: migrated }
     } catch (error) {
       return {
@@ -283,4 +245,17 @@ export function resolvePluginSettings<TSettings>(
 
   // No migrate function — use stored value as-is (best effort)
   return { value: record.value as TSettings }
+}
+
+/** Background startup may not apply a migration before it is durably saved. */
+export async function ensureCommittedPluginSettings<T>(source: PluginSettingsSource, pluginId: string,
+  contribution: { version?: number; defaultValue: T; migrate?: (stored: unknown, fromVersion: number) => T }, isCurrent: () => boolean): Promise<T> {
+  const record = usePluginSettingsStore.getState().getPluginSettings(source, pluginId)
+  const resolved = resolvePluginSettings(source, pluginId, contribution)
+  if (resolved.migrationError) throw new Error(resolved.migrationError)
+  if (record && (record.version ?? 1) < (contribution.version ?? 1) && contribution.migrate) {
+    await usePluginSettingsStore.getState().setPluginSettings(source, pluginId, resolved.value, contribution.version ?? 1, { expected: record, isCurrent })
+  }
+  if (!isCurrent()) throw new PluginSettingsCommitError('cancelled')
+  return resolvePluginSettings(source, pluginId, contribution).value
 }

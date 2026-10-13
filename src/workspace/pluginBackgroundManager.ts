@@ -11,7 +11,7 @@ import type { PluginBackgroundContribution, PluginBackgroundContext, PluginBackg
 import type { PluginDefinition } from './pluginTypes'
 import { pluginRegistry } from './pluginRegistry'
 import type { PluginSettingsSource } from './pluginSettingsStore'
-import { resolvePluginSettings, usePluginSettingsStore } from './pluginSettingsStore'
+import { ensureCommittedPluginSettings, usePluginSettingsStore } from './pluginSettingsStore'
 import { createPluginPrivateStorage } from './pluginStorage'
 import { createPluginClipboard } from './pluginClipboard'
 import { createPluginPaste } from './pluginPaste'
@@ -73,7 +73,7 @@ async function startBackground(
   source: PluginSettingsSource,
   pluginId: string,
   background: PluginBackgroundContribution<unknown>,
-  settings: unknown,
+  definition: PluginDefinition<unknown>,
   requestedPermissions: readonly PluginPermission[],
 ): Promise<void> {
   // Claim the slot before awaiting: a later disable/restart invalidates this start.
@@ -101,9 +101,12 @@ async function startBackground(
     return
   }
 
-  const ctx = buildBackgroundContext(source, pluginId, settings, requestedPermissions, () => activeBackgrounds.get(key) === instance, instance.controller.signal)
-
   try {
+    const current = () => activeBackgrounds.get(key) === instance && !instance.controller.signal.aborted
+    const settings = definition.settings
+      ? await ensureCommittedPluginSettings(source, pluginId, definition.settings, current) : {}
+    if (!current()) return
+    const ctx = buildBackgroundContext(source, pluginId, settings, requestedPermissions, current, instance.controller.signal)
     const stopFn = await background.start(ctx)
     if (activeBackgrounds.get(key) !== instance) {
       await stopFn?.()
@@ -133,13 +136,6 @@ async function stopBackground(source: PluginSettingsSource, pluginId: string): P
   }
 }
 
-function getPluginSettings(source: PluginSettingsSource, pluginId: string, definition: PluginDefinition<unknown>): unknown {
-  const settingsContribution = definition.settings
-  if (!settingsContribution) return {}
-  const resolved = resolvePluginSettings(source, pluginId, settingsContribution)
-  return resolved.value
-}
-
 /**
  * Initialize all plugin backgrounds. Call after bundled plugins are registered.
  */
@@ -149,8 +145,7 @@ export function initializePluginBackgrounds(): void {
     if (!def.background) continue
 
     const settingsSource = resolvePluginSettingsSource(pluginId, source)
-    const settings = getPluginSettings(settingsSource, pluginId, def)
-    void startBackground(settingsSource, pluginId, def.background, settings, permissions)
+    void startBackground(settingsSource, pluginId, def.background, def, permissions)
   }
 }
 
@@ -169,8 +164,7 @@ export async function restartPluginBackground(pluginId: string, source?: PluginS
   if (!def.background) return
 
   const settingsSource = resolvePluginSettingsSource(entry.pluginId, entry.source)
-  const settings = getPluginSettings(settingsSource, entry.pluginId, def)
-  await startBackground(settingsSource, entry.pluginId, def.background, settings, entry.permissions)
+  await startBackground(settingsSource, entry.pluginId, def.background, def, entry.permissions)
 }
 
 /**
@@ -232,8 +226,7 @@ export function setupBackgroundPermissionWatcher(): () => void {
       if (missing.length > 0 && isActive) {
         void stopBackground(settingsSource, pluginId)
       } else if (missing.length === 0 && !isActive) {
-        const settings = getPluginSettings(settingsSource, pluginId, def)
-        void startBackground(settingsSource, pluginId, def.background, settings, requestedPermissions)
+        void startBackground(settingsSource, pluginId, def.background, def, requestedPermissions)
       }
     }
   })
