@@ -30,7 +30,7 @@
   "surface.revealMatch": "定位到第 {line} 行第 {col} 列的匹配",
   "surface.noMatchesHint": "调整表达式、标记或示例文本。",
   "surface.enterPatternHint": "在上方输入表达式后开始测试。",
-  "surface.extractMatches": "提取全部 {count} 个匹配并继续处理",
+  "surface.extractMatches": "提取 {count} 项并继续处理",
   "surface.extractHint": "提取全部匹配的完整文本（最多 {limit} 条），按顺序换行连接，保留重复和空白。高亮仅用于定位。",
   "surface.emptyMatches": "当前匹配均为零长度，没有可提取的文本。",
   "error.continueFailed": "无法带回 Launcher，原文和匹配结果已保留，请重试。",
@@ -64,5 +64,15 @@
   "ai.failure.validation": "部分例子未通过，此候选不可采用。请调整描述或例子后重新生成。",
   "ai.failure.changed": "AI 配置已变化，请使用当前配置重新生成。",
   "ai.failed.positive": "正例 {index}：未匹配",
-  "ai.failed.negative": "反例 {index}：出现意外匹配"
+  "ai.failed.negative": "反例 {index}：出现意外匹配",
+  "surface.extractTarget": "提取内容",
+  "surface.wholeMatch": "完整匹配",
+  "surface.captureGroup": "捕获组 {number}",
+  "surface.namedGroup": "命名组 {name}",
+  "surface.unavailableGroup": "所选捕获组不可用",
+  "surface.missingGroup": "未参与匹配",
+  "extraction.missing-group": "部分匹配未包含所选捕获组，未提取任何内容。请修改表达式或选择其他组。",
+  "extraction.empty-group": "所选捕获组包含空字符串，无法无歧义地输出为逐行文本。未提取任何内容，请修改表达式或选择其他组。",
+  "extraction.truncated": "匹配超过 {limit} 条，当前仅显示部分结果。未提取任何内容，请缩小输入范围或修改表达式。",
+  "extraction.too-large": "提取内容超过 1 MiB，未提取任何内容。请缩小输入范围。"
 }

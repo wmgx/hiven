@@ -1,7 +1,8 @@
 export type MatchResult = {
   index: number
   text: string
-  groups: string[]
+  groups: (string | undefined)[]
+  namedGroups?: Record<string, string | undefined>
   line: number
   col: number
 }
@@ -12,7 +13,7 @@ export function evaluateRegex(
   pattern: string,
   flags: string,
   sourceText: string,
-): { error: string | null; matches: MatchResult[] } {
+): { error: string | null; matches: MatchResult[]; truncated?: boolean } {
   if (!pattern) return { error: null, matches: [] }
 
   let regex: RegExp
@@ -27,8 +28,9 @@ export function evaluateRegex(
     let match: RegExpExecArray | null
     regex.lastIndex = 0
     while ((match = regex.exec(sourceText)) !== null) {
+      // Probe one extra match so exactly-at-limit results remain deliverable.
+      if (matches.length === MAX_REGEX_MATCHES) return { error: null, matches, truncated: true }
       matches.push(toMatchResult(sourceText, match))
-      if (matches.length >= MAX_REGEX_MATCHES) break
       if (match[0].length === 0) {
         const codePoint = sourceText.codePointAt(regex.lastIndex)
         regex.lastIndex += (regex.unicode || flags.includes('v')) && codePoint !== undefined && codePoint >= 0x10000
@@ -51,6 +53,7 @@ function toMatchResult(sourceText: string, match: RegExpExecArray): MatchResult 
     index: match.index,
     text: match[0],
     groups: match.slice(1),
+    ...(match.groups ? { namedGroups: { ...match.groups } } : {}),
     line,
     col: match.index - lastNewline,
   }

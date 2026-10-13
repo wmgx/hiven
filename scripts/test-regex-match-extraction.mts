@@ -43,7 +43,28 @@ const manyIds = Array.from({ length: MAX_REGEX_MATCHES + 5 }, (_, index) => `id$
 const cappedResult = evaluateRegex('id\\d+', 'g', manyIds.join(' '))
 const capped = extractRegexMatches(cappedResult)
 assert.equal(cappedResult.matches.length, MAX_REGEX_MATCHES)
-assert.equal(capped.text, manyIds.slice(0, MAX_REGEX_MATCHES).join('\n'), 'extract the full current set beyond the 100-row preview, within the core cap')
+assert.deepEqual(capped, { status: 'truncated', text: '' }, 'never deliver a capped set as complete')
 assert.equal(cappedResult.matches[100].text, 'id100', 'extraction does not mutate the current matches')
 
 console.log('Regex match extraction passed: whole matches, exact text, caps, empty results and line-tools journey')
+
+const captured = evaluateRegex('order=(?<id>[0-9]+)', 'g', 'order=00123 order=9007199254740993 order=00123')
+for (const target of ['group:1', 'name:id'] as const) {
+  const out = extractRegexMatches(captured, target)
+  assert.deepEqual(out, { status: 'ready', text: '00123\n9007199254740993\n00123' })
+  assert.equal(sqlInString(dedupLines(out.text, false)), "('00123','9007199254740993')")
+}
+for (const target of ['group:1', 'name:id'] as const) {
+  assert.equal(extractRegexMatches(evaluateRegex('(?<id>a)?b', 'g', 'ab b'), target).status, 'missing-group')
+  assert.equal(extractRegexMatches(evaluateRegex('(?<id>a*)b', 'g', 'ab b'), target).status, 'empty-group')
+}
+assert.equal(extractRegexMatches(captured, 'group:2').status, 'missing-group')
+assert.equal(extractRegexMatches(captured, 'name:toString').status, 'missing-group')
+assert.equal(extractRegexMatches(evaluateRegex('(.+)', 'gs', ' 空白 \r\n001 '), 'group:1').text, ' 空白 \r\n001 ')
+const exact = evaluateRegex('x', 'g', 'x'.repeat(MAX_REGEX_MATCHES))
+assert.equal(exact.truncated, undefined)
+assert.equal(extractRegexMatches(exact).status, 'ready')
+assert.equal(evaluateRegex('(?=.)', 'gu', '😀'.repeat(MAX_REGEX_MATCHES + 1)).truncated, true)
+assert.equal(extractRegexMatches(evaluateRegex('(.*)', '', 'a'.repeat(1024 * 1024)), 'group:1').status, 'ready')
+assert.equal(extractRegexMatches(evaluateRegex('(.*)', '', '中'.repeat(400000)), 'group:1').status, 'too-large')
+console.log('Capture extraction: numbered/named, missing/empty, exact boundaries and complete log journey passed')

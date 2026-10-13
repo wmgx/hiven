@@ -30,7 +30,7 @@
   "surface.revealMatch": "Reveal match at line {line}, column {col}",
   "surface.noMatchesHint": "Adjust the expression, flags, or sample text.",
   "surface.enterPatternHint": "Enter an expression above to begin.",
-  "surface.extractMatches": "Extract all {count} matches and continue",
+  "surface.extractMatches": "Extract {count} values and continue",
   "surface.extractHint": "Extract all whole matches (up to {limit}), joined with new lines. Keeps order, duplicates and whitespace. Highlighting only locates a match.",
   "surface.emptyMatches": "All matches are zero-length. There is no matched text to extract.",
   "error.continueFailed": "Could not return to Launcher. Your text and matches are still here. Try again.",
@@ -64,5 +64,15 @@
   "ai.failure.validation": "Some examples failed. This candidate cannot be adopted. Adjust the description or examples and generate again.",
   "ai.failure.changed": "The AI configuration changed. Generate again using the current configuration.",
   "ai.failed.positive": "Positive example {index}: no match",
-  "ai.failed.negative": "Negative example {index}: unexpected match"
+  "ai.failed.negative": "Negative example {index}: unexpected match",
+  "surface.extractTarget": "Extract content",
+  "surface.wholeMatch": "Whole match",
+  "surface.captureGroup": "Capture group {number}",
+  "surface.namedGroup": "Named group {name}",
+  "surface.unavailableGroup": "Selected capture unavailable",
+  "surface.missingGroup": "Unmatched",
+  "extraction.missing-group": "Some matches do not contain the selected capture. Nothing was extracted. Edit the expression or choose another group.",
+  "extraction.empty-group": "The selected capture contains an empty string, which cannot be represented unambiguously as a line list. Nothing was extracted. Edit the expression or choose another group.",
+  "extraction.truncated": "More than {limit} matches; only part of the result is shown. Nothing was extracted. Narrow the input or expression.",
+  "extraction.too-large": "Extraction exceeds 1 MiB. Nothing was extracted. Narrow the input."
 }

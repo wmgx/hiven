@@ -1,10 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { getPluginHostSdk, type PanelPropsV2, type PluginSurfaceProps } from '@hiven/plugin'
-import { Button, IconButton } from '@hiven/plugin-ui'
+import { Button, IconButton, Select } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
 import { MAX_REGEX_MATCHES, type MatchResult } from './regexCore'
 import { useRegexExecution } from './useRegexExecution'
-import { extractRegexMatches } from './extractMatches'
+import { extractRegexMatches, type RegexExtractionTarget } from './extractMatches'
 import { createAiCandidateSession, type AiCandidateState } from './aiCandidateSession'
 import { AiCandidateControls } from './AiCandidateControls'
 
@@ -121,7 +121,17 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
   const sourceRef = useRef<HTMLTextAreaElement>(null)
   const execution = useRegexExecution(pattern, flags, sourceText, host.deliveryFeedbackOwner)
   const result = execution.result
-  const extraction = useMemo(() => result.status === 'ready' ? extractRegexMatches(result) : { status: 'invalid' as const, text: '' }, [result])
+  const [extractionTarget, setExtractionTarget] = useState<RegexExtractionTarget>('whole')
+  const extractionOptions = useMemo(() => [
+    { value: 'whole', label: t('surface.wholeMatch') },
+    ...Array.from({ length: result.matches[0]?.groups.length ?? 0 }, (_, index) => ({
+      value: `group:${index + 1}`, label: t('surface.captureGroup', { number: index + 1 }),
+    })),
+    ...Object.keys(result.matches[0]?.namedGroups ?? {}).map((name) => ({
+      value: `name:${name}`, label: t('surface.namedGroup', { name }),
+    })),
+  ], [result, t])
+  const extraction = useMemo(() => result.status === 'ready' ? extractRegexMatches(result, extractionTarget) : { status: 'invalid' as const, text: '' }, [result, extractionTarget])
   const currentResultRef = useRef<typeof result | null>(result)
   currentResultRef.current = result
   const activeRef = useRef(true)
@@ -140,17 +150,22 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
   }, [])
 
   // Revoke rendered actions immediately, before an input change commits a new render.
-  const invalidateResult = () => {
+  const invalidateResult = (cancelExecution = true) => {
     aiSession.current?.invalidate()
-    execution.cancel()
+    if (cancelExecution) execution.cancel()
     handoffRef.current?.abort()
     handoffRef.current = null
     currentResultRef.current = null
+    handedOffResultRef.current = null
+    setHandedOffResult(null)
+    setFailedResult(null)
     actionEpochRef.current += 1
     // Hidden native surfaces remain mounted. Refresh the current button while
     // permanently invalidating callbacks captured before leaving this view.
     setActionEpoch(actionEpochRef.current)
   }
+
+  useLayoutEffect(() => host.deliveryFeedbackOwner?.subscribeInvalidation(() => invalidateResult(false)), [host.deliveryFeedbackOwner])
 
   const toggleFlag = (flag: string) => {
     invalidateResult()
@@ -163,14 +178,14 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
   }
 
   const continueProcessing = async () => {
-    if (!activeRef.current || actionEpochRef.current !== actionEpoch || currentResultRef.current !== result || extraction.status !== 'ready' || handedOffResultRef.current === result) return
+    if (host.deliveryFeedbackOwner?.isCurrent() === false || !activeRef.current || actionEpochRef.current !== actionEpoch || currentResultRef.current !== result || extraction.status !== 'ready' || handedOffResultRef.current === result) return
     aiSession.current?.invalidate()
     const submission = new AbortController()
     handoffRef.current = submission
     handedOffResultRef.current = result
     setHandedOffResult(result)
     setFailedResult(null)
-    const current = () => activeRef.current && !submission.signal.aborted && currentResultRef.current === result && handoffRef.current === submission
+    const current = () => host.deliveryFeedbackOwner?.isCurrent() !== false && actionEpochRef.current === actionEpoch && activeRef.current && !submission.signal.aborted && currentResultRef.current === result && handoffRef.current === submission
     try {
       const accepted = await host.returnToLauncherWithObject({ kind: 'text', text: extraction.text, source: 'tool-result' }, { signal: submission.signal })
       if (!current() || accepted !== false) return
@@ -314,7 +329,7 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
                     {match.groups.length > 0 ? (
                       <em>
                         <b>{t('surface.groups')}</b>
-                        {match.groups.map((group) => group || t('surface.emptyGroup')).join(', ')}
+                        {match.groups.map((group) => group === undefined ? t('surface.missingGroup') : group === '' ? t('surface.emptyGroup') : group).join(', ')}
                       </em>
                     ) : <em />}
                   </button>
@@ -328,8 +343,13 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
             )}
           </div>
           <footer className="regex-tester-surface__extract">
-            <p>{t('surface.extractHint', { limit: MAX_REGEX_MATCHES })}</p>
+            <Select aria-label={t('surface.extractTarget')} value={extractionTarget}
+              options={extractionOptions.some((option) => option.value === extractionTarget) ? extractionOptions : [
+                ...extractionOptions, { value: extractionTarget, label: t('surface.unavailableGroup') },
+              ]}
+              onChange={(event) => { invalidateResult(false); setExtractionTarget(event.currentTarget.value as RegexExtractionTarget) }} />
             {extraction.status === 'empty-matches' ? <p role="status">{t('surface.emptyMatches')}</p> : null}
+            {['missing-group', 'empty-group', 'truncated', 'too-large'].includes(extraction.status) ? <p role="alert">{t(`extraction.${extraction.status}`, { limit: MAX_REGEX_MATCHES })}</p> : null}
             {failedResult === result ? <p role="alert">{t('error.continueFailed')}</p> : null}
             <Button type="button" disabled={extraction.status !== 'ready' || handedOffResult === result} onClick={() => void continueProcessing()}>
               {t('surface.extractMatches', { count: result.matches.length })}

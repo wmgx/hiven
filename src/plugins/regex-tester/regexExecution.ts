@@ -6,11 +6,12 @@ export type RegexExecutionOutcome = {
   status: 'ready' | 'invalid' | 'timeout' | 'failed' | 'cancelled'
   matches: MatchResult[]
   error: string | null
+  truncated?: boolean
 }
 export type RegexWorkerRequest = RegexExecutionInput & { requestId: number }
 export type RegexWorkerResponse = {
   requestId: number
-  result: { error: string | null; matches: MatchResult[] }
+  result: { error: string | null; matches: MatchResult[]; truncated?: boolean }
 }
 
 export const REGEX_EXECUTION_TIMEOUT_MS = 1000
@@ -38,7 +39,7 @@ export function createRegexExecution(options: {
       const request = { cancel: () => finish('cancelled') }
       const finish = (
         status: RegexExecutionOutcome['status'],
-        result: { error: string | null; matches: MatchResult[] } = { error: null, matches: [] },
+        result: { error: string | null; matches: MatchResult[]; truncated?: boolean } = { error: null, matches: [] },
       ) => {
         if (settled || pending !== request) return
         settled = true
