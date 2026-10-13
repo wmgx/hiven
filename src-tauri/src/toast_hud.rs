@@ -276,9 +276,21 @@ fn show_current(app: &tauri::AppHandle) -> Result<HudUpdate, String> {
         let scale = monitor.scale_factor();
         let area = monitor.work_area();
         let width = (360.0 * scale).min(area.size.width as f64).max(1.0);
-        let height = (100.0 * scale).min(area.size.height as f64).max(1.0);
+        // Fixed-result cards reserve room for a two-line headline; queue cards
+        // additionally reserve their progress line. Both include a transparent edge.
+        let logical_height = if pending.snapshot.progress.is_some() { 104.0 } else { 84.0 };
+        let height = (logical_height * scale).min(area.size.height as f64).max(1.0);
         let x = area.position.x as f64 + (area.size.width as f64 - width) / 2.0;
         let y = area.position.y as f64 + (area.size.height as f64 - height - 32.0 * scale).max(0.0);
+        // GTK recomputes a non-resizable window's natural size after its menu
+        // is destroyed. Pin its widget request too, otherwise it can map at
+        // WebKit's 200px natural height despite the requested native size.
+        #[cfg(target_os = "linux")]
+        {
+            use gtk::prelude::WidgetExt;
+            window.gtk_window().map_err(|_| "hud-unavailable")?
+                .set_size_request((width / scale) as i32, (height / scale) as i32);
+        }
         window.set_size(tauri::PhysicalSize::new(width as u32, height as u32)).map_err(|_| "hud-unavailable")?;
         window.set_position(tauri::PhysicalPosition::new(x as i32, y as i32)).map_err(|_| "hud-unavailable")?;
     }
@@ -300,9 +312,14 @@ fn ensure_window(app: &tauri::AppHandle) -> Result<(), String> {
     if app.get_webview_window(LABEL).is_some() { return Ok(()); }
     registry().lock().map_err(|_| "hud-unavailable")?.ready = false;
     let window = tauri::WebviewWindowBuilder::new(app, LABEL, tauri::WebviewUrl::App("index.html?window=toast-hud".into()))
-        .title("Hiven").inner_size(360.0, 100.0).decorations(false).transparent(true)
+        .title("Hiven").inner_size(360.0, 84.0).decorations(false).transparent(true)
         .shadow(false).resizable(false).visible(false).focused(false).focusable(false)
         .always_on_top(true).skip_taskbar(true).build().map_err(|_| "hud-unavailable")?;
+    // The global Edit menu belongs to editable windows, not this passive HUD.
+    // Remove only this hidden window's inherited menu before its first map.
+    // macOS menus are app-wide: never remove or replace the application's menu.
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    window.remove_menu().map_err(|_| "hud-unavailable")?;
     // Deliberately no paste recovery registration, foreground capture, or
     // launcher focus/blur handlers: this window is never a user input target.
     window.on_window_event(|event| {

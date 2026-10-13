@@ -6,6 +6,8 @@ html[data-window='toast-hud'], html[data-window='toast-hud'] body, html[data-win
   background: transparent;
   pointer-events: none;
 }
+/* Keep rounded-edge antialiasing inside the transparent native window. */
+html[data-window='toast-hud'] #root { box-sizing: border-box; padding: 2px; }
 .toast-hud {
   box-sizing: border-box;
   display: flex;
