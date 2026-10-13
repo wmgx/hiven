@@ -27,6 +27,7 @@ import { createPluginShell } from '../workspace/pluginShell'
 import { getPluginPermissionSnapshot, usePluginPermissionStore } from '../workspace/pluginPermissions'
 import { PluginSettingsSchemaRenderer } from './PluginSettingsSchemaRenderer'
 import { resolvePluginSettingsModal, type ResolvedPluginSettingsModal } from './pluginSettingsModalResolution'
+import { readSettingsConfirmationSnapshot } from './pluginSettingsConfirmation'
 import { navigateToPluginSettingsField } from './pluginSettingsFieldNavigation'
 
 // ─── Error Boundary ──────────────────────────────────────────────────────────
@@ -304,6 +305,85 @@ function SettingsDialogBody({
     [setPluginSettings, source, pluginId, currentVersion, contribution.defaultValue, notifySettingsChange]
   )
 
+  // Only schema fields explicitly opting in use this UI gate. The store and
+  // ordinary settings callbacks retain their existing persistence semantics.
+  type PendingDecrease = { key: string; from: number; to: number; fingerprint: string; generation: number; title: string; message: string }
+  const [pendingDecrease, setPendingDecrease] = useState<PendingDecrease | null>(null)
+  const [confirmationError, setConfirmationError] = useState('')
+  const settingsOwner = usePluginSettingsStore((state) => state.settingsDialogTarget)
+  const confirmationGeneration = useRef(0)
+  const confirmationActive = useRef(false)
+  const cancelConfirmationButton = useRef<HTMLButtonElement>(null)
+  const cancelDecrease = useCallback(() => {
+    confirmationGeneration.current++
+    setPendingDecrease(null)
+  }, [])
+  useLayoutEffect(() => {
+    confirmationActive.current = true
+    cancelDecrease()
+    setConfirmationError('')
+    return () => { confirmationActive.current = false; confirmationGeneration.current++ }
+  }, [settingsOwner, contribution, cancelDecrease])
+  useEffect(() => {
+    const onVisibility = () => { if (document.visibilityState === 'hidden') cancelDecrease() }
+    window.addEventListener('pagehide', cancelDecrease)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('pagehide', cancelDecrease)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [cancelDecrease])
+  const confirmationCurrent = () => document.visibilityState !== 'hidden' && confirmationActive.current && !!settingsOwner
+    && settingsOwner.source === source && settingsOwner.pluginId === pluginId
+    && usePluginSettingsStore.getState().settingsDialogTarget === settingsOwner
+    && pluginRegistry.getPluginDefinition(pluginId, source)?.settings === contribution
+  const refreshConfirmationConflict = () => {
+    cancelDecrease()
+    void usePluginSettingsStore.persist.rehydrate()
+    setConfirmationError(t(locale, 'scripts.settingsConfirmConflict'))
+  }
+  useLayoutEffect(() => {
+    if (pendingDecrease && JSON.stringify(storedRecord ?? null) !== pendingDecrease.fingerprint) {
+      cancelDecrease()
+      setConfirmationError(t(locale, 'scripts.settingsConfirmConflict'))
+    }
+  }, [storedRecord, pendingDecrease, cancelDecrease, locale])
+  const schemaUpdateValue = (patch: Partial<unknown>) => {
+    const keys = Object.keys(patch)
+    const field = keys.length === 1 ? contribution.schema?.sections.flatMap(section => section.fields)
+      .find(candidate => 'key' in candidate && candidate.key === keys[0]) : undefined
+    if (field?.kind !== 'number' || !field.confirmDecrease) { updateValue(patch); return }
+    if (!confirmationCurrent()) return
+    cancelDecrease(); setConfirmationError('')
+    try {
+      const snapshot = readSettingsConfirmationSnapshot(window.localStorage, source, pluginId, contribution)
+      // Include other fields/version in the baseline, not only the displayed number.
+      if (snapshot.fingerprint !== JSON.stringify(storedRecord ?? null)) { refreshConfirmationConflict(); return }
+      const from = snapshot.value[field.key]
+      const to = (patch as Record<string, unknown>)[field.key]
+      if (typeof from !== 'number' || !Number.isFinite(from) || typeof to !== 'number' || !Number.isFinite(to)) throw new Error('Invalid numeric setting')
+      if (to >= from) {
+        try { updateValue(patch) } catch { setConfirmationError(t(locale, 'scripts.settingsConfirmSaveFailed')) }
+        return
+      }
+      setPendingDecrease({ key: field.key, from, to, fingerprint: snapshot.fingerprint,
+        generation: confirmationGeneration.current, ...field.confirmDecrease })
+    } catch { setConfirmationError(t(locale, 'scripts.settingsConfirmReadFailed')) }
+  }
+  const confirmDecrease = (candidate: PendingDecrease) => {
+    if (!confirmationCurrent() || candidate.generation !== confirmationGeneration.current) return
+    let snapshot: ReturnType<typeof readSettingsConfirmationSnapshot>
+    try { snapshot = readSettingsConfirmationSnapshot(window.localStorage, source, pluginId, contribution) }
+    catch { setConfirmationError(t(locale, 'scripts.settingsConfirmReadFailed')); return }
+    if (snapshot.fingerprint !== candidate.fingerprint || snapshot.value[candidate.key] !== candidate.from) {
+      refreshConfirmationConflict(); return
+    }
+    // Synchronous preflight only, not atomic against another webview's write.
+    cancelDecrease(); setConfirmationError('')
+    try { setValue({ ...snapshot.value, [candidate.key]: candidate.to }) }
+    catch { setConfirmationError(t(locale, 'scripts.settingsConfirmSaveFailed')) }
+  }
+
   const resetValue = useCallback(() => {
     setPluginSettings(source, pluginId, contribution.defaultValue, currentVersion)
     notifySettingsChange(contribution.defaultValue)
@@ -373,7 +453,7 @@ function SettingsDialogBody({
         <button
           className="flex items-center justify-center w-7 h-7 rounded-md"
           style={{ color: 'var(--color-text-tertiary)', background: 'transparent' }}
-          onClick={onClose}
+          onClick={() => { cancelDecrease(); onClose() }}
           title={t(locale, 'scripts.settingsClose')}
           aria-label={t(locale, 'scripts.settingsClose')}
           data-settings-dialog-close
@@ -394,6 +474,7 @@ function SettingsDialogBody({
         </div>
       )}
 
+      {confirmationError && !pendingDecrease && <p role="alert" className="px-5 text-[13px]">{confirmationError}</p>}
       {/* Body */}
       <div ref={bodyRef} className="flex-1 overflow-y-auto px-5 py-4" data-launcher-scrollable data-settings-navigation-root={target ? '' : undefined} tabIndex={-1}>
         <SettingsErrorBoundary fallback={errorFallback}>
@@ -407,7 +488,7 @@ function SettingsDialogBody({
               locale={locale}
               translateText={pluginT}
               value={value}
-              updateValue={updateValue}
+              updateValue={schemaUpdateValue}
               onOpenModal={(field) => setSettingsModalTarget(resolvePluginSettingsModal(contribution, field))}
               onRunAction={async (field, reportProgress) => {
                 await field.run({ ...settingsBodyProps, reportProgress })
@@ -421,6 +502,22 @@ function SettingsDialogBody({
           )}
         </SettingsErrorBoundary>
       </div>
+
+      {pendingDecrease && <Dialog.Root open onOpenChange={(open) => { if (!open) cancelDecrease() }}>
+        <Dialog.Portal>
+          <Dialog.Backdrop className="fixed inset-0 bg-black/40 z-[1220]" />
+          <Dialog.Popup className="plugin-settings-modal-panel fixed left-1/2 top-1/2 z-[1221] -translate-x-1/2 -translate-y-1/2 w-[min(440px,calc(100%-40px))] rounded-lg p-5"
+            style={{ background: 'var(--panel)', border: '1px solid var(--border)' }} initialFocus={cancelConfirmationButton}>
+            <Dialog.Title className="text-[14px] font-semibold">{pluginT(pendingDecrease.title, { from: pendingDecrease.from, to: pendingDecrease.to })}</Dialog.Title>
+            <Dialog.Description className="mt-3 text-[13px]">{pluginT(pendingDecrease.message)}</Dialog.Description>
+            {confirmationError && <p role="alert" className="mt-3 text-[13px]">{confirmationError}</p>}
+            <div className="mt-4 flex justify-end gap-3">
+              <button ref={cancelConfirmationButton} type="button" onClick={cancelDecrease}>{t(locale, 'scripts.cancel')}</button>
+              <button type="button" onClick={() => confirmDecrease(pendingDecrease)}>{t(locale, 'scripts.settingsConfirmSave')}</button>
+            </div>
+          </Dialog.Popup>
+        </Dialog.Portal>
+      </Dialog.Root>}
 
       {activeSettingsModalTarget && SettingsModalComponent && (
         <Dialog.Root open onOpenChange={(open) => { if (!open && !isSettingsModalClosing) setSettingsModalTarget(null) }}>

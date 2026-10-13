@@ -304,6 +304,8 @@ export type PluginSettingsNumberField<TSettings = unknown> = PluginSettingsField
   unitI18n?: Partial<Record<Locale, string>>
   /** Multiplies the displayed number before storing it, e.g. 1048576 for MB-backed byte fields. */
   storageScale?: number
+  /** Optional UI-only confirmation on decrease; plugin locale keys with {from}/{to}. */
+  confirmDecrease?: { title: string; message: string }
 }
 
 export type PluginSettingsSelectOptionsFrom = {

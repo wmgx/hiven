@@ -119,6 +119,7 @@ export default definePlugin<ClipboardHistorySettings>({
             {
               kind: 'number',
               key: 'retentionMonths',
+              confirmDecrease: { title: 'settings.shortenTitle', message: 'settings.shortenMessage' },
               label: 'Retention months',
               labelI18n: { zh: '保留月数' },
               description: '1–12 UTC calendar months, default 3; no item-count limit. Favorites are exempt from automatic expiry. Earlier history stays protected until explicitly included. Expired or manually deleted items are recoverable for 30 days, then permanently deleted automatically. Turning off recording does not pause cleanup.',
