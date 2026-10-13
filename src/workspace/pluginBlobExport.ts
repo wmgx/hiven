@@ -9,7 +9,7 @@ import { acquireLauncherNativeDialogFocus } from './launcherBlurGuard'
 type PreparedPngExport = { status: 'cancelled' } | { status: 'prepared'; exportId: number }
 
 /** Host-only owner guard. Plugins never receive destination paths or native tickets. */
-export type PluginStorageOwner = { capture: () => () => boolean }
+export type PluginStorageOwner = { capture: () => () => boolean; onCommit?: () => void }
 
 export function createPluginPngSaver(
   source: PluginSettingsSource,
@@ -54,7 +54,7 @@ export function createPluginPngSaver(
       usePluginPermissionStore.subscribe(observeOwner),
       usePluginStore.subscribe(observeOwner),
     ]
-    const releaseFocus = acquireLauncherNativeDialogFocus()
+    const releaseFocus = acquireLauncherNativeDialogFocus(() => !invalidated && (!isCurrentOwner || isCurrentOwner()))
     let exportId: number | undefined
     let discard: (() => Promise<void>) | undefined
     try {
@@ -75,6 +75,7 @@ export function createPluginPngSaver(
       // No await between this last authorization check and dispatch. Native owns
       // the one-shot destination ticket; accepting commit is the write boundary.
       requireCurrent()
+      owner?.onCommit?.()
       const saved = await invoke<PluginBlobSaveResult>('plugin_blob_commit_png_export', { source, pluginId, exportId, copyPathToClipboard: copyPath })
       // Once dispatched, report the real write result even if its owner closes.
       // The surface host separately suppresses messages from an obsolete view.

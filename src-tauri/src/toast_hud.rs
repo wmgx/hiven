@@ -23,7 +23,7 @@ pub(crate) enum Theme { Light, Dark }
 pub(crate) struct Progress { completed: u32, total: u32 }
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "kebab-case")]
-pub(crate) enum ResultKind { Copied, Pasted, CopyFailed, PasteFailed, CopiedPasteFailed, QueueReady, QueuePasted, QueueFailed }
+pub(crate) enum ResultKind { Copied, Pasted, CopyFailed, PasteFailed, CopiedPasteFailed, QueueReady, QueuePasted, QueueFailed, ImageSaved, ImageSavedPathFailed, ImageSaveFailed, ImageSaveCancelled }
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Receipt {
@@ -38,8 +38,8 @@ impl Receipt {
             if [8, 13, 18, 23].contains(&i) { *c == b'-' } else { c.is_ascii_hexdigit() }
         });
         uuid && self.target.as_ref().map_or(true, |token| token.len() == 16 && token.bytes().all(|c| c.is_ascii_hexdigit())) && self.revision <= 9_007_199_254_740_991 && match self.result {
-            ResultKind::Copied | ResultKind::Pasted | ResultKind::QueuePasted => matches!(level, Level::Success),
-            ResultKind::QueueReady => matches!(level, Level::Info),
+            ResultKind::Copied | ResultKind::Pasted | ResultKind::QueuePasted | ResultKind::ImageSaved => matches!(level, Level::Success),
+            ResultKind::QueueReady | ResultKind::ImageSaveCancelled => matches!(level, Level::Info),
             _ => matches!(level, Level::Error),
         }
     }

@@ -9,7 +9,7 @@ import { dismissRoutedToast, routeToast } from './toastRouting'
 export type ToastLevel = 'info' | 'success' | 'error' | 'warning'
 
 /** Host-only fixed results. Never populated from plugin text or error messages. */
-export type HudResult = 'copied' | 'pasted' | 'copy-failed' | 'paste-failed' | 'copied-paste-failed' | 'queue-ready' | 'queue-pasted' | 'queue-failed'
+export type HudResult = 'copied' | 'pasted' | 'copy-failed' | 'paste-failed' | 'copied-paste-failed' | 'queue-ready' | 'queue-pasted' | 'queue-failed' | 'image-saved' | 'image-saved-path-failed' | 'image-save-failed' | 'image-save-cancelled'
 export type HudReceipt = { operation: string; revision: number; result: HudResult; target?: string }
 
 export interface ToastAction {

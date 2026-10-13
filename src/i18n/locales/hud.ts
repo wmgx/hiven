@@ -1,6 +1,10 @@
 export default {
   en: {
     title: 'Hiven',
+    'result.image-saved': 'PNG saved; path copied',
+    'result.image-saved-path-failed': 'PNG saved; path copy did not complete',
+    'result.image-save-failed': 'PNG save did not complete',
+    'result.image-save-cancelled': 'PNG save cancelled',
     'result.copied': 'Copied to clipboard',
     'result.pasted': 'Paste sent',
     'result.copy-failed': 'Copy did not complete',
@@ -23,6 +27,10 @@ export default {
   },
   zh: {
     title: 'Hiven',
+    'result.image-saved': 'PNG 已保存，路径已复制',
+    'result.image-saved-path-failed': 'PNG 已保存，路径复制未完成',
+    'result.image-save-failed': 'PNG 保存未完成',
+    'result.image-save-cancelled': '已取消 PNG 保存',
     'result.copied': '已复制到剪贴板',
     'result.pasted': '已发送粘贴',
     'result.copy-failed': '复制未完成',

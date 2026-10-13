@@ -379,6 +379,8 @@ export type PluginLauncherApi = {
     }>
   }
   isPanePanelOpen(panelId: string): boolean
+  /** Optional host handoff for the bundled explicit PNG save action; no caller-selected payload. */
+  saveClipboardImageAsPng?(): Promise<void>
   getClipboardText(): Promise<string>
   replaceActiveText(text: string): Promise<void>
   insertText(text: string): Promise<void>

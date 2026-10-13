@@ -100,7 +100,11 @@ export const encodeDecodePlugin = definePlugin({
       },
       behavior: { type: 'perform' as const },
       surfaces: ['global-launcher' as const],
-      execute(execution) {
+      async execute(execution) {
+        if (route.id === 'image-save' && execution.api.saveClipboardImageAsPng) {
+          await execution.api.saveClipboardImageAsPng()
+          return { ok: true as const, keepOpen: true }
+        }
         execution.api.openSurface(route.id, { initialText: execution.input?.text })
         return { ok: true as const, keepOpen: true }
       },

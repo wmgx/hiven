@@ -82,7 +82,7 @@
   "image.saveClipboardCancelled": "Save cancelled. Clipboard unchanged.",
   "image.saveClipboardFailed": "PNG could not be saved. Clipboard unchanged. Choose an unused filename and a writable folder.",
   "image.saveRouteTitle": "Save screenshot to file",
-  "image.saveRouteDescription": "Open image tools · choose Save clipboard image, then a PNG location; full path is copied",
+  "image.saveRouteDescription": "Save the clipboard image as PNG in a location you choose, then copy its full path",
   "image.saveTaskHint": "Save the copied screenshot as a PNG file and copy its path.",
   "image.limits": "Supported formats and size limits",
   "image.openWorkbench": "Open image and text encoding tools",

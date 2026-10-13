@@ -67,6 +67,7 @@ import { getPluginPermissionSnapshot } from '../../workspace/pluginPermissions'
 import { selectLauncherVisibleItems } from '../../workspace/launcher/visibleItems'
 import type { LauncherBrowseCategory } from '../../workspace/launcher/browseItems'
 import { showToast } from '../../workspace/toast'
+import { withClipboardImageSave } from '../../clipboardImageSaveHandoff'
 import { captureHudTarget } from '../../workspace/toastRouting'
 
 type CurrentTextActionScope = { block: LauncherObjectBlock } & ReturnType<typeof captureCurrentTextDeliveryScope>
@@ -185,6 +186,8 @@ export function GlobalLauncherHost() {
   const objectBlockText = getObjectBlockRecommendationText(clipboardBlock.block)
   const [foregroundApp, setForegroundApp] = useState<string | undefined>()
 
+  const makeLauncherApi = useCallback((api: Parameters<typeof withClipboardImageSave>[0], item?: Parameters<typeof withClipboardImageSave>[1]) =>
+    withClipboardImageSave(createGlobalLauncherPluginApi(api), item, () => closeAfterActionRef.current()), [])
   const {
     query,
     rankingQuery,
@@ -208,7 +211,7 @@ export function GlobalLauncherHost() {
     objectBlockText,
     getMaterialGeneration: clipboardBlock.getMaterialGeneration,
     foregroundApp,
-    makeApi: createGlobalLauncherPluginApi,
+    makeApi: makeLauncherApi,
     visibleSelectionItemsRef,
     extraSelectionRowsRef,
   })
