@@ -80,7 +80,7 @@
   "relative.error.fold": "目标日历时刻重复出现，无法唯一确定；请改用精确小时",
   "countdown.title": "短倒计时",
   "countdown.statusInfo": "查看剩余时间、取消或查看上次结果",
-  "countdown.unavailable": "短倒计时目前仅支持 Linux 桌面端",
+  "countdown.unavailable": "当前环境无法使用短倒计时",
   "countdown.remaining": "剩余 {seconds} 秒",
   "countdown.refresh": "当前时间快照 · 回车刷新",
   "countdown.exists": "已有倒计时运行，未替换 · 回车刷新",
@@ -95,5 +95,10 @@
   "countdown.boundary": "回车开始 · 休眠计入，不唤醒 · 退出 Hiven 将中断",
   "countdown.failed": "未能更新倒计时，请先查看状态再重试。",
   "countdown.storage": "倒计时状态未能保存，请重试查看状态，不要视为已完成。",
-  "countdown.done": "返回工作"
+  "countdown.done": "返回工作",
+  "countdown.checking": "正在检查短倒计时是否可用…",
+  "countdown.checkFailed": "未能检查短倒计时，请关闭入口后重新打开再试。",
+  "countdown.checkingTitle": "检查中",
+  "countdown.unavailableTitle": "不可用",
+  "countdown.checkFailedTitle": "检查失败"
 }

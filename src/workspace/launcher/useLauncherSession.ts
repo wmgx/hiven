@@ -81,6 +81,7 @@ type UseLauncherSessionOptions = {
   open: boolean
   requestClose: () => void
   staticItemFilter?: (items: LauncherItem[]) => LauncherItem[]
+  mapCandidate?: (item: LauncherItem) => LauncherItem
   collectDynamicWhenEmpty?: boolean
   objectBlockText?: string
   getMaterialGeneration?: () => number | undefined
@@ -184,6 +185,7 @@ export function useLauncherSession({
   open,
   requestClose,
   staticItemFilter,
+  mapCandidate,
   collectDynamicWhenEmpty = false,
   objectBlockText,
   getMaterialGeneration,
@@ -816,10 +818,11 @@ export function useLauncherSession({
     // also creates duplicate React keys, which corrupts visible quick-run indices.
     const liveKeys = new Set([...staticCandidates, ...visiblePluginDynamicItems, ...visibleHostDynamicItems, ...visibleDocumentDynamicItems].map((item) => item.systemKey))
     const recentsDeduped = persistableRecentItems.filter((item) => !liveKeys.has(item.systemKey))
-    return [...staticCandidates, ...visiblePluginDynamicItems, ...visibleHostDynamicItems,
+    const items = [...staticCandidates, ...visiblePluginDynamicItems, ...visibleHostDynamicItems,
       ...recentsDeduped, ...visibleDocumentDynamicItems]
+    return mapCandidate ? items.map(mapCandidate) : items
   }, [query, objectBlockText, visiblePluginDynamicItems, visibleHostDynamicItems,
-    visibleDocumentDynamicItems, staticCandidates, persistableRecentItems])
+    visibleDocumentDynamicItems, staticCandidates, persistableRecentItems, mapCandidate])
 
   const availableItems = useMemo(() => {
     void pluginPermissions
@@ -917,8 +920,8 @@ export function useLauncherSession({
     const label = translate(locale, 'settings', 'jevBadge')
     const item = { ...suggestion.item, display: { ...suggestion.item.display, kindLabel: label,
       kindLabelI18n: { en: translate('en', 'settings', 'jevBadge'), zh: translate('zh', 'settings', 'jevBadge') } } }
-    return [item, ...localRankedItems.filter((candidate) => candidate.systemKey !== item.systemKey)]
-  }, [hasLocalMatches, jevFrameKind, jevSettings, jevSuggestion, localRankedItems, locale, open, query, staticCandidates])
+    return [mapCandidate ? mapCandidate(item) : item, ...localRankedItems.filter((candidate) => candidate.systemKey !== item.systemKey)]
+  }, [hasLocalMatches, jevFrameKind, jevSettings, jevSuggestion, localRankedItems, locale, open, query, staticCandidates, mapCandidate])
   // After progressive partials / re-rank:
   // - user-pinned key → follow that row
   // - default (no pin) → stay on ranking top (index 0)

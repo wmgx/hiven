@@ -1,3 +1,4 @@
+import { useShortCountdownAvailability } from '../../shortCountdownAvailability'
 import { isCurrentBundledDefinition } from '../../workspace/bundledPluginIdentity'
 import { CURRENT_MATERIAL_COMPARE_ACTION, createMaterialComparison, type MaterialTextPair } from '../../currentMaterialCompare'
 import { ensurePluginRuntimeReady } from '../../workspace/pluginRuntimeBootstrap'
@@ -187,6 +188,7 @@ export function GlobalLauncherHost() {
   const objectBlockText = getObjectBlockRecommendationText(clipboardBlock.block)
   const [foregroundApp, setForegroundApp] = useState<string | undefined>()
 
+  const mapCandidate = useShortCountdownAvailability()
   const makeLauncherApi = useCallback((api: Parameters<typeof withClipboardImageSave>[0], item?: Parameters<typeof withClipboardImageSave>[1]) =>
     withShortCountdown(withClipboardImageSave(createGlobalLauncherPluginApi(api), item, () => closeAfterActionRef.current()), item), [])
   const {
@@ -213,6 +215,7 @@ export function GlobalLauncherHost() {
     getMaterialGeneration: clipboardBlock.getMaterialGeneration,
     foregroundApp,
     makeApi: makeLauncherApi,
+    mapCandidate,
     visibleSelectionItemsRef,
     extraSelectionRowsRef,
   })

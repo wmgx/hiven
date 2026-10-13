@@ -80,7 +80,7 @@
   "relative.error.fold": "Target calendar time occurs twice; use exact hours to disambiguate",
   "countdown.title": "Short countdown",
   "countdown.statusInfo": "View remaining time, cancel, or check the last result",
-  "countdown.unavailable": "Short countdown is currently supported on Linux desktop only",
+  "countdown.unavailable": "Short countdown is unavailable in this environment",
   "countdown.remaining": "{seconds} seconds remaining",
   "countdown.refresh": "Time snapshot · Enter to refresh",
   "countdown.exists": "A countdown is already running; it was not replaced · Enter to refresh",
@@ -95,5 +95,10 @@
   "countdown.boundary": "Enter starts · Sleep counts; no wake-up · Quitting Hiven interrupts it",
   "countdown.failed": "Could not update the countdown. Check its status before trying again.",
   "countdown.storage": "Countdown state could not be saved. Retry checking its status; do not assume completion.",
-  "countdown.done": "Return to work"
+  "countdown.done": "Return to work",
+  "countdown.checking": "Checking short countdown availability…",
+  "countdown.checkFailed": "Could not check short countdown. Close and reopen the launcher to retry.",
+  "countdown.checkingTitle": "Checking",
+  "countdown.unavailableTitle": "Unavailable",
+  "countdown.checkFailedTitle": "Check failed"
 }
