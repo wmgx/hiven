@@ -1,3 +1,4 @@
+import { invoke } from '@tauri-apps/api/core'
 import { beginSuggestionSession } from './workspace/launcher/contextSuggestionsStore'
 import { translate } from './i18n'
 import { installHistoryPasteQueueHost } from './historyPasteQueueHandoff'
@@ -62,6 +63,10 @@ function isNativeDesktopRuntime() {
 function LauncherRuntimeApp() {
   const fontSize = useAppStore((s) => s.settings.fontSize)
   const theme = useAppStore((s) => s.settings.theme)
+  const countdownLocale = useAppStore((s) => s.settings.locale)
+  useEffect(() => {
+    if (isNativeDesktopRuntime()) void invoke('short_countdown_context', { theme, locale: countdownLocale === 'zh' ? 'zh' : 'en' }).catch(() => {})
+  }, [theme, countdownLocale])
   const launcherWindowPosition = useAppStore((s) => s.settings.globalLauncherWindowPosition)
   const launcherProgrammaticMoveRef = useRef(false)
   const launcherProgrammaticMoveResetRef = useRef<number | undefined>(undefined)

@@ -38,6 +38,10 @@ const relativeModule = { exports: {} }
 vm.runInNewContext(ts.transpileModule(readFileSync('src/plugins/date-time-assistant/relativeTimeAnswer.ts', 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023 },
 }).outputText, { module: relativeModule, exports: relativeModule.exports, Date: FixedDate, Intl })
+const countdownModule = { exports: {} }
+vm.runInNewContext(ts.transpileModule(readFileSync('src/plugins/date-time-assistant/countdown.ts', 'utf8'), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023 },
+}).outputText, { module: countdownModule, exports: countdownModule.exports })
 const module = { exports: {} }
 const context = vm.createContext({
   Date: FixedDate,
@@ -49,6 +53,7 @@ const context = vm.createContext({
   module,
   exports: module.exports,
   require(specifier) {
+    if (specifier === './countdown') return countdownModule.exports
     if (specifier === './relativeTimeAnswer') return relativeModule.exports
     if (specifier === './cronAnswer') return cronModule.exports
     if (specifier === './timeZoneAnswer') return zoneModule.exports
@@ -363,3 +368,25 @@ try {
   else process.env.TZ = calendarOriginalTZ
 }
 console.log('Explicit calendar offsets are host-independent; invalid fields/offsets rejected and unqualified local semantics preserved')
+
+// Explicit countdown intent never consumes relative-time calculations.
+assert.equal(countdownModule.exports.parseCountdown('10分钟倒计时'), 600)
+assert.equal(countdownModule.exports.parseCountdown('countdown 3 seconds'), 3)
+assert.equal(countdownModule.exports.parseCountdown('10分钟后'), null)
+assert.equal(countdownModule.exports.parseCountdown('0秒倒计时'), 0)
+assert.equal(countdownModule.exports.parseCountdown('61分钟倒计时'), 0)
+assert.equal(countdownModule.exports.parseCountdown('1.5分钟倒计时'), null)
+const calls = []
+let active = { supported: true, remainingSeconds: 10, storageError: false, record: { id: 'old', phase: 'running', seconds: 10 } }
+const ctx = { t: key => key, api: { shortCountdown: async request => { calls.push(request); return active } } }
+const duplicate = await countdownModule.exports.countdownStartItem(20, ctx.t).execute(ctx)
+assert.equal(duplicate.output.choices[0].subtitle, 'countdown.exists')
+active = { ...active, record: { id: 'new', phase: 'running', seconds: 20 } }
+await duplicate.output.choices[1].primaryAction()
+assert.equal(calls.find(call => call.action === 'cancel').id, 'old')
+const refreshed = await duplicate.output.choices[0].primaryAction()
+assert.ok(refreshed.output.choices)
+active = { ...active, supported: false }
+const unsupported = await countdownModule.exports.countdownStartItem(10, ctx.t).execute(ctx)
+assert.equal(unsupported.message, 'countdown.unavailable')
+console.log('Countdown explicit intent, duplicate start, current refresh and identity-scoped cancel passed.')

@@ -1758,7 +1758,8 @@ export class LauncherController {
         return
       }
       // Success with output: enter result-choice mode (keep open).
-      const frames = replacePreview ? this.state.frames.slice(0, -1) : [...this.state.frames]
+      const refreshResult = result.output.replaceCurrent && this.state.frames.at(-1)?.kind === 'result'
+      const frames = replacePreview || refreshResult ? this.state.frames.slice(0, -1) : [...this.state.frames]
       const previous = frames[frames.length - 1]
       if (replacePreview && previewEdit && (previous?.kind === 'collect-input' || previous?.kind === 'param-input')) {
         const params = this.copyParams(previewEdit.params)

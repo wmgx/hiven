@@ -1,3 +1,4 @@
+import { countdownStatusItem, countdownStartItem, parseCountdown } from './countdown'
 import { definePlugin, getPluginHostSdk, textError, textOutput, type TextInput, type LauncherDynamicContext, type LauncherItemContribution, type PluginSurfaceProps, type PluginToolSurfaces } from '@hiven/plugin'
 import { parseRelativeTimeAnswer } from './relativeTimeAnswer'
 import { parseCronAnswer } from './cronAnswer'
@@ -540,7 +541,7 @@ export const dateTimeAssistantPlugin = definePlugin({
     },
   ],
   launcher: {
-    items: WORKSPACE_ROUTES.map((route) => ({
+    items: [countdownStatusItem(), ...WORKSPACE_ROUTES.map((route) => ({
       id: `open-${route.id}`,
       display: {
         title: route.title,
@@ -554,10 +555,12 @@ export const dateTimeAssistantPlugin = definePlugin({
         execution.api.openSurface(route.id, { initialText: execution.input?.text })
         return { ok: true as const, keepOpen: true }
       },
-    })),
+    }))],
     dynamicItems(ctx: LauncherDynamicContext): LauncherItemContribution[] {
       const input = ctx.query
       if (!input) return []
+      const countdown = parseCountdown(input)
+      if (countdown !== null) return [countdownStartItem(countdown, ctx.t)]
       const now = new Date()
       const relative = parseRelativeTimeAnswer(input, now)
       if (relative) {

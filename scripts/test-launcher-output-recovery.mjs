@@ -599,6 +599,25 @@ try {
     assert.equal(h.closed, 1)
   })
 
+  await check('explicit result refresh replaces only a result frame and never stacks stale snapshots', async () => {
+    const h = harness()
+    const item = makeItem(h)
+    let refreshes = 0
+    const current = () => ({ ok: true, output: { replaceCurrent: true, choices: [
+      { id: 'refresh', title: `Status ${refreshes}`, primaryAction: () => { refreshes++; return current() } },
+      { id: 'done', title: 'Done', primaryAction: () => ({ ok: true }) },
+    ] } })
+    item.execute = async () => current()
+    await h.controller.selectItem(item)
+    const depth = h.controller.getState().frames.length
+    assert.equal(refreshes, 0, 'two choices present the terminal status without auto-running')
+    for (let i = 0; i < 3; i++) await h.controller.activateChoice(h.choices()[0])
+    assert.equal(h.controller.getState().frames.length, depth)
+    assert.equal(h.choices()[0].title, 'Status 3')
+    h.controller.back()
+    assert.notEqual(h.top()?.kind, 'result', 'Back cannot expose a stale status snapshot')
+  })
+
   console.log(`Launcher output recovery passed: ${passed} real logic cases (delivery locks, retry-only recovery, stale completions, exact Return material, explicit previews and legacy paste semantics)`)
 } finally {
   console.info = originalInfo

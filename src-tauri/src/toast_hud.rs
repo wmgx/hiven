@@ -9,6 +9,7 @@ use tauri::{Emitter, Manager};
 const LABEL: &str = "toast-hud";
 const EVENT: &str = "hiven://hud-toast";
 const MAX_LIFETIME: u64 = 15_000;
+static CREATION: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -23,7 +24,7 @@ pub(crate) enum Theme { Light, Dark }
 pub(crate) struct Progress { completed: u32, total: u32 }
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "kebab-case")]
-pub(crate) enum ResultKind { Copied, Pasted, CopyFailed, PasteFailed, CopiedPasteFailed, QueueReady, QueuePasted, QueueFailed, ImageSaved, ImageSavedPathFailed, ImageSaveFailed, ImageSaveCancelled }
+pub(crate) enum ResultKind { Copied, Pasted, CopyFailed, PasteFailed, CopiedPasteFailed, QueueReady, QueuePasted, QueueFailed, ImageSaved, ImageSavedPathFailed, ImageSaveFailed, ImageSaveCancelled, CountdownExpired }
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Receipt {
@@ -39,7 +40,7 @@ impl Receipt {
         });
         uuid && self.target.as_ref().map_or(true, |token| token.len() == 16 && token.bytes().all(|c| c.is_ascii_hexdigit())) && self.revision <= 9_007_199_254_740_991 && match self.result {
             ResultKind::Copied | ResultKind::Pasted | ResultKind::QueuePasted | ResultKind::ImageSaved => matches!(level, Level::Success),
-            ResultKind::QueueReady | ResultKind::ImageSaveCancelled => matches!(level, Level::Info),
+            ResultKind::QueueReady | ResultKind::ImageSaveCancelled | ResultKind::CountdownExpired => matches!(level, Level::Info),
             _ => matches!(level, Level::Error),
         }
     }
@@ -373,7 +374,6 @@ pub(crate) async fn route_toast(app: tauri::AppHandle, window: tauri::WebviewWin
     // On Linux WebviewWindowBuilder synchronously waits for webview creation
     // dispatched to the UI loop. Calling it inside run_on_main_thread deadlocks
     // that loop. Serialize lazy creation on this async command's worker instead.
-    static CREATION: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
     {
         trace("ensure-enter");
         let _creation = CREATION.lock().await;
@@ -514,4 +514,43 @@ mod tests {
     }
     #[test]
     fn hud_is_not_an_eligible_surface() { assert!(!surface(LABEL)); assert!(surface("launcher")); assert!(surface("plugin-surface:builtin:x:y")); }
+}
+
+/// App-owned deadline receipt; no plugin text, external target or generic scheduling API.
+pub(crate) async fn short_countdown_due(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    { let _guard = CREATION.lock().await; ensure_window(&app)?; }
+    let shown_id = id.clone();
+    let shown = ui(app.clone(), move |app| {
+        if !matches!(foreground_target(app, "short-countdown"), Ok(None)) { return Ok(false); }
+        let Some((locale, theme)) = super::short_countdown::presentation(&shown_id) else { return Ok(false); };
+        let receipt = Receipt { operation: shown_id.clone(), revision: 1, result: ResultKind::CountdownExpired, target: None };
+        let mut s = registry().lock().map_err(|_| "hud-unavailable")?;
+        if s.protects_failure("short-countdown", Some(&receipt), &Level::Info, now()) { return Ok(false); }
+        let sequence = now().saturating_mul(1000).max(s.latest_sequence.saturating_add(1))
+            .max(s.sequences.get("short-countdown").copied().unwrap_or(0).saturating_add(1));
+        if !s.accept("short-countdown", sequence, &shown_id, now() + MAX_LIFETIME, now()) { return Ok(false); }
+        s.revision = s.revision.saturating_add(1);
+        s.pending = Some(Pending { owner: "short-countdown".into(), sequence, target: None, snapshot: Snapshot { id: shown_id, level: Level::Info, expires_at: now() + MAX_LIFETIME, locale, theme, progress: None, receipt: Some(receipt) } });
+        drop(s); show_current(app)?; Ok(true)
+    }).await?;
+    if shown { tauri::async_runtime::spawn(async move {
+        let display_until = Instant::now() + Duration::from_millis(MAX_LIFETIME);
+        loop {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            let id = id.clone();
+            let keep = ui(app.clone(), move |app| {
+                let pending = registry().lock().map_err(|_| "hud-unavailable")?.pending.clone();
+                let Some(pending) = pending.filter(|p| p.owner == "short-countdown" && p.snapshot.id == id) else { return Ok(false); };
+                let expired = Instant::now() >= display_until || pending.snapshot.expires_at <= now() || !matches!(foreground_target(app, &pending.owner), Ok(None));
+                let mut s = registry().lock().map_err(|_| "hud-unavailable")?;
+                if !same_pending(s.pending.as_ref(), &pending) { return Ok(false); }
+                if expired { s.pending = None; }
+                drop(s);
+                if expired { hide(app); }
+                Ok(!expired)
+            }).await;
+            if keep != Ok(true) { break; }
+        }
+    }); }
+    Ok(())
 }

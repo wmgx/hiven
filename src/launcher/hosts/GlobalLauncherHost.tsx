@@ -67,6 +67,7 @@ import { getPluginPermissionSnapshot } from '../../workspace/pluginPermissions'
 import { selectLauncherVisibleItems } from '../../workspace/launcher/visibleItems'
 import type { LauncherBrowseCategory } from '../../workspace/launcher/browseItems'
 import { showToast } from '../../workspace/toast'
+import { withShortCountdown } from '../../shortCountdownHandoff'
 import { withClipboardImageSave } from '../../clipboardImageSaveHandoff'
 import { captureHudTarget } from '../../workspace/toastRouting'
 
@@ -187,7 +188,7 @@ export function GlobalLauncherHost() {
   const [foregroundApp, setForegroundApp] = useState<string | undefined>()
 
   const makeLauncherApi = useCallback((api: Parameters<typeof withClipboardImageSave>[0], item?: Parameters<typeof withClipboardImageSave>[1]) =>
-    withClipboardImageSave(createGlobalLauncherPluginApi(api), item, () => closeAfterActionRef.current()), [])
+    withShortCountdown(withClipboardImageSave(createGlobalLauncherPluginApi(api), item, () => closeAfterActionRef.current()), item), [])
   const {
     query,
     rankingQuery,
