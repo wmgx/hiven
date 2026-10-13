@@ -87,5 +87,16 @@
   "image.limits": "Supported formats and size limits",
   "image.openWorkbench": "Open image and text encoding tools",
   "image.loadError": "Could not load this image.",
-  "image.previousNotUpdated": "Previous preview was not updated. Copy and save are unavailable."
+  "image.previousNotUpdated": "Previous preview was not updated. Copy and save are unavailable.",
+  "redact.title": "Redact image",
+  "redact.undo": "Undo redaction",
+  "redact.ready": "Drag a solid rectangle to hide content. Esc cancels a drag; Ctrl/⌘ Z undoes.",
+  "redact.empty": "Choose an image or read the clipboard, then drag rectangles and copy or save the result.",
+  "redact.canvas": "Drag rectangles to redact image",
+  "redact.replace": "Current redactions have not been copied or saved. Replacing the image discards these changes.",
+  "redact.replaceConfirm": "Replace image",
+  "redact.keep": "Keep current image",
+  "redact.failed": "Operation failed. Your image and redactions are preserved; try again.",
+  "redact.count": "{width} × {height} · {count} redactions",
+  "redact.previous": "The previous image is still shown. Keep it explicitly or retry loading before copying or saving."
 }

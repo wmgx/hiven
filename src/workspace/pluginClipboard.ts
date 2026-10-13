@@ -276,12 +276,18 @@ export function createPluginClipboard(
       await writeClipboardText(text, options)
     },
 
-    async writeImage(blobId: string): Promise<void> {
+    async writeImage(blobId: string, options?: { signal?: AbortSignal }): Promise<void> {
+      const requireCurrent = () => {
+        if (options?.signal?.aborted) throw Object.assign(new Error('Image copy was interrupted'), { name: 'AbortError' })
+      }
+      requireCurrent()
       requirePermissions(['clipboard.write', 'clipboard.image', 'storage.blob'])
       if (!storage) throw new Error('Image clipboard write requires plugin blob storage')
       const bytes = await storage.blob.get(blobId)
+      requireCurrent()
       if (!bytes) throw new Error(`Blob not found: ${blobId}`)
-      await writeClipboardImageBytes(bytes)
+      await writeClipboardImageBytes(bytes, options?.signal)
+      requireCurrent()
     },
 
     async writeFiles(paths: string[]): Promise<void> {

@@ -164,3 +164,17 @@ for (const stage of ['create-resolves', 'create-rejects', 'write-rejects']) {
   assert.deepEqual(log, stage === 'create-resolves' ? ['close'] : stage === 'create-rejects' ? [] : ['write', 'close'])
 }
 console.log('Clipboard cancellation passed: delayed decode/write cannot start a fallback and acquired native handles close')
+
+{
+  let resolveRead
+  let decoded = false
+  const { api } = loadPluginClipboard({ fromBytesImpl: async () => { decoded = true; return { close: async () => {} } }, writeImageImpl: async () => assert.fail('cancelled image must not be written') })
+  const clipboard = api.createPluginClipboard('encode-decode', undefined, { blob: { get: () => new Promise(resolve => { resolveRead = resolve }) } })
+  const controller = new AbortController()
+  const result = clipboard.writeImage('synthetic', { signal: controller.signal })
+  controller.abort()
+  resolveRead(new Uint8Array([1]))
+  await assert.rejects(result, error => error.name === 'AbortError')
+  assert.equal(decoded, false)
+}
+console.log('Public image copy cancellation during blob read passed')

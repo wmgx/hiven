@@ -1,10 +1,10 @@
 {
-  "version": 145,
+  "version": 146,
   "packages": [
     {
       "pluginId": "encode-decode",
       "dir": "encode-decode",
-      "version": "2.7.3"
+      "version": "2.8.0"
     },
     {
       "pluginId": "formatter",

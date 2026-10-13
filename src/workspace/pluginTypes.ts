@@ -625,7 +625,7 @@ export type PluginClipboardApi = {
   readImage?: (options?: { signal?: AbortSignal }) => Promise<PluginClipboardImage>
   /** recordInHistory:false is restricted to History assembly and curl inspection on native desktop. */
   writeText(text: string, options?: { sensitive?: boolean; recordInHistory?: boolean }): Promise<void>
-  writeImage(blobId: string): Promise<void>
+  writeImage(blobId: string, options?: { signal?: AbortSignal }): Promise<void>
   writeFiles(paths: string[]): Promise<void>
   watch(
     options: ClipboardWatchOptions,

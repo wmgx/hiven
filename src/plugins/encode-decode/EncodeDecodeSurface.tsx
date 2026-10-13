@@ -1,3 +1,4 @@
+import { ImageRedactionPanel } from './ImageRedactionPanel'
 import { ImageBase64Panel } from './ImageBase64Panel'
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
@@ -38,6 +39,7 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
   const baseline = useRef(initialText)
   const [imageDirty, setImageDirty] = useState(false)
   const imageInvalidation = useRef<(() => void) | null>(null)
+  const [redactMode, setRedactMode] = useState(props.surfaceId === 'image-redact')
   const [saveFocused, setSaveFocused] = useState(props.surfaceId === 'image-save')
   const hasUnsavedChanges = inputText !== baseline.current || imageDirty
   const reportUnsavedChanges = host.setUnsavedChanges
@@ -150,13 +152,13 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
         <IconButton type="button" label={t('action.back')} onClick={() => update(() => host.requestBack())}>
           <BackIcon size={14} strokeWidth={2} />
         </IconButton>
-        <strong>{t(saveFocused ? 'image.saveRouteTitle' : 'surface.title')}</strong>
+        <strong>{t(redactMode ? 'redact.title' : saveFocused ? 'image.saveRouteTitle' : 'surface.title')}</strong>
         <IconButton type="button" label={t('action.close')} onClick={() => update(() => host.close())}>
           <CloseIcon size={14} strokeWidth={2} />
         </IconButton>
       </header>
 
-      {!saveFocused && <nav className="encode-formats" aria-label={t('format.label')}>
+      {!saveFocused && !redactMode && <nav className="encode-formats" aria-label={t('format.label')}>
         {FORMATS.map((item) => (
           <button
             key={item}
@@ -169,10 +171,11 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
           </button>
         ))}
         <button type="button" className={imageMode ? 'is-active' : ''} aria-pressed={imageMode} onClick={() => update(() => setImageMode(true))}>{t('image.title')}</button>
+        <button type="button" onClick={() => update(() => setRedactMode(true))}>{t('redact.title')}</button>
       </nav>}
 
-      <ImageBase64Panel {...props} active={imageMode} saveFocused={saveFocused} onShowWorkbench={() => setSaveFocused(false)} onDirtyChange={setImageDirty} invalidateRef={imageInvalidation} />
-      {!imageMode && <>
+      {redactMode ? <ImageRedactionPanel {...props} onDirtyChange={setImageDirty} invalidateRef={imageInvalidation} /> : <ImageBase64Panel {...props} active={imageMode} saveFocused={saveFocused} onShowWorkbench={() => setSaveFocused(false)} onDirtyChange={setImageDirty} invalidateRef={imageInvalidation} />}
+      {!imageMode && !redactMode && <>
       <nav className="encode-directions" aria-label={t('direction.label')}>
         {(format === 'jwt' ? ['decode'] : ['encode', 'decode']).map((item) => (
           <button

@@ -87,5 +87,16 @@
   "image.limits": "支持的格式与大小限制",
   "image.openWorkbench": "打开图片与文本编解码",
   "image.loadError": "无法载入此图片。",
-  "image.previousNotUpdated": "旧预览未更新，暂不可复制或保存。"
+  "image.previousNotUpdated": "旧预览未更新，暂不可复制或保存。",
+  "redact.title": "图片遮挡",
+  "redact.undo": "撤销遮挡",
+  "redact.ready": "拖动实色矩形遮挡。Esc 取消当前拖动，Ctrl/⌘ Z 撤销。",
+  "redact.empty": "选择图片或读取剪贴板图片，拖动矩形遮挡后直接复制或另存。",
+  "redact.canvas": "拖动矩形以遮挡图片",
+  "redact.replace": "当前遮挡尚未复制或保存。替换图片会丢弃这些修改。",
+  "redact.replaceConfirm": "替换图片",
+  "redact.keep": "保留当前图片",
+  "redact.failed": "操作未完成，当前图片和遮挡已保留，可重试。",
+  "redact.count": "{width} × {height} · {count} 处遮挡",
+  "redact.previous": "当前显示的仍是旧图片。请明确保留它或重试载入，再复制或保存。"
 }

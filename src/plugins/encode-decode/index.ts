@@ -39,6 +39,7 @@ const WORKSPACE_SHELL = {
   resizable: true,
 }
 const OPERATION_ROUTES = [
+  { id: 'image-redact', title: 'redact.title', aliases: ['redact screenshot', 'redact image', 'hide image text', '截图遮挡', '图片遮挡', '图片打码'] },
   { id: 'image-save', title: 'image.saveRouteTitle', aliases: ['save screenshot', 'save clipboard image', 'screenshot png', '截图保存文件', '截图存为文件', '保存截图', '保存剪贴板图片'] },
   { id: 'image-base64', title: 'image.title', aliases: ['image base64', 'data uri', '图片base64', '图片编码'] },
   { id: 'base64-encode', title: 'base64.encode.title', aliases: ['base64 encode', 'encode base64', 'b64 encode', 'base64编码', 'base64 编码'] },
