@@ -67,6 +67,7 @@ import { getPluginPermissionSnapshot } from '../../workspace/pluginPermissions'
 import { selectLauncherVisibleItems } from '../../workspace/launcher/visibleItems'
 import type { LauncherBrowseCategory } from '../../workspace/launcher/browseItems'
 import { showToast } from '../../workspace/toast'
+import { captureHudTarget } from '../../workspace/toastRouting'
 
 type CurrentTextActionScope = { block: LauncherObjectBlock } & ReturnType<typeof captureCurrentTextDeliveryScope>
 type CurrentTextExportScope = { block: LauncherObjectBlock } & ReturnType<typeof captureCurrentTextExportScope>
@@ -955,6 +956,8 @@ export function GlobalLauncherHost() {
     const generation = ++deliveryGenerationRef.current
     if (hudMaterialRef.current?.block !== scope.block) hudMaterialRef.current = { block: scope.block, id: crypto.randomUUID() }
     const operation = hudMaterialRef.current.id
+    const target = await captureHudTarget(operation)
+    if (generation !== deliveryGenerationRef.current || !scope.isCurrent()) return
     setDeliveryFailure(null)
     const result = await currentTextDeliveryRef.current({
       ...scope,
@@ -969,7 +972,7 @@ export function GlobalLauncherHost() {
       if (result.message) {
         setDeliveryFailure({ message: result.message, isCurrent: scope.isCurrent })
         const outcome = action.startsWith('copy-') ? 'copy-failed' : result.fallback === 'copied' ? 'copied-paste-failed' : 'paste-failed'
-        showToast(t(locale, `hud.result.${outcome}`), 'error', { durationMs: 6000, hud: { operation, revision: generation, result: outcome } })
+        showToast(t(locale, `hud.result.${outcome}`), 'error', { durationMs: 6000, hud: { operation, target, revision: generation, result: outcome } })
       }
     }
     else {
@@ -978,7 +981,7 @@ export function GlobalLauncherHost() {
       await closing
       const current = useAppStore.getState()
       if (current.globalLauncherSessionId === closedSession && !current.globalLauncherOpen) {
-        showToast(t(locale, action.startsWith('copy-') ? 'palette.copied' : 'hud.pasted'), 'success', { hud: { operation, revision: generation, result: action.startsWith('copy-') ? 'copied' : 'pasted' } })
+        showToast(t(locale, action.startsWith('copy-') ? 'palette.copied' : 'hud.pasted'), 'success', { hud: { operation, target, revision: generation, result: action.startsWith('copy-') ? 'copied' : 'pasted' } })
       }
     }
   }, [closeLauncherAfterAction, locale, overlay, pastePreviewText, standaloneLauncher])

@@ -10,7 +10,7 @@ export type ToastLevel = 'info' | 'success' | 'error' | 'warning'
 
 /** Host-only fixed results. Never populated from plugin text or error messages. */
 export type HudResult = 'copied' | 'pasted' | 'copy-failed' | 'paste-failed' | 'copied-paste-failed' | 'queue-ready' | 'queue-pasted' | 'queue-failed'
-export type HudReceipt = { operation: string; revision: number; result: HudResult }
+export type HudReceipt = { operation: string; revision: number; result: HudResult; target?: string }
 
 export interface ToastAction {
   label: string

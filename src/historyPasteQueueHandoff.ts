@@ -1,3 +1,4 @@
+import { captureHudTarget } from './workspace/toastRouting'
 /** App composition only: bundled History -> one session-only hidden-launcher queue. */
 import type { HistoryPasteQueueBridge, HistoryPasteQueueStatus } from './workspace/pluginTypes'
 import { createClipboardPasteQueue, validateQueueSnapshots } from './plugins/clipboard-history/queue/clipboardPasteQueue'
@@ -40,10 +41,12 @@ function allowed(): boolean {
 
 let installedStop: (() => void) | null = null
 /** Install only in the long-lived native launcher, never a plugin webview. */
-export function installHistoryPasteQueueHost(options: { notify?: (status: HistoryPasteQueueStatus, outcome: HistoryPasteQueueNotice) => void } = {}): () => void {
+export function installHistoryPasteQueueHost(options: { notify?: (status: HistoryPasteQueueStatus, outcome: HistoryPasteQueueNotice, hud: { operation: string; target?: string }) => void } = {}): () => void {
   if (installedStop || new URLSearchParams(window.location.search).get('window') !== 'launcher' || !(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return () => {}
   let alive = true
   let sessionId = ''
+  let hudOperation = crypto.randomUUID()
+  let deliveryHudTarget: string | undefined
   let sessionDefinition = pluginRegistry.getPluginDefinition(TARGET.pluginId, 'production')
   let generation = 0
   let statusRevision = 0
@@ -63,7 +66,9 @@ export function installHistoryPasteQueueHost(options: { notify?: (status: Histor
       const cancel = () => { if (attemptId) void invoke('cancel_paste_attempt', { attemptId }).catch(() => undefined) }
       signal.addEventListener('abort', cancel, { once: true })
       try {
+        deliveryHudTarget = undefined
         attemptId = await invoke<string>('begin_history_queue_paste')
+        deliveryHudTarget = await captureHudTarget(hudOperation, attemptId)
         if (!isCurrent()) { cancel(); return { ok: false } }
         await invoke('paste_history_queue_text', { attemptId, text: snapshot.text })
         return { ok: isCurrent() }
@@ -98,14 +103,14 @@ export function installHistoryPasteQueueHost(options: { notify?: (status: Histor
     generation += 1
     if (startingId) cancelled.add(startingId)
     queue.cancel()
-    options.notify?.(status(), 'cancelled')
+    options.notify?.(status(), 'cancelled', { operation: hudOperation })
     void releaseShortcut().catch(() => undefined)
   }
   const next = async (): Promise<boolean> => {
     if (!alive || !allowed()) { cancelQueue(); return false }
     if (!queue.getSnapshot().remaining) return false
     const outcome = await queue.next()
-    if (outcome === 'delivered' || outcome === 'failed') options.notify?.(status(), outcome)
+    if (outcome === 'delivered' || outcome === 'failed') options.notify?.(status(), outcome, { operation: hudOperation, target: deliveryHudTarget })
     if (queue.getSnapshot().phase === 'completed') void releaseShortcut().catch(() => undefined)
     return true
   }
@@ -143,8 +148,9 @@ export function installHistoryPasteQueueHost(options: { notify?: (status: Histor
         sessionDefinition = requestedDefinition
         sessionId = request.id
         startingId = ''
+        hudOperation = crypto.randomUUID()
         queue.replace(snapshots)
-        options.notify?.(status(), 'ready')
+        options.notify?.(status(), 'ready', { operation: hudOperation })
         } finally { finishStart() }
       }
     } catch (error) {
@@ -174,7 +180,7 @@ export function installHistoryPasteQueueHost(options: { notify?: (status: Histor
     alive = false
     generation += 1
     queue.dispose()
-    options.notify?.(status(), 'cancelled')
+    options.notify?.(status(), 'cancelled', { operation: hudOperation })
     for (const cleanup of stops) cleanup()
     void releaseShortcut().catch(() => undefined)
     installedStop = null

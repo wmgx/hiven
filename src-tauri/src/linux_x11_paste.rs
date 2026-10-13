@@ -808,3 +808,16 @@ mod tests {
         assert_eq!(select_paste_keycodes(8, 0, &[], &[8]), None);
     }
 }
+
+/// Read only the original captured window's geometry. The retained DestroyNotify
+/// observer rejects a destroyed/reused XID even after paste consumes its slot.
+pub(crate) fn hud_target_rect(target: &Arc<PasteTarget>) -> Option<(i32, i32, u32, u32)> {
+    let captured = &target.captured;
+    let session = captured.session.try_lock().ok()?;
+    session.ensure_alive(captured.window).ok()?;
+    let geometry = session.connection.get_geometry(captured.window).ok()?.reply().ok()?;
+    let origin = session.connection.translate_coordinates(captured.window, session.root, 0, 0).ok()?.reply().ok()?;
+    session.ensure_alive(captured.window).ok()?;
+    if !origin.same_screen || geometry.width == 0 || geometry.height == 0 { return None; }
+    Some((i32::from(origin.dst_x), i32::from(origin.dst_y), u32::from(geometry.width), u32::from(geometry.height)))
+}

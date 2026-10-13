@@ -7741,6 +7741,7 @@ pub fn run() {
             history_paste_queue::begin_history_queue_paste,
             history_paste_queue::paste_history_queue_text,
             toast_hud::route_toast,
+            toast_hud::capture_hud_target,
             toast_hud::hud_ready,
             toast_hud::dismiss_toast,
             get_config_dir,

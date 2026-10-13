@@ -12,6 +12,13 @@ export function nativeToastRoutingAvailable() {
   return typeof window !== 'undefined' && !!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ && !window.__HIVEN_WEB_NATIVE_BRIDGE__
 }
 
+/** Best-effort native ticket for this operation, never a window ID or geometry. */
+export async function captureHudTarget(operation: string, attemptId?: string): Promise<string | undefined> {
+  if (!nativeToastRoutingAvailable()) return undefined
+  try { return await invoke<string | null>('capture_hud_target', { operation, attemptId }) ?? undefined }
+  catch { return undefined }
+}
+
 export async function routeToast(item: ToastItem, removeLocal: (id: string) => void) {
   if (!nativeToastRoutingAvailable()) return
   sequence = Math.max(Date.now() * 1000, sequence + 1)

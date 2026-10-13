@@ -147,20 +147,19 @@ function LauncherRuntimeApp() {
   useEffect(() => isNativeDesktopRuntime() ? installQuickEditorHotkeys() : undefined, [])
   useEffect(() => {
     if (!isNativeDesktopRuntime()) return
-    let session = '', operation = '', lastNotice: string | undefined
-    const stop = installHistoryPasteQueueHost({ notify: (status, outcome) => {
+    let session = '', lastNotice: string | undefined
+    const stop = installHistoryPasteQueueHost({ notify: (status, outcome, hud) => {
       if (outcome === 'cancelled' || status.sessionId !== session) {
         if (lastNotice) dismissToast(lastNotice)
         lastNotice = undefined
         if (outcome === 'cancelled') return
         session = status.sessionId
-        operation = crypto.randomUUID()
       }
       const locale = useAppStore.getState().settings.locale
       lastNotice = showToast(translate(locale, 'hud', `queue.${outcome}`), outcome === 'failed' ? 'error' : outcome === 'delivered' ? 'success' : 'info', {
         durationMs: outcome === 'failed' ? 6000 : 3500,
         progress: status.total ? { completed: status.completed, total: status.total } : undefined,
-        hud: { operation, revision: status.version, result: outcome === 'failed' ? 'queue-failed' : outcome === 'delivered' ? 'queue-pasted' : 'queue-ready' },
+        hud: { ...hud, revision: status.version, result: outcome === 'failed' ? 'queue-failed' : outcome === 'delivered' ? 'queue-pasted' : 'queue-ready' },
       })
     } })
     return () => { stop(); if (lastNotice) dismissToast(lastNotice) }

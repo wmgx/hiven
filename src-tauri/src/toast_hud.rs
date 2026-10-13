@@ -26,14 +26,18 @@ pub(crate) struct Progress { completed: u32, total: u32 }
 pub(crate) enum ResultKind { Copied, Pasted, CopyFailed, PasteFailed, CopiedPasteFailed, QueueReady, QueuePasted, QueueFailed }
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct Receipt { operation: String, revision: u64, result: ResultKind }
+pub(crate) struct Receipt {
+    operation: String, revision: u64, result: ResultKind,
+    #[serde(default, skip_serializing)]
+    target: Option<String>,
+}
 impl Receipt {
     fn valid(&self, level: &Level) -> bool {
         let bytes = self.operation.as_bytes();
         let uuid = bytes.len() == 36 && bytes.iter().enumerate().all(|(i, c)| {
             if [8, 13, 18, 23].contains(&i) { *c == b'-' } else { c.is_ascii_hexdigit() }
         });
-        uuid && self.revision <= 9_007_199_254_740_991 && match self.result {
+        uuid && self.target.as_ref().map_or(true, |token| token.len() == 16 && token.bytes().all(|c| c.is_ascii_hexdigit())) && self.revision <= 9_007_199_254_740_991 && match self.result {
             ResultKind::Copied | ResultKind::Pasted | ResultKind::QueuePasted => matches!(level, Level::Success),
             ResultKind::QueueReady => matches!(level, Level::Info),
             _ => matches!(level, Level::Error),
@@ -54,7 +58,82 @@ pub(crate) struct Snapshot {
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct HudUpdate { revision: u64, toast: Option<Snapshot> }
 #[derive(Clone)]
-struct Pending { owner: String, sequence: u64, snapshot: Snapshot }
+struct Pending { owner: String, sequence: u64, snapshot: Snapshot, target: Option<PlacementTarget> }
+#[derive(Clone)]
+struct PlacementTarget {
+    #[cfg(target_os = "linux")]
+    window: std::sync::Arc<super::linux_x11_paste::PasteTarget>,
+    until: Instant,
+}
+struct TargetTicket { owner: String, operation: String, target: PlacementTarget }
+fn target_tickets() -> &'static Mutex<HashMap<String, TargetTicket>> {
+    static TICKETS: OnceLock<Mutex<HashMap<String, TargetTicket>>> = OnceLock::new();
+    TICKETS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+/// Only the current material's remembered target or a live queue attempt may
+/// produce a ticket. No caller-selected XID, title, application or coordinates.
+#[tauri::command]
+pub(crate) async fn capture_hud_target(window: tauri::WebviewWindow, operation: String, attempt_id: Option<String>) -> Option<String> {
+    if window.label() != "launcher" || !(Receipt { operation: operation.clone(), revision: 0, result: ResultKind::Copied, target: None }).valid(&Level::Success) { return None; }
+    #[cfg(target_os = "linux")]
+    {
+        let surface = if let Some(id) = attempt_id {
+            super::paste_recovery::current("launcher", &id).ok()?.ensure_active().ok()?;
+            if window.is_visible().ok()? { return None; }
+            "history-paste-queue"
+        } else {
+            if !window.is_visible().ok()? || !window.is_focused().ok()? { return None; }
+            "launcher"
+        };
+        let captured = super::linux_x11_paste::snapshot(surface).ok()?;
+        super::linux_x11_paste::hud_target_rect(&captured)?;
+        let target = PlacementTarget { window: captured, until: Instant::now() + Duration::from_secs(30) };
+        let mut tickets = target_tickets().lock().ok()?;
+        tickets.retain(|_, ticket| ticket.target.until > Instant::now());
+        if tickets.len() >= 64 { return None; }
+        static SERIAL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        let token = format!("{:016x}", SERIAL.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
+        tickets.insert(token.clone(), TargetTicket { owner: window.label().into(), operation, target });
+        drop(tickets);
+        let expiry_token = token.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(30)).await;
+            if let Ok(mut tickets) = target_tickets().lock() { tickets.remove(&expiry_token); }
+        });
+        Some(token)
+    }
+    #[cfg(not(target_os = "linux"))]
+    { let _ = attempt_id; None }
+}
+fn take_target(owner: &str, receipt: Option<&Receipt>) -> Option<PlacementTarget> {
+    let receipt = receipt?;
+    let token = receipt.target.as_ref()?;
+    let mut tickets = target_tickets().lock().ok()?;
+    let ticket = tickets.get(token)?;
+    if ticket.owner != owner || ticket.operation != receipt.operation { return None; }
+    let ticket = tickets.remove(token)?;
+    (ticket.target.until > Instant::now()).then_some(ticket.target)
+}
+fn intersection_area(a: (i32, i32, u32, u32), b: (i32, i32, u32, u32)) -> i64 {
+    let width = (i64::from(a.0) + i64::from(a.2)).min(i64::from(b.0) + i64::from(b.2)) - i64::from(a.0.max(b.0));
+    let height = (i64::from(a.1) + i64::from(a.3)).min(i64::from(b.1) + i64::from(b.3)) - i64::from(a.1.max(b.1));
+    width.max(0).saturating_mul(height.max(0))
+}
+fn target_monitor(window: &tauri::WebviewWindow, target: Option<&PlacementTarget>) -> Option<tauri::Monitor> {
+    let target = target?;
+    if target.until <= Instant::now() { return None; }
+    #[cfg(target_os = "linux")]
+    {
+        let rect = super::linux_x11_paste::hud_target_rect(&target.window)?;
+        window.available_monitors().ok()?.into_iter().filter_map(|monitor| {
+            let p = monitor.position(); let size = monitor.size();
+            let area = intersection_area(rect, (p.x, p.y, size.width, size.height));
+            (area > 0).then_some((area, monitor))
+        }).max_by_key(|(area, _)| *area).map(|(_, monitor)| monitor)
+    }
+    #[cfg(not(target_os = "linux"))]
+    { let _ = window; None }
+}
 #[derive(Default)]
 struct State {
     pending: Option<Pending>,
@@ -193,7 +272,7 @@ fn show_current(app: &tauri::AppHandle) -> Result<HudUpdate, String> {
     if !ready { return Ok(update); }
     let window = app.get_webview_window(LABEL).ok_or("hud-unavailable")?;
     trace("show-position-enter");
-    if let Some(monitor) = super::monitor_under_cursor(&window).or_else(|| window.primary_monitor().ok().flatten()) {
+    if let Some(monitor) = target_monitor(&window, pending.target.as_ref()).or_else(|| super::monitor_under_cursor(&window)).or_else(|| window.primary_monitor().ok().flatten()) {
         let scale = monitor.scale_factor();
         let area = monitor.work_area();
         let width = (360.0 * scale).min(area.size.width as f64).max(1.0);
@@ -268,7 +347,7 @@ pub(crate) async fn route_toast(app: tauri::AppHandle, window: tauri::WebviewWin
         {
             let mut state = registry().lock().map_err(|_| "hud-unavailable")?;
             state.revision = state.revision.saturating_add(1);
-            state.pending = Some(Pending { owner, sequence, snapshot: Snapshot { id, level, expires_at, locale, theme, progress, receipt } });
+            state.pending = Some(Pending { target: take_target(&owner, receipt.as_ref()), owner, sequence, snapshot: Snapshot { id, level, expires_at, locale, theme, progress, receipt } });
         }
         Ok((None, true))
     }).await?;
@@ -341,6 +420,7 @@ pub(crate) async fn dismiss_toast(app: tauri::AppHandle, window: tauri::WebviewW
     }).await
 }
 pub(crate) fn invalidate_owner(app: &tauri::AppHandle, owner: &str) {
+    if let Ok(mut tickets) = target_tickets().lock() { tickets.retain(|_, ticket| ticket.owner != owner); }
     let cleared = {
         let Ok(mut state) = registry().lock() else { return };
         state.sequences.insert(owner.into(), now().saturating_mul(1000).saturating_add(999));
@@ -369,7 +449,7 @@ mod tests {
     #[test]
     fn dismissal_is_owner_and_id_scoped() {
         let mut s = State::default();
-        s.pending = Some(Pending { owner: "launcher".into(), sequence: 12, snapshot: Snapshot { id: "new".into(), level: Level::Success, expires_at: 200, locale: Locale::En, theme: Theme::Dark, progress: None, receipt: None } });
+        s.pending = Some(Pending { owner: "launcher".into(), sequence: 12, target: None, snapshot: Snapshot { id: "new".into(), level: Level::Success, expires_at: 200, locale: Locale::En, theme: Theme::Dark, progress: None, receipt: None } });
         assert!(!s.cancel("launcher", "old"));
         assert!(!s.cancel("editor:1", "new"));
         assert!(s.pending.is_some());
@@ -377,7 +457,7 @@ mod tests {
         assert!(s.pending.is_none());
     }
     fn receipt(revision: u64, result: ResultKind) -> Receipt {
-        Receipt { operation: "00000000-0000-4000-8000-000000000000".into(), revision, result }
+        Receipt { operation: "00000000-0000-4000-8000-000000000000".into(), revision, result, target: None }
     }
     #[test]
     fn receipts_are_bounded_fixed_and_monotonic() {
@@ -395,7 +475,7 @@ mod tests {
     #[test]
     fn failure_survives_unrelated_success_but_retry_can_resolve_it() {
         let mut state = State::default();
-        state.pending = Some(Pending { owner: "launcher".into(), sequence: 1, snapshot: Snapshot {
+        state.pending = Some(Pending { owner: "launcher".into(), sequence: 1, target: None, snapshot: Snapshot {
             id: "notice".into(), level: Level::Error, expires_at: 1000, locale: Locale::En, theme: Theme::Dark,
             progress: None, receipt: Some(receipt(1, ResultKind::PasteFailed)),
         } });
@@ -403,6 +483,17 @@ mod tests {
         assert!(state.protects_failure("editor:1", Some(&receipt(2, ResultKind::Pasted)), &Level::Success, 100));
         assert!(!state.protects_failure("launcher", Some(&receipt(2, ResultKind::Pasted)), &Level::Success, 100));
         assert!(!state.protects_failure("launcher", None, &Level::Success, 1000));
+    }
+    #[test]
+    fn target_overlap_handles_negative_coordinates_and_disjoint_screens() {
+        assert_eq!(intersection_area((-900, 100, 800, 500), (-1280, 0, 1280, 900)), 400_000);
+        assert_eq!(intersection_area((1400, 100, 800, 500), (0, 0, 1280, 900)), 0);
+        assert_eq!(intersection_area((1200, 100, 800, 500), (1280, 0, 1024, 768)), 360_000);
+        assert_eq!(intersection_area((0, 0, u32::MAX, u32::MAX), (0, 0, u32::MAX, u32::MAX)), i64::MAX);
+        let target = Receipt { target: Some("0000000000000001".into()), ..receipt(1, ResultKind::Copied) };
+        assert!(target.valid(&Level::Success));
+        assert!(!serde_json::to_string(&target).unwrap().contains("target"));
+        assert!(!Receipt { target: Some("arbitrary-window".into()), ..target }.valid(&Level::Success));
     }
     #[test]
     fn hud_is_not_an_eligible_surface() { assert!(!surface(LABEL)); assert!(surface("launcher")); assert!(surface("plugin-surface:builtin:x:y")); }

@@ -14,6 +14,7 @@ function fixture(recordingEnabled = true) {
   const emit = (name, payload) => { for (const fn of [...(listeners.get(name) ?? [])]) fn({ payload }) }
   let definition = { settings: {} }
   const modules = {
+    './workspace/toastRouting': { captureHudTarget: async (operation, attemptId) => { h.hudCapture = { operation, attemptId }; return '0000000000000001' } },
     './hotkeys/pluginSurfaceShortcuts': { acquireSurfaceShortcutInterceptor: async (_target, accelerator, handle) => {
       assert.equal(accelerator, 'Control+Shift+V'); handler = handle
       return async () => { releaseCount++; handler = undefined }
@@ -61,7 +62,7 @@ function fixture(recordingEnabled = true) {
   }
   modules['./plugins/clipboard-history/queue/clipboardPasteQueue'] = load('src/plugins/clipboard-history/queue/clipboardPasteQueue.ts')
   const api = load('src/historyPasteQueueHandoff.ts')
-  h.stop = api.installHistoryPasteQueueHost({ notify: (status, outcome) => notices.push({ status, outcome }) })
+  h.stop = api.installHistoryPasteQueueHost({ notify: (status, outcome, hud) => notices.push({ status, outcome, hud }) })
   h.createBridge = (owner = { isCurrent: () => true }) => api.createHistoryPasteQueueBridge({ source: 'builtin', pluginId: 'clipboard-history', ...owner })
   h.bridge = h.createBridge()
   h.next = () => handler?.()
@@ -99,6 +100,8 @@ const original = [{ id: 'a', text: '完整\r\n  synthetic A\n' }, { id: 'b', tex
   await h.next(); await h.next(); await flush()
   assert.deepEqual(h.calls.filter(({ command }) => command === 'paste_history_queue_text').map(({ args }) => args.text), [original[0].text, original[0].text, original[1].text])
   assert.equal((await h.bridge.getStatus()).phase, 'completed')
+  assert.equal(h.notices.at(-1).hud.operation, h.hudCapture.operation)
+  assert.equal(h.notices.at(-1).hud.target, '0000000000000001')
   assert.equal(h.releaseCount(), 1)
   assert.equal(JSON.stringify(h.calls.filter(({ command }) => command === 'history_queue_publish')).includes('synthetic'), false, 'Published status never carries bodies')
   h.stop()
@@ -118,6 +121,7 @@ const original = [{ id: 'a', text: '完整\r\n  synthetic A\n' }, { id: 'b', tex
   const h = fixture(); await flush(); await h.bridge.start(original)
   const gate = deferred(); h.pasteGate = gate
   const old = h.next(); await flush()
+  const oldOperation = h.hudCapture.operation
   await h.bridge.start([{ id: 'new', text: 'replacement' }])
   await h.next()
   assert.equal(h.calls.filter(({ command }) => command === 'paste_history_queue_text').length, 1, 'Replacement cannot overlap unsettled old native write')
@@ -126,6 +130,9 @@ const original = [{ id: 'a', text: '完整\r\n  synthetic A\n' }, { id: 'b', tex
   assert.equal((await h.bridge.getStatus()).completed, 1)
   assert.equal(h.calls.filter(({ command }) => command === 'paste_history_queue_text').at(-1).args.text, 'replacement')
   assert.equal(h.notices.filter(({ outcome }) => outcome === 'delivered').length, 1, 'Old success cannot advance or notify replacement')
+  assert.notEqual(h.hudCapture.operation, oldOperation)
+  assert.equal(h.notices.at(-1).hud.operation, h.hudCapture.operation)
+  assert.equal(h.notices.at(-1).hud.target, '0000000000000001')
   h.stop()
 }
 {
