@@ -222,7 +222,7 @@ export function GlobalLauncherPanel({
    */
   useEffect(() => {
     const pointer = lastPointerRef.current
-    if (!hoverSelectArmedRef.current || !pointer) return
+    if (!hoverSelectArmedRef.current || !pointer || isKeyboardNavRef.current) return
     const el = document.elementFromPoint(pointer.x, pointer.y)
     const row = el instanceof HTMLElement ? el.closest('[data-launcher-row-index]') : null
     if (!(row instanceof HTMLElement)) return

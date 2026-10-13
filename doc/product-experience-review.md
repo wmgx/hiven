@@ -217,3 +217,11 @@ CSV 对源文本、结果参数与文件来源上报未保存状态，空白未�
 独立审查、生产组件 callback 逻辑检查、类型、架构、前端与 Linux 原生构建通过。逻辑检查覆盖空文件取消、损坏/超限、成功纠正、旧交付回调、晚回执、tab/owner 撤销以及独立截图保存；这些受控异步证据不冒充真实桌面乱序复现。
 
 真实 Linux 验收仅用原隔离 HOME/XDG、暂停的历史和合成图片：64×32 成功载入 → 损坏文件失败 → 旧预览/URI 完整保留且三按钮禁用 → 切换 URL 再回来仍禁用 → 换成不同的 37×19 图片成功 → 显式复制完整 data URI，与源文件全部字节一致 → 原生 Save File 保存 PNG，尺寸和全部像素一致。返回搜索再进入时无旧结果恢复。WebDriver 会抑制 HTML 文件选择器，因此另用同一隔离 profile 直接启动应用，以物理鼠标打开真实 Select File、Escape 取消；用哨兵替换外部剪贴板后点击 Copy data URI，确认仍复制取消前的完整结果，解码后全部像素一致。image-stale-fixed-failure.png、image-stale-fixed-corrected.png、image-stale-native-picker.png、image-stale-native-cancel-valid.png 已检视。未改历史设置、安装依赖或使用真实 API/密钥；macOS/Windows 未重验。
+
+## 主 Launcher 异步刷新保持键盘选中
+
+受控延迟本地时间即时答案，在真实原生 Launcher 输入 `timestamp`，先将鼠标移到第一行，再按两次下键选中“日期时间转时间戳”。答案插入时原项仍存在，但刷新后的鼠标位置对齐 effect 未检查键盘导航状态，会将选择改为静止鼠标下第一行。修复仅给该 effect 添加已有 `isKeyboardNavRef` 检查；不新增导航模式、不改 systemKey 身份保持或原项消失后的既有回退。
+
+独立审查、原选择保持逻辑检查、类型、架构及前端/原生构建通过。验收使用隔离 Linux 原生界面与真实鼠标/按键；只有 provider 的 60ms 调度被受控延迟，不访问外网/API、不执行列表中的应用或命令。未重跑 History hover 或其它全套验收。
+
+修复后同路径实际通过：原目标在插入后移到第 4 行，仍保持选中，行范围 y=184–228 完整位于列表视口 y=64–234.25 内；真实鼠标移动可重新接管，下一次方向键可接管，清空及新查询恢复默认选择。临时延迟钩子已撤销、查询已清空。macOS/Windows 未实测。
