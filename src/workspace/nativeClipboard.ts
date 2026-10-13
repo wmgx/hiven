@@ -21,9 +21,11 @@ export async function writeText(text: string, signal?: AbortSignal): Promise<voi
 }
 
 /** Native history-only suppression; no web fallback can uphold this contract. */
-export async function writeTextWithoutHistory(text: string): Promise<void> {
+export async function writeTextWithoutHistory(text: string, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return
   if (!isTauriClipboardRuntime()) throw new Error('History-preserving copy requires native clipboard')
   const { invoke } = await import('@tauri-apps/api/core')
+  if (signal?.aborted) return
   await invoke('clipboard_write_text', { text, recordInHistory: false })
 }
 

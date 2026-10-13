@@ -178,3 +178,14 @@ console.log('Clipboard cancellation passed: delayed decode/write cannot start a 
   assert.equal(decoded, false)
 }
 console.log('Public image copy cancellation during blob read passed')
+
+{
+  const controller = new AbortController()
+  const { api } = loadPluginClipboard({ writeTextImpl: async (_text, signal) => { controller.abort(); assert.equal(signal.aborted, true); throw Error('cancelled before native dispatch') } })
+  const clipboard = api.createPluginClipboard('line-tools')
+  // A cancelled native attempt must not start a browser fallback write.
+  await clipboard.writeText('synthetic list', { signal: controller.signal })
+  const { api: preCancelled } = loadPluginClipboard({ writeTextImpl: async () => assert.fail('pre-cancelled write') })
+  await preCancelled.createPluginClipboard('line-tools').writeText('synthetic', { signal: controller.signal })
+}
+console.log('Public text copy signal and cancelled fallback checks passed')

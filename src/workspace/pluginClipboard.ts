@@ -38,18 +38,21 @@ async function readClipboardText(beforeRead?: () => void): Promise<string> {
   return readNativeClipboardText(beforeRead)
 }
 
-export async function writeClipboardText(text: string, options?: { sensitive?: boolean }): Promise<void> {
+export async function writeClipboardText(text: string, options?: { sensitive?: boolean; signal?: AbortSignal }): Promise<void> {
+  if (options?.signal?.aborted) return
   if (options?.sensitive) {
     // Fail closed: never fall back to an ordinary clipboard write for secrets.
     const { invoke } = await import('@tauri-apps/api/core')
+    if (options?.signal?.aborted) return
     await invoke('clipboard_write_sensitive_text', { text })
     return
   }
   try {
     const { writeText } = await import('./nativeClipboard')
-    await writeText(text)
+    await writeText(text, options?.signal)
   } catch {
     try {
+      if (options?.signal?.aborted) return
       await navigator.clipboard.writeText(text)
     } catch (error) {
       console.warn('[plugin-clipboard] write failed:', error)
@@ -263,14 +266,15 @@ export function createPluginClipboard(
       return text
     },
 
-    async writeText(text: string, options?: { sensitive?: boolean; recordInHistory?: boolean }): Promise<void> {
+    async writeText(text: string, options?: { sensitive?: boolean; recordInHistory?: boolean; signal?: AbortSignal }): Promise<void> {
+      if (options?.signal?.aborted) return
       requirePermissions(['clipboard.write'])
       if (options?.recordInHistory === false) {
         if (!['clipboard-history', 'curl-inspector'].includes(pluginId) || options.sensitive) {
           throw new Error('History-preserving copy is restricted to approved text tools')
         }
         const { writeTextWithoutHistory } = await import('./nativeClipboard')
-        await writeTextWithoutHistory(text)
+        await writeTextWithoutHistory(text, options?.signal)
         return
       }
       await writeClipboardText(text, options)

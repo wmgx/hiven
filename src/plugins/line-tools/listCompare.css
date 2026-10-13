@@ -1,0 +1,16 @@
+.list-compare { height: 100%; min-height: 0; display: flex; flex-direction: column; gap: 12px; color: var(--color-text-primary); padding: 12px; box-sizing: border-box; }
+.list-compare > header { display: flex; align-items: center; gap: 8px; }
+.list-compare > header strong { flex: 1; }
+.list-compare-options { display: flex; gap: 16px; flex-wrap: wrap; align-items: start; font-size: 12px; }
+.list-compare-options details { max-width: 420px; }
+.list-compare-options summary { cursor: pointer; }
+.list-compare-options p { margin: 6px 0 0; line-height: 1.5; }
+.list-compare-inputs, .list-compare-results { display: grid; gap: 12px; min-height: 0; flex: 1; }
+.list-compare-inputs { grid-template-columns: repeat(2,minmax(0,1fr)); }
+.list-compare-results { grid-template-columns: repeat(3,minmax(0,1fr)); }
+.list-compare-inputs label, .list-compare-results section { display: flex; flex-direction: column; min-height: 0; gap: 6px; }
+.list-compare-results section > div { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.list-compare textarea { flex: 1; width: 100%; min-height: 50px; resize: none; box-sizing: border-box; border: 1px solid var(--color-border-tertiary); border-radius: 6px; padding: 8px; color: inherit; background: var(--color-background-primary); font: 13px/1.5 var(--font-mono,monospace); white-space: pre; }
+.list-compare textarea:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.list-compare footer { min-height: 18px; display: flex; flex-wrap: wrap; gap: 12px; font-size: 11px; color: var(--color-text-secondary); }
+.list-compare [role=alert] { margin: 0; color: var(--color-error-text); font-size: 12px; }
