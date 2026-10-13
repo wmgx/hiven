@@ -14,9 +14,9 @@ const {
   urlEncode: pluginUrlEncode,
 } = encodeDecodeCore
 
-// Existing plugins and the workbench must share the actual implementations.
-assert.equal(jsonPrettify, formatJson)
-assert.equal(jsonCompact, compactJson)
+// JSONTools wraps shared converters with its own fidelity policy.
+assert.equal(jsonPrettify('{"a":0.1}'), formatJson('{"a":0.1}'))
+assert.equal(jsonCompact('{"a":0.1}'), compactJson('{"a":0.1}'))
 assert.equal(pluginSortKeys, sortKeys)
 assert.equal(pluginUrlEncode, urlEncode)
 assert.equal(pluginUrlDecode, urlDecode)

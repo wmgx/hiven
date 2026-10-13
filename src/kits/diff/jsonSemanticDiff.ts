@@ -6,7 +6,7 @@
  * - Arrays: ordered by index
  */
 
-import { hasJsonNumberRisk } from './jsonNumberFidelity'
+import { hasJsonNumberRisk } from '../jsonNumberFidelity'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 

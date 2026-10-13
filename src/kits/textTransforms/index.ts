@@ -1,3 +1,5 @@
+export { hasJsonNumberRisk } from '../jsonNumberFidelity.ts'
+
 export function sortKeys(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortKeys)
   if (value && typeof value === 'object') {

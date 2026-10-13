@@ -2,7 +2,8 @@ import jsYaml from 'js-yaml'
 import { parseUrlQuery, UrlQueryError, type UrlQueryErrorCode } from './urlQueryCore'
 import { getPluginHostSdk } from '@hiven/plugin'
 
-export const { formatJson: jsonPrettify, compactJson: jsonCompact, sortKeys } = getPluginHostSdk().kits.textTransforms
+const { formatJson, compactJson, hasJsonNumberRisk } = getPluginHostSdk().kits.textTransforms
+export const { sortKeys } = getPluginHostSdk().kits.textTransforms
 
 export type JsonOperation =
   | 'format'
@@ -28,7 +29,7 @@ export type JsonProcessResult =
   | { ok: true; output: string }
   | { ok: false; message: string; code?: JsonCoreErrorCode }
 
-export type JsonCoreErrorCode = UrlQueryErrorCode | 'objectRequired' | 'stringRequired' | 'expressionRequired' | 'finiteNumberRequired'
+export type JsonCoreErrorCode = UrlQueryErrorCode | 'objectRequired' | 'stringRequired' | 'expressionRequired' | 'finiteNumberRequired' | 'numberFidelity'
 
 export class JsonCoreError extends Error {
   readonly code: JsonCoreErrorCode
@@ -39,7 +40,22 @@ export class JsonCoreError extends Error {
   }
 }
 
+function requireFaithfulNumbers(text: string): void {
+  if (hasJsonNumberRisk(text)) throw new JsonCoreError('numberFidelity')
+}
+
+export function jsonPrettify(text: string, indent = 2, shouldSort = false): string {
+  requireFaithfulNumbers(text)
+  return formatJson(text, indent, shouldSort)
+}
+
+export function jsonCompact(text: string): string {
+  requireFaithfulNumbers(text)
+  return compactJson(text)
+}
+
 export function sortJsonKeys(text: string): string {
+  requireFaithfulNumbers(text)
   return JSON.stringify(sortKeys(JSON.parse(text)), null, 2)
 }
 

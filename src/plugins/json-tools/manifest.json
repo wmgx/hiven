@@ -4,7 +4,7 @@
   "displayNameI18n": {
     "zh": "JSON / YAML 工具"
   },
-  "version": "2.6.0",
+  "version": "2.6.1",
   "capabilities": [
     "command",
     "surface"

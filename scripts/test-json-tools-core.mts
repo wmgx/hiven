@@ -45,3 +45,22 @@ const invalidUrl = processJson('/relative?q=1', { operation: 'url-query-edit' })
 assert.equal(invalidUrl.ok, false)
 if (!invalidUrl.ok) assert.equal(invalidUrl.code, 'urlRequired')
 console.log('json-tools core tests passed')
+
+// Guard the exported entrypoints too: editor tools and previews bypass processJson.
+for (const source of ['9007199254740993', '0.12345678901234567891', '1e400', '1e-400', '-0']) {
+  const input = `{"value":${source},"label":"unchanged"}`
+  for (const operation of ['format', 'compact', 'sort'] as const) {
+    const result = processJson(input, { operation, sortKeys: true })
+    assert.equal(result.ok, false, `${operation}: ${source}`)
+    if (!result.ok) assert.equal(result.code, 'numberFidelity')
+  }
+  for (const transform of [jsonCore.jsonPrettify, jsonCore.jsonCompact, sortJsonKeys]) {
+    assert.throws(() => transform(input), error => error instanceof Error && error.message === 'numberFidelity')
+  }
+}
+for (const operation of ['format', 'compact', 'sort'] as const) {
+  const input = '{"z":0.1,"n":1e3,"id":"9007199254740993","escaped":"\\\"-0"}'
+  const result = processJson(input, { operation, sortKeys: true })
+  assert.equal(result.ok, true)
+  if (result.ok) assert.deepEqual(JSON.parse(result.output), JSON.parse(input))
+}
