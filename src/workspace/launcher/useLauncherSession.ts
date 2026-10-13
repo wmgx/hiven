@@ -1,3 +1,4 @@
+import { createSearchAttempt, type LauncherSearchRecovery } from './searchRecovery'
 import { getSuggestionSession, recordSuggestionSuccess } from './contextSuggestionsStore'
 import { captureLauncherPasteOwner, checkPendingPasteRecovery } from '../pasteRecovery'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type MutableRefObject } from 'react'
@@ -97,6 +98,7 @@ export type LauncherSession = {
   query: string
   /** Query snapshot used by ranking, rendering, and execution. */
   rankingQuery: string
+  searchRecovery: LauncherSearchRecovery
   setQuery: (value: string) => void
   selectedIndex: number
   /**
@@ -332,6 +334,7 @@ export function useLauncherSession({
   const setQuery = useCallback((value: string) => {
     if (queryRef.current === value) return
     queryRef.current = value
+    searchOwnerRef.current = {}
     controllerRef.current?.onRootQueryChanged()
     selectedKeyRef.current = null
     selectedIndexRef.current = 0
@@ -340,6 +343,7 @@ export function useLauncherSession({
   }, [])
 
   const reset = useCallback(() => {
+    searchOwnerRef.current = {}
     if (normalizedHostId === 'global-launcher') void releaseDesktopWindowSearch()
     queryRef.current = ''
     setQueryState('')
@@ -511,9 +515,31 @@ export function useLauncherSession({
     return () => { cancelled = true }
   }, [locale, makeApi, normalizedHostId, open, recordLauncherSelection, recordPersistableLauncherSelection])
 
+  const searchOwner = useMemo(() => ({}), [open, query, objectBlockText, normalizedHostId, locale, pluginSettings, pluginRegistryVersion])
+  const searchOwnerRef = useRef(searchOwner)
+  searchOwnerRef.current = searchOwner
+  const [searchRetry, setSearchRetry] = useState(0)
+  const [searchStatus, setSearchStatus] = useState<{ owner: object; failed: boolean; pending: boolean } | null>(null)
+  const retryOwnerRef = useRef<object | null>(null)
+  const retrySearch = () => {
+    if (!open || searchOwnerRef.current !== searchOwner || searchStatus?.owner !== searchOwner
+      || !searchStatus.failed || searchStatus.pending || retryOwnerRef.current === searchOwner) return
+    retryOwnerRef.current = searchOwner
+    setSearchStatus({ owner: searchOwner, failed: true, pending: true })
+    setSearchRetry(value => value + 1)
+  }
+
   // ── Plugin dynamic path (fast debounce, progressive partials) ──────────────
   useEffect(() => {
     if (!open) return
+    const owner = searchOwner
+    const current = () => launcherOpenRef.current && searchOwnerRef.current === owner
+    const retrying = retryOwnerRef.current === owner
+    const attempt = createSearchAttempt(current, (failed, pending) => {
+      if (!pending && retryOwnerRef.current === owner) retryOwnerRef.current = null
+      setSearchStatus({ owner, failed, pending })
+    }, retrying)
+    setSearchStatus({ owner, failed: retrying, pending: true })
     const q = query.trim()
     const inputText = q || objectBlockText?.trim() || ''
     const inputIdentity = launcherInputIdentity(q, objectBlockText)
@@ -522,6 +548,7 @@ export function useLauncherSession({
       pluginQueryRef.current = ''
       pluginPartialsRef.current.clear()
       pluginAbortRef.current?.abort()
+      attempt.finish()
       return
     }
 
@@ -529,7 +556,7 @@ export function useLauncherSession({
     setPluginDynamicItems([])
     pluginQueryRef.current = q
     const timer = window.setTimeout(() => {
-      if (pluginQueryRef.current !== q) return
+      if (pluginQueryRef.current !== q || !current()) return
       pluginAbortRef.current?.abort()
       const abortController = new AbortController()
       pluginAbortRef.current = abortController
@@ -541,34 +568,37 @@ export function useLauncherSession({
         includePlugins: true,
         signal: abortController.signal,
         onPartial: (update) => {
-          if (abortController.signal.aborted) return
-          if (pluginQueryRef.current !== q) return
+          if (abortController.signal.aborted || !current()) return
+          if (pluginQueryRef.current !== q || !current()) return
           if (update.kind !== 'plugin' || !update.pluginId) return
+          attempt.report(update.pluginId, update.failed === true)
           pluginPartialsRef.current.set(update.pluginId, update.items)
           const merged = filterDynamicForSurface(mergePartials(pluginPartialsRef.current), normalizedHostId)
-          setPluginDynamicItemsNextFrame(merged, inputIdentity)
+          setPluginDynamicItemsNextFrame(merged, inputIdentity, () => !abortController.signal.aborted && current())
         },
       }).then((items) => {
-        if (abortController.signal.aborted) return
+        if (abortController.signal.aborted || !current()) return
         logLauncherPerfDuration('session:plugin-dynamic-items', startedAt, {
           surfaceId: normalizedHostId,
           queryLength: q.length,
           hasObjectBlockText: Boolean(objectBlockText),
           itemCount: items.length,
         })
-        if (pluginQueryRef.current !== q) return
+        if (pluginQueryRef.current !== q || !current()) return
         const merged = pluginPartialsRef.current.size > 0
           ? mergePartials(pluginPartialsRef.current)
           : items
         setPluginDynamicItems(filterDynamicForSurface(merged, normalizedHostId), inputIdentity)
-      }).catch(() => { /* aborted or failed — ignore */ })
+        attempt.finish()
+      }).catch(() => { if (!abortController.signal.aborted) attempt.finish(true) })
     }, q || inputText ? PLUGIN_DYNAMIC_DEBOUNCE_MS : 0)
 
     return () => {
+      attempt.cancel()
       window.clearTimeout(timer)
       pluginAbortRef.current?.abort()
     }
-  }, [collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open, query, pluginSettings, pluginRegistryVersion])
+  }, [collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open, query, pluginSettings, pluginRegistryVersion, searchOwner, searchRetry])
 
   // ── Host dynamic path (apps / workflow) — isolated, longer debounce ────────
   useEffect(() => {
@@ -901,6 +931,8 @@ export function useLauncherSession({
     hostId: normalizedHostId,
     query,
     rankingQuery: query,
+    searchRecovery: { failed: open && searchStatus?.owner === searchOwner && searchStatus.failed,
+      pending: searchStatus?.owner === searchOwner && searchStatus.pending, retry: retrySearch },
     setQuery,
     selectedIndex,
     setSelectedIndex,

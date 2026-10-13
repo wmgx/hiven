@@ -1,3 +1,4 @@
+import type { LauncherSearchRecovery } from '../../workspace/launcher/searchRecovery'
 import { ConfirmDialog } from '../../plugin-ui'
 import { useCallback, useEffect, useMemo, useRef, type RefObject } from 'react'
 import { t, type Locale } from '../../i18n'
@@ -66,6 +67,7 @@ type GlobalLauncherPanelProps = {
   hostSurfaceTarget: LauncherHostSurfaceTarget | null
   clearLauncherHostSurface: () => void
   query: string
+  searchRecovery?: LauncherSearchRecovery
   setQuery: (value: string) => void
   browsingActions: boolean
   browseCategory: LauncherBrowseCategory
@@ -131,6 +133,7 @@ export function GlobalLauncherPanel({
   hostSurfaceTarget,
   clearLauncherHostSurface: _omit_clearLauncherHostSurface,
   query,
+  searchRecovery,
   setQuery,
   browsingActions,
   browseCategory,
@@ -323,6 +326,7 @@ export function GlobalLauncherPanel({
         inputRef={inputRef}
         bindSearchInputRef={bindSearchInputRef}
         query={query}
+        searchRecovery={searchRecovery}
         searchPlaceholder={searchPlaceholder}
         visibleFiltered={visibleFiltered}
         nearbySaveItem={nearbySaveItem}

@@ -181,6 +181,7 @@ export function GlobalLauncherHost() {
   const {
     query,
     rankingQuery,
+    searchRecovery,
     setQuery: setSessionQuery,
     selectedIndex,
     setSelectedIndex,
@@ -1239,6 +1240,7 @@ export function GlobalLauncherHost() {
         hostSurfaceTarget={hostSurfaceTarget}
         clearLauncherHostSurface={clearLauncherHostSurface}
         query={query}
+        searchRecovery={searchRecovery}
         setQuery={(value) => {
           setBrowsingActions(false)
           setBrowseCategory('all')

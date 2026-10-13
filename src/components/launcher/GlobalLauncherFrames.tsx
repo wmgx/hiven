@@ -1,3 +1,4 @@
+import type { LauncherSearchRecovery } from '../../workspace/launcher/searchRecovery'
 import { type MouseEvent as ReactMouseEvent, type MutableRefObject, type ReactNode, type RefObject } from 'react'
 import { t, type Locale } from '../../i18n'
 import { localized, type LauncherHostSurfaceTarget, type PluginSurfaceOpenTarget } from '../../store'
@@ -36,6 +37,7 @@ export function GlobalLauncherFrameSwitch({
   inputRef,
   bindSearchInputRef,
   query,
+  searchRecovery,
   searchPlaceholder,
   searchContext,
   visibleFiltered,
@@ -107,6 +109,7 @@ export function GlobalLauncherFrameSwitch({
   inputRef: RefObject<HTMLInputElement | HTMLTextAreaElement | null>
   bindSearchInputRef?: (node: HTMLInputElement | HTMLTextAreaElement | null) => void
   query: string
+  searchRecovery?: LauncherSearchRecovery
   searchPlaceholder: string
   searchContext?: string
   visibleFiltered: LauncherMixedItem[]
@@ -328,6 +331,7 @@ export function GlobalLauncherFrameSwitch({
       inputRef={inputRef}
       bindSearchInputRef={bindSearchInputRef}
       query={query}
+        searchRecovery={searchRecovery}
       placeholder={searchPlaceholder}
       searchContext={searchContext}
       clipboardBlock={clipboardBlock}

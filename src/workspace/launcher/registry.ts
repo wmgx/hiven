@@ -347,6 +347,8 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 /** Progressive update emitted as each dynamic source finishes. */
 export type DynamicItemsPartialUpdate = {
   kind: 'host' | 'plugin'
+  /** Current provider failed; no exception text crosses into search UI. */
+  failed?: boolean
   /** Present when kind === 'plugin'. */
   pluginId?: string
   items: LauncherItem[]
@@ -488,7 +490,7 @@ export async function collectDynamicItems(
           message: error instanceof Error ? error.message : String(error),
         })
         console.warn(`[launcher] dynamic provider "${pluginId}" failed:`, error)
-        if (!signal?.aborted) onPartial?.({ kind: 'plugin', pluginId, items: [] })
+        if (!signal?.aborted && lifetime.active) onPartial?.({ kind: 'plugin', pluginId, items: [], failed: true })
         return []
       }
     }),

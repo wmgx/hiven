@@ -1,3 +1,4 @@
+import type { LauncherSearchRecovery } from '../../workspace/launcher/searchRecovery'
 import { useLayoutEffect, useState, type FocusEvent as ReactFocusEvent, type MouseEvent as ReactMouseEvent, type MutableRefObject, type RefObject } from 'react'
 import { ArrowLeft, BookmarkPlus, FilePlus2, Search, X } from 'lucide-react'
 import type { Locale } from '../../i18n'
@@ -37,6 +38,7 @@ export function GlobalLauncherSearchFrame({
   inputRef,
   bindSearchInputRef,
   query,
+  searchRecovery,
   placeholder,
   searchContext,
   error,
@@ -72,6 +74,7 @@ export function GlobalLauncherSearchFrame({
   inputRef: RefObject<HTMLInputElement | HTMLTextAreaElement | null>
   bindSearchInputRef?: (node: HTMLInputElement | HTMLTextAreaElement | null) => void
   query: string
+  searchRecovery?: LauncherSearchRecovery
   placeholder: string
   searchContext?: string
   error?: string | null
@@ -384,8 +387,14 @@ export function GlobalLauncherSearchFrame({
         )}
         {items.length === 0 && (query || browsingActions) ? (
           <LauncherEmptyWell
-            title={t(locale, 'palette.noResults')}
-            hint={t(locale, browsingActions ? 'palette.browseEmptyHint' : 'palette.noResultsHint')}
+            title={t(locale, !browsingActions && searchRecovery?.failed ? 'palette.searchTemporarilyUnavailable' : 'palette.noResults')}
+            hint={!browsingActions && searchRecovery?.failed ? undefined : t(locale, browsingActions ? 'palette.browseEmptyHint' : 'palette.noResultsHint')}
+            action={!browsingActions && searchRecovery?.failed ? <button type="button" aria-disabled={searchRecovery.pending}
+              onMouseDown={event => event.preventDefault()}
+              onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') event.stopPropagation() }}
+              onClick={() => { if (!searchRecovery.pending) searchRecovery.retry(); inputRef.current?.focus({ preventScroll: true }) }}>
+              {t(locale, searchRecovery.pending ? 'palette.searchRetrying' : 'palette.searchRetry')}
+            </button> : undefined}
           />
         ) : (
           <LauncherMixedList
