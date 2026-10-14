@@ -541,7 +541,7 @@ export const dateTimeAssistantPlugin = definePlugin({
     },
   ],
   launcher: {
-    items: [countdownStatusItem(), ...WORKSPACE_ROUTES.map((route) => ({
+    items: [countdownStatusItem(), ...WORKSPACE_ROUTES.map((route): LauncherItemContribution => ({
       id: `open-${route.id}`,
       display: {
         title: route.title,
