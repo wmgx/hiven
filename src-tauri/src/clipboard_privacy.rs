@@ -66,6 +66,14 @@ pub async fn clipboard_write_text(
 #[tauri::command]
 pub async fn clipboard_read_image(webview: tauri::Webview) -> Result<tauri::ResourceId, String> {
     let image = with_clipboard(webview.app_handle(), |app| {
+        #[cfg(target_os = "macos")]
+        unsafe {
+            use objc2::{class, msg_send, runtime::AnyObject};
+            let board: *mut AnyObject = msg_send![class!(NSPasteboard), generalPasteboard];
+            if has_private_marker(board)? {
+                return Err("Clipboard image is private".into());
+            }
+        }
         app.clipboard()
             .read_image()
             .map(|image| image.to_owned())
@@ -188,17 +196,8 @@ unsafe fn read_public_text(board: *mut objc2::runtime::AnyObject) -> Result<Stri
         return Err("Clipboard unavailable".into());
     }
     let revision: isize = msg_send![board, changeCount];
-    let types: *mut AnyObject = msg_send![board, types];
-    for marker in [
-        c"org.nspasteboard.ConcealedType",
-        c"org.nspasteboard.TransientType",
-    ] {
-        let name: *mut AnyObject =
-            msg_send![class!(NSString), stringWithUTF8String: marker.as_ptr()];
-        let contains: bool = msg_send![types, containsObject: name];
-        if contains {
-            return Ok(String::new());
-        }
+    if has_private_marker(board)? {
+        return Ok(String::new());
     }
     let kind: *mut AnyObject =
         msg_send![class!(NSString), stringWithUTF8String: c"public.utf8-plain-text".as_ptr()];
@@ -216,6 +215,27 @@ unsafe fn read_public_text(board: *mut objc2::runtime::AnyObject) -> Result<Stri
     } else {
         String::new()
     })
+}
+
+#[cfg(target_os = "macos")]
+unsafe fn has_private_marker(board: *mut objc2::runtime::AnyObject) -> Result<bool, String> {
+    use objc2::{class, msg_send, runtime::AnyObject};
+    if board.is_null() {
+        return Err("Clipboard unavailable".into());
+    }
+    let types: *mut AnyObject = msg_send![board, types];
+    for marker in [
+        c"org.nspasteboard.ConcealedType",
+        c"org.nspasteboard.TransientType",
+    ] {
+        let name: *mut AnyObject =
+            msg_send![class!(NSString), stringWithUTF8String: marker.as_ptr()];
+        let contains: bool = msg_send![types, containsObject: name];
+        if contains {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 #[cfg(target_os = "macos")]

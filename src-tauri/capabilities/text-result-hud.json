@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "text-result-hud",
+  "description": "Render and operate one bounded short-lived text result HUD session; clipboard access remains host-owned.",
+  "windows": ["text-result-hud"],
+  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
+}

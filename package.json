@@ -27,6 +27,7 @@
     "test:intent-engine": "node scripts/test-intent-engine.mjs",
     "test:browser-tabs-plugin": "node scripts/test-browser-tabs-plugin.mjs",
     "test:qr-code-plugin": "node scripts/test-qr-code-plugin.mjs",
+    "test:qr-hud": "node scripts/test-qr-hud.mjs",
     "test:desktop-bridge-d3-d4": "node scripts/test-desktop-bridge-d3-d4.mjs",
     "test:browser-tabs-bridge-features": "node scripts/test-browser-tabs-bridge-features.mjs",
     "test:url-tab-match": "node scripts/test-url-tab-match.mjs",

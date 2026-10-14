@@ -102,21 +102,25 @@ export async function decodeQrFromBlob(blob: Blob): Promise<QrDecodeResult> {
   if (typeof createImageBitmap !== 'function' || typeof document === 'undefined') {
     return { ok: false, code: 'failed' }
   }
+  let bitmap: ImageBitmap | undefined
+  let canvas: HTMLCanvasElement | undefined
   try {
-    const bitmap = await createImageBitmap(blob)
-    const canvas = document.createElement('canvas')
+    bitmap = await createImageBitmap(blob)
+    canvas = document.createElement('canvas')
     canvas.width = bitmap.width
     canvas.height = bitmap.height
     const context = canvas.getContext('2d')
     if (!context) return { ok: false, code: 'failed' }
     context.drawImage(bitmap, 0, 0)
     const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
-    bitmap.close()
     const text = decodeQrFromImageData(imageData)
     if (!text) return { ok: false, code: 'no-qr' }
     return { ok: true, text }
   } catch {
     return { ok: false, code: 'failed' }
+  } finally {
+    bitmap?.close()
+    if (canvas) { canvas.width = 0; canvas.height = 0 }
   }
 }
 

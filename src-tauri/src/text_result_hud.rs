@@ -1,4 +1,4 @@
-//! Dedicated two-stage translation HUD. The passive stage cannot receive input;
+//! Dedicated two-stage short-lived text result HUD. The passive stage cannot receive input;
 //! activation captures a short-lived focus lease before making the HUD keyable.
 //! Source text never crosses this module's native boundary. Completed output is
 //! held only for the matching active session and sent only to the HUD window.
@@ -9,9 +9,9 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{Emitter, Manager};
 
-const LABEL: &str = "translation-hud";
-const UPDATE_EVENT: &str = "hiven://translation-hud-update";
-const ACTION_EVENT: &str = "hiven://translation-hud-action";
+const LABEL: &str = "text-result-hud";
+const UPDATE_EVENT: &str = "hiven://text-result-hud-update";
+const ACTION_EVENT: &str = "hiven://text-result-hud-action";
 const MAX_PASSIVE_LIFETIME_MS: u64 = 30_000;
 const ACTIVE_READING_LIFETIME_MS: u64 = 120_000;
 const MAX_PREVIEW_CHARS: usize = 512;
@@ -32,6 +32,13 @@ pub(crate) enum Phase {
     Active,
     Cancelled,
     Error,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum Product {
+    Translation,
+    QrScan,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -58,6 +65,7 @@ pub(crate) enum Theme {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct Snapshot {
+    product: Product,
     session_id: String,
     revision: u64,
     phase: Phase,
@@ -65,6 +73,7 @@ pub(crate) struct Snapshot {
     truncated: bool,
     copy_failed: bool,
     complete: bool,
+    sensitive: bool,
     failure: Option<Failure>,
     expires_at: u64,
     locale: Locale,
@@ -90,9 +99,16 @@ pub(crate) enum Action {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ActionRequest {
+    product: Product,
     session_id: String,
     revision: u64,
     action: Action,
+}
+
+#[derive(Clone, Debug)]
+struct FocusLoss {
+    session_id: String,
+    request: Option<ActionRequest>,
 }
 
 #[cfg(target_os = "linux")]
@@ -118,7 +134,7 @@ impl FocusLease {
         {
             let pid = super::current_foreground_process_id()
                 .filter(|pid| *pid != 0 && *pid != std::process::id())
-                .ok_or_else(|| "translation-hud-focus-unavailable".to_string())?;
+                .ok_or_else(|| "text-result-hud-focus-unavailable".to_string())?;
             Ok(Self { pid })
         }
         #[cfg(target_os = "windows")]
@@ -128,12 +144,12 @@ impl FocusLease {
             };
             let hwnd = GetForegroundWindow();
             if hwnd.0.is_null() {
-                return Err("translation-hud-focus-unavailable".into());
+                return Err("text-result-hud-focus-unavailable".into());
             }
             let mut pid = 0;
             GetWindowThreadProcessId(hwnd, Some(&mut pid));
             if pid == 0 || pid == std::process::id() {
-                return Err("translation-hud-focus-unavailable".into());
+                return Err("text-result-hud-focus-unavailable".into());
             }
             Ok(Self {
                 hwnd: hwnd.0 as isize,
@@ -141,7 +157,7 @@ impl FocusLease {
         }
         #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
         {
-            Err("translation-hud-focus-unavailable".into())
+            Err("text-result-hud-focus-unavailable".into())
         }
     }
 
@@ -220,20 +236,20 @@ impl State {
             self.lease = None;
         }
         if snapshot.phase == Phase::Active && !self.active {
-            return Err("translation-hud-not-active");
+            return Err("text-result-hud-not-active");
         }
         if full_text.is_some()
             && (!self.active || snapshot.phase != Phase::Active || !snapshot.complete)
         {
-            return Err("translation-hud-invalid");
+            return Err("text-result-hud-invalid");
         }
         if snapshot.phase == Phase::Active && snapshot.complete && full_text.is_none() {
-            return Err("translation-hud-invalid");
+            return Err("text-result-hud-invalid");
         }
         if let Some(text) = full_text.as_ref() {
             if text.is_empty() || text.contains('\0') || text.chars().count() > MAX_FULL_TEXT_CHARS
             {
-                return Err("translation-hud-invalid");
+                return Err("text-result-hud-invalid");
             }
         }
         self.action_sent = false;
@@ -276,7 +292,7 @@ impl State {
         Some(expires_at)
     }
 
-    fn focus_changed(&mut self, focused: bool, now: u64) -> Option<ActionRequest> {
+    fn focus_changed(&mut self, focused: bool, now: u64) -> Option<FocusLoss> {
         if !self.active {
             return None;
         }
@@ -291,14 +307,16 @@ impl State {
         self.restore_allowed = false;
         self.lease = None;
         let current = self.current.as_ref()?;
-        if self.action_sent || current.expires_at <= now {
-            return None;
-        }
-        self.action_sent = true;
-        Some(ActionRequest {
+        let request = (!self.action_sent && current.expires_at > now).then(|| ActionRequest {
+            product: current.product.clone(),
             session_id: current.session_id.clone(),
             revision: current.revision,
             action: Action::Close,
+        });
+        self.action_sent = true;
+        Some(FocusLoss {
+            session_id: current.session_id.clone(),
+            request,
         })
     }
 
@@ -341,6 +359,7 @@ impl State {
         }
         self.action_sent = true;
         Some(ActionRequest {
+            product: current.product.clone(),
             session_id: session_id.to_owned(),
             revision,
             action,
@@ -413,17 +432,18 @@ fn validate_snapshot(snapshot: &Snapshot, current_time: u64) -> Result<(), &'sta
         || snapshot.revision > 9_007_199_254_740_991
         || snapshot.preview.chars().count() > MAX_PREVIEW_CHARS
         || snapshot.preview.contains('\0')
+        || (snapshot.sensitive && snapshot.phase != Phase::Active && !snapshot.preview.is_empty())
         || (snapshot.phase == Phase::Error) != snapshot.failure.is_some()
         || snapshot.expires_at <= current_time
         || snapshot.expires_at > current_time.saturating_add(max_lifetime)
     {
-        return Err("translation-hud-invalid");
+        return Err("text-result-hud-invalid");
     }
     Ok(())
 }
 
 fn current_update(include_full_text: bool) -> Result<Update, String> {
-    let state = state().lock().map_err(|_| "translation-hud-unavailable")?;
+    let state = state().lock().map_err(|_| "text-result-hud-unavailable")?;
     let full_text = include_full_text
         .then(|| {
             let current = state.current.as_ref()?;
@@ -447,12 +467,12 @@ fn ensure_window(app: &tauri::AppHandle) -> Result<(), String> {
     }
     state()
         .lock()
-        .map_err(|_| "translation-hud-unavailable")?
+        .map_err(|_| "text-result-hud-unavailable")?
         .ready = false;
     let window = tauri::WebviewWindowBuilder::new(
         app,
         LABEL,
-        tauri::WebviewUrl::App("index.html?window=translation-hud".into()),
+        tauri::WebviewUrl::App("index.html?window=text-result-hud".into()),
     )
     .title("Hiven")
     .inner_size(PASSIVE_WIDTH, PASSIVE_HEIGHT)
@@ -466,25 +486,27 @@ fn ensure_window(app: &tauri::AppHandle) -> Result<(), String> {
     .always_on_top(true)
     .skip_taskbar(true)
     .build()
-    .map_err(|_| "translation-hud-unavailable")?;
+    .map_err(|_| "text-result-hud-unavailable")?;
     #[cfg(any(target_os = "linux", target_os = "windows"))]
     window
         .remove_menu()
-        .map_err(|_| "translation-hud-unavailable")?;
+        .map_err(|_| "text-result-hud-unavailable")?;
     let handle = app.clone();
     window.on_window_event(move |event| match event {
         tauri::WindowEvent::Focused(focused) => {
-            let request = state()
+            let loss = state()
                 .lock()
                 .ok()
                 .and_then(|mut state| state.focus_changed(*focused, now()));
-            if let Some(request) = request {
-                let session_id = request.session_id.clone();
-                let _ = handle.emit_to("launcher", ACTION_EVENT, request);
+            if let Some(loss) = loss {
+                if let Some(request) = loss.request {
+                    let _ = handle.emit_to("launcher", ACTION_EVENT, request);
+                }
                 // Focus loss owns cancellation of this native session. A newer
-                // provider revision may land between the two state locks, so
-                // cleanup must not be scoped to the emitted revision.
-                let _ = dismiss_on_main(&handle, &session_id, u64::MAX);
+                // provider revision or a failed clipboard write may land between
+                // the two state locks, so cleanup is session-wide even when Copy
+                // already owns the one allowed action.
+                let _ = dismiss_on_main(&handle, &loss.session_id, u64::MAX);
             }
         }
         tauri::WindowEvent::Destroyed => {
@@ -518,22 +540,22 @@ fn position(window: &tauri::WebviewWindow, active: bool) -> Result<(), String> {
             use gtk::prelude::WidgetExt;
             window
                 .gtk_window()
-                .map_err(|_| "translation-hud-unavailable")?
+                .map_err(|_| "text-result-hud-unavailable")?
                 .set_size_request((width / scale) as i32, (height / scale) as i32);
         }
         window
             .set_size(tauri::PhysicalSize::new(width as u32, height as u32))
-            .map_err(|_| "translation-hud-unavailable")?;
+            .map_err(|_| "text-result-hud-unavailable")?;
         window
             .set_position(tauri::PhysicalPosition::new(x as i32, y as i32))
-            .map_err(|_| "translation-hud-unavailable")?;
+            .map_err(|_| "text-result-hud-unavailable")?;
     }
     Ok(())
 }
 
 fn show_passive(app: &tauri::AppHandle) -> Result<(), String> {
     let (ready, active) = {
-        let state = state().lock().map_err(|_| "translation-hud-unavailable")?;
+        let state = state().lock().map_err(|_| "text-result-hud-unavailable")?;
         (state.ready, state.active)
     };
     if !ready {
@@ -548,21 +570,21 @@ fn show_passive(app: &tauri::AppHandle) -> Result<(), String> {
     }
     let window = app
         .get_webview_window(LABEL)
-        .ok_or("translation-hud-unavailable")?;
+        .ok_or("text-result-hud-unavailable")?;
     position(&window, active)?;
     window
         .emit(UPDATE_EVENT, &update)
-        .map_err(|_| "translation-hud-unavailable")?;
+        .map_err(|_| "text-result-hud-unavailable")?;
     if active {
         return Ok(());
     }
     window
         .set_focusable(false)
-        .map_err(|_| "translation-hud-unavailable")?;
-    window.show().map_err(|_| "translation-hud-unavailable")?;
+        .map_err(|_| "text-result-hud-unavailable")?;
+    window.show().map_err(|_| "text-result-hud-unavailable")?;
     window
         .set_ignore_cursor_events(true)
-        .map_err(|_| "translation-hud-unavailable")?;
+        .map_err(|_| "text-result-hud-unavailable")?;
     Ok(())
 }
 
@@ -590,7 +612,7 @@ fn dismiss_on_main(
         .and_then(|window| window.is_focused().ok())
         .unwrap_or(false);
     let (matched, lease) = {
-        let mut state = state().lock().map_err(|_| "translation-hud-unavailable")?;
+        let mut state = state().lock().map_err(|_| "text-result-hud-unavailable")?;
         let matched = state.current.as_ref().is_some_and(|snapshot| {
             snapshot.session_id == session_id && revision >= snapshot.revision
         });
@@ -629,14 +651,14 @@ fn schedule_expiry(app: tauri::AppHandle, session_id: String, revision: u64, exp
 }
 
 #[tauri::command]
-pub(crate) async fn translation_hud_present(
+pub(crate) async fn text_result_hud_present(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,
     snapshot: Snapshot,
     full_text: Option<String>,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     if window.label() != "launcher" {
-        return Err("translation-hud-unavailable".into());
+        return Err("text-result-hud-unavailable".into());
     }
     let _creation = CREATION.lock().await;
     ensure_window(&app)?;
@@ -645,26 +667,26 @@ pub(crate) async fn translation_hud_present(
     let expires_at = snapshot.expires_at;
     let accepted = state()
         .lock()
-        .map_err(|_| "translation-hud-unavailable")?
+        .map_err(|_| "text-result-hud-unavailable")?
         .present(snapshot, full_text, now())
         .map_err(str::to_owned)?;
     if !accepted {
-        return Ok(());
+        return Ok(false);
     }
     show_passive(&app)?;
     schedule_expiry(app, session_id, revision, expires_at);
-    Ok(())
+    Ok(true)
 }
 
 #[tauri::command]
-pub(crate) async fn translation_hud_activate(
+pub(crate) async fn text_result_hud_activate(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,
     session_id: String,
     revision: u64,
 ) -> Result<Option<u64>, String> {
     if window.label() != "launcher" || !valid_session_id(&session_id) {
-        return Err("translation-hud-unavailable".into());
+        return Err("text-result-hud-unavailable".into());
     }
     let handle = app.clone();
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -673,10 +695,10 @@ pub(crate) async fn translation_hud_activate(
             let lease = FocusLease::capture()?;
             let hud = handle
                 .get_webview_window(LABEL)
-                .ok_or("translation-hud-unavailable")?;
+                .ok_or("text-result-hud-unavailable")?;
             let expires_at;
             {
-                let mut state = state().lock().map_err(|_| "translation-hud-unavailable")?;
+                let mut state = state().lock().map_err(|_| "text-result-hud-unavailable")?;
                 let Some(deadline) = state.activate(&session_id, revision, now(), lease) else {
                     return Ok(None);
                 };
@@ -685,13 +707,13 @@ pub(crate) async fn translation_hud_activate(
             let activation: Result<(), String> = (|| {
                 position(&hud, true)?;
                 hud.set_ignore_cursor_events(false)
-                    .map_err(|_| "translation-hud-unavailable".to_owned())?;
+                    .map_err(|_| "text-result-hud-unavailable".to_owned())?;
                 hud.set_focusable(true)
-                    .map_err(|_| "translation-hud-unavailable".to_owned())?;
+                    .map_err(|_| "text-result-hud-unavailable".to_owned())?;
                 hud.show()
-                    .map_err(|_| "translation-hud-unavailable".to_owned())?;
+                    .map_err(|_| "text-result-hud-unavailable".to_owned())?;
                 hud.set_focus()
-                    .map_err(|_| "translation-hud-unavailable".to_owned())
+                    .map_err(|_| "text-result-hud-unavailable".to_owned())
             })();
             if activation.is_err() {
                 let focused = hud.is_focused().unwrap_or(false);
@@ -714,47 +736,47 @@ pub(crate) async fn translation_hud_activate(
         })();
         let _ = tx.send(result);
     })
-    .map_err(|_| "translation-hud-unavailable")?;
-    rx.await.map_err(|_| "translation-hud-unavailable")?
+    .map_err(|_| "text-result-hud-unavailable")?;
+    rx.await.map_err(|_| "text-result-hud-unavailable")?
 }
 
 #[tauri::command]
-pub(crate) async fn translation_hud_dismiss(
+pub(crate) async fn text_result_hud_dismiss(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,
     session_id: String,
     revision: u64,
 ) -> Result<(), String> {
     if window.label() != "launcher" || !valid_session_id(&session_id) {
-        return Err("translation-hud-unavailable".into());
+        return Err("text-result-hud-unavailable".into());
     }
     let handle = app.clone();
     let (tx, rx) = tokio::sync::oneshot::channel();
     app.run_on_main_thread(move || {
         let _ = tx.send(dismiss_on_main(&handle, &session_id, revision).map(|_| ()));
     })
-    .map_err(|_| "translation-hud-unavailable")?;
-    rx.await.map_err(|_| "translation-hud-unavailable")?
+    .map_err(|_| "text-result-hud-unavailable")?;
+    rx.await.map_err(|_| "text-result-hud-unavailable")?
 }
 
 #[tauri::command]
-pub(crate) async fn translation_hud_ready(
+pub(crate) async fn text_result_hud_ready(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,
 ) -> Result<Update, String> {
     if window.label() != LABEL {
-        return Err("translation-hud-unavailable".into());
+        return Err("text-result-hud-unavailable".into());
     }
     state()
         .lock()
-        .map_err(|_| "translation-hud-unavailable")?
+        .map_err(|_| "text-result-hud-unavailable")?
         .ready = true;
     show_passive(&app)?;
     current_update(true)
 }
 
 #[tauri::command]
-pub(crate) async fn translation_hud_action(
+pub(crate) async fn text_result_hud_action(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,
     session_id: String,
@@ -762,17 +784,17 @@ pub(crate) async fn translation_hud_action(
     action: Action,
 ) -> Result<bool, String> {
     if window.label() != LABEL || !valid_session_id(&session_id) {
-        return Err("translation-hud-unavailable".into());
+        return Err("text-result-hud-unavailable".into());
     }
     let request = state()
         .lock()
-        .map_err(|_| "translation-hud-unavailable")?
+        .map_err(|_| "text-result-hud-unavailable")?
         .action(&session_id, revision, action, now());
     let Some(request) = request else {
         return Ok(false);
     };
     app.emit_to("launcher", ACTION_EVENT, request)
-        .map_err(|_| "translation-hud-unavailable")?;
+        .map_err(|_| "text-result-hud-unavailable")?;
     Ok(true)
 }
 
@@ -782,6 +804,7 @@ mod tests {
 
     fn snapshot(session: &str, revision: u64, expires_at: u64) -> Snapshot {
         Snapshot {
+            product: Product::Translation,
             session_id: session.into(),
             revision,
             phase: Phase::Ready,
@@ -789,6 +812,7 @@ mod tests {
             truncated: false,
             copy_failed: false,
             complete: true,
+            sensitive: false,
             failure: None,
             expires_at,
             locale: Locale::En,
@@ -813,6 +837,21 @@ mod tests {
         assert!(state.present(error.clone(), None, 100).is_err());
         error.failure = Some(Failure::Unavailable);
         assert!(state.present(error, None, 100).unwrap());
+    }
+
+    #[test]
+    fn sensitive_passive_snapshot_cannot_carry_a_preview() {
+        let mut state = State::default();
+        let mut hidden = snapshot("secret", 1, 200);
+        hidden.product = Product::QrScan;
+        hidden.sensitive = true;
+        hidden.preview.clear();
+        assert!(state.present(hidden, None, 100).unwrap());
+
+        let mut leaked = snapshot("leaked", 1, 200);
+        leaked.product = Product::QrScan;
+        leaked.sensitive = true;
+        assert!(state.present(leaked, None, 100).is_err());
     }
 
     #[test]
@@ -885,10 +924,18 @@ mod tests {
         state.restore_allowed = true;
         assert!(state.action("one", 3, Action::Copy, 100).is_some());
         assert!(state.action("one", 3, Action::Copy, 100).is_none());
-        assert!(state.focus_changed(false, 100).is_none());
+        let loss = state.focus_changed(false, 100).unwrap();
+        assert!(loss.request.is_none());
+        assert_eq!(loss.session_id, "one");
         assert!(!state.restore_allowed);
         assert!(state.take_for_dismiss("one", 3, true).is_none());
         assert!(state.current.is_none());
+        let mut failed_copy_update = snapshot("one", 4, 200);
+        failed_copy_update.phase = Phase::Active;
+        failed_copy_update.copy_failed = true;
+        assert!(!state
+            .present(failed_copy_update, Some("must stay hidden".into()), 100)
+            .unwrap());
     }
 
     #[test]
@@ -902,7 +949,8 @@ mod tests {
 
         assert!(state.focus_changed(false, 100).is_none());
         assert!(state.focus_changed(true, 100).is_none());
-        let request = state.focus_changed(false, 100).unwrap();
+        let loss = state.focus_changed(false, 100).unwrap();
+        let request = loss.request.unwrap();
         assert_eq!(request.session_id, "one");
         assert_eq!(request.revision, 3);
         assert_eq!(request.action, Action::Close);
@@ -940,7 +988,15 @@ mod tests {
         state.active = true;
         state.active_focused = true;
 
-        assert_eq!(state.focus_changed(false, 100).unwrap().revision, 3);
+        assert_eq!(
+            state
+                .focus_changed(false, 100)
+                .unwrap()
+                .request
+                .unwrap()
+                .revision,
+            3
+        );
         let mut newer = snapshot("one", 4, 200);
         newer.phase = Phase::Active;
         assert!(state

@@ -2,6 +2,7 @@ export type HudTranslationPhase = 'idle' | 'translating' | 'ready' | 'active' | 
 export type HudTranslationFailure = 'unavailable' | 'incomplete'
 
 export type HudTranslationView = {
+  product: 'translation'
   sessionId: string
   revision: number
   phase: Exclude<HudTranslationPhase, 'idle'>
@@ -9,6 +10,7 @@ export type HudTranslationView = {
   truncated: boolean
   copyFailed: boolean
   complete: boolean
+  sensitive: false
   failure?: HudTranslationFailure
   expiresAt: number
 }
@@ -172,7 +174,7 @@ export class HudTranslationSession {
         if (this.expired(session)) { await this.expire(session); return false }
         session.copyFailed = true
         session.revision += 1
-        await this.publish(session)
+        if (!await this.publish(session)) await this.retire(session)
       }
       return false
     } finally {
@@ -264,7 +266,7 @@ export class HudTranslationSession {
 
   private view(session: LiveSession): HudTranslationView {
     const { preview, truncated } = boundedPreview(session.output, this.previewCharacters)
-    return { sessionId: session.id, revision: session.revision, phase: session.phase, preview, truncated, copyFailed: session.copyFailed, complete: session.complete, failure: session.failure, expiresAt: session.expiresAt }
+    return { product: 'translation', sessionId: session.id, revision: session.revision, phase: session.phase, preview, truncated, copyFailed: session.copyFailed, complete: session.complete, sensitive: false, failure: session.failure, expiresAt: session.expiresAt }
   }
 
   private isCurrent(session: LiveSession): boolean { return this.live === session }

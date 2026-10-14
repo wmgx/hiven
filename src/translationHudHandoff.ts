@@ -14,12 +14,13 @@ import { resolvePluginSettings, usePluginSettingsStore } from './workspace/plugi
 import { pluginSurfaceShortcutKey, usePluginSurfaceShortcutStore } from './workspace/pluginSurfaceShortcuts'
 import { createPluginAi } from './workspace/ai/runtime'
 import { readNativeClipboardText, writeTextWithoutHistory } from './workspace/nativeClipboard'
+import { claimTextResultHud, releaseTextResultHud } from './workspace/textResultHudOwnership'
 
 const TARGET = { source: 'builtin' as const, pluginId: 'translate', surfaceId: 'main' }
 const REQUIRED = ['ai.use', 'globalShortcut.register', 'clipboard.read', 'clipboard.write'] as const
-const ACTION_EVENT = 'hiven://translation-hud-action'
+const ACTION_EVENT = 'hiven://text-result-hud-action'
 
-type NativeAction = { sessionId: string; revision: number; action: 'copy' | 'close' }
+type NativeAction = { product: 'translation' | 'qr-scan'; sessionId: string; revision: number; action: 'copy' | 'close' }
 
 function definitionAndSettings(): { definition: object; settings: TranslateSettings; profile: TranslateProfile } | null {
   const definition = pluginRegistry.getPluginDefinition(TARGET.pluginId, 'production')
@@ -98,14 +99,16 @@ export function installTranslationHudHost(): () => void {
     readClipboard: async (signal) => signal.aborted ? '' : readNativeClipboardText(),
     isSensitive: (text) => detectContent(text).some(({ kind }) => kind === 'secret' || kind === 'secret-like'),
     writeClipboard: (text, signal) => writeTextWithoutHistory(text, signal),
-    present: (view, fullText) => invoke('translation_hud_present', { snapshot: nativeSnapshot(view), fullText }).then(() => undefined),
-    activate: (view) => invoke<number | null>('translation_hud_activate', { sessionId: view.sessionId, revision: view.revision }),
-    dismiss: (sessionId, revision) => invoke('translation_hud_dismiss', { sessionId, revision }).then(() => undefined),
+    present: (view, fullText) => invoke<boolean>('text_result_hud_present', { snapshot: nativeSnapshot(view), fullText })
+      .then((accepted) => { if (!accepted) throw new Error('Text result HUD rejected the session') }),
+    activate: (view) => invoke<number | null>('text_result_hud_activate', { sessionId: view.sessionId, revision: view.revision }),
+    dismiss: (sessionId, revision) => invoke('text_result_hud_dismiss', { sessionId, revision }).then(() => undefined),
     now: () => Date.now(),
     schedule: (callback, delayMs) => setTimeout(callback, delayMs),
     clearSchedule: (timer) => clearTimeout(timer),
     randomId: () => crypto.randomUUID(),
   })
+  const hudOwner = Symbol('translation-hud-owner')
 
   const releaseCurrent = async () => {
     const current = release
@@ -122,6 +125,7 @@ export function installTranslationHudHost(): () => void {
       const shortcut = usePluginSurfaceShortcutStore.getState().shortcuts[key]
       if (!shortcut?.enabled || !definitionAndSettings() || !permissionsReady()) return
       release = await acquireRegisteredSurfaceShortcutInterceptor(TARGET, async () => {
+        await claimTextResultHud(hudOwner, () => session.cancel())
         await session.trigger()
         return true
       }).catch(() => null)
@@ -142,7 +146,7 @@ export function installTranslationHudHost(): () => void {
   ]
   let stopAction = () => {}
   void listen<NativeAction>(ACTION_EVENT, ({ payload }) => {
-    if (!alive) return
+    if (!alive || payload.product !== 'translation') return
     const expected = { sessionId: payload.sessionId, revision: payload.revision }
     if (payload.action === 'copy') void session.copyAndClose(expected)
     else void session.cancelExpected(expected)
@@ -155,6 +159,7 @@ export function installTranslationHudHost(): () => void {
     stopAction()
     for (const unsubscribe of stops) unsubscribe()
     void session.cancel()
+    releaseTextResultHud(hudOwner)
     void releaseCurrent()
     installedStop = null
   }
