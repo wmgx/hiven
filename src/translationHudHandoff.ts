@@ -14,7 +14,7 @@ import { resolvePluginSettings, usePluginSettingsStore } from './workspace/plugi
 import { pluginSurfaceShortcutKey, usePluginSurfaceShortcutStore } from './workspace/pluginSurfaceShortcuts'
 import { createPluginAi } from './workspace/ai/runtime'
 import { readNativeClipboardText, writeTextWithoutHistory } from './workspace/nativeClipboard'
-import { claimTextResultHud, releaseTextResultHud } from './workspace/textResultHudOwnership'
+import { claimTextResultHud, type TextResultHudClaim, type TextResultHudLease } from './workspace/textResultHudOwnership'
 
 const TARGET = { source: 'builtin' as const, pluginId: 'translate', surfaceId: 'main' }
 const REQUIRED = ['ai.use', 'globalShortcut.register', 'clipboard.read', 'clipboard.write'] as const
@@ -58,6 +58,8 @@ export function installTranslationHudHost(): () => void {
     || !(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return () => {}
   let alive = true
   let release: (() => Promise<void>) | null = null
+  let pendingClaim: TextResultHudClaim | null = null
+  let hudLease: TextResultHudLease | null = null
   let syncing = false
   let resyncRequested = false
 
@@ -125,7 +127,18 @@ export function installTranslationHudHost(): () => void {
       const shortcut = usePluginSurfaceShortcutStore.getState().shortcuts[key]
       if (!shortcut?.enabled || !definitionAndSettings() || !permissionsReady()) return
       release = await acquireRegisteredSurfaceShortcutInterceptor(TARGET, async () => {
-        await claimTextResultHud(hudOwner, () => session.cancel())
+        const claim = claimTextResultHud(hudOwner, () => session.cancel())
+        pendingClaim = claim
+        const lease = await claim.acquired
+        if (pendingClaim === claim) pendingClaim = null
+        const latestShortcut = usePluginSurfaceShortcutStore.getState().shortcuts[key]
+        if (!lease || !alive || !latestShortcut?.enabled || latestShortcut.registrationStatus !== 'registered'
+          || !definitionAndSettings() || !permissionsReady()) {
+          lease?.release()
+          return true
+        }
+        hudLease?.release()
+        hudLease = lease
         await session.trigger()
         return true
       }).catch(() => null)
@@ -134,7 +147,14 @@ export function installTranslationHudHost(): () => void {
       if (resyncRequested) { resyncRequested = false; void sync() }
     }
   }
-  const invalidate = () => { void session.cancel(); void sync() }
+  const invalidate = () => {
+    pendingClaim?.cancel()
+    pendingClaim = null
+    hudLease?.release()
+    hudLease = null
+    void session.cancel()
+    void sync()
+  }
   const stops = [
     pluginRegistry.subscribe(invalidate),
     usePluginPermissionStore.subscribe(invalidate),
@@ -158,8 +178,11 @@ export function installTranslationHudHost(): () => void {
     alive = false
     stopAction()
     for (const unsubscribe of stops) unsubscribe()
+    pendingClaim?.cancel()
+    pendingClaim = null
+    hudLease?.release()
+    hudLease = null
     void session.cancel()
-    releaseTextResultHud(hudOwner)
     void releaseCurrent()
     installedStop = null
   }

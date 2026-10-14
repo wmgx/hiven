@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { translate } from '../i18n'
+import { acceptTextResultHudUpdate, type TextResultHudUpdate } from './textResultHudUpdates'
 import './TextResultHud.css'
 
 type Snapshot = {
@@ -20,20 +21,18 @@ type Snapshot = {
   theme: 'dark' | 'light'
 }
 type RenderSnapshot = Snapshot & { fullText?: string }
-type Update = { snapshot: Snapshot | null; fullText?: string }
+type Update = TextResultHudUpdate<Snapshot>
 
 export function TextResultHud() {
-  const [snapshot, setSnapshot] = useState<RenderSnapshot | null>(null)
+  const [render, setRender] = useState<{ generation: number; snapshot: RenderSnapshot | null }>({ generation: -1, snapshot: null })
+  const snapshot = render.snapshot
   const resultRef = useRef<HTMLPreElement>(null)
   useEffect(() => {
     let disposed = false
     let stop = () => {}
     const accept = (update: Update) => {
       if (disposed) return
-      setSnapshot((current) => !update.snapshot || !current || update.snapshot.sessionId !== current.sessionId
-        || update.snapshot.revision >= current.revision
-        ? update.snapshot && { ...update.snapshot, fullText: update.fullText }
-        : current)
+      setRender((current) => acceptTextResultHudUpdate(current, update))
     }
     void listen<Update>('hiven://text-result-hud-update', ({ payload }) => accept(payload)).then(async (cleanup) => {
       if (disposed) { cleanup(); return }

@@ -12,7 +12,7 @@ import { pluginRegistry } from './workspace/pluginRegistry'
 import { pluginSurfaceShortcutKey, usePluginSurfaceShortcutStore } from './workspace/pluginSurfaceShortcuts'
 import { readNativeClipboardText, writeTextWithoutHistory } from './workspace/nativeClipboard'
 import { writeClipboardText } from './workspace/pluginClipboard'
-import { claimTextResultHud, releaseTextResultHud } from './workspace/textResultHudOwnership'
+import { claimTextResultHud, type TextResultHudClaim, type TextResultHudLease } from './workspace/textResultHudOwnership'
 
 const TARGET = { source: 'builtin' as const, pluginId: 'qr-code', surfaceId: 'scan' }
 const REQUIRED = ['clipboard.read', 'clipboard.image', 'clipboard.write'] as const
@@ -45,6 +45,8 @@ export function installQrHudHost(): () => void {
     || !(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return () => {}
   let alive = true
   let release: (() => Promise<void>) | null = null
+  let pendingClaim: TextResultHudClaim | null = null
+  let hudLease: TextResultHudLease | null = null
   let syncing = false
   let resyncRequested = false
   const hudOwner = Symbol('qr-hud-owner')
@@ -100,7 +102,18 @@ export function installQrHudHost(): () => void {
       const shortcut = usePluginSurfaceShortcutStore.getState().shortcuts[key]
       if (!shortcut?.enabled || !permissionsReady()) return
       release = await acquireRegisteredSurfaceShortcutInterceptor(TARGET, async () => {
-        await claimTextResultHud(hudOwner, () => session.cancel())
+        const claim = claimTextResultHud(hudOwner, () => session.cancel())
+        pendingClaim = claim
+        const lease = await claim.acquired
+        if (pendingClaim === claim) pendingClaim = null
+        const latestShortcut = usePluginSurfaceShortcutStore.getState().shortcuts[key]
+        if (!lease || !alive || !latestShortcut?.enabled || latestShortcut.registrationStatus !== 'registered'
+          || !permissionsReady()) {
+          lease?.release()
+          return true
+        }
+        hudLease?.release()
+        hudLease = lease
         await session.trigger()
         return true
       }).catch(() => null)
@@ -109,7 +122,14 @@ export function installQrHudHost(): () => void {
       if (resyncRequested) { resyncRequested = false; void sync() }
     }
   }
-  const invalidate = () => { void session.cancel(); void sync() }
+  const invalidate = () => {
+    pendingClaim?.cancel()
+    pendingClaim = null
+    hudLease?.release()
+    hudLease = null
+    void session.cancel()
+    void sync()
+  }
   const stops = [
     pluginRegistry.subscribe(invalidate),
     usePluginPermissionStore.subscribe(invalidate),
@@ -132,9 +152,12 @@ export function installQrHudHost(): () => void {
     alive = false
     stopAction()
     for (const unsubscribe of stops) unsubscribe()
+    pendingClaim?.cancel()
+    pendingClaim = null
+    hudLease?.release()
+    hudLease = null
     void session.cancel()
     void releaseCurrent()
-    releaseTextResultHud(hudOwner)
     installedStop = null
   }
   installedStop = stop
