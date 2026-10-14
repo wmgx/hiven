@@ -17,7 +17,12 @@ let busy = false
 let lastNotice: string | undefined
 const required = ['clipboard.read', 'clipboard.image', 'storage.blob', 'clipboard.write'] as const
 
-export function withClipboardImageSave(api: PluginLauncherApi, item: LauncherItem | undefined, close: () => void | Promise<void>): PluginLauncherApi {
+export function withClipboardImageSave(
+  api: PluginLauncherApi,
+  item: LauncherItem | undefined,
+  close: () => void | Promise<void>,
+  restore: () => void | Promise<void>,
+): PluginLauncherApi {
   if (!nativeToastRoutingAvailable() || item?.pluginId !== 'encode-decode' || item.source !== 'builtin' || item.systemKey !== 'plugin:encode-decode:launcher:open-image-save') return api
   // Capture at API creation: retained callbacks cannot acquire a newer launcher session.
   const definition = pluginRegistry.getPluginDefinition('encode-decode', 'production')
@@ -63,13 +68,21 @@ export function withClipboardImageSave(api: PluginLauncherApi, item: LauncherIte
       // Fixed outcome only. No native error, image, destination or clipboard path enters HUD.
       result = 'image-save-failed'
     } finally {
-      const mayClose = current()
+      const mayRestore = current()
+      const shouldClose = result === 'image-saved' || result === 'image-saved-path-failed'
       for (const stop of stops) stop()
-      // Keep dialog blur protection until the original launcher has finished closing.
+      // Keep dialog blur protection until the original launcher has either closed or
+      // restored its input. A stale dialog must never revive or focus a newer session.
       try {
-        if (mayClose) await close()
-        if (mayClose || committed) {
-          const level = result === 'image-saved' ? 'success' : result === 'image-save-cancelled' ? 'info' : 'error'
+        if (mayRestore) {
+          if (shouldClose) await close()
+          else await restore()
+        }
+        // Cancellation is already visible in the chooser and leaves the launcher ready
+        // to retry, so a second HUD is noise. Committed outcomes still report against
+        // their captured target after a session replacement, without touching its UI.
+        if (result !== 'image-save-cancelled' && (mayRestore || committed)) {
+          const level = result === 'image-saved' ? 'success' : 'error'
           lastNotice = showToast(t(locale, `hud.result.${result}`), level, { durationMs: level === 'error' ? 6000 : 3500, hud: { operation, target, revision: 1, result } })
         }
       } finally { releaseFocus(); busy = false }

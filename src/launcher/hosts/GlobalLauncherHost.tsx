@@ -190,7 +190,12 @@ export function GlobalLauncherHost() {
 
   const mapCandidate = useShortCountdownAvailability()
   const makeLauncherApi = useCallback((api: Parameters<typeof withClipboardImageSave>[0], item?: Parameters<typeof withClipboardImageSave>[1]) =>
-    withShortCountdown(withClipboardImageSave(createGlobalLauncherPluginApi(api), item, () => closeAfterActionRef.current()), item), [])
+    withShortCountdown(withClipboardImageSave(
+      createGlobalLauncherPluginApi(api),
+      item,
+      () => closeAfterActionRef.current(),
+      () => { try { inputRef.current?.focus({ preventScroll: true }) } catch { /* best-effort retry focus */ } },
+    ), item), [])
   const {
     query,
     rankingQuery,
