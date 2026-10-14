@@ -86,6 +86,7 @@
     "test:clipboard-history-settings": "node scripts/test-clipboard-history-settings.mjs",
     "test:clipboard-history-logic": "node scripts/test-clipboard-history-logic.mts",
     "test:clipboard-history-shortcuts": "node scripts/test-clipboard-history-shortcuts.mjs",
+    "test:clipboard-history-copy-lifecycle": "node --experimental-strip-types scripts/test-clipboard-history-copy-lifecycle.mts",
     "test:clipboard-history-open-session": "node --experimental-strip-types scripts/test-clipboard-history-open-session.mts",
     "test:clipboard-history-runtime": "node scripts/test-clipboard-history-runtime.mjs",
     "test:clipboard-history-surface-paste-story": "node scripts/test-clipboard-history-surface-paste-story.mjs",

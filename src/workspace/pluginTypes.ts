@@ -633,7 +633,7 @@ export type PluginClipboardApi = {
   /** recordInHistory:false is restricted to History assembly and curl inspection on native desktop. */
   writeText(text: string, options?: { sensitive?: boolean; recordInHistory?: boolean; signal?: AbortSignal }): Promise<void>
   writeImage(blobId: string, options?: { signal?: AbortSignal }): Promise<void>
-  writeFiles(paths: string[]): Promise<void>
+  writeFiles(paths: string[], options?: { signal?: AbortSignal }): Promise<void>
   watch(
     options: ClipboardWatchOptions,
     onChange: (change: ClipboardChange) => void | Promise<void>,

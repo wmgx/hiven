@@ -35,6 +35,7 @@ import { createClipboardHistoryRepository } from '../storage/clipboardHistoryRep
 import { readMatchingHistoryPage } from './clipboardHistoryPageReader'
 import { createHistoryPointerIntent } from './historyPointerIntent'
 import { createHistoryOpenSession, resetHistoryOpenSession } from './historyOpenSession'
+import { createHistoryCopyLifecycle } from './historyCopyLifecycle'
 import {
   CLIPBOARD_TEXT_MERGE_MIN_ITEMS,
   CLIPBOARD_TEXT_MERGE_MAX_ITEMS,
@@ -101,6 +102,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const [query, setQuery] = useState('')
   const [pasteNotice, setPasteNotice] = useState<string | null>(null)
   const pasteNoticeGenerationRef = useRef(0)
+  const [copyLifecycle] = useState(createHistoryCopyLifecycle)
   const [filter, setFilter] = useState<FilterKind>(() => initialFilter(props.surfaceId))
   const [loading, setLoading] = useState(true)
   const [fullTextSearchState, setFullTextSearchState] = useState<'idle' | 'loading' | 'error'>('idle')
@@ -108,6 +110,15 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const editGeneration = useRef(0)
   const editInputRef = useRef<HTMLTextAreaElement>(null)
   const modifierLabel = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌥' : 'Alt+'
+  useLayoutEffect(() => {
+    const unsubscribeOwner = host.deliveryFeedbackOwner?.subscribeInvalidation(copyLifecycle.cancel)
+    const unsubscribeLeave = host.subscribeLeaveIntent?.(copyLifecycle.cancel)
+    return () => {
+      copyLifecycle.cancel()
+      unsubscribeOwner?.()
+      unsubscribeLeave?.()
+    }
+  }, [copyLifecycle, host.deliveryFeedbackOwner, host.subscribeLeaveIntent])
   useEffect(() => {
     const invalidate = () => {
       editGeneration.current += 1
@@ -799,26 +810,32 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const handleCopy = useCallback(async (item: ClipboardHistoryItem) => {
     pasteNoticeGenerationRef.current += 1
     setPasteNotice(null)
+    const submission = copyLifecycle.begin(() => host.deliveryFeedbackOwner?.isCurrent() !== false)
     try {
       const fullItem = await resolveFullItem(item)
+      if (!submission.isCurrent()) return
       if (!fullItem) {
         host.showMessage(t('error.copyFailed'), 'error')
         return
       }
       if (fullItem.kind === 'text') {
-        await host.clipboard.writeText(fullItem.text)
+        await host.clipboard.writeText(fullItem.text, { signal: submission.signal })
       } else if (fullItem.kind === 'image') {
-        await host.clipboard.writeImage(fullItem.blobId)
+        await host.clipboard.writeImage(fullItem.blobId, { signal: submission.signal })
       } else {
-        await host.clipboard.writeFiles(fullItem.paths)
+        await host.clipboard.writeFiles(fullItem.paths, { signal: submission.signal })
       }
+      if (!submission.isCurrent()) return
+      submission.commit()
       host.showMessage(t('message.copied'), 'success')
       resetBrowser()
       host.complete()
     } catch {
-      host.showMessage(t('error.copyFailed'), 'error')
+      if (submission.isCurrent()) host.showMessage(t('error.copyFailed'), 'error')
+    } finally {
+      submission.finish()
     }
-  }, [host, resetBrowser, resolveFullItem, t])
+  }, [copyLifecycle, host, resetBrowser, resolveFullItem, t])
 
   const applyItemUpdate = useCallback((updated: ClipboardHistoryItem) => {
     setItems((current) =>

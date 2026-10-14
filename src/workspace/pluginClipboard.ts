@@ -294,9 +294,10 @@ export function createPluginClipboard(
       requireCurrent()
     },
 
-    async writeFiles(paths: string[]): Promise<void> {
+    async writeFiles(paths: string[], options?: { signal?: AbortSignal }): Promise<void> {
+      if (options?.signal?.aborted) return
       requirePermissions(['clipboard.write', 'clipboard.files'])
-      await writeClipboardText(paths.join('\n'))
+      await writeClipboardText(paths.join('\n'), { signal: options?.signal })
     },
 
     async watch(
