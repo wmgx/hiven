@@ -24,7 +24,9 @@ html[data-window='translation-hud'] #root { padding: 2px; }
 .translation-hud header { display: flex; justify-content: space-between; gap: 12px; }
 .translation-hud header span { font-weight: 650; }
 .translation-hud header small, .translation-hud > p { margin: 0; opacity: .7; }
-.translation-hud pre { margin: 0; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+.translation-hud pre { margin: 0; min-width: 0; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+.translation-hud[data-active='true'] pre { overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
+.translation-hud[data-active='true'] pre:focus-visible { outline: 2px solid var(--accent, #5d7cff); outline-offset: 2px; }
 .translation-hud footer { display: flex; justify-content: flex-end; gap: 8px; }
 .translation-hud button { min-width: 72px; padding: 7px 12px; border: 1px solid var(--color-border-secondary, #666); border-radius: 8px; background: transparent; color: inherit; }
 .translation-hud button:first-child { background: var(--accent, #5d7cff); border-color: transparent; color: white; }

@@ -21,8 +21,9 @@ export type HudTranslationDependencies = {
   readClipboard(signal: AbortSignal): Promise<string>
   isSensitive(text: string): boolean
   writeClipboard(text: string, signal: AbortSignal): Promise<void>
-  present(view: HudTranslationView): Promise<void> | void
-  activate(view: HudTranslationView): Promise<boolean>
+  present(view: HudTranslationView, fullText?: string): Promise<void> | void
+  /** Returns the native-owned absolute reading deadline after activation. */
+  activate(view: HudTranslationView): Promise<number | null>
   dismiss(sessionId: string, revision: number): Promise<void> | void
   now(): number
   schedule(callback: () => void, delayMs: number): ReturnType<typeof setTimeout>
@@ -32,8 +33,10 @@ export type HudTranslationDependencies = {
 
 export type HudTranslationSessionOptions = {
   ttlMs?: number
+  activeTtlMs?: number
   previewCharacters?: number
   maxInputCharacters?: number
+  maxOutputCharacters?: number
 }
 
 type LiveSession = {
@@ -52,8 +55,10 @@ type LiveSession = {
 }
 
 const DEFAULT_TTL_MS = 15_000
+const DEFAULT_ACTIVE_TTL_MS = 120_000
 const DEFAULT_PREVIEW_CHARACTERS = 320
 const DEFAULT_MAX_INPUT_CHARACTERS = 12_000
+const DEFAULT_MAX_OUTPUT_CHARACTERS = 1_000_000
 // The native HUD is process-global, so delivery must remain ordered even when
 // the host is torn down and creates a replacement session controller.
 let nativeDelivery: Promise<void> = Promise.resolve()
@@ -69,8 +74,10 @@ function boundedPreview(text: string, limit: number): { preview: string; truncat
 export class HudTranslationSession {
   private readonly dependencies: HudTranslationDependencies
   private readonly ttlMs: number
+  private readonly activeTtlMs: number
   private readonly previewCharacters: number
   private readonly maxInputCharacters: number
+  private readonly maxOutputCharacters: number
   private live: LiveSession | null = null
   private preparing = false
   private triggerQueue: Promise<'started' | 'cancelled' | 'activated' | 'unavailable' | 'rejected'> = Promise.resolve('unavailable')
@@ -78,8 +85,10 @@ export class HudTranslationSession {
   constructor(dependencies: HudTranslationDependencies, options: HudTranslationSessionOptions = {}) {
     this.dependencies = dependencies
     this.ttlMs = options.ttlMs ?? DEFAULT_TTL_MS
+    this.activeTtlMs = options.activeTtlMs ?? DEFAULT_ACTIVE_TTL_MS
     this.previewCharacters = options.previewCharacters ?? DEFAULT_PREVIEW_CHARACTERS
     this.maxInputCharacters = options.maxInputCharacters ?? DEFAULT_MAX_INPUT_CHARACTERS
+    this.maxOutputCharacters = options.maxOutputCharacters ?? DEFAULT_MAX_OUTPUT_CHARACTERS
   }
 
   /** First press starts passively; a second press explicitly activates the live HUD. */
@@ -115,7 +124,7 @@ export class HudTranslationSession {
       copying: false, activating: false, delivery: Promise.resolve(),
     }
     this.live = session
-    session.timer = this.dependencies.schedule(() => { void this.expire(session) }, this.ttlMs)
+    this.scheduleExpiry(session)
 
     let input: string
     try {
@@ -178,13 +187,22 @@ export class HudTranslationSession {
     if (session.activating) return 'unavailable'
     session.activating = true
     try {
-      const activated = await this.dependencies.activate(this.view(session)).catch(() => false)
+      const readingExpiresAt = await this.dependencies.activate(this.view(session)).catch(() => null)
       if (!this.isCurrent(session) || session.controller.signal.aborted) return 'unavailable'
-      if (this.expired(session)) { await this.expire(session); return 'unavailable' }
-      if (!activated) return 'unavailable'
+      if (!readingExpiresAt || readingExpiresAt <= this.dependencies.now()
+        || readingExpiresAt > this.dependencies.now() + this.activeTtlMs) {
+        if (this.expired(session)) await this.expire(session)
+        return 'unavailable'
+      }
+      session.expiresAt = readingExpiresAt
+      if (session.timer) this.dependencies.clearSchedule(session.timer)
+      this.scheduleExpiry(session)
       session.phase = 'active'
       session.revision += 1
-      await this.publish(session)
+      if (!await this.publish(session)) {
+        await this.retire(session)
+        return 'unavailable'
+      }
       return 'activated'
     } finally {
       session.activating = false
@@ -213,6 +231,9 @@ export class HudTranslationSession {
         signal: session.controller.signal,
         onText: (text) => {
           if (!this.isCurrent(session) || session.controller.signal.aborted || this.expired(session)) return
+          if (Array.from(text).length > this.maxOutputCharacters) {
+            throw new Error('Translation output exceeds the session limit')
+          }
           session.output = text
           session.revision += 1
           void this.publish(session)
@@ -220,6 +241,7 @@ export class HudTranslationSession {
       })
       if (!this.isCurrent(session) || session.controller.signal.aborted) return
       if (this.expired(session)) { await this.expire(session); return }
+      if (Array.from(output).length > this.maxOutputCharacters) { await this.fail(session); return }
       if (!output.trim()) { await this.fail(session); return }
       session.output = output
       session.complete = true
@@ -241,11 +263,21 @@ export class HudTranslationSession {
   private isCurrent(session: LiveSession): boolean { return this.live === session }
   private expired(session: LiveSession): boolean { return session.expiresAt <= this.dependencies.now() }
 
+  private scheduleExpiry(session: LiveSession): void {
+    const expectedExpiresAt = session.expiresAt
+    session.timer = this.dependencies.schedule(() => {
+      if (this.isCurrent(session) && session.expiresAt <= expectedExpiresAt && this.expired(session)) {
+        void this.expire(session)
+      }
+    }, Math.max(0, expectedExpiresAt - this.dependencies.now()))
+  }
+
   private publish(session: LiveSession): Promise<boolean> {
     const view = this.view(session)
+    const fullText = view.phase === 'active' && view.complete ? session.output : undefined
     let delivered = false
     nativeDelivery = nativeDelivery.then(async () => {
-      try { await this.dependencies.present(view); delivered = true } catch { delivered = false }
+      try { await this.dependencies.present(view, fullText); delivered = true } catch { delivered = false }
     })
     session.delivery = nativeDelivery
     return session.delivery.then(() => delivered)
