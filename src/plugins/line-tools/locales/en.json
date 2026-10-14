@@ -212,5 +212,12 @@
   "compare.excluded": "Blank lines ignored: left {leftBlank}, right {rightBlank}. Duplicates merged: left {leftDup}, right {rightDup}.",
   "compare.error.bytes": "Combined input exceeds 1 MiB. Reduce the input; no truncated result is available.",
   "compare.error.lines": "Combined input exceeds {limit} lines. Reduce the input; no truncated result is available.",
-  "compare.error.failed": "Comparison failed. Edit the input to retry; previous results cannot be copied."
+  "compare.error.failed": "Comparison failed. Edit the input to retry; previous results cannot be copied.",
+  "markdownPlain.title": "Markdown to Plain Text",
+  "markdownPlain.image": "Image",
+  "markdownPlain.processing": "Converting…",
+  "markdownPlain.hint": "Keeps addresses, task states, code and definitions. HTML and entities stay literal; nothing is loaded or executed. Input ≤128 KiB; full output ≤512 KiB.",
+  "markdownPlain.limit": "Input, output or nesting exceeds the conversion limit. Reduce the input; no partial result is available.",
+  "markdownPlain.timeout": "Conversion took too long. Your input is kept; simplify it to retry.",
+  "markdownPlain.failed": "Could not convert the text. Your input is kept; edit to retry."
 }

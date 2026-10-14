@@ -212,5 +212,12 @@
   "compare.excluded": "忽略空白行：左 {leftBlank}、右 {rightBlank}；合并重复项：左 {leftDup}、右 {rightDup}。",
   "compare.error.bytes": "两侧输入合计超过 1 MiB。请缩小范围，结果未截断。",
   "compare.error.lines": "两侧输入合计超过 {limit} 行。请缩小范围，结果未截断。",
-  "compare.error.failed": "核对失败，请修改输入后重试。旧结果不可复制。"
+  "compare.error.failed": "核对失败，请修改输入后重试。旧结果不可复制。",
+  "markdownPlain.title": "Markdown 转纯文本",
+  "markdownPlain.image": "图片",
+  "markdownPlain.processing": "正在转换…",
+  "markdownPlain.hint": "保留地址、任务状态、代码及引用定义。HTML 和实体保留原文，不加载或执行。输入最多128 KiB，完整输出最多512 KiB。",
+  "markdownPlain.limit": "输入、输出或嵌套超过转换限制。请减少输入，不提供截断结果。",
+  "markdownPlain.timeout": "转换超时，输入已保留。请简化内容后重试。",
+  "markdownPlain.failed": "转换失败，输入已保留。请编辑后重试。"
 }

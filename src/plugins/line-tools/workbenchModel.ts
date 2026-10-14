@@ -11,6 +11,7 @@ export type WorkbenchOperation =
   | 'remove-blank'
   | 'clean-list'
   | 'clean-agent-text'
+  | 'markdown-plain-text'
   | 'json-format'
   | 'json-compact'
   | 'url-encode'
@@ -31,6 +32,7 @@ export type WorkbenchOptions = LineOptions & {
 
 export type WorkbenchResult =
   | { status: 'idle' }
+  | { status: 'processing' }
   | { status: 'ready'; text: string; duplicates?: DuplicateLineGroup[] }
   | { status: 'error'; messageKey: string }
 
@@ -50,6 +52,7 @@ export const WORKBENCH_OPERATIONS: readonly {
   { value: 'remove-blank', category: 'text', label: 'removeBlankLines.title' },
   { value: 'dedup', category: 'text', label: 'dedup.title' },
   { value: 'find-duplicates', category: 'text', label: 'duplicates.title' },
+  { value: 'markdown-plain-text', category: 'text', label: 'markdownPlain.title' },
   { value: 'clean-agent-text', category: 'text', label: 'cleanAgent.title' },
   { value: 'clean-list', category: 'text', label: 'cleanList.title' },
   { value: 'sort', category: 'text', label: 'sort.title' },
@@ -89,6 +92,7 @@ export const DEFAULT_WORKBENCH_OPTIONS: Readonly<WorkbenchOptions> = {
 }
 
 export function getWorkbenchOperation(surfaceId?: string): WorkbenchOperation {
+  if (surfaceId === 'markdown-plain-text') return 'markdown-plain-text'
   if (surfaceId === 'clean-agent-text') return 'clean-agent-text'
   if (surfaceId === 'regex-escape') return 'regex-escape'
   if (surfaceId === 'find-duplicates') return 'find-duplicates'
@@ -112,6 +116,7 @@ export function evaluateWorkbench(
         const duplicates = findDuplicateLines(inputText, { ignoreCase: options.duplicateIgnoreCase, trim: options.duplicateTrim })
         return { status: 'ready', text: duplicateLineReport(duplicates), duplicates }
       }
+      case 'markdown-plain-text': return { status: 'processing' } // Isolated worker owns this operation.
       case 'clean-agent-text': text = cleanAgentText(inputText, options.cleanAgentAscii === true); break
       case 'clean-list': text = cleanLineList(inputText, options); break
       case 'trim': text = processLines('trim-whitespace', inputText, options); break

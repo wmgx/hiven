@@ -1,3 +1,4 @@
+import { useMarkdownPlainText } from './useMarkdownPlainText'
 import { useLayoutEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { getPluginHostSdk, type PluginSurfaceProps } from '@hiven/plugin'
 import { Button, Checkbox, IconButton, SegmentedControl, Select, TextArea, TextInput, useToolDeliveryFeedback } from '@hiven/plugin-ui'
@@ -95,10 +96,12 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
   const selected = WORKBENCH_OPERATIONS.find((item) => item.value === operation)!
   const category = selected.category
 
-  const result = useMemo<WorkbenchResult>(() => {
+  const markdownResult = useMarkdownPlainText(inputText, operation === 'markdown-plain-text', revision, t('markdownPlain.image'))
+  const syncResult = useMemo<WorkbenchResult>(() => {
     return evaluateWorkbench(inputText, operation, options, { compactJson, formatJson, urlDecode, urlEncode })
     // A revision gives identical-looking results a fresh identity after any edit or exit.
   }, [inputText, operation, options, revision, compactJson, formatJson, urlDecode, urlEncode])
+  const result = operation === 'markdown-plain-text' ? markdownResult : syncResult
   const delivery = useToolDeliveryFeedback(result, host.deliveryFeedbackOwner)
 
   useLayoutEffect(() => {
@@ -238,7 +241,7 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
         return
       }
       if (action === 'copy') {
-        await host.clipboard.writeText(result.text)
+        await host.clipboard.writeText(result.text, { signal: submission.controller.signal })
         if (!isCurrent()) return
         delivery.invalidate()
         host.showMessage(t('toast.copied'), 'success')
@@ -266,7 +269,7 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
   const outputDisabled = result.status !== 'ready' || busy !== null || noDuplicates
   const resultStatus = result.status === 'ready'
     ? t(noDuplicates ? 'duplicates.none' : outputText.length === 0 ? 'workbench.status.empty' : 'workbench.status.ready')
-    : t(result.status === 'error' ? 'workbench.status.error' : 'workbench.status.waiting')
+    : t(result.status === 'processing' ? 'markdownPlain.processing' : result.status === 'error' ? 'workbench.status.error' : 'workbench.status.waiting')
 
   return (
     <section className={`text-workbench${props.embedded ? ' text-workbench--embedded' : ''}`} aria-label={t('workbench.title')} data-no-drag>
@@ -361,7 +364,7 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
               <TextInput value={options[key]} aria-label={t(`param.${key}`)} onChange={(event) => changeOption(key, event.currentTarget.value)} />
             </label>
           ))}
-          {!['json-format', 'sort', 'dedup', 'clean-list', 'join', 'prepend', 'append', 'wrap', 'find-duplicates'].includes(operation) ? <span>{t(operation === 'clean-agent-text' ? 'cleanAgent.hint' : operation === 'regex-escape' ? 'regexEscape.hint' : operation === 'extract-urls' ? 'extractUrls.hint' : 'option.livePreview')}</span> : null}
+          {!['json-format', 'sort', 'dedup', 'clean-list', 'join', 'prepend', 'append', 'wrap', 'find-duplicates'].includes(operation) ? <span>{t(operation === 'markdown-plain-text' ? 'markdownPlain.hint' : operation === 'clean-agent-text' ? 'cleanAgent.hint' : operation === 'regex-escape' ? 'regexEscape.hint' : operation === 'extract-urls' ? 'extractUrls.hint' : 'option.livePreview')}</span> : null}
         </div>
       </div>
 
