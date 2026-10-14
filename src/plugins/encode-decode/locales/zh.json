@@ -98,5 +98,19 @@
   "redact.keep": "保留当前图片",
   "redact.failed": "操作未完成，当前图片和遮挡已保留，可重试。",
   "redact.count": "{width} × {height} · {count} 处遮挡",
-  "redact.previous": "当前显示的仍是旧图片。请明确保留它或重试载入，再复制或保存。"
+  "redact.previous": "当前显示的仍是旧图片。请明确保留它或重试载入，再复制或保存。",
+  "crop.title": "裁剪图片",
+  "crop.clear": "清除选区",
+  "crop.x": "X",
+  "crop.y": "Y",
+  "crop.width": "宽度",
+  "crop.height": "高度",
+  "crop.canvas": "图片裁剪选区",
+  "crop.replace": "替换图片并放弃当前裁剪选区？",
+  "crop.previous": "新图片未载入，已保留原图和选区。",
+  "crop.failed": "图片载入或导出失败，已保留图片和选区。",
+  "crop.empty": "选择图片，或主动读取剪贴板图片。",
+  "crop.select": "拖框保留区域，或输入原图像素坐标和尺寸。",
+  "crop.invalid": "请输入图片范围内的整数像素坐标和正数尺寸。",
+  "crop.dimensions": "输出：{width} × {height} 像素"
 }

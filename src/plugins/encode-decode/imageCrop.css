@@ -1,0 +1,11 @@
+.image-crop { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: 12px; }
+.image-crop-toolbar, .image-crop-footer, .image-crop-replace { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.image-crop-viewport { flex: 1; min-height: 0; overflow: auto; background: #969696; border: 1px solid var(--hiven-color-border); display: flex; align-items: flex-start; justify-content: center; }
+.image-crop-viewport canvas { display: block; max-width: 100%; height: auto; flex-shrink: 0; touch-action: none; cursor: crosshair; background: repeating-conic-gradient(#ddd 0% 25%, #fff 0% 50%) 0 / 16px 16px; }
+.image-crop-viewport canvas:focus-visible { outline: 2px solid var(--hiven-color-accent); outline-offset: -2px; }
+.image-crop-empty { align-self: center; padding: 24px; color: #111; text-align: center; }
+.image-crop-footer > span { flex: 1; min-width: 160px; font-size: 12px; }
+.image-crop-replace { font-size: 12px; }
+.image-crop-fields { display: flex; gap: 12px; flex-wrap: wrap; }
+.image-crop-fields label { display: flex; gap: 6px; align-items: center; font-size: 12px; }
+.image-crop-fields input { width: 80px; padding: 5px 6px; border: 1px solid var(--hiven-color-border); border-radius: 4px; color: inherit; background: transparent; }

@@ -98,5 +98,19 @@
   "redact.keep": "Keep current image",
   "redact.failed": "Operation failed. Your image and redactions are preserved; try again.",
   "redact.count": "{width} × {height} · {count} redactions",
-  "redact.previous": "The previous image is still shown. Keep it explicitly or retry loading before copying or saving."
+  "redact.previous": "The previous image is still shown. Keep it explicitly or retry loading before copying or saving.",
+  "crop.title": "Crop image",
+  "crop.clear": "Clear selection",
+  "crop.x": "X",
+  "crop.y": "Y",
+  "crop.width": "Width",
+  "crop.height": "Height",
+  "crop.canvas": "Image crop selection",
+  "crop.replace": "Replace this image and discard the current crop?",
+  "crop.previous": "The new image was not loaded. The previous image and selection are kept.",
+  "crop.failed": "Could not load or export the image. Your image and selection are kept.",
+  "crop.empty": "Choose an image or explicitly read one from the clipboard.",
+  "crop.select": "Drag to keep a region, or enter source-pixel coordinates and dimensions.",
+  "crop.invalid": "Enter whole-pixel coordinates and positive dimensions within the image.",
+  "crop.dimensions": "Output: {width} × {height} px"
 }
