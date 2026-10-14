@@ -3,6 +3,11 @@ import type { KeyboardEvent, ReactNode } from 'react'
 import type { GlobalPinnedLauncherDoubleModifier } from '../store'
 import { useAppStore } from '../store'
 import { translate } from '../i18n'
+import {
+  claimShortcutRecordingLease,
+  type ShortcutRecordingClaim,
+  type ShortcutRecordingLease,
+} from '../hotkeys/pageReload'
 
 export type ShortcutRecorderValue =
   | { kind: 'accelerator'; accelerator: string }
@@ -39,33 +44,52 @@ export function ShortcutRecorder({
   onClear,
 }: ShortcutRecorderProps) {
   const locale = useAppStore((s) => s.locale)
+  const [isArming, setIsArming] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
   const [error, setError] = useState('')
   const lastModifierTapRef = useRef<LastModifierTap | null>(null)
   const recorderRef = useRef<HTMLButtonElement>(null)
+  const claimRef = useRef<ShortcutRecordingClaim | null>(null)
+  const leaseRef = useRef<ShortcutRecordingLease | null>(null)
+  const recordingGenerationRef = useRef(0)
   const platformLabels = useMemo(() => getHotkeyPlatformLabels(), [])
   const recordingLabel = translate(locale, 'settings', 'hotkeyRecording')
   const recordError = translate(locale, 'settings', 'hotkeyRecordError')
   const disabledLabel = translate(locale, 'settings', 'hotkeyDisabled')
 
-  const displayValue = isRecording
+  const displayValue = isArming || isRecording
     ? recordingLabel
     : formatShortcutRecorderValueLabel(value, locale, platformLabels, emptyLabel ?? disabledLabel)
 
+  function stopRecording() {
+    recordingGenerationRef.current += 1
+    claimRef.current?.cancel()
+    claimRef.current = null
+    leaseRef.current?.release()
+    leaseRef.current = null
+    setIsArming(false)
+    setIsRecording(false)
+    setError('')
+  }
+
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (isArming) {
+      event.preventDefault()
+      event.stopPropagation()
+      if (event.key === 'Escape') stopRecording()
+      return
+    }
     if (!isRecording) return
     event.preventDefault()
     event.stopPropagation()
 
     if (event.key === 'Escape') {
-      setError('')
-      setIsRecording(false)
+      stopRecording()
       return
     }
 
     if (event.key === 'Delete' || event.key === 'Backspace') {
-      setError('')
-      setIsRecording(false)
+      stopRecording()
       if (onClear) onClear()
       return
     }
@@ -76,36 +100,71 @@ export function ShortcutRecorder({
       setError(isModifierKey(event.key) ? '' : recordError)
       return
     }
-    setError('')
-    setIsRecording(false)
+    stopRecording()
     onRecord(recordedShortcut.shortcut)
   }
 
   useEffect(() => {
+    if (!isArming && !isRecording) return
+    const intercept = (event: globalThis.KeyboardEvent) => {
+      event.stopImmediatePropagation()
+      handleKeyDown(event as unknown as KeyboardEvent<HTMLButtonElement>)
+    }
+    window.addEventListener('keydown', intercept, true)
+    return () => window.removeEventListener('keydown', intercept, true)
+  }, [isArming, isRecording])
+
+  useEffect(() => {
     if (!isRecording) return
-    ;(window as unknown as { __FLUXTEXT_HOTKEY_RECORDING__?: boolean }).__FLUXTEXT_HOTKEY_RECORDING__ = true
     const timer = window.setTimeout(() => {
-      setIsRecording(false)
-      setError('')
+      stopRecording()
     }, 10_000)
     return () => {
       window.clearTimeout(timer)
-      ;(window as unknown as { __FLUXTEXT_HOTKEY_RECORDING__?: boolean }).__FLUXTEXT_HOTKEY_RECORDING__ = false
     }
   }, [isRecording])
 
+  useEffect(() => {
+    const stop = () => stopRecording()
+    window.addEventListener('pagehide', stop)
+    window.addEventListener('blur', stop)
+    return () => {
+      window.removeEventListener('pagehide', stop)
+      window.removeEventListener('blur', stop)
+      stop()
+    }
+  }, [])
+
   const startRecording = () => {
+    if (isArming || isRecording) return
     setError('')
     lastModifierTapRef.current = null
-    setIsRecording(true)
-    requestAnimationFrame(() => recorderRef.current?.focus())
+    const generation = ++recordingGenerationRef.current
+    const claim = claimShortcutRecordingLease()
+    claimRef.current = claim
+    setIsArming(true)
+    void claim.acquired.then((lease) => {
+      if (recordingGenerationRef.current !== generation || claimRef.current !== claim) {
+        lease?.release()
+        return
+      }
+      claimRef.current = null
+      setIsArming(false)
+      if (!lease) return
+      leaseRef.current = lease
+      setIsRecording(true)
+      requestAnimationFrame(() => recorderRef.current?.focus())
+    }).catch(() => {
+      if (recordingGenerationRef.current !== generation || claimRef.current !== claim) return
+      claim.cancel()
+      claimRef.current = null
+      setIsArming(false)
+      setError(recordError)
+    })
   }
 
   const handleBlur = () => {
-    if (isRecording) {
-      setIsRecording(false)
-      setError('')
-    }
+    if (isArming || isRecording) stopRecording()
   }
 
   return (
@@ -113,7 +172,7 @@ export function ShortcutRecorder({
       <button
         ref={recorderRef}
         type="button"
-        className={`shortcut-recorder-display ${isRecording ? 'is-recording' : ''}`}
+        className={`shortcut-recorder-display ${isArming || isRecording ? 'is-recording' : ''}`}
         onClick={startRecording}
         onKeyDown={handleKeyDown}
         onBlur={handleBlur}

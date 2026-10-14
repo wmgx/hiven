@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, type MutableRefObject,
 import type { LauncherControllerState } from '../../workspace/launcher/controller'
 import { finishImeComposition, startImeComposition } from '../../utils/imeKeyboard'
 import { runLauncherEscapeInterceptor } from './launcherEscapeInterceptor'
+import { isShortcutRecordingLeaseActive } from '../../hotkeys/pageReload'
 import { usePluginSettingsStore } from '../../workspace/pluginSettingsStore'
 import { focusLauncherWebview } from '../../workspace/windowManager/launcherWindow'
 import { launcherNativeDialogFocus } from '../../workspace/launcherBlurGuard'
@@ -233,6 +234,8 @@ export function useGlobalLauncherHostEscape({
     if (isImeComposingRef.current) {
       isImeComposingRef.current = false
     }
+
+    if (isShortcutRecordingLeaseActive()) return
 
     // Layer interceptors first: settings / plugin surface / permission / quick-editor.
     // Do NOT early-return on settingsDialogTarget — global-launcher settings only

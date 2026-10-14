@@ -27,6 +27,8 @@ const files = {
   settingsSurfaceContent: read('src/surfaces/SettingsContent.tsx'),
   app: read('src/App.tsx'),
   globalPinnedLauncherHotkeys: read('src/hotkeys/globalPinnedLauncher.ts'),
+  pageReload: read('src/hotkeys/pageReload.ts'),
+  globalLauncherHostLifecycle: read('src/components/launcher/GlobalLauncherHostLifecycle.ts'),
   shortcutRecorder: read('src/components/ShortcutRecorder.tsx'),
   tauriHotkeys: read('src-tauri/src/hotkeys.rs'),
   i18n: readI18n(),
@@ -285,11 +287,21 @@ check('native double-modifier registration avoids Accessibility-only event taps'
   )
 })
 
-check('shortcut recorder marks active hotkey recording sessions', () => {
+check('shortcut recorder lease owns host-level key routing', () => {
   assertHas(
+    files.pageReload,
+    /export function isShortcutRecordingLeaseActive\(\)/,
+    'the lease coordinator should expose active recording ownership',
+  )
+  assertHas(
+    files.globalLauncherHostLifecycle,
+    /isShortcutRecordingLeaseActive\(\)/,
+    'launcher Escape routing should yield to arming or active recording leases',
+  )
+  assertDoesNotHave(
     files.shortcutRecorder,
     /__FLUXTEXT_HOTKEY_RECORDING__/,
-    'ShortcutRecorder should mark active recording sessions for any host-level key routing',
+    'individual recorder lifecycles must not race through a shared boolean flag',
   )
   assertDoesNotHave(
     files.app,
