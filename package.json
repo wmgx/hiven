@@ -17,6 +17,7 @@
     "test:settings-field-search": "node scripts/test-settings-field-search.mjs && node scripts/test-settings-field-navigation.mjs",
     "check:reachability": "node scripts/check-reachability.mjs",
     "check:typecheck": "tsc -p tsconfig.app.json --noEmit",
+    "test:hud-translation-session": "node --experimental-strip-types scripts/test-hud-translation-session.mts",
     "test:history-queue-handoff": "node scripts/test-history-queue-handoff.mjs",
     "test:plugin-permission-least-privilege": "node scripts/test-plugin-permission-least-privilege.mjs",
     "test:plugin-permission-foreground": "node scripts/test-plugin-permission-foreground.mjs",

@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "translation-hud",
+  "description": "Render and operate one bounded translation HUD session; clipboard access remains host-owned.",
+  "windows": ["translation-hud"],
+  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
+}

@@ -346,3 +346,33 @@ export async function acquireSurfaceShortcutInterceptor(
   }
   return stop
 }
+
+/** Attach behavior only to the user's already-registered surface shortcut.
+ * Never registers, moves, or persists an accelerator of its own.
+ */
+export async function acquireRegisteredSurfaceShortcutInterceptor(
+  target: PluginSurfaceOpenTarget,
+  handle: () => Promise<boolean>,
+): Promise<() => Promise<void>> {
+  if (!isTauriRuntime() || !installed || !isBindableSurfaceTarget(target) || missingShortcutPermissions(target).length) throw new Error('ShortcutUnavailableError')
+  await syncQueue
+  const key = pluginSurfaceShortcutKey(target)
+  const shortcut = usePluginSurfaceShortcutStore.getState().shortcuts[key]
+  const accelerator = currentAccelerators.get(key)
+  if (!shortcut?.enabled || shortcut.registrationStatus !== 'registered' || !accelerator
+    || !sameAccelerator(accelerator, shortcut.accelerator)) throw new Error('ShortcutUnavailableError')
+  const previous = shortcutInterceptors.get(key)
+  if (previous?.release) await previous.release()
+  else if (previous) throw new Error('ShortcutConflictError')
+  const entry: { accelerator: string; handle: () => Promise<boolean>; pressed: boolean; release?: () => Promise<void> } = {
+    accelerator, handle, pressed: false,
+  }
+  shortcutInterceptors.set(key, entry)
+  let stopped = false
+  const stop = async () => {
+    if (stopped) return
+    stopped = true
+    if (shortcutInterceptors.get(key) === entry) shortcutInterceptors.delete(key)
+  }
+  return stop
+}

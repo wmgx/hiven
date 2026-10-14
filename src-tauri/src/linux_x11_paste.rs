@@ -37,6 +37,49 @@ pub(crate) struct CapturedWindow {
     window: Window,
 }
 
+/// A translation HUD focus lease is intentionally independent from the paste
+/// target registry. It restores only the exact, still-live X11 client window.
+pub(crate) struct HudFocusLease {
+    captured: Arc<CapturedWindow>,
+}
+
+impl HudFocusLease {
+    pub(crate) fn capture() -> PasteResult<Self> {
+        let session = Session::connect()?;
+        let window = session.active()?.ok_or_else(|| error("no active HUD focus target"))?;
+        if session.wm_pid != NONE {
+            let pid = session.connection
+                .get_property(false, window, session.wm_pid, AtomEnum::CARDINAL, 0, 1)
+                .map_err(error)?.reply().map_err(error)?.value32()
+                .and_then(|mut values| values.next());
+            if pid == Some(std::process::id()) {
+                return Err(error("the HUD focus target belongs to Hiven"));
+            }
+        }
+        session.connection
+            .change_window_attributes(window, &ChangeWindowAttributesAux::new().event_mask(EventMask::STRUCTURE_NOTIFY))
+            .map_err(error)?.check().map_err(error)?;
+        session.ensure_alive(window)?;
+        if !session.focused(window)? {
+            return Err(error("the HUD focus target does not hold keyboard focus"));
+        }
+        Ok(Self { captured: Arc::new(CapturedWindow { session: Mutex::new(session), window }) })
+    }
+
+    pub(crate) fn restore(&self) -> PasteResult<()> {
+        let session = self.captured.session.lock().map_err(error)?;
+        session.ensure_alive(self.captured.window)?;
+        session.request_activation(self.captured.window)?;
+        let deadline = Instant::now() + Duration::from_millis(800);
+        while Instant::now() < deadline {
+            session.ensure_alive(self.captured.window)?;
+            if session.focused(self.captured.window)? { return Ok(()); }
+            thread::sleep(Duration::from_millis(20));
+        }
+        Err(error("the HUD focus target did not regain focus"))
+    }
+}
+
 struct Session {
     connection: RustConnection,
     root: Window,
