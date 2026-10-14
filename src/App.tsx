@@ -21,6 +21,7 @@ import { installGlobalPinnedLauncherHotkeys, routeGlobalPinnedLauncherShortcut }
 import { installPluginSurfaceShortcutHotkeys } from './hotkeys/pluginSurfaceShortcuts'
 import { installTranslationHudHost } from './translationHudHandoff'
 import { installQrHudHost } from './qrHudHandoff'
+import { installCleanAgentHudHost } from './cleanAgentHudHandoff'
 import { installAppHotkeys } from './hotkeys/appHotkeys'
 import { installQuickEditorHotkeys } from './hotkeys/quickEditor'
 import { consumePendingPluginSurfaceOpenTarget, isPluginSurfaceOpenTarget, openLauncherHostedPluginSurface } from './workspace/pluginSurfaceOpenRequest'
@@ -152,6 +153,7 @@ function LauncherRuntimeApp() {
   useEffect(() => isNativeDesktopRuntime() ? installPluginSurfaceShortcutHotkeys() : undefined, [])
   useEffect(() => isNativeDesktopRuntime() ? installTranslationHudHost() : undefined, [])
   useEffect(() => isNativeDesktopRuntime() ? installQrHudHost() : undefined, [])
+  useEffect(() => isNativeDesktopRuntime() ? installCleanAgentHudHost() : undefined, [])
   useEffect(() => isNativeDesktopRuntime() ? installAppHotkeys() : undefined, [])
   useEffect(() => isNativeDesktopRuntime() ? installQuickEditorHotkeys() : undefined, [])
   useEffect(() => {

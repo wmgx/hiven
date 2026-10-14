@@ -6,7 +6,7 @@ import { acceptTextResultHudUpdate, type TextResultHudUpdate } from './textResul
 import './TextResultHud.css'
 
 type Snapshot = {
-  product: 'translation' | 'qr-scan'
+  product: 'translation' | 'qr-scan' | 'clean-agent'
   sessionId: string
   revision: number
   phase: 'translating' | 'ready' | 'active' | 'cancelled' | 'error'
@@ -15,7 +15,7 @@ type Snapshot = {
   copyFailed: boolean
   complete: boolean
   sensitive: boolean
-  failure?: 'unavailable' | 'incomplete'
+  failure?: 'unavailable' | 'incomplete' | 'no-change' | 'too-large' | 'refused'
   expiresAt: number
   locale: 'zh' | 'en'
   theme: 'dark' | 'light'
@@ -59,14 +59,18 @@ export function TextResultHud() {
   const action = (name: 'copy' | 'close') => invoke('text_result_hud_action', {
     sessionId: snapshot.sessionId, revision: snapshot.revision, action: name,
   }).catch(() => undefined)
-  const prefix = snapshot.product === 'qr-scan' ? 'qr' : 'translation'
+  const prefix = snapshot.product === 'qr-scan' ? 'qr' : snapshot.product === 'clean-agent' ? 'cleanAgent' : 'translation'
   const active = snapshot.phase === 'active'
   const result = active && snapshot.fullText != null ? snapshot.fullText : snapshot.preview
-  const errorKey = snapshot.failure === 'unavailable' ? `${prefix}.unavailable` : `${prefix}.error`
-  const errorStatusKey = snapshot.failure === 'unavailable' ? `${prefix}.unavailableStatus` : `${prefix}.error`
+  const errorKey = snapshot.product === 'clean-agent' && snapshot.failure
+    ? `cleanAgent.${snapshot.failure}`
+    : snapshot.failure === 'unavailable' ? `${prefix}.unavailable` : `${prefix}.error`
+  const errorStatusKey = snapshot.product === 'clean-agent'
+    ? 'cleanAgent.errorStatus'
+    : snapshot.failure === 'unavailable' ? `${prefix}.unavailableStatus` : `${prefix}.error`
   return <main className="text-result-hud" data-theme={snapshot.theme} data-active={active} data-product={snapshot.product}>
     <header><span>{t(`${prefix}.title`)}</span><small>{snapshot.complete ? t(`${prefix}.complete`) : snapshot.phase === 'error' ? t(errorStatusKey) : t(`${prefix}.working`)}</small></header>
-    <pre ref={resultRef} tabIndex={active ? 0 : undefined} aria-label={t(`${prefix}.result`)} aria-live="polite">{snapshot.phase === 'error' ? t(errorKey) : snapshot.sensitive && !active ? t('qr.sensitive') : result || t(`${prefix}.working`)}</pre>
+    <pre ref={resultRef} tabIndex={active ? 0 : undefined} aria-label={t(`${prefix}.result`)} aria-live="polite">{snapshot.phase === 'error' ? t(errorKey) : !active && snapshot.product === 'clean-agent' ? t('cleanAgent.hidden') : snapshot.sensitive && !active ? t('qr.sensitive') : result || t(`${prefix}.working`)}</pre>
     {snapshot.truncated && !active && !snapshot.sensitive && <p>{t(`${prefix}.previewTruncated`)}</p>}
     {snapshot.copyFailed && <p role="alert">{t(`${prefix}.copyFailed`)}</p>}
     {active && <footer>

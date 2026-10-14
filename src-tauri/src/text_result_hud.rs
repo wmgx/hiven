@@ -39,13 +39,17 @@ pub(crate) enum Phase {
 pub(crate) enum Product {
     Translation,
     QrScan,
+    CleanAgent,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "kebab-case")]
 pub(crate) enum Failure {
     Unavailable,
     Incomplete,
+    NoChange,
+    TooLarge,
+    Refused,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -433,6 +437,9 @@ fn validate_snapshot(snapshot: &Snapshot, current_time: u64) -> Result<(), &'sta
         || snapshot.preview.chars().count() > MAX_PREVIEW_CHARS
         || snapshot.preview.contains('\0')
         || (snapshot.sensitive && snapshot.phase != Phase::Active && !snapshot.preview.is_empty())
+        || (snapshot.product == Product::CleanAgent
+            && snapshot.phase != Phase::Active
+            && !snapshot.preview.is_empty())
         || (snapshot.phase == Phase::Error) != snapshot.failure.is_some()
         || snapshot.expires_at <= current_time
         || snapshot.expires_at > current_time.saturating_add(max_lifetime)
@@ -801,6 +808,18 @@ pub(crate) async fn text_result_hud_action(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn deserializes_clean_agent_kebab_case_failures() {
+        assert_eq!(
+            serde_json::from_str::<Failure>("\"no-change\"").unwrap(),
+            Failure::NoChange
+        );
+        assert_eq!(
+            serde_json::from_str::<Failure>("\"too-large\"").unwrap(),
+            Failure::TooLarge
+        );
+    }
 
     fn snapshot(session: &str, revision: u64, expires_at: u64) -> Snapshot {
         Snapshot {

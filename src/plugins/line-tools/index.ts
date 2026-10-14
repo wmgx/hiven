@@ -95,6 +95,17 @@ export const lineToolsPlugin = definePlugin({
         },
         shell: WORKSPACE_SHELL,
       },
+      {
+        id: 'clean-agent-clipboard',
+        kind: 'custom-view',
+        title: 'Clean Agent Text from Clipboard',
+        titleI18n: { zh: '清理剪贴板中的 AI 终端文本' },
+        icon: 'RemoveFormatting',
+        aliases: ['clean agent clipboard', 'clean terminal clipboard', '清理剪贴板终端文本', '清理 AI 剪贴板文本'],
+        component: TextWorkbenchSurface,
+        entry: { launcher: false, shortcutBindable: true },
+        shell: WORKSPACE_SHELL,
+      },
       ...textToolRoutes.map((route) => ({
         id: route.surfaceId,
         kind: 'custom-view' as const,

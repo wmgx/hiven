@@ -93,7 +93,7 @@ export const DEFAULT_WORKBENCH_OPTIONS: Readonly<WorkbenchOptions> = {
 
 export function getWorkbenchOperation(surfaceId?: string): WorkbenchOperation {
   if (surfaceId === 'markdown-plain-text') return 'markdown-plain-text'
-  if (surfaceId === 'clean-agent-text') return 'clean-agent-text'
+  if (surfaceId === 'clean-agent-text' || surfaceId === 'clean-agent-clipboard') return 'clean-agent-text'
   if (surfaceId === 'regex-escape') return 'regex-escape'
   if (surfaceId === 'find-duplicates') return 'find-duplicates'
   const operation = lineOperationRoutes.find((route) => route.surfaceId === surfaceId)?.operation
