@@ -32,6 +32,13 @@ pub(crate) enum Phase {
     Error,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum Failure {
+    Unavailable,
+    Incomplete,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum Locale {
@@ -56,6 +63,7 @@ pub(crate) struct Snapshot {
     truncated: bool,
     copy_failed: bool,
     complete: bool,
+    failure: Option<Failure>,
     expires_at: u64,
     locale: Locale,
     theme: Theme,
@@ -371,6 +379,7 @@ fn validate_snapshot(snapshot: &Snapshot, current_time: u64) -> Result<(), &'sta
         || snapshot.revision > 9_007_199_254_740_991
         || snapshot.preview.chars().count() > MAX_PREVIEW_CHARS
         || snapshot.preview.contains('\0')
+        || (snapshot.phase == Phase::Error) != snapshot.failure.is_some()
         || snapshot.expires_at <= current_time
         || snapshot.expires_at > current_time.saturating_add(max_lifetime)
     {
@@ -736,6 +745,7 @@ mod tests {
             truncated: false,
             copy_failed: false,
             complete: true,
+            failure: None,
             expires_at,
             locale: Locale::En,
             theme: Theme::Dark,
@@ -753,6 +763,12 @@ mod tests {
         let mut oversized = snapshot("two", 1, 200);
         oversized.preview = "x".repeat(MAX_PREVIEW_CHARS + 1);
         assert!(state.present(oversized, None, 100).is_err());
+        let mut error = snapshot("two", 1, 200);
+        error.phase = Phase::Error;
+        error.complete = false;
+        assert!(state.present(error.clone(), None, 100).is_err());
+        error.failure = Some(Failure::Unavailable);
+        assert!(state.present(error, None, 100).unwrap());
     }
 
     #[test]

@@ -49,9 +49,11 @@ export function TranslationHud() {
   }).catch(() => undefined)
   const active = snapshot.phase === 'active'
   const result = active && snapshot.fullText != null ? snapshot.fullText : snapshot.preview
+  const errorKey = snapshot.failure === 'unavailable' ? 'translation.unavailable' : 'translation.error'
+  const errorStatusKey = snapshot.failure === 'unavailable' ? 'translation.unavailableStatus' : 'translation.error'
   return <main className="translation-hud" data-theme={snapshot.theme} data-active={active}>
-    <header><span>{t('translation.title')}</span><small>{snapshot.complete ? t('translation.complete') : snapshot.phase === 'error' ? t('translation.error') : t('translation.working')}</small></header>
-    <pre ref={resultRef} tabIndex={active ? 0 : undefined} aria-label={t('translation.result')} aria-live="polite">{snapshot.phase === 'error' ? t('translation.error') : result || t('translation.working')}</pre>
+    <header><span>{t('translation.title')}</span><small>{snapshot.complete ? t('translation.complete') : snapshot.phase === 'error' ? t(errorStatusKey) : t('translation.working')}</small></header>
+    <pre ref={resultRef} tabIndex={active ? 0 : undefined} aria-label={t('translation.result')} aria-live="polite">{snapshot.phase === 'error' ? t(errorKey) : result || t('translation.working')}</pre>
     {snapshot.truncated && !active && <p>{t('translation.previewTruncated')}</p>}
     {snapshot.copyFailed && <p role="alert">{t('translation.copyFailed')}</p>}
     {active && <footer>

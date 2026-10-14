@@ -103,6 +103,29 @@ function deferred<T>() {
   let reads = 0; h.dependencies.readClipboard = async () => { reads += 1; return 'private' }
   const session = new HudTranslationSession(h.dependencies)
   assert.equal(await session.trigger(), 'unavailable'); assert.equal(reads, 0)
+  assert.equal(h.views.at(-1)?.phase, 'error')
+  assert.equal(h.views.at(-1)?.failure, 'unavailable', 'readiness failure gives bounded feedback without reading content')
+  h.prepared = true
+  assert.equal(await session.trigger(), 'started', 'a later explicit retry replaces the unavailable state')
+  assert.equal(reads, 1)
+}
+{
+  const h = harness()
+  let reads = 0
+  h.dependencies.prepare = async () => { throw Error('synthetic readiness failure') }
+  h.dependencies.readClipboard = async () => { reads += 1; return 'private' }
+  const session = new HudTranslationSession(h.dependencies)
+  assert.equal(await session.trigger(), 'unavailable')
+  assert.equal(reads, 0)
+  assert.equal(h.views.at(-1)?.failure, 'unavailable', 'readiness exceptions produce the same opaque feedback')
+}
+{
+  const h = harness(); h.prepared = false
+  const session = new HudTranslationSession(h.dependencies, { ttlMs: 10 })
+  await session.trigger(); h.advance(11)
+  for (const callback of [...h.timers.values()]) callback()
+  await settle()
+  assert.equal(h.dismissals.length, 1, 'unavailable feedback retains the bounded passive lifetime')
 }
 {
   const h = harness(), session = new HudTranslationSession(h.dependencies, { ttlMs: 10 })

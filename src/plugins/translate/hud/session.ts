@@ -1,4 +1,5 @@
 export type HudTranslationPhase = 'idle' | 'translating' | 'ready' | 'active' | 'cancelled' | 'error'
+export type HudTranslationFailure = 'unavailable' | 'incomplete'
 
 export type HudTranslationView = {
   sessionId: string
@@ -8,6 +9,7 @@ export type HudTranslationView = {
   truncated: boolean
   copyFailed: boolean
   complete: boolean
+  failure?: HudTranslationFailure
   expiresAt: number
 }
 
@@ -47,6 +49,7 @@ type LiveSession = {
   output: string
   copyFailed: boolean
   complete: boolean
+  failure?: HudTranslationFailure
   expiresAt: number
   timer?: ReturnType<typeof setTimeout>
   copying: boolean
@@ -113,8 +116,12 @@ export class HudTranslationSession {
     this.preparing = true
     let prepared: HudTranslationPreparedRun | null
     try { prepared = await this.dependencies.prepare() }
+    catch { prepared = null }
     finally { this.preparing = false }
-    if (!prepared) return 'unavailable'
+    if (!prepared) {
+      await this.showUnavailable()
+      return 'unavailable'
+    }
 
     await this.cancel()
     const controller = new AbortController()
@@ -257,7 +264,7 @@ export class HudTranslationSession {
 
   private view(session: LiveSession): HudTranslationView {
     const { preview, truncated } = boundedPreview(session.output, this.previewCharacters)
-    return { sessionId: session.id, revision: session.revision, phase: session.phase, preview, truncated, copyFailed: session.copyFailed, complete: session.complete, expiresAt: session.expiresAt }
+    return { sessionId: session.id, revision: session.revision, phase: session.phase, preview, truncated, copyFailed: session.copyFailed, complete: session.complete, failure: session.failure, expiresAt: session.expiresAt }
   }
 
   private isCurrent(session: LiveSession): boolean { return this.live === session }
@@ -304,9 +311,23 @@ export class HudTranslationSession {
   private async fail(session: LiveSession): Promise<void> {
     if (!this.isCurrent(session)) return
     session.phase = 'error'
+    session.failure = 'incomplete'
     session.output = ''
     session.revision += 1
     await this.publish(session)
+  }
+
+  private async showUnavailable(): Promise<void> {
+    await this.cancel()
+    const session: LiveSession = {
+      id: this.dependencies.randomId(), revision: 1, phase: 'error', controller: new AbortController(),
+      output: '', copyFailed: false, complete: false, failure: 'unavailable',
+      expiresAt: this.dependencies.now() + this.ttlMs, copying: false, activating: false,
+      delivery: Promise.resolve(),
+    }
+    this.live = session
+    this.scheduleExpiry(session)
+    if (!await this.publish(session)) await this.retire(session)
   }
 
   private async finish(session: LiveSession): Promise<void> {

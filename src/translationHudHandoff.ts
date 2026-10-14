@@ -72,7 +72,9 @@ export function installTranslationHudHost(): () => void {
       readiness.setAi(ai)
       readiness.setSelection(profile)
       try {
-        await readiness.refresh()
+        // Each explicit shortcut is a retry boundary. Recheck metadata so a
+        // recovered local provider is not hidden behind the normal cache TTL.
+        await readiness.refresh(true)
         if (readiness.getSnapshot().status !== 'ready') return null
         const selection = readiness.execution(ai, profile)
         if (!selection) return null
