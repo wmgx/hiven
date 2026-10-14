@@ -112,5 +112,14 @@
   "crop.empty": "选择图片，或主动读取剪贴板图片。",
   "crop.select": "拖框保留区域，或输入原图像素坐标和尺寸。",
   "crop.invalid": "请输入图片范围内的整数像素坐标和正数尺寸。",
-  "crop.dimensions": "输出：{width} × {height} 像素"
+  "crop.dimensions": "输出：{width} × {height} 像素",
+  "resize.title": "图片按宽度缩小",
+  "resize.width": "目标宽度（像素）",
+  "resize.source": "原图：{width} × {height} 像素",
+  "resize.hint": "预览整张原图。保持比例和透明，不放大、不保证文件大小。输出高度按像素四舍五入。",
+  "resize.preview": "整张原图预览",
+  "resize.invalid": "请输入不超过原图宽度的正整数，按比例计算的高度不能小于1像素。",
+  "resize.failed": "图片载入或导出失败，已保留原图和宽度。",
+  "resize.replace": "替换图片并放弃当前宽度设置？",
+  "resize.previous": "新图片未载入，已保留原图和宽度设置。"
 }

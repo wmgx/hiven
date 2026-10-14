@@ -112,5 +112,14 @@
   "crop.empty": "Choose an image or explicitly read one from the clipboard.",
   "crop.select": "Drag to keep a region, or enter source-pixel coordinates and dimensions.",
   "crop.invalid": "Enter whole-pixel coordinates and positive dimensions within the image.",
-  "crop.dimensions": "Output: {width} × {height} px"
+  "crop.dimensions": "Output: {width} × {height} px",
+  "resize.title": "Shrink image by width",
+  "resize.width": "Target width (px)",
+  "resize.source": "Original: {width} × {height} px",
+  "resize.hint": "Whole-image preview. Keeps proportions and transparency; no enlargement or file-size target. Output height is rounded to pixels.",
+  "resize.preview": "Whole original image preview",
+  "resize.invalid": "Enter a whole width from 1 to the original width; the proportional height must be at least 1 px.",
+  "resize.failed": "Could not load or export the image. Your original and width are kept.",
+  "resize.replace": "Replace this image and discard the current width?",
+  "resize.previous": "The new image was not loaded. The previous image and width are kept."
 }

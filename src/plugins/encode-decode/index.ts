@@ -39,6 +39,7 @@ const WORKSPACE_SHELL = {
   resizable: true,
 }
 const OPERATION_ROUTES = [
+  { id: 'image-resize', title: 'resize.title', aliases: ['resize image', 'shrink image', 'image width', '图片缩小', '调整图片尺寸', '图片宽度', '图片等比缩小'] },
   { id: 'image-crop', title: 'crop.title', aliases: ['crop image', 'crop screenshot', '图片裁剪', '裁剪图片', '裁剪截图'] },
   { id: 'image-redact', title: 'redact.title', aliases: ['redact screenshot', 'redact image', 'hide image text', '截图遮挡', '图片遮挡', '图片打码'] },
   { id: 'image-save', title: 'image.saveRouteTitle', aliases: ['save screenshot', 'save clipboard image', 'screenshot png', '截图保存文件', '截图存为文件', '保存截图', '保存剪贴板图片'] },

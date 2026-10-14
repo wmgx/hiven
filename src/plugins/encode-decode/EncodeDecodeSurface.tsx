@@ -1,3 +1,4 @@
+import { ImageResizePanel } from './ImageResizePanel'
 import { ImageCropPanel } from './ImageCropPanel'
 import { ImageRedactionPanel } from './ImageRedactionPanel'
 import { ImageBase64Panel } from './ImageBase64Panel'
@@ -40,6 +41,7 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
   const baseline = useRef(initialText)
   const [imageDirty, setImageDirty] = useState(false)
   const imageInvalidation = useRef<(() => void) | null>(null)
+  const resizeMode = props.surfaceId === 'image-resize'
   const cropMode = props.surfaceId === 'image-crop'
   const [redactMode, setRedactMode] = useState(props.surfaceId === 'image-redact')
   const [saveFocused, setSaveFocused] = useState(props.surfaceId === 'image-save')
@@ -154,13 +156,13 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
         <IconButton type="button" label={t('action.back')} onClick={() => update(() => host.requestBack())}>
           <BackIcon size={14} strokeWidth={2} />
         </IconButton>
-        <strong>{t(cropMode ? 'crop.title' : redactMode ? 'redact.title' : saveFocused ? 'image.saveRouteTitle' : 'surface.title')}</strong>
+        <strong>{t(resizeMode ? 'resize.title' : cropMode ? 'crop.title' : redactMode ? 'redact.title' : saveFocused ? 'image.saveRouteTitle' : 'surface.title')}</strong>
         <IconButton type="button" label={t('action.close')} onClick={() => update(() => host.close())}>
           <CloseIcon size={14} strokeWidth={2} />
         </IconButton>
       </header>
 
-      {!cropMode && !saveFocused && !redactMode && <nav className="encode-formats" aria-label={t('format.label')}>
+      {!resizeMode && !cropMode && !saveFocused && !redactMode && <nav className="encode-formats" aria-label={t('format.label')}>
         {FORMATS.map((item) => (
           <button
             key={item}
@@ -176,8 +178,8 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
         <button type="button" onClick={() => update(() => setRedactMode(true))}>{t('redact.title')}</button>
       </nav>}
 
-      {cropMode ? <ImageCropPanel {...props} onDirtyChange={setImageDirty} invalidateRef={imageInvalidation} /> : redactMode ? <ImageRedactionPanel {...props} onDirtyChange={setImageDirty} invalidateRef={imageInvalidation} /> : <ImageBase64Panel {...props} active={imageMode} saveFocused={saveFocused} onShowWorkbench={() => setSaveFocused(false)} onDirtyChange={setImageDirty} invalidateRef={imageInvalidation} />}
-      {!cropMode && !imageMode && !redactMode && <>
+      {resizeMode ? <ImageResizePanel {...props} onDirtyChange={setImageDirty} invalidateRef={imageInvalidation} /> : cropMode ? <ImageCropPanel {...props} onDirtyChange={setImageDirty} invalidateRef={imageInvalidation} /> : redactMode ? <ImageRedactionPanel {...props} onDirtyChange={setImageDirty} invalidateRef={imageInvalidation} /> : <ImageBase64Panel {...props} active={imageMode} saveFocused={saveFocused} onShowWorkbench={() => setSaveFocused(false)} onDirtyChange={setImageDirty} invalidateRef={imageInvalidation} />}
+      {!resizeMode && !cropMode && !imageMode && !redactMode && <>
       <nav className="encode-directions" aria-label={t('direction.label')}>
         {(format === 'jwt' ? ['decode'] : ['encode', 'decode']).map((item) => (
           <button
