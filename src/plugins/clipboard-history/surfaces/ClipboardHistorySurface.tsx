@@ -34,6 +34,7 @@ import { subscribeCachedIndex } from '../storage/clipboardHistoryCache'
 import { createClipboardHistoryRepository } from '../storage/clipboardHistoryRepository'
 import { readMatchingHistoryPage } from './clipboardHistoryPageReader'
 import { createHistoryPointerIntent } from './historyPointerIntent'
+import { createHistoryOpenSession, resetHistoryOpenSession } from './historyOpenSession'
 import {
   CLIPBOARD_TEXT_MERGE_MIN_ITEMS,
   CLIPBOARD_TEXT_MERGE_MAX_ITEMS,
@@ -703,6 +704,33 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }, [groupedItems])
 
   const listRef = useRef<HTMLDivElement>(null)
+  const [openSession] = useState(() => createHistoryOpenSession(document.visibilityState))
+  useEffect(() => {
+    let focusFrame: number | undefined
+    const onVisibilityChange = () => {
+      if (!openSession.visibilityChanged(document.visibilityState)) return
+      // A standalone surface window is retained while hidden. A genuine reopen
+      // starts a fresh browsing session without treating ordinary blur, dialogs,
+      // or an internal preview return as a new open.
+      resetHistoryOpenSession({
+        invalidatePasteNotice: () => { pasteNoticeGenerationRef.current += 1 },
+        clearPasteNotice: () => setPasteNotice(null),
+        clearSelection: () => setSelectedId(null),
+        resetPage: () => setPagePath({ key: '', cursors: [undefined] }),
+        clearNextCursor: () => setNextCursor(undefined),
+        resetScroll: () => listRef.current?.scrollTo({ top: 0 }),
+        clearDomSelection: () => window.getSelection()?.removeAllRanges(),
+        suspendPointerHover,
+        refreshPage,
+        focusSearch: () => { focusFrame = requestAnimationFrame(() => searchRef.current?.focus()) },
+      })
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      if (focusFrame !== undefined) cancelAnimationFrame(focusFrame)
+    }
+  }, [openSession, refreshPage, suspendPointerHover])
   const selectListItem = useCallback((id: string) => {
     setSelectedId(id)
     // Rows are virtualized. Their button must not own keyboard focus when a
