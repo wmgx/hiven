@@ -4,6 +4,7 @@
 //! held only for the matching active session and sent only to the HUD window.
 
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{Emitter, Manager};
@@ -16,6 +17,7 @@ const ACTIVE_READING_LIFETIME_MS: u64 = 120_000;
 const MAX_PREVIEW_CHARS: usize = 512;
 const MAX_FULL_TEXT_CHARS: usize = 1_000_000;
 const MAX_SESSION_ID_BYTES: usize = 128;
+const MAX_DISMISSED_SESSIONS: usize = 32;
 const PASSIVE_WIDTH: f64 = 420.0;
 const PASSIVE_HEIGHT: f64 = 168.0;
 const ACTIVE_HEIGHT: f64 = 480.0;
@@ -167,6 +169,7 @@ impl FocusLease {
 #[derive(Default)]
 struct State {
     current: Option<Snapshot>,
+    dismissed_session_ids: VecDeque<String>,
     full_text: Option<(String, u64, String)>,
     generation: u64,
     ready: bool,
@@ -186,6 +189,13 @@ impl State {
         now: u64,
     ) -> Result<bool, &'static str> {
         validate_snapshot(&snapshot, now)?;
+        if self
+            .dismissed_session_ids
+            .iter()
+            .any(|session_id| session_id == &snapshot.session_id)
+        {
+            return Ok(false);
+        }
         if let Some(current) = self.current.as_ref() {
             if current.session_id == snapshot.session_id && snapshot.revision <= current.revision {
                 return Ok(false);
@@ -266,16 +276,30 @@ impl State {
         Some(expires_at)
     }
 
-    fn focus_changed(&mut self, focused: bool) {
+    fn focus_changed(&mut self, focused: bool, now: u64) -> Option<ActionRequest> {
         if !self.active {
-            return;
+            return None;
         }
         if focused {
             self.active_focused = true;
-        } else if self.active_focused {
-            self.restore_allowed = false;
-            self.lease = None;
+            return None;
         }
+        if !self.active_focused {
+            return None;
+        }
+        self.active_focused = false;
+        self.restore_allowed = false;
+        self.lease = None;
+        let current = self.current.as_ref()?;
+        if self.action_sent || current.expires_at <= now {
+            return None;
+        }
+        self.action_sent = true;
+        Some(ActionRequest {
+            session_id: current.session_id.clone(),
+            revision: current.revision,
+            action: Action::Close,
+        })
     }
 
     fn activation_failed(&mut self) -> Option<FocusLease> {
@@ -337,6 +361,16 @@ impl State {
             .then(|| self.lease.take())
             .flatten();
         self.current = None;
+        if !self
+            .dismissed_session_ids
+            .iter()
+            .any(|dismissed| dismissed == session_id)
+        {
+            self.dismissed_session_ids.push_back(session_id.to_owned());
+            if self.dismissed_session_ids.len() > MAX_DISMISSED_SESSIONS {
+                self.dismissed_session_ids.pop_front();
+            }
+        }
         self.generation = self.generation.saturating_add(1);
         self.active = false;
         self.active_focused = false;
@@ -437,10 +471,20 @@ fn ensure_window(app: &tauri::AppHandle) -> Result<(), String> {
     window
         .remove_menu()
         .map_err(|_| "translation-hud-unavailable")?;
+    let handle = app.clone();
     window.on_window_event(move |event| match event {
         tauri::WindowEvent::Focused(focused) => {
-            if let Ok(mut state) = state().lock() {
-                state.focus_changed(*focused);
+            let request = state()
+                .lock()
+                .ok()
+                .and_then(|mut state| state.focus_changed(*focused, now()));
+            if let Some(request) = request {
+                let session_id = request.session_id.clone();
+                let _ = handle.emit_to("launcher", ACTION_EVENT, request);
+                // Focus loss owns cancellation of this native session. A newer
+                // provider revision may land between the two state locks, so
+                // cleanup must not be scoped to the emitted revision.
+                let _ = dismiss_on_main(&handle, &session_id, u64::MAX);
             }
         }
         tauri::WindowEvent::Destroyed => {
@@ -841,10 +885,89 @@ mod tests {
         state.restore_allowed = true;
         assert!(state.action("one", 3, Action::Copy, 100).is_some());
         assert!(state.action("one", 3, Action::Copy, 100).is_none());
-        state.focus_changed(false);
+        assert!(state.focus_changed(false, 100).is_none());
         assert!(!state.restore_allowed);
         assert!(state.take_for_dismiss("one", 3, true).is_none());
         assert!(state.current.is_none());
+    }
+
+    #[test]
+    fn confirmed_active_focus_loss_requests_close_once() {
+        let mut state = State::default();
+        // The native activation flag is authoritative: the JS active snapshot
+        // may still be in flight when the user immediately switches away.
+        state.current = Some(snapshot("one", 3, 200));
+        state.active = true;
+        state.restore_allowed = true;
+
+        assert!(state.focus_changed(false, 100).is_none());
+        assert!(state.focus_changed(true, 100).is_none());
+        let request = state.focus_changed(false, 100).unwrap();
+        assert_eq!(request.session_id, "one");
+        assert_eq!(request.revision, 3);
+        assert_eq!(request.action, Action::Close);
+        assert!(!state.restore_allowed);
+        assert!(state.focus_changed(false, 100).is_none());
+    }
+
+    #[test]
+    fn dismissed_session_cannot_be_reopened_by_late_updates() {
+        let mut state = State::default();
+        let mut active = snapshot("one", 3, 200);
+        active.phase = Phase::Active;
+        state.current = Some(active);
+        state.active = true;
+        assert!(state.take_for_dismiss("one", 3, false).is_none());
+
+        assert!(!state.present(snapshot("one", 4, 200), None, 100).unwrap());
+        assert!(state.present(snapshot("two", 1, 200), None, 100).unwrap());
+        assert!(!state.present(snapshot("one", 5, 200), None, 100).unwrap());
+        assert_eq!(
+            state
+                .current
+                .as_ref()
+                .map(|snapshot| snapshot.session_id.as_str()),
+            Some("two")
+        );
+    }
+
+    #[test]
+    fn focus_loss_cleanup_accepts_a_revision_that_arrived_after_the_close_request() {
+        let mut state = State::default();
+        let mut current = snapshot("one", 3, 200);
+        current.phase = Phase::Active;
+        state.current = Some(current);
+        state.active = true;
+        state.active_focused = true;
+
+        assert_eq!(state.focus_changed(false, 100).unwrap().revision, 3);
+        let mut newer = snapshot("one", 4, 200);
+        newer.phase = Phase::Active;
+        assert!(state
+            .present(newer, Some("newer result".into()), 100)
+            .unwrap());
+        assert!(state.take_for_dismiss("one", u64::MAX, false).is_none());
+        assert!(state.current.is_none());
+        assert!(!state.present(snapshot("one", 5, 200), None, 100).unwrap());
+    }
+
+    #[test]
+    fn dismissed_session_tombstones_are_bounded_and_keep_the_newest() {
+        let mut state = State::default();
+        for index in 0..=MAX_DISMISSED_SESSIONS {
+            let session_id = format!("session-{index}");
+            state.current = Some(snapshot(&session_id, 1, 200));
+            assert!(state.take_for_dismiss(&session_id, 1, false).is_none());
+        }
+        assert_eq!(state.dismissed_session_ids.len(), MAX_DISMISSED_SESSIONS);
+        assert!(!state
+            .dismissed_session_ids
+            .iter()
+            .any(|id| id == "session-0"));
+        assert!(state
+            .dismissed_session_ids
+            .iter()
+            .any(|id| id == &format!("session-{MAX_DISMISSED_SESSIONS}")));
     }
 
     #[test]
