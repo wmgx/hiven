@@ -167,6 +167,28 @@ export function createPluginPrivateStorage(
         }
       },
 
+      async getMany<T = unknown>(keys: readonly string[]): Promise<Array<{ key: string; value: T }>> {
+        requireKv()
+        if (keys.length === 0) return []
+        if (keys.length > 128) throw new Error('Plugin KV batch read is limited to 128 keys')
+        const result = isTauri()
+          ? await invoke<Array<{ key: string; valueJson: string }>>('plugin_kv_get_many', { source, pluginId, keys })
+          : keys.flatMap((key) => {
+              const valueJson = localStorage.getItem(kvKey(source, pluginId, key))
+              return valueJson === null ? [] : [{ key, valueJson }]
+            })
+        return result.flatMap(({ key, valueJson }) => {
+          try { return [{ key, value: JSON.parse(valueJson) as T }] } catch { return [] }
+        })
+      },
+
+      async relatedSearch<T = unknown>(options: import('./pluginTypes').PluginKvRelatedSearchOptions) {
+        requireKv()
+        if (!isTauri()) throw new Error('Bounded storage search requires native storage')
+        const result = await invoke<{ entries: Array<{ key: string; valueJson: string }>; nextCursor?: string; scanned: number }>('plugin_kv_related_search', { source, pluginId, options })
+        return { ...result, entries: result.entries.map(({ key, valueJson }) => ({ key, value: JSON.parse(valueJson) as T })) }
+      },
+
       async set<T = unknown>(key: string, value: T): Promise<void> {
         requireKv()
         const valueJson = JSON.stringify(value)

@@ -100,13 +100,23 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
     const items: ClipboardHistoryItem[] = []
     let cursor = request.cursor
     let scanned = 0
-    while (scanned < 512 && items.length < limit) {
+    while (scanned < 2048 && items.length < limit) {
       requireCurrent(request.signal)
-      const page = await storage.kv.page<HistoryMetadata | TrashRecord>({ prefix, after: cursor, limit: Math.min(32, limit - items.length) })
+      const query = request.query?.trim()
+      const page = query && prefix !== TRASH
+        ? await storage.kv.relatedSearch<HistoryMetadata>({
+            indexPrefix: prefix, valuePrefix: ITEM, after: cursor,
+            limit: Math.min(100, Math.max(32, limit - items.length)), scanLimit: 2048 - scanned,
+            query: query.toLowerCase(), idPath: '$.id',
+            indexPaths: ['$.favoriteTitle', '$.preview', '$.contentType', '$.width', '$.height', '$.fileNames'],
+            indexPathGroups: [['$.contentType', '$.width', '$.height']],
+            valuePaths: ['$.text'],
+          })
+        : await storage.kv.page<HistoryMetadata | TrashRecord>({ prefix, after: cursor, limit: Math.min(100, Math.max(32, limit - items.length)) })
+      const candidates: Array<{ meta: HistoryMetadata; lite: ClipboardHistoryItem; trash?: TrashRecord }> = []
       for (const row of page.entries) {
         requireCurrent(request.signal)
         cursor = row.key
-        scanned++
         const trash = request.filter === 'trash' ? row.value as TrashRecord : undefined
         const meta = trash ? trash.metadata : row.value as HistoryMetadata
         if (request.filter === 'favorites' && !meta.isFavorite) continue
@@ -114,11 +124,44 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
         if (['text', 'image', 'files'].includes(request.filter ?? '') && meta.kind !== request.filter) continue
         const lite = indexToListItems({ entries: [meta], updatedAt: 0 })[0]
         if (!lite) continue
-        if (request.query?.trim() && !matchesClipboardHistorySearch(lite, request.query)) {
-          if (lite.kind !== 'text') continue
-          const full = await storage.kv.get<ClipboardHistoryItem>(ITEM + meta.id)
+        candidates.push({ meta, lite, trash })
+      }
+      scanned += 'scanned' in page ? page.scanned : page.entries.length
+      // Native search deliberately returns a broad Unicode candidate set.
+      // Reapply the existing JS matcher to every candidate so case expansion
+      // (for example Straße/SS) and composite-field spacing stay exact.
+      const bodyKeys = query ? candidates
+        .filter(({ lite }) => lite.kind === 'text' && !matchesClipboardHistorySearch(lite, query))
+        .map(({ meta }) => ({ key: ITEM + meta.id, byteSize: meta.byteSize })) : []
+      const bodies = new Map<string, ClipboardHistoryItem>()
+      let bodyChunk: string[] = []; let bodyChunkBytes = 0
+      const flushBodies = async () => {
+        if (!bodyChunk.length) return
+        for (const entry of await storage.kv.getMany<ClipboardHistoryItem>(bodyChunk)) bodies.set(entry.key, entry.value)
+        requireCurrent(request.signal)
+        bodyChunk = []; bodyChunkBytes = 0
+      }
+      for (const body of bodyKeys) {
+        // JSON escaping can expand text substantially; keep the raw-text
+        // budget well below the native 16 MiB response ceiling.
+        if (body.byteSize > 2 * 1024 * 1024) {
+          await flushBodies()
+          const value = await storage.kv.get<ClipboardHistoryItem>(body.key)
           requireCurrent(request.signal)
-          if (!full || !matchesClipboardHistorySearch(full, request.query)) continue
+          if (value) bodies.set(body.key, value)
+          continue
+        }
+        if (bodyChunk.length === 32 || bodyChunkBytes + body.byteSize > 2 * 1024 * 1024) await flushBodies()
+        bodyChunk.push(body.key); bodyChunkBytes += body.byteSize
+      }
+      await flushBodies()
+      requireCurrent(request.signal)
+      for (const { meta, lite, trash } of candidates) {
+        if (items.length >= limit) break
+        if (query && !matchesClipboardHistorySearch(lite, query)) {
+          if (lite.kind !== 'text') continue
+          const full = bodies.get(ITEM + meta.id)
+          if (!full || !matchesClipboardHistorySearch(full, query)) continue
         }
         items.push({ ...lite, ...(trash ? { deletedAt: trash.deletedAt, purgeAfter: trash.purgeAfter } : {}), legacyProtected: meta.legacy === true && !legacyEnabled })
       }

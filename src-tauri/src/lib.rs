@@ -6050,6 +6050,40 @@ fn plugin_kv_get(source: String, plugin_id: String, key: String) -> Result<Optio
         .map_err(|e| e.to_string())
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PluginKvGetManyEntry {
+    key: String,
+    value_json: String,
+}
+
+#[tauri::command]
+fn plugin_kv_get_many(source: String, plugin_id: String, keys: Vec<String>) -> Result<Vec<PluginKvGetManyEntry>, String> {
+    validate_plugin_kv_namespace(&source, &plugin_id)?;
+    if keys.len() > 128 {
+        return Err("Plugin KV batch read is limited to 128 keys".to_string());
+    }
+    for key in &keys { validate_plugin_kv_key(key)?; }
+    let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
+    let mut statement = db.connection
+        .prepare("SELECT value_json FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2 AND key = ?3")
+        .map_err(|e| e.to_string())?;
+    let mut entries = Vec::with_capacity(keys.len());
+    let mut bytes = 0usize;
+    for key in keys {
+        let value_json = statement
+            .query_row(params![source, plugin_id, key], |row| row.get::<_, String>(0))
+            .optional()
+            .map_err(|e| e.to_string())?;
+        if let Some(value_json) = value_json {
+            bytes = bytes.checked_add(key.len() + value_json.len()).ok_or("Plugin KV batch read is too large")?;
+            if bytes > 16 * 1024 * 1024 { return Err("Plugin KV batch read exceeds 16 MiB".to_string()); }
+            entries.push(PluginKvGetManyEntry { key, value_json });
+        }
+    }
+    Ok(entries)
+}
+
 #[tauri::command]
 fn plugin_kv_set(
     source: String,
@@ -6146,6 +6180,13 @@ fn plugin_kv_array_page(source: String, plugin_id: String, options: plugin_kv_pa
     validate_plugin_kv_namespace(&source, &plugin_id)?;
     let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
     plugin_kv_paging::array_page(&db.connection, &source, &plugin_id, options)
+}
+
+#[tauri::command]
+fn plugin_kv_related_search(source: String, plugin_id: String, options: plugin_kv_paging::RelatedSearchOptions) -> Result<plugin_kv_paging::RelatedSearchPage, String> {
+    validate_plugin_kv_namespace(&source, &plugin_id)?;
+    let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
+    plugin_kv_paging::related_search(&db.connection, &source, &plugin_id, options)
 }
 
 #[tauri::command]
@@ -7782,11 +7823,13 @@ pub fn run() {
             read_plugin_file,
             save_plugin_file,
             plugin_kv_get,
+            plugin_kv_get_many,
             plugin_kv_set,
             plugin_kv_delete,
             plugin_kv_list,
             plugin_kv_page,
             plugin_kv_array_page,
+            plugin_kv_related_search,
             plugin_kv_batch,
             plugin_kv_usage,
             plugin_kv_prune,

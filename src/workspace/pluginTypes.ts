@@ -529,6 +529,9 @@ export type PluginStoragePrunePolicy = {
 /** New bounded/transactional methods require native storage; permissions remain storage.private. */
 export type PluginKvPageOptions = { prefix: string; after?: string; limit?: number; order?: 'asc' | 'desc' }
 export type PluginKvPage<T> = { entries: Array<{ key: string; value: T; updatedAt: number }>; nextCursor?: string }
+export type PluginKvGetManyEntry<T> = { key: string; value: T }
+export type PluginKvRelatedSearchOptions = { indexPrefix: string; valuePrefix: string; after?: string; limit?: number; scanLimit?: number; query: string; idPath: string; indexPaths: string[]; indexPathGroups?: string[][]; valuePaths: string[] }
+export type PluginKvRelatedSearchPage<T> = { entries: Array<{ key: string; value: T }>; nextCursor?: string; scanned: number }
 export type PluginKvArrayPageOptions = { key: string; path: string; afterIndex?: number; limit?: number }
 export type PluginKvArrayPage<T> = { entries: Array<{ index: number; value: T }>; nextIndex?: number }
 export type PluginKvBatch = {
@@ -540,6 +543,10 @@ export type PluginKvBatch = {
 export type PluginPrivateStorageApi = {
   kv: {
     get<T = unknown>(key: string): Promise<T | undefined>
+    /** One bounded native round trip. Missing keys are omitted; input order is preserved. */
+    getMany<T = unknown>(keys: readonly string[]): Promise<Array<PluginKvGetManyEntry<T>>>
+    /** Search selected JSON string fields while traversing a key-ordered lightweight index. */
+    relatedSearch<T = unknown>(options: PluginKvRelatedSearchOptions): Promise<PluginKvRelatedSearchPage<T>>
     set<T = unknown>(key: string, value: T): Promise<void>
     delete(key: string): Promise<void>
     list(prefix?: string): Promise<Array<{ key: string; updatedAt: number }>>

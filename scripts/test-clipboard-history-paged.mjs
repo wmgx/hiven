@@ -26,9 +26,14 @@ try {
   assert.ok(memory.stats.maxArrayPage <= 8)
   assert.ok(memory.stats.maxPage <= 100)
   let cursor, matched = []
+  const singleBodyGetsBeforeSearch = memory.stats.gets.filter((key) => key.startsWith('history/items/')).length
   do { const page = await repo.getPage({ query: 'UNIQUE-legacy-0619', cursor }); matched.push(...page.items); cursor = page.nextCursor } while (cursor)
   assert.equal(matched[0].id, 'legacy-0619', 'search matches full text beyond preview without caching all full texts')
   assert.equal(matched[0].text, '', 'search result remains lightweight')
+  assert.equal(memory.stats.gets.filter((key) => key.startsWith('history/items/')).length, singleBodyGetsBeforeSearch, 'full-text search never falls back to per-record KV reads')
+  assert.ok(memory.stats.relatedSearches > 0)
+  assert.ok(memory.stats.getMany.length <= 1 && memory.stats.getMany.every((keys) => keys.length <= 32), 'active full-text verification uses at most one bounded candidate batch')
+  assert.equal((await repo.getPage({ query: 'definitely-absent' })).items.length, 0)
   assert.equal((await repo.getFreshListItems(['legacy-0619', 'legacy-0000'])).length, 2, 'cross-page explicit selected IDs validate')
   assert.equal((await repo.getRetentionStatus()).legacyProtectedCount, 621)
   const unchangedRevision = memory.data.get('history/v2/state').revision
@@ -152,5 +157,32 @@ try {
   assert.deepEqual(cancelled.deletedBlobs, [])
   const abort = new AbortController(); abort.abort()
   await assert.rejects(repo.getPage({ signal: abort.signal }), /cancelled/)
+  const unicodeMemory = syntheticHistoryStorage(); const unicodeRepo = create(unicodeMemory.storage)
+  const unicode = await unicodeRepo.addItem({ kind: 'text', text: 'prefix '.repeat(40) + '中文检索 CAFÉ Straße ΟΣ', hash: 'unicode-search', byteSize: 320 })
+  assert.equal((await unicodeRepo.getPage({ query: '中文检索' })).items.some(({ id }) => id === unicode.id), true)
+  assert.equal((await unicodeRepo.getPage({ query: 'café' })).items.some(({ id }) => id === unicode.id), true, 'batching preserves JavaScript Unicode lowercase matching')
+  assert.equal((await unicodeRepo.getPage({ query: '\uFEFFος\uFEFF' })).items.some(({ id }) => id === unicode.id), true, 'JS trim and contextual lowercase semantics remain authoritative')
+  assert.equal((await unicodeRepo.getPage({ query: 'ss' })).items.some(({ id }) => id === unicode.id), false, 'Unicode uppercase expansion does not change JavaScript search semantics')
+  const compositeImage = await unicodeRepo.addItem({ kind: 'image', blobId: 'composite-image', previewBlobId: 'composite-image', contentType: 'image/png', width: 640, height: 480, hash: 'composite-image', byteSize: 10 })
+  assert.equal((await unicodeRepo.getPage({ query: 'image/png 640' })).items.some(({ id }) => id === compositeImage.id), true, 'image composite-field search semantics remain intact')
+  assert.equal((await unicodeRepo.getPage({ query: '640 480' })).items.some(({ id }) => id === compositeImage.id), true)
+  const partialImage = await unicodeRepo.addItem({ kind: 'image', blobId: 'partial-image', previewBlobId: 'partial-image', contentType: 'image/png', height: 480, hash: 'partial-image', byteSize: 10 })
+  assert.equal((await unicodeRepo.getPage({ query: 'image/png 480' })).items.some(({ id }) => id === partialImage.id), false, 'missing composite fields retain their semantic spacing')
+  const longMemory = syntheticHistoryStorage(); const longRepo = create(longMemory.storage)
+  for (let index = 0; index < 100; index++) {
+    const text = `Straße ${index} ${'x'.repeat(260_000)}`
+    await longRepo.addItem({ kind: 'text', text, hash: `long-${index}`, byteSize: text.length })
+  }
+  for (let index = 0; index < 10; index++) {
+    const text = `Straße escaped ${index} ${'\0'.repeat(300_000)}`
+    await longRepo.addItem({ kind: 'text', text, hash: `escaped-${index}`, byteSize: text.length })
+  }
+  assert.equal((await longRepo.getPage({ query: 'ss' })).items.length, 0, 'broad native candidates are always verified with exact JavaScript semantics')
+  assert.ok(longMemory.stats.getMany.length >= 4 && longMemory.stats.getMany.every((keys) => keys.length <= 32), 'large candidate body reads stay under bounded batch size')
+  assert.ok(longMemory.stats.getMany.every((keys) => keys.reduce((bytes, key) => bytes + JSON.stringify(longMemory.data.get(key)).length, 0) < 16 * 1024 * 1024), 'escaped candidate bodies stay below the native response ceiling')
+  await unicodeRepo.deleteItem(unicode.id)
+  unicodeMemory.stats.getMany.length = 0
+  assert.equal((await unicodeRepo.getPage({ filter: 'trash', query: '中文检索' })).items.some(({ id }) => id === unicode.id), true)
+  assert.ok(unicodeMemory.stats.getMany.length > 0, 'trash full-text fallback uses a bounded batch read')
   console.log('History v2: bounded migration/pages/search, legacy protection, UTC calendar retention, recovery, CAS faults/concurrency, and shared image cleanup passed (synthetic only)')
 } finally { Date.now = realNow }

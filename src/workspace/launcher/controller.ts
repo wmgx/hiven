@@ -166,6 +166,8 @@ export type LauncherControllerDeps = {
 const emptyStorage: PluginPrivateStorageApi = {
   kv: {
     get: async () => undefined,
+    getMany: async () => [],
+    relatedSearch: async () => { throw new Error('Storage unavailable') },
     set: async () => {},
     delete: async () => {},
     list: async () => [],

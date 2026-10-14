@@ -15,12 +15,37 @@ const clone = (value) => value === undefined ? undefined : JSON.parse(JSON.strin
 export function syntheticHistoryStorage() {
   const data = new Map()
   const deletedBlobs = []
-  const stats = { maxPage: 0, maxArrayPage: 0, gets: [], batches: 0 }
+  const stats = { maxPage: 0, maxArrayPage: 0, gets: [], getMany: [], relatedSearches: 0, batches: 0 }
   let rejectBatch
   let rejectBlob = false
   const storage = {
     kv: {
       get: async (key) => { stats.gets.push(key); return clone(data.get(key)) },
+      getMany: async (keys) => {
+        stats.getMany.push([...keys])
+        return keys.flatMap((key) => data.has(key) ? [{ key, value: clone(data.get(key)) }] : [])
+      },
+      relatedSearch: async ({ indexPrefix, valuePrefix, after, limit = 64, scanLimit = 512, query, idPath, indexPaths, indexPathGroups = [], valuePaths }) => {
+        stats.relatedSearches++
+        const keys = [...data.keys()].filter((key) => key.startsWith(indexPrefix) && (!after || key > after)).sort()
+        const normalized = query.trim().toLowerCase()
+        const upper = normalized.toUpperCase()
+        const at = (value, jsonPath) => jsonPath.slice(2).split('.').reduce((current, field) => current?.[field], value)
+        const matches = (value) => Array.isArray(value) ? value.some(matches) : (typeof value === 'string' || typeof value === 'number') && (String(value).toLowerCase().includes(normalized) || String(value).toUpperCase().includes(upper))
+        const entries = []
+        const scannedKeys = keys.slice(0, scanLimit)
+        let lastKey
+        for (const key of scannedKeys) {
+          lastKey = key
+          const index = data.get(key)
+          const related = data.get(valuePrefix + at(index, idPath))
+          const groups = indexPathGroups.map((paths) => paths.map((path) => at(index, path)).filter((value) => typeof value === 'string' || typeof value === 'number').join(' '))
+          if ([...indexPaths.map((path) => at(index, path)), ...groups, ...valuePaths.map((path) => at(related, path))].some(matches)) entries.push({ key, value: clone(index) })
+          if (entries.length === limit) break
+        }
+        const consumed = lastKey ? keys.indexOf(lastKey) + 1 : 0
+        return { entries, scanned: consumed, ...(consumed < keys.length ? { nextCursor: lastKey } : {}) }
+      },
       set: async (key, value) => { data.set(key, clone(value)) },
       delete: async (key) => { data.delete(key) },
       list: async () => { throw new Error('Unbounded list forbidden') },

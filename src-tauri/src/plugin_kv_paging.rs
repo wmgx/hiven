@@ -29,6 +29,27 @@ pub(crate) struct Page {
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct RelatedSearchOptions {
+    index_prefix: String,
+    value_prefix: String,
+    after: Option<String>,
+    limit: Option<usize>,
+    scan_limit: Option<usize>,
+    query: String,
+    id_path: String,
+    index_paths: Vec<String>,
+    #[serde(default)]
+    index_path_groups: Vec<Vec<String>>,
+    value_paths: Vec<String>,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RelatedSearchEntry { key: String, value_json: String }
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RelatedSearchPage { entries: Vec<RelatedSearchEntry>, next_cursor: Option<String>, scanned: usize }
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct ArrayPageOptions {
     key: String,
     path: String,
@@ -103,6 +124,124 @@ fn prefix_upper(prefix: &str) -> Option<String> {
         }
     }
     None
+}
+
+fn json_path<'a>(value: &'a serde_json::Value, path: &str) -> Option<&'a serde_json::Value> {
+    if path == "$" { return Some(value); }
+    if !valid_json_path(path) { return None; }
+    let mut current = value;
+    for field in path[2..].split('.') {
+        if field.is_empty() || !field.bytes().enumerate().all(|(i, c)| c.is_ascii_alphabetic() || c == b'_' || (i > 0 && c.is_ascii_digit())) { return None; }
+        current = current.get(field)?;
+    }
+    Some(current)
+}
+
+fn valid_json_path(path: &str) -> bool {
+    path == "$" || (path.starts_with("$.") && path.len() <= 512 && path[2..].split('.').all(|field| !field.is_empty() && field.bytes().enumerate().all(|(i, c)| c.is_ascii_alphabetic() || c == b'_' || (i > 0 && c.is_ascii_digit()))))
+}
+
+fn contains_literal(value: &serde_json::Value, query: &str, query_upper: &str) -> bool {
+    match value {
+        serde_json::Value::String(text) => text.to_lowercase().contains(query) || text.to_uppercase().contains(query_upper),
+        serde_json::Value::Array(values) => values.iter().any(|value| contains_literal(value, query, query_upper)),
+        serde_json::Value::Number(number) => number.to_string().to_lowercase().contains(query),
+        _ => false,
+    }
+}
+
+pub(crate) fn related_search(db: &Connection, source: &str, plugin: &str, options: RelatedSearchOptions) -> Result<RelatedSearchPage, String> {
+    let result_limit = limit(options.limit)?;
+    let scan_limit = options.scan_limit.unwrap_or(512);
+    if scan_limit == 0 || scan_limit > 2048 { return Err("Plugin KV search scan limit must be 1–2048".into()); }
+    if options.index_prefix.contains('\0') || options.value_prefix.contains('\0') || options.index_prefix.len() > 2048 || options.value_prefix.len() > 2048 { return Err("Invalid plugin KV search prefix".into()); }
+    if let Some(after) = &options.after { key(after)?; if !after.starts_with(&options.index_prefix) { return Err("Cursor is outside the search index prefix".into()); } }
+    if !valid_json_path(&options.id_path) || options.index_paths.iter().chain(options.value_paths.iter()).any(|path| !valid_json_path(path)) || options.index_path_groups.iter().flatten().any(|path| !valid_json_path(path)) { return Err("Invalid plugin KV search path".into()); }
+    if options.index_paths.len() > 16 || options.value_paths.len() > 16 || options.index_path_groups.len() > 8 || options.index_path_groups.iter().any(|paths| paths.len() > 8) { return Err("Too many plugin KV search paths".into()); }
+    let query = options.query.trim().to_lowercase();
+    let query_upper = query.to_uppercase();
+    if query.is_empty() { return Err("Plugin KV search query is empty".into()); }
+    let upper = prefix_upper(&options.index_prefix);
+    let sql = "SELECT i.key, i.value_json, v.value_json FROM plugin_kv i LEFT JOIN plugin_kv v ON v.source=i.source AND v.plugin_id=i.plugin_id AND v.key=(?4 || json_extract(i.value_json, ?5)) WHERE i.source=?1 AND i.plugin_id=?2 AND i.key>=?3 AND (?6 IS NULL OR i.key<?6) AND (?7 IS NULL OR i.key>?7) ORDER BY i.key ASC LIMIT ?8";
+    let mut statement = db.prepare(sql).map_err(|e| e.to_string())?;
+    let mut rows = statement.query(params![source, plugin, options.index_prefix, options.value_prefix, options.id_path, upper, options.after, (scan_limit + 1) as i64]).map_err(|e| e.to_string())?;
+    let mut entries = Vec::new();
+    let mut scanned = 0usize;
+    let mut last_key = None;
+    let mut has_more = false;
+    let mut bytes = 0usize;
+    while let Some(row) = rows.next().map_err(|e| e.to_string())? {
+        if scanned == scan_limit { has_more = true; break; }
+        let item_key: String = row.get(0).map_err(|e| e.to_string())?;
+        let index_json: String = row.get(1).map_err(|e| e.to_string())?;
+        let related_json: Option<String> = row.get(2).map_err(|e| e.to_string())?;
+        let index_value: serde_json::Value = serde_json::from_str(&index_json).map_err(|e| e.to_string())?;
+        let index_match = options.index_paths.iter().filter_map(|path| json_path(&index_value, path)).any(|value| contains_literal(value, &query, &query_upper));
+        let group_match = options.index_path_groups.iter().any(|paths| {
+            let combined = paths.iter().filter_map(|path| json_path(&index_value, path)).filter_map(|value| match value {
+                serde_json::Value::String(text) => Some(text.clone()),
+                serde_json::Value::Number(number) => Some(number.to_string()),
+                _ => None,
+            }).collect::<Vec<_>>().join(" ");
+            combined.to_lowercase().contains(&query) || combined.to_uppercase().contains(&query_upper)
+        });
+        let related_match = if index_match || group_match { false } else if let Some(raw) = related_json {
+            let value: serde_json::Value = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+            options.value_paths.iter().filter_map(|path| json_path(&value, path)).any(|value| contains_literal(value, &query, &query_upper))
+        } else { false };
+        if index_match || group_match || related_match {
+            let entry_bytes = item_key.len() + index_json.len();
+            if bytes + entry_bytes > MAX_BYTES {
+                if entries.is_empty() { return Err("Plugin KV search value exceeds page byte limit".into()); }
+                has_more = true;
+                break;
+            }
+            bytes += entry_bytes;
+            entries.push(RelatedSearchEntry { key: item_key.clone(), value_json: index_json });
+        }
+        scanned += 1;
+        last_key = Some(item_key);
+        if entries.len() == result_limit { has_more = true; break; }
+    }
+    Ok(RelatedSearchPage { entries, next_cursor: if has_more { last_key } else { None }, scanned })
+}
+
+#[cfg(test)]
+mod related_search_tests {
+    use super::*;
+
+    fn database() -> Connection {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch("CREATE TABLE plugin_kv(source TEXT, plugin_id TEXT, key TEXT, value_json TEXT, updated_at INTEGER, PRIMARY KEY(source,plugin_id,key));").unwrap();
+        db
+    }
+    fn put(db: &Connection, key: &str, value: serde_json::Value) {
+        db.execute("INSERT INTO plugin_kv VALUES('builtin','clipboard-history',?1,?2,0)", params![key, value.to_string()]).unwrap();
+    }
+    fn options(query: &str) -> RelatedSearchOptions {
+        RelatedSearchOptions { index_prefix: "history/v2/order/".into(), value_prefix: "history/items/".into(), after: None, limit: Some(100), scan_limit: Some(512), query: query.into(), id_path: "$.id".into(), index_paths: vec!["$.preview".into()], index_path_groups: vec![vec!["$.contentType".into(), "$.width".into(), "$.height".into()]], value_paths: vec!["$.text".into()] }
+    }
+    #[test]
+    fn searches_related_unicode_and_preserves_index_cursor_order() {
+        let db = database();
+        put(&db, "history/v2/order/001/a", serde_json::json!({"id":"a","preview":"short"}));
+        put(&db, "history/items/a", serde_json::json!({"text":"long 中文 CAFÉ"}));
+        put(&db, "history/v2/order/002/b", serde_json::json!({"id":"b","preview":"none"}));
+        put(&db, "history/items/b", serde_json::json!({"text":"absent"}));
+        let page = related_search(&db, "builtin", "clipboard-history", options("café")).unwrap();
+        assert_eq!(page.scanned, 2);
+        assert_eq!(page.entries.len(), 1);
+        assert_eq!(page.entries[0].key, "history/v2/order/001/a");
+        assert!(page.next_cursor.is_none());
+    }
+    #[test]
+    fn supports_composite_fields_and_rejects_invalid_paths() {
+        let db = database();
+        put(&db, "history/v2/order/001/image", serde_json::json!({"id":"image","contentType":"image/png","width":640,"height":480}));
+        assert_eq!(related_search(&db, "builtin", "clipboard-history", options("640 480")).unwrap().entries.len(), 1);
+        let mut invalid = options("x"); invalid.id_path = "$[*]".into();
+        assert!(related_search(&db, "builtin", "clipboard-history", invalid).is_err());
+    }
 }
 
 pub(crate) fn page(
