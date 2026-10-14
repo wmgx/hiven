@@ -1,5 +1,5 @@
 {
-  "version": 147,
+  "version": 148,
   "packages": [
     {
       "pluginId": "encode-decode",
@@ -14,7 +14,7 @@
     {
       "pluginId": "json-tools",
       "dir": "json-tools",
-      "version": "2.6.1"
+      "version": "2.7.0"
     },
     {
       "pluginId": "line-tools",

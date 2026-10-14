@@ -108,5 +108,11 @@
   "error.urlRequired": "请输入一条完整 HTTP(S) URL，不含未编码空格或换行。",
   "error.urlTooLarge": "URL 超过 262,144 个字符，未截断或修改。",
   "error.urlTooManyParameters": "最多支持 1,000 个参数，未截断或修改。",
-  "error.urlInvalidText": "参数含未完整输入的 Unicode 字符，请完成输入后重试。"
+  "error.urlInvalidText": "参数含未完整输入的 Unicode 字符，请完成输入后重试。",
+  "route.typescript": "JSON → TypeScript 类型",
+  "operation.typescript": "TypeScript 类型",
+  "typescript.observed": "类型仅描述此样例，不代表 API 契约。",
+  "error.typeDuplicateKey": "JSON 含有重复键，无法可靠推断。请修正后重试。",
+  "error.typeInvalidJson": "请输入有效 JSON 后生成 TypeScript 类型。",
+  "error.typeLimit": "类型推断最多支持 128 KiB UTF-8 输入、64 层嵌套、20,000 个节点和 512 KiB 输出。未抽样或截断。"
 }

@@ -1,3 +1,4 @@
+import { inferJsonType, JsonTypeInferenceError } from './jsonTypeInference'
 import jsYaml from 'js-yaml'
 import { parseUrlQuery, UrlQueryError, type UrlQueryErrorCode } from './urlQueryCore'
 import { getPluginHostSdk } from '@hiven/plugin'
@@ -6,6 +7,7 @@ const { formatJson, compactJson, hasJsonNumberRisk } = getPluginHostSdk().kits.t
 export const { sortKeys } = getPluginHostSdk().kits.textTransforms
 
 export type JsonOperation =
+  | 'typescript'
   | 'format'
   | 'compact'
   | 'sort'
@@ -29,7 +31,7 @@ export type JsonProcessResult =
   | { ok: true; output: string }
   | { ok: false; message: string; code?: JsonCoreErrorCode }
 
-export type JsonCoreErrorCode = UrlQueryErrorCode | 'objectRequired' | 'stringRequired' | 'expressionRequired' | 'finiteNumberRequired' | 'numberFidelity'
+export type JsonCoreErrorCode = UrlQueryErrorCode | 'typeDuplicateKey' | 'typeLimit' | 'typeInvalidJson' | 'objectRequired' | 'stringRequired' | 'expressionRequired' | 'finiteNumberRequired' | 'numberFidelity'
 
 export class JsonCoreError extends Error {
   readonly code: JsonCoreErrorCode
@@ -113,6 +115,8 @@ export function processJson(text: string, options: JsonProcessOptions): JsonProc
   if (!text.trim() && options.operation !== 'escape') return { ok: true, output: '' }
   try {
     switch (options.operation) {
+      case 'typescript':
+        return { ok: true, output: inferJsonType(text) }
       case 'format':
         return { ok: true, output: jsonPrettify(text, options.indent ?? 2, options.sortKeys === true) }
       case 'compact':
@@ -141,7 +145,7 @@ export function processJson(text: string, options: JsonProcessOptions): JsonProc
     return {
       ok: false,
       message: error instanceof Error ? error.message : String(error),
-      code: error instanceof JsonCoreError || error instanceof UrlQueryError ? error.code : undefined,
+      code: error instanceof JsonCoreError || error instanceof UrlQueryError || error instanceof JsonTypeInferenceError ? error.code : undefined,
     }
   }
 }

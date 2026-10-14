@@ -80,6 +80,7 @@ export function JsonSurface(props: PluginSurfaceProps) {
     { value: 'format', title: t('operation.format'), group: 'json' },
     { value: 'compact', title: t('operation.compact'), group: 'json' },
     { value: 'sort', title: t('operation.sort'), group: 'json' },
+    { value: 'typescript', title: t('operation.typescript'), group: 'json' },
     { value: 'expression', title: t('operation.expression'), group: 'json' },
     { value: 'yaml-to-json', title: t('operation.yamlToJson'), group: 'yaml' },
     { value: 'json-to-yaml', title: t('operation.jsonToYaml'), group: 'yaml' },
@@ -99,9 +100,10 @@ export function JsonSurface(props: PluginSurfaceProps) {
     : liveResult
   const delivery = useToolDeliveryFeedback(result, host.deliveryFeedbackOwner)
   const outputText = result?.ok ? result.output : ''
-  const hasOutput = Boolean(result?.ok && inputText.length > 0)
+  const hasOutput = Boolean(result?.ok && inputText.length > 0 && (operation !== 'typescript' || outputText.length > 0))
   const canReturnOutput = hasOutput && (operation === 'escape' || inputText.trim().length > 0)
   const outputLanguage = useMemo(() => {
+    if (operation === 'typescript') return 'typescript'
     if (operation === 'url-query-edit') return 'plaintext'
     if (operation === 'json-to-yaml') return 'yaml'
     try {
@@ -296,7 +298,7 @@ export function JsonSurface(props: PluginSurfaceProps) {
             <div className="jt-pane-header">
               <strong>{t('pane.output')}</strong>
               <div className="jt-pane-actions">
-                <Button type="button" variant="ghost" title={useAsInputDescription} aria-label={useAsInputDescription} disabled={!hasOutput} onClick={useOutputAsInput}>
+                <Button type="button" variant="ghost" title={useAsInputDescription} aria-label={useAsInputDescription} disabled={!hasOutput || operation === 'typescript'} onClick={useOutputAsInput}>
                   {t('action.useAsInput')}
                 </Button>
                 <Button type="button" variant="ghost" title={t('action.continueProcessingDescription')} aria-label={t('action.continueProcessingDescription')} disabled={!canReturnOutput || returning || copying} onClick={() => void returnOutput()}>
@@ -341,7 +343,7 @@ export function JsonSurface(props: PluginSurfaceProps) {
           <div className="jt-status-input">
             <span>{t('meta.characters', { count: inputText.length })}</span>
             <span className={delivery.feedback?.tone === 'error' || (result && !result.ok) ? 'jt-status-error' : ''}>
-              {cursorMessage || delivery.feedback?.message || (result && !result.ok ? t('status.error') : hasOutput ? t('status.ready') : t('status.waiting'))}
+              {cursorMessage || delivery.feedback?.message || (operation === 'typescript' && hasOutput ? t('typescript.observed') : '') || (result && !result.ok ? t('status.error') : hasOutput ? t('status.ready') : t('status.waiting'))}
             </span>
           </div>
           <div className="jt-status-output">

@@ -108,5 +108,11 @@
   "error.urlRequired": "Enter one complete HTTP(S) URL without unencoded spaces or line breaks.",
   "error.urlTooLarge": "URL exceeds 262,144 characters. Nothing was truncated or changed.",
   "error.urlTooManyParameters": "This editor supports up to 1,000 parameters. Nothing was truncated or changed.",
-  "error.urlInvalidText": "This parameter contains an incomplete Unicode character. Complete the character and retry."
+  "error.urlInvalidText": "This parameter contains an incomplete Unicode character. Complete the character and retry.",
+  "route.typescript": "JSON → TypeScript types",
+  "operation.typescript": "TypeScript types",
+  "typescript.observed": "Types describe this sample only; not an API contract.",
+  "error.typeDuplicateKey": "Duplicate JSON keys cannot be inferred safely. Resolve them and retry.",
+  "error.typeInvalidJson": "Enter valid JSON to infer TypeScript types.",
+  "error.typeLimit": "Type inference supports 128 KiB of UTF-8 input, 64 nesting levels, 20,000 nodes and 512 KiB of output. Nothing was sampled or truncated."
 }
