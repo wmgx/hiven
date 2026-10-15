@@ -36,6 +36,7 @@ import { readMatchingHistoryPage } from './clipboardHistoryPageReader'
 import { createHistoryPointerIntent } from './historyPointerIntent'
 import { createHistoryOpenSession, resetHistoryOpenSession } from './historyOpenSession'
 import { createHistoryCopyLifecycle } from './historyCopyLifecycle'
+import { createHistoryImageSaveLifecycle, saveClipboardHistoryImage } from './historyImageSave'
 import {
   CLIPBOARD_TEXT_MERGE_MIN_ITEMS,
   CLIPBOARD_TEXT_MERGE_MAX_ITEMS,
@@ -103,13 +104,18 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const [pasteNotice, setPasteNotice] = useState<string | null>(null)
   const pasteNoticeGenerationRef = useRef(0)
   const [copyLifecycle] = useState(createHistoryCopyLifecycle)
+  const [imageSaveLifecycle] = useState(createHistoryImageSaveLifecycle)
+  const [imageSaveBusy, setImageSaveBusy] = useState(false)
+  const imageSaveMountedRef = useRef(true)
   const [filter, setFilter] = useState<FilterKind>(() => initialFilter(props.surfaceId))
   const [loading, setLoading] = useState(true)
   const [fullTextSearchState, setFullTextSearchState] = useState<'idle' | 'loading' | 'error'>('idle')
   const [textEdit, setTextEdit] = useState<TextEditState | null>(null)
   const editGeneration = useRef(0)
   const editInputRef = useRef<HTMLTextAreaElement>(null)
-  const modifierLabel = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌥' : 'Alt+'
+  const isApplePlatform = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
+  const modifierLabel = isApplePlatform ? '⌥' : 'Alt+'
+  const primaryModifierLabel = isApplePlatform ? '⌘' : 'Ctrl+'
   useLayoutEffect(() => {
     const unsubscribeOwner = host.deliveryFeedbackOwner?.subscribeInvalidation(copyLifecycle.cancel)
     const unsubscribeLeave = host.subscribeLeaveIntent?.(copyLifecycle.cancel)
@@ -119,6 +125,13 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       unsubscribeLeave?.()
     }
   }, [copyLifecycle, host.deliveryFeedbackOwner, host.subscribeLeaveIntent])
+  useLayoutEffect(() => {
+    imageSaveMountedRef.current = true
+    return () => {
+      imageSaveMountedRef.current = false
+      imageSaveLifecycle.invalidate()
+    }
+  }, [imageSaveLifecycle])
   useEffect(() => {
     const invalidate = () => {
       editGeneration.current += 1
@@ -837,6 +850,41 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     }
   }, [copyLifecycle, host, resetBrowser, resolveFullItem, t])
 
+  const handleSaveImage = useCallback(async (item: ClipboardHistoryItem) => {
+    if (item.kind !== 'image') return
+    const ownerCurrent = () => host.deliveryFeedbackOwner?.isCurrent() !== false
+    const submission = imageSaveLifecycle.begin(ownerCurrent)
+    if (!submission) return
+
+    const generation = ++pasteNoticeGenerationRef.current
+    const focusTarget = document.activeElement instanceof HTMLElement && containerRef.current?.contains(document.activeElement)
+      ? document.activeElement
+      : null
+    setPasteNotice(null)
+    setImageSaveBusy(true)
+    try {
+      const result = await saveClipboardHistoryImage(repository, host.storage, item.id, submission.isCurrent)
+      if (!submission.isCurrent() || generation !== pasteNoticeGenerationRef.current) return
+      if (result.status === 'saved') setPasteNotice(t('imageSave.saved'))
+      else if (result.status === 'cancelled') setPasteNotice(t('imageSave.cancelled'))
+      else if (result.status === 'unavailable') setPasteNotice(t('imageSave.unavailable'))
+    } catch {
+      if (submission.isCurrent() && generation === pasteNoticeGenerationRef.current) {
+        setPasteNotice(t('imageSave.failed'))
+      }
+    } finally {
+      const restoreFocus = submission.isCurrent()
+      submission.finish()
+      if (imageSaveMountedRef.current) setImageSaveBusy(false)
+      if (restoreFocus && imageSaveMountedRef.current) {
+        requestAnimationFrame(() => {
+          if (focusTarget?.isConnected) focusTarget.focus({ preventScroll: true })
+          else containerRef.current?.focus({ preventScroll: true })
+        })
+      }
+    }
+  }, [host, imageSaveLifecycle, repository, t])
+
   const applyItemUpdate = useCallback((updated: ClipboardHistoryItem) => {
     setItems((current) =>
       current.map((entry) => {
@@ -1012,8 +1060,11 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       { key: 'editText', label: t('edit.action'), onSelect: () => void openTextEdit(item) },
     ] : []),
     { key: 'copy', label: t('action.copy'), onSelect: () => void handleCopy(item) },
+    ...(item.kind === 'image' ? [
+      { key: 'saveImage', label: t('imageSave.action'), description: `${primaryModifierLabel}S`, disabled: imageSaveBusy, onSelect: () => void handleSaveImage(item) },
+    ] : []),
     { key: 'delete', label: t('action.delete'), danger: true, onSelect: () => handleDelete(item.id) },
-  ], [handlePaste, handleCopy, handleDelete, openTextEdit, t])
+  ], [handlePaste, handleCopy, handleSaveImage, handleDelete, imageSaveBusy, openTextEdit, primaryModifierLabel, t])
 
   const handleReturnToLauncher = useCallback(async (item: ClipboardHistoryItem) => {
     pasteNoticeGenerationRef.current += 1
@@ -1132,6 +1183,10 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       if (!shortcuts.delete) return
       e.preventDefault()
       handleDelete(selectedItem.id)
+    } else if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 's') {
+      if (!shortcuts.paste || selectedItem.kind !== 'image') return
+      e.preventDefault()
+      void handleSaveImage(selectedItem)
     } else if ((e.metaKey || e.ctrlKey) && e.key === 'c') {
       const selectedText = readDomSelectedText()
       e.preventDefault()
@@ -1161,7 +1216,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         if (flatIndex >= 0) virtualizer.scrollToIndex(flatIndex, { align: 'auto' })
       }
     }
-  }, [selectedItem, selectedId, filteredItems, flatRows, virtualizer, handlePaste, handleReturnToLauncher, handleDelete, handleCopy, host, t, imeKeyDown, combining, cancelMerge, toggleMergeItem, titleDialog, textEdit, toggleQuickFavorite, loading, settings.enabled, filter, legacyDialog])
+  }, [selectedItem, selectedId, filteredItems, flatRows, virtualizer, handlePaste, handleReturnToLauncher, handleDelete, handleCopy, handleSaveImage, host, t, imeKeyDown, combining, cancelMerge, toggleMergeItem, titleDialog, textEdit, toggleQuickFavorite, loading, settings.enabled, filter, legacyDialog])
 
   const queueActive = Boolean(queueStatus && queueStatus.remaining > 0 && (queueStatus.phase === 'ready' || queueStatus.phase === 'failed'))
   const queueReadNotice = queueReadState === 'failed' ? t('queue.statusFailed') : queueReadState === 'loading' ? t('queue.statusLoading') : null
