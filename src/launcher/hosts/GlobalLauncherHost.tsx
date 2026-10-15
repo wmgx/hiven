@@ -1124,7 +1124,8 @@ export function GlobalLauncherHost() {
     if (pasteAttempted && (pasteCancelled || !pasteOwner?.isCurrent())) return
     if (!result.ok) {
       if (generation !== deliveryGenerationRef.current) return
-      if (result.error) setDeliveryFailure({ message: result.error, isCurrent: () =>
+      if (result.error) setDeliveryFailure({ message: result.error === 'FilePathLineBreakError'
+        ? t(locale, 'workspace.filePaths.lineBreakUnsupported') : result.error, isCurrent: () =>
         clipboardBlock.getMaterialGeneration() === materialGeneration && clipboardBlock.hasMaterial(block) })
       return
     }

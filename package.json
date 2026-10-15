@@ -77,6 +77,7 @@
     "test:launcher-object-handoff": "node scripts/test-launcher-object-handoff.mjs",
     "test:image-base64": "node scripts/test-image-base64.mjs",
     "test:file-paths": "node --experimental-strip-types scripts/test-file-paths.mts",
+    "test:file-path-object-action": "node scripts/test-file-path-object-action.mjs",
     "test:color-answers": "node scripts/test-color-answers.mjs",
     "test:clipboard-paste-queue": "node scripts/test-clipboard-paste-queue.mjs",
     "test:toast-routing": "node scripts/test-toast-routing.mjs",

@@ -141,6 +141,13 @@ const FILES_HISTORY_ACTIONS: RecommendedAction[] = [
     provider: 'Clipboard History',
     defaultOutput: 'copy',
   },
+  {
+    id: 'convert-history-file-paths',
+    title: 'Convert File Paths',
+    titleZh: '转换文件路径',
+    pluginId: 'file-paths',
+    defaultOutput: 'open-plugin-surface',
+  },
 ]
 
 /**

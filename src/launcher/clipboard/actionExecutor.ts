@@ -95,6 +95,15 @@ export async function executeRecommendedAction(
       await handlers.copyText(paths.join('\n'))
       return { ok: true, message: '已复制' }
     }
+    if (action.id === 'convert-history-file-paths') {
+      const paths = block.payloadFiles?.paths
+      if (!paths?.length) return { ok: false, error: 'Files payload missing' }
+      // The file-paths surface intentionally accepts one path per text line.
+      // Never flatten a legal POSIX filename containing a newline into extra files.
+      if (paths.some((path) => /[\r\n]/.test(path))) return { ok: false, error: 'FilePathLineBreakError' }
+      await handlers.openPluginSurface('file-paths', { initialText: paths.join('\n') })
+      return { ok: true }
+    }
 
     switch (target) {
       case 'copy': {

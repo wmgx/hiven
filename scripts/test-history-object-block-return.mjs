@@ -90,7 +90,7 @@ function createPendingBridge() {
 function recommendHistory(block) {
   if (block.source !== 'history-item') return 'other'
   if (block.kind === 'image') return ['paste-history-image', 'copy-history-image']
-  if (block.kind === 'files') return ['paste-history-files', 'copy-history-file-paths']
+  if (block.kind === 'files') return ['paste-history-files', 'copy-history-file-paths', 'convert-history-file-paths']
   return []
 }
 
@@ -108,6 +108,13 @@ async function executeHistoryAction(actionId, block, handlers) {
   if (actionId === 'copy-history-file-paths') {
     if (!block.payloadFiles?.paths?.length) return { ok: false, error: 'Files payload missing' }
     await handlers.copyText(block.payloadFiles.paths.join('\n'))
+    return { ok: true }
+  }
+  if (actionId === 'convert-history-file-paths') {
+    const paths = block.payloadFiles?.paths
+    if (!paths?.length) return { ok: false, error: 'Files payload missing' }
+    if (paths.some((path) => /[\r\n]/.test(path))) return { ok: false, error: 'FilePathLineBreakError' }
+    await handlers.openPluginSurface('file-paths', { initialText: paths.join('\n') })
     return { ok: true }
   }
   return { ok: false, error: 'unknown' }
@@ -133,6 +140,29 @@ async function executeHistoryAction(actionId, block, handlers) {
   )
   assert.equal(r.ok, true)
   assert.equal(copied, '/a\n/b')
+}
+
+{
+  let opened = null
+  const paths = ['/tmp/第一 个.txt', '/tmp/第二个 #.png']
+  const r = await executeHistoryAction(
+    'convert-history-file-paths',
+    { payloadFiles: { paths } },
+    { openPluginSurface: async (pluginId, options) => { opened = { pluginId, options } } },
+  )
+  assert.equal(r.ok, true)
+  assert.deepEqual(opened, { pluginId: 'file-paths', options: { initialText: paths.join('\n') } })
+}
+
+{
+  let opened = false
+  const r = await executeHistoryAction(
+    'convert-history-file-paths',
+    { payloadFiles: { paths: ['/tmp/valid', '/tmp/line\nbreak'] } },
+    { openPluginSurface: async () => { opened = true } },
+  )
+  assert.deepEqual(r, { ok: false, error: 'FilePathLineBreakError' })
+  assert.equal(opened, false, 'ambiguous newline path must not be flattened into the text-list surface')
 }
 
 // ─── createHistoryItemObjectBlock shape (import real module if node can) ────
