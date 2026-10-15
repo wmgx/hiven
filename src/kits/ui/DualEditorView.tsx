@@ -4,7 +4,7 @@
  * semantics, pane binding, and highlight computation.
  */
 
-import { useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { editor as MonacoEditor } from 'monaco-editor'
 import { TextEditorCore } from '../editor/TextEditorCore'
 import type { EditorSelectionRange, LineDecorationSpec, RangeDecorationSpec, TextEditorCoreHandle } from '../editor/types'
@@ -34,6 +34,12 @@ const dualOptionOverrides: MonacoEditor.IStandaloneEditorConstructionOptions = {
   overviewRulerLanes: 3,
 }
 
+export type DualEditorLineRevealRequest = {
+  requestId: number
+  leftLine: number
+  rightLine: number
+}
+
 export function DualEditorView({
   leftText,
   rightText,
@@ -41,6 +47,7 @@ export function DualEditorView({
   rightHighlights,
   leftRanges,
   rightRanges,
+  lineRevealRequest,
   layout,
   language = 'plaintext',
   onLeftFocus,
@@ -64,6 +71,8 @@ export function DualEditorView({
   /** Prefer precise character ranges (JSON mode). Falls back to whole-line highlights. */
   leftRanges?: EditorSelectionRange[]
   rightRanges?: EditorSelectionRange[]
+  /** Applied once per request id; revealing lines does not move either cursor or selection. */
+  lineRevealRequest?: DualEditorLineRevealRequest
   layout: 'side-by-side' | 'inline'
   language?: string
   onLeftFocus?: () => void
@@ -83,10 +92,49 @@ export function DualEditorView({
   const leftRef = useRef<TextEditorCoreHandle | null>(null)
   const rightRef = useRef<TextEditorCoreHandle | null>(null)
   const isSyncing = useRef(false)
+  const lineRevealRequestRef = useRef(lineRevealRequest)
+  const appliedLeftReveal = useRef<number | null>(null)
+  const appliedRightReveal = useRef<number | null>(null)
+
+  const applyLineReveal = useCallback((ready?: {
+    side: 'left' | 'right'
+    editor: MonacoEditor.IStandaloneCodeEditor
+  }) => {
+    const request = lineRevealRequestRef.current
+    if (!request) return
+    const leftEditor = ready?.side === 'left' ? ready.editor : leftRef.current?.getEditor()
+    const rightEditor = ready?.side === 'right' ? ready.editor : rightRef.current?.getEditor()
+    const reveal = (editor: MonacoEditor.IStandaloneCodeEditor | null | undefined, line: number) => {
+      const lineCount = editor?.getModel()?.getLineCount()
+      if (!editor || !lineCount || !Number.isFinite(line)) return false
+      editor.revealLineInCenter(Math.max(1, Math.min(Math.floor(line), lineCount)))
+      return true
+    }
+
+    // The two targets can have different line numbers after insertions or
+    // deletions. Suppress ordinary pixel-scroll mirroring while positioning
+    // each editor independently.
+    isSyncing.current = true
+    try {
+      if (appliedLeftReveal.current !== request.requestId && reveal(leftEditor, request.leftLine)) {
+        appliedLeftReveal.current = request.requestId
+      }
+      if (appliedRightReveal.current !== request.requestId && reveal(rightEditor, request.rightLine)) {
+        appliedRightReveal.current = request.requestId
+      }
+    } finally {
+      isSyncing.current = false
+    }
+  }, [])
 
   useEffect(() => {
     ensureCss()
   }, [])
+
+  useEffect(() => {
+    lineRevealRequestRef.current = lineRevealRequest
+    applyLineReveal()
+  }, [applyLineReveal, lineRevealRequest])
 
   const useLeftRanges = Boolean(leftRanges && leftRanges.length > 0)
   const useRightRanges = Boolean(rightRanges && rightRanges.length > 0)
@@ -152,7 +200,11 @@ export function DualEditorView({
       rangeDecorations={leftRangeDecorations}
       onChange={onLeftChange}
       onFocus={onLeftFocus}
-      onReady={onLeftReady}
+      onReady={(editor) => {
+        const cleanup = onLeftReady?.(editor)
+        applyLineReveal({ side: 'left', editor })
+        return cleanup
+      }}
       onScrollChange={syncFrom('left')}
     />
   )
@@ -172,6 +224,7 @@ export function DualEditorView({
       rangeDecorations={rightRangeDecorations}
       onChange={onRightChange}
       onFocus={onRightFocus}
+      onReady={(editor) => applyLineReveal({ side: 'right', editor })}
       onScrollChange={syncFrom('right')}
     />
   )

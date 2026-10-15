@@ -6,6 +6,7 @@ import { DiffExplanation } from './DiffExplanation'
 import { useDiffSourceText } from './useDiffSourceText'
 import { createDiffSourceReader } from './sourceReadLifetime'
 import { createDiffSideCopier, type DiffCopySide } from './copySideText'
+import { buildHighlightNavigationTargets, clampDiffHunkIndex, moveDiffHunkIndex } from './diffNavigation'
 
 type DiffMode = 'text' | 'json'
 
@@ -186,6 +187,12 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
     asDiffSource({ sourceId: 'empty', kind: 'empty', title: t('source.empty') }, 'empty'),
   ]
   const [currentHunkIndex, setCurrentHunkIndex] = useState(0)
+  const revealRequestId = useRef(0)
+  const [lineRevealRequest, setLineRevealRequest] = useState<{
+    requestId: number
+    leftLine: number
+    rightLine: number
+  }>()
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [debouncedOriginal, setDebouncedOriginal] = useState(originalText)
@@ -209,7 +216,8 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
   const renderMode: DiffMode = diffMode === 'json' && jsonAvailable ? 'json' : 'text'
 
   // Editors stay live (originalText/modifiedText); only highlights use the debounce snapshot.
-  const { leftHighlights, rightHighlights, leftRanges, rightRanges } = useMemo(() => {
+  const { leftHighlights, rightHighlights, leftRanges, rightRanges, navigationHunks } = useMemo(() => {
+    const textResult = computeTextLineDiff(debouncedOriginal, debouncedModified)
     // JSON mode: keep user text as-is; structural changes → character-range blocks.
     if (renderMode === 'json') {
       const hl = computeJsonLineHighlights(debouncedOriginal, debouncedModified)
@@ -219,37 +227,27 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
           rightHighlights: hl.rightHighlights,
           leftRanges: hl.leftRanges,
           rightRanges: hl.rightRanges,
+          navigationHunks: buildHighlightNavigationTargets(
+            hl.leftHighlights,
+            hl.rightHighlights,
+            debouncedOriginal.split('\n').length,
+            debouncedModified.split('\n').length,
+          ),
         }
       }
     }
 
-    const result = computeTextLineDiff(debouncedOriginal, debouncedModified)
     return {
-      ...result,
+      leftHighlights: textResult.leftHighlights,
+      rightHighlights: textResult.rightHighlights,
       leftRanges: undefined as undefined,
       rightRanges: undefined as undefined,
+      navigationHunks: textResult.hunks,
     }
   }, [renderMode, debouncedOriginal, debouncedModified, computeJsonLineHighlights, computeTextLineDiff])
 
-  const hunkLines = useMemo(() => {
-    const hunks: number[] = []
-    const allLines = [...new Set([...leftHighlights, ...rightHighlights])].sort((a, b) => a - b)
-    if (allLines.length === 0) return hunks
-    let lastLine = -999
-    for (const line of allLines) {
-      if (line - lastLine > 1) hunks.push(line)
-      lastLine = line
-    }
-    return hunks
-  }, [leftHighlights, rightHighlights])
-
-  const totalHunks = hunkLines.length
-
-  useEffect(() => {
-    if (currentHunkIndex >= totalHunks && totalHunks > 0) {
-      setCurrentHunkIndex(totalHunks - 1)
-    }
-  }, [totalHunks, currentHunkIndex])
+  const totalHunks = navigationHunks.length
+  const displayedHunkIndex = clampDiffHunkIndex(currentHunkIndex, totalHunks)
 
   const handleSwap = useCallback(() => {
     setOriginalText(modifiedText)
@@ -278,15 +276,17 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
     host.detachToWindow(p)
   }, [originalText, modifiedText, originalSource, modifiedSource, diffMode, host, leaveSurface])
 
-  const handlePrevHunk = useCallback(() => {
-    if (totalHunks === 0) return
-    setCurrentHunkIndex((i) => (i - 1 + totalHunks) % totalHunks)
-  }, [totalHunks])
-
-  const handleNextHunk = useCallback(() => {
-    if (totalHunks === 0) return
-    setCurrentHunkIndex((i) => (i + 1) % totalHunks)
-  }, [totalHunks])
+  const navigateHunk = useCallback((direction: -1 | 1) => {
+    const nextIndex = moveDiffHunkIndex(displayedHunkIndex, navigationHunks.length, direction)
+    if (nextIndex == null) return
+    const target = navigationHunks[nextIndex]
+    setCurrentHunkIndex(nextIndex)
+    setLineRevealRequest({
+      requestId: ++revealRequestId.current,
+      leftLine: target.leftLine,
+      rightLine: target.rightLine,
+    })
+  }, [displayedHunkIndex, navigationHunks])
 
   // Follow the user-selected mode (not only successful JSON parse) so Monaco
   // can offer JSON folding / syntax while editing toward valid JSON.
@@ -404,6 +404,7 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
           rightHighlights={rightHighlights}
           leftRanges={leftRanges}
           rightRanges={rightRanges}
+          lineRevealRequest={lineRevealRequest}
           layout="side-by-side"
           language={editorLanguage}
           onLeftChange={setOriginalText}
@@ -435,7 +436,7 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
           <button
             type="button"
             className="td-nav-b"
-            onClick={handlePrevHunk}
+            onClick={() => navigateHunk(-1)}
             disabled={totalHunks === 0}
             aria-label={t('diff.navPrev')}
           >
@@ -443,13 +444,13 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
           </button>
           <span className="td-nav-p">
             {totalHunks > 0
-              ? t('diff.navPosition', { current: String(currentHunkIndex + 1), total: String(totalHunks) })
+              ? t('diff.navPosition', { current: String(displayedHunkIndex + 1), total: String(totalHunks) })
               : t('diff.noChanges')}
           </span>
           <button
             type="button"
             className="td-nav-b"
-            onClick={handleNextHunk}
+            onClick={() => navigateHunk(1)}
             disabled={totalHunks === 0}
             aria-label={t('diff.navNext')}
           >

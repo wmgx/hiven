@@ -5,6 +5,15 @@
 
 type Op = 'equal' | 'delete' | 'insert'
 
+export type TextLineDiffHunk = {
+  /** Valid editor lines to reveal on each side, including anchors for one-sided changes. */
+  leftLine: number
+  rightLine: number
+  /** Actually changed lines on each side; one array is empty for pure insert/delete hunks. */
+  leftLines: number[]
+  rightLines: number[]
+}
+
 const MAX_LINES = 4000 // skip detailed diff for very large files
 
 function lcsOps(orig: string[], mod: string[]): Op[] {
@@ -43,33 +52,75 @@ function lcsOps(orig: string[], mod: string[]): Op[] {
 export function computeTextLineDiff(
   origText: string,
   modText: string,
-): { leftHighlights: number[]; rightHighlights: number[] } {
+): { leftHighlights: number[]; rightHighlights: number[]; hunks: TextLineDiffHunk[] } {
   const orig = origText.split('\n')
   const mod  = modText.split('\n')
 
   const leftHighlights:  number[] = []
   const rightHighlights: number[] = []
+  const hunks: TextLineDiffHunk[] = []
+  const validLine = (line: number, count: number) => Math.max(1, Math.min(line, count))
 
   // For huge files, highlight everything that differs at a coarse level
   if (orig.length > MAX_LINES || mod.length > MAX_LINES) {
     const limit = Math.max(orig.length, mod.length)
+    let active: TextLineDiffHunk | null = null
     for (let k = 1; k <= limit; k++) {
       if (orig[k - 1] !== mod[k - 1]) {
-        if (k <= orig.length) leftHighlights.push(k)
-        if (k <= mod.length)  rightHighlights.push(k)
+        if (!active) {
+          active = {
+            leftLine: validLine(k, orig.length),
+            rightLine: validLine(k, mod.length),
+            leftLines: [],
+            rightLines: [],
+          }
+          hunks.push(active)
+        }
+        if (k <= orig.length) {
+          leftHighlights.push(k)
+          active.leftLines.push(k)
+        }
+        if (k <= mod.length) {
+          rightHighlights.push(k)
+          active.rightLines.push(k)
+        }
+      } else {
+        active = null
       }
     }
-    return { leftHighlights, rightHighlights }
+    return { leftHighlights, rightHighlights, hunks }
   }
 
   const ops = lcsOps(orig, mod)
   let l = 1, r = 1
+  let active: TextLineDiffHunk | null = null
 
   for (const op of ops) {
-    if (op === 'equal') { l++; r++ }
-    else if (op === 'delete') { leftHighlights.push(l);  l++ }
-    else                      { rightHighlights.push(r); r++ }
+    if (op === 'equal') {
+      active = null
+      l++
+      r++
+      continue
+    }
+    if (!active) {
+      active = {
+        leftLine: validLine(l, orig.length),
+        rightLine: validLine(r, mod.length),
+        leftLines: [],
+        rightLines: [],
+      }
+      hunks.push(active)
+    }
+    if (op === 'delete') {
+      leftHighlights.push(l)
+      active.leftLines.push(l)
+      l++
+    } else {
+      rightHighlights.push(r)
+      active.rightLines.push(r)
+      r++
+    }
   }
 
-  return { leftHighlights, rightHighlights }
+  return { leftHighlights, rightHighlights, hunks }
 }
