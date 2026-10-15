@@ -279,12 +279,7 @@ pub async fn plugin_blob_prepare_png_export(
             Some(directory) => dialog.set_directory(directory),
             None => dialog,
         };
-        // A background action must not map or focus its hidden owner window.
-        // Visible surface/Launcher exports keep their normal modal parent.
-        match webview.window().is_visible() {
-            Ok(true) => dialog.set_parent(&webview.window()),
-            _ => dialog,
-        }
+        dialog.set_parent(&webview.window())
     };
     dialog.save_file(move |selection| {
         let _ = tx.send(selection);

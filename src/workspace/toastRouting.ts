@@ -13,9 +13,9 @@ export function nativeToastRoutingAvailable() {
 }
 
 /** Best-effort native ticket for this operation, never a window ID or geometry. */
-export async function captureHudTarget(operation: string, attemptId?: string, backgroundAction?: 'image-save-shortcut'): Promise<string | undefined> {
+export async function captureHudTarget(operation: string, attemptId?: string): Promise<string | undefined> {
   if (!nativeToastRoutingAvailable()) return undefined
-  try { return await invoke<string | null>('capture_hud_target', { operation, attemptId, backgroundAction }) ?? undefined }
+  try { return await invoke<string | null>('capture_hud_target', { operation, attemptId }) ?? undefined }
   catch { return undefined }
 }
 

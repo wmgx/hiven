@@ -23,7 +23,7 @@ let syncGeneration = 0
 let syncQueue: Promise<void> = Promise.resolve()
 // Host-owned, bounded lifetime interception of an already registered surface.
 // The host authorizes the plugin/permission before acquiring one.
-const shortcutInterceptors = new Map<string, { accelerator: string; registered: boolean; handle: () => Promise<boolean>; pressed: boolean; release?: () => Promise<void> }>()
+const shortcutInterceptors = new Map<string, { accelerator: string; handle: () => Promise<boolean>; pressed: boolean; release?: () => Promise<void> }>()
 
 export function installPluginSurfaceShortcutHotkeys(): () => void {
   if (installed) return () => {}
@@ -158,7 +158,7 @@ async function registerShortcut(
       const latest = usePluginSurfaceShortcutStore.getState().shortcuts[key]
       if (!latest || !latest.enabled || normalizeAccelerator(latest.accelerator) !== accelerator) return
       const interceptor = shortcutInterceptors.get(key)
-      if (interceptor && (interceptor.registered || sameAccelerator(interceptor.accelerator, accelerator))) {
+      if (interceptor && sameAccelerator(interceptor.accelerator, accelerator)) {
         if (event.state === 'Released') { interceptor.pressed = false; return }
         if (event.state !== 'Pressed' || interceptor.pressed || interceptor.release) return
         interceptor.pressed = true
@@ -312,7 +312,7 @@ export async function acquireSurfaceShortcutInterceptor(
   const previous = shortcutInterceptors.get(key)
   if (previous?.release) await previous.release()
   else if (previous) throw new Error('QueueShortcutConflictError')
-  const entry: { accelerator: string; registered: boolean; handle: () => Promise<boolean>; pressed: boolean; release?: () => Promise<void> } = { accelerator, registered: false, handle, pressed: false }
+  const entry: { accelerator: string; handle: () => Promise<boolean>; pressed: boolean; release?: () => Promise<void> } = { accelerator, handle, pressed: false }
   const registered = currentAccelerators.get(key)
   let temporary = false
   if (!registered || !sameAccelerator(registered, accelerator)) {
@@ -364,8 +364,8 @@ export async function acquireRegisteredSurfaceShortcutInterceptor(
   const previous = shortcutInterceptors.get(key)
   if (previous?.release) await previous.release()
   else if (previous) throw new Error('ShortcutConflictError')
-  const entry: { accelerator: string; registered: boolean; handle: () => Promise<boolean>; pressed: boolean; release?: () => Promise<void> } = {
-    accelerator, registered: true, handle, pressed: false,
+  const entry: { accelerator: string; handle: () => Promise<boolean>; pressed: boolean; release?: () => Promise<void> } = {
+    accelerator, handle, pressed: false,
   }
   shortcutInterceptors.set(key, entry)
   let stopped = false
@@ -375,22 +375,4 @@ export async function acquireRegisteredSurfaceShortcutInterceptor(
     if (shortcutInterceptors.get(key) === entry) shortcutInterceptors.delete(key)
   }
   return stop
-}
-
-/** Install fail-closed behavior before a registered shortcut can fire.
- * Registration, persistence and conflict ownership remain with the surface
- * shortcut registrar; this handler never creates or moves a key binding.
- */
-export function installRegisteredSurfaceShortcutHandler(
-  target: PluginSurfaceOpenTarget,
-  handle: () => Promise<boolean>,
-): () => void {
-  if (!isBindableSurfaceTarget(target)) throw new Error('ShortcutUnavailableError')
-  const key = pluginSurfaceShortcutKey(target)
-  if (shortcutInterceptors.has(key)) throw new Error('ShortcutConflictError')
-  const entry = { accelerator: '', registered: true, handle, pressed: false }
-  shortcutInterceptors.set(key, entry)
-  return () => {
-    if (shortcutInterceptors.get(key) === entry) shortcutInterceptors.delete(key)
-  }
 }

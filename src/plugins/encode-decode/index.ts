@@ -83,10 +83,10 @@ export const encodeDecodePlugin = definePlugin({
       ...OPERATION_ROUTES.map((route) => ({
         id: route.id,
         kind: 'custom-view' as const,
-        title: route.id === 'image-save' ? 'Save screenshot to file' : 'Encode / Decode',
-        titleI18n: { zh: route.id === 'image-save' ? '截图存为文件' : '编解码' },
+        title: 'Encode / Decode',
+        titleI18n: { zh: '编解码' },
         component: EncodeDecodeSurface,
-        entry: { launcher: false, shortcutBindable: route.id === 'image-save' },
+        entry: { launcher: false },
         shell: WORKSPACE_SHELL,
       })),
     ],
