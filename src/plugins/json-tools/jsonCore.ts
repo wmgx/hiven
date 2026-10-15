@@ -31,7 +31,7 @@ export type JsonProcessResult =
   | { ok: true; output: string }
   | { ok: false; message: string; code?: JsonCoreErrorCode }
 
-export type JsonCoreErrorCode = UrlQueryErrorCode | 'typeDuplicateKey' | 'typeLimit' | 'typeInvalidJson' | 'objectRequired' | 'stringRequired' | 'expressionRequired' | 'finiteNumberRequired' | 'numberFidelity'
+export type JsonCoreErrorCode = UrlQueryErrorCode | 'typeDuplicateKey' | 'typeLimit' | 'typeInvalidJson' | 'queryDuplicateKey' | 'objectRequired' | 'stringRequired' | 'expressionRequired' | 'finiteNumberRequired' | 'numberFidelity'
 
 export class JsonCoreError extends Error {
   readonly code: JsonCoreErrorCode
@@ -64,6 +64,11 @@ export function sortJsonKeys(text: string): string {
 export function queryStringToJson(text: string): string {
   const query = text.trim().replace(/^\?/, '')
   const params = new URLSearchParams(query)
+  const keys = new Set<string>()
+  for (const key of params.keys()) {
+    if (keys.has(key)) throw new JsonCoreError('queryDuplicateKey')
+    keys.add(key)
+  }
   return JSON.stringify(Object.fromEntries(params), null, 2)
 }
 

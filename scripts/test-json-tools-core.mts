@@ -18,6 +18,22 @@ const {
 
 assert.equal(sortJsonKeys('{"z":1,"a":{"d":2,"b":1},"__proto__":3}'), '{\n  "__proto__": 3,\n  "a": {\n    "b": 1,\n    "d": 2\n  },\n  "z": 1\n}')
 assert.deepEqual(JSON.parse(queryStringToJson('?name=Ada&active=true')), { name: 'Ada', active: 'true' })
+assert.deepEqual(JSON.parse(queryStringToJson('?empty=&name=%E4%BD%A0%E5%A5%BD')), { empty: '', name: '你好' })
+for (const query of [
+  'tag=one&tag=two',
+  'tag=same&tag=same',
+  '%74ag=one&tag=two',
+  'a+b=one&a%20b=two',
+  '=one&=two',
+]) {
+  assert.throws(() => queryStringToJson(query), (error) => error instanceof Error && error.message === 'queryDuplicateKey', query)
+  assert.deepEqual(processJson(query, { operation: 'query-to-json' }), {
+    ok: false, message: 'queryDuplicateKey', code: 'queryDuplicateKey',
+  }, query)
+}
+const privateDuplicate = processJson('token=synthetic-secret&token=synthetic-other', { operation: 'query-to-json' })
+assert.deepEqual(privateDuplicate, { ok: false, message: 'queryDuplicateKey', code: 'queryDuplicateKey' })
+assert.doesNotMatch(JSON.stringify(privateDuplicate), /synthetic-(?:secret|other)/)
 assert.equal(jsonToQueryString('{"name":"Ada Lovelace","active":true}'), 'name=Ada+Lovelace&active=true')
 assert.equal(escapeJsonString(' line\n'), '" line\\n"')
 assert.equal(unescapeJsonString('" line\\n"'), ' line\n')
