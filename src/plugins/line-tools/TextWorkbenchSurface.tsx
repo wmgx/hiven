@@ -267,6 +267,11 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
   const duplicateGroups = result.status === 'ready' ? result.duplicates : undefined
   const noDuplicates = duplicateGroups?.length === 0
   const outputDisabled = result.status !== 'ready' || busy !== null || noDuplicates
+  const invisibleCleanupStatus = result.status === 'ready' && result.invisibleCleanup
+    ? result.invisibleCleanup.normalizedSpaces + result.invisibleCleanup.removedCharacters === 0
+      ? t('invisibleCharacters.noChanges')
+      : t('invisibleCharacters.summary', result.invisibleCleanup)
+    : null
   const resultStatus = result.status === 'ready'
     ? t(noDuplicates ? 'duplicates.none' : outputText.length === 0 ? 'workbench.status.empty' : 'workbench.status.ready')
     : t(result.status === 'processing' ? 'markdownPlain.processing' : result.status === 'error' ? 'workbench.status.error' : 'workbench.status.waiting')
@@ -416,7 +421,7 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
             spellCheck={false}
           />}
           <div className={`text-workbench-result-meta${delivery.feedback ? ` is-delivery is-${delivery.feedback.tone}` : ''}`} role="status" aria-live="polite">
-            <span>{confirmUndo ? t('workbench.undoOverwriteWarning') : delivery.feedback?.message ?? t(selected.label)}</span>
+            <span>{confirmUndo ? t('workbench.undoOverwriteWarning') : delivery.feedback?.message ?? invisibleCleanupStatus ?? t(selected.label)}</span>
             {!confirmUndo && !delivery.feedback && result.status === 'ready' ? <span>{t('meta.characters', { count: outputText.length })}</span> : null}
           </div>
         </section>

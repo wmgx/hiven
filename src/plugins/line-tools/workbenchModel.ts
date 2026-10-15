@@ -3,6 +3,7 @@ import { lineOperationRoutes } from './routes'
 import { escapeRegexPattern } from './escapeRegexPattern'
 import { extractTextList } from './extractTextList'
 import { cleanAgentText } from './cleanAgentText'
+import { cleanInvisibleCharacters, type InvisibleCharacterCleanup } from './cleanInvisibleCharacters'
 
 export type WorkbenchCategory = 'text' | 'json' | 'url'
 export type WorkbenchOperation =
@@ -10,6 +11,7 @@ export type WorkbenchOperation =
   | 'trim'
   | 'remove-blank'
   | 'clean-list'
+  | 'clean-invisible-characters'
   | 'clean-agent-text'
   | 'markdown-plain-text'
   | 'json-format'
@@ -33,7 +35,7 @@ export type WorkbenchOptions = LineOptions & {
 export type WorkbenchResult =
   | { status: 'idle' }
   | { status: 'processing' }
-  | { status: 'ready'; text: string; duplicates?: DuplicateLineGroup[] }
+  | { status: 'ready'; text: string; duplicates?: DuplicateLineGroup[]; invisibleCleanup?: Omit<InvisibleCharacterCleanup, 'text'> }
   | { status: 'error'; messageKey: string }
 
 export type WorkbenchTextTransforms = {
@@ -52,6 +54,7 @@ export const WORKBENCH_OPERATIONS: readonly {
   { value: 'remove-blank', category: 'text', label: 'removeBlankLines.title' },
   { value: 'dedup', category: 'text', label: 'dedup.title' },
   { value: 'find-duplicates', category: 'text', label: 'duplicates.title' },
+  { value: 'clean-invisible-characters', category: 'text', label: 'invisibleCharacters.title' },
   { value: 'markdown-plain-text', category: 'text', label: 'markdownPlain.title' },
   { value: 'clean-agent-text', category: 'text', label: 'cleanAgent.title' },
   { value: 'clean-list', category: 'text', label: 'cleanList.title' },
@@ -92,6 +95,7 @@ export const DEFAULT_WORKBENCH_OPTIONS: Readonly<WorkbenchOptions> = {
 }
 
 export function getWorkbenchOperation(surfaceId?: string): WorkbenchOperation {
+  if (surfaceId === 'clean-invisible-characters') return 'clean-invisible-characters'
   if (surfaceId === 'markdown-plain-text') return 'markdown-plain-text'
   if (surfaceId === 'clean-agent-text' || surfaceId === 'clean-agent-clipboard') return 'clean-agent-text'
   if (surfaceId === 'regex-escape') return 'regex-escape'
@@ -117,6 +121,17 @@ export function evaluateWorkbench(
         return { status: 'ready', text: duplicateLineReport(duplicates), duplicates }
       }
       case 'markdown-plain-text': return { status: 'processing' } // Isolated worker owns this operation.
+      case 'clean-invisible-characters': {
+        const cleaned = cleanInvisibleCharacters(inputText)
+        return {
+          status: 'ready',
+          text: cleaned.text,
+          invisibleCleanup: {
+            normalizedSpaces: cleaned.normalizedSpaces,
+            removedCharacters: cleaned.removedCharacters,
+          },
+        }
+      }
       case 'clean-agent-text': text = cleanAgentText(inputText, options.cleanAgentAscii === true); break
       case 'clean-list': text = cleanLineList(inputText, options); break
       case 'trim': text = processLines('trim-whitespace', inputText, options); break

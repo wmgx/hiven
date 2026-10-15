@@ -49,6 +49,7 @@ export const statsRoute: TextToolRoute = {
 
 export const textToolRoutes = [
   ...lineOperationRoutes,
+  { surfaceId: 'clean-invisible-characters', titleKey: 'invisibleCharacters.title', group: 'lines', aliases: ['clean invisible characters', 'remove invisible characters', 'clean copied text', '清理不可见字符', '去除不可见字符', '清理复制文本'] } satisfies TextToolRoute,
   { surfaceId: 'markdown-plain-text', titleKey: 'markdownPlain.title', group: 'lines', aliases: ['markdown to text', 'markdown to plain text', 'strip markdown', 'Markdown转纯文本', 'markdown 转文本', '去除Markdown格式'] } satisfies TextToolRoute,
   { surfaceId: 'clean-agent-text', titleKey: 'cleanAgent.title', group: 'lines', aliases: ['clean agent text', 'clean cli text', 'claude code', 'remove cli borders', '清理AI文本', '清理 AI 文本', '清理终端文本', '去除边框', '清理 Claude Code'] } satisfies TextToolRoute,
   { surfaceId: 'regex-escape', titleKey: 'regexEscape.title', group: 'lines', aliases: ['escape regex', 'regex escape', 'escape regexp', '正则转义', '正则字面量'] } satisfies TextToolRoute,

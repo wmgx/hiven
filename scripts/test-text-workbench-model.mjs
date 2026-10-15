@@ -50,7 +50,21 @@ try {
     ['sql-in-number', 'sql-number', 'sqlin.number', {}],
   ]
   assert.deepEqual(lineOperationRoutes.map((route) => route.surfaceId), routes.map(([id]) => id))
-  assert.equal(new Set(operations.map(({ value }) => value)).size, 21)
+  assert.equal(new Set(operations.map(({ value }) => value)).size, 23)
+  assert.equal(getWorkbenchOperation('clean-invisible-characters'), 'clean-invisible-characters')
+  const invisibleRoute = plugin.launcher.items.find(({ id }) => id === 'open-clean-invisible-characters')
+  assert.ok(invisibleRoute, 'explicit invisible-character cleanup has a searchable workbench entry')
+  assert.ok(!plugin.tools.some(({ id }) => id.includes('invisible')), 'cleanup does not become a learnable tool or Saved Action')
+  assert.deepEqual(result('A\u00a0B\u202fC\u200b\u00ad', 'clean-invisible-characters'), {
+    status: 'ready',
+    text: 'A B C',
+    invisibleCleanup: { normalizedSpaces: 2, removedCharacters: 2 },
+  })
+  assert.deepEqual(result('👨‍👩‍👧‍👦\r\nمی‌روم\te\u0301\u200e\u200f', 'clean-invisible-characters'), {
+    status: 'ready',
+    text: '👨‍👩‍👧‍👦\r\nمی‌روم\te\u0301\u200e\u200f',
+    invisibleCleanup: { normalizedSpaces: 0, removedCharacters: 0 },
+  })
   assert.equal(getWorkbenchOperation('clean-agent-text'), 'clean-agent-text')
   assert.equal(ready('╭─────╮\n│ cat │\n╰─────╯', 'clean-agent-text'), 'cat')
   assert.equal(ready('+-----+\n| cat |\n+-----+', 'clean-agent-text', { cleanAgentAscii: true }), 'cat')
