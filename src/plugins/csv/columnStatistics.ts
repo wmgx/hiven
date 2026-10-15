@@ -22,13 +22,13 @@ function aborted(signal?: AbortSignal) {
 }
 
 /** Full-result statistics; exact-string distinct count excludes whitespace-only cells. */
-export async function columnStatistics(table: Table, columns: ReadonlySet<string>, signal?: AbortSignal): Promise<ColumnStatistics[]> {
+export async function columnStatistics(table: Table, columnIndexes: ReadonlySet<number>, signal?: AbortSignal): Promise<ColumnStatistics[]> {
   aborted(signal)
   const results: ColumnStatistics[] = []
   let visited = 0
   for (let index = 0; index < table.headers.length; index++) {
     const column = table.headers[index]
-    if (!columns.has(column)) continue
+    if (!columnIndexes.has(index)) continue
     const stats: ColumnStatistics = { column, index, rows: table.rows.length, valid: 0, empty: 0, invalid: 0, outOfRange: 0, distinct: 0, sum: null, average: null, averageRounded: false }
     let sum = new Decimal(0)
     const distinct = new Set<string>()

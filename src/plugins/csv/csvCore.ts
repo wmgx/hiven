@@ -32,7 +32,7 @@ export type TableQuery = {
   filterMode?: 'text' | 'sql'
   globalFilter?: string
   sqlFilter?: string
-  sortColumns?: readonly { columnKey: string; direction: 'ASC' | 'DESC' }[]
+  sortColumns?: readonly { columnKey: string; columnIndex?: number; direction: 'ASC' | 'DESC' }[]
 }
 
 export type TableQueryResult =
@@ -459,8 +459,8 @@ export function applyTableQuery(table: Table, query: TableQuery = {}): TableQuer
 
   const headerIndexes = new Map(table.headers.map((header, index) => [header, index]))
   if (query.sortColumns?.length) {
-    const sortColumns = query.sortColumns.map(({ columnKey, direction }) => ({
-      index: headerIndexes.get(columnKey),
+    const sortColumns = query.sortColumns.map(({ columnKey, columnIndex, direction }) => ({
+      index: columnIndex ?? headerIndexes.get(columnKey),
       direction,
     }))
     rowIndexes.sort((left, right) => {

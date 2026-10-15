@@ -7,7 +7,6 @@ import {
   type CellMouseArgs,
   type CellSelectArgs,
   type Column,
-  type SortColumn,
 } from 'react-data-grid'
 import 'react-data-grid/lib/styles.css'
 import type { PluginSurfaceProps } from '@hiven/plugin'
@@ -52,6 +51,29 @@ type MainView = 'table' | 'output' | 'source'
 type CsvGridRow = {
   id: number
   [key: string]: string | number
+}
+
+type GridColumnIdentity = { key: string; index: number; sourceIndex: number; header: string; label: string }
+type PositionSort = { columnKey: string; columnIndex: number; header: string; direction: 'ASC' | 'DESC' }
+
+const gridColumnKey = (index: number) => `csv-column-${index}`
+
+function gridColumnIdentities(headers: string[], sourceHeaders: string[] = headers): GridColumnIdentity[] {
+  const counts = new Map<string, number>()
+  for (const header of headers) counts.set(header, (counts.get(header) ?? 0) + 1)
+  const occurrences = new Map<string, number>()
+  return headers.map((header, index) => {
+    const occurrence = occurrences.get(header) ?? 0
+    occurrences.set(header, occurrence + 1)
+    const matches = sourceHeaders.flatMap((candidate, sourceIndex) => candidate === header ? [sourceIndex] : [])
+    return {
+      key: gridColumnKey(index),
+      index,
+      sourceIndex: matches[occurrence] ?? index,
+      header,
+      label: (counts.get(header) ?? 0) > 1 ? `${header} (${occurrence + 1})` : header,
+    }
+  })
 }
 
 /** Inclusive block in display-space (row ids + column keys). */
@@ -135,12 +157,13 @@ type FullJobState =
 
 
 
-function normalizeBlock(block: CellBlock, displayRows: CsvGridRow[], headers: string[]) {
+function normalizeBlock(block: CellBlock, displayRows: CsvGridRow[], columns: GridColumnIdentity[]) {
   const rowOrder = displayRows.map((r) => r.id)
   const i0 = rowOrder.indexOf(block.start.rowId)
   const i1 = rowOrder.indexOf(block.end.rowId)
-  const j0 = headers.indexOf(block.start.columnKey)
-  const j1 = headers.indexOf(block.end.columnKey)
+  const keys = columns.map((column) => column.key)
+  const j0 = keys.indexOf(block.start.columnKey)
+  const j1 = keys.indexOf(block.end.columnKey)
   if (i0 < 0 || i1 < 0 || j0 < 0 || j1 < 0) return null
   const rMin = Math.min(i0, i1)
   const rMax = Math.max(i0, i1)
@@ -148,7 +171,7 @@ function normalizeBlock(block: CellBlock, displayRows: CsvGridRow[], headers: st
   const cMax = Math.max(j0, j1)
   return {
     rowIds: rowOrder.slice(rMin, rMax + 1),
-    colKeys: headers.slice(cMin, cMax + 1),
+    columns: columns.slice(cMin, cMax + 1),
     rMin,
     rMax,
     cMin,
@@ -161,20 +184,20 @@ function isInBlock(
   columnKey: string,
   block: CellBlock | null,
   displayRows: CsvGridRow[],
-  headers: string[],
+  columns: GridColumnIdentity[],
 ): boolean {
   if (!block) return false
-  const n = normalizeBlock(block, displayRows, headers)
+  const n = normalizeBlock(block, displayRows, columns)
   if (!n) return false
-  return n.rowIds.includes(rowId) && n.colKeys.includes(columnKey)
+  return n.rowIds.includes(rowId) && n.columns.some((column) => column.key === columnKey)
 }
 
-function blockToTsv(block: CellBlock, displayRows: CsvGridRow[], headers: string[]): string {
-  const n = normalizeBlock(block, displayRows, headers)
+function blockToTsv(block: CellBlock, displayRows: CsvGridRow[], columns: GridColumnIdentity[]): string {
+  const n = normalizeBlock(block, displayRows, columns)
   if (!n) return ''
   const lines = n.rowIds.map((id) => {
     const row = displayRows.find((r) => r.id === id)
-    return n.colKeys.map((h) => String(row?.[h] ?? '')).join('\t')
+    return n.columns.map((column) => String(row?.[column.key] ?? '')).join('\t')
   })
   return lines.join('\n')
 }
@@ -235,7 +258,9 @@ export function CsvSurface(props: PluginSurfaceProps) {
   const [selectedCell, setSelectedCell] = useState<{ rowId: number; columnKey: string } | null>(null)
   const [selectedColumns, setSelectedColumns] = useState<ReadonlySet<string>>(() => new Set())
   const [cellBlock, setCellBlock] = useState<CellBlock | null>(null)
-  const [sortColumns, setSortColumns] = useState<readonly SortColumn[]>([])
+  const [sortColumns, setSortColumns] = useState<readonly PositionSort[]>([])
+  const selectedColumnStructureRef = useRef<string | null>(null)
+  const sortColumnStructureRef = useRef<string | null>(null)
   const [filterMode, setFilterMode] = useState<'text' | 'sql'>('text')
   const [globalFilter, setGlobalFilter] = useState('')
   const [sqlFilter, setSqlFilter] = useState('')
@@ -445,6 +470,13 @@ export function CsvSurface(props: PluginSurfaceProps) {
       return null
     }
   }, [dedupe, dropEmpty, parsed, transpose])
+  useEffect(() => {
+    if (!tableFull) return
+    const structure = JSON.stringify(tableFull.headers)
+    const previousStructure = sortColumnStructureRef.current
+    sortColumnStructureRef.current = structure
+    if (previousStructure !== null && previousStructure !== structure) setSortColumns([])
+  }, [tableFull])
 
   // A capped parse is only useful for discovering source columns. Do not query
   // that subset or present its row count as the complete result.
@@ -459,7 +491,12 @@ export function CsvSurface(props: PluginSurfaceProps) {
     && fullReturnSnapshotRef.current?.sourceText === sourceText
     && fullReturnSnapshotRef.current.parameters === resultParameters
   const fullJobReady = fullReturnReady
-  const tableQuery = useMemo(() => ({ filterMode, globalFilter, sqlFilter, sortColumns }), [filterMode, globalFilter, sqlFilter, sortColumns])
+  const tableQuery = useMemo(() => ({
+    filterMode,
+    globalFilter,
+    sqlFilter,
+    sortColumns: sortColumns.map((sort) => ({ columnKey: sort.header, columnIndex: sort.columnIndex, direction: sort.direction })),
+  }), [filterMode, globalFilter, sqlFilter, sortColumns])
   const queryResult = useMemo(() => {
     if (!tableFull || returnNeedsFullProcess) return null
     // Capped JSON and transposed sources may have columns beyond the preview.
@@ -477,7 +514,8 @@ export function CsvSurface(props: PluginSurfaceProps) {
     setStatistics(null)
     if (!finalTable || !selectedColumns.size) return
     const controller = new AbortController()
-    void columnStatistics(finalTable, selectedColumns, controller.signal).then((values) => {
+    const indexes = new Set([...selectedColumns].map((key) => Number(key.slice(key.lastIndexOf('-') + 1))))
+    void columnStatistics(finalTable, indexes, controller.signal).then((values) => {
       if (!controller.signal.aborted) setStatistics({ table: finalTable, columns: selectedColumns, values })
     }).catch(() => {
       if (!controller.signal.aborted) setStatistics({ table: finalTable, columns: selectedColumns, values: null })
@@ -724,8 +762,8 @@ export function CsvSurface(props: PluginSurfaceProps) {
     if (!table) return []
     return table.rows.map((row, index) => {
       const record: CsvGridRow = { id: index }
-      table.headers.forEach((h, i) => {
-        record[h] = row[i] ?? ''
+      table.headers.forEach((_header, i) => {
+        record[gridColumnKey(i)] = row[i] ?? ''
       })
       return record
     })
@@ -733,6 +771,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
 
   /** Final columns include SQL projection, with source columns kept for completion. */
   const visibleHeaders = table?.headers ?? []
+  const visibleColumns = useMemo(() => gridColumnIdentities(visibleHeaders, tableFull?.headers), [tableFull, visibleHeaders])
 
   const sqlCompletions = useMemo(() => {
     if (filterMode !== 'sql') return { items: [] as SqlCompletionItem[], from: 0, to: 0 }
@@ -783,12 +822,12 @@ export function CsvSurface(props: PluginSurfaceProps) {
     setCellBlock(null)
   }, [])
 
-  const cycleSort = useCallback((columnKey: string) => {
+  const cycleSort = useCallback((column: GridColumnIdentity) => {
     updateResult(() => setSortColumns((prev) => {
-      const existing = prev.find((s) => s.columnKey === columnKey)
-      if (!existing) return [{ columnKey, direction: 'ASC' }]
-      if (existing.direction === 'ASC') return [{ columnKey, direction: 'DESC' }]
-      return prev.filter((s) => s.columnKey !== columnKey)
+      const existing = prev.find((s) => s.columnKey === column.key)
+      if (!existing) return [{ columnKey: column.key, columnIndex: column.sourceIndex, header: column.header, direction: 'ASC' }]
+      if (existing.direction === 'ASC') return [{ ...existing, direction: 'DESC' }]
+      return prev.filter((s) => s.columnKey !== column.key)
     }))
   }, [updateResult])
 
@@ -802,24 +841,25 @@ export function CsvSurface(props: PluginSurfaceProps) {
 
   const gridColumns: Column<CsvGridRow>[] = useMemo(() => {
     if (visibleHeaders.length === 0) return []
-    return visibleHeaders.map((h) => {
-      const dir = sortDirFor(h)
+    return visibleColumns.map((column) => {
+      const { key, label } = column
+      const dir = sortDirFor(key)
       return {
-        key: h,
-        name: h,
+        key,
+        name: label,
         resizable: true,
         sortable: false, // custom sort icon — header click selects column
         minWidth: 108,
-        headerCellClass: selectedColumns.has(h)
+        headerCellClass: selectedColumns.has(key)
           ? 'csv-tools-surface__header-cell is-col-selected'
           : 'csv-tools-surface__header-cell',
         cellClass: (row: CsvGridRow) => {
           const classes: string[] = []
-          if (selectedColumns.has(h)) classes.push('csv-cell--col-selected')
-          if (isInBlock(row.id, h, cellBlock, displayGridRows, visibleHeaders)) {
+          if (selectedColumns.has(key)) classes.push('csv-cell--col-selected')
+          if (isInBlock(row.id, key, cellBlock, displayGridRows, visibleColumns)) {
             classes.push('csv-cell--range')
           }
-          if (selectedCell?.rowId === row.id && selectedCell.columnKey === h && !cellBlock) {
+          if (selectedCell?.rowId === row.id && selectedCell.columnKey === key && !cellBlock) {
             classes.push('csv-cell--focus')
           }
           return classes.length > 0 ? classes.join(' ') : undefined
@@ -833,10 +873,10 @@ export function CsvSurface(props: PluginSurfaceProps) {
               onClick={(event) => {
                 event.preventDefault()
                 event.stopPropagation()
-                toggleColumnSelected(h, event.shiftKey || event.metaKey || event.ctrlKey)
+                toggleColumnSelected(key, event.shiftKey || event.metaKey || event.ctrlKey)
               }}
             >
-              <span className="csv-tools-surface__col-name-text">{h}</span>
+              <span className="csv-tools-surface__col-name-text">{label}</span>
             </button>
             <button
               type="button"
@@ -846,7 +886,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
               onClick={(event) => {
                 event.preventDefault()
                 event.stopPropagation()
-                cycleSort(h)
+                cycleSort(column)
               }}
             >
               {dir === 'ASC' ? <IconSortAsc /> : dir === 'DESC' ? <IconSortDesc /> : <IconSortNone />}
@@ -861,12 +901,12 @@ export function CsvSurface(props: PluginSurfaceProps) {
               if (!drag?.active) return
               setCellBlock({
                 start: drag.start,
-                end: { rowId: row.id, columnKey: h },
+                end: { rowId: row.id, columnKey: key },
               })
               setSelectedColumns(new Set())
             }}
           >
-            {String(row[h] ?? '')}
+            {String(row[key] ?? '')}
           </div>
         ),
       }
@@ -880,7 +920,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
     sortDirFor,
     t,
     toggleColumnSelected,
-    visibleHeaders,
+    visibleColumns,
   ])
 
   const delimiterOptions = [
@@ -934,35 +974,35 @@ export function CsvSurface(props: PluginSurfaceProps) {
   const copySelection = useCallback(async () => {
     if (!table || !canCopyOutput || resultRevision !== resultRevisionRef.current || fileReadRef.current) return
     if (cellBlock) {
-      await writeClipboard(blockToTsv(cellBlock, displayGridRows, visibleHeaders))
+      await writeClipboard(blockToTsv(cellBlock, displayGridRows, visibleColumns))
       return
     }
     if (selectedColumns.size > 0) {
-      const cols = visibleHeaders.filter((h) => selectedColumns.has(h))
-      const body = displayGridRows.map((row) => cols.map((h) => String(row[h] ?? '')).join('\t'))
-      await writeClipboard([cols.join('\t'), ...body].join('\n'))
+      const cols = visibleColumns.filter((column) => selectedColumns.has(column.key))
+      const body = displayGridRows.map((row) => cols.map((column) => String(row[column.key] ?? '')).join('\t'))
+      await writeClipboard([cols.map((column) => column.header).join('\t'), ...body].join('\n'))
       return
     }
     if (selectedCell) {
       const row = displayGridRows.find((r) => r.id === selectedCell.rowId)
       if (row) await writeClipboard(String(row[selectedCell.columnKey] ?? ''))
     }
-  }, [canCopyOutput, cellBlock, displayGridRows, resultRevision, selectedCell, selectedColumns, table, visibleHeaders, writeClipboard])
+  }, [canCopyOutput, cellBlock, displayGridRows, resultRevision, selectedCell, selectedColumns, table, visibleColumns, writeClipboard])
 
   const handleCellCopy = useCallback(
     (args: CellCopyArgs<CsvGridRow>, event: React.ClipboardEvent<HTMLDivElement>) => {
       event.preventDefault()
       if (!table || !canCopyOutput || resultRevision !== resultRevisionRef.current || fileReadRef.current) return
       if (cellBlock) {
-        const tsv = blockToTsv(cellBlock, displayGridRows, visibleHeaders)
+        const tsv = blockToTsv(cellBlock, displayGridRows, visibleColumns)
         event.clipboardData.setData('text/plain', tsv)
         void writeClipboard(tsv)
         return
       }
       if (selectedColumns.size > 0) {
-        const cols = visibleHeaders.filter((h) => selectedColumns.has(h))
-        const body = displayGridRows.map((row) => cols.map((h) => String(row[h] ?? '')).join('\t'))
-        const tsv = [cols.join('\t'), ...body].join('\n')
+        const cols = visibleColumns.filter((column) => selectedColumns.has(column.key))
+        const body = displayGridRows.map((row) => cols.map((column) => String(row[column.key] ?? '')).join('\t'))
+        const tsv = [cols.map((column) => column.header).join('\t'), ...body].join('\n')
         event.clipboardData.setData('text/plain', tsv)
         void writeClipboard(tsv)
         return
@@ -971,7 +1011,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
       event.clipboardData.setData('text/plain', value)
       void writeClipboard(value)
     },
-    [canCopyOutput, cellBlock, displayGridRows, resultRevision, selectedColumns, table, visibleHeaders, writeClipboard],
+    [canCopyOutput, cellBlock, displayGridRows, resultRevision, selectedColumns, table, visibleColumns, writeClipboard],
   )
 
   const handleCellKeyDown = useCallback(
@@ -1073,9 +1113,20 @@ export function CsvSurface(props: PluginSurfaceProps) {
 
   useEffect(() => {
     // Keep the selection while a full result is pending or the query is incomplete.
-    // A completed projection may remove columns, but zero-row filters do not.
+    // A completed projection may reorder same-position columns; invalidate the
+    // old positional selection instead of silently rebinding it. Row-only
+    // filtering and sorting preserve the same header structure and selection.
     if (!finalTable) return
-    const available = new Set(finalTable.headers)
+    const structure = JSON.stringify(finalTable.headers)
+    const previousStructure = selectedColumnStructureRef.current
+    selectedColumnStructureRef.current = structure
+    if (previousStructure !== null && previousStructure !== structure) {
+      setSelectedColumns(new Set())
+      setSelectedCell(null)
+      setCellBlock(null)
+      return
+    }
+    const available = new Set(gridColumnIdentities(finalTable.headers).map((column) => column.key))
     setSelectedColumns((selected) => {
       const retained = new Set([...selected].filter((column) => available.has(column)))
       return retained.size === selected.size ? selected : retained

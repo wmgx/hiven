@@ -44,9 +44,9 @@ const fields = [
   'outputText', 'tableFull', 'fullJob', 'fullJobReady', 'fullOutputRef', 'jobFingerprint', 'fullReturnReady',
   'returnNeedsFullProcess', 'canReturnOutput', 'returning', 'returnOutput', 'runFullProcess', 'cancelFullProcess',
   'onFilePicked', 'readingFile', 'handleCopyPrimary', 'saveFullResult', 'updateResult', 'setSourceText',
-  'setSelectedCell', 'setSelectedColumns', 'setCellBlock', 'setGlobalFilter', 'setSqlFilter', 'setFilterMode', 'setMainView',
+  'selectedColumns', 'setSelectedCell', 'setSelectedColumns', 'setCellBlock', 'setGlobalFilter', 'setSqlFilter', 'setFilterMode', 'setMainView',
   'filterMode', 'globalFilter', 'sqlFilter', 'sortColumns', 'cycleSort', 'applySqlCompletion', 'sqlCompletions',
-  'saving', 'setLinkedFileLabel', 'finalTable', 'table', 'tableHeaders', 'displayGridRows', 'filterError', 'canCopyOutput', 'copyFullOutput',
+  'saving', 'setLinkedFileLabel', 'finalTable', 'table', 'tableHeaders', 'displayGridRows', 'visibleColumns', 'currentStatistics', 'filterError', 'canCopyOutput', 'copyFullOutput',
 ]
 const probe = `({ ${fields.join(', ')}, clearSelection: ${clearSelection}, queryEdits: { ${Object.entries(queryEdits).map(([name, fn]) => `${name}: ${fn}`).join(', ')} }, edits: { ${Object.entries(edits).map(([name, fn]) => `${name}: ${fn}`).join(', ')} }, exits: { ${Object.entries(exits).map(([name, fn]) => `${name}: ${fn}`).join(', ')} } })`
 const source = surfaceSource.slice(0, returned.expression.getStart(file)) + probe + surfaceSource.slice(returned.expression.end)
@@ -167,7 +167,11 @@ function harness({ input = 'name,value\none,1\ntwo,2', operation = 'to-json', ou
       if ('sqlFilter' in values) view.queryEdits.SqlFilter({ target: { value: values.sqlFilter, selectionStart: values.sqlFilter.length } })
       if (rerender) render()
     },
-    sort(key, rerender = true) { view.cycleSort(key); if (rerender) render() },
+    sort(key, rerender = true) {
+      const index = Number(key.slice(key.lastIndexOf('-') + 1))
+      view.cycleSort({ key, index, sourceIndex: index, header: view.table.headers[index], label: view.table.headers[index] })
+      if (rerender) render()
+    },
     setDeferred(value) { deferredInput = value; render() },
     setProcessing(value) { processing = value; render() },
     async full() { await view.runFullProcess(); render() },
@@ -191,8 +195,8 @@ const expected = (input, mode = 'objects') => core.toOutput(core.parseSource(inp
 for (const viewName of ['table', 'output', 'source']) await check(`${viewName} returns the final text-filtered result independent of selection`, async () => {
   const input = csv(1800), h = harness({ input })
   h.query({ globalFilter: 'row1' })
-  h.view.setMainView(viewName); h.view.setSelectedCell({ rowId: 0, columnKey: 'name' })
-  h.view.setSelectedColumns(new Set(['name'])); h.view.setCellBlock({ start: { rowId: 0, columnKey: 'name' }, end: { rowId: 1, columnKey: 'name' } })
+  h.view.setMainView(viewName); h.view.setSelectedCell({ rowId: 0, columnKey: 'csv-column-0' })
+  h.view.setSelectedColumns(new Set(['csv-column-0'])); h.view.setCellBlock({ start: { rowId: 0, columnKey: 'csv-column-0' }, end: { rowId: 1, columnKey: 'csv-column-0' } })
   h.render()
   const queried = core.applyTableQuery(core.parseSource(input).table, { filterMode: 'text', globalFilter: 'row1' })
   assert.equal(queried.ok, true)
@@ -205,6 +209,33 @@ await check('SQL projection and limit become the returned final result', async (
   h.query({ filterMode: 'sql', sqlFilter: 'SELECT name FROM data ORDER BY value DESC LIMIT 1' })
   await h.view.returnOutput()
   assert.deepEqual(JSON.parse(h.calls.handoff[0].block.text), [{ name: 'row29' }])
+})
+await check('duplicate header positions keep independent statistics and projection changes clear old selection', async () => {
+  const h = harness({ input: 'amount,amount\n1,10\n2,20', operation: 'to-markdown' })
+  assert.deepEqual(plain(h.view.visibleColumns.map(({ key, label }) => ({ key, label }))), [
+    { key: 'csv-column-0', label: 'amount (1)' },
+    { key: 'csv-column-1', label: 'amount (2)' },
+  ])
+  h.view.setSelectedColumns(new Set(['csv-column-0'])); h.render()
+  await new Promise((resolve) => setTimeout(resolve, 0)); h.render()
+  assert.equal(h.view.currentStatistics[0].sum, '3')
+  h.view.setSelectedColumns(new Set(['csv-column-1'])); h.render()
+  await new Promise((resolve) => setTimeout(resolve, 0)); h.render()
+  assert.equal(h.view.currentStatistics[0].sum, '30')
+
+  const projected = harness({ input: 'a,b\n1,10\n2,20' })
+  projected.query({ filterMode: 'sql', sqlFilter: 'SELECT a, b FROM data' })
+  projected.view.setSelectedColumns(new Set(['csv-column-0'])); projected.render()
+  assert.equal(projected.view.selectedColumns.size, 1)
+  projected.query({ sqlFilter: 'SELECT b, a FROM data' })
+  assert.equal(projected.view.selectedColumns.size, 0)
+  assert.equal(projected.view.currentStatistics, null)
+
+  const changedHeaders = harness({ input: 'a,b\n2,10\n1,20' })
+  changedHeaders.sort('csv-column-1')
+  assert.equal(changedHeaders.view.sortColumns.length, 1)
+  changedHeaders.edit('SourceText', 'x,y\n2,10\n1,20')
+  assert.equal(changedHeaders.view.sortColumns.length, 0)
 })
 await check('8100 rows require a completed current full job and return the entire result', async () => {
   const input = csv(8100), h = harness({ input })
@@ -419,7 +450,7 @@ await check('filtering beyond both preview caps feeds the same grid, copy, retur
   assert.equal(h.calls.copied.length + h.calls.saves.length + h.calls.handoff.length, 0)
   await h.full()
   assert.equal(h.view.finalTable.rows.length, 1)
-  assert.equal(h.view.displayGridRows[0].name, 'row8104')
+  assert.equal(h.view.displayGridRows[0]['csv-column-0'], 'row8104')
   await h.view.saveFullResult()
   h.view.handleCopyPrimary(); await new Promise((resolve) => setTimeout(resolve, 0)); h.render()
   await h.view.returnOutput()
@@ -431,7 +462,7 @@ await check('filtering beyond both preview caps feeds the same grid, copy, retur
 await check('SQL limit and header sort run before the grid and output preview slices', async () => {
   const h = harness({ input: csv(8105) })
   h.query({ filterMode: 'sql', sqlFilter: 'SELECT name, value FROM data WHERE value >= 8100 ORDER BY value DESC LIMIT 3' })
-  h.sort('value')
+  h.sort('csv-column-1')
   await h.full()
   assert.deepEqual(plain(h.view.finalTable.rows), [['row8102', '8102'], ['row8103', '8103'], ['row8104', '8104']])
   assert.deepEqual(plain(h.view.tableHeaders), ['name', 'value'])
@@ -442,7 +473,7 @@ await check('small complete tables query rows beyond the 5000-row grid limit', a
   const h = harness({ input: csv(6000) })
   assert.equal(h.view.displayGridRows.length, 5000)
   h.query({ globalFilter: 'row5999' })
-  assert.equal(h.view.displayGridRows[0].name, 'row5999')
+  assert.equal(h.view.displayGridRows[0]['csv-column-0'], 'row5999')
   assert.equal(h.view.finalTable.rows.length, 1)
 })
 await check('a column first found after the parse cap is validated by the full query', async () => {
@@ -514,7 +545,7 @@ await check('SQL completion revokes a pending result and uses source columns', a
 await check('clearing only a selection preserves a completed full result', async () => {
   const h = harness({ input: csv(8105) })
   await h.full()
-  h.view.setSelectedColumns(new Set(['name'])); h.render()
+  h.view.setSelectedColumns(new Set(['csv-column-0'])); h.render()
   h.view.clearSelection(); h.render()
   assert.equal(h.view.fullJobReady, true)
   assert.equal(h.view.canReturnOutput, true)
@@ -573,7 +604,7 @@ await check('raw-source copy and cell copy retain their distinct meanings', asyn
   assert.equal(source.calls.complete, 0)
   const cell = harness({ input })
   cell.query({ globalFilter: 'row1' })
-  cell.view.setMainView('table'); cell.view.setSelectedCell({ rowId: 0, columnKey: 'name' }); cell.render()
+  cell.view.setMainView('table'); cell.view.setSelectedCell({ rowId: 0, columnKey: 'csv-column-0' }); cell.render()
   cell.view.handleCopyPrimary(); await new Promise((resolve) => setTimeout(resolve, 0))
   assert.deepEqual(cell.calls.copied, ['row1'])
   assert.equal(cell.calls.complete, 0)
@@ -588,7 +619,7 @@ await check('save captures complete filtered output, waits for saved receipt and
   const receipt = deferred(), h = harness({ input: csv(8105), saveOutcome: () => receipt.promise })
   h.query({ filterMode: 'sql', sqlFilter: 'SELECT name, value FROM data WHERE value >= 100 ORDER BY value DESC' })
   await h.full()
-  h.view.setSelectedColumns(new Set(['name'])); h.render()
+  h.view.setSelectedColumns(new Set(['csv-column-0'])); h.render()
   const draft = h.draft(), complete = h.view.fullOutputRef.current
   h.calls.messages.length = 0
   const save = h.view.saveFullResult, pending = save()
@@ -772,7 +803,7 @@ await check('ordinary surface rerenders preserve a pending save snapshot', async
   await h.full(); h.calls.messages.length = 0
   const complete = h.view.fullOutputRef.current
   const pending = h.view.saveFullResult()
-  h.view.setMainView('source'); h.view.setSelectedColumns(new Set(['name'])); h.render(); h.rerenderHost()
+  h.view.setMainView('source'); h.view.setSelectedColumns(new Set(['csv-column-0'])); h.render(); h.rerenderHost()
   assert.equal(h.calls.saves[0].signal.aborted, false)
   assert.equal(h.view.saving, true)
   assert.equal(h.view.fullJobReady, true)

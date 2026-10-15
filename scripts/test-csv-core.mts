@@ -476,6 +476,15 @@ function table(headers: string[], rows: string[][]): Table {
   const parsedWider = parseSource(wider, 'comma', 'first-row')
   assert.equal(parsedWider.ok, true)
   if (parsedWider.ok) assert.deepEqual(parsedWider.table, table(['a', 'column_2'], [['1', 'tail']]))
+  const duplicates = parseSource('amount,amount\n2,10\n1,20', 'comma', 'first-row')
+  assert.equal(duplicates.ok, true)
+  if (duplicates.ok) {
+    assert.equal(toOutput(duplicates.table, 'markdown'), '| amount | amount |\n| --- | --- |\n| 2 | 10 |\n| 1 | 20 |')
+    const firstSorted = applyTableQuery(duplicates.table, { sortColumns: [{ columnKey: 'amount', columnIndex: 0, direction: 'ASC' }] })
+    const secondSorted = applyTableQuery(duplicates.table, { sortColumns: [{ columnKey: 'amount', columnIndex: 1, direction: 'DESC' }] })
+    assert.equal(firstSorted.ok && firstSorted.table.rows[0][0], '1')
+    assert.equal(secondSorted.ok && secondSorted.table.rows[0][1], '20')
+  }
   const widerFull = await processFullSource(wider, {
     delimiter: 'comma', header: 'first-row', output: 'markdown',
     transforms: { dropEmpty: false, dedupe: false, transpose: false },
