@@ -2,7 +2,7 @@ import { useLayoutEffect, useMemo, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import { IconButton } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
-import { CurlParseError, parseCurl } from './core'
+import { CurlParseError, curlHeaderDisplayLabels, parseCurl } from './core'
 
 export function CurlInspector({ host, t }: PluginSurfaceProps) {
   // Deliberately ignore initialText: a curl command belongs here, never in a launcher query.
@@ -18,6 +18,7 @@ export function CurlInspector({ host, t }: PluginSurfaceProps) {
     try { return { request: parseCurl(source) } }
     catch (error) { return { error: error instanceof CurlParseError ? error.code : 'option' } }
   }, [source])
+  const headerLabels = useMemo(() => result?.request ? curlHeaderDisplayLabels(result.request.headers) : [], [result])
   const toggle = (id: string) => setVisible((old) => { const next = new Set(old); if (next.has(id)) next.delete(id); else next.add(id); return next })
   const copy = async (text: string) => {
     try { await host.clipboard.writeText(text, { recordInHistory: false }); setStatus(t('copy.ok')) }
@@ -58,7 +59,7 @@ export function CurlInspector({ host, t }: PluginSurfaceProps) {
       {field('method', t('method'), result.request.method, false)}
       {field('url', t('url'), result.request.url)}
       <h3>{t('headers')}</h3><p>{t('headers.hint')}</p>
-      {result.request.headers.length ? result.request.headers.map((header, index) => field(`header-${index}`, header.name, header.value)) : <p>{t('headers.empty')}</p>}
+      {result.request.headers.length ? result.request.headers.map((header, index) => field(`header-${index}`, headerLabels[index], header.value)) : <p>{t('headers.empty')}</p>}
       {result.request.body !== null ? field('body', t('body'), result.request.body) : <p>{t('body.empty')}</p>}
     </section>}
     <div className="curl-status" role="status" aria-live="polite">{status}</div>

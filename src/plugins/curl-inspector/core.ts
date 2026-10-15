@@ -5,6 +5,20 @@ export class CurlParseError extends Error {
 }
 function fail(code: CurlError): never { throw new CurlParseError(code) }
 export type CurlRequest = { url: string; method: string; headers: Array<{ name: string; value: string }>; body: string | null }
+export function curlHeaderDisplayLabels(headers: ReadonlyArray<{ name: string }>): string[] {
+  const totals = new Map<string, number>()
+  for (const header of headers) {
+    const identity = header.name.toLowerCase()
+    totals.set(identity, (totals.get(identity) ?? 0) + 1)
+  }
+  const occurrences = new Map<string, number>()
+  return headers.map((header) => {
+    const identity = header.name.toLowerCase()
+    const occurrence = (occurrences.get(identity) ?? 0) + 1
+    occurrences.set(identity, occurrence)
+    return (totals.get(identity) ?? 0) > 1 ? `${header.name} (${occurrence})` : header.name
+  })
+}
 /** POSIX quoting only, lexical parsing; no shell, substitutions, globbing or file access. */
 export function tokenizeCurl(source: string): string[] {
   if (source.length > 100000) fail('limit')

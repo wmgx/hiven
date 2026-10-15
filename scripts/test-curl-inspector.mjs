@@ -9,7 +9,20 @@ try {
   const text = await readFile(new URL('../src/plugins/curl-inspector/core.ts', import.meta.url), 'utf8')
   const path = join(dir, 'core.mjs')
   await writeFile(path, ts.transpileModule(text, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText)
-  const { parseCurl, tokenizeCurl } = await import(pathToFileURL(path))
+  const { curlHeaderDisplayLabels, parseCurl, tokenizeCurl } = await import(pathToFileURL(path))
+  assert.deepEqual(curlHeaderDisplayLabels([{ name: 'X-Only' }]), ['X-Only'])
+  assert.deepEqual(curlHeaderDisplayLabels([
+    { name: 'X-Trace' },
+    { name: 'x-trace' },
+    { name: 'X-TRACE' },
+  ]), ['X-Trace (1)', 'x-trace (2)', 'X-TRACE (3)'])
+  const parenthesized = Object.freeze([
+    Object.freeze({ name: 'X-Trace (1)' }),
+    Object.freeze({ name: 'x-trace (1)' }),
+    Object.freeze({ name: 'X-Unique (2)' }),
+  ])
+  assert.deepEqual(curlHeaderDisplayLabels(parenthesized), ['X-Trace (1) (1)', 'x-trace (1) (2)', 'X-Unique (2)'])
+  assert.deepEqual(parenthesized.map((header) => header.name), ['X-Trace (1)', 'x-trace (1)', 'X-Unique (2)'])
   assert.deepEqual(parseCurl('curl https://example.invalid/a'), { url: 'https://example.invalid/a', method: 'GET', headers: [], body: null })
   const command = `curl 'https://example.invalid/a?token=SYNTHETIC&x=2' \\\n-H 'Authorization: Bearer SYNTHETIC' \\\n-H 'Cookie: session=SYNTHETIC' -H 'X-Test: one' -H 'X-Test: two' \\\n--data-raw '{"a":"quote \\" and @literal"}'`
   const parsed = parseCurl(command)
