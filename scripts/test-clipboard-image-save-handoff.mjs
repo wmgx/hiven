@@ -41,7 +41,8 @@ function fixture() {
     async () => { h.closes++; state.globalLauncherOpen = false },
     async () => { h.restores++ },
   )
-  return { ...h, h, notices, bind, state }
+  const shortcut = (current = () => true) => module.exports.saveClipboardImageFromShortcut(current, {})
+  return { ...h, h, notices, bind, shortcut, state }
 }
 {
   const { h, bind, notices } = fixture(); const api = bind(); const first = api.saveClipboardImageAsPng(); await flush(); await api.saveClipboardImageAsPng()
@@ -84,3 +85,42 @@ console.log('Image save handoff: one read/dialog, scoped cancellation, committed
   assert.equal(h.dismissed.length, 1, 'Explicit retry retires its previous failure before a new result')
   assert.equal(notices[1].result, 'image-saved')
 }
+
+{
+  const { h, shortcut, notices } = fixture()
+  let current = false
+  await shortcut(() => current)
+  assert.equal(h.readCount, 0, 'Disabled shortcut must exit before reading the clipboard')
+  current = true
+  h.allowed = false
+  await shortcut(() => current)
+  assert.equal(h.readCount, 0, 'Missing permissions must exit before reading the clipboard')
+  assert.equal(notices.length, 0, 'An unavailable shortcut must not report a result')
+}
+{
+  const { h, shortcut, notices } = fixture()
+  let current = true
+  const run = shortcut(() => current)
+  await flush()
+  await shortcut(() => current)
+  assert.equal(h.readCount, 1, 'Repeated shortcut presses share the existing busy transaction')
+  current = false
+  h.gate.resolve()
+  await run
+  assert.equal(notices.length, 0, 'An invalidated shortcut owner must not leave late feedback')
+}
+{
+  const { h, shortcut, notices } = fixture()
+  h.result = { status: 'saved', pathCopied: false }
+  h.gate.resolve()
+  await shortcut()
+  assert.equal(notices[0].result, 'image-saved-path-failed', 'A saved file with failed path copy needs an honest outcome')
+}
+{
+  const { h, shortcut, notices } = fixture()
+  h.result = { status: 'cancelled' }
+  h.gate.resolve()
+  await shortcut()
+  assert.equal(notices.length, 0, 'Native chooser cancellation must stay silent')
+}
+console.log('Image save shortcut: read-before-authorization blocked, busy serialized, stale feedback suppressed and outcomes honest')
