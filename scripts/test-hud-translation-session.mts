@@ -177,6 +177,21 @@ function deferred<T>() {
 }
 {
   const h = harness(), session = new HudTranslationSession(h.dependencies)
+  const activation = deferred<number | null>()
+  let activationStarted = false
+  h.dependencies.activate = () => { activationStarted = true; return activation.promise }
+  await session.trigger(); h.pending!.resolve('done'); await settleUntil(() => h.views.at(-1)?.phase === 'ready')
+  const result = session.trigger()
+  await settleUntil(() => activationStarted)
+  await session.cancel()
+  activation.resolve(h.dependencies.now() + 120_000)
+  assert.equal(await result, 'unavailable')
+  assert.equal(h.views.some(view => view.phase === 'active'), false,
+    'activation completion after cancellation cannot publish or revive focusable state')
+  assert.equal(h.dismissals.length, 1)
+}
+{
+  const h = harness(), session = new HudTranslationSession(h.dependencies)
   const copy = deferred<void>()
   h.dependencies.writeClipboard = async (text) => { h.writes.push(text); await copy.promise }
   await session.trigger(); h.pending!.resolve('copy once'); await settleUntil(() => h.views.at(-1)?.phase === 'ready'); await session.trigger()
@@ -236,13 +251,82 @@ function deferred<T>() {
 {
   const h = harness(), session = new HudTranslationSession(h.dependencies)
   const readiness = deferred<ReturnType<HudTranslationDependencies['prepare']> extends Promise<infer T> ? T : never>()
-  let reads = 0
+  const translated = deferred<string>()
+  let reads = 0, runs = 0, activations = 0
   h.dependencies.prepare = () => readiness.promise
   h.dependencies.readClipboard = async () => { reads += 1; return 'must not be read twice' }
+  h.dependencies.activate = async () => { activations += 1; return h.dependencies.now() + 120_000 }
   const first = session.trigger(); await settle()
-  assert.equal(await session.trigger(), 'unavailable', 'a second press during metadata preflight cannot queue another clipboard read')
+  const second = session.trigger()
+  const third = session.trigger()
+  readiness.resolve({
+    translate() { runs += 1; return translated.promise },
+  })
+  assert.equal(await first, 'activated')
+  assert.equal(await second, 'activated')
+  assert.equal(await third, 'activated', 'repeated preflight presses coalesce into one activation intent')
+  assert.deepEqual({ reads, runs, activations }, { reads: 1, runs: 1, activations: 1 },
+    'preflight activation intent cannot duplicate clipboard or provider work')
+  assert.equal(h.views.at(-1)?.phase, 'active')
+  translated.resolve('completed after deferred activation'); await settle()
+  assert.equal(h.views.at(-1)?.phase, 'active')
+}
+{
+  const h = harness(), session = new HudTranslationSession(h.dependencies)
+  const readiness = deferred<ReturnType<HudTranslationDependencies['prepare']> extends Promise<infer T> ? T : never>()
+  let reads = 0, activations = 0
+  h.dependencies.prepare = () => readiness.promise
+  h.dependencies.readClipboard = async () => { reads += 1; return 'private' }
+  h.dependencies.activate = async () => { activations += 1; return h.dependencies.now() + 120_000 }
+  const first = session.trigger(); await settle()
+  const second = session.trigger()
   readiness.resolve(null)
-  assert.equal(await first, 'unavailable'); assert.equal(reads, 0)
+  assert.equal(await first, 'unavailable')
+  assert.equal(await second, 'unavailable')
+  assert.deepEqual({ reads, activations }, { reads: 0, activations: 0 },
+    'readiness failure clears deferred activation without reading or focusing')
+  assert.equal(h.views.at(-1)?.failure, 'unavailable')
+}
+{
+  const h = harness(), session = new HudTranslationSession(h.dependencies)
+  const readiness = deferred<ReturnType<HudTranslationDependencies['prepare']> extends Promise<infer T> ? T : never>()
+  let reads = 0, activations = 0
+  h.dependencies.prepare = () => readiness.promise
+  h.dependencies.readClipboard = async () => { reads += 1; return 'cancelled input' }
+  h.dependencies.activate = async () => { activations += 1; return h.dependencies.now() + 120_000 }
+  const first = session.trigger(); await settle()
+  const second = session.trigger()
+  await session.cancel()
+  readiness.resolve({ translate: async () => 'late output' })
+  assert.equal(await first, 'cancelled')
+  assert.equal(await second, 'cancelled')
+  assert.deepEqual({ reads, activations }, { reads: 0, activations: 0 },
+    'cancellation invalidates the preparing generation before late readiness can focus')
+  assert.equal(h.views.some((view) => view.phase === 'active'), false)
+}
+{
+  const h = harness(), session = new HudTranslationSession(h.dependencies)
+  const oldReadiness = deferred<ReturnType<HudTranslationDependencies['prepare']> extends Promise<infer T> ? T : never>()
+  const replacementReadiness = deferred<ReturnType<HudTranslationDependencies['prepare']> extends Promise<infer T> ? T : never>()
+  const replacementOutput = deferred<string>()
+  let preparationCount = 0, reads = 0, runs = 0, activations = 0
+  h.dependencies.prepare = () => (++preparationCount === 1 ? oldReadiness.promise : replacementReadiness.promise)
+  h.dependencies.readClipboard = async () => { reads += 1; return 'replacement input' }
+  h.dependencies.activate = async () => { activations += 1; return h.dependencies.now() + 120_000 }
+  const oldFirst = session.trigger(); await settle()
+  const oldSecond = session.trigger()
+  await session.cancel()
+  oldReadiness.resolve({ translate: async () => 'stale output' })
+  assert.equal(await oldFirst, 'cancelled')
+  assert.equal(await oldSecond, 'cancelled')
+
+  const replacement = session.trigger(); await settleUntil(() => preparationCount === 2)
+  replacementReadiness.resolve({ translate() { runs += 1; return replacementOutput.promise } })
+  assert.equal(await replacement, 'started')
+  assert.deepEqual({ reads, runs, activations }, { reads: 1, runs: 1, activations: 0 },
+    'an old activation intent cannot activate its replacement generation')
+  assert.equal(h.views.at(-1)?.phase, 'translating')
+  replacementOutput.resolve('replacement output'); await settle()
 }
 {
   const h = harness(), session = new HudTranslationSession(h.dependencies)

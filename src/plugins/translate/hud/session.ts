@@ -59,6 +59,12 @@ type LiveSession = {
   delivery: Promise<void>
 }
 
+// Object identity is the preparation generation token: cancellation replaces it,
+// so a late readiness result cannot consume the intent for a newer session.
+type Preparation = {
+  activateRequested: boolean
+}
+
 const DEFAULT_TTL_MS = 15_000
 const DEFAULT_ACTIVE_TTL_MS = 120_000
 const DEFAULT_PREVIEW_CHARACTERS = 320
@@ -84,7 +90,7 @@ export class HudTranslationSession {
   private readonly maxInputCharacters: number
   private readonly maxOutputCharacters: number
   private live: LiveSession | null = null
-  private preparing = false
+  private preparing: Preparation | null = null
   private triggerQueue: Promise<'started' | 'cancelled' | 'activated' | 'unavailable' | 'rejected'> = Promise.resolve('unavailable')
 
   constructor(dependencies: HudTranslationDependencies, options: HudTranslationSessionOptions = {}) {
@@ -102,30 +108,35 @@ export class HudTranslationSession {
     if (current && (current.phase === 'translating' || current.phase === 'ready' || current.phase === 'active')) {
       return this.activateCurrent(current)
     }
-    if (this.preparing) return Promise.resolve('unavailable')
-    const next = this.triggerQueue.catch(() => 'unavailable' as const).then(() => this.triggerOnce())
+    if (this.preparing) {
+      this.preparing.activateRequested = true
+      return this.triggerQueue
+    }
+    const preparation: Preparation = { activateRequested: false }
+    this.preparing = preparation
+    const next = this.triggerQueue.catch(() => 'unavailable' as const).then(() => this.triggerOnce(preparation))
     this.triggerQueue = next
     return next
   }
 
-  private async triggerOnce(): Promise<'started' | 'cancelled' | 'activated' | 'unavailable' | 'rejected'> {
-    const current = this.live
-    if (current && (current.phase === 'translating' || current.phase === 'ready' || current.phase === 'active')) {
-      return this.activateCurrent(current)
-    }
-
+  private async triggerOnce(preparation: Preparation): Promise<'started' | 'cancelled' | 'activated' | 'unavailable' | 'rejected'> {
+    if (this.preparing !== preparation) return 'cancelled'
     // Profile/readiness/cancellation support is checked before content access.
-    this.preparing = true
     let prepared: HudTranslationPreparedRun | null
     try { prepared = await this.dependencies.prepare() }
     catch { prepared = null }
-    finally { this.preparing = false }
+    if (this.preparing !== preparation) return 'cancelled'
     if (!prepared) {
-      await this.showUnavailable()
+      preparation.activateRequested = false
+      await this.showUnavailable(preparation)
       return 'unavailable'
     }
 
-    await this.cancel()
+    const previous = this.live
+    if (previous) await this.retire(previous)
+    if (this.preparing !== preparation) return 'cancelled'
+    const activateRequested = preparation.activateRequested
+    preparation.activateRequested = false
     const controller = new AbortController()
     const session: LiveSession = {
       id: this.dependencies.randomId(), revision: 1, phase: 'translating', controller,
@@ -133,6 +144,7 @@ export class HudTranslationSession {
       copying: false, activating: false, delivery: Promise.resolve(),
     }
     this.live = session
+    this.preparing = null
     this.scheduleExpiry(session)
 
     let input: string
@@ -154,7 +166,7 @@ export class HudTranslationSession {
     if (!this.isCurrent(session) || controller.signal.aborted) return 'cancelled'
     if (this.expired(session)) { await this.expire(session); return 'cancelled' }
     void this.run(session, input, prepared)
-    return 'started'
+    return activateRequested ? this.activateCurrent(session) : 'started'
   }
 
   async copyAndClose(expected?: { sessionId: string; revision: number }): Promise<boolean> {
@@ -219,6 +231,10 @@ export class HudTranslationSession {
   }
 
   async cancel(phase?: 'cancelled'): Promise<void> {
+    if (this.preparing) {
+      this.preparing.activateRequested = false
+      this.preparing = null
+    }
     const session = this.live
     if (!session) return
     if (phase) {
@@ -319,8 +335,10 @@ export class HudTranslationSession {
     await this.publish(session)
   }
 
-  private async showUnavailable(): Promise<void> {
-    await this.cancel()
+  private async showUnavailable(preparation: Preparation): Promise<void> {
+    const previous = this.live
+    if (previous) await this.retire(previous)
+    if (this.preparing !== preparation) return
     const session: LiveSession = {
       id: this.dependencies.randomId(), revision: 1, phase: 'error', controller: new AbortController(),
       output: '', copyFailed: false, complete: false, failure: 'unavailable',
@@ -329,7 +347,11 @@ export class HudTranslationSession {
     }
     this.live = session
     this.scheduleExpiry(session)
-    if (!await this.publish(session)) await this.retire(session)
+    try {
+      if (!await this.publish(session)) await this.retire(session)
+    } finally {
+      if (this.preparing === preparation) this.preparing = null
+    }
   }
 
   private async finish(session: LiveSession): Promise<void> {
