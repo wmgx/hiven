@@ -45,6 +45,7 @@
     "test:launcher-intent-ranking": "node scripts/test-launcher-intent-ranking.mjs",
     "test:quality-gate": "node scripts/test-quality-gate.mjs",
     "test:editor-primitive-boundary": "node scripts/test-editor-primitive-boundary.mjs",
+    "test:editor-external-value-sync": "node --experimental-strip-types scripts/test-editor-external-value-sync.mts",
     "test:calculator-command-mode": "node scripts/test-calculator-command-mode.mjs",
     "test:date-time-assistant": "node scripts/test-date-time-assistant.mjs",
     "test:translate-plugin": "node scripts/test-translate-plugin-contract.mjs && node scripts/test-translate-baidu-response.mjs && node scripts/test-translate-tencent.mjs",

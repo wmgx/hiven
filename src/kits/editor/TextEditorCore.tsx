@@ -13,6 +13,7 @@ import { createMonacoDisposableBucket } from '../../utils/monacoDisposables'
 import { registerFluxMonacoThemes } from '../../utils/monacoTheme'
 import { installMonacoHoverOverlay } from '../../utils/monacoHoverOverlay'
 import { configureMonacoRuntime } from './monacoRuntime'
+import { syncExternalEditorValue } from './syncExternalEditorValue'
 import type { TextEditorCoreHandle, TextEditorCoreProps } from './types'
 
 configureMonacoRuntime()
@@ -101,18 +102,11 @@ export const TextEditorCore = forwardRef<TextEditorCoreHandle, TextEditorCorePro
         isLocalChange.current = false
         if (model?.getValue() === value) return
       }
-      if (model && model.getValue() !== value) {
-        if (editor.getOption(monaco.editor.EditorOption.readOnly)) {
-          model.setValue(value)
-          return
-        }
-        const fullRange = model.getFullModelRange()
-        editor.executeEdits('external', [{
-          range: fullRange,
-          text: value,
-          forceMoveMarkers: false,
-        }])
-      }
+      syncExternalEditorValue(
+        editor,
+        value,
+        editor.getOption(monaco.editor.EditorOption.readOnly),
+      )
     }, [value])
 
     useEffect(() => {

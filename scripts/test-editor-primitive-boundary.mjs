@@ -22,6 +22,7 @@ function assert(condition, message) {
 
 const coreTypes = read('src/kits/editor/types.ts')
 const core = read('src/kits/editor/TextEditorCore.tsx')
+const externalValueSync = read('src/kits/editor/syncExternalEditorValue.ts')
 const surface = read('src/components/editor/EditorSurface.tsx')
 const statusBar = read('src/components/editor/EditorStatusBar.tsx')
 const quickPanel = read('src/components/quickEditor/QuickEditorPanel.tsx')
@@ -31,7 +32,7 @@ const dualEditor = read('src/kits/ui/DualEditorView.tsx')
 // 1. kit primitive exists and does not depend on framework.
 assert(coreTypes.length > 0, 'kits/editor/types.ts should exist')
 assert(core.length > 0, 'kits/editor/TextEditorCore.tsx should exist')
-for (const [label, text] of [['types', coreTypes], ['TextEditorCore', core]]) {
+for (const [label, text] of [['types', coreTypes], ['TextEditorCore', core], ['external value sync', externalValueSync]]) {
   assert(!/from '.*\/(workspace|components|store|i18n|plugins)\//.test(text) &&
     !/from '\.\.\/\.\.\/(workspace|components|store|i18n|plugins)'/.test(text),
     `kits/editor ${label} must not import framework modules`)
@@ -46,7 +47,8 @@ assert(/padding:\s*\{\s*top:\s*12,\s*bottom:\s*12\s*\}/.test(core),
   'TextEditorCore should own the unified padding baseline')
 assert(/const\s+lineDecorationsWidth\s*=\s*foldingEnabled\s*\?\s*8\s*:\s*24/.test(core),
   'TextEditorCore should own the unified gutter width baseline')
-assert(/executeEdits\('external'/.test(core), 'TextEditorCore should own the external value sync')
+assert(/syncExternalEditorValue/.test(core) && /executeEdits\('external'/.test(externalValueSync),
+  'TextEditorCore should own the external value sync through its editor helper')
 assert(/startFindReplaceAction/.test(core), 'TextEditorCore should own the find-replace override')
 
 // 3. EditorSurface = core + status bar + shared behavior.
