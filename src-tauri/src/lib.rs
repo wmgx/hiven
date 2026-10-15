@@ -6183,10 +6183,20 @@ fn plugin_kv_array_page(source: String, plugin_id: String, options: plugin_kv_pa
 }
 
 #[tauri::command]
-fn plugin_kv_related_search(source: String, plugin_id: String, options: plugin_kv_paging::RelatedSearchOptions) -> Result<plugin_kv_paging::RelatedSearchPage, String> {
+async fn plugin_kv_related_search(
+    source: String,
+    plugin_id: String,
+    options: plugin_kv_paging::RelatedSearchOptions,
+) -> Result<plugin_kv_paging::RelatedSearchPage, String> {
     validate_plugin_kv_namespace(&source, &plugin_id)?;
-    let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
-    plugin_kv_paging::related_search(&db.connection, &source, &plugin_id, options)
+    tauri::async_runtime::spawn_blocking(move || {
+        // Keep the existing single-connection serialization boundary, but do
+        // the bounded scan away from the IPC/UI thread.
+        let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
+        plugin_kv_paging::related_search(&db.connection, &source, &plugin_id, options)
+    })
+    .await
+    .map_err(|e| format!("Plugin KV related search task failed: {e}"))?
 }
 
 #[tauri::command]
