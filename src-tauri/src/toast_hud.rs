@@ -75,11 +75,19 @@ fn target_tickets() -> &'static Mutex<HashMap<String, TargetTicket>> {
 /// Only the current material's remembered target or a live queue attempt may
 /// produce a ticket. No caller-selected XID, title, application or coordinates.
 #[tauri::command]
-pub(crate) async fn capture_hud_target(window: tauri::WebviewWindow, operation: String, attempt_id: Option<String>) -> Option<String> {
+pub(crate) async fn capture_hud_target(window: tauri::WebviewWindow, operation: String, attempt_id: Option<String>, background_action: Option<String>) -> Option<String> {
     if window.label() != "launcher" || !(Receipt { operation: operation.clone(), revision: 0, result: ResultKind::Copied, target: None }).valid(&Level::Success) { return None; }
     #[cfg(target_os = "linux")]
     {
-        let surface = if let Some(id) = attempt_id {
+        let surface = if background_action.as_deref() == Some("image-save-shortcut") {
+            if attempt_id.is_some() || window.is_visible().ok()? || window.is_focused().ok()? { return None; }
+            // This exact background action captures only the currently focused,
+            // confirmed-external X11 window; failure replaces any stale target.
+            super::linux_x11_paste::remember_target("image-save-shortcut", false);
+            "image-save-shortcut"
+        } else if background_action.is_some() {
+            return None;
+        } else if let Some(id) = attempt_id {
             super::paste_recovery::current("launcher", &id).ok()?.ensure_active().ok()?;
             if window.is_visible().ok()? { return None; }
             "history-paste-queue"
@@ -105,7 +113,7 @@ pub(crate) async fn capture_hud_target(window: tauri::WebviewWindow, operation: 
         Some(token)
     }
     #[cfg(not(target_os = "linux"))]
-    { let _ = attempt_id; None }
+    { let _ = (attempt_id, background_action); None }
 }
 fn take_target(owner: &str, receipt: Option<&Receipt>) -> Option<PlacementTarget> {
     let receipt = receipt?;
@@ -235,6 +243,11 @@ fn foreground_target(app: &tauri::AppHandle, owner: &str) -> Result<Option<Strin
     let mut unknown = false;
     for (label, window) in &windows {
         if !surface(label) { continue; }
+        match window.is_visible() {
+            Ok(false) => continue,
+            Err(_) => { unknown = true; continue; },
+            Ok(true) => {},
+        }
         match window.is_focused() {
             Ok(true) => focused.push(label.clone()),
             Ok(false) => {},
