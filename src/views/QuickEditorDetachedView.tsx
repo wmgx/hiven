@@ -6,11 +6,8 @@ import { registerBundledPluginPackages } from '../workspace/bundledPluginLoader'
 import { registerHostLauncherProviders } from '../workspace/launcher/hostProvider'
 import {
   applyQuickEditorPaneRequest,
-  applyQuickEditorSetPaneText,
   isQuickEditorPaneRequest,
-  isQuickEditorSetPaneTextRequest,
   QUICK_EDITOR_CREATE_PANE_EVENT,
-  QUICK_EDITOR_SET_PANE_TEXT_EVENT,
 } from '../workspace/quickEditor/quickEditorRequests'
 import { listenForQuickEditorOverwrites } from '../workspace/quickEditor/quickEditorOverwriteHandoff'
 import { useQuickEditorStore } from '../workspace/quickEditor/quickEditorStore'
@@ -72,17 +69,12 @@ export function QuickEditorDetachedView() {
     if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return
     let disposed = false
     let unlistenCreate: (() => void) | undefined
-    let unlistenSetText: (() => void) | undefined
     let unlistenOverwrite: (() => void) | undefined
     import('@tauri-apps/api/event')
       .then(async ({ listen }) => {
         const createCleanup = await listen<unknown>(QUICK_EDITOR_CREATE_PANE_EVENT, (event) => {
           if (!isQuickEditorPaneRequest(event.payload)) return
           applyQuickEditorPaneRequest(event.payload)
-        })
-        const setTextCleanup = await listen<unknown>(QUICK_EDITOR_SET_PANE_TEXT_EVENT, (event) => {
-          if (!isQuickEditorSetPaneTextRequest(event.payload)) return
-          applyQuickEditorSetPaneText(event.payload)
         })
         const overwriteCleanup = await listenForQuickEditorOverwrites((text, options) => {
           if (disposed) throw new Error('QuickEditorClosed')
@@ -91,12 +83,10 @@ export function QuickEditorDetachedView() {
         })
         if (disposed) {
           createCleanup()
-          setTextCleanup()
           overwriteCleanup()
           return
         }
         unlistenCreate = createCleanup
-        unlistenSetText = setTextCleanup
         unlistenOverwrite = overwriteCleanup
       })
       .catch((error) => {
@@ -105,7 +95,6 @@ export function QuickEditorDetachedView() {
     return () => {
       disposed = true
       unlistenCreate?.()
-      unlistenSetText?.()
       unlistenOverwrite?.()
     }
   }, [])

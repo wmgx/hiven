@@ -8,13 +8,23 @@ import type {
   QuickEditorVersionRestoreRequest,
   QuickEditorVersionRestoreResult,
 } from './quickEditorTypes'
-import { isQuickEditorWindowOpen, showQuickEditorWindow } from '../windowManager/quickEditorWindow'
+import {
+  isQuickEditorDetachedWindow,
+  isQuickEditorWindowOpen,
+  QUICK_EDITOR_WINDOW_LABEL,
+  showQuickEditorWindow,
+} from '../windowManager/quickEditorWindow'
+import { LAUNCHER_WINDOW_LABEL } from '../windowManager/windowLabels'
 import { requestOpenLauncherHostSurface } from '../launcherHostSurfaceBridge'
 import { isNativeDesktopRuntime } from '../webNativeBridge'
 import { requestQuickEditorOverwrite, type QuickEditorOverwriteLifecycle } from './quickEditorOverwriteHandoff'
+import {
+  requestQuickEditorPaneWrite,
+  type QuickEditorPaneWriteLifecycle,
+  type QuickEditorPaneWriteReceipt,
+} from './quickEditorPaneWriteHandoff'
 
 export const QUICK_EDITOR_CREATE_PANE_EVENT = 'hiven://quick-editor-create-pane'
-export const QUICK_EDITOR_SET_PANE_TEXT_EVENT = 'hiven://quick-editor-set-pane-text'
 
 export type QuickEditorPaneRequest = {
   text?: string
@@ -22,14 +32,42 @@ export type QuickEditorPaneRequest = {
   direction?: 'left' | 'right' | 'top' | 'bottom'
 }
 
-export type QuickEditorSetPaneTextRequest = {
-  paneId: QuickEditorPaneId
-  text: string
-}
-
 export type OverwriteQuickEditorResult = {
   paneId: QuickEditorPaneId
   historyCount: number
+}
+
+type QueuedPaneWrite = {
+  paneId: QuickEditorPaneId
+  text: string
+  expectedRevision: number
+  lifecycle?: QuickEditorPaneWriteLifecycle
+  resolve: (updated: boolean) => void
+}
+
+type PaneWriteQueue = { running: boolean; pending?: QueuedPaneWrite }
+const paneWriteQueues = new Map<QuickEditorPaneId, PaneWriteQueue>()
+
+function readDurablePane(paneId: QuickEditorPaneId): { revision: number; text: string } | undefined {
+  try {
+    const parsed = JSON.parse(localStorage.getItem('hiven-quick-editor') ?? 'null') as {
+      state?: { panes?: Record<string, { revision?: unknown; text?: unknown }> }
+    } | null
+    const pane = parsed?.state?.panes?.[paneId]
+    const revision = pane?.revision === undefined ? 0 : pane.revision
+    if (!Number.isSafeInteger(revision) || (revision as number) < 0 || typeof pane?.text !== 'string') return undefined
+    return { revision: revision as number, text: pane.text }
+  } catch {
+    return undefined
+  }
+}
+
+function paneWriteIsCurrent(lifecycle?: QuickEditorPaneWriteLifecycle): boolean {
+  return !lifecycle?.signal?.aborted && lifecycle?.isCurrent?.() !== false
+}
+
+function queuedPaneWrite(queue: PaneWriteQueue): QueuedPaneWrite | undefined {
+  return queue.pending
 }
 
 function normalizeDirection(direction: QuickEditorPaneRequest['direction']): 'right' | 'bottom' {
@@ -69,7 +107,7 @@ export async function showQuickEditorSurface(): Promise<void> {
 }
 
 export async function createQuickEditorPane(input: QuickEditorPaneRequest = {}): Promise<QuickEditorPaneId | undefined> {
-  if (await isQuickEditorWindowOpen()) {
+  if (await isQuickEditorWindowOpen({ throwOnError: true })) {
     await showQuickEditorWindow()
     if (isNativeDesktopRuntime()) {
       const { emit } = await import('@tauri-apps/api/event')
@@ -111,33 +149,106 @@ export function isQuickEditorPaneRequest(value: unknown): value is QuickEditorPa
   )
 }
 
-export function applyQuickEditorSetPaneText(input: QuickEditorSetPaneTextRequest): boolean {
-  return useQuickEditorStore.getState().setPaneText(input.paneId, input.text)
-}
-
-export function isQuickEditorSetPaneTextRequest(value: unknown): value is QuickEditorSetPaneTextRequest {
-  if (!value || typeof value !== 'object') return false
-  const request = value as QuickEditorSetPaneTextRequest
-  return typeof request.paneId === 'string' && request.paneId.length > 0 && typeof request.text === 'string'
-}
-
 /**
  * Write pane text for Diff ↔ quick-editor binding.
- * Always updates the local store; when the detached Quick Editor window is open,
- * also emit a live update so that webview stays in sync.
+ * Native multi-window callers deliver only to the active renderer owner. The
+ * sender must not persist its own possibly stale full-store snapshot first.
  */
-export async function setQuickEditorPaneText(paneId: QuickEditorPaneId, text: string): Promise<boolean> {
-  const updated = useQuickEditorStore.getState().setPaneText(paneId, text)
-  if (!isNativeDesktopRuntime()) return updated
+async function deliverNativePaneWrite(input: QueuedPaneWrite): Promise<QuickEditorPaneWriteReceipt> {
+  const detachedOpen = await isQuickEditorWindowOpen({ throwOnError: true })
+  return await requestQuickEditorPaneWrite(
+    { paneId: input.paneId, text: input.text, expectedRevision: input.expectedRevision },
+    detachedOpen ? QUICK_EDITOR_WINDOW_LABEL : LAUNCHER_WINDOW_LABEL,
+    input.lifecycle,
+  )
+}
+
+async function drainPaneWriteQueue(paneId: QuickEditorPaneId, queue: PaneWriteQueue): Promise<void> {
+  if (queue.running) return
+  queue.running = true
   try {
-    if (await isQuickEditorWindowOpen()) {
-      const { emit } = await import('@tauri-apps/api/event')
-      await emit(QUICK_EDITOR_SET_PANE_TEXT_EVENT, { paneId, text } satisfies QuickEditorSetPaneTextRequest)
+    while (queue.pending) {
+      const current = queue.pending
+      queue.pending = undefined
+      if (!paneWriteIsCurrent(current.lifecycle)) {
+        current.resolve(false)
+        continue
+      }
+
+      let receipt: QuickEditorPaneWriteReceipt | undefined
+      try {
+        receipt = await deliverNativePaneWrite(current)
+      } catch (error) {
+        if (paneWriteIsCurrent(current.lifecycle)) {
+          console.warn('[hiven] Quick editor pane write was not acknowledged:', error)
+        }
+      }
+      current.resolve(receipt?.updated === true)
+
+      // Calls made while this write was in flight saw the old durable revision.
+      // Advance only when the acknowledged owner write is still the durable head;
+      // an intervening Quick Editor edit/restore makes the queued input stale.
+      const next = queuedPaneWrite(queue)
+      if (receipt?.updated && Number.isSafeInteger(receipt.revision)
+        && next?.expectedRevision === current.expectedRevision) {
+        const durable = readDurablePane(paneId)
+        if (durable && durable.revision === receipt.revision && durable.text === current.text) {
+          next.expectedRevision = receipt.revision as number
+        }
+      }
     }
-  } catch (error) {
-    console.warn('[hiven] Failed to emit quick editor set-pane-text:', error)
+  } finally {
+    queue.running = false
+    if (queue.pending) void drainPaneWriteQueue(paneId, queue)
+    else if (paneWriteQueues.get(paneId) === queue) paneWriteQueues.delete(paneId)
   }
-  return updated
+}
+
+function enqueueNativePaneWrite(
+  paneId: QuickEditorPaneId,
+  text: string,
+  expectedRevision: number,
+  lifecycle?: QuickEditorPaneWriteLifecycle,
+): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    let queue = paneWriteQueues.get(paneId)
+    if (!queue) {
+      queue = { running: false }
+      paneWriteQueues.set(paneId, queue)
+    }
+    // Keep at most one not-yet-delivered change. A superseded edit is not
+    // acknowledged as written; the latest change will follow the in-flight one.
+    queue.pending?.resolve(false)
+    queue.pending = { paneId, text, expectedRevision, lifecycle, resolve }
+    void drainPaneWriteQueue(paneId, queue)
+  })
+}
+
+export function setQuickEditorPaneText(
+  paneId: QuickEditorPaneId,
+  text: string,
+  lifecycle?: QuickEditorPaneWriteLifecycle,
+): Promise<boolean> {
+  if (!paneWriteIsCurrent(lifecycle)) return Promise.resolve(false)
+  if (isQuickEditorDetachedWindow()) {
+    lifecycle?.onCommit?.()
+    return Promise.resolve(useQuickEditorStore.getState().setPaneText(paneId, text))
+  }
+
+  if (!isNativeDesktopRuntime()) {
+    return Promise.resolve(useQuickEditorStore.persist.rehydrate()).then(() => {
+      if (!paneWriteIsCurrent(lifecycle)) return false
+      lifecycle?.onCommit?.()
+      return useQuickEditorStore.getState().setPaneText(paneId, text)
+    }).catch((error: unknown) => {
+      console.warn('[hiven] Quick editor pane write failed:', error)
+      return false
+    })
+  }
+
+  const durable = readDurablePane(paneId)
+  if (!durable) return Promise.resolve(false)
+  return enqueueNativePaneWrite(paneId, text, durable.revision, lifecycle)
 }
 
 /**

@@ -16,6 +16,8 @@ import { ConfirmDialog } from '../../plugin-ui'
 import { pluginRegistry } from '../../workspace/pluginRegistry'
 import { applyEffectsToQuickEditor } from '../../workspace/quickEditor/quickEditorActions'
 import { captureQuickEditorCommandTarget } from '../../workspace/quickEditor/quickEditorCommandTarget'
+import { listenForQuickEditorPaneWrites } from '../../workspace/quickEditor/quickEditorPaneWriteHandoff'
+import { isNativeDesktopRuntime } from '../../workspace/webNativeBridge'
 
 export function QuickEditorPanel({ onRequestExit }: { onRequestExit: () => void }) {
   const pendingClose = useQuickEditorStore((s) => s.pendingPaneClose)
@@ -29,10 +31,43 @@ export function QuickEditorPanel({ onRequestExit }: { onRequestExit: () => void 
   const paneOrder = useQuickEditorStore((s) => s.paneOrder)
   const splitDirection = useQuickEditorStore((s) => s.splitDirection)
   const openQuickEditorCommand = useAppStore((s) => s.openQuickEditorCommand)
+  const isDetached = isQuickEditorDetachedWindow()
+
+  useEffect(() => {
+    if (!isNativeDesktopRuntime()) return
+    let disposed = false
+    let unlisten: (() => void) | undefined
+    void (async () => {
+      // A launcher owner may follow a detached window that persisted newer
+      // state. It is not eligible to acknowledge writes until hydration ends.
+      if (!isDetached) await useQuickEditorStore.persist.rehydrate()
+      if (disposed) return
+      const cleanup = await listenForQuickEditorPaneWrites({
+        getRevision: (paneId) => {
+          const pane = useQuickEditorStore.getState().panes[paneId]
+          return pane ? pane.revision ?? 0 : undefined
+        },
+        commit: ({ paneId, text, expectedRevision }) => {
+          if (disposed) return undefined
+          const pane = useQuickEditorStore.getState().panes[paneId]
+          if (!pane || (pane.revision ?? 0) !== expectedRevision) return undefined
+          if (!useQuickEditorStore.getState().setPaneText(paneId, text)) return undefined
+          return useQuickEditorStore.getState().panes[paneId]?.revision
+        },
+      })
+      if (disposed) cleanup()
+      else unlisten = cleanup
+    })().catch((error) => {
+      console.warn('[hiven] Failed to register quick editor pane-write owner:', error)
+    })
+    return () => {
+      disposed = true
+      unlisten?.()
+    }
+  }, [isDetached])
 
   const { exitHintVisible } = useQuickEditorEscape(onRequestExit)
   const tQuickEditor = useT('quickEditor')
-  const isDetached = isQuickEditorDetachedWindow()
 
   const handleKeyDownCapture = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.nativeEvent.isComposing || event.keyCode === 229) return

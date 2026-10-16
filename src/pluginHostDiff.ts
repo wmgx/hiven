@@ -28,6 +28,7 @@ import {
 } from './workspace/editorBridge'
 import { useQuickEditorStore } from './workspace/quickEditor/quickEditorStore'
 import { setQuickEditorPaneText } from './workspace/quickEditor/quickEditorRequests'
+import type { QuickEditorPaneWriteLifecycle } from './workspace/quickEditor/quickEditorPaneWriteHandoff'
 import type { PaneId } from './workspace/types'
 
 export type DiffSourceBinding = {
@@ -50,7 +51,7 @@ export type PluginDiffKits = {
 
 export type PluginDiffHooks = {
   useBoundSourceText: (source: DiffSourceBinding) => string
-  setBoundSourceText: (source: DiffSourceBinding, text: string) => void
+  setBoundSourceText: (source: DiffSourceBinding, text: string, lifecycle?: QuickEditorPaneWriteLifecycle) => void
   /** Legacy fullscreen workbench path; prefer plugin surface windows. */
   clearActiveFullscreenView: () => void
   useActiveFullscreenView: () => {
@@ -70,23 +71,30 @@ function getMirroredEditorPaneText(paneId: PaneId): string | undefined {
   return snapshot?.activePaneId === paneId ? snapshot.activeText : undefined
 }
 
-function writeBoundSourceText(source: DiffSourceBinding, text: string): void {
+function writeBoundSourceText(source: DiffSourceBinding, text: string, lifecycle?: QuickEditorPaneWriteLifecycle): void {
   if (source.kind !== 'editor-pane' || !source.paneId) return
+  if (lifecycle?.signal?.aborted || lifecycle?.isCurrent?.() === false) return
   const paneId = source.paneId
   const origin = source.origin
     ?? (useQuickEditorStore.getState().panes[paneId] ? 'quick-editor' as const : null)
     ?? (useWorkspaceStore.getState().panes[paneId] ? 'editor' as const : null)
 
   if (origin === 'quick-editor') {
-    void setQuickEditorPaneText(paneId, text)
+    void setQuickEditorPaneText(paneId, text, lifecycle).then((updated) => {
+      if (!updated && lifecycle?.signal?.aborted !== true && lifecycle?.isCurrent?.() !== false) {
+        console.warn('[hiven] Text Diff write-back was not accepted by the current Quick Editor owner')
+      }
+    })
     return
   }
 
   if (origin === 'editor' || useWorkspaceStore.getState().panes[paneId]) {
+    lifecycle?.onCommit?.()
     useWorkspaceStore.getState().setPaneText(paneId, text)
     return
   }
 
+  lifecycle?.onCommit?.()
   void replaceEditorSelection(text, { paneId }).catch(() => {
     // Bridge may be unavailable outside editor window; snapshot text remains local.
   })

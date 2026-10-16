@@ -561,7 +561,7 @@ export function getHostPaneControlItems(): LauncherItem[] {
       execute: async () => {
         // Single-instance rule: if the editor lives in the detached window,
         // focus it instead of opening the surface.
-        if (await isQuickEditorWindowOpen()) {
+        if (await isQuickEditorWindowOpen({ throwOnError: true })) {
           await showQuickEditorWindow()
           return { ok: true }
         }

@@ -36,7 +36,7 @@ export function isQuickEditorDetachedWindow(): boolean {
   return new URLSearchParams(window.location.search).get('window') === 'quick-editor'
 }
 
-export async function isQuickEditorWindowOpen(): Promise<boolean> {
+export async function isQuickEditorWindowOpen(options: { throwOnError?: boolean } = {}): Promise<boolean> {
   if (!isNativeDesktopRuntime()) return false
   try {
     const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow')
@@ -44,6 +44,7 @@ export async function isQuickEditorWindowOpen(): Promise<boolean> {
     return window != null
   } catch (error) {
     console.warn('[hiven] Failed to probe quick editor window:', error)
+    if (options.throwOnError) throw error
     return false
   }
 }
