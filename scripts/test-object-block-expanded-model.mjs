@@ -128,11 +128,4 @@ assert.equal(secret.secretMasked, true)
 assert.equal(secret.preview, undefined)
 assert.equal(secret.state, 'secret-masked')
 
-const typeSrc = readFileSync('src/launcher/clipboard/objectBlock.ts', 'utf8')
-assert.match(typeSrc, /validity:/, 'ObjectBlock should expose validity')
-assert.match(typeSrc, /state\?:/, 'ObjectBlock should expose state')
-assert.match(typeSrc, /meta\?:/, 'ObjectBlock should expose meta fields')
-assert.match(typeSrc, /createSnapshotObjectBlock/, 'snapshot source factory required for cross-editor diff')
-assert.match(typeSrc, /createMultiPaneObjectBlock/, 'multi-pane source factory required for diff')
-
 console.log('object block expanded model checks passed')

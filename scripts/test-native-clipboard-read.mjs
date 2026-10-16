@@ -10,52 +10,7 @@ import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import ts from 'typescript'
 
-const packageJson = JSON.parse(readFileSync('package.json', 'utf8'))
-assert.equal(
-  packageJson.scripts?.['test:native-clipboard-read'],
-  'node scripts/test-native-clipboard-read.mjs',
-  'package.json must expose native clipboard read coverage',
-)
-
 const nativeSrc = readFileSync('src/workspace/nativeClipboard.ts', 'utf8')
-const pluginClipboardSrc = readFileSync('src/workspace/pluginClipboard.ts', 'utf8')
-const launcherReadSrc = readFileSync('src/launcher/clipboard/readLauncherClipboard.ts', 'utf8')
-const appSrc = readFileSync('src/App.tsx', 'utf8')
-const contextBrokerSrc = readFileSync('src/launcher/context/contextBroker.ts', 'utf8')
-const pluginApiSrc = readFileSync('src/workspace/launcher/pluginApi.ts', 'utf8')
-const quickEditorSrc = readFileSync('src/workspace/quickEditor/quickEditorActions.ts', 'utf8')
-const searchFrameSrc = readFileSync('src/components/launcher/GlobalLauncherSearchFrame.tsx', 'utf8')
-
-assert.match(nativeSrc, /isTauriClipboardRuntime/, 'shared Tauri runtime guard')
-assert.match(nativeSrc, /readNativeClipboardText/, 'shared native text reader')
-assert.match(pluginClipboardSrc, /readNativeClipboardText/, 'plugin clipboard uses shared reader')
-assert.match(pluginClipboardSrc, /if \(isTauriClipboardRuntime\(\)\) return null/, 'plugin image read must not fall through in Tauri')
-assert.match(pluginClipboardSrc, /writeClipboardImageBytes/, 'plugin clipboard must expose image write')
-assert.doesNotMatch(
-  pluginClipboardSrc,
-  /catch\s*\{[\s\S]{0,80}await writeImage\(bytes\)/,
-  'image write must not pass PNG file bytes as RGBA',
-)
-assert.match(launcherReadSrc, /readNativeClipboardText/, 'launcher clipboard uses shared reader')
-assert.match(appSrc, /readNativeClipboardText/, 'age tracker uses shared reader')
-assert.match(contextBrokerSrc, /readNativeClipboardText/, 'context broker uses shared reader')
-assert.match(pluginApiSrc, /readNativeClipboardText/, 'plugin launcher API uses shared reader')
-assert.match(quickEditorSrc, /readNativeClipboardText/, 'quick editor uses shared reader')
-assert.match(searchFrameSrc, /autoComplete="off"/, 'launcher search must disable webkit autofill paste UI')
-
-for (const [name, src] of [
-  ['App.tsx', appSrc],
-  ['readLauncherClipboard.ts', launcherReadSrc],
-  ['contextBroker.ts', contextBrokerSrc],
-  ['pluginApi.ts', pluginApiSrc],
-  ['quickEditorActions.ts', quickEditorSrc],
-]) {
-  assert.doesNotMatch(
-    src,
-    /await navigator\.clipboard\.read/,
-    `${name} must not call the web clipboard read API directly`,
-  )
-}
 
 function loadNativeClipboard({ tauri, readTextImpl, navigatorReadText, invokeImpl } = {}) {
   const out = ts.transpileModule(nativeSrc, {

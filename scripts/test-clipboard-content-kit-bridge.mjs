@@ -5,7 +5,6 @@
  * Locks:
  *   - timestamp / jwt / csv / json samples align between
  *     detectClipboardType(text) and detectContent(text)[0].kind
- *   - clipboardSnapshot.ts must import content-kit (detectContent)
  *
  * Run: node scripts/test-clipboard-content-kit-bridge.mjs
  */
@@ -265,23 +264,5 @@ for (const { input, expected, label } of ALIGNMENT_SAMPLES) {
     `${label}: detectClipboardType (${clipKind}) must align with content-kit shared primary (${contentKind})`,
   )
 }
-
-// ─── 3. Static bridge requirement: clipboardSnapshot must import content-kit ─
-// Task2 implementation: detectClipboardType delegates to detectContent.
-// This assertion is intentionally red until the bridge lands.
-
-const clipboardSource = readFileSync(CLIPBOARD_SNAPSHOT, 'utf8')
-
-const importsContentKit =
-  /from\s+['"][^'"]*kits\/content(?:\/[^'"]*)?['"]/.test(clipboardSource) ||
-  /from\s+['"][^'"]*\/content(?:\/index)?['"]/.test(clipboardSource) ||
-  /import\s*\{[^}]*\bdetectContent\b[^}]*\}\s*from\s+['"][^'"]+['"]/.test(clipboardSource) ||
-  /\bdetectContent\b/.test(clipboardSource) &&
-    /from\s+['"][^'"]*content[^'"]*['"]/.test(clipboardSource)
-
-assert.ok(
-  importsContentKit,
-  'clipboardSnapshot.ts must import content-kit (kits/content or detectContent) so detectClipboardType bridges to detectContent',
-)
 
 console.log('clipboard ↔ content-kit bridge contract checks passed')

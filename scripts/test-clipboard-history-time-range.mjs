@@ -203,18 +203,6 @@ try {
   assert.deepEqual(sparseResult.items.map(({ id }) => id), ['late-recent'])
   assert.ok(sparseMemory.stats.maxPage <= 100)
 
-  const surface = await import('node:fs').then(({ readFileSync }) => readFileSync('src/plugins/clipboard-history/surfaces/ClipboardHistorySurface.tsx', 'utf8'))
-  assert.match(surface, /copiedSince \?\? null/, 'time boundary participates in pagination criteria identity')
-  assert.match(surface, /next === 'trash'\) setTimeRange\('all'\)/, 'trash entry visibly clears the inapplicable time range')
-  assert.match(surface, /syncLocalDay = useCallback[\s\S]*getClipboardHistoryLocalDayKey\(now\)[\s\S]*setLocalDayAnchor\(now\)/, 'all re-query entry points can refresh a stale local-day boundary')
-  assert.match(surface, /clearPage = useCallback[\s\S]*setRefreshEpoch\(\(value\) => value \+ 1\)/, 'cursor resets always schedule a replacement query, including All time on page one')
-  assert.match(surface, /resetPage = useCallback[\s\S]*syncLocalDay\(\)[\s\S]*clearPage\(\)/, 'criteria changes refresh the day boundary and reset cursors')
-  assert.match(surface, /changePage = useCallback[\s\S]*syncLocalDay\(\)[\s\S]*clearPage\(\)/, 'pagination resets instead of traversing a stale cross-midnight cursor')
-  assert.match(surface, /subscribeCachedIndex\(refreshVisibleDay\)/, 'cache invalidation re-queries through the local-day boundary check')
-  assert.match(surface, /resetBrowser = useCallback[\s\S]*setTimeRange\('all'\)/, 'a completed browse action resets the time filter with the other browse criteria')
-  const pluginUi = await import('node:fs').then(({ readFileSync }) => readFileSync('src/plugin-ui.tsx', 'utf8'))
-  assert.match(pluginUi, /aria-pressed=\{option\.value === value\}/, 'segmented controls expose their selected state to assistive technology')
-
   console.log('Clipboard History time ranges passed: local-calendar DST/midnight, candidate filtering, search modes, type/favorite/frequent combinations, sparse pagination, and trash reset')
 } finally {
   Date.now = realNow

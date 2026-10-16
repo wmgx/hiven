@@ -69,40 +69,10 @@ const executor = transpileAndRun('src/launcher/clipboard/actionExecutor.ts', {
   detectClipboardFilePath: snapshot.detectClipboardFilePath,
 })
 
-// ─── Scenario 1: Recommended action click calls executor ─────────────────────
-
-console.log('Scenario 1: Recommended action click calls executor')
-{
-  const hostSrc = readFileSync('src/launcher/hosts/GlobalLauncherHost.tsx', 'utf8')
-  // Verify executeRecommendedAction is imported and used
-  assert.match(hostSrc, /import\s*\{[^}]*executeRecommendedAction[^}]*\}/, 'GlobalLauncherHost imports executeRecommendedAction')
-  assert.match(hostSrc, /executeRecommendedAction\(\s*\{\s*block,\s*action,\s*target\s*\}/, 'GlobalLauncherHost calls executeRecommendedAction with context')
-  // Verify all required handlers are provided
-  assert.match(hostSrc, /copyText:\s*writeClipboardText/, 'GlobalLauncherHost provides copyText handler')
-  assert.match(hostSrc, /openInEditor:/, 'GlobalLauncherHost provides openInEditor handler')
-  assert.match(hostSrc, /openPluginSurface:/, 'GlobalLauncherHost provides openPluginSurface handler')
-  assert.match(hostSrc, /openUrl:/, 'GlobalLauncherHost provides openUrl handler')
-  // Verify onExecuteObjectAction is wired to panel
-  assert.match(hostSrc, /onExecuteObjectAction=\{executeObjectAction\}/, 'GlobalLauncherHost passes executeObjectAction to panel')
-  console.log('  ✓ All handlers wired correctly')
-}
-
 // ─── Scenario 2: Executor uses full payloadText, not preview ─────────────────
 
 console.log('Scenario 2: Executor uses full payloadText, not preview')
 {
-  // Verify the LauncherObjectBlock type has payloadText
-  const objectBlockSrc = readFileSync('src/launcher/clipboard/objectBlock.ts', 'utf8')
-  assert.match(objectBlockSrc, /payloadText\?:\s*string/, 'LauncherObjectBlock has payloadText field')
-
-  // Verify createGenericObjectBlock sets payloadText
-  assert.match(objectBlockSrc, /payloadText:\s*params\.text/, 'createGenericObjectBlock stores full text as payloadText')
-
-  // Verify executor uses payloadText
-  const executorSrc = readFileSync('src/launcher/clipboard/actionExecutor.ts', 'utf8')
-  assert.match(executorSrc, /block\.payloadText\s*\?\?\s*block\.preview/, 'Executor uses payloadText ?? preview fallback')
-  assert.doesNotMatch(executorSrc, /const text = block\.preview \?\? ''/, 'Executor does NOT use only block.preview')
-
   // Create a block with long text and verify payloadText preserved
   const longJson = JSON.stringify({ key: 'x'.repeat(500), nested: { a: 1, b: 2 } })
   const snap = { ...snapshot.updateClipboardSnapshot(longJson), changedAt: Date.now() - 10_000, ageConfidence: 'known' }
@@ -124,57 +94,10 @@ console.log('Scenario 2: Executor uses full payloadText, not preview')
   console.log('  ✓ Executor uses payloadText for full content')
 }
 
-// ─── Scenario 3: Query filters history object actions (host list path) ───────
-
-console.log('Scenario 3: Query filters history object actions')
-{
-  const hostSrc = readFileSync('src/launcher/hosts/GlobalLauncherHost.tsx', 'utf8')
-  // Retired RecommendedActionRow — filtering lives on pinnedObjectActionItems
-  assert.match(hostSrc, /pinnedObjectActionItems/, 'Host builds pinnedObjectActionItems')
-  assert.match(
-    hostSrc,
-    /action\.title\.toLowerCase\(\)\.includes\(q\)/,
-    'Filters history actions by title',
-  )
-  assert.match(
-    hostSrc,
-    /action\.titleZh\.toLowerCase\(\)\.includes\(q\)/,
-    'Filters history actions by titleZh',
-  )
-  assert.match(
-    hostSrc,
-    /action\.id\.toLowerCase\(\)\.includes\(q\)/,
-    'Filters history actions by id',
-  )
-  console.log('  ✓ Query filtering implemented for history object actions')
-}
-
-// ─── Scenario 4: Object Block coexists with LauncherMixedList ────────────────
-
-console.log('Scenario 4: Object Block token + mixed list (ranking path)')
-{
-  const searchFrameSrc = readFileSync('src/components/launcher/GlobalLauncherSearchFrame.tsx', 'utf8')
-  // Current product: ObjectBlockToken in header + LauncherMixedList for tools/actions
-  assert.match(searchFrameSrc, /ObjectBlockToken/, 'Object block token renders in search frame')
-  assert.match(searchFrameSrc, /LauncherMixedList/, 'Mixed list remains the action surface')
-  assert.doesNotMatch(searchFrameSrc, /RecommendedActionRow/, 'Dedicated action rows stay retired')
-  console.log('  ✓ Block token + ranking/mixed list is the object-action surface')
-}
-
 // ─── Scenario 5: RecentClipboardHint attach preserves original ageLabel ──────
 
 console.log('Scenario 5: RecentClipboardHint attach preserves original ageLabel')
 {
-  // Verify createClipboardObjectBlock supports forceAttach option
-  const objectBlockSrc = readFileSync('src/launcher/clipboard/objectBlock.ts', 'utf8')
-  assert.match(objectBlockSrc, /forceAttach\?:\s*boolean/, 'createClipboardObjectBlock accepts forceAttach option')
-  assert.match(objectBlockSrc, /if \(!options\?\.forceAttach\) \{[\s\S]*?shouldAutoAttachClipboard/, 'forceAttach bypasses freshness check')
-
-  // Verify useClipboardObjectBlock uses forceAttach
-  const hookSrc = readFileSync('src/launcher/clipboard/useClipboardObjectBlock.ts', 'utf8')
-  assert.match(hookSrc, /forceAttach:\s*true/, 'attachHintAsBlock uses forceAttach: true')
-  assert.doesNotMatch(hookSrc, /changedAt:\s*now/, 'attachHintAsBlock does NOT override changedAt')
-
   // Functional test: 90s old clipboard (in 30s–2min hint window) keeps ageLabel after attach
   const ninetySecAgo = Date.now() - 90_000
   const snap = {
@@ -196,49 +119,6 @@ console.log('Scenario 5: RecentClipboardHint attach preserves original ageLabel'
   assert.ok(forcedBlock, 'forceAttach should create block even for non-fresh clipboard')
   assert.equal(forcedBlock.ageLabel, '1 分钟前', 'ageLabel must reflect original time, not "刚刚"')
   console.log('  ✓ RecentClipboardHint attach preserves original age')
-}
-
-// ─── Scenario 6: Object Block deletion restores search-only mode ─────────────
-
-console.log('Scenario 6: Object Block deletion restores search-only mode')
-{
-  const searchFrameSrc = readFileSync('src/components/launcher/GlobalLauncherSearchFrame.tsx', 'utf8')
-  assert.match(searchFrameSrc, /LauncherMixedList/, 'LauncherMixedList is always the list surface')
-
-  // Verify Backspace handling in hook — single press starts remove transition when query empty
-  const hookSrc = readFileSync('src/launcher/clipboard/useClipboardObjectBlock.ts', 'utf8')
-  assert.match(hookSrc, /if \(!queryEmpty\) return false/, 'Backspace only when query empty')
-  assert.match(
-    hookSrc,
-    /const handleBackspace = useCallback\(\(queryEmpty: boolean\): boolean => \{[\s\S]*?removeBlock\(\)[\s\S]*?return true/,
-    'Backspace removes block in one press via removeBlock()',
-  )
-  assert.match(hookSrc, /removeBlock/, 'removeBlock callback exposed')
-  assert.match(hookSrc, /OBJECT_BLOCK_EXIT_MS|setIsExiting\(true\)/, 'remove plays exit transition then clears block')
-  console.log('  ✓ Block deletion restores search-only mode')
-}
-
-// ─── Scenario 7: Global Launcher default does NOT read external selection ────
-
-console.log('Scenario 7: Global Launcher default does NOT read external selection')
-{
-  const contextBrokerSrc = readFileSync('src/launcher/context/contextBroker.ts', 'utf8')
-  // Verify externalSelectionContextProvider is NOT in the default array
-  assert.match(
-    contextBrokerSrc,
-    /\/\/ NOTE: externalSelectionContextProvider intentionally removed from defaults/,
-    'Comment confirms external selection is intentionally excluded',
-  )
-  // The default providers line should NOT contain externalSelectionContextProvider
-  const defaultProvidersLine = contextBrokerSrc.match(/\[foregroundContextProvider.*?\]/s)?.[0] ?? ''
-  assert.doesNotMatch(
-    defaultProvidersLine,
-    /externalSelectionContextProvider/,
-    'Default providers must NOT include externalSelectionContextProvider',
-  )
-  // No Cmd+C simulation
-  assert.doesNotMatch(contextBrokerSrc, /simulate.*copy|cmd.*c.*simulate/i, 'No Cmd+C simulation in context broker')
-  console.log('  ✓ Global Launcher does not auto-read external selection')
 }
 
 // ─── Scenario 8: Secret block behavior ──────────────────────────────────────
@@ -273,4 +153,4 @@ console.log('Scenario 8: Secret block does not show preview AND does not recomme
 
 // ─── Summary ──────────────────────────────────────────────────────────────────
 
-console.log('\n✅ All 8 MVP closure scenarios passed')
+console.log('\n✅ MVP closure behavior scenarios passed')

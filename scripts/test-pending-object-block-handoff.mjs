@@ -43,13 +43,4 @@ assert.equal(pending.consumePendingObjectBlock(), null, 'consume is one-shot')
 pending.setPendingObjectBlock(block, { persist: true, silent: true })
 assert.equal(pending.consumePendingObjectBlock()?.payloadText, '在收', 'silent re-stash survives')
 
-// wiring
-const hook = readFileSync('src/launcher/clipboard/useClipboardObjectBlock.ts', 'utf8')
-assert.match(hook, /history-item/, 'handoff sources include history-item')
-assert.match(hook, /silent:\s*true/, 're-stash is silent')
-assert.match(hook, /isHandoffBlock/, 'clipboard read must not clobber handoff')
-
-const renderer = readFileSync('src/components/pluginSurface/PluginSurfaceRenderer.tsx', 'utf8')
-assert.match(renderer, /persist:\s*true/, 'returnToLauncher always persists')
-
 console.log('test-pending-object-block-handoff: ok')

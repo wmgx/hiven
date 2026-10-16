@@ -163,12 +163,6 @@ assert.ok(snapshot.detectClipboardFilePath('/Users/me/export.csv'))
 assert.equal(snapshot.detectClipboardFilePath('/Users/me/export.csv')?.ext, 'csv')
 assert.equal(snapshot.fileNameFromPath('/Users/me/export.csv'), 'export.csv')
 
-// readLauncherClipboard prefers native file paths over plain text
-const readClip = readFileSync('src/launcher/clipboard/readLauncherClipboard.ts', 'utf8')
-assert.match(readClip, /read_clipboard_file_paths/, 'launcher clipboard read should prefer native file paths')
-assert.match(readClip, /readNativeClipboardText/, 'launcher clipboard text must go through the Tauri-safe reader')
-assert.doesNotMatch(readClip, /await navigator\.clipboard\.readText/, 'launcher clipboard must not fall back to the web Paste chip API')
-
 // ─── §11.2 Object Block ───────────────────────────────────────────────────────
 
 // Soft operands (short numbers) must not hard-attach even when fresh

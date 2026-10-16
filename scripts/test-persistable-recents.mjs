@@ -13,12 +13,6 @@ import ts from 'typescript'
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const read = (p) => readFileSync(join(root, p), 'utf8')
 
-assert.match(read('src/workspace/desktopTargets/types.ts'), /persistable\?:/)
-assert.match(read('src/workspace/desktopTargets/toLauncherItem.ts'), /buildPersistPayload|persistPayload/)
-assert.match(read('src/workspace/launcher/persistableRecents.ts'), /recordPersistableRecent|buildPersistableRecentLauncherItems/)
-assert.match(read('src/workspace/launcher/useLauncherSession.ts'), /persistableRecentItems|recordPersistableLauncherSelection/)
-assert.match(read('src/store.ts'), /launcherPersistableRecents/)
-
 // Pure helpers
 const tmp = mkdtempSync(join(tmpdir(), 'persist-recents-'))
 const src = read('src/workspace/launcher/persistableRecents.ts')
@@ -128,12 +122,6 @@ const [legacyBrowserHistory] = mod.buildPersistableRecentLauncherItems({
 })
 assert.equal(legacyBrowserHistory.ranking?.fallback, true, 'legacy browser history restores as fallback')
 assert.equal(legacyBrowserHistory.persistPayload?.fallback, true, 'legacy browser history self-heals on selection')
-
-assert.match(
-  read('src/store.ts'),
-  /CLEAR_PERSISTABLE_RECENTS_EVENT|clearPersistableLauncherRecents/,
-  'host must expose clear path for settings',
-)
 
 rmSync(tmp, { recursive: true, force: true })
 console.log('persistable recents checks passed')

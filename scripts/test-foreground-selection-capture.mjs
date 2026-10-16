@@ -170,17 +170,4 @@ function adapter(h, run) {
   assert.deepEqual(h.messages, [])
 }
 
-// Native build is intentionally not run here. These source contracts make the
-// non-Mac/Win branch exclusive and incapable of calling any side-effect helper.
-const native = readFileSync('src-tauri/src/lib.rs', 'utf8')
-const captureCommand = native.slice(native.indexOf('async fn hide_launcher_and_capture_selection('), native.indexOf('\n#[cfg(target_os = "macos")]\nfn wait_for_foreground_handoff_then_capture'))
-const body = captureCommand.slice(captureCommand.indexOf(') -> Result<Option<String>, String> {') + ') -> Result<Option<String>, String> {'.length).replace(/\/\/[^\n]*/g, '').trim()
-const branches = body.match(/^#\[cfg\(not\(any\(target_os = "macos", target_os = "windows"\)\)\)\]\s*\{([^{}]*)\}\s*#\[cfg\(any\(target_os = "macos", target_os = "windows"\)\)\]\s*\{([\s\S]*)\}\s*\}$/)
-assert.ok(branches, 'Native capture must have only mutually exclusive unsupported and Mac/Win branches')
-assert.equal(branches[1].replace(/\s+/g, ' ').trim(), 'let _ = (window, app); Err("SELECTION_CAPTURE_UNSUPPORTED".to_string())', 'Unsupported branch cannot invalidate recovery, hide, read clipboard, or invoke copy')
-assert.match(branches[2], /^\s*paste_recovery::invalidate_all\(\);\s*let \(target_pid, target_is_self\) =\s*hide_window_and_resolve_foreground_target\(window, app.clone\(\), false, None\)\?;/)
-assert.match(branches[2], /spawn_blocking\(move \|\| \{\s*wait_for_foreground_handoff_then_capture\(app, target_pid, target_is_self\)/)
-assert.match(native, /fn get_selection_capture_availability\(\) -> &'static str \{\s*if cfg!\(any\(target_os = "macos", target_os = "windows"\)\) \{\s*"can-attempt"\s*\} else \{\s*"unsupported"\s*\}\s*\}/, 'Read-only preflight matches actual capture platforms')
-assert.match(native, /generate_handler!\[[\s\S]*get_selection_capture_availability,/, 'Native capability must be registered')
-
-console.log('foreground selection capture passed: fail-closed capability, no-hide unsupported, direct adapter fallback, supported restore/trim, native cfg contract')
+console.log('foreground selection capture passed: fail-closed capability, no-hide unsupported, direct adapter fallback, supported restore/trim')

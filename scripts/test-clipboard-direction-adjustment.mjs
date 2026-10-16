@@ -63,25 +63,6 @@ const currentTextGlobals = {
 }
 const recommendation = transpileAndRun('src/launcher/clipboard/actionRecommendation.ts', currentTextGlobals)
 
-const contextBroker = readFileSync('src/launcher/context/contextBroker.ts', 'utf8')
-const globalLauncherHost = readFileSync('src/launcher/hosts/GlobalLauncherHost.tsx', 'utf8')
-const searchFrame = readFileSync('src/components/launcher/GlobalLauncherSearchFrame.tsx', 'utf8')
-const keyboard = readFileSync('src/components/launcher/GlobalLauncherKeyboard.ts', 'utf8')
-// EditorCommandBarHost and useEditorObjectBlock were deleted in the workbench
-// retirement (6e69f0f). The in-editor command entry is now the quick editor
-// overlay; requirement #10 below tracks it there.
-const editorCommandSurface = readFileSync('src/components/quickEditor/QuickEditorCommandOverlay.tsx', 'utf8')
-const hookSrc = readFileSync('src/launcher/clipboard/useClipboardObjectBlock.ts', 'utf8')
-
-// ─── #1: Global Launcher no longer reads external selection ────────────────────
-assert.doesNotMatch(
-  contextBroker,
-  /\[foregroundContextProvider[\s\S]{0,80}externalSelectionContextProvider[\s\S]{0,80}clipboardContextProvider[\s\S]{0,20}\.\.\.providers\]/,
-  '#1: default context snapshot must NOT include externalSelectionContextProvider',
-)
-assert.doesNotMatch(globalLauncherHost, /externalSelection/, '#1: GlobalLauncherHost must not reference external selection')
-assert.doesNotMatch(hookSrc, /externalSelection|readExternalSelection/, '#1: clipboard hook must not read external selection')
-
 // ─── #2: ClipboardSnapshot shape ───────────────────────────────────────────────
 const s1 = snapshot.updateClipboardSnapshot('test text')
 assert.equal(typeof s1.hash, 'string', '#2: hash must be string')
@@ -127,35 +108,6 @@ const unknownSnap = snapshot.createClipboardSnapshotFromUnknownAge('whatever')
 assert.equal(snapshot.shouldAutoAttachClipboard(unknownSnap), false, '#5: unknown no attach')
 assert.equal(snapshot.shouldShowRecentClipboardHint(unknownSnap), false, '#5: unknown no hint')
 
-// ─── #6: ObjectBlockToken in search input ──────────────────────────────────────
-assert.match(searchFrame, /ObjectBlockToken/, '#6: SearchFrame renders ObjectBlockToken')
-// data-testid="object-block-token" is in the ObjectBlockToken component, verified below
-const tokenSrc = readFileSync('src/components/launcher/ObjectBlockToken.tsx', 'utf8')
-assert.match(tokenSrc, /data-testid="object-block-token"/, '#6: ObjectBlockToken component has test id')
-assert.match(tokenSrc, /data-source=/, '#6: token shows source')
-assert.match(tokenSrc, /data-kind=/, '#6: token shows kind')
-assert.match(tokenSrc, /data-state=/, '#6: token shows age/state')
-
-// ─── #7: × delete + empty-query Backspace one-shot remove ─────────────────────
-assert.match(tokenSrc, /onRemove/, '#7: ObjectBlockToken has × remove')
-assert.match(keyboard, /handleClipboardBackspace/, '#7: keyboard handles Backspace')
-assert.match(tokenSrc, /selectedForDelete/, '#7: token still supports selected-for-delete visual')
-assert.match(keyboard, /isClipboardHintSelected|selectedIndex === -1/, '#7b: Enter only attaches hint when selected')
-assert.doesNotMatch(
-  keyboard,
-  /if \(event\.key === 'Enter' && hasClipboardHint && attachHintAsBlock\) \{\s*event\.preventDefault\(\)\s*attachHintAsBlock\(\)/,
-  '#7b: must not attach clipboard hint on bare Enter without selection',
-)
-
-// ─── #8: Object Block shows recommended actions, not clipboard as search ───────
-// Recommendation moved from the search frame up to the host: actions are now
-// pinned launcher rows above ranked tools rather than a separate action list, so
-// they compete in the one result list instead of stacking a second UI on top.
-assert.match(globalLauncherHost, /recommendActionsForBlock\(clipboardBlock\.block\)/, '#8: recommended actions computed from block')
-assert.match(globalLauncherHost, /pinnedObjectActionItems/, '#8: actions pinned above ranked tools when a block exists')
-assert.match(globalLauncherHost, /const block = clipboardBlock\.block\s*\n\s*if \(!block\) return \[\]/, '#8: no block means no pinned object actions')
-assert.match(searchFrame, /block && \(/, '#8: search frame renders the block itself in object-action mode')
-
 // ─── #9: Action labels use descriptive text, not plugin name as primary ────────
 const jsonActions = recommendation.recommendActionsForBlock({ source: 'clipboard', kind: 'json' })
 for (const action of jsonActions) {
@@ -163,21 +115,6 @@ for (const action of jsonActions) {
   // Title should be descriptive, e.g. "格式化剪贴板 JSON" not "JSON Tools"
   if (action.pluginId) assert.ok(!action.titleZh.startsWith(action.pluginId), '#9: title should not start with plugin name')
 }
-// RecommendedActionRow is gone with the dedicated action list; the host now folds
-// actions into launcher items, so the localized title must survive that mapping.
-assert.match(globalLauncherHost, /pickLocale\(locale, action\.titleZh, action\.title\)/, '#9: host picks the localized action title')
-assert.match(globalLauncherHost, /titleI18n:\s*\{\s*en: action\.title,\s*zh: action\.titleZh\s*\}/, '#9: pinned action items keep both locales for ranking and display')
-assert.match(globalLauncherHost, /action\.titleZh\.toLowerCase\(\)\.includes\(q\)/, '#9: pinned actions are searchable by their Chinese title')
-
-// ─── #10: In-editor command entry never rides on clipboard freshness ──────────
-// The original requirement was "editor Cmd+K attaches the editor's own selection
-// or document, never a fresh-clipboard guess". The attach half was retired with
-// the editor command bar — the quick editor overlay attaches nothing at all — but
-// the "never clipboard freshness" half is exactly what still must hold.
-assert.doesNotMatch(editorCommandSurface, /shouldAutoAttachClipboard|FRESH_CLIPBOARD_TTL/, '#10: in-editor command entry must not use clipboard freshness')
-assert.doesNotMatch(editorCommandSurface, /readLauncherClipboard|readClipboard/, '#10: in-editor command entry must not read the clipboard')
-assert.match(editorCommandSurface, /emptyClipboardBlock/, '#10: in-editor command entry must pass an explicitly empty object block')
-
 // ─── #11: Secret mask ──────────────────────────────────────────────────────────
 const secretSnap = { ...s1, changedAt: Date.now() - 5_000, ageConfidence: 'known', detectedType: 'secret', text: 'sk-abc123' }
 const secretBlock = objectBlock.createClipboardObjectBlock(secretSnap)

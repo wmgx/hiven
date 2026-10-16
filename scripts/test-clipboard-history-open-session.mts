@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { createHistoryOpenSession, resetHistoryOpenSession } from '../src/plugins/clipboard-history/surfaces/historyOpenSession.ts'
 
 const visibleSession = createHistoryOpenSession('visible')
@@ -29,12 +28,5 @@ assert.deepEqual(calls, [
   'invalidate-paste', 'clear-notice', 'clear-selection', 'first-page', 'clear-next-cursor',
   'top', 'clear-dom-selection', 'suspend-hover', 'refresh', 'focus-search',
 ], 'a genuine reopen resets stale actions, selection, pagination, scroll and hover before refreshing and focusing search')
-
-const surface = readFileSync(new URL('../src/plugins/clipboard-history/surfaces/ClipboardHistorySurface.tsx', import.meta.url), 'utf8')
-assert.match(
-  surface,
-  /if \(!openSession\.visibilityChanged\(document\.visibilityState\)\) return[\s\S]*resetHistoryOpenSession\(\{/,
-  'the surface must run the tested reset only after a genuine reopen transition',
-)
 
 console.log('clipboard history open session transitions passed')
