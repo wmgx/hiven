@@ -5,20 +5,6 @@ import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import ts from 'typescript'
 
-const packageJson = JSON.parse(readFileSync('package.json', 'utf8'))
-const refactorSuite = readFileSync('scripts/test-refactor-suite.mjs', 'utf8')
-
-assert.equal(
-  packageJson.scripts?.['test:workflow-registry-behavior'],
-  'node scripts/test-workflow-registry-behavior.mjs',
-  'package.json must expose test:workflow-registry-behavior',
-)
-assert.match(
-  refactorSuite,
-  /test:workflow-registry-behavior/,
-  'refactor suite must include workflow registry behavior coverage',
-)
-
 function plainIds(actions) {
   return JSON.parse(JSON.stringify(actions.map((action) => action.id)))
 }

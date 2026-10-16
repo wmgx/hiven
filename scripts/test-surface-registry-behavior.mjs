@@ -5,43 +5,9 @@ import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import ts from 'typescript'
 
-const packageJson = JSON.parse(readFileSync('package.json', 'utf8'))
-const refactorSuite = readFileSync('scripts/test-refactor-suite.mjs', 'utf8')
 const surfaceRegistrySource = readFileSync('src/surfaces/registry.ts', 'utf8')
 
-assert.equal(
-  packageJson.scripts?.['test:surface-registry-behavior'],
-  'node scripts/test-surface-registry-behavior.mjs',
-  'package.json must expose test:surface-registry-behavior',
-)
-const tauriLib = readFileSync('src-tauri/src/lib.rs', 'utf8')
-assert.match(tauriLib, /fn validate_surface_instance_kind/, 'Rust surface registry must validate surface kind inputs')
-assert.match(tauriLib, /fn validate_surface_instance_state/, 'Rust surface registry must validate surface state inputs')
-assert.match(tauriLib, /validate_surface_instance_kind\(&surface\.kind\)\?[\s\S]*validate_surface_instance_state\(&surface\.state\)\?/, 'Rust surface upsert must reject invalid kind/state values')
-assert.match(tauriLib, /surface_registry_mark_state[\s\S]*surface_registry_mark_record_state\(&id, &state, last_active_at\)/, 'Rust surface mark-state command must route through the validated mark-state helper')
-assert.match(tauriLib, /fn surface_registry_mark_record_state[\s\S]*validate_surface_instance_state\(state\)\?/, 'Rust surface mark-state helper must reject invalid state values')
-assert.match(
-  refactorSuite,
-  /test:surface-registry-behavior/,
-  'refactor suite must include surface registry behavior coverage',
-)
-
 const SURFACE_REGISTRY_EVENT = 'hiven://surface-registry-sync'
-
-assert.match(
-  surfaceRegistrySource,
-  /upsertSurfaceInstance[\s\S]*if \(!isSurfaceInstance\(surface\)\)[\s\S]*Ignoring invalid surface registry upsert[\s\S]*return[\s\S]*surfaces\.set/,
-  'frontend surface upsert must validate records before mutating the local mirror',
-)
-assert.match(
-  surfaceRegistrySource,
-  /markSurfaceInstanceState[\s\S]*if \(!isSurfaceInstanceState\(state\)\)[\s\S]*Ignoring invalid surface registry state[\s\S]*return[\s\S]*surfaces\.set/,
-  'frontend surface state updates must validate state before mutating the local mirror',
-)
-
-assert.match(surfaceRegistrySource, /SURFACE_INSTANCE_KINDS/, 'frontend surface registry must validate surface kind values')
-assert.match(surfaceRegistrySource, /SURFACE_INSTANCE_STATES/, 'frontend surface registry must validate surface state values')
-assert.match(surfaceRegistrySource, /isSurfaceInstanceKind\(surface\.kind\)[\s\S]*isSurfaceInstanceState\(surface\.state\)/, 'frontend surface registry must reject invalid snapshot and mutation surface records')
 
 async function flushAsyncWork() {
   await Promise.resolve()

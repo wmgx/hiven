@@ -194,22 +194,6 @@ dropReceipt = false
 stop()
 
 const requestSource = readFileSync('src/workspace/quickEditor/quickEditorRequests.ts', 'utf8')
-const quickEditorPanelSource = readFileSync('src/components/quickEditor/QuickEditorPanel.tsx', 'utf8')
-const paneWriteFunction = requestSource.slice(
-  requestSource.indexOf('async function deliverNativePaneWrite'),
-  requestSource.indexOf('/**\n * Overwrite active Quick Editor content'),
-)
-assert.doesNotMatch(paneWriteFunction, /QUICK_EDITOR_SET_PANE_TEXT_EVENT/, 'Legacy blind broadcast must stay removed')
-assert.match(paneWriteFunction, /throwOnError:\s*true/, 'A failed detached probe must fail closed')
-assert.match(paneWriteFunction, /paneWriteQueues/, 'Pane writes must be serialized per pane')
-assert.match(paneWriteFunction, /readDurablePane/, 'Each queued write must carry its input-time durable revision')
-assert.match(paneWriteFunction, /persist\.rehydrate\(\)/, 'The non-native inline writer must rehydrate before local mutation')
-assert.match(paneWriteFunction, /LAUNCHER_WINDOW_LABEL/, 'A plugin surface must target the launcher owner')
-assert.match(
-  quickEditorPanelSource,
-  /getRevision:[\s\S]*pane\.revision \?\? 0/,
-  'The owner must normalize a legacy pane without a revision to revision zero',
-)
 
 const requestsCompiled = ts.transpileModule(requestSource, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },

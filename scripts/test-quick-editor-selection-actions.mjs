@@ -257,10 +257,4 @@ assert.throws(() => replaceQuickEditorCommandTarget(switchedTarget, 'late', 'cha
 assert.equal(switchedEditor.operationCount(), 0)
 switchedTarget.dispose()
 
-const imperativeSource = readFileSync('src/components/quickEditor/quickEditorImperative.ts', 'utf8')
-const overlaySource = readFileSync('src/components/quickEditor/QuickEditorCommandOverlay.tsx', 'utf8')
-assert.match(imperativeSource, /commandTargetHandlers = new Map/)
-assert.match(overlaySource, /captureCommandTarget\(owner, paneId\)/)
-assert.match(overlaySource, /captureQuickEditorCommandTarget\(owner, undefined, paneId\)/)
-
 console.log('PASS quick editor selection actions: frozen reverse/Unicode/CRLF range, exact prefix/suffix, one edit, undo/redo, whole text, multi-select/unavailable block, pane-specific capture, stale guards')

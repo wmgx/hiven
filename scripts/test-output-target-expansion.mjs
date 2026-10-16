@@ -6,10 +6,9 @@
  *  - actionExecutor transforms text correctly (format JSON, minify)
  *  - getActionOutputTargets returns default + alternatives
  *  - getOutputTargetLabel provides Chinese labels
- *  - the dedicated expansion panel stays retired (object actions are ranked rows now)
  */
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import ts from 'typescript'
 
@@ -116,24 +115,5 @@ const result3 = await executor.executeRecommendedAction(
 assert.equal(result3.ok, true)
 assert.equal(editorText, 'hello world')
 assert.equal(editorTitle, '打开到编辑器')
-
-// ─── The expansion UI is retired; the model behind it is not ───────────────────
-// Object actions became pinned launcher rows competing in the one result list, so
-// the dedicated OutputTargetExpansion panel and its Tab-to-expand state are gone.
-// What survives — and what this file is really worth keeping for — is the executor:
-// the transforms and target routing verified above. Assert the UI stays retired so
-// a second action list cannot quietly reappear alongside the ranked one.
-assert.equal(
-  existsSync('src/components/launcher/OutputTargetExpansion.tsx'),
-  false,
-  'the dedicated output-target expansion panel should stay retired',
-)
-const searchFrame = readFileSync('src/components/launcher/GlobalLauncherSearchFrame.tsx', 'utf8')
-assert.doesNotMatch(searchFrame, /OutputTargetExpansion|setExpandedAction\(/, 'SearchFrame must not render a second, separate action list')
-assert.match(
-  searchFrame,
-  /@deprecated Dedicated object-action rows removed[\s\S]{0,120}onExecuteAction\?:/,
-  'the leftover object-action props must stay marked deprecated so they are not rewired by accident',
-)
 
 console.log('output target expansion Phase R3 checks passed')

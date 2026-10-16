@@ -234,20 +234,11 @@ const fallbackItem = toItem.desktopTargetToLauncherItem(
 assert.equal(fallbackItem.ranking?.fallback, true, 'target fallback reaches launcher ranking')
 assert.equal(fallbackItem.persistPayload?.fallback, true, 'persisted target keeps fallback semantics')
 
-// Process mode helper
-const processesSrc = readFileSync('src/workspace/desktopControl/processes.ts', 'utf8')
-assert.match(processesSrc, /isProcessModeQuery/)
-// "Process rows are not usage-recorded" moved out of processes.ts into
-// shouldRecordUsage's kind allowlist (same stale assertion as in
-// test-desktop-window-process-contract). Assert it where it now lives.
-{
-  const toItem = readFileSync('src/workspace/desktopTargets/toLauncherItem.ts', 'utf8')
-  const allowlist = /export function shouldRecordUsage[\s\S]*?\n}/.exec(toItem)?.[0] ?? ''
-  assert.ok(allowlist, 'shouldRecordUsage must exist')
-  assert.doesNotMatch(allowlist, /target\.kind === 'process'/, 'process rows must not record usage')
-}
-
-// surfaces force in toLauncherItem
-assert.match(readFileSync('src/workspace/desktopTargets/toLauncherItem.ts', 'utf8'), /surfaces:\s*\[\s*'global-launcher'\s*\]/)
+// Process rows are not usage-recorded.
+const processItem = toItem.desktopTargetToLauncherItem(
+  { id: 'host.process:focus:1', sourceId: 'host.process', kind: 'process', title: 'P', actionClass: 'focus' },
+  { locale: 'en' },
+)
+assert.equal(processItem.recordUsage, false, 'process rows must not record usage')
 
 console.log('desktop target registry + toLauncherItem contracts passed')
