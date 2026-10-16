@@ -255,6 +255,7 @@
     "test:translate-ai-readiness": "node scripts/test-translate-ai-readiness.mjs",
     "test:translate-output-eligibility": "node scripts/test-translate-output-eligibility.mjs",
     "test:regex-ai": "node scripts/test-regex-ai.mjs",
+    "test:regex-unsaved-changes": "node scripts/test-regex-unsaved-changes.mjs",
     "test:regex-worker": "node scripts/test-regex-worker.mjs",
     "test:regex-match-extraction": "node --experimental-strip-types scripts/test-regex-match-extraction.mts",
     "test:text-diff-source-read-lifetime": "node scripts/test-text-diff-source-read-lifetime.mjs",

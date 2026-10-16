@@ -1,5 +1,5 @@
 {
-  "version": 151,
+  "version": 152,
   "packages": [
     {
       "pluginId": "encode-decode",
@@ -54,7 +54,7 @@
     {
       "pluginId": "regex-tester",
       "dir": "regex-tester",
-      "version": "1.4.0"
+      "version": "1.4.1"
     },
     {
       "pluginId": "text-diff",

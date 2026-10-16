@@ -104,9 +104,21 @@ export function RegexTesterPluginPanel({ host, paneId }: PanelPropsV2<unknown>) 
 
 export function RegexTesterSurface(props: PluginSurfaceProps) {
   const { host, t } = props
-  const [pattern, setPattern] = useState('[a-z]+')
-  const [flags, setFlags] = useState('g')
-  const [sourceText, setSourceText] = useState(props.initialText ?? 'hello 123\nworld 456')
+  const baseline = useRef({
+    pattern: '[a-z]+',
+    flags: 'g',
+    sourceText: props.initialText ?? 'hello 123\nworld 456',
+  })
+  const [pattern, setPattern] = useState(baseline.current.pattern)
+  const [flags, setFlags] = useState(baseline.current.flags)
+  const [sourceText, setSourceText] = useState(baseline.current.sourceText)
+  const hasUnsavedChanges = pattern !== baseline.current.pattern
+    || flags !== baseline.current.flags
+    || sourceText !== baseline.current.sourceText
+  const reportUnsavedChanges = host.setUnsavedChanges
+  useLayoutEffect(() => {
+    reportUnsavedChanges?.(hasUnsavedChanges)
+  }, [hasUnsavedChanges, reportUnsavedChanges])
   const [aiState, setAiState] = useState<AiCandidateState>({ status: 'idle' })
   const aiSession = useRef<ReturnType<typeof createAiCandidateSession> | null>(null)
   useLayoutEffect(() => {
