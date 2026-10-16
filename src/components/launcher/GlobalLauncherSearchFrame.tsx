@@ -229,22 +229,6 @@ export function GlobalLauncherSearchFrame({
             <X size={15} aria-hidden />
           </button>
         )}
-        {!block && clipboardBlock && query.length > 0 && (
-          <button
-            type="button"
-            className="launcher-query-content-action"
-            onMouseDown={(event) => event.preventDefault()}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') event.stopPropagation()
-            }}
-            onClick={() => {
-              clipboardBlock.attachQueryAsBlock(query)
-              inputRef.current?.focus()
-            }}
-          >
-            {t(locale, 'palette.useQueryAsContent')}
-          </button>
-        )}
         {clipboardBlock?.canPickTextFile && (
           <button
             type="button"

@@ -132,6 +132,15 @@ assert.equal(attachPolicy.isStrongClipboardAttachEligible('hello world plain tex
 assert.equal(attachPolicy.isStrongClipboardAttachEligible('42'), false, 'short number not strong')
 assert.equal(attachPolicy.isStrongClipboardAttachEligible('/Users/me/export.csv'), true, 'file path strong via ext')
 
+// Typed/pasted query routing: a strong-type query becomes a content block, plain search text does not.
+{
+  const routed = objectBlock.createStrongQueryObjectBlock('{"a":1,"b":[1,2]}')
+  assert.equal(routed?.source, 'query')
+  assert.equal(routed?.kind, 'json')
+  assert.equal(routed?.payloadText, '{"a":1,"b":[1,2]}')
+  assert.equal(objectBlock.createStrongQueryObjectBlock('chrome'), null)
+}
+
 // Soft operands
 assert.equal(snapshot.isSoftClipboardOperand('42'), true, 'integer is soft operand')
 assert.equal(snapshot.isSoftClipboardOperand('1710000000'), false, 'unix ts is not soft')

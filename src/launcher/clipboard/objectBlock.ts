@@ -460,6 +460,14 @@ export function createQueryObjectBlock(params: {
   })
 }
 
+/**
+ * Typed or pasted launcher query that is clearly a structured object (JSON, JWT,
+ * timestamp, URL, ...) becomes a content block; ordinary search text stays null.
+ */
+export function createStrongQueryObjectBlock(query: string): LauncherObjectBlock | null {
+  return isStrongClipboardAttachEligible(query) ? createQueryObjectBlock({ query }) : null
+}
+
 export function createToolResultObjectBlock(text: string): LauncherObjectBlock {
   const kind = normalizeSecretKind(detectClipboardType(text))
   return createGenericObjectBlock({

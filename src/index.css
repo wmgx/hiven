@@ -5586,25 +5586,6 @@ body[data-theme='dark'] .l-search {
   cursor: text;
 }
 
-.launcher-query-content-action {
-  flex: none;
-  border: 0;
-  border-radius: 6px;
-  padding: 5px 8px;
-  background: transparent;
-  color: var(--text-2);
-  font: inherit;
-  font-size: 11px;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.launcher-query-content-action:hover,
-.launcher-query-content-action:focus-visible {
-  background: var(--surface);
-  color: var(--text);
-}
-
 .l-search .back {
   width: 24px;
   height: 24px;

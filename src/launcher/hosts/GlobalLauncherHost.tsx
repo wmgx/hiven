@@ -33,7 +33,7 @@ import { useClipboardObjectBlock } from '../clipboard/useClipboardObjectBlock'
 import { chooseTextMaterialFile } from '../clipboard/fileTextMaterial'
 import { captureRootFileTextSession } from '../clipboard/fileTextInputSession'
 import { acquireLauncherNativeDialogFocus } from '../../workspace/launcherBlurGuard'
-import { getObjectBlockRecommendationText, type LauncherObjectBlock } from '../clipboard/objectBlock'
+import { createStrongQueryObjectBlock, getObjectBlockRecommendationText, type LauncherObjectBlock } from '../clipboard/objectBlock'
 import { captureCurrentTextDeliveryScope, createCurrentTextDelivery, isCurrentTextDeliveryAction, type CurrentTextDeliveryAction } from '../clipboard/currentTextDelivery'
 import { canExportCurrentText, captureCurrentTextExportScope, createCurrentTextExport, CURRENT_TEXT_EXPORT_ACTION, CURRENT_TEXT_EXPORT_ERROR_KEYS } from '../clipboard/currentTextExport'
 import { setPendingObjectBlock, subscribePendingObjectBlock } from '../clipboard/pendingObjectBlock'
@@ -72,6 +72,20 @@ import { captureHudTarget } from '../../workspace/toastRouting'
 
 type CurrentTextActionScope = { block: LauncherObjectBlock } & ReturnType<typeof captureCurrentTextDeliveryScope>
 type CurrentTextExportScope = { block: LauncherObjectBlock } & ReturnType<typeof captureCurrentTextExportScope>
+
+/** Host commands unrelated to the attached content; hidden from the default content-action list. */
+const CONTENT_UNRELATED_HOST_KEYS: ReadonlySet<string> = new Set([
+  'host:view:plugins',
+  'host:view:settings',
+  'host:view:ai-settings',
+  'host:view:devtools',
+  'host:view:quick-editor',
+  'host:saved-action:delete',
+  'host:app-launcher:refresh',
+])
+
+/** Idle time before strong-typed query text turns into an Object Block. */
+const QUERY_BLOCK_ATTACH_DELAY_MS = 250
 
 export function GlobalLauncherHost() {
   const {
@@ -398,6 +412,21 @@ export function GlobalLauncherHost() {
     open && surfaceKey !== null ? surfaceFrame : null,
   )
 
+  // Typed or pasted text that is clearly a structured object (JSON, JWT, timestamp, URL, ...)
+  // becomes an Object Block, exactly like clipboard content. Debounced so that typing a
+  // longer query is never hijacked half-way.
+  const rootListActive = !surfaceFrame && !hostSurfaceTarget && !launcherSettingsTarget &&
+    (controllerState?.frames.length ?? 1) <= 1
+  useEffect(() => {
+    if (!open || !rootListActive || clipboardBlock.block || browsingActions || !query.trim()) return
+    if (!createStrongQueryObjectBlock(query)) return
+    const timer = window.setTimeout(() => {
+      if (isImeComposingRef.current) return
+      clipboardBlock.attachQueryAsBlock(query)
+    }, QUERY_BLOCK_ATTACH_DELAY_MS)
+    return () => window.clearTimeout(timer)
+  }, [open, rootListActive, clipboardBlock.block, clipboardBlock.attachQueryAsBlock, browsingActions, query, isImeComposingRef])
+
   useEffect(() => {
     if (!standaloneLauncher || !isNativeDesktopRuntime()) return
     let disposed = false
@@ -462,14 +491,19 @@ export function GlobalLauncherHost() {
   })
 
   // Ranking and execution share the live query snapshot.
+  const hasContentBlock = Boolean(clipboardBlock.block)
   const rankedVisible = useMemo(() => {
     void pluginRegistryVersion
+    // With content attached and no search typed, only content-related actions are listed.
+    const contentRows = hasContentBlock && !rankingQuery.trim()
+      ? rankedLauncherItems.filter((item) => !CONTENT_UNRELATED_HOST_KEYS.has(item.systemKey))
+      : rankedLauncherItems
     return buildGlobalLauncherItems({
-      rankedLauncherItems,
+      rankedLauncherItems: contentRows,
       query: rankingQuery,
       locale,
     })
-  }, [locale, pluginRegistryVersion, rankingQuery, rankedLauncherItems])
+  }, [hasContentBlock, locale, pluginRegistryVersion, rankingQuery, rankedLauncherItems])
 
   /**
    * Object Block host rows pinned near the top of the composed list.
