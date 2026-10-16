@@ -163,6 +163,12 @@ export type LauncherControllerDeps = {
   /** Test/alternate sink injection; production defaults to the native journal. */
 }
 
+type RootActionOwnership = {
+  itemKey: string
+  queryGeneration: number
+  selectionGeneration: number
+}
+
 const emptyStorage: PluginPrivateStorageApi = {
   kv: {
     get: async () => undefined,
@@ -240,6 +246,11 @@ export class LauncherController {
   private flowGeneration = 0
   /** Root search edits retire failure messages without cancelling an active action. */
   private rootQueryGeneration = 0
+  /** Actual highlighted root row, separate from the session's optional sticky selection. */
+  private rootSelectionKey: string | null = null
+  private rootSelectionGeneration = 0
+  /** Set only for a visible root execution failure; other controller errors remain independent. */
+  private rootExecutionErrorKey: string | null = null
   private prepareGeneration = 0
   private paramFrameGeneration = 0
   private readonly choiceGenerations = new WeakMap<LauncherResultChoice, number>()
@@ -270,9 +281,28 @@ export class LauncherController {
   onRootQueryChanged(): void {
     if (this.state.frames.length !== 1 || this.topFrame().kind !== 'list') return
     this.rootQueryGeneration += 1
+    this.rootSelectionKey = null
+    this.rootSelectionGeneration += 1
+    this.rootExecutionErrorKey = null
     if (this.state.error === null) return
     // Only dismiss the visible root error, including unavailable-plugin errors;
     // setState also enforces plugin lifetime and could restore the same message.
+    this.state = { ...this.state, error: null }
+    this.deps.onChange(this.state)
+  }
+
+  /** Keep root execution failures attached to the row that actually launched them. */
+  onRootSelectionChanged(itemKey: string | null): void {
+    if (this.state.frames.length !== 1 || this.topFrame().kind !== 'list') return
+    this.setRootSelection(itemKey)
+  }
+
+  private setRootSelection(itemKey: string | null): void {
+    if (itemKey === this.rootSelectionKey) return
+    this.rootSelectionKey = itemKey
+    this.rootSelectionGeneration += 1
+    if (this.rootExecutionErrorKey === null || this.state.error === null) return
+    this.rootExecutionErrorKey = null
     this.state = { ...this.state, error: null }
     this.deps.onChange(this.state)
   }
@@ -289,6 +319,7 @@ export class LauncherController {
     if (this.activePluginLifetime?.active === false) {
       patch = { ...patch, error: this.unavailableMessage(), busy: false, deliveryIntent: null }
     }
+    if (Object.prototype.hasOwnProperty.call(patch, 'error')) this.rootExecutionErrorKey = null
     this.state = { ...this.state, ...patch }
     this.deps.onChange(this.state)
   }
@@ -352,6 +383,8 @@ export class LauncherController {
     }
     this.activePluginLifetime = undefined
     this.pluginUnavailable = false
+    this.rootSelectionKey = null
+    this.rootSelectionGeneration += 1
     this.invalidatePendingActions()
     this.prepareGeneration += 1
     this.setState({ frames: [{ kind: 'list' }], error: null, busy: false })
@@ -664,6 +697,9 @@ export class LauncherController {
    * Usage is recorded only when the resulting commit succeeds.
    */
   async selectItem(item: LauncherItem, options: SelectOptions = {}): Promise<void> {
+    // Every first-level activation owns its stable row identity, including
+    // callers outside the Global Launcher list and special rows without an index.
+    this.setRootSelection(item.systemKey)
     if (item.pluginLifetime?.active === false) {
       this.invalidateUnavailablePlugin()
       this.setState({ error: this.unavailableMessage() })
@@ -676,7 +712,11 @@ export class LauncherController {
     this.pluginUnavailable = false
     this.invalidatePendingActions()
     const prepareGeneration = ++this.prepareGeneration
-    const rootQueryGeneration = this.rootQueryGeneration
+    const rootActionOwnership: RootActionOwnership = {
+      itemKey: item.systemKey,
+      queryGeneration: this.rootQueryGeneration,
+      selectionGeneration: this.rootSelectionGeneration,
+    }
     // A first-level selection starts a new command, never a nested draft session.
     this.setState({ frames: [{ kind: 'list' }], error: null })
     if (item.prepare) {
@@ -691,7 +731,7 @@ export class LauncherController {
         }
       } catch (error) {
         if (prepareGeneration === this.prepareGeneration && !this.invalidateUnavailablePlugin()) {
-          this.setActionFailure(error instanceof Error ? error.message : String(error), rootQueryGeneration)
+          this.setActionFailure(error instanceof Error ? error.message : String(error), rootActionOwnership)
         }
         return
       }
@@ -703,11 +743,10 @@ export class LauncherController {
       item = { ...item, initialInputText: undefined }
     }
     if (item.disabledReason) {
-      if (rootQueryGeneration === this.rootQueryGeneration) {
-        this.setState({
-          error: item.disabledReason.messageI18n?.[this.deps.locale as Locale] ?? item.disabledReason.message,
-        })
-      }
+      this.setActionFailure(
+        item.disabledReason.messageI18n?.[this.deps.locale as Locale] ?? item.disabledReason.message,
+        rootActionOwnership,
+      )
       return
     }
     trackBehavior(TelemetryEvents.launcherItemSelect, {
@@ -730,7 +769,7 @@ export class LauncherController {
       if (item.initialInputText === undefined && this.hasObjectBlockText(options.objectBlockText)) {
         await this.commitResolvedAction({
           item,
-          rootQueryGeneration,
+          rootActionOwnership,
           via: item.commitVia ?? 'execute',
           params: this.defaultParamsFor(item),
           inputBinding: 'prompt',
@@ -754,7 +793,7 @@ export class LauncherController {
       if (item.initialInputText === undefined && this.hasObjectBlockText(options.objectBlockText)) {
         await this.commitResolvedAction({
           item,
-          rootQueryGeneration,
+          rootActionOwnership,
           via: item.commitVia ?? 'execute',
           params: this.defaultParamsFor(item),
           inputBinding: 'prompt',
@@ -776,7 +815,7 @@ export class LauncherController {
     const inputText = item.initialInputText ?? options.objectBlockText
     await this.commitResolvedAction({
       item,
-      rootQueryGeneration,
+      rootActionOwnership,
       via: item.commitVia ?? 'execute',
       params: this.defaultParamsFor(item),
       sourceTitle: this.itemTitle(item),
@@ -1545,8 +1584,8 @@ export class LauncherController {
     resolvedChoice?: LauncherResultChoice
     /** Successful single-parameter edits replace the existing preview level. */
     replacePreview?: boolean
-    /** The root search that selected this action, captured before any preparation. */
-    rootQueryGeneration?: number
+    /** Root row/query identity captured before any preparation. */
+    rootActionOwnership?: RootActionOwnership
   }): Promise<void> {
     if (this.invalidateUnavailablePlugin()) return
     const { item, via, sourceTitle, execute, resolvedChoice } = input
@@ -1624,7 +1663,7 @@ export class LauncherController {
         via,
         failed: true,
       })
-      this.setActionFailure(error instanceof Error ? error.message : String(error), input.rootQueryGeneration)
+      this.setActionFailure(error instanceof Error ? error.message : String(error), input.rootActionOwnership)
       return
     }
 
@@ -1636,7 +1675,7 @@ export class LauncherController {
       hasOutput: isOutputResult(result),
     })
     if (!result.ok) {
-      this.setActionFailure(result.message, input.rootQueryGeneration)
+      this.setActionFailure(result.message, input.rootActionOwnership)
       return
     }
     await this.applyResult(result, sourceTitle, committedRun, {
@@ -1646,11 +1685,17 @@ export class LauncherController {
   }
 
   /** Call only after the action's flow/prepare ownership checks have passed. */
-  private setActionFailure(error: string, rootQueryGeneration?: number): void {
+  private setActionFailure(error: string, ownership?: RootActionOwnership): void {
+    const ownsCurrentRoot = ownership === undefined || (
+      ownership.queryGeneration === this.rootQueryGeneration &&
+      ownership.selectionGeneration === this.rootSelectionGeneration &&
+      (this.rootSelectionKey === null || ownership.itemKey === this.rootSelectionKey)
+    )
     this.setState({
       busy: false,
-      ...(rootQueryGeneration === undefined || rootQueryGeneration === this.rootQueryGeneration ? { error } : {}),
+      ...(ownsCurrentRoot ? { error } : {}),
     })
+    if (ownsCurrentRoot && ownership) this.rootExecutionErrorKey = ownership.itemKey
   }
 
   private async runChoiceAction(

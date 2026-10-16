@@ -161,19 +161,30 @@ export function GlobalLauncherPanel({
   const activatePreviewPaste = pastePreviewText
     ? (choice: LauncherResultChoice) => controllerRef.current?.activatePreviewPaste(choice, pastePreviewText)
     : undefined
+  const visibleFilteredRef = useRef(visibleFiltered)
+  visibleFilteredRef.current = visibleFiltered
+  const syncSearchSelection = useCallback((item: GlobalLauncherItem) => {
+    const index = visibleFilteredRef.current.findIndex(
+      (candidate) => candidate.domainItem.systemKey === item.domainItem.systemKey,
+    )
+    if (index >= 0) setSelectedIndex(index)
+  }, [setSelectedIndex])
   // Stable handlers so LauncherMixedListItem memo is not busted every parent render.
   const handleSearchSelectItem = useCallback((item: GlobalLauncherItem) => {
+    syncSearchSelection(item)
     selectItem(item)
-  }, [selectItem])
+  }, [selectItem, syncSearchSelection])
   const handleRenameSavedAction = useCallback((item: GlobalLauncherItem) => {
     const artifactId = item.domainItem.savedActionArtifactId
     if (!artifactId) return
+    syncSearchSelection(item)
     void controllerRef.current?.selectItem(createRenameSavedActionItem(artifactId))
-  }, [controllerRef])
+  }, [controllerRef, syncSearchSelection])
   const handleDeleteSavedAction = useCallback((item: GlobalLauncherItem) => {
     if (!item.domainItem.savedActionArtifactId || !item.domainItem.savedActionSnapshot) return
+    syncSearchSelection(item)
     void controllerRef.current?.selectItem(createDeleteSavedActionItem(item.domainItem))
-  }, [controllerRef])
+  }, [controllerRef, syncSearchSelection])
   const toggleLauncherFavorite = useAppStore((s) => s.toggleLauncherFavorite)
   const launcherFavoriteKeys = useAppStore((s) => s.launcherFavoriteKeys)
   // X11 tokens expire and settings fields exist only under an explicit query.

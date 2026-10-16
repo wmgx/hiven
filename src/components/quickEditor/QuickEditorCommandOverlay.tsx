@@ -106,6 +106,10 @@ export function QuickEditorCommandOverlay() {
 
   const selectMixedItem = (item?: GlobalLauncherItem) => {
     if (item?.kind === 'domain') {
+      const index = visibleFiltered.findIndex(
+        (candidate) => candidate.domainItem.systemKey === item.domainItem.systemKey,
+      )
+      if (index >= 0) setSelectedIndex(index)
       executeGlobalLauncherDomainItem({
         item: item.domainItem,
         controller: controllerRef.current,

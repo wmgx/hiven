@@ -304,19 +304,14 @@ export function useLauncherSession({
   ) => {
     // Default pin=true: keyboard / hover are intentional user selection.
     const pin = options?.pin !== false
-    setSelectedIndexState((prev) => {
-      const next = typeof value === 'function' ? value(prev) : value
-      selectedIndexRef.current = next
-      if (pin) {
-        const item = (visibleSelectionItemsRef?.current ?? rankedItemsRef.current)[next]
-        selectedKeyRef.current = item?.systemKey
-          ?? extraSelectionRowsRef?.current.find((row) => row.index === next)?.systemKey
-          ?? null
-      } else {
-        selectedKeyRef.current = null
-      }
-      return next
-    })
+    const next = typeof value === 'function' ? value(selectedIndexRef.current) : value
+    const itemKey = (visibleSelectionItemsRef?.current ?? rankedItemsRef.current)[next]?.systemKey
+      ?? extraSelectionRowsRef?.current.find((row) => row.index === next)?.systemKey
+      ?? null
+    selectedIndexRef.current = next
+    selectedKeyRef.current = pin ? itemKey : null
+    controllerRef.current?.onRootSelectionChanged(itemKey)
+    setSelectedIndexState(next)
   }, [extraSelectionRowsRef, visibleSelectionItemsRef])
 
   const syncSelection = useCallback(() => {
@@ -327,6 +322,10 @@ export function useLauncherSession({
       extraRows: extraSelectionRowsRef?.current,
     })
     selectedKeyRef.current = resolved.key
+    const itemKey = (visibleSelectionItemsRef?.current ?? rankedItemsRef.current)[resolved.index]?.systemKey
+      ?? extraSelectionRowsRef?.current.find((row) => row.index === resolved.index)?.systemKey
+      ?? null
+    controllerRef.current?.onRootSelectionChanged(itemKey)
     if (resolved.index === selectedIndexRef.current) return
     selectedIndexRef.current = resolved.index
     setSelectedIndexState(resolved.index)

@@ -314,7 +314,7 @@ export function GlobalLauncherSearchFrame({
           </div>
         )}
         {error && (
-          <div className="px-3.5 py-1.5 text-[12px]" style={{ color: 'var(--color-error)', borderBottom: 'var(--hairline) solid var(--color-border-tertiary)' }}>
+          <div className="px-3.5 py-1.5 text-[12px]" role="alert" style={{ color: 'var(--color-error)', borderBottom: 'var(--hairline) solid var(--color-border-tertiary)' }}>
             {error}
           </div>
         )}

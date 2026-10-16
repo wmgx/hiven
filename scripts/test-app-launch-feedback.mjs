@@ -120,6 +120,87 @@ assert.equal(pending.closed, 0)
 assert.equal(pending.selections, 0)
 assert.equal(nativeCalls.length, pendingCount, 'an uncertain result never retries on its own')
 
+// Root execution errors belong to the exact highlighted result, not a title/index.
+nativeLaunch = async () => { throw 'APP_LAUNCH_REJECTED' }
+const ownedFailure = harness()
+ownedFailure.controller.onRootSelectionChanged(item.systemKey)
+await ownedFailure.controller.selectItem(item)
+assert.equal(ownedFailure.controller.getState().error, messages.en.rejected)
+ownedFailure.controller.onRootSelectionChanged(item.systemKey)
+assert.equal(ownedFailure.controller.getState().error, messages.en.rejected,
+  'same stable identity keeps its execution error across harmless re-renders')
+ownedFailure.controller.onRootSelectionChanged('host:other-source:same-title')
+assert.equal(ownedFailure.controller.getState().error, null,
+  'a different systemKey clears the old execution error even when titles could match')
+
+// A pending failure must not land after a re-rank or deliberate move to another result.
+let rejectStaleSelection
+nativeLaunch = () => new Promise((_resolve, reject) => { rejectStaleSelection = reject })
+const movedSelection = harness()
+movedSelection.controller.onRootSelectionChanged(item.systemKey)
+const staleSelectionRun = movedSelection.controller.selectItem(item)
+await new Promise((resolve) => setImmediate(resolve))
+movedSelection.controller.onRootSelectionChanged('host:other-source:same-title')
+rejectStaleSelection('APP_LAUNCH_REJECTED')
+await staleSelectionRun
+assert.equal(movedSelection.controller.getState().error, null,
+  'late failure from the previous result cannot overwrite the new selection')
+assert.equal(movedSelection.controller.getState().busy, false)
+
+let rejectReturnedSelection
+nativeLaunch = () => new Promise((_resolve, reject) => { rejectReturnedSelection = reject })
+const returnedSelection = harness()
+returnedSelection.controller.onRootSelectionChanged(item.systemKey)
+const returnedSelectionRun = returnedSelection.controller.selectItem(item)
+await new Promise((resolve) => setImmediate(resolve))
+returnedSelection.controller.onRootSelectionChanged('host:other-source:same-title')
+returnedSelection.controller.onRootSelectionChanged(item.systemKey)
+rejectReturnedSelection('APP_LAUNCH_REJECTED')
+await returnedSelectionRun
+assert.equal(returnedSelection.controller.getState().error, null,
+  'A → B → A cannot revive a failure owned by the earlier A selection generation')
+
+let rejectStaleQuery
+nativeLaunch = () => new Promise((_resolve, reject) => { rejectStaleQuery = reject })
+const changedQuery = harness()
+changedQuery.controller.onRootSelectionChanged(item.systemKey)
+const staleQueryRun = changedQuery.controller.selectItem(item)
+await new Promise((resolve) => setImmediate(resolve))
+changedQuery.controller.onRootQueryChanged()
+rejectStaleQuery('APP_LAUNCH_REJECTED')
+await staleQueryRun
+assert.equal(changedQuery.controller.getState().error, null,
+  'late failure from the previous query cannot overwrite the new search state')
+assert.equal(changedQuery.controller.getState().busy, false)
+
+// Selection changes only dismiss owned execution failures, not unrelated controller errors.
+const nonExecutionError = harness()
+await nonExecutionError.controller.selectItem({
+  ...item,
+  systemKey: 'plugin:inactive:same-title',
+  pluginLifetime: { active: false },
+})
+const unavailableMessage = nonExecutionError.controller.getState().error
+assert.ok(unavailableMessage)
+nonExecutionError.controller.onRootSelectionChanged('host:other-source:same-title')
+assert.equal(nonExecutionError.controller.getState().error, unavailableMessage,
+  'selection changes must not clear non-execution controller errors')
+
+const lifetime = { active: true }
+nativeLaunch = async () => { throw 'APP_LAUNCH_REJECTED' }
+const revokedAfterFailure = harness()
+const lifetimeItem = { ...item, systemKey: 'plugin:lifetime:owned-error', pluginLifetime: lifetime }
+revokedAfterFailure.controller.onRootSelectionChanged(lifetimeItem.systemKey)
+await revokedAfterFailure.controller.selectItem(lifetimeItem)
+assert.equal(revokedAfterFailure.controller.getState().error, messages.en.rejected)
+lifetime.active = false
+assert.equal(revokedAfterFailure.controller.invalidateUnavailablePlugin(), true)
+const revokedMessage = revokedAfterFailure.controller.getState().error
+assert.notEqual(revokedMessage, messages.en.rejected)
+revokedAfterFailure.controller.onRootSelectionChanged('host:other-source:same-title')
+assert.equal(revokedAfterFailure.controller.getState().error, revokedMessage,
+  'plugin revocation must replace and detach an older owned execution error')
+
 nativeLaunch = async () => {}
 const accepted = harness()
 await accepted.controller.selectItem(item)
