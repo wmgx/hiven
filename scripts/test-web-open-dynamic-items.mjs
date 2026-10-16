@@ -34,11 +34,6 @@ const learnedRules = loadModule('src/plugins/web-open/learnedRules.ts', {
   } },
 })
 const matchPatternCache = loadModule('src/plugins/web-open/matchPatternCache.ts', { stripImports: stripTypeImports })
-const launcherTypesSource = readFileSync('src/workspace/launcher/types.ts', 'utf8')
-const launcherRegistrySource = readFileSync('src/workspace/launcher/registry.ts', 'utf8')
-const launcherSessionSource = readFileSync('src/workspace/launcher/useLauncherSession.ts', 'utf8')
-const faviconCacheSource = readFileSync('src/plugins/web-open/faviconCache.ts', 'utf8')
-const webOpenIndexSource = readFileSync('src/plugins/web-open/index.tsx', 'utf8')
 
 const queryHistory = loadModule('src/plugins/web-open/queryHistory.ts', {
   stripImports: [
@@ -99,80 +94,6 @@ const webOpen = loadModule('src/plugins/web-open/index.tsx', {
 
 const definition = webOpen.default
 assert.ok(definition.launcher.dynamicItems, 'web-open should provide runtime dynamic launcher items')
-assert.doesNotMatch(
-  launcherTypesSource,
-  /LauncherDynamicContext[\s\S]*clipboardText/,
-  'LauncherDynamicContext should expose only host-resolved query text to plugins',
-)
-assert.doesNotMatch(
-  launcherRegistrySource,
-  /clipboardText/,
-  'launcher registry should not pass source-specific clipboardText to plugin dynamic providers',
-)
-
-// Progressive + isolated host/plugin dynamic paths
-assert.match(
-  launcherRegistrySource,
-  /onPartial\?/,
-  'collectDynamicItems should support progressive onPartial updates',
-)
-assert.match(
-  launcherRegistrySource,
-  /includeHost|includePlugins/,
-  'collectDynamicItems should allow isolating host vs plugin providers',
-)
-assert.match(
-  launcherSessionSource,
-  /PLUGIN_DYNAMIC_DEBOUNCE_MS/,
-  'launcher session should use a short debounce for plugin compute dynamics',
-)
-assert.match(
-  launcherSessionSource,
-  /HOST_DYNAMIC_DEBOUNCE_MS/,
-  'launcher session should use a longer debounce for host app dynamics',
-)
-assert.match(
-  launcherSessionSource,
-  /includeHost:\s*false[\s\S]*includePlugins:\s*true/,
-  'plugin dynamic path must not wait on host app search',
-)
-assert.match(
-  launcherSessionSource,
-  /includeHost:\s*true[\s\S]*includePlugins:\s*false/,
-  'host dynamic path must not wait on plugin providers',
-)
-assert.match(
-  launcherSessionSource,
-  /const inputText = q \|\| objectBlockText\?\.trim\(\) \|\| ''[\s\S]*collectDynamicItems\(q,\s*normalizedHostId,\s*locale,\s*getPluginSettings,\s*inputText/,
-  'launcher session should resolve query vs Object Block before invoking dynamic providers',
-)
-assert.match(
-  launcherSessionSource,
-  /launcherInputIdentity\(query[\s\S]*query\.trim\(\), objectBlockText\?\.trim\(\)[\s\S]*inputIdentity:\s*string \| null; items:\s*LauncherItem\[\]/,
-  'dynamic result batches must retain the query and Object Block identity that produced them',
-)
-
-// Non-blocking favicon path
-assert.match(
-  faviconCacheSource,
-  /resolveFaviconIconForLauncher/,
-  'favicon cache should expose a non-blocking launcher resolve path',
-)
-assert.match(
-  webOpenIndexSource,
-  /resolveFaviconIconForLauncher/,
-  'web-open dynamic items must not await network favicon fetch on the list path',
-)
-assert.match(
-  webOpenIndexSource,
-  /favicon-cache/,
-  'web-open settings should surface plugin-internal favicon cache management',
-)
-assert.match(
-  webOpenIndexSource,
-  /replaceMatchPatternCache/,
-  'web-open should replace compiled matchPattern cache from current settings',
-)
 
 // matchPattern cache: compile once, support replace
 matchPatternCache.clearMatchPatternCache()

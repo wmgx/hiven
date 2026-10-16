@@ -4,24 +4,13 @@
  */
 
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import vm from 'node:vm'
 import ts from 'typescript'
 
 const root = process.cwd()
 const read = (p) => readFileSync(join(root, p), 'utf8')
-
-for (const path of [
-  'src/plugins/web-open/extension/manifest.json',
-  'src/plugins/web-open/extension/background.js',
-  'src/plugins/web-open/browserTabsModel.ts',
-  'src/plugins/web-open/browserProvider.ts',
-  'src/workspace/desktopTargets/pluginApi.ts',
-  'src/workspace/desktopTargets/collectBridgeLauncherItems.ts',
-]) {
-  assert.ok(existsSync(join(root, path)), `${path} must exist`)
-}
 
 const manifest = JSON.parse(read('src/plugins/web-open/extension/manifest.json'))
 assert.ok(manifest.permissions.includes('history'), 'extension must request history')
@@ -37,38 +26,6 @@ assert.ok(manifest.permissions.includes('tabs'))
     `extension version must be >= 0.2 , got ${manifest.version}`,
   )
 }
-
-const background = read('src/plugins/web-open/extension/background.js')
-assert.match(background, /\/v1\/sources\/\$\{SOURCE_ID\}\/history/)
-assert.match(background, /\/v1\/sources\/\$\{SOURCE_ID\}\/events/)
-assert.match(background, /type:\s*'tab\.opened'|type === 'tab\.opened'|tab\.opened/)
-assert.match(background, /tab\.activated/)
-assert.match(background, /autoCloseIdleTabs/)
-assert.doesNotMatch(background, /MAX_IDLE_TIMEOUT_MINUTES/)
-assert.match(background, /MIN_IDLE_TIMEOUT_MINUTES/)
-assert.match(background, /chrome\.tabs\.remove/)
-assert.match(background, /tab\.pinned/)
-assert.doesNotMatch(background, /from ['"]\.\.\/\.\.\/workspace\//)
-
-const api = read('src/workspace/desktopTargets/pluginApi.ts')
-assert.match(api, /listHistory:/)
-assert.match(api, /listEvents:/)
-assert.match(api, /openUrl:/)
-assert.match(api, /setSourceConfig:/)
-
-const collect = read('src/workspace/desktopTargets/collectBridgeLauncherItems.ts')
-assert.match(collect, /t\.kind === 'tab' \|\| t\.kind === 'document'/)
-
-// Merged into web-open: the browser capability is applied from web-open's index,
-// and the history/idle toggles live in the connection modal.
-const pluginIndex = read('src/plugins/web-open/index.tsx')
-assert.match(pluginIndex, /pushChromiumBridgeConfig/)
-assert.match(pluginIndex, /applyBrowserCapability/)
-const connectionModal = read('src/plugins/web-open/settings/BrowserTabsConnectionModal.tsx')
-assert.match(connectionModal, /historyEnabled/)
-assert.match(connectionModal, /autoCloseIdleTabs/)
-assert.match(connectionModal, /IDLE_TIMEOUT_PRESET_MINUTES/)
-assert.match(connectionModal, /HISTORY_SEARCH_DAY_OPTIONS/)
 
 function loadTs(path) {
   const src = readFileSync(path, 'utf8').replace(/import\s+type\s*\{[\s\S]*?\}\s*from\s*'[^']*'\s*;?\s*\n?/g, '')

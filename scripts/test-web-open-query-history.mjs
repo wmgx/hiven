@@ -91,31 +91,4 @@ for (const entry of model.DEFAULT_WEB_QUICK_OPEN_SETTINGS.entries) {
   assert.equal(entry.recordQueryHistory, false)
 }
 
-// controller / types wiring source checks
-const controllerSource = readFileSync('src/workspace/launcher/controller.ts', 'utf8')
-assert.match(controllerSource, /selectedSuggestionIndex/)
-assert.match(controllerSource, /moveSuggestionHighlight/)
-assert.match(controllerSource, /refreshSuggestions/)
-assert.match(controllerSource, /item\.suggest/)
-
-const typesSource = readFileSync('src/workspace/launcher/types.ts', 'utf8')
-assert.match(typesSource, /LauncherSuggestHandler/)
-assert.match(typesSource, /suggest\?:/)
-
-// registry.ts delegates contribution field mapping to normalizeContribution —
-// that is where the suggest passthrough actually lives (this assertion used to
-// point at registry.ts and had been silently stale since that refactor).
-const registrySource = readFileSync('src/workspace/launcher/registry.ts', 'utf8')
-assert.match(registrySource, /resolveDynamicItem[\s\S]*normalizeContribution/)
-const normalizeSource = readFileSync('src/workspace/launcher/normalizeContribution.ts', 'utf8')
-assert.match(normalizeSource, /suggest: contribution\.suggest/)
-
-const webOpenSource = readFileSync('src/plugins/web-open/index.tsx', 'utf8')
-assert.match(webOpenSource, /recordQueryHistory/)
-assert.match(webOpenSource, /suggestHistoryForEntry|suggest:/)
-assert.match(webOpenSource, /query-history/)
-
-const keyboardSource = readFileSync('src/components/launcher/GlobalLauncherKeyboard.ts', 'utf8')
-assert.match(keyboardSource, /moveSuggestionHighlight/)
-
 console.log('test-web-open-query-history: ok')

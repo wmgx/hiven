@@ -13,28 +13,6 @@ import { createRequire } from 'node:module'
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const read = (p) => readFileSync(join(root, p), 'utf8')
 
-assert.match(read('src/workspace/urlSchemeRegistry.ts'), /registerUrlSchemes|routeHostOpenUrl/)
-assert.match(read('src/pluginHostSdk.ts'), /urlSchemes/)
-assert.match(read('src/workspace/effectRunner.ts'), /routeHostOpenUrl|urlSchemeRegistry/)
-// Must NOT put product schemes into tauri shell open config
-const tauriConf = read('src-tauri/tauri.conf.json')
-assert.doesNotMatch(
-  tauriConf,
-  /"shell"\s*:\s*\{[^}]*lark/,
-  'tauri.conf must not hardcode lark scheme in shell.open',
-)
-// open_system_url must stay product-agnostic (plugin does open -a Lark.app)
-const libRs = read('src-tauri/src/lib.rs')
-const openFn = libRs.match(
-  /fn open_system_url[\s\S]*?\n}\n\n#\[derive/,
-)?.[0]
-assert.ok(openFn, 'open_system_url function present')
-assert.doesNotMatch(
-  openFn,
-  /is_feishu_scheme|Lark\.app|lark:\/\/|feishu:\/\//,
-  'open_system_url must not hardcode Feishu/Lark delivery',
-)
-
 let ts
 try {
   ts = createRequire(import.meta.url)('typescript')

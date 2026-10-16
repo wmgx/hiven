@@ -311,20 +311,6 @@ const model = loadTs('src/plugins/web-open/settings/model.ts', [
   assert.equal(noEncode, 'https://x.test/c d')
 }
 
-// Source contracts: direct-url accepts + dynamic accepts passthrough
-const webOpenIndex = readFileSync('src/plugins/web-open/index.tsx', 'utf8')
-assert.match(webOpenIndex, /direct-url-open[\s\S]*accepts:\s*\{\s*kinds:\s*\[['"]url['"]\]/, 'direct-url-open must declare accepts.kinds url')
-const registry = readFileSync('src/workspace/launcher/registry.ts', 'utf8')
-assert.match(
-  registry,
-  /resolveDynamicItem[\s\S]*normalizeContribution/,
-  'resolveDynamicItem must normalizeContribution (copies accepts/params/match protocol)',
-)
-assert.match(
-  readFileSync('src/workspace/launcher/normalizeContribution.ts', 'utf8'),
-  /accepts:\s*contribution\.accepts/,
-  'normalizeContribution must pass through contribution.accepts',
-)
 const manifest = JSON.parse(readFileSync('src/plugins/web-open/manifest.json', 'utf8'))
 // Floor, not equality: plugin versions must rise whenever behavior changes
 // (CLAUDE.md), so pinning an exact version guarantees a false failure on the

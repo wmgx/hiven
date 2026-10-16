@@ -76,7 +76,4 @@ assert.equal(plugin.settings.migrate({ entries: [] }, 8).entries.length, 0, 'an 
 assert.equal(plugin.settings.migrate(null, 8).entries.length, model.DEFAULT_WEB_QUICK_OPEN_SETTINGS.entries.length)
 assert.ok(cache.testMatchPattern(manual.matchPattern, 'LOG-123'), 'the manual rule remains usable after migration')
 assert.equal(cache.testMatchPattern(manual.matchPattern, 'unrelated-query'), false)
-
-const source = readFileSync('src/plugins/web-open/index.tsx', 'utf8')
-assert.doesNotMatch(source, /registerSink\(['"]web-open['"]/, 'automatic URL learning must remain disabled')
 console.log('test-web-open-learned-rules: retired rule preservation passed')

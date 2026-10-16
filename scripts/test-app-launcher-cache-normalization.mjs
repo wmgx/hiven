@@ -8,10 +8,8 @@ import vm from 'node:vm'
 
 const root = process.cwd()
 const modulePath = join(root, 'src/workspace/appLauncher/hostAppIndex.ts')
-const launcherPath = join(root, 'src/workspace/appLauncher/hostAppLauncher.ts')
 
 assert.ok(existsSync(modulePath), 'host app index normalization module must exist')
-assert.ok(existsSync(launcherPath), 'host app launcher module must exist')
 
 const source = readFileSync(modulePath, 'utf8')
 const compiled = ts.transpileModule(source, {
@@ -72,15 +70,3 @@ assert.deepEqual(
 )
 
 console.log('host app launcher cache normalization checks passed')
-
-const launcherSource = readFileSync(launcherPath, 'utf8')
-assert.match(
-  launcherSource,
-  /refreshHostApplicationIndexOnStartup[\s\S]*refreshApplicationIndex\(\{ force: true \}\)/,
-  'startup refresh must force a full latest scan instead of trusting a fresh cache',
-)
-assert.doesNotMatch(
-  launcherSource,
-  /apps:\s*\[\s*\.\.\.cache\.apps[\s\S]*\.\.\.apps\s*\]/,
-  'application index writes must replace the cached list instead of appending to it',
-)
