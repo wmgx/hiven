@@ -119,6 +119,7 @@ doc/diff-plugin-boundary-decision.md
 ## 验证要求
 
 - 只为重要逻辑编写单元测试，不为 UI 编写单元测试。
+- 禁止新增源码字符串断言测试（读取 `.ts/.tsx/.rs/.css` 源码文本再用 `assert.match` / `includes` / 正则断言）；需要验证行为就 import 模块真实调用，需要约束目录边界就放进 `scripts/check-architecture.mjs`。
 
 修改 diff、插件系统、workspace renderer 或 UI 后，至少执行：
 
