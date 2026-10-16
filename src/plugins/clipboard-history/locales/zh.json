@@ -37,6 +37,7 @@
   "route.image": "剪贴板图片",
   "route.files": "剪贴板文件",
   "search.placeholder": "搜索剪贴板历史...",
+  "search.allTerms": "全部词",
   "filter.all": "全部",
   "filter.frequent": "常用",
   "filter.favorite": "收藏",

@@ -25,13 +25,15 @@ export function syntheticHistoryStorage() {
         stats.getMany.push([...keys])
         return keys.flatMap((key) => data.has(key) ? [{ key, value: clone(data.get(key)) }] : [])
       },
-      relatedSearch: async ({ indexPrefix, valuePrefix, after, limit = 64, scanLimit = 512, query, idPath, indexPaths, indexPathGroups = [], valuePaths }) => {
+      relatedSearch: async ({ indexPrefix, valuePrefix, after, limit = 64, scanLimit = 512, query, matchMode = 'literal', idPath, indexPaths, indexPathGroups = [], valuePaths }) => {
         stats.relatedSearches++
         const keys = [...data.keys()].filter((key) => key.startsWith(indexPrefix) && (!after || key > after)).sort()
         const normalized = query.trim().toLowerCase()
-        const upper = normalized.toUpperCase()
+        const terms = matchMode === 'all-terms' ? [...new Set(normalized.split(/\s+/u).filter(Boolean))] : [normalized]
+        if (terms.length > 64) throw new Error('Plugin KV search has too many terms')
+        const upperTerms = terms.map((term) => term.toUpperCase())
         const at = (value, jsonPath) => jsonPath.slice(2).split('.').reduce((current, field) => current?.[field], value)
-        const matches = (value) => Array.isArray(value) ? value.some(matches) : (typeof value === 'string' || typeof value === 'number') && (String(value).toLowerCase().includes(normalized) || String(value).toUpperCase().includes(upper))
+        const matches = (value) => Array.isArray(value) ? value.some(matches) : (typeof value === 'string' || typeof value === 'number') && terms.every((term, index) => String(value).toLowerCase().includes(term) || String(value).toUpperCase().includes(upperTerms[index]))
         const entries = []
         const scannedKeys = keys.slice(0, scanLimit)
         let lastKey

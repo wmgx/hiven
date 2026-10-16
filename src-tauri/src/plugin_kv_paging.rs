@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 const MAX_BYTES: usize = 16 * 1024 * 1024;
 const MAX_ITEMS: usize = 128;
+const MAX_SEARCH_TERMS: usize = 64;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -36,11 +37,20 @@ pub(crate) struct RelatedSearchOptions {
     limit: Option<usize>,
     scan_limit: Option<usize>,
     query: String,
+    #[serde(default)]
+    match_mode: RelatedSearchMatchMode,
     id_path: String,
     index_paths: Vec<String>,
     #[serde(default)]
     index_path_groups: Vec<Vec<String>>,
     value_paths: Vec<String>,
+}
+#[derive(Clone, Copy, Default, Deserialize, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+enum RelatedSearchMatchMode {
+    #[default]
+    Literal,
+    AllTerms,
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -141,11 +151,26 @@ fn valid_json_path(path: &str) -> bool {
     path == "$" || (path.starts_with("$.") && path.len() <= 512 && path[2..].split('.').all(|field| !field.is_empty() && field.bytes().enumerate().all(|(i, c)| c.is_ascii_alphabetic() || c == b'_' || (i > 0 && c.is_ascii_digit()))))
 }
 
-fn contains_literal(value: &serde_json::Value, query: &str, query_upper: &str) -> bool {
+fn is_ecmascript_whitespace(value: char) -> bool {
+    matches!(value,
+        '\u{0009}'..='\u{000d}' | '\u{0020}' | '\u{00a0}' | '\u{1680}' |
+        '\u{2000}'..='\u{200a}' | '\u{2028}' | '\u{2029}' | '\u{202f}' |
+        '\u{205f}' | '\u{3000}' | '\u{feff}'
+    )
+}
+
+fn contains_search_terms(value: &serde_json::Value, terms: &[String], terms_upper: &[String]) -> bool {
     match value {
-        serde_json::Value::String(text) => text.to_lowercase().contains(query) || text.to_uppercase().contains(query_upper),
-        serde_json::Value::Array(values) => values.iter().any(|value| contains_literal(value, query, query_upper)),
-        serde_json::Value::Number(number) => number.to_string().to_lowercase().contains(query),
+        serde_json::Value::String(text) => {
+            let lower = text.to_lowercase();
+            let upper = text.to_uppercase();
+            terms.iter().zip(terms_upper).all(|(term, term_upper)| lower.contains(term) || upper.contains(term_upper))
+        }
+        serde_json::Value::Array(values) => values.iter().any(|value| contains_search_terms(value, terms, terms_upper)),
+        serde_json::Value::Number(number) => {
+            let text = number.to_string();
+            terms.iter().all(|term| text.contains(term))
+        }
         _ => false,
     }
 }
@@ -158,9 +183,24 @@ pub(crate) fn related_search(db: &Connection, source: &str, plugin: &str, option
     if let Some(after) = &options.after { key(after)?; if !after.starts_with(&options.index_prefix) { return Err("Cursor is outside the search index prefix".into()); } }
     if !valid_json_path(&options.id_path) || options.index_paths.iter().chain(options.value_paths.iter()).any(|path| !valid_json_path(path)) || options.index_path_groups.iter().flatten().any(|path| !valid_json_path(path)) { return Err("Invalid plugin KV search path".into()); }
     if options.index_paths.len() > 16 || options.value_paths.len() > 16 || options.index_path_groups.len() > 8 || options.index_path_groups.iter().any(|paths| paths.len() > 8) { return Err("Too many plugin KV search paths".into()); }
-    let query = options.query.trim().to_lowercase();
-    let query_upper = query.to_uppercase();
-    if query.is_empty() { return Err("Plugin KV search query is empty".into()); }
+    let lowered_query = options.query.to_lowercase();
+    let mut terms = Vec::new();
+    if options.match_mode == RelatedSearchMatchMode::Literal {
+        let query = lowered_query.trim();
+        if query.is_empty() { return Err("Plugin KV search query is empty".into()); }
+        terms.push(query.to_owned());
+    } else {
+        // Keep native candidate generation aligned with ECMAScript `\s`, which
+        // includes U+FEFF but not U+0085. JS remains the authoritative recheck.
+        for term in lowered_query.split(is_ecmascript_whitespace).filter(|term| !term.is_empty()) {
+            if !terms.iter().any(|existing| existing == term) {
+                terms.push(term.to_owned());
+            }
+        }
+        if terms.is_empty() { return Err("Plugin KV search query is empty".into()); }
+        if terms.len() > MAX_SEARCH_TERMS { return Err("Plugin KV search has too many terms".into()); }
+    }
+    let terms_upper = terms.iter().map(|term| term.to_uppercase()).collect::<Vec<_>>();
     let upper = prefix_upper(&options.index_prefix);
     let sql = "SELECT i.key, i.value_json, v.value_json FROM plugin_kv i LEFT JOIN plugin_kv v ON v.source=i.source AND v.plugin_id=i.plugin_id AND v.key=(?4 || json_extract(i.value_json, ?5)) WHERE i.source=?1 AND i.plugin_id=?2 AND i.key>=?3 AND (?6 IS NULL OR i.key<?6) AND (?7 IS NULL OR i.key>?7) ORDER BY i.key ASC LIMIT ?8";
     let mut statement = db.prepare(sql).map_err(|e| e.to_string())?;
@@ -176,18 +216,18 @@ pub(crate) fn related_search(db: &Connection, source: &str, plugin: &str, option
         let index_json: String = row.get(1).map_err(|e| e.to_string())?;
         let related_json: Option<String> = row.get(2).map_err(|e| e.to_string())?;
         let index_value: serde_json::Value = serde_json::from_str(&index_json).map_err(|e| e.to_string())?;
-        let index_match = options.index_paths.iter().filter_map(|path| json_path(&index_value, path)).any(|value| contains_literal(value, &query, &query_upper));
+        let index_match = options.index_paths.iter().filter_map(|path| json_path(&index_value, path)).any(|value| contains_search_terms(value, &terms, &terms_upper));
         let group_match = options.index_path_groups.iter().any(|paths| {
             let combined = paths.iter().filter_map(|path| json_path(&index_value, path)).filter_map(|value| match value {
                 serde_json::Value::String(text) => Some(text.clone()),
                 serde_json::Value::Number(number) => Some(number.to_string()),
                 _ => None,
             }).collect::<Vec<_>>().join(" ");
-            combined.to_lowercase().contains(&query) || combined.to_uppercase().contains(&query_upper)
+            contains_search_terms(&serde_json::Value::String(combined), &terms, &terms_upper)
         });
         let related_match = if index_match || group_match { false } else if let Some(raw) = related_json {
             let value: serde_json::Value = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
-            options.value_paths.iter().filter_map(|path| json_path(&value, path)).any(|value| contains_literal(value, &query, &query_upper))
+            options.value_paths.iter().filter_map(|path| json_path(&value, path)).any(|value| contains_search_terms(value, &terms, &terms_upper))
         } else { false };
         if index_match || group_match || related_match {
             let entry_bytes = item_key.len() + index_json.len();
@@ -219,7 +259,7 @@ mod related_search_tests {
         db.execute("INSERT INTO plugin_kv VALUES('builtin','clipboard-history',?1,?2,0)", params![key, value.to_string()]).unwrap();
     }
     fn options(query: &str) -> RelatedSearchOptions {
-        RelatedSearchOptions { index_prefix: "history/v2/order/".into(), value_prefix: "history/items/".into(), after: None, limit: Some(100), scan_limit: Some(512), query: query.into(), id_path: "$.id".into(), index_paths: vec!["$.preview".into()], index_path_groups: vec![vec!["$.contentType".into(), "$.width".into(), "$.height".into()]], value_paths: vec!["$.text".into()] }
+        RelatedSearchOptions { index_prefix: "history/v2/order/".into(), value_prefix: "history/items/".into(), after: None, limit: Some(100), scan_limit: Some(512), query: query.into(), match_mode: RelatedSearchMatchMode::Literal, id_path: "$.id".into(), index_paths: vec!["$.preview".into()], index_path_groups: vec![vec!["$.contentType".into(), "$.width".into(), "$.height".into()]], value_paths: vec!["$.text".into()] }
     }
     #[test]
     fn searches_related_unicode_and_preserves_index_cursor_order() {
@@ -241,6 +281,39 @@ mod related_search_tests {
         assert_eq!(related_search(&db, "builtin", "clipboard-history", options("640 480")).unwrap().entries.len(), 1);
         let mut invalid = options("x"); invalid.id_path = "$[*]".into();
         assert!(related_search(&db, "builtin", "clipboard-history", invalid).is_err());
+    }
+
+    #[test]
+    fn all_terms_match_one_field_without_changing_literal_default() {
+        let db = database();
+        put(&db, "history/v2/order/001/full", serde_json::json!({"id":"full","preview":"alpha"}));
+        put(&db, "history/items/full", serde_json::json!({"text":"alpha middle\n中文 gamma"}));
+        put(&db, "history/v2/order/002/split", serde_json::json!({"id":"split","preview":"alpha"}));
+        put(&db, "history/items/split", serde_json::json!({"text":"gamma only"}));
+        put(&db, "history/v2/order/003/files", serde_json::json!({"id":"files","preview":"none","fileNames":["alpha.txt","gamma.txt"]}));
+
+        assert!(related_search(&db, "builtin", "clipboard-history", options("alpha gamma")).unwrap().entries.is_empty());
+        let mut all_terms = options(" alpha\nALPHA  中文 gamma ");
+        all_terms.match_mode = RelatedSearchMatchMode::AllTerms;
+        all_terms.index_paths.push("$.fileNames".into());
+        let entries = related_search(&db, "builtin", "clipboard-history", all_terms).unwrap().entries;
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].key, "history/v2/order/001/full");
+
+        let mut byte_order_mark = options("alpha\u{feff}gamma");
+        byte_order_mark.match_mode = RelatedSearchMatchMode::AllTerms;
+        assert_eq!(related_search(&db, "builtin", "clipboard-history", byte_order_mark).unwrap().entries.len(), 1);
+        let mut next_line = options("alpha\u{0085}gamma");
+        next_line.match_mode = RelatedSearchMatchMode::AllTerms;
+        assert!(related_search(&db, "builtin", "clipboard-history", next_line).unwrap().entries.is_empty());
+    }
+
+    #[test]
+    fn all_terms_keeps_per_query_work_bounded() {
+        let db = database();
+        let mut too_many = options(&(0..=MAX_SEARCH_TERMS).map(|index| format!("term{index}")).collect::<Vec<_>>().join(" "));
+        too_many.match_mode = RelatedSearchMatchMode::AllTerms;
+        assert!(related_search(&db, "builtin", "clipboard-history", too_many).is_err());
     }
 }
 

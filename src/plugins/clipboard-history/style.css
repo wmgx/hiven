@@ -31,6 +31,17 @@
   font-size: 13px;
 }
 
+.clipboard-history-topbar .clipboard-history-search-mode {
+  flex: none;
+  white-space: nowrap;
+}
+
+.clipboard-history-topbar .clipboard-history-search-mode[aria-pressed="true"] {
+  color: var(--hiven-color-accent);
+  border-color: color-mix(in srgb, var(--hiven-color-accent) 48%, var(--hiven-color-border));
+  background: color-mix(in srgb, var(--hiven-color-accent) 12%, transparent);
+}
+
 .clipboard-history-filter {
   width: 100%;
   min-height: 25px;

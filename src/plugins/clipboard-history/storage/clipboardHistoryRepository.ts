@@ -1,11 +1,11 @@
 import type { PluginPrivateStorageApi } from '@hiven/plugin'
 import { getCachedIndex, setCachedIndex, clearCachedIndex } from './clipboardHistoryCache'
-import { matchesClipboardHistorySearch } from './clipboardHistorySearch'
+import { matchesClipboardHistorySearch, type ClipboardHistorySearchMatchMode } from './clipboardHistorySearch'
 import { resolveClipboardHistoryRetentionMonths } from '../settings/model'
 import { createPagedHistoryStore, ROOT, ITEM, META, ORDER, FREQUENT, TRASH, TRASH_ID, GC, metadata, putMetadata, removeMetadata, hashKey, trashKey, blobIds, type HistoryMetadata, type TrashRecord, type Operation } from './clipboardHistoryPagedStore'
 import type { AddItemInput, ClipboardHistoryItem, ClipboardHistoryIndex, ClipboardHistoryPrunePolicy, PruneResult, ClipboardTextHistoryItem, ClipboardImageHistoryItem, ClipboardFilesHistoryItem } from './clipboardHistoryTypes'
 
-export type HistoryPageRequest = { query?: string; filter?: 'all' | 'text' | 'image' | 'files' | 'favorites' | 'frequent' | 'trash'; frequentThreshold?: number; cursor?: string; limit?: number; signal?: AbortSignal }
+export type HistoryPageRequest = { query?: string; matchMode?: ClipboardHistorySearchMatchMode; filter?: 'all' | 'text' | 'image' | 'files' | 'favorites' | 'frequent' | 'trash'; frequentThreshold?: number; cursor?: string; limit?: number; signal?: AbortSignal }
 export type HistoryPage = { items: ClipboardHistoryItem[]; nextCursor?: string; scanned: number }
 export type HistoryRetentionStatus = { legacyProtectedCount: number; trashCount: number; migrationComplete: boolean; hasPurgeable: boolean }
 export type ClipboardHistoryRepository = {
@@ -94,6 +94,7 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
     await store.ready()
     requireCurrent(request.signal)
     const limit = Math.max(1, Math.min(100, Math.floor(request.limit ?? 100)))
+    const matchMode = request.matchMode ?? 'literal'
     const prefix = request.filter === 'trash' ? TRASH : request.filter === 'frequent' ? FREQUENT : ORDER
     if (request.cursor && !request.cursor.startsWith(prefix)) throw new Error('Invalid history cursor')
     const legacyEnabled = Boolean((await store.state()).legacyEnabledAt)
@@ -107,7 +108,7 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
         ? await storage.kv.relatedSearch<HistoryMetadata>({
             indexPrefix: prefix, valuePrefix: ITEM, after: cursor,
             limit: Math.min(100, Math.max(32, limit - items.length)), scanLimit: 2048 - scanned,
-            query: query.toLowerCase(), idPath: '$.id',
+            query: query.toLowerCase(), matchMode, idPath: '$.id',
             indexPaths: ['$.favoriteTitle', '$.preview', '$.contentType', '$.width', '$.height', '$.fileNames'],
             indexPathGroups: [['$.contentType', '$.width', '$.height']],
             valuePaths: ['$.text'],
@@ -131,7 +132,7 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
       // Reapply the existing JS matcher to every candidate so case expansion
       // (for example Straße/SS) and composite-field spacing stay exact.
       const bodyKeys = query ? candidates
-        .filter(({ lite }) => lite.kind === 'text' && !matchesClipboardHistorySearch(lite, query))
+        .filter(({ lite }) => lite.kind === 'text' && !matchesClipboardHistorySearch(lite, query, matchMode))
         .map(({ meta }) => ({ key: ITEM + meta.id, byteSize: meta.byteSize })) : []
       const bodies = new Map<string, ClipboardHistoryItem>()
       let bodyChunk: string[] = []; let bodyChunkBytes = 0
@@ -158,10 +159,10 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
       requireCurrent(request.signal)
       for (const { meta, lite, trash } of candidates) {
         if (items.length >= limit) break
-        if (query && !matchesClipboardHistorySearch(lite, query)) {
+        if (query && !matchesClipboardHistorySearch(lite, query, matchMode)) {
           if (lite.kind !== 'text') continue
           const full = bodies.get(ITEM + meta.id)
-          if (!full || !matchesClipboardHistorySearch(full, query)) continue
+          if (!full || !matchesClipboardHistorySearch(full, query, matchMode)) continue
         }
         items.push({ ...lite, ...(trash ? { deletedAt: trash.deletedAt, purgeAfter: trash.purgeAfter } : {}), legacyProtected: meta.legacy === true && !legacyEnabled })
       }

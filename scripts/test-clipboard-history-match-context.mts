@@ -5,7 +5,10 @@ import {
   getClipboardHistoryMatchContext as context,
   getClipboardHistoryMatchSnippet as snippet,
 } from '../src/plugins/clipboard-history/surfaces/clipboardHistoryMatchContext.ts'
-import { matchesClipboardHistorySearch } from '../src/plugins/clipboard-history/storage/clipboardHistorySearch.ts'
+import {
+  getClipboardHistorySearchNeedles,
+  matchesClipboardHistorySearch,
+} from '../src/plugins/clipboard-history/storage/clipboardHistorySearch.ts'
 
 const textItem = (text: string) => ({
   id: 'synthetic-match', kind: 'text' as const, hash: 'synthetic',
@@ -73,6 +76,21 @@ for (const [text, query, expected] of cases) {
   const result = verifySource(text, query)
   assert.equal(result.firstMatchOffset !== null, expected, `display agrees with literal storage search: ${JSON.stringify(query)}`)
 }
+const allTermsText = 'Alpha first\n中间内容 beta tail ALPHA'
+assert.deepEqual(getClipboardHistorySearchNeedles('  ALPHA\n beta alpha  ', 'all-terms'), ['alpha', 'beta'])
+assert.deepEqual(getClipboardHistorySearchNeedles('alpha\uFEFFbeta', 'all-terms'), ['alpha', 'beta'], 'ECMAScript U+FEFF whitespace splits terms')
+assert.deepEqual(getClipboardHistorySearchNeedles('alpha\u0085beta', 'all-terms'), ['alpha\u0085beta'], 'U+0085 is not ECMAScript whitespace')
+assert.equal(matchesClipboardHistorySearch(textItem(allTermsText), 'alpha beta'), false, 'literal mode remains the default')
+assert.equal(matchesClipboardHistorySearch(textItem(allTermsText), 'alpha beta', 'all-terms'), true)
+assert.equal(matchesClipboardHistorySearch({ ...textItem('beta only'), favoriteTitle: 'alpha title' }, 'alpha beta', 'all-terms'), false, 'terms cannot be assembled across fields')
+const allTermsContext = context(allTermsText, 'ALPHA beta alpha', 'all-terms')
+assert.deepEqual(allTermsContext.segments.filter((part) => part.match).map((part) => part.text), ['Alpha', 'beta', 'ALPHA'])
+assert.ok(snippet(allTermsText, 'alpha beta', 'all-terms')?.includes('Alpha'))
+const farAllTerms = `alpha ${'x'.repeat(300)} beta`
+const farAllTermsSnippet = snippet(farAllTerms, 'alpha beta', 'all-terms')!
+assert.ok(farAllTermsSnippet.includes('alpha') && !farAllTermsSnippet.includes('beta'))
+assert.deepEqual(context(farAllTermsSnippet, 'alpha beta', 'all-terms').segments.filter((part) => part.match), [], 'a partial excerpt is not independently treated as an all-terms match')
+assert.deepEqual(context(farAllTermsSnippet, 'alpha beta', 'all-terms', true).segments.filter((part) => part.match).map((part) => part.text), ['alpha'], 'a snippet already validated against its source still decorates visible matching terms')
 assert.deepEqual(context('İ x I İ', 'i').segments.filter((part) => part.match).map(({ start, end }) => [start, end]), [[0, 1], [4, 5], [6, 7]])
 assert.equal(context('İ hidden marker', 'marker').firstMatchOffset, 'İ hidden '.length, 'lower-case expansion before a hit does not shift its source offset')
 assert.equal(context('e\u0301', '\u0301').firstMatchOffset, 0, 'an inner combining-mark hit anchors the whole visible grapheme')

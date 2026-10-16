@@ -37,6 +37,7 @@
   "route.image": "Clipboard Images",
   "route.files": "Clipboard Files",
   "search.placeholder": "Search clipboard history...",
+  "search.allTerms": "All words",
   "filter.all": "All",
   "filter.frequent": "Frequent",
   "filter.favorite": "Favorites",

@@ -31,6 +31,7 @@ import {
 import { BackIcon, ClipboardIcon, CloseIcon, FileTextIcon, ImageIcon, SettingsIcon, StarIcon } from '@hiven/plugin-ui/icons'
 import { resolveClipboardHistoryRetentionMonths, type ClipboardHistorySettings } from '../settings/model'
 import type { ClipboardHistoryItem } from '../storage/clipboardHistoryTypes'
+import type { ClipboardHistorySearchMatchMode } from '../storage/clipboardHistorySearch'
 import { subscribeCachedIndex } from '../storage/clipboardHistoryCache'
 import { createClipboardHistoryRepository } from '../storage/clipboardHistoryRepository'
 import { readMatchingHistoryPage } from './clipboardHistoryPageReader'
@@ -114,6 +115,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const [items, setItems] = useState<ClipboardHistoryItem[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  const [searchMatchMode, setSearchMatchMode] = useState<ClipboardHistorySearchMatchMode>('literal')
   const [pasteNotice, setPasteNotice] = useState<string | null>(null)
   const pasteNoticeGenerationRef = useRef(0)
   const [copyLifecycle] = useState(createHistoryCopyLifecycle)
@@ -579,12 +581,24 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const [retentionStatus, setRetentionStatus] = useState<{ legacyProtectedCount: number; trashCount: number; migrationComplete: boolean } | null>(null)
   const [legacyDialog, setLegacyDialog] = useState(false)
   const [retentionBusy, setRetentionBusy] = useState(false)
-  const criteriaKey = JSON.stringify([query.trim(), combining ? 'text' : filter, frequentThreshold])
+  const criteriaKey = JSON.stringify([query.trim(), searchMatchMode, combining ? 'text' : filter, frequentThreshold])
   const cursors = pagePath.key === criteriaKey ? pagePath.cursors : [undefined]
   const pageCursor = cursors.at(-1)
   const pageIndex = cursors.length - 1
   const pageGeneration = useRef(0)
   const refreshPage = useCallback(() => setRefreshEpoch((value) => value + 1), [])
+  const changeSearchQuery = useCallback((value: string) => {
+    pageGeneration.current += 1
+    setPagePath({ key: '', cursors: [undefined] })
+    setNextCursor(undefined)
+    setQuery(value)
+  }, [])
+  const toggleSearchMatchMode = useCallback(() => {
+    pageGeneration.current += 1
+    setPagePath({ key: '', cursors: [undefined] })
+    setNextCursor(undefined)
+    setSearchMatchMode((current) => current === 'literal' ? 'all-terms' : 'literal')
+  }, [])
 
   useLayoutEffect(() => {
     const generation = ++pageGeneration.current
@@ -599,7 +613,8 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     setItems([])
     const timer = window.setTimeout(() => {
       void readMatchingHistoryPage((cursor) => repository.getPage({
-        query: query.trim(), filter: combining ? 'text' : filter === 'favorite' ? 'favorites' : filter,
+        query: query.trim(), matchMode: searchMatchMode,
+        filter: combining ? 'text' : filter === 'favorite' ? 'favorites' : filter,
         frequentThreshold, cursor, limit: 100, signal: controller.signal,
       }), pageCursor, controller.signal, (count) => { if (current()) setScannedCount(count) })
         .then((page) => {
@@ -764,6 +779,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       // A standalone surface window is retained while hidden. A genuine reopen
       // starts a fresh browsing session without treating ordinary blur, dialogs,
       // or an internal preview return as a new open.
+      setSearchMatchMode('literal')
       resetHistoryOpenSession({
         invalidatePasteNotice: () => { pasteNoticeGenerationRef.current += 1 },
         clearPasteNotice: () => setPasteNotice(null),
@@ -792,6 +808,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
 
   const resetBrowser = useCallback(() => {
     setQuery('')
+    setSearchMatchMode('literal')
     setFilter('all')
     setSelectedId(items[0]?.id ?? null)
     if (listRef.current) listRef.current.scrollTop = 0
@@ -1426,6 +1443,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                           <ClipboardHistoryItemRow
                             item={row.item}
                             query={query}
+                            matchMode={searchMatchMode}
                             selected={row.item.id === selectedId}
                             locale={locale}
                             t={t}
@@ -1506,7 +1524,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                       <ToolbarButton type="button" onClick={() => void openTextEdit(previewItem)}>{t('edit.action')}</ToolbarButton>
                       <ToolbarButton type="button" onClick={() => void handlePaste(previewItem, true)}>{t('action.pastePlain')}</ToolbarButton>
                     </div>}
-                    <ClipboardHistoryPreviewContent item={previewItem} query={query} t={t} storage={host.storage} />
+                    <ClipboardHistoryPreviewContent item={previewItem} query={query} matchMode={searchMatchMode} t={t} storage={host.storage} />
                     {previewItem.isFavorite && (
                       <div className="clipboard-history-favorite-title-bar">
                         <span className="clipboard-history-favorite-title-label">
@@ -1567,6 +1585,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
           disabled={Boolean(textEdit)}
           onClick={() => {
             setQuery('')
+            setSearchMatchMode('literal')
             host.requestBack()
           }}
         >
@@ -1576,12 +1595,21 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
           ref={searchRef}
           data-plugin-surface-autofocus
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => changeSearchQuery(e.target.value)}
           onCompositionStart={imeKeyDown.onCompositionStart}
           onCompositionEnd={imeKeyDown.onCompositionEnd}
           placeholder={t('search.placeholder')}
           disabled={Boolean(textEdit)}
         />
+        <Button
+          type="button"
+          className="clipboard-history-search-mode"
+          aria-pressed={searchMatchMode === 'all-terms'}
+          disabled={Boolean(textEdit)}
+          onClick={toggleSearchMatchMode}
+        >
+          {t('search.allTerms')}
+        </Button>
         {!combining && !loading && (
           <Button type="button" disabled={Boolean(textEdit) || filter === 'trash' || retentionBusy} onClick={startMerge}>
             {t('merge.start')}
@@ -1610,6 +1638,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
           onClick={() => {
             mergeReader.invalidate()
             setQuery('')
+            setSearchMatchMode('literal')
             host.close()
           }}
         >
@@ -1737,6 +1766,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
 const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
   item,
   query,
+  matchMode,
   selected,
   locale,
   t,
@@ -1754,6 +1784,7 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
 }: {
   item: ClipboardHistoryItem
   query: string
+  matchMode: ClipboardHistorySearchMatchMode
   selected: boolean
   locale: string
   t: (key: string) => string
@@ -1771,8 +1802,8 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
 }) {
   const pasteCount = item.pasteCount ?? 0
   const matchSnippet = useMemo(
-    () => item.kind === 'text' ? getClipboardHistoryMatchSnippet(item.text || item.preview, query) : null,
-    [item, query],
+    () => item.kind === 'text' ? getClipboardHistoryMatchSnippet(item.text || item.preview, query, matchMode) : null,
+    [item, query, matchMode],
   )
   const hasCustomTitle = Boolean(item.favoriteTitle?.trim())
   const title = !hasCustomTitle && matchSnippet ? matchSnippet : getItemTitle(item, t)
@@ -1803,10 +1834,10 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
               </span>
             ) : renderItemMedia(item, storage)}
             <span className="clipboard-history-item-text">
-              <span className="clipboard-history-item-title"><ClipboardHistoryHighlightedText text={title} query={query} /></span>
+              <span className="clipboard-history-item-title"><ClipboardHistoryHighlightedText text={title} query={query} matchMode={matchMode} allTermsAlreadyValidated={!hasCustomTitle && Boolean(matchSnippet)} /></span>
               <span className="clipboard-history-item-subtitle">
                 {hasCustomTitle && matchSnippet ? <>
-                  <ClipboardHistoryHighlightedText text={matchSnippet} query={query} />
+                  <ClipboardHistoryHighlightedText text={matchSnippet} query={query} matchMode={matchMode} allTermsAlreadyValidated />
                   {` · ${getContentTypeLabel(item, t)} · ${formatBytes(item.byteSize)} · ${formatDateTime(item.lastCopiedAt, locale)}`}
                 </> : getItemSubtitle(item, locale, t)}
                 {pasteCount > 0 ? ` · ×${pasteCount}` : ''}
@@ -1912,21 +1943,30 @@ function ClipboardImagePreview({ item, storage, t }: { item: ImageHistoryItem, s
   )
 }
 
-function ClipboardHistoryHighlightedText({ text, query }: { text: string, query: string }) {
-  const { segments } = useMemo(() => getClipboardHistoryMatchContext(text, query), [text, query])
+function ClipboardHistoryHighlightedText({ text, query, matchMode, allTermsAlreadyValidated = false }: {
+  text: string
+  query: string
+  matchMode: ClipboardHistorySearchMatchMode
+  allTermsAlreadyValidated?: boolean
+}) {
+  const { segments } = useMemo(
+    () => getClipboardHistoryMatchContext(text, query, matchMode, allTermsAlreadyValidated),
+    [text, query, matchMode, allTermsAlreadyValidated],
+  )
   return <>{segments.map((segment) => segment.match
     ? <mark key={segment.start} className="clipboard-history-search-match">{segment.text}</mark>
     : segment.text)}</>
 }
 
-function ClipboardHistoryPreviewContent({ item, query, t, storage }: {
+function ClipboardHistoryPreviewContent({ item, query, matchMode, t, storage }: {
   item: ClipboardHistoryItem
   query: string
+  matchMode: ClipboardHistorySearchMatchMode
   t: (key: string) => string
   storage: SurfaceStorage
 }) {
   const contentRef = useRef<HTMLDivElement>(null)
-  const alignedRef = useRef<{ id: string, query: string, fullText: boolean } | null>(null)
+  const alignedRef = useRef<{ id: string, query: string, matchMode: ClipboardHistorySearchMatchMode, fullText: boolean } | null>(null)
   const normalizedQuery = query.trim().toLowerCase()
   const fullText = item.kind === 'text' && Boolean(item.text)
 
@@ -1934,11 +1974,11 @@ function ClipboardHistoryPreviewContent({ item, query, t, storage }: {
     const content = contentRef.current
     if (!content) return
     const previous = alignedRef.current
-    const sameSearch = previous?.id === item.id && previous.query === normalizedQuery
+    const sameSearch = previous?.id === item.id && previous.query === normalizedQuery && previous.matchMode === matchMode
     // Loading the full record gets one alignment. Re-reads and background index
     // refreshes must not move a reader who has since scrolled through the text.
     if (sameSearch && (previous.fullText || !fullText)) return
-    alignedRef.current = { id: item.id, query: normalizedQuery, fullText }
+    alignedRef.current = { id: item.id, query: normalizedQuery, matchMode, fullText }
     const firstMatch = content.querySelector<HTMLElement>('.clipboard-history-search-match')
     if (firstMatch) {
       const matchTop = firstMatch.getBoundingClientRect().top - content.getBoundingClientRect().top + content.scrollTop
@@ -1946,11 +1986,11 @@ function ClipboardHistoryPreviewContent({ item, query, t, storage }: {
     } else if (!sameSearch) {
       content.scrollTop = 0
     }
-  }, [item.id, normalizedQuery, fullText])
+  }, [item.id, normalizedQuery, matchMode, fullText])
 
   return (
     <div ref={contentRef} className="clipboard-history-preview-content" data-launcher-scrollable>
-      {renderPreview(item, t, storage, query)}
+      {renderPreview(item, t, storage, query, matchMode)}
     </div>
   )
 }
@@ -1989,13 +2029,13 @@ function ClipboardHistoryMetadata({ item, locale, t }: {
   )
 }
 
-function renderPreview(item: ClipboardHistoryItem, t: (key: string) => string, storage: SurfaceStorage, query: string) {
+function renderPreview(item: ClipboardHistoryItem, t: (key: string) => string, storage: SurfaceStorage, query: string, matchMode: ClipboardHistorySearchMatchMode) {
   if (item.kind === 'text') {
     // Show preview text while full item is loading
     const displayText = item.text || item.preview
     return (
       <pre className="clipboard-history-preview-text">
-        <ClipboardHistoryHighlightedText text={displayText} query={query} />
+        <ClipboardHistoryHighlightedText text={displayText} query={query} matchMode={matchMode} />
       </pre>
     )
   }

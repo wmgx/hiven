@@ -1,4 +1,9 @@
 /** Display-only search context. Never use these slices as clipboard payloads. */
+import {
+  getClipboardHistorySearchNeedles,
+  type ClipboardHistorySearchMatchMode,
+} from '../storage/clipboardHistorySearch.ts'
+
 export const CLIPBOARD_HISTORY_MATCH_LIMITS = {
   maxTextLength: 1024 * 1024,
   maxQueryLength: 4096,
@@ -49,7 +54,13 @@ function sourceOffsetMapper(text: string, lowerText: string) {
   }
 }
 
-function findDisplayMatches(text: string, query: string, maxMatches: number): {
+function findDisplayMatches(
+  text: string,
+  query: string,
+  matchMode: ClipboardHistorySearchMatchMode,
+  maxMatches: number,
+  allTermsAlreadyValidated = false,
+): {
   ranges: MatchRange[]
   graphemes: Intl.Segments
 } | null {
@@ -58,20 +69,38 @@ function findDisplayMatches(text: string, query: string, maxMatches: number): {
   // Do not lower-case a prefix: that changes contextual casing such as final Σ.
   if (!segmenter || !text || text.length > CLIPBOARD_HISTORY_MATCH_LIMITS.maxTextLength
     || query.length > CLIPBOARD_HISTORY_MATCH_LIMITS.maxQueryLength) return null
-  // Match the storage search contract: trimmed, case-insensitive literal text.
-  // No normalization, regular expression, HTML parsing or privacy detection.
-  const needle = query.trim().toLowerCase()
-  if (!needle) return null
+  // Match the storage search contract: trimmed, case-insensitive literal text
+  // or, when explicitly selected, every deduplicated Unicode-whitespace term
+  // in this same display field. No normalization, regex or HTML parsing.
+  const needles = getClipboardHistorySearchNeedles(query, matchMode)
+  if (!needles.length) return null
   const lowerText = text.toLowerCase()
-  let offset = lowerText.indexOf(needle)
-  if (offset < 0) return null
+  const firstOffsets = needles.map((needle) => lowerText.indexOf(needle))
+  if (firstOffsets.some((offset) => offset < 0) && !(matchMode === 'all-terms' && allTermsAlreadyValidated)) return null
+  const lowerRanges = firstOffsets
+    .map((start, index) => ({ start, end: start + needles[index].length, needleIndex: index }))
+    .filter(({ start }) => start >= 0)
+    .sort((left, right) => left.start - right.start || right.end - left.end)
+    .slice(0, maxMatches)
+  if (!lowerRanges.length) return null
+  const nextOffsets = firstOffsets.map((offset, index) => lowerText.indexOf(needles[index], offset + needles[index].length))
+  while (lowerRanges.length < maxMatches) {
+    let needleIndex = -1
+    for (let index = 0; index < nextOffsets.length; index += 1) {
+      if (nextOffsets[index] >= 0 && (needleIndex < 0 || nextOffsets[index] < nextOffsets[needleIndex])) needleIndex = index
+    }
+    if (needleIndex < 0) break
+    const start = nextOffsets[needleIndex]
+    lowerRanges.push({ start, end: start + needles[needleIndex].length, needleIndex })
+    nextOffsets[needleIndex] = lowerText.indexOf(needles[needleIndex], start + needles[needleIndex].length)
+  }
+  lowerRanges.sort((left, right) => left.start - right.start || right.end - left.end)
   const mapOffset = sourceOffsetMapper(text, lowerText)
   const graphemes = segmenter.segment(text)
   const ranges: MatchRange[] = []
-  for (let count = 0; offset >= 0 && count < maxMatches; count++) {
-    const endOffset = offset + needle.length
-    const sourceStart = mapOffset(offset, false)
-    const sourceEnd = mapOffset(endOffset, true)
+  for (const lowerRange of lowerRanges) {
+    const sourceStart = mapOffset(lowerRange.start, false)
+    const sourceEnd = mapOffset(lowerRange.end, true)
     const previous = ranges.at(-1)
     // Repeated hits inside one huge combining sequence must not ask ICU to
     // walk that entire grapheme for every hit.
@@ -81,7 +110,6 @@ function findDisplayMatches(text: string, query: string, maxMatches: number): {
       if (previous && start <= previous.end) previous.end = Math.max(previous.end, end)
       else ranges.push({ start, end })
     }
-    if (count + 1 < maxMatches) offset = lowerText.indexOf(needle, endOffset)
   }
   return { ranges, graphemes }
 }
@@ -95,9 +123,11 @@ function findDisplayMatches(text: string, query: string, maxMatches: number): {
 export function getClipboardHistoryMatchContext(
   displayText: string | null | undefined,
   query: string,
+  matchMode: ClipboardHistorySearchMatchMode = 'literal',
+  allTermsAlreadyValidated = false,
 ): ClipboardHistoryMatchContext {
   const text = displayText ?? ''
-  const found = findDisplayMatches(text, query, CLIPBOARD_HISTORY_MATCH_LIMITS.maxMatches)
+  const found = findDisplayMatches(text, query, matchMode, CLIPBOARD_HISTORY_MATCH_LIMITS.maxMatches, allTermsAlreadyValidated)
   const segments: ClipboardHistoryMatchSegment[] = []
   let offset = 0
   for (const range of found?.ranges ?? []) {
@@ -117,9 +147,10 @@ export function getClipboardHistoryMatchContext(
 export function getClipboardHistoryMatchSnippet(
   displayText: string | null | undefined,
   query: string,
+  matchMode: ClipboardHistorySearchMatchMode = 'literal',
 ): string | null {
   const text = displayText ?? ''
-  const found = findDisplayMatches(text, query, 1)
+  const found = findDisplayMatches(text, query, matchMode, 1)
   const first = found?.ranges[0]
   if (!found || !first) return null
   const budget = CLIPBOARD_HISTORY_MATCH_LIMITS.snippetLength
