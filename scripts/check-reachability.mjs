@@ -59,7 +59,9 @@ function collectAllSourceFiles(dir) {
   return results
 }
 
-function resolveImport(specifier, fromFile) {
+function resolveImport(rawSpecifier, fromFile) {
+  // Strip Vite query suffixes such as ?worker&inline / ?raw / ?url
+  const specifier = rawSpecifier.replace(/\?[^'"]*$/, '')
   // Check Vite aliases first (longest match wins)
   const aliasKeys = Object.keys(VITE_ALIASES).sort((a, b) => b.length - a.length)
   for (const alias of aliasKeys) {

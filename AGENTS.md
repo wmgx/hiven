@@ -49,7 +49,7 @@ dual-pane diff layout
 
 Diff 是插件产品，不是 framework 能力。
 
-- **打包按产品内聚，不是「一个能力一个插件」**：判断口径是「产品上该在一起就在一起」。实际 `text-diff` 就是**一个插件**，内部按内容自动切 `text` / `json-semantic` 模式（见 `src/plugins/textDiff/autoDiffMode.ts`），并**没有**独立的 `json-diff`、`markdown-diff` 插件——同一产品的多个模式/能力归同一插件，只有真正独立、互不相关的产品才各自成插件。
+- **打包按产品内聚，不是「一个能力一个插件」**：判断口径是「产品上该在一起就在一起」。实际 `text-diff` 就是**一个插件**，内部由 `TextDiffSurface.tsx` 在 `text` / `json-semantic` 模式间切换（JSON 两侧都可解析时才启用语义模式，否则回落文本行 diff），并**没有**独立的 `json-diff`、`markdown-diff` 插件——同一产品的多个模式/能力归同一插件，只有真正独立、互不相关的产品才各自成插件。
 - 同理浏览器相关能力（开 URL、quick-open 规则、活标签、历史、聚焦）合并为**一个浏览器插件**：由 `web-open` 吸收 `browser-tabs`，扩展 / bridge 依赖的部分做成可选能力层。
 - `core.diff` 不应变成 JSON-aware 默认入口；JSON parse、semantic diff、array compare mode、key order、invalid JSON fallback、JSON toolbar 和展示文案都属于**插件侧产品语义**，不在 framework。
 - 插件之间仍不运行时依赖：跨插件不 import 彼此内部实现（共享纯算法走 kit，见下）。

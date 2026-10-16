@@ -288,7 +288,6 @@ check('Text Diff builtin directory includes the adaptive diff UI source files', 
   )
   const renderer = read('src/plugins/textDiff/TextDiffSurface.tsx')
   assert.match(renderer, /jsonAvailable|jsonEnabled|renderMode === ['"]json['"]/, 'text-diff renderer should own the adaptive JSON/text UI controls')
-  assert.ok(readIfExists('src/plugins/textDiff/autoDiffMode.ts'), 'text-diff package should ship autoDiffMode.ts')
   assert.ok(readIfExists('src/plugins/textDiff/manifest.json'), 'text-diff package should ship manifest.json')
   assert.doesNotMatch(
     files.configInit,
