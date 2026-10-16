@@ -74,6 +74,7 @@
     "test:desktop-window-process-contract": "node scripts/test-desktop-window-process-contract.mjs",
     "test:quick-editor-host-surface": "node scripts/test-quick-editor-host-surface.mjs",
     "test:quick-editor-overwrite-rollback": "node scripts/test-quick-editor-overwrite-rollback.mjs",
+    "test:quick-editor-version-restore": "node scripts/test-quick-editor-version-restore.mjs",
     "test:quick-editor-hotkey": "node scripts/test-quick-editor-hotkey.mjs",
     "test:quick-editor-selection-actions": "node scripts/test-quick-editor-selection-actions.mjs",
     "test:tauri-plugin-dir-commands": "cargo test --manifest-path src-tauri/Cargo.toml plugin_dir_command_tests -- --test-threads=1",

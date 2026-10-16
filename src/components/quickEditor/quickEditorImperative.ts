@@ -3,6 +3,7 @@ import type { QuickEditorCommandOwner, QuickEditorCommandTarget } from '../../wo
 let findHandler: (() => void) | null = null
 let focusHandler: (() => void) | null = null
 let overlayEscapeHandler: ((event: KeyboardEvent) => boolean) | null = null
+let versionHistoryEscapeHandler: ((event: KeyboardEvent) => boolean) | null = null
 const commandTargetHandlers = new Map<string, (owner: QuickEditorCommandOwner) => QuickEditorCommandTarget>()
 const paneFocusHandlers = new Map<string, () => void>()
 
@@ -23,4 +24,10 @@ export const quickEditorImperative = {
   registerOverlayEscape: (fn: (event: KeyboardEvent) => boolean) => { overlayEscapeHandler = fn },
   unregisterOverlayEscape: () => { overlayEscapeHandler = null },
   handleOverlayEscape: (event: KeyboardEvent): boolean => overlayEscapeHandler?.(event) ?? false,
+  registerVersionHistoryEscape: (fn: (event: KeyboardEvent) => boolean) => { versionHistoryEscapeHandler = fn },
+  unregisterVersionHistoryEscape: (fn: (event: KeyboardEvent) => boolean) => {
+    if (versionHistoryEscapeHandler === fn) versionHistoryEscapeHandler = null
+  },
+  handleVersionHistoryEscape: (event: KeyboardEvent): boolean => versionHistoryEscapeHandler?.(event) ?? false,
+  isVersionHistoryOpen: () => Boolean(versionHistoryEscapeHandler),
 }

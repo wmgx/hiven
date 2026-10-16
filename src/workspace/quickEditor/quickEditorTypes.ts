@@ -33,11 +33,25 @@ export type QuickEditorExternalVersion = {
   preview: string
 }
 
+/**
+ * Runtime-only intent captured before a historical version is restored.
+ * The immutable snapshots make a later confirmation reject pane/version ABA
+ * changes instead of overwriting a newer draft.
+ */
+export type QuickEditorVersionRestoreRequest = Readonly<{
+  version: Readonly<QuickEditorExternalVersion>
+  targetPane: Readonly<QuickEditorPaneState> | null
+}>
+
+export type QuickEditorVersionRestoreResult = 'restored' | 'stale' | 'storage-error'
+
 export type QuickEditorPaneCloseRequest = { paneId: QuickEditorPaneId; revision: number; text: string }
 
 export interface QuickEditorState {
   /** Runtime-only close intent; never hydrated or persisted. */
   pendingPaneClose: QuickEditorPaneCloseRequest | null
+  /** Runtime-only history preview/restore intent; never hydrated or persisted. */
+  pendingVersionRestore: QuickEditorVersionRestoreRequest | null
   panes: Record<QuickEditorPaneId, QuickEditorPaneState>
   paneOrder: QuickEditorPaneId[]
   activePaneId: QuickEditorPaneId
@@ -88,8 +102,12 @@ export interface QuickEditorActions {
    * Does not record user typing paths (setText / setPaneText).
    */
   overwriteActiveText: (text: string, options?: QuickEditorOverwriteOptions) => QuickEditorPaneId
-  /** Load an archived external version into the active pane (no new history entry). */
-  restoreExternalVersion: (versionId: string) => boolean
+  /** Start a read-only preview without touching persisted editor state. */
+  requestExternalVersionRestore: (versionId: string) => QuickEditorVersionRestoreRequest | null
+  /** Atomically archive the current target draft, then restore the previewed version. */
+  confirmExternalVersionRestore: (request: QuickEditorVersionRestoreRequest) => QuickEditorVersionRestoreResult
+  /** Cancel only this preview intent without touching persisted editor state. */
+  cancelExternalVersionRestore: (request: QuickEditorVersionRestoreRequest) => void
   clearExternalVersionHistory: () => void
   openPanelV2: (instance: PanelInstanceV2) => void
   closePanelV2: (panelId: string) => void

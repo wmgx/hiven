@@ -5,6 +5,8 @@ import { useQuickEditorStore } from './quickEditorStore'
 import type {
   QuickEditorOverwriteOptions,
   QuickEditorPaneId,
+  QuickEditorVersionRestoreRequest,
+  QuickEditorVersionRestoreResult,
 } from './quickEditorTypes'
 import { isQuickEditorWindowOpen, showQuickEditorWindow } from '../windowManager/quickEditorWindow'
 import { requestOpenLauncherHostSurface } from '../launcherHostSurfaceBridge'
@@ -182,11 +184,14 @@ export async function overwriteQuickEditorText(
 }
 
 /**
- * Restore a specific external-overwrite version. Does not create a new history entry.
+ * Confirm a previewed external-overwrite version. The destination archives its
+ * current draft in the same durable commit before restoring the old text.
  */
-export async function restoreQuickEditorExternalVersion(versionId: string): Promise<boolean> {
-  const restored = useQuickEditorStore.getState().restoreExternalVersion(versionId)
-  if (!restored) return false
+export async function restoreQuickEditorExternalVersion(
+  request: QuickEditorVersionRestoreRequest,
+): Promise<QuickEditorVersionRestoreResult> {
+  const result = useQuickEditorStore.getState().confirmExternalVersionRestore(request)
+  if (result !== 'restored') return result
 
   const locale = useAppStore.getState().locale
   showToast(
@@ -194,5 +199,5 @@ export async function restoreQuickEditorExternalVersion(versionId: string): Prom
     'info',
     2500,
   )
-  return true
+  return result
 }

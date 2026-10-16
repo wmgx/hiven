@@ -36,7 +36,8 @@ s().setActivePaneId(a); assert.equal(s().confirmPaneClose(focus), false)
 s().setActivePaneId(b); s().closePane(b); const overwrite = s().pendingPaneClose
 s().overwriteActiveText(fullB, { source: 'synthetic' }); assert.equal(s().confirmPaneClose(overwrite), false)
 s().closePane(b); const restore = s().pendingPaneClose
-s().restoreExternalVersion(s().externalVersionHistory[0].id); assert.equal(s().confirmPaneClose(restore), false)
+const versionRestore = s().requestExternalVersionRestore(s().externalVersionHistory[0].id)
+assert.equal(s().confirmExternalVersionRestore(versionRestore), 'restored'); assert.equal(s().confirmPaneClose(restore), false)
 // Cross-window revision change must not be overwritten by an old close intent.
 s().closePane(b); const crossWindow = s().pendingPaneClose
 const other = store(); other.getState().setPaneText(b, 'new remote synthetic draft')

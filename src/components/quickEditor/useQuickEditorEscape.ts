@@ -35,7 +35,18 @@ export function useQuickEditorEscape(onExit: () => void) {
 
   const handleEscape = useCallback((event: KeyboardEvent): boolean => {
     if (event.key !== 'Escape' || event.isComposing || event.keyCode === 229) return false
+    if (quickEditorImperative.handleVersionHistoryEscape(event)) {
+      clearHint()
+      return true
+    }
     const state = useQuickEditorStore.getState()
+    if (state.pendingVersionRestore) {
+      event.preventDefault()
+      event.stopPropagation()
+      clearHint()
+      state.cancelExternalVersionRestore(state.pendingVersionRestore)
+      return true
+    }
     if (state.pendingPaneClose) {
       event.preventDefault()
       event.stopPropagation()

@@ -36,6 +36,16 @@ export function QuickEditorPanel({ onRequestExit }: { onRequestExit: () => void 
 
   const handleKeyDownCapture = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.nativeEvent.isComposing || event.keyCode === 229) return
+    if (quickEditorImperative.isVersionHistoryOpen()) {
+      const key = event.key.toLowerCase()
+      const editorShortcut = ((event.metaKey || event.ctrlKey) && (key === 'w' || key === 'k' || key === '\\'))
+        || (event.altKey && (event.key === 'ArrowRight' || event.key === 'ArrowLeft'))
+      if (editorShortcut) {
+        event.preventDefault()
+        event.stopPropagation()
+      }
+      return
+    }
     if (!(event.metaKey || event.ctrlKey)) return
     if (event.key.toLowerCase() === 'w') {
       if (useQuickEditorStore.getState().paneOrder.length <= 1) return

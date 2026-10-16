@@ -6,6 +6,7 @@ import type {
   QuickEditorPaneState,
   QuickEditorStore,
   QuickEditorState,
+  QuickEditorVersionRestoreRequest,
 } from './quickEditorTypes'
 
 const DEFAULT_PANE_ID: QuickEditorPaneId = 'quick-pane-1'
@@ -78,7 +79,10 @@ function pushExternalVersion(
 ): QuickEditorExternalVersion[] {
   // Skip empty content and exact duplicate of the newest entry.
   if (!entry.text) return history
-  if (history[0]?.text === entry.text && history[0]?.paneId === entry.paneId) return history
+  if (history[0]?.text === entry.text
+    && history[0]?.paneId === entry.paneId
+    && history[0]?.language === entry.language
+    && history[0]?.languageSource === entry.languageSource) return history
   return [entry, ...history].slice(0, QUICK_EDITOR_EXTERNAL_VERSION_LIMIT)
 }
 
@@ -86,6 +90,7 @@ const initialPane = createPaneState({ id: DEFAULT_PANE_ID })
 
 const INITIAL_STATE: QuickEditorState = {
   pendingPaneClose: null,
+  pendingVersionRestore: null,
   panes: { [DEFAULT_PANE_ID]: initialPane },
   paneOrder: [DEFAULT_PANE_ID],
   activePaneId: DEFAULT_PANE_ID,
@@ -97,6 +102,84 @@ const INITIAL_STATE: QuickEditorState = {
   scrollPosition: initialPane.scrollPosition,
   externalVersionHistory: [],
   panelInstancesV2: {},
+}
+
+type LegacyPersistedQuickEditorState = Partial<QuickEditorState> & {
+  /** Legacy single-slot snapshot from older builds. */
+  overwriteSnapshot?: {
+    paneId?: string
+    text?: string
+    language?: string
+    languageSource?: 'manual' | 'auto'
+    at?: number
+    source?: string
+  } | null
+}
+
+function mergePersistedState(
+  persisted: unknown,
+  current: QuickEditorStore,
+): QuickEditorStore {
+  const source = persisted as LegacyPersistedQuickEditorState | undefined
+  if (!source) return current
+  const panes = source.panes && Object.keys(source.panes).length > 0
+    ? source.panes
+    : {
+        [DEFAULT_PANE_ID]: createPaneState({
+          id: DEFAULT_PANE_ID,
+          text: source.text,
+          language: source.language,
+          languageSource: source.languageSource,
+          cursorPosition: source.cursorPosition,
+          scrollPosition: source.scrollPosition,
+        }),
+      }
+  const paneOrder = source.paneOrder?.filter((id) => panes[id]) ?? Object.keys(panes)
+  const activePaneId = source.activePaneId && panes[source.activePaneId]
+    ? source.activePaneId
+    : paneOrder[0] ?? DEFAULT_PANE_ID
+  const active = panes[activePaneId] ?? createPaneState({ id: DEFAULT_PANE_ID })
+
+  let externalVersionHistory = Array.isArray(source.externalVersionHistory)
+    ? source.externalVersionHistory
+    : []
+  // Migrate the legacy single overwriteSnapshot into the history list. If the
+  // old entry had no timestamp, reuse the in-memory migration identity when
+  // comparing durable state so the same legacy payload remains stable.
+  if (externalVersionHistory.length === 0 && source.overwriteSnapshot?.text) {
+    const legacy = source.overwriteSnapshot
+    const currentLegacy = current.externalVersionHistory[0]?.id.startsWith('qe-ver-legacy-')
+      ? current.externalVersionHistory[0]
+      : undefined
+    const at = typeof legacy.at === 'number' ? legacy.at : currentLegacy?.at ?? Date.now()
+    externalVersionHistory = [{
+      id: `qe-ver-legacy-${at}`,
+      paneId: typeof legacy.paneId === 'string' ? legacy.paneId : activePaneId,
+      text: legacy.text ?? '',
+      language: legacy.language ?? 'plaintext',
+      languageSource: legacy.languageSource ?? 'auto',
+      at,
+      source: legacy.source,
+      preview: previewFromText(legacy.text ?? ''),
+    }]
+  }
+
+  return {
+    ...current,
+    ...source,
+    pendingPaneClose: null,
+    pendingVersionRestore: null,
+    panes,
+    paneOrder: paneOrder.length > 0 ? paneOrder : [activePaneId],
+    activePaneId,
+    splitDirection: source.splitDirection ?? 'horizontal',
+    text: active.text,
+    language: active.language,
+    languageSource: active.languageSource,
+    cursorPosition: active.cursorPosition,
+    scrollPosition: active.scrollPosition,
+    externalVersionHistory,
+  }
 }
 
 let publishCommittedState: StoreApi<QuickEditorStore>['setState']
@@ -113,6 +196,65 @@ function commitReplacement(state: QuickEditorStore, patch: Partial<QuickEditorSt
     version: options.version ?? 0,
   }))
   publishCommittedState(patch)
+}
+
+function readDurableStateMatch(state: QuickEditorStore): 'match' | 'stale' | 'unavailable' {
+  if (!useQuickEditorStore.persist.hasHydrated()) return 'unavailable'
+  const options = useQuickEditorStore.persist.getOptions()
+  if (!options.name) return 'unavailable'
+  try {
+    const stored = JSON.parse(localStorage.getItem(options.name) ?? 'null')?.state
+    if (!stored) return 'unavailable'
+    const normalizedStored = mergePersistedState(stored, state)
+    const current = options.partialize ? options.partialize(state) : state
+    const durable = options.partialize ? options.partialize(normalizedStored) : normalizedStored
+    return JSON.stringify(durable) === JSON.stringify(current) ? 'match' : 'stale'
+  } catch {
+    return 'unavailable'
+  }
+}
+
+function sameVersion(
+  current: QuickEditorExternalVersion | undefined,
+  snapshot: Readonly<QuickEditorExternalVersion>,
+): boolean {
+  return Boolean(current
+    && current.id === snapshot.id
+    && current.paneId === snapshot.paneId
+    && current.text === snapshot.text
+    && current.language === snapshot.language
+    && current.languageSource === snapshot.languageSource
+    && current.at === snapshot.at
+    && current.source === snapshot.source
+    && current.preview === snapshot.preview)
+}
+
+function samePane(
+  current: QuickEditorPaneState | undefined,
+  snapshot: Readonly<QuickEditorPaneState> | null,
+): boolean {
+  if (!snapshot) return current === undefined
+  return Boolean(current
+    && current.id === snapshot.id
+    && (current.revision ?? 0) === (snapshot.revision ?? 0)
+    && current.text === snapshot.text
+    && current.language === snapshot.language
+    && current.languageSource === snapshot.languageSource)
+}
+
+function createVersionRestoreRequest(
+  state: QuickEditorStore,
+  version: QuickEditorExternalVersion,
+): QuickEditorVersionRestoreRequest {
+  const targetPane = state.panes[version.paneId]
+  return {
+    version: { ...version },
+    targetPane: targetPane ? {
+      ...targetPane,
+      cursorPosition: { ...targetPane.cursorPosition },
+      scrollPosition: { ...targetPane.scrollPosition },
+    } : null,
+  }
 }
 
 /** Delete only after durable state still matches this window's complete pane set. */
@@ -142,7 +284,7 @@ function commitPaneClose(state: QuickEditorStore, paneId: QuickEditorPaneId): bo
   } catch { return false }
 }
 
-const quickEditorInitializer = persist<QuickEditorStore, [], [], Omit<QuickEditorState, 'panelInstancesV2' | 'pendingPaneClose'>>(
+const quickEditorInitializer = persist<QuickEditorStore, [], [], Omit<QuickEditorState, 'panelInstancesV2' | 'pendingPaneClose' | 'pendingVersionRestore'>>(
     (set, get) => ({
       ...INITIAL_STATE,
 
@@ -265,37 +407,68 @@ const quickEditorInitializer = persist<QuickEditorStore, [], [], Omit<QuickEdito
         })
         return current.id
       },
-      restoreExternalVersion: (versionId) => {
+      requestExternalVersionRestore: (versionId) => {
         const state = get()
         const version = state.externalVersionHistory.find((entry) => entry.id === versionId)
-        if (!version) return false
-        const targetPane = state.panes[version.paneId] ?? activePaneSnapshot(state)
+        if (!version || state.pendingVersionRestore) return null
+        const request = createVersionRestoreRequest(state, version)
+        // Preview state is runtime-only and must not cause a persistence write.
+        publishCommittedState({ pendingVersionRestore: request })
+        return request
+      },
+      confirmExternalVersionRestore: (request) => {
+        const state = get()
+        const version = state.externalVersionHistory.find((entry) => entry.id === request.version.id)
+        const targetPane = state.panes[request.version.paneId]
+        if (state.pendingVersionRestore !== request
+          || !sameVersion(version, request.version)
+          || !samePane(targetPane, request.targetPane)) return 'stale'
+
+        const durableMatch = readDurableStateMatch(state)
+        if (durableMatch === 'stale') return 'stale'
+        if (durableMatch === 'unavailable') return 'storage-error'
+
+        const history = targetPane
+          ? pushExternalVersion(
+              state.externalVersionHistory,
+              toExternalVersion(targetPane, 'history-restore'),
+            )
+          : state.externalVersionHistory
+        const basePane = targetPane ?? createPaneState({ id: request.version.paneId })
         const restoredPane: QuickEditorPaneState = {
-          ...targetPane,
-          revision: (targetPane.revision ?? 0) + 1,
-          id: version.paneId,
-          text: version.text,
-          language: version.language,
-          languageSource: version.languageSource,
+          ...basePane,
+          revision: (basePane.revision ?? 0) + 1,
+          id: request.version.paneId,
+          text: request.version.text,
+          language: request.version.language,
+          languageSource: request.version.languageSource,
           cursorPosition: { lineNumber: 1, column: 1 },
         }
         const panes = { ...state.panes, [restoredPane.id]: restoredPane }
         const paneOrder = state.paneOrder.includes(restoredPane.id)
           ? state.paneOrder
           : [...state.paneOrder, restoredPane.id]
-        // Restore does not append history — only external overwrite does.
-        commitReplacement(state, {
-          pendingPaneClose: null,
-          panes,
-          paneOrder,
-          activePaneId: restoredPane.id,
-          text: restoredPane.text,
-          language: restoredPane.language,
-          languageSource: restoredPane.languageSource,
-          cursorPosition: restoredPane.cursorPosition,
-          scrollPosition: restoredPane.scrollPosition,
-        })
-        return true
+        try {
+          commitReplacement(state, {
+            pendingPaneClose: null,
+            pendingVersionRestore: null,
+            panes,
+            paneOrder,
+            activePaneId: restoredPane.id,
+            text: restoredPane.text,
+            language: restoredPane.language,
+            languageSource: restoredPane.languageSource,
+            cursorPosition: restoredPane.cursorPosition,
+            scrollPosition: restoredPane.scrollPosition,
+            externalVersionHistory: history,
+          })
+          return 'restored'
+        } catch {
+          return 'storage-error'
+        }
+      },
+      cancelExternalVersionRestore: (request) => {
+        if (get().pendingVersionRestore === request) publishCommittedState({ pendingVersionRestore: null })
       },
       clearExternalVersionHistory: () => set({ externalVersionHistory: [] }),
       openPanelV2: (instance) => set((state) => ({
@@ -322,69 +495,7 @@ const quickEditorInitializer = persist<QuickEditorStore, [], [], Omit<QuickEdito
         scrollPosition: state.scrollPosition,
         externalVersionHistory: state.externalVersionHistory,
       }),
-      merge: (persisted, current) => {
-        const source = persisted as Partial<QuickEditorState> & {
-          /** Legacy single-slot snapshot from older builds. */
-          overwriteSnapshot?: {
-            paneId?: string
-            text?: string
-            language?: string
-            languageSource?: 'manual' | 'auto'
-            at?: number
-            source?: string
-          } | null
-        } | undefined
-        if (!source) return current
-        const panes = source.panes && Object.keys(source.panes).length > 0
-          ? source.panes
-          : {
-              [DEFAULT_PANE_ID]: createPaneState({
-                id: DEFAULT_PANE_ID,
-                text: source.text,
-                language: source.language,
-                languageSource: source.languageSource,
-                cursorPosition: source.cursorPosition,
-                scrollPosition: source.scrollPosition,
-              }),
-            }
-        const paneOrder = source.paneOrder?.filter((id) => panes[id]) ?? Object.keys(panes)
-        const activePaneId = source.activePaneId && panes[source.activePaneId] ? source.activePaneId : paneOrder[0] ?? DEFAULT_PANE_ID
-        const active = panes[activePaneId] ?? createPaneState({ id: DEFAULT_PANE_ID })
-
-        let externalVersionHistory = Array.isArray(source.externalVersionHistory)
-          ? source.externalVersionHistory
-          : []
-        // Migrate legacy single overwriteSnapshot into the history list once.
-        if (externalVersionHistory.length === 0 && source.overwriteSnapshot?.text) {
-          const legacy = source.overwriteSnapshot
-          externalVersionHistory = [{
-            id: `qe-ver-legacy-${legacy.at ?? Date.now()}`,
-            paneId: typeof legacy.paneId === 'string' ? legacy.paneId : activePaneId,
-            text: legacy.text ?? "",
-            language: legacy.language ?? 'plaintext',
-            languageSource: legacy.languageSource ?? 'auto',
-            at: typeof legacy.at === 'number' ? legacy.at : Date.now(),
-            source: legacy.source,
-            preview: previewFromText(legacy.text ?? ''),
-          }]
-        }
-
-        return {
-          ...current,
-          ...source,
-          pendingPaneClose: null,
-          panes,
-          paneOrder: paneOrder.length > 0 ? paneOrder : [activePaneId],
-          activePaneId,
-          splitDirection: source.splitDirection ?? 'horizontal',
-          text: active.text,
-          language: active.language,
-          languageSource: active.languageSource,
-          cursorPosition: active.cursorPosition,
-          scrollPosition: active.scrollPosition,
-          externalVersionHistory,
-        }
-      },
+      merge: mergePersistedState,
     }
 )
 
