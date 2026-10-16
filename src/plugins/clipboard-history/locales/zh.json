@@ -194,6 +194,7 @@
   "paging.page": "第 {page} 页 · {count} 条",
   "paging.previous": "上一页",
   "paging.next": "下一页",
+  "paging.searchOlder": "继续搜索较早记录",
   "paging.retry": "重试",
   "paging.scanning": "搜索中… 已检查 {count} 条",
   "retention.summary": "新记录保留 {months} 个日历月 · 固定（收藏）项不自动过期",

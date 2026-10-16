@@ -1451,7 +1451,9 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
             <SurfaceFooterHints className="clipboard-history-footer">
               <span role="status">{t('paging.page', { page: pageIndex + 1, count: items.length })}</span>
               <Button type="button" disabled={loading || pageIndex === 0 || Boolean(textEdit)} onClick={() => setPagePath({ key: criteriaKey, cursors: cursors.slice(0, -1) })}>{t('paging.previous')}</Button>
-              <Button type="button" disabled={loading || !nextCursor || Boolean(textEdit)} onClick={() => { if (nextCursor) setPagePath({ key: criteriaKey, cursors: [...cursors, nextCursor] }) }}>{t('paging.next')}</Button>
+              <Button type="button" disabled={loading || !nextCursor || Boolean(textEdit)} onClick={() => { if (nextCursor) setPagePath({ key: criteriaKey, cursors: [...cursors, nextCursor] }) }}>
+                {t(query.trim() && nextCursor ? 'paging.searchOlder' : 'paging.next')}
+              </Button>
               {fullTextSearchState === 'error' && <Button type="button" onClick={refreshPage}>{t('paging.retry')}</Button>}
             </SurfaceFooterHints>
           </div>

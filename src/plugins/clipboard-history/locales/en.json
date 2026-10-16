@@ -194,6 +194,7 @@
   "paging.page": "Page {page} · {count} items",
   "paging.previous": "Previous",
   "paging.next": "Next",
+  "paging.searchOlder": "Search older",
   "paging.retry": "Retry",
   "paging.scanning": "Searching… {count} records checked",
   "retention.summary": "New records: {months} calendar months · Favorites never expire automatically",
