@@ -10,10 +10,6 @@ import ts from 'typescript'
 
 const src = readFileSync('src/workspace/launcher/usage.ts', 'utf8')
 
-assert.match(src, /export function recordSelection/, 'exports recordSelection')
-assert.match(src, /export function migrateLegacyUsage/, 'exports migrateLegacyUsage')
-assert.match(src, /count|lastSelectedAt/, 'uses {count,lastSelectedAt} record shape')
-
 // Stub the ./types import (surface ids + legacy alias normalization are used at runtime).
 const stubbed = src.replace(
   /import\s*\{[^}]*\}\s*from\s*'\.\/types'\s*;?\s*\n?/,

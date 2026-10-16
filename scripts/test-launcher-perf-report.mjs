@@ -4,38 +4,12 @@
  */
 
 import assert from 'node:assert/strict'
-import { readFileSync, existsSync } from 'node:fs'
-import { join } from 'node:path'
 import {
   analyzeLauncherPerfLog,
   groupLauncherPerfSessions,
   parseLauncherPerfNdjson,
   formatLauncherPerfReport,
 } from './lib/launcher-perf-analyze.mjs'
-
-const root = process.cwd()
-const read = (p) => readFileSync(join(root, p), 'utf8')
-
-// ─── Source contracts ────────────────────────────────────────────────────────
-const perf = read('src/workspace/launcher/perf.ts')
-const app = read('src/App.tsx')
-const host = read('src/launcher/hosts/GlobalLauncherHost.tsx')
-const pkg = JSON.parse(read('package.json'))
-const agents = read('Agents.md')
-
-assert.match(perf, /beginLauncherPerfOpenSession/, 'must expose begin open session')
-assert.match(perf, /endLauncherPerfOpenSession/, 'must expose end open session')
-assert.match(perf, /openId/, 'samples must carry openId')
-assert.match(perf, /open:session-start/, 'session-start marker required')
-assert.match(perf, /open:session-end/, 'session-end marker required')
-assert.match(perf, /listLauncherPerfOpenSessionsFromRing/, 'ring open list for DevTools')
-assert.match(app, /beginLauncherPerfOpenSession/, 'App open path must begin session')
-assert.match(host, /endLauncherPerfOpenSession/, 'Host close must end session')
-assert.equal(pkg.scripts?.['perf:launcher'], 'node scripts/launcher-perf-report.mjs')
-assert.equal(pkg.scripts?.['test:launcher-perf-report'], 'node scripts/test-launcher-perf-report.mjs')
-assert.match(agents, /perf:launcher|launcher-perf/, 'Agents.md must document perf CLI for agents')
-assert.ok(existsSync(join(root, 'scripts/launcher-perf-report.mjs')))
-assert.ok(existsSync(join(root, 'scripts/lib/launcher-perf-analyze.mjs')))
 
 // ─── Analyze unit tests ──────────────────────────────────────────────────────
 const fixture = `

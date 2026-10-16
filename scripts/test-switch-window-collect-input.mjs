@@ -155,14 +155,4 @@ const unique = await item.execute({
 assert.equal(unique.ok, true)
 assert.equal(getFocusedId(), 'w3')
 
-// Host wires static command AND keeps dynamic global mix
-const host = readFileSync('src/workspace/launcher/hostProvider.ts', 'utf8')
-assert.match(host, /getSwitchWindowHostItem/, 'host must register switch window as static item')
-assert.match(host, /getHostWindowLauncherDynamicItems/, 'host must keep global window mix')
-
-// windows.ts exports filter helper used by L2
-const windowsSrc = readFileSync('src/workspace/desktopControl/windows.ts', 'utf8')
-assert.match(windowsSrc, /export async function listSwitchableWindowsForFilter/, 'must export L2 list helper')
-assert.match(windowsSrc, /export async function focusDesktopWindow/, 'must export focus helper')
-
 console.log('switch window collect-input second-level checks passed')

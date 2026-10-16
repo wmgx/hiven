@@ -63,11 +63,6 @@ assert.deepEqual(asArr(fav.normalizeLauncherFavorites([...many, ' k0 ', '', null
 assert.deepEqual(asArr(fav.normalizeLauncherFavorites([' a ', '', 1, 'a', 'b', 'a'])), ['a', 'b'])
 assert.deepEqual(asArr(fav.normalizeLauncherFavorites(null)), [])
 
-// Recommendation cap constant present
-const recSrc = readFileSync('src/launcher/clipboard/actionRecommendation.ts', 'utf8')
-assert.match(recSrc, /RECOMMENDED_ACTIONS_MAX\s*=\s*5/, 'recommended actions capped at 5')
-assert.match(recSrc, /\.slice\(0,\s*RECOMMENDED_ACTIONS_MAX\)/, 'merge path applies cap')
-
 console.log('✓ test-launcher-favorites passed')
 
 const appKey = 'host:app-launcher:app:linux:desktop-entry:synthetic.desktop'

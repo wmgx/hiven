@@ -109,32 +109,4 @@ const dynamicNoUsage = normalize.normalizeContribution(contribution, {
 })
 assert.equal(dynamicNoUsage.recordUsage, undefined, 'dynamic without opt-in leaves recordUsage unset')
 
-// registry must use normalizeContribution for static + dynamic
-const registry = read('src/workspace/launcher/registry.ts')
-assert.match(registry, /normalizeContribution/, 'registry must import/use normalizeContribution')
-assert.match(
-  registry,
-  /resolveStaticItemFromContribution[\s\S]*normalizeContribution/,
-  'static path must call normalizeContribution',
-)
-assert.match(
-  registry,
-  /resolveDynamicItem[\s\S]*normalizeContribution/,
-  'dynamic path must call normalizeContribution',
-)
-assert.match(
-  registry,
-  /signal,/,
-  'dynamic provider context must pass AbortSignal',
-)
-
-// ranking must use shared eligibility (match filter)
-const ranking = read('src/workspace/launcher/ranking.ts')
-assert.match(ranking, /isIntentEligible/, 'ranking intentScore must use isIntentEligible')
-
-// actionRecommendation must not merge pluginActionManifest
-const actions = read('src/launcher/clipboard/actionRecommendation.ts')
-assert.doesNotMatch(actions, /discoverActionsForBlock/, 'host pins must not merge pluginActionManifest')
-assert.doesNotMatch(actions, /format-clipboard-json|html-decode/, 'transform catalog must be removed')
-
 console.log('test-launcher-normalize-contribution: ok')

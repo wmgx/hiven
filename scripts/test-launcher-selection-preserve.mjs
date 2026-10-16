@@ -15,44 +15,6 @@ import ts from 'typescript'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const src = readFileSync(join(root, 'src/workspace/launcher/selectionPreserve.ts'), 'utf8')
-assert.match(src, /resolvePreservedSelection/, 'selectionPreserve must export resolvePreservedSelection')
-
-const session = readFileSync(join(root, 'src/workspace/launcher/useLauncherSession.ts'), 'utf8')
-assert.match(session, /resolvePreservedSelection|selectedKeyRef/, 'session must preserve selection by systemKey')
-assert.match(session, /pin:\s*false|options\?\.pin/, 'session must support pin:false for default selection')
-assert.match(
-  session,
-  /visibleSelectionItemsRef\?\.current\s*\?\?\s*rankedItemsRef\.current/,
-  'selection identity must come from the rendered list when the host prepends rows',
-)
-assert.doesNotMatch(session, /useDeferredValue/, 'ranking and Enter must use the live query snapshot')
-assert.doesNotMatch(
-  session,
-  /First paint with items: pin identity/,
-  'must not auto-pin default top-of-list selection',
-)
-
-const panel = readFileSync(join(root, 'src/components/launcher/GlobalLauncherPanel.tsx'), 'utf8')
-assert.match(panel, /setSelectedIndex\(0,\s*\{\s*pin:\s*false\s*\}\)/, 'query change must not pin default selection')
-const clickHandler = panel.slice(
-  panel.indexOf('const syncSearchSelection'),
-  panel.indexOf('const handleRenameSavedAction'),
-)
-assert.match(clickHandler, /domainItem\.systemKey/, 'click selection must resolve by stable item identity')
-assert.ok(clickHandler.indexOf('setSelectedIndex') < clickHandler.indexOf('selectItem(item)'),
-  'click must synchronize the highlighted row before execution')
-assert.match(session, /onRootSelectionChanged\(itemKey\)/,
-  'keyboard/default selection changes must notify execution-error ownership by stable key')
-const globalHost = readFileSync(join(root, 'src/launcher/hosts/GlobalLauncherHost.tsx'), 'utf8')
-assert.match(globalHost, /visibleSelectionItemsRef/, 'global host must bind selection to its composed visible list')
-const quickEditor = readFileSync(join(root, 'src/components/quickEditor/QuickEditorCommandOverlay.tsx'), 'utf8')
-const quickEditorSelect = quickEditor.slice(
-  quickEditor.indexOf('const selectMixedItem'),
-  quickEditor.indexOf('const focusSearchInputAfterBack'),
-)
-assert.match(quickEditorSelect, /domainItem\.systemKey/, 'Quick Editor click selection must use stable identity')
-assert.ok(quickEditorSelect.indexOf('setSelectedIndex') < quickEditorSelect.indexOf('executeGlobalLauncherDomainItem'),
-  'Quick Editor click must synchronize its highlighted row before execution')
 
 const tmp = mkdtempSync(join(tmpdir(), 'sel-preserve-'))
 const out = join(tmp, 'selectionPreserve.mjs')

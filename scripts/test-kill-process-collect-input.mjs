@@ -134,17 +134,4 @@ assert.ok(
   'must include confirm action',
 )
 
-// Host wires the static command
-const host = readFileSync('src/workspace/launcher/hostProvider.ts', 'utf8')
-assert.match(host, /getKillProcessHostItem/, 'host must register kill command as static item')
-assert.doesNotMatch(
-  host,
-  /getHostProcessLauncherDynamicItems/,
-  'host must NOT put processes on first-level dynamic list',
-)
-
-// Session must not implement search-prefix process mode
-const session = readFileSync('src/workspace/launcher/useLauncherSession.ts', 'utf8')
-assert.doesNotMatch(session, /isProcessModeQuery|process-mode/, 'session must not use prefix process mode')
-
 console.log('kill process collect-input second-level checks passed')

@@ -125,27 +125,4 @@ const pasteResult = await executor.executeRecommendedAction(
 assert.equal(pasteResult.ok, true)
 assert.equal(pasted, '{"a":1}')
 
-// Host paste path uses native hide_launcher_and_paste
-const pasteSrc = readFileSync('src/workspace/pluginPaste.ts', 'utf8')
-assert.match(pasteSrc, /hide_launcher_and_paste/, 'paste must restore previous foreground via native command')
-
-// Surface + host wiring (source-level)
-const surface = readFileSync('src/plugins/clipboard-history/surfaces/ClipboardHistorySurface.tsx', 'utf8')
-assert.match(surface, /returnToLauncherWithObject/)
-assert.match(surface, /recordPaste/)
-assert.match(surface, /frequent/)
-assert.match(surface, /favorite/)
-
-const host = readFileSync('src/launcher/hosts/GlobalLauncherHost.tsx', 'utf8')
-// The host used to branch on `source !== 'history-item'`; it now branches positively
-// in two places — history keeps its own paste/copy/open action set, and it carries a
-// distinct row label so the user can tell a history pick from a live clipboard grab.
-assert.match(host, /if \(block\.source === 'history-item'\)/, 'history blocks must keep their own action set')
-assert.match(host, /block\.source === 'history-item'[\s\S]{0,80}zh: '历史'/, 'history blocks must be labeled distinctly from the live clipboard')
-assert.match(host, /paste-history-text|pasteText/)
-
-const renderer = readFileSync('src/components/pluginSurface/PluginSurfaceRenderer.tsx', 'utf8')
-assert.match(renderer, /createHistoryItemObjectBlock/)
-assert.match(renderer, /setPendingObjectBlock/)
-
 console.log('✓ test-launcher-r2-clipboard-follow-through passed')

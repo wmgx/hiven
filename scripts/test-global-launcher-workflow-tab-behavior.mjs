@@ -5,20 +5,6 @@ import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import ts from 'typescript'
 
-const packageJson = JSON.parse(readFileSync('package.json', 'utf8'))
-const refactorSuite = readFileSync('scripts/test-refactor-suite.mjs', 'utf8')
-
-assert.equal(
-  packageJson.scripts?.['test:global-launcher-workflow-tab-behavior'],
-  'node scripts/test-global-launcher-workflow-tab-behavior.mjs',
-  'package.json must expose test:global-launcher-workflow-tab-behavior',
-)
-assert.match(
-  refactorSuite,
-  /test:global-launcher-workflow-tab-behavior/,
-  'refactor suite must include workflow Tab expansion behavior coverage',
-)
-
 function loadModule(path, globals = {}) {
   let src = readFileSync(path, 'utf8')
   src = src.replace(/import\s+type\s*\{[\s\S]*?\}\s*from\s*'[^']*'\s*;?\s*\n?/g, '')

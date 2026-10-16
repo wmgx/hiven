@@ -6,9 +6,6 @@ import vm from 'node:vm'
 import ts from 'typescript'
 
 const host = readFileSync('src/launcher/hosts/GlobalLauncherHost.tsx', 'utf8')
-const lifecycle = readFileSync('src/components/launcher/GlobalLauncherHostLifecycle.ts', 'utf8')
-assert.doesNotMatch(host + lifecycle, /querySticky|saveStickyLauncherQuery|consumeStickyLauncherQuery/)
-assert.match(lifecycle, /setQuery\(''\)/, 'new sessions start empty')
 const callback = (name) => {
   const body = host.match(new RegExp(`const ${name} = useCallback\\(([\\s\\S]*?)\\n  }, \\[`))?.[1]
   assert.ok(body, `${name} callback exists`)

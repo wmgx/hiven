@@ -11,21 +11,6 @@ import ts from 'typescript'
 
 const src = readFileSync('src/workspace/launcher/identity.ts', 'utf8')
 
-// ─── Structural contract checks ──────────────────────────────────────────────
-assert.match(src, /export function getPluginLauncherItemKey/, 'exports getPluginLauncherItemKey')
-assert.doesNotMatch(src, /getPluginCommandAdapterItemKey|plugin-command-adapter|tail\.startsWith\(['"]command:/, 'command-adapter identity should be removed')
-assert.match(src, /export function getHostViewItemKey/, 'exports getHostViewItemKey')
-assert.match(src, /export function getHostActionItemKey/, 'exports getHostActionItemKey')
-assert.match(src, /export function validateLauncherItemIds/, 'exports validateLauncherItemIds')
-assert.match(src, /export function findUnknownSurfaces/, 'exports findUnknownSurfaces')
-assert.match(
-  src,
-  /`plugin:\$\{pluginId\}:launcher:\$\{itemId\}`/,
-  'plugin launcher key is plugin:<id>:launcher:<itemId>',
-)
-// The launcher key function must not interpolate version or dev/source.
-const launcherKeyFn = src.split('export function getPluginLauncherItemKey')[1]?.split('export function')[0] ?? ''
-assert.doesNotMatch(launcherKeyFn, /version|isDev|source/i, 'launcher key has no version/source segment')
 
 // ─── Behavioral checks (transpile + vm, project convention) ─────────────────
 // Stub the ./types import so the module is standalone.

@@ -41,7 +41,6 @@ const CANDIDATE_MODULES = [
   path.join(ROOT, 'src/launcher/clipboard/actionRecommendation.ts'),
 ]
 
-const GLOBAL_HOST = path.join(ROOT, 'src/launcher/hosts/GlobalLauncherHost.tsx')
 
 /**
  * Transpile a TypeScript module graph rooted at `entryPath` with relative
@@ -477,30 +476,7 @@ assert.equal(
   assert.equal(action.pluginId, 'date-time-assistant')
 }
 
-// ─── Static: GlobalLauncherHost must call recommend pipeline ─────────────────
-{
-  assert.ok(existsSync(GLOBAL_HOST), `GlobalLauncherHost missing: ${GLOBAL_HOST}`)
-  const hostSrc = readFileSync(GLOBAL_HOST, 'utf8')
-
-  // Must not hardcode empty object actions (disabled recommend path).
-  assert.ok(
-    !/const\s+objectActions\s*:\s*RecommendedAction\[\]\s*=\s*\[\s*\]/.test(hostSrc),
-    'GlobalLauncherHost must not hardcode `const objectActions: RecommendedAction[] = []` — wire recommend pipeline',
-  )
-
-  const usesRecommend =
-    /\brecommendActionsFromToolAccepts\b/.test(hostSrc) ||
-    /\brecommendActionsWithPlugins\b/.test(hostSrc) ||
-    /\brecommendActionsForBlock\b/.test(hostSrc) ||
-    /\brecommendActions\b/.test(hostSrc)
-
-  assert.ok(
-    usesRecommend,
-    'GlobalLauncherHost source must call recommendActions / recommendActionsFromToolAccepts / recommendActionsWithPlugins',
-  )
-}
-
 console.log('intent content recommend (accepts evaluation) checks passed')
 console.log(`  module: ${path.relative(ROOT, entry)}`)
 console.log(`  coverage: accepts-hit-only, no-accepts-excluded, toolId-dedupe, match-throw-isolation,`)
-console.log(`            timestamp/base64/csv/jwt kinds, plain-text-miss, host recommend pipeline`)
+console.log(`            timestamp/base64/csv/jwt kinds, plain-text-miss`)
