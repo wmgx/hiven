@@ -41,6 +41,11 @@ import {
 import { subscribeCachedIndex } from '../storage/clipboardHistoryCache'
 import { createClipboardHistoryRepository } from '../storage/clipboardHistoryRepository'
 import { readMatchingHistoryPage } from './clipboardHistoryPageReader'
+import {
+  getClipboardHistorySearchDebounceMs,
+  getClipboardHistorySearchPresentation,
+  type ClipboardHistorySearchLoadState,
+} from './clipboardHistorySearchPresentation'
 import { createHistoryPointerIntent } from './historyPointerIntent'
 import { createHistoryOpenSession, resetHistoryOpenSession } from './historyOpenSession'
 import { createHistoryCopyLifecycle } from './historyCopyLifecycle'
@@ -114,6 +119,14 @@ type QuickEditorOpenState = {
   error: string | null
 }
 
+type AppliedHistorySearch = {
+  key: string
+  query: string
+  matchMode: ClipboardHistorySearchMatchMode
+  filter: FilterKind
+  pageIndex: number
+}
+
 type ClipboardHistoryMatchNavigator = {
   move: (direction: -1 | 1) => boolean
 }
@@ -146,8 +159,8 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     () => getClipboardHistoryCopiedSince(timeRange, localDayAnchor),
     [timeRange, localDayAnchor],
   )
-  const [loading, setLoading] = useState(true)
-  const [fullTextSearchState, setFullTextSearchState] = useState<'idle' | 'loading' | 'error'>('idle')
+  const [fullTextSearchState, setFullTextSearchState] = useState<ClipboardHistorySearchLoadState>('loading')
+  const [appliedSearch, setAppliedSearch] = useState<AppliedHistorySearch | null>(null)
   const [textEdit, setTextEdit] = useState<TextEditState | null>(null)
   const editGeneration = useRef(0)
   const editInputRef = useRef<HTMLTextAreaElement>(null)
@@ -197,7 +210,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }, [textEdit?.id])
   useLayoutEffect(() => {
     if (!textEdit) editGeneration.current += 1
-  }, [selectedId, query, filter, timeRange, textEdit?.id])
+  }, [selectedId, query, searchMatchMode, filter, timeRange, textEdit?.id])
   const reportUnsavedChanges = host.setUnsavedChanges
   useLayoutEffect(() => {
     reportUnsavedChanges?.(Boolean(textEdit && (textEdit.busy || textEdit.draft !== textEdit.original)))
@@ -234,7 +247,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     pasteNoticeGenerationRef.current += 1
     setPasteNotice(null)
     return () => { pasteNoticeGenerationRef.current += 1 }
-  }, [query, selectedId, filter, timeRange, combining, host, settings.enabled])
+  }, [query, searchMatchMode, selectedId, filter, timeRange, combining, host, settings.enabled])
   const [mergeIds, setMergeIds] = useState<readonly string[]>([])
   // The selection owns its order and labels; searches and background index refreshes do not.
   const mergeItemsRef = useRef(new Map<string, ClipboardHistoryItem>())
@@ -602,18 +615,48 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const [retentionStatus, setRetentionStatus] = useState<{ legacyProtectedCount: number; trashCount: number; migrationComplete: boolean } | null>(null)
   const [legacyDialog, setLegacyDialog] = useState(false)
   const [retentionBusy, setRetentionBusy] = useState(false)
+  const desiredQuery = query.trim()
+  const desiredFilter: FilterKind = combining ? 'text' : filter
   const criteriaKey = JSON.stringify([
-    query.trim(), searchMatchMode, combining ? 'text' : filter, frequentThreshold, copiedSince ?? null,
+    desiredQuery, searchMatchMode, desiredFilter, frequentThreshold, copiedSince ?? null,
   ])
-  const cursors = pagePath.key === criteriaKey ? pagePath.cursors : [undefined]
+  const cursors = useMemo(
+    () => pagePath.key === criteriaKey ? pagePath.cursors : [undefined],
+    [criteriaKey, pagePath],
+  )
   const pageCursor = cursors.at(-1)
   const pageIndex = cursors.length - 1
+  const requestKey = JSON.stringify([criteriaKey, pageCursor ?? null, pageIndex])
+  const searchPresentation = getClipboardHistorySearchPresentation({
+    desiredKey: requestKey,
+    appliedKey: appliedSearch?.key,
+    loadState: fullTextSearchState,
+  })
+  const resultsActionBlocked = searchPresentation.actionsBlocked
+  const resultsActionableRef = useRef(false)
+  resultsActionableRef.current = !resultsActionBlocked
+  const appliedQuery = appliedSearch?.query ?? ''
+  const appliedSearchMatchMode = appliedSearch?.matchMode ?? 'literal'
+  const appliedFilter = appliedSearch?.filter ?? desiredFilter
+  const appliedPageIndex = appliedSearch?.pageIndex ?? 0
   const pageGeneration = useRef(0)
-  const refreshPage = useCallback(() => setRefreshEpoch((value) => value + 1), [])
+  const lastSettledCriteriaKeyRef = useRef<string | undefined>(undefined)
+  const lastRequestedCriteriaKeyRef = useRef<string | undefined>(undefined)
+  useLayoutEffect(() => {
+    copyLifecycle.cancel()
+    quickEditorLifecycle.cancel()
+    setQuickEditorOpen(null)
+  }, [requestKey, refreshEpoch, copyLifecycle, quickEditorLifecycle])
+  const refreshPage = useCallback(() => {
+    setFullTextSearchState('loading')
+    setScannedCount(0)
+    setRefreshEpoch((value) => value + 1)
+  }, [])
   const clearPage = useCallback(() => {
     pageGeneration.current += 1
+    setFullTextSearchState('loading')
+    setScannedCount(0)
     setPagePath({ key: '', cursors: [undefined] })
-    setNextCursor(undefined)
     setRefreshEpoch((value) => value + 1)
   }, [])
   const syncLocalDay = useCallback(() => {
@@ -629,9 +672,9 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     clearPage()
   }, [clearPage, syncLocalDay])
   const changeSearchQuery = useCallback((value: string) => {
-    resetPage()
+    if (value.trim() !== desiredQuery) resetPage()
     setQuery(value)
-  }, [resetPage])
+  }, [desiredQuery, resetPage])
   const toggleSearchMatchMode = useCallback(() => {
     resetPage()
     setSearchMatchMode((current) => current === 'literal' ? 'all-terms' : 'literal')
@@ -648,13 +691,16 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     setTimeRange(value as ClipboardHistoryTimeRange)
   }, [filter, resetPage])
   const changePage = useCallback((direction: 'previous' | 'next') => {
+    if (resultsActionBlocked) return
     if (syncLocalDay()) {
       clearPage()
       return
     }
+    setFullTextSearchState('loading')
+    setScannedCount(0)
     if (direction === 'previous') setPagePath({ key: criteriaKey, cursors: cursors.slice(0, -1) })
     else if (nextCursor) setPagePath({ key: criteriaKey, cursors: [...cursors, nextCursor] })
-  }, [clearPage, criteriaKey, cursors, nextCursor, syncLocalDay])
+  }, [clearPage, criteriaKey, cursors, nextCursor, resultsActionBlocked, syncLocalDay])
 
   useLayoutEffect(() => {
     const generation = ++pageGeneration.current
@@ -662,33 +708,47 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     const controller = new AbortController()
     const owner = host.deliveryFeedbackOwner
     const current = () => generation === pageGeneration.current && !controller.signal.aborted && owner?.isCurrent() !== false
-    setLoading(true)
     setFullTextSearchState('loading')
-    setNextCursor(undefined)
     setScannedCount(0)
-    setItems([])
+    const requestedQuery = desiredQuery
+    const requestedMatchMode = searchMatchMode
+    const requestedFilter = desiredFilter
+    const requestedPageIndex = pageIndex
+    const requestedKey = requestKey
+    const debounceMs = getClipboardHistorySearchDebounceMs(
+      lastSettledCriteriaKeyRef.current,
+      lastRequestedCriteriaKeyRef.current,
+      criteriaKey,
+    )
+    lastRequestedCriteriaKeyRef.current = criteriaKey
     const timer = window.setTimeout(() => {
       void readMatchingHistoryPage((cursor) => repository.getPage({
-        query: query.trim(), matchMode: searchMatchMode,
-        filter: combining ? 'text' : filter === 'favorite' ? 'favorites' : filter,
+        query: requestedQuery, matchMode: requestedMatchMode,
+        filter: requestedFilter === 'favorite' ? 'favorites' : requestedFilter,
         frequentThreshold, copiedSince, cursor, limit: 100, signal: controller.signal,
       }), pageCursor, controller.signal, (count) => { if (current()) setScannedCount(count) })
         .then((page) => {
           if (!current()) return
           setItems(page.items)
           setNextCursor(page.nextCursor)
+          lastSettledCriteriaKeyRef.current = criteriaKey
+          setAppliedSearch({
+            key: requestedKey,
+            query: requestedQuery,
+            matchMode: requestedMatchMode,
+            filter: requestedFilter,
+            pageIndex: requestedPageIndex,
+          })
           setSelectedId((selected) => page.items.some((item) => item.id === selected) ? selected : page.items[0]?.id ?? null)
-          setLoading(false)
           setFullTextSearchState('idle')
         }).catch(() => {
           if (!current()) return
-          setLoading(false)
           setFullTextSearchState('error')
         })
-    }, query.trim() ? 120 : 0)
+    }, debounceMs)
     const unsubscribe = owner?.subscribeInvalidation(() => controller.abort())
     return () => { controller.abort(); window.clearTimeout(timer); unsubscribe?.() }
-  }, [repository, criteriaKey, pageCursor, refreshEpoch, settings.enabled, host.deliveryFeedbackOwner, suspendPointerHover])
+  }, [repository, requestKey, pageCursor, pageIndex, refreshEpoch, settings.enabled, host.deliveryFeedbackOwner, suspendPointerHover, desiredQuery, searchMatchMode, desiredFilter, frequentThreshold, copiedSince])
 
   useEffect(() => {
     let active = true
@@ -741,10 +801,10 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }
 
   useEffect(() => {
-    if (loading) return
+    if (searchPresentation.showInitialSkeleton) return
     const frame = requestAnimationFrame(() => searchRef.current?.focus())
     return () => cancelAnimationFrame(frame)
-  }, [loading, settings.enabled, combining])
+  }, [searchPresentation.showInitialSkeleton, settings.enabled, combining])
 
   // Flush pending soft-delete on unmount
   useEffect(() => {
@@ -764,12 +824,12 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
 
   useEffect(() => {
     setSelectedId((current) => {
-      if (loading) return current
+      if (resultsActionBlocked) return current
       if (filteredItems.length === 0) return null
       if (current && filteredItems.some((item) => item.id === current)) return current
       return filteredItems[0].id
     })
-  }, [filteredItems, loading])
+  }, [filteredItems, resultsActionBlocked])
 
   const selectedItem = useMemo(
     () => filteredItems.find((i) => i.id === selectedId) ?? null,
@@ -778,7 +838,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
 
   const shortcutHints = getClipboardHistoryShortcuts({
     hasSelection: Boolean(selectedItem),
-    loading,
+    loading: resultsActionBlocked,
     enabled: true,
     blocked: combining || filter === 'trash' || legacyDialog || Boolean(titleDialog) || Boolean(textEdit),
     focus: shortcutFocus,
@@ -802,21 +862,21 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     const owner = host.deliveryFeedbackOwner
     const unsubscribe = owner?.subscribeInvalidation(() => { cancelled = true })
     setSelectedFullItem(null)
-    void (filter === 'trash' ? repository.getTrashItem(selectedId) : repository.getItem(selectedId)).then((item) => {
+    void (appliedFilter === 'trash' ? repository.getTrashItem(selectedId) : repository.getItem(selectedId)).then((item) => {
       if (!cancelled && owner?.isCurrent() !== false && item) {
         setSelectedFullItem(item)
       }
     }).catch(() => { /* The current row can still be retried by its explicit action. */ })
     return () => { cancelled = true; unsubscribe?.() }
-  }, [selectedId, repository, filter, selectedItem?.hash, host.deliveryFeedbackOwner])
+  }, [selectedId, repository, appliedFilter, selectedItem?.hash, host.deliveryFeedbackOwner])
 
   const groupedItems = useMemo(() => {
     // Frequent / favorite use their own sort; do not re-bucket by day.
-    if (!combining && (filter === 'frequent' || filter === 'favorite')) {
+    if (!combining && (appliedFilter === 'frequent' || appliedFilter === 'favorite')) {
       return [{ label: '', items: filteredItems }]
     }
     return groupItemsByDay(filteredItems, locale, t)
-  }, [filteredItems, filter, locale, t, combining])
+  }, [filteredItems, appliedFilter, locale, t, combining])
 
   type VirtualRow =
     | { type: 'group-header'; label: string }
@@ -889,7 +949,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   })
 
   const handlePaste = useCallback(async (item: ClipboardHistoryItem, plainTextOnly = false) => {
-    if (combining || textEdit || (plainTextOnly && item.kind !== 'text')) return
+    if (!resultsActionableRef.current || combining || textEdit || (plainTextOnly && item.kind !== 'text')) return
     const generation = ++pasteNoticeGenerationRef.current
     setPasteNotice(null)
     try {
@@ -899,7 +959,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         if (generation === pasteNoticeGenerationRef.current) setPasteNotice(t('error.pasteFailed'))
         return
       }
-      if (generation !== pasteNoticeGenerationRef.current) return
+      if (generation !== pasteNoticeGenerationRef.current || !resultsActionableRef.current) return
 
       let result
       if (fullItem.kind === 'text') {
@@ -932,6 +992,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }, [repository])
 
   const handleCopy = useCallback(async (item: ClipboardHistoryItem) => {
+    if (!resultsActionableRef.current) return
     pasteNoticeGenerationRef.current += 1
     setPasteNotice(null)
     const submission = copyLifecycle.begin(() => host.deliveryFeedbackOwner?.isCurrent() !== false)
@@ -962,7 +1023,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }, [copyLifecycle, host, resetBrowser, resolveFullItem, t])
 
   const handleSaveImage = useCallback(async (item: ClipboardHistoryItem) => {
-    if (item.kind !== 'image') return
+    if (!resultsActionableRef.current || item.kind !== 'image') return
     const ownerCurrent = () => host.deliveryFeedbackOwner?.isCurrent() !== false
     const submission = imageSaveLifecycle.begin(ownerCurrent)
     if (!submission) return
@@ -997,7 +1058,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }, [host, imageSaveLifecycle, repository, t])
 
   const prepareQuickEditorOpen = useCallback(async (item: ClipboardHistoryItem) => {
-    if (item.kind !== 'text' || quickEditorOpen) return
+    if (!resultsActionableRef.current || item.kind !== 'text' || quickEditorOpen) return
     pasteNoticeGenerationRef.current += 1
     setPasteNotice(null)
     const submission = quickEditorLifecycle.begin(host.deliveryFeedbackOwner)
@@ -1081,12 +1142,12 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }, [])
 
   const openTextEdit = useCallback(async (item: ClipboardHistoryItem) => {
-    if (item.kind !== 'text' || textEdit) return
+    if (!resultsActionableRef.current || item.kind !== 'text' || textEdit) return
     const generation = ++editGeneration.current
     pasteNoticeGenerationRef.current += 1
     try {
       const full = await repository.getItem(item.id)
-      if (generation !== editGeneration.current || host.deliveryFeedbackOwner?.isCurrent() === false) return
+      if (generation !== editGeneration.current || !resultsActionableRef.current || host.deliveryFeedbackOwner?.isCurrent() === false) return
       if (full?.kind !== 'text') throw new Error('missing')
       setTextEdit({ id: full.id, original: full.text, draft: full.text, busy: false, error: null })
     } catch {
@@ -1113,6 +1174,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }, [textEdit, repository, settings.maxTextBytes, applyItemUpdate, host, t])
 
   const toggleQuickFavorite = useCallback(async (item: ClipboardHistoryItem) => {
+    if (!resultsActionableRef.current) return
     try {
       const updated = await repository.toggleFavorite(item.id)
       if (updated) applyItemUpdate(updated)
@@ -1121,6 +1183,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }, [repository, applyItemUpdate, t])
 
   const openFavoriteTitleDialog = useCallback((item: ClipboardHistoryItem, mode: 'create' | 'edit') => {
+    if (!resultsActionableRef.current) return
     const fallback =
       item.favoriteTitle
       || (item.kind === 'text' ? item.preview : item.kind === 'files' ? item.fileNames.join(', ') : '')
@@ -1128,6 +1191,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }, [])
 
   const handleFavoriteClick = useCallback((item: ClipboardHistoryItem) => {
+    if (!resultsActionableRef.current) return
     if (item.isFavorite) {
       void repository.setFavorite(item.id, false)
         .then((updated) => {
@@ -1155,6 +1219,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }, [titleDialog, repository, applyItemUpdate, host, t])
 
   const handleDelete = useCallback((id: string) => {
+    if (!resultsActionableRef.current) return
     // Cancel any previous pending delete
     if (pendingDeleteRef.current) {
       clearTimeout(pendingDeleteRef.current.timerId)
@@ -1231,12 +1296,14 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   ], [handlePaste, handleCopy, handleSaveImage, handleDelete, imageSaveBusy, openTextEdit, prepareQuickEditorOpen, primaryModifierLabel, t])
 
   const handleReturnToLauncher = useCallback(async (item: ClipboardHistoryItem) => {
+    if (!resultsActionableRef.current) return
     pasteNoticeGenerationRef.current += 1
     setPasteNotice(null)
     try {
       let fullItem = item
       if ((item.kind === 'text' && !item.text) || (item.kind === 'image' && !item.blobId) || (item.kind === 'files' && item.paths.length === 0)) {
         const loaded = await repository.getItem(item.id)
+        if (!resultsActionableRef.current) return
         if (!loaded) {
           host.showToast(t('error.loadFailed'), 'error')
           return
@@ -1308,7 +1375,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       if (e.key === 'Enter') {
         e.preventDefault()
         e.stopPropagation()
-        if (selectedItem && !e.metaKey && !e.ctrlKey && !e.altKey) toggleMergeItem(selectedItem)
+        if (!resultsActionBlocked && selectedItem && !e.metaKey && !e.ctrlKey && !e.altKey) toggleMergeItem(selectedItem)
         return
       }
       if (e.key === 'Delete' || e.key === 'Backspace') return
@@ -1332,7 +1399,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     if (!selectedItem) return
     const shortcuts = getClipboardHistoryShortcuts({
       hasSelection: true,
-      loading,
+      loading: resultsActionBlocked,
       enabled: true,
       blocked: combining || filter === 'trash' || legacyDialog || Boolean(titleDialog) || Boolean(textEdit),
       focus,
@@ -1364,6 +1431,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       e.preventDefault()
       void handleSaveImage(selectedItem)
     } else if ((e.metaKey || e.ctrlKey) && e.key === 'c') {
+      if (focus.editing || !shortcuts.paste) return
       const selectedText = readDomSelectedText()
       e.preventDefault()
       if (selectedText) {
@@ -1392,7 +1460,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         if (flatIndex >= 0) virtualizer.scrollToIndex(flatIndex, { align: 'auto' })
       }
     }
-  }, [selectedItem, selectedId, filteredItems, flatRows, virtualizer, handlePaste, handleReturnToLauncher, handleDelete, handleCopy, handleSaveImage, host, t, imeKeyDown, combining, cancelMerge, toggleMergeItem, titleDialog, textEdit, toggleQuickFavorite, loading, settings.enabled, filter, legacyDialog, quickEditorOpen])
+  }, [selectedItem, selectedId, filteredItems, flatRows, virtualizer, handlePaste, handleReturnToLauncher, handleDelete, handleCopy, handleSaveImage, host, t, imeKeyDown, combining, cancelMerge, toggleMergeItem, titleDialog, textEdit, toggleQuickFavorite, resultsActionBlocked, settings.enabled, filter, legacyDialog, quickEditorOpen])
 
   const queueActive = Boolean(queueStatus && queueStatus.remaining > 0 && (queueStatus.phase === 'ready' || queueStatus.phase === 'failed'))
   const queueReadNotice = queueReadState === 'failed' ? t('queue.statusFailed') : queueReadState === 'loading' ? t('queue.statusLoading') : null
@@ -1415,7 +1483,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   ) : null
 
   const renderContent = () => {
-    if (loading) {
+    if (searchPresentation.showInitialSkeleton) {
       return (
         <div className="clipboard-history-main">
           <div className="clipboard-history-list-pane" {...(textEdit ? { inert: true } : {})}>
@@ -1450,7 +1518,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                   className="clipboard-history-filter"
                   value={filter}
                   onChange={changeFilter}
-                  disabled={loading || Boolean(textEdit)}
+                  disabled={Boolean(textEdit)}
                   aria-label={t('filter.label')}
                   options={[
                     { value: 'all', label: t('filter.all') },
@@ -1466,7 +1534,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                   className="clipboard-history-filter clipboard-history-time-filter"
                   value={timeRange}
                   onChange={changeTimeRange}
-                  disabled={loading || Boolean(textEdit)}
+                  disabled={Boolean(textEdit)}
                   aria-label={t('filter.timeLabel')}
                   options={[
                     { value: 'all', label: t('filter.timeAll') },
@@ -1490,11 +1558,11 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                       ? t('state.loading')
                       : fullTextSearchState === 'error'
                         ? t('error.loadFailed')
-                      : filter === 'frequent'
+                      : appliedFilter === 'frequent'
                       ? t('state.emptyFrequent')
-                      : filter === 'favorite'
+                      : appliedFilter === 'favorite'
                         ? t('state.emptyFavorite')
-                        : filter === 'trash'
+                        : appliedFilter === 'trash'
                           ? t('retention.empty')
                         : t('state.empty')}
                   </SurfaceEmptyState>
@@ -1534,8 +1602,8 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                         >
                           <ClipboardHistoryItemRow
                             item={row.item}
-                            query={query}
-                            matchMode={searchMatchMode}
+                            query={appliedQuery}
+                            matchMode={appliedSearchMatchMode}
                             selected={row.item.id === selectedId}
                             locale={locale}
                             t={t}
@@ -1545,7 +1613,8 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                             onDelete={handleDelete}
                             onFavorite={handleFavoriteClick}
                             menuItems={combining || filter === 'trash' ? [] : itemContextMenuItems(row.item)}
-                            readOnly={filter === 'trash'}
+                            readOnly={appliedFilter === 'trash'}
+                            actionsDisabled={resultsActionBlocked}
                             combining={combining}
                             mergePosition={mergeIds.indexOf(row.item.id)}
                             mergeLimitReached={mergeIds.length >= CLIPBOARD_TEXT_MERGE_MAX_ITEMS}
@@ -1559,12 +1628,15 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
               </SurfaceList>
             </div>
             <SurfaceFooterHints className="clipboard-history-footer">
-              <span role="status">{t('paging.page', { page: pageIndex + 1, count: items.length })}</span>
-              <Button type="button" disabled={loading || pageIndex === 0 || Boolean(textEdit)} onClick={() => changePage('previous')}>{t('paging.previous')}</Button>
-              <Button type="button" disabled={loading || !nextCursor || Boolean(textEdit)} onClick={() => changePage('next')}>
-                {t(query.trim() && nextCursor ? 'paging.searchOlder' : 'paging.next')}
+              <span role="status">{t('paging.page', { page: appliedPageIndex + 1, count: items.length })}</span>
+              <Button type="button" disabled={resultsActionBlocked || appliedPageIndex === 0 || Boolean(textEdit)} onClick={() => changePage('previous')}>{t('paging.previous')}</Button>
+              <Button type="button" disabled={resultsActionBlocked || !nextCursor || Boolean(textEdit)} onClick={() => changePage('next')}>
+                {t(appliedQuery && nextCursor ? 'paging.searchOlder' : 'paging.next')}
               </Button>
-              {fullTextSearchState === 'error' && <Button type="button" onClick={refreshPage}>{t('paging.retry')}</Button>}
+              {fullTextSearchState === 'error' && <>
+                <span role="alert">{t('error.loadFailed')}</span>
+                <Button type="button" onClick={refreshPage}>{t('paging.retry')}</Button>
+              </>}
             </SurfaceFooterHints>
           </div>
 
@@ -1588,7 +1660,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
               }}
             />
           ) : <ContextMenu
-            disabled={!selectedItem || Boolean(textEdit) || filter === 'trash'}
+            disabled={!selectedItem || resultsActionBlocked || Boolean(textEdit) || appliedFilter === 'trash'}
             items={previewItem ? itemContextMenuItems(previewItem) : []}
             trigger={
               <SurfacePreview className="clipboard-history-preview" data-launcher-scrollable>
@@ -1612,14 +1684,14 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                   </SurfaceEmptyState>
                 ) : (
                   <>
-                    {previewItem.kind === 'text' && filter !== 'trash' && <div className="clipboard-history-text-actions">
-                      <ToolbarButton type="button" onClick={() => void openTextEdit(previewItem)}>{t('edit.action')}</ToolbarButton>
-                      <ToolbarButton type="button" onClick={() => void handlePaste(previewItem, true)}>{t('action.pastePlain')}</ToolbarButton>
+                    {previewItem.kind === 'text' && appliedFilter !== 'trash' && <div className="clipboard-history-text-actions">
+                      <ToolbarButton type="button" disabled={resultsActionBlocked} onClick={() => void openTextEdit(previewItem)}>{t('edit.action')}</ToolbarButton>
+                      <ToolbarButton type="button" disabled={resultsActionBlocked} onClick={() => void handlePaste(previewItem, true)}>{t('action.pastePlain')}</ToolbarButton>
                     </div>}
                     <ClipboardHistoryPreviewContent
                       item={previewItem}
-                      query={query}
-                      matchMode={searchMatchMode}
+                      query={appliedQuery}
+                      matchMode={appliedSearchMatchMode}
                       t={t}
                       storage={host.storage}
                       matchNavigatorRef={matchNavigatorRef}
@@ -1631,6 +1703,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                         </span>
                         <ToolbarButton
                           type="button"
+                          disabled={resultsActionBlocked}
                           onClick={() => openFavoriteTitleDialog(previewItem, 'edit')}
                         >
                           {t('action.editFavoriteTitle')}
@@ -1709,15 +1782,15 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         >
           {t('search.allTerms')}
         </Button>
-        {!combining && !loading && (
-          <Button type="button" disabled={Boolean(textEdit) || filter === 'trash' || retentionBusy} onClick={startMerge}>
+        {!combining && !searchPresentation.showInitialSkeleton && (
+          <Button type="button" disabled={resultsActionBlocked || Boolean(textEdit) || filter === 'trash' || retentionBusy} onClick={startMerge}>
             {t('merge.start')}
           </Button>
         )}
         {!combining && <Button
           type="button"
           variant="primary"
-          disabled={!selectedItem || loading || Boolean(textEdit) || retentionBusy}
+          disabled={!selectedItem || resultsActionBlocked || Boolean(textEdit) || retentionBusy}
           onClick={() => filter === 'trash' ? void restoreExpired() : selectedItem && void handlePaste(selectedItem)}
         >
           {t(filter === 'trash' ? 'retention.restore' : 'action.paste')}
@@ -1760,7 +1833,11 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         <SurfaceFooterHints className="clipboard-history-footer clipboard-history-merge-footer">
           {queueFeedback}
           <div className="clipboard-history-merge-footer-hints">
-            {compareNotice ? <span role="status">{compareNotice}</span> : <span>↵ {t('merge.toggleSelection')}</span>}
+            {compareNotice
+              ? <span role="status">{compareNotice}</span>
+              : resultsActionBlocked
+                ? fullTextSearchState === 'loading' && <span role="status">{t('paging.scanning', { count: scannedCount })}</span>
+                : <span>↵ {t('merge.toggleSelection')}</span>}
             <span>Esc {t('merge.cancel')}</span>
           </div>
           <div className="clipboard-history-merge-footer-actions">
@@ -1875,6 +1952,7 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
   onDelete,
   onFavorite,
   menuItems,
+  actionsDisabled,
   combining,
   mergePosition,
   mergeLimitReached,
@@ -1893,6 +1971,7 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
   onDelete: (id: string) => void
   onFavorite: (item: ClipboardHistoryItem) => void
   menuItems: MenuItemSpec[]
+  actionsDisabled: boolean
   combining: boolean
   readOnly: boolean
   mergePosition: number
@@ -1909,7 +1988,7 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
 
   return (
     <ContextMenu
-      disabled={combining || readOnly}
+      disabled={actionsDisabled || combining || readOnly}
       items={menuItems}
       trigger={
         <div
@@ -1920,12 +1999,12 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
             selected={selected}
             className="clipboard-history-item"
             aria-pressed={combining ? mergePosition >= 0 : undefined}
-            aria-disabled={combining && mergeLimitReached && mergePosition < 0 ? true : undefined}
+            aria-disabled={combining && (actionsDisabled || (mergeLimitReached && mergePosition < 0)) ? true : undefined}
             onClick={(event) => {
               onSelect(item.id)
-              if (combining && event.detail < 2) onToggleMerge(item)
+              if (!actionsDisabled && combining && event.detail < 2) onToggleMerge(item)
             }}
-            onDoubleClick={() => { if (!combining && !readOnly) void onPaste(item) }}
+            onDoubleClick={() => { if (!actionsDisabled && !combining && !readOnly) void onPaste(item) }}
           >
             {combining ? (
               <span className="clipboard-history-merge-check" aria-hidden="true">
@@ -1948,6 +2027,7 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
             type="button"
             label={item.isFavorite ? t('action.unfavorite') : t('action.favorite')}
             className={`clipboard-history-item-favorite${item.isFavorite ? ' is-active' : ''}`}
+            disabled={actionsDisabled}
             onClick={() => onFavorite(item)}
           >
             <StarIcon size={14} fill={item.isFavorite ? 'currentColor' : 'none'} />
@@ -1956,6 +2036,7 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
             type="button"
             label={t('action.delete')}
             className="clipboard-history-item-delete"
+            disabled={actionsDisabled}
             onClick={() => onDelete(item.id)}
           >
             <CloseIcon size={14} />

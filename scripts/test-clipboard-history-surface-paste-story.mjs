@@ -134,7 +134,7 @@ assert.match(
 
 // Frequent / favorite filters
 assert.match(surface, /FilterKind = 'all' \| 'text' \| 'image' \| 'files' \| 'frequent' \| 'favorite'/)
-assert.match(surface, /filter === 'frequent'[\s\S]*pasteCount/)
-assert.match(surface, /filter === 'favorite'[\s\S]*isFavorite/)
+assert.match(surface, /appliedFilter === 'frequent'[\s\S]*pasteCount/)
+assert.match(surface, /appliedFilter === 'favorite'[\s\S]*isFavorite/)
 
 console.log('✓ test-clipboard-history-surface-paste-story passed')

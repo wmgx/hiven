@@ -146,7 +146,7 @@ function dispatch(key, target, options = {}) {
   const selectedItem = { id: 'selected', kind: 'text' }
   const context = {
     ...policy, Element, HTMLElement: Element, document,
-    titleDialog: null, legacyDialog: null, textEdit: null, combining: false, filter: 'all', loading: false, settings: { enabled: true },
+    titleDialog: null, legacyDialog: null, quickEditorOpen: null, textEdit: null, combining: false, filter: 'all', resultsActionBlocked: false, settings: { enabled: true },
     selectedItem, selectedId: 'selected', filteredItems: [selectedItem], flatRows: [],
     imeKeyDown: { shouldIgnoreKeyDown: () => false },
     handlePaste: (_item, plain) => calls.push(plain ? 'plainPaste' : 'paste'), toggleQuickFavorite: () => calls.push('favorite'), handleReturnToLauncher: () => calls.push('return'),
@@ -183,7 +183,7 @@ for (const target of [row, list, surface]) {
   for (const key of ['Delete', 'Backspace']) assert.deepEqual(dispatch(key, target), { calls: ['delete'], prevented: true, stopped: false })
 }
 assert.deepEqual(dispatch('Delete', row, { activeElement: search }), untouched)
-for (const context of [{ selectedItem: null }, { loading: true }, { titleDialog: {} }]) {
+for (const context of [{ selectedItem: null }, { resultsActionBlocked: true }, { titleDialog: {} }]) {
   for (const key of ['Enter', 'Delete', 'Backspace']) assert.deepEqual(dispatch(key, row, { context }), untouched)
   assert.deepEqual(dispatch('Enter', row, { context, event: { ctrlKey: true } }), untouched)
 }
@@ -193,6 +193,8 @@ for (const event of [{}, { ctrlKey: true }]) {
 assert.deepEqual(dispatch('Enter', search, { event: { defaultPrevented: true } }).calls, [])
 assert.deepEqual(dispatch('a', search), untouched, 'ordinary input characters are unaffected')
 assert.deepEqual(dispatch('c', row, { event: { ctrlKey: true } }).calls, ['copy'], 'copy behavior is unchanged')
+assert.deepEqual(dispatch('c', search, { event: { ctrlKey: true } }), untouched, 'the focused query keeps native text copy ownership')
+assert.deepEqual(dispatch('c', search, { event: { ctrlKey: true }, context: { resultsActionBlocked: true } }), untouched, 'pending search keeps input copy native and never copies the stale row')
 for (const target of [search, row, list]) {
   for (const modifier of ['metaKey', 'ctrlKey']) {
     assert.deepEqual(dispatch('s', target, {
@@ -209,6 +211,7 @@ assert.deepEqual(dispatch('s', row, {
   event: { ctrlKey: true, shiftKey: true }, context: { selectedItem: { id: 'image', kind: 'image' } },
 }), untouched, 'modified save chords do not trigger image save')
 assert.deepEqual(dispatch('Enter', search, { context: { combining: true } }), { calls: ['toggle-merge'], prevented: true, stopped: true })
+assert.deepEqual(dispatch('Enter', search, { context: { combining: true, resultsActionBlocked: true } }), { calls: [], prevented: true, stopped: true }, 'pending merge search cannot select a stale row')
 assert.deepEqual(dispatch('Delete', row, { context: { combining: true } }), untouched)
 assert.deepEqual(dispatch('Escape', search, { context: { combining: true } }), { calls: ['cancel-merge'], prevented: true, stopped: true })
 

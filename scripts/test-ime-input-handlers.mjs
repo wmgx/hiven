@@ -34,7 +34,7 @@ for (const mode of ['native', 'react', '229', 'tracked', 'commit', 'plain']) {
   let changes = 0, completions = 0, pastes = 0
   const aliasHandler = evaluate(alias, { aliasIme: ime, value: [], onChange: () => changes++ })
   const csvHandler = evaluate(csv, { sqlIme: ime, sqlSuggestOpen: true, sqlCompletions: { items: [{ insertText: 'SELECT ' }] }, sqlSuggestIndex: 0, applySqlCompletion: () => completions++, setSqlSuggestIndex() {}, setSqlSuggestOpen() {} })
-  const historyHandler = evaluate(history, { titleDialog: null, legacyDialog: null, textEdit: null, combining: false, Element: class {}, document: { activeElement: null }, filter: 'all', selectedItem: { kind: 'text' }, loading: false, imeKeyDown: ime, readClipboardHistoryShortcutFocus: () => ({ nativeButton: false }), getClipboardHistoryShortcuts: () => ({ paste: true }), handlePaste: () => pastes++ })
+  const historyHandler = evaluate(history, { titleDialog: null, legacyDialog: null, quickEditorOpen: null, textEdit: null, combining: false, Element: class {}, document: { activeElement: null }, filter: 'all', selectedItem: { kind: 'text' }, resultsActionBlocked: false, imeKeyDown: ime, readClipboardHistoryShortcutFocus: () => ({ nativeButton: false }), getClipboardHistoryShortcuts: () => ({ paste: true }), handlePaste: () => pastes++ })
   for (const handler of [aliasHandler, csvHandler, historyHandler]) {
     const e = event(flags); handler(e)
     assert.equal(e.prevented, mode === 'plain', `${mode}: preventDefault only after IME guard`)
