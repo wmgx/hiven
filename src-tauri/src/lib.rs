@@ -7807,6 +7807,7 @@ pub fn run() {
             text_result_hud::text_result_hud_dismiss,
             text_result_hud::text_result_hud_ready,
             text_result_hud::text_result_hud_action,
+            text_result_hud::text_result_hud_paste,
             get_config_dir,
             init_config_dir,
             read_scripts_dir,

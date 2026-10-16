@@ -13,6 +13,8 @@ type Snapshot = {
   preview: string
   truncated: boolean
   copyFailed: boolean
+  pasteFailed: boolean
+  pasteCopied: boolean
   complete: boolean
   sensitive: boolean
   failure?: 'unavailable' | 'incomplete' | 'no-change' | 'too-large' | 'refused'
@@ -56,7 +58,7 @@ export function TextResultHud() {
   }, [snapshot?.sessionId, snapshot?.revision, snapshot?.phase])
   if (!snapshot) return null
   const t = (key: string) => translate(snapshot.locale, 'hud', key)
-  const action = (name: 'copy' | 'close') => invoke('text_result_hud_action', {
+  const action = (name: 'copy' | 'paste' | 'close') => invoke('text_result_hud_action', {
     sessionId: snapshot.sessionId, revision: snapshot.revision, action: name,
   }).catch(() => undefined)
   const prefix = snapshot.product === 'qr-scan' ? 'qr' : snapshot.product === 'clean-agent' ? 'cleanAgent' : 'translation'
@@ -73,7 +75,10 @@ export function TextResultHud() {
     <pre ref={resultRef} tabIndex={active ? 0 : undefined} aria-label={t(`${prefix}.result`)} aria-live="polite">{snapshot.phase === 'error' ? t(errorKey) : !active && snapshot.product === 'clean-agent' ? t('cleanAgent.hidden') : snapshot.sensitive && !active ? t('qr.sensitive') : result || t(`${prefix}.working`)}</pre>
     {snapshot.truncated && !active && !snapshot.sensitive && <p>{t(`${prefix}.previewTruncated`)}</p>}
     {snapshot.copyFailed && <p role="alert">{t(`${prefix}.copyFailed`)}</p>}
+    {snapshot.pasteFailed && <p role="alert">{t('cleanAgent.pasteFailed')}</p>}
+    {snapshot.pasteCopied && <p role="status">{t('cleanAgent.pasteCopied')}</p>}
     {active && <footer>
+      {snapshot.product === 'clean-agent' && <button type="button" disabled={!snapshot.complete || snapshot.pasteCopied} onClick={() => { void action('paste') }}>{t('cleanAgent.paste')}</button>}
       <button type="button" disabled={!snapshot.complete} onClick={() => { void action('copy') }}>{t(`${prefix}.copy`)}</button>
       <button type="button" onClick={() => { void action('close') }}>{t(`${prefix}.close`)}</button>
     </footer>}

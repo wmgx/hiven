@@ -5,8 +5,11 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
-use std::sync::{Mutex, OnceLock};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+#[cfg(target_os = "windows")]
+use std::time::Instant;
 use tauri::{Emitter, Manager};
 
 const LABEL: &str = "text-result-hud";
@@ -76,6 +79,10 @@ pub(crate) struct Snapshot {
     preview: String,
     truncated: bool,
     copy_failed: bool,
+    #[serde(default)]
+    paste_failed: bool,
+    #[serde(default)]
+    paste_copied: bool,
     complete: bool,
     sensitive: bool,
     failure: Option<Failure>,
@@ -97,6 +104,7 @@ pub(crate) struct Update {
 #[serde(rename_all = "lowercase")]
 pub(crate) enum Action {
     Copy,
+    Paste,
     Close,
 }
 
@@ -184,6 +192,78 @@ impl FocusLease {
             }
         }
     }
+
+    fn paste(&self, attempt: &HudPasteAttempt) -> Result<(), String> {
+        #[cfg(target_os = "linux")]
+        {
+            return self.0.restore_and_paste(|| attempt.ensure_active());
+        }
+        #[cfg(target_os = "macos")]
+        {
+            attempt.ensure_active()?;
+            // The existing macOS lease identifies only a process. That is
+            // sufficient for Close focus restoration, but not for an exact
+            // paste target when the app owns multiple windows. Keep the copied
+            // clipboard fallback instead of injecting into an unverified window.
+            return Err("text-result-hud-paste-target-unverifiable".into());
+        }
+        #[cfg(target_os = "windows")]
+        unsafe {
+            use windows::Win32::Foundation::HWND;
+            use windows::Win32::UI::WindowsAndMessaging::{
+                GetForegroundWindow, IsWindow, SetForegroundWindow,
+            };
+            let hwnd = HWND(self.hwnd as *mut std::ffi::c_void);
+            attempt.ensure_active()?;
+            if !IsWindow(Some(hwnd)).as_bool() || !SetForegroundWindow(hwnd).as_bool() {
+                return Err("text-result-hud-paste-target-unavailable".into());
+            }
+            let deadline = Instant::now() + Duration::from_millis(1_000);
+            while GetForegroundWindow() != hwnd {
+                attempt.ensure_active()?;
+                if Instant::now() >= deadline {
+                    return Err("text-result-hud-paste-target-unavailable".into());
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            std::thread::sleep(Duration::from_millis(120));
+            attempt.ensure_active()?;
+            if GetForegroundWindow() != hwnd {
+                return Err("text-result-hud-paste-target-changed".into());
+            }
+            return super::simulate_paste_impl();
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+        {
+            let _ = attempt;
+            Err("text-result-hud-paste-unsupported".into())
+        }
+    }
+}
+
+#[derive(Default)]
+struct HudPasteAttempt {
+    active: AtomicBool,
+}
+
+impl HudPasteAttempt {
+    fn new() -> Self {
+        Self {
+            active: AtomicBool::new(true),
+        }
+    }
+
+    fn ensure_active(&self) -> Result<(), String> {
+        if self.active.load(Ordering::SeqCst) {
+            Ok(())
+        } else {
+            Err(super::paste_recovery::cancelled_error())
+        }
+    }
+
+    fn cancel(&self) {
+        self.active.store(false, Ordering::SeqCst);
+    }
 }
 
 #[derive(Default)]
@@ -196,7 +276,9 @@ struct State {
     active: bool,
     active_focused: bool,
     restore_allowed: bool,
-    action_sent: bool,
+    pending_action: Option<Action>,
+    paste_attempted: bool,
+    paste_attempt: Option<Arc<HudPasteAttempt>>,
     activation_previous_expiry: Option<u64>,
     lease: Option<FocusLease>,
 }
@@ -232,12 +314,16 @@ impl State {
             return Ok(false);
         }
         if !same_session {
+            if let Some(attempt) = self.paste_attempt.take() {
+                attempt.cancel();
+            }
             self.active = false;
             self.active_focused = false;
             self.restore_allowed = false;
             self.full_text = None;
             self.activation_previous_expiry = None;
             self.lease = None;
+            self.paste_attempted = false;
         }
         if snapshot.phase == Phase::Active && !self.active {
             return Err("text-result-hud-not-active");
@@ -256,7 +342,7 @@ impl State {
                 return Err("text-result-hud-invalid");
             }
         }
-        self.action_sent = false;
+        self.pending_action = None;
         if snapshot.phase == Phase::Active {
             self.activation_previous_expiry = None;
         }
@@ -291,7 +377,11 @@ impl State {
         self.active = true;
         self.active_focused = false;
         self.restore_allowed = true;
-        self.action_sent = false;
+        self.pending_action = None;
+        self.paste_attempted = false;
+        if let Some(attempt) = self.paste_attempt.take() {
+            attempt.cancel();
+        }
         self.lease = Some(lease);
         Some(expires_at)
     }
@@ -311,13 +401,13 @@ impl State {
         self.restore_allowed = false;
         self.lease = None;
         let current = self.current.as_ref()?;
-        let request = (!self.action_sent && current.expires_at > now).then(|| ActionRequest {
+        let request = (self.pending_action.is_none() && current.expires_at > now).then(|| ActionRequest {
             product: current.product.clone(),
             session_id: current.session_id.clone(),
             revision: current.revision,
             action: Action::Close,
         });
-        self.action_sent = true;
+        self.pending_action = Some(Action::Close);
         Some(FocusLoss {
             session_id: current.session_id.clone(),
             request,
@@ -329,7 +419,7 @@ impl State {
         self.active = false;
         self.active_focused = false;
         self.restore_allowed = false;
-        self.action_sent = false;
+        self.pending_action = None;
         self.full_text = None;
         if let (Some(snapshot), Some(previous)) = (
             self.current.as_mut(),
@@ -348,20 +438,22 @@ impl State {
         now: u64,
     ) -> Option<ActionRequest> {
         let current = self.current.as_ref()?;
-        let revision_matches = match action {
-            Action::Copy => current.revision == revision,
+        let revision_matches = match &action {
+            Action::Copy | Action::Paste => current.revision == revision,
             Action::Close => revision <= current.revision,
         };
         if !self.active
             || current.phase != Phase::Active
-            || self.action_sent
+            || self.pending_action.is_some()
             || current.session_id != session_id
             || !revision_matches
             || current.expires_at <= now
+            || (action == Action::Paste
+                && (current.product != Product::CleanAgent || self.paste_attempted))
         {
             return None;
         }
-        self.action_sent = true;
+        self.pending_action = Some(action.clone());
         Some(ActionRequest {
             product: current.product.clone(),
             session_id: session_id.to_owned(),
@@ -383,6 +475,9 @@ impl State {
         let lease = (focused && self.active && self.restore_allowed)
             .then(|| self.lease.take())
             .flatten();
+        if let Some(attempt) = self.paste_attempt.take() {
+            attempt.cancel();
+        }
         self.current = None;
         if !self
             .dismissed_session_ids
@@ -398,11 +493,89 @@ impl State {
         self.active = false;
         self.active_focused = false;
         self.restore_allowed = false;
-        self.action_sent = false;
+        self.pending_action = None;
+        self.paste_attempted = false;
         self.full_text = None;
         self.activation_previous_expiry = None;
         self.lease = None;
         lease
+    }
+
+    fn begin_paste(
+        &mut self,
+        session_id: &str,
+        revision: u64,
+        now: u64,
+        attempt: Arc<HudPasteAttempt>,
+    ) -> Option<FocusLease> {
+        let current = self.current.as_ref()?;
+        let full_text_matches = self.full_text.as_ref().is_some_and(|(id, owned_revision, text)| {
+            id == session_id && *owned_revision == revision && !text.is_empty()
+        });
+        if !self.active
+            || !self.active_focused
+            || !self.restore_allowed
+            || self.pending_action != Some(Action::Paste)
+            || self.paste_attempted
+            || current.product != Product::CleanAgent
+            || current.phase != Phase::Active
+            || !current.complete
+            || current.session_id != session_id
+            || current.revision != revision
+            || current.expires_at <= now
+            || !full_text_matches
+        {
+            return None;
+        }
+        let lease = self.lease.take()?;
+        self.paste_attempted = true;
+        self.paste_attempt = Some(attempt);
+        // The following blur is the owned handoff, not an arbitrary focus loss.
+        self.active_focused = false;
+        self.restore_allowed = false;
+        Some(lease)
+    }
+
+    fn recover_paste(
+        &mut self,
+        session_id: &str,
+        revision: u64,
+        attempt: &Arc<HudPasteAttempt>,
+        lease: FocusLease,
+    ) -> Result<(), FocusLease> {
+        let matches = self.current.as_ref().is_some_and(|current| {
+            current.session_id == session_id
+                && current.revision == revision
+                && current.phase == Phase::Active
+                && current.expires_at > now()
+        }) && self
+            .paste_attempt
+            .as_ref()
+            .is_some_and(|current| Arc::ptr_eq(current, attempt));
+        if !matches || attempt.ensure_active().is_err() {
+            return Err(lease);
+        }
+        attempt.cancel();
+        self.paste_attempt = None;
+        self.lease = Some(lease);
+        self.restore_allowed = true;
+        self.active_focused = false;
+        Ok(())
+    }
+
+    fn paste_matches(
+        &self,
+        session_id: &str,
+        revision: u64,
+        attempt: &Arc<HudPasteAttempt>,
+    ) -> bool {
+        self.current.as_ref().is_some_and(|current| {
+            current.session_id == session_id && current.revision == revision
+        }) && self
+            .paste_attempt
+            .as_ref()
+            .is_some_and(|current| Arc::ptr_eq(current, attempt))
+            && attempt.ensure_active().is_ok()
     }
 }
 
@@ -782,6 +955,130 @@ pub(crate) async fn text_result_hud_ready(
     current_update(true)
 }
 
+fn recover_paste_window(window: &tauri::WebviewWindow) -> Result<(), String> {
+    position(window, true)?;
+    window
+        .emit(UPDATE_EVENT, current_update(true)?)
+        .map_err(|_| "text-result-hud-unavailable".to_owned())?;
+    window
+        .set_ignore_cursor_events(false)
+        .map_err(|_| "text-result-hud-unavailable".to_owned())?;
+    window
+        .set_focusable(true)
+        .map_err(|_| "text-result-hud-unavailable".to_owned())?;
+    window
+        .show()
+        .map_err(|_| "text-result-hud-unavailable".to_owned())?;
+    window
+        .set_focus()
+        .map_err(|_| "text-result-hud-unavailable".to_owned())
+}
+
+#[tauri::command]
+pub(crate) async fn text_result_hud_paste(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    session_id: String,
+    revision: u64,
+) -> Result<(), String> {
+    if window.label() != "launcher" || !valid_session_id(&session_id) {
+        return Err("text-result-hud-unavailable".into());
+    }
+    let handle = app.clone();
+    let setup_session = session_id.clone();
+    let (setup_tx, setup_rx) = tokio::sync::oneshot::channel();
+    app.run_on_main_thread(move || {
+        let result = (|| {
+            let hud = handle
+                .get_webview_window(LABEL)
+                .ok_or("text-result-hud-unavailable")?;
+            if !hud.is_focused().unwrap_or(false) {
+                return Err("text-result-hud-paste-target-unavailable".to_owned());
+            }
+            let attempt = Arc::new(HudPasteAttempt::new());
+            let lease = state()
+                .lock()
+                .map_err(|_| "text-result-hud-unavailable")?
+                .begin_paste(&setup_session, revision, now(), attempt.clone())
+                .ok_or_else(|| "text-result-hud-paste-rejected".to_owned())?;
+            let hidden = hud
+                .hide()
+                .and_then(|_| hud.set_focusable(false))
+                .and_then(|_| hud.set_ignore_cursor_events(true))
+                .map_err(|_| "text-result-hud-unavailable".to_owned());
+            if let Err(error) = hidden {
+                let recovered = state()
+                    .lock()
+                    .map_err(|_| "text-result-hud-unavailable")?
+                    .recover_paste(&setup_session, revision, &attempt, lease);
+                if recovered.is_ok() {
+                    let _ = recover_paste_window(&hud);
+                }
+                return Err(error);
+            }
+            Ok((lease, attempt))
+        })();
+        let _ = setup_tx.send(result);
+    })
+    .map_err(|_| "text-result-hud-unavailable")?;
+    let (lease, attempt) = setup_rx
+        .await
+        .map_err(|_| "text-result-hud-unavailable")??;
+
+    let (lease, attempt, delivery) = tokio::task::spawn_blocking(move || {
+        let delivery = lease.paste(&attempt);
+        (lease, attempt, delivery)
+    })
+    .await
+    .map_err(|_| "text-result-hud-unavailable")?;
+
+    let handle = app.clone();
+    let finish_session = session_id.clone();
+    let (finish_tx, finish_rx) = tokio::sync::oneshot::channel();
+    app.run_on_main_thread(move || {
+        let result = match delivery {
+            Ok(()) => {
+                let current = state()
+                    .lock()
+                    .map(|state| state.paste_matches(&finish_session, revision, &attempt))
+                    .unwrap_or(false);
+                if !current {
+                    Err(super::paste_recovery::cancelled_error())
+                } else {
+                    attempt.cancel();
+                    if let Ok(mut state) = state().lock() {
+                        let _ = state.take_for_dismiss(&finish_session, revision, false);
+                    }
+                    hide_window(&handle);
+                    Ok(())
+                }
+            }
+            Err(error) => {
+                let recovered = state()
+                    .lock()
+                    .map_err(|_| "text-result-hud-unavailable".to_owned())
+                    .and_then(|mut state| {
+                        state
+                            .recover_paste(&finish_session, revision, &attempt, lease)
+                            .map_err(|_| super::paste_recovery::cancelled_error())
+                    });
+                match recovered {
+                    Ok(()) => match handle.get_webview_window(LABEL) {
+                        Some(hud) => recover_paste_window(&hud).and(Err(error)),
+                        None => Err("text-result-hud-unavailable".into()),
+                    },
+                    Err(cancelled) => Err(cancelled),
+                }
+            }
+        };
+        let _ = finish_tx.send(result);
+    })
+    .map_err(|_| "text-result-hud-unavailable")?;
+    finish_rx
+        .await
+        .map_err(|_| "text-result-hud-unavailable")?
+}
+
 #[tauri::command]
 pub(crate) async fn text_result_hud_action(
     app: tauri::AppHandle,
@@ -830,6 +1127,8 @@ mod tests {
             preview: "result".into(),
             truncated: false,
             copy_failed: false,
+            paste_failed: false,
+            paste_copied: false,
             complete: true,
             sensitive: false,
             failure: None,
@@ -1059,5 +1358,30 @@ mod tests {
         assert!(state.current.is_some());
         assert!(state.take_for_dismiss("one", 4, false).is_none());
         assert!(state.current.is_none());
+    }
+
+    #[test]
+    fn paste_receipt_is_exact_clean_agent_only_and_one_shot() {
+        let mut state = State::default();
+        let mut current = snapshot("one", 4, 200);
+        current.phase = Phase::Active;
+        state.current = Some(current);
+        state.active = true;
+        assert!(state.action("one", 4, Action::Paste, 100).is_none());
+
+        state.current.as_mut().unwrap().product = Product::CleanAgent;
+        assert!(state.action("one", 3, Action::Paste, 100).is_none());
+        let request = state.action("one", 4, Action::Paste, 100).unwrap();
+        assert_eq!(request.product, Product::CleanAgent);
+        assert_eq!(request.action, Action::Paste);
+        assert!(state.action("one", 4, Action::Paste, 100).is_none());
+    }
+
+    #[test]
+    fn cancelled_paste_attempt_cannot_resume() {
+        let attempt = HudPasteAttempt::new();
+        assert!(attempt.ensure_active().is_ok());
+        attempt.cancel();
+        assert!(attempt.ensure_active().is_err());
     }
 }

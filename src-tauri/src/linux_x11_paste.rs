@@ -78,6 +78,20 @@ impl HudFocusLease {
         }
         Err(error("the HUD focus target did not regain focus"))
     }
+
+    pub(crate) fn restore_and_paste(
+        &self,
+        check_owner: impl Fn() -> PasteResult<()>,
+    ) -> PasteResult<()> {
+        let _paste_lock = PASTE_LOCK.lock().map_err(error)?;
+        restore_and_paste_captured(
+            &self.captured,
+            &check_owner,
+            &|| Ok(()),
+            true,
+            || Ok(()),
+        )
+    }
 }
 
 struct Session {
@@ -557,9 +571,30 @@ fn restore_and_paste_with_policy(
     target: Arc<PasteTarget>, check_owner: impl Fn() -> PasteResult<()>, allow_restore: bool,
 ) -> PasteResult<()> {
     let _paste_lock = PASTE_LOCK.lock().map_err(error)?;
+    restore_and_paste_captured(
+        &target.captured,
+        &check_owner,
+        &|| ensure_current(&target),
+        allow_restore,
+        || {
+            let registry = targets().lock().map_err(error)?;
+            if !is_current(&registry, &target) {
+                return Err(error("the surface was reopened or its target changed"));
+            }
+            Ok(registry)
+        },
+    )
+}
+
+fn restore_and_paste_captured<G>(
+    captured: &Arc<CapturedWindow>,
+    check_owner: &impl Fn() -> PasteResult<()>,
+    check_target: &impl Fn() -> PasteResult<()>,
+    allow_restore: bool,
+    acquire_final_target_guard: impl FnOnce() -> PasteResult<G>,
+) -> PasteResult<()> {
     check_owner()?;
-    ensure_current(&target)?;
-    let captured = &target.captured;
+    check_target()?;
     let session = captured.session.lock().map_err(error)?;
     session.ensure_alive(captured.window)?;
     if !session.focused(captured.window)? {
@@ -571,7 +606,7 @@ fn restore_and_paste_with_policy(
     let mut focused_since = None;
     loop {
         check_owner()?;
-        ensure_current(&target)?;
+        check_target()?;
         session.ensure_alive(captured.window)?;
         if !allow_restore && !session.focused(captured.window)? { return Err(error("the foreground target changed")); }
         if session.focused(captured.window)? && session.keyboard_idle()? {
@@ -589,10 +624,7 @@ fn restore_and_paste_with_policy(
         }
         thread::sleep(Duration::from_millis(20));
     }
-    let registry = targets().lock().map_err(error)?;
-    if !is_current(&registry, &target) {
-        return Err(error("the surface was reopened or its target changed"));
-    }
+    let _target_guard = acquire_final_target_guard()?;
     // Keep the final verification and four events together. Other clients (the
     // WM included) cannot switch input focus between the check and the chord.
     // The server is ungrabbed before the target handles clipboard requests.

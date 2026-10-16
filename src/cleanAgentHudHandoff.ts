@@ -15,8 +15,9 @@ import { claimTextResultHud, type TextResultHudClaim, type TextResultHudLease } 
 
 const TARGET = { source: 'builtin' as const, pluginId: 'line-tools', surfaceId: 'clean-agent-clipboard' }
 const REQUIRED = ['clipboard.write'] as const
+const PASTE_REQUIRED = ['clipboard.write', 'accessibility.paste'] as const
 const ACTION_EVENT = 'hiven://text-result-hud-action'
-type NativeAction = { product: 'translation' | 'qr-scan' | 'clean-agent'; sessionId: string; revision: number; action: 'copy' | 'close' }
+type NativeAction = { product: 'translation' | 'qr-scan' | 'clean-agent'; sessionId: string; revision: number; action: 'copy' | 'paste' | 'close' }
 const sensitive = (text: string) => detectContent(text).some(({ kind }) => kind === 'secret' || kind === 'secret-like')
 
 function definitionReady() {
@@ -26,6 +27,14 @@ function definitionReady() {
   if (!REQUIRED.every((permission) => requested.includes(permission))) return null
   const snapshot = getPluginPermissionSnapshot(TARGET.source, TARGET.pluginId, requested)
   return missingPluginPermissions(snapshot, [...REQUIRED]).length ? null : definition
+}
+function pasteReady() {
+  const definition = pluginRegistry.getPluginDefinition(TARGET.pluginId, 'production')
+  if (!isCurrentBundledDefinition(TARGET.pluginId, TARGET.source, definition)) return false
+  const requested = pluginRegistry.getPluginPermissions(TARGET.pluginId, TARGET.source)
+  if (!PASTE_REQUIRED.every((permission) => requested.includes(permission))) return false
+  const snapshot = getPluginPermissionSnapshot(TARGET.source, TARGET.pluginId, requested)
+  return missingPluginPermissions(snapshot, [...PASTE_REQUIRED]).length === 0
 }
 function nativeSnapshot(view: CleanAgentHudView) {
   const settings = useAppStore.getState().settings
@@ -53,6 +62,8 @@ export function installCleanAgentHudHost(): () => void {
     write: (text, isSensitive, signal) => isSensitive
       ? writeClipboardText(text, { sensitive: true, signal })
       : writeTextWithoutHistory(text, signal),
+    canPaste: pasteReady,
+    paste: (sessionId, revision) => invoke('text_result_hud_paste', { sessionId, revision }).then(() => undefined),
     present: (view, fullText) => invoke<boolean>('text_result_hud_present', { snapshot: nativeSnapshot(view), fullText })
       .then((accepted) => { if (!accepted) throw new Error('Text result HUD rejected the session') }),
     activate: (view) => invoke<number | null>('text_result_hud_activate', { sessionId: view.sessionId, revision: view.revision }),
@@ -99,6 +110,7 @@ export function installCleanAgentHudHost(): () => void {
     if (!alive || payload.product !== 'clean-agent') return
     const expected = { sessionId: payload.sessionId, revision: payload.revision }
     if (payload.action === 'copy') void session.copyAndClose(expected)
+    else if (payload.action === 'paste') void session.pasteAndClose(expected)
     else void session.cancelExpected(expected)
   }).then((stop) => { if (alive) stopAction = stop; else stop() }).catch(() => undefined)
   setTimeout(() => { void sync() }, 0)
