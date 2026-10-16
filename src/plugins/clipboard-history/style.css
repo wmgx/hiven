@@ -55,6 +55,17 @@
   font-size: 11.5px;
 }
 
+.clipboard-history-filter-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.clipboard-history-time-filter {
+  padding-top: 3px;
+  border-top: 1px solid color-mix(in srgb, var(--hiven-color-border) 68%, transparent);
+}
+
 .clipboard-history-filter .hiven-ui-segmented-item {
   flex: 0 0 auto;
   min-width: max-content;

@@ -429,6 +429,7 @@ export function SegmentedControl({ options, value, onChange, className, disabled
           key={option.value}
           type="button"
           className={cx('hiven-ui-segmented-item', option.value === value && 'is-active')}
+          aria-pressed={option.value === value}
           disabled={disabled}
           onClick={() => onChange(option.value)}
         >

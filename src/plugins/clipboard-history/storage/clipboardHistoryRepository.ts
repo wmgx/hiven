@@ -2,10 +2,10 @@ import type { PluginPrivateStorageApi } from '@hiven/plugin'
 import { getCachedIndex, setCachedIndex, clearCachedIndex } from './clipboardHistoryCache'
 import { matchesClipboardHistorySearch, type ClipboardHistorySearchMatchMode } from './clipboardHistorySearch'
 import { resolveClipboardHistoryRetentionMonths } from '../settings/model'
-import { createPagedHistoryStore, ROOT, ITEM, META, ORDER, FREQUENT, TRASH, TRASH_ID, GC, metadata, putMetadata, removeMetadata, hashKey, trashKey, blobIds, type HistoryMetadata, type TrashRecord, type Operation } from './clipboardHistoryPagedStore'
+import { createPagedHistoryStore, ROOT, ITEM, META, ORDER, FREQUENT, TRASH, TRASH_ID, GC, metadata, putMetadata, removeMetadata, hashKey, trashKey, blobIds, invert, type HistoryMetadata, type TrashRecord, type Operation } from './clipboardHistoryPagedStore'
 import type { AddItemInput, ClipboardHistoryItem, ClipboardHistoryIndex, ClipboardHistoryPrunePolicy, PruneResult, ClipboardTextHistoryItem, ClipboardImageHistoryItem, ClipboardFilesHistoryItem } from './clipboardHistoryTypes'
 
-export type HistoryPageRequest = { query?: string; matchMode?: ClipboardHistorySearchMatchMode; filter?: 'all' | 'text' | 'image' | 'files' | 'favorites' | 'frequent' | 'trash'; frequentThreshold?: number; cursor?: string; limit?: number; signal?: AbortSignal }
+export type HistoryPageRequest = { query?: string; matchMode?: ClipboardHistorySearchMatchMode; filter?: 'all' | 'text' | 'image' | 'files' | 'favorites' | 'frequent' | 'trash'; frequentThreshold?: number; copiedSince?: number; cursor?: string; limit?: number; signal?: AbortSignal }
 export type HistoryPage = { items: ClipboardHistoryItem[]; nextCursor?: string; scanned: number }
 export type HistoryRetentionStatus = { legacyProtectedCount: number; trashCount: number; migrationComplete: boolean; hasPurgeable: boolean }
 export type ClipboardHistoryRepository = {
@@ -97,6 +97,17 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
     const matchMode = request.matchMode ?? 'literal'
     const prefix = request.filter === 'trash' ? TRASH : request.filter === 'frequent' ? FREQUENT : ORDER
     if (request.cursor && !request.cursor.startsWith(prefix)) throw new Error('Invalid history cursor')
+    if (request.copiedSince !== undefined && !Number.isFinite(request.copiedSince)) throw new Error('Invalid history time range')
+    const copiedSince = request.copiedSince
+    // Only ordinary ORDER pages are guaranteed to be newest-first. Favorites
+    // and frequent views keep their own traversal semantics and never early-stop.
+    const timeOrdered = copiedSince !== undefined
+      && prefix === ORDER
+      && request.filter !== 'favorites'
+    const timeBoundaryEnd = timeOrdered ? `${ORDER}${invert(copiedSince)}/\uffff` : undefined
+    if (timeBoundaryEnd && request.cursor && request.cursor >= timeBoundaryEnd) {
+      return { items: [], scanned: 0 }
+    }
     const legacyEnabled = Boolean((await store.state()).legacyEnabledAt)
     const items: ClipboardHistoryItem[] = []
     let cursor = request.cursor
@@ -114,18 +125,23 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
             valuePaths: ['$.text'],
           })
         : await storage.kv.page<HistoryMetadata | TrashRecord>({ prefix, after: cursor, limit: Math.min(100, Math.max(32, limit - items.length)) })
-      const candidates: Array<{ meta: HistoryMetadata; lite: ClipboardHistoryItem; trash?: TrashRecord }> = []
+      const candidates: Array<{ key: string; meta: HistoryMetadata; lite: ClipboardHistoryItem; trash?: TrashRecord }> = []
+      let reachedTimeBoundary = false
       for (const row of page.entries) {
         requireCurrent(request.signal)
         cursor = row.key
         const trash = request.filter === 'trash' ? row.value as TrashRecord : undefined
         const meta = trash ? trash.metadata : row.value as HistoryMetadata
+        if (copiedSince !== undefined && meta.lastCopiedAt < copiedSince) {
+          if (timeOrdered) reachedTimeBoundary = true
+          continue
+        }
         if (request.filter === 'favorites' && !meta.isFavorite) continue
         if (request.filter === 'frequent' && (meta.pasteCount ?? 0) < (request.frequentThreshold ?? 3)) continue
         if (['text', 'image', 'files'].includes(request.filter ?? '') && meta.kind !== request.filter) continue
         const lite = indexToListItems({ entries: [meta], updatedAt: 0 })[0]
         if (!lite) continue
-        candidates.push({ meta, lite, trash })
+        candidates.push({ key: row.key, meta, lite, trash })
       }
       scanned += 'scanned' in page ? page.scanned : page.entries.length
       // Native search deliberately returns a broad Unicode candidate set.
@@ -157,14 +173,40 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
       }
       await flushBodies()
       requireCurrent(request.signal)
-      for (const { meta, lite, trash } of candidates) {
-        if (items.length >= limit) break
+      for (let index = 0; index < candidates.length; index += 1) {
+        const { key, meta, lite, trash } = candidates[index]
         if (query && !matchesClipboardHistorySearch(lite, query, matchMode)) {
           if (lite.kind !== 'text') continue
           const full = bodies.get(ITEM + meta.id)
           if (!full || !matchesClipboardHistorySearch(full, query, matchMode)) continue
         }
         items.push({ ...lite, ...(trash ? { deletedAt: trash.deletedAt, purgeAfter: trash.purgeAfter } : {}), legacyProtected: meta.legacy === true && !legacyEnabled })
+        if (items.length >= limit) {
+          const hasUnconsumedCandidates = index + 1 < candidates.length
+          const hasUnscannedRows = Boolean(page.nextCursor)
+          let continuationCursor: string | undefined
+          if (hasUnconsumedCandidates) continuationCursor = key
+          else if (!reachedTimeBoundary && hasUnscannedRows) {
+            continuationCursor = key
+            // ORDER is the only traversal whose next row can prove that every
+            // remaining item is outside the calendar range. A one-row metadata
+            // lookahead avoids a phantom empty page without reading item bodies.
+            if (timeOrdered && copiedSince !== undefined && cursor && scanned < 2048) {
+              const lookahead = await storage.kv.page<HistoryMetadata>({ prefix: ORDER, after: cursor, limit: 1 })
+              scanned += lookahead.entries.length
+              const next = lookahead.entries[0]
+              continuationCursor = next && next.value.lastCopiedAt >= copiedSince ? cursor : undefined
+            }
+          }
+          return {
+            items,
+            scanned,
+            ...(continuationCursor ? { nextCursor: continuationCursor } : {}),
+          }
+        }
+      }
+      if (reachedTimeBoundary || (timeBoundaryEnd && page.nextCursor && page.nextCursor >= timeBoundaryEnd)) {
+        return { items, scanned }
       }
       if (!page.nextCursor) return { items, scanned }
       cursor = page.nextCursor

@@ -99,6 +99,7 @@
     "test:clipboard-history-open-session": "node --experimental-strip-types scripts/test-clipboard-history-open-session.mts",
     "test:clipboard-history-runtime": "node scripts/test-clipboard-history-runtime.mjs",
     "test:clipboard-history-surface-paste-story": "node scripts/test-clipboard-history-surface-paste-story.mjs",
+    "test:clipboard-history-time-range": "node scripts/test-clipboard-history-time-range.mjs",
     "test:clipboard-history-integration": "node scripts/test-clipboard-history-integration.mjs",
     "test:clipboard-history": "npm run test:clipboard-history-storage && npm run test:clipboard-history-boundary && npm run test:clipboard-history-settings && npm run test:clipboard-history-runtime && npm run test:clipboard-history-integration && npm run test:clipboard-history-image-save",
     "test:plugin-goal-suite": "node scripts/test-plugin-goal-suite.mjs",

@@ -33,6 +33,11 @@ import { ArrowDown, ArrowUp } from 'lucide-react'
 import { resolveClipboardHistoryRetentionMonths, type ClipboardHistorySettings } from '../settings/model'
 import type { ClipboardHistoryItem } from '../storage/clipboardHistoryTypes'
 import type { ClipboardHistorySearchMatchMode } from '../storage/clipboardHistorySearch'
+import {
+  getClipboardHistoryCopiedSince,
+  getClipboardHistoryLocalDayKey,
+  type ClipboardHistoryTimeRange,
+} from '../storage/clipboardHistoryTimeRange'
 import { subscribeCachedIndex } from '../storage/clipboardHistoryCache'
 import { createClipboardHistoryRepository } from '../storage/clipboardHistoryRepository'
 import { readMatchingHistoryPage } from './clipboardHistoryPageReader'
@@ -135,6 +140,12 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const [imageSaveBusy, setImageSaveBusy] = useState(false)
   const imageSaveMountedRef = useRef(true)
   const [filter, setFilter] = useState<FilterKind>(() => initialFilter(props.surfaceId))
+  const [timeRange, setTimeRange] = useState<ClipboardHistoryTimeRange>('all')
+  const [localDayAnchor, setLocalDayAnchor] = useState(() => Date.now())
+  const copiedSince = useMemo(
+    () => getClipboardHistoryCopiedSince(timeRange, localDayAnchor),
+    [timeRange, localDayAnchor],
+  )
   const [loading, setLoading] = useState(true)
   const [fullTextSearchState, setFullTextSearchState] = useState<'idle' | 'loading' | 'error'>('idle')
   const [textEdit, setTextEdit] = useState<TextEditState | null>(null)
@@ -186,7 +197,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }, [textEdit?.id])
   useLayoutEffect(() => {
     if (!textEdit) editGeneration.current += 1
-  }, [selectedId, query, filter, textEdit?.id])
+  }, [selectedId, query, filter, timeRange, textEdit?.id])
   const reportUnsavedChanges = host.setUnsavedChanges
   useLayoutEffect(() => {
     reportUnsavedChanges?.(Boolean(textEdit && (textEdit.busy || textEdit.draft !== textEdit.original)))
@@ -223,7 +234,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     pasteNoticeGenerationRef.current += 1
     setPasteNotice(null)
     return () => { pasteNoticeGenerationRef.current += 1 }
-  }, [query, selectedId, filter, combining, host, settings.enabled])
+  }, [query, selectedId, filter, timeRange, combining, host, settings.enabled])
   const [mergeIds, setMergeIds] = useState<readonly string[]>([])
   // The selection owns its order and labels; searches and background index refreshes do not.
   const mergeItemsRef = useRef(new Map<string, ClipboardHistoryItem>())
@@ -591,24 +602,59 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const [retentionStatus, setRetentionStatus] = useState<{ legacyProtectedCount: number; trashCount: number; migrationComplete: boolean } | null>(null)
   const [legacyDialog, setLegacyDialog] = useState(false)
   const [retentionBusy, setRetentionBusy] = useState(false)
-  const criteriaKey = JSON.stringify([query.trim(), searchMatchMode, combining ? 'text' : filter, frequentThreshold])
+  const criteriaKey = JSON.stringify([
+    query.trim(), searchMatchMode, combining ? 'text' : filter, frequentThreshold, copiedSince ?? null,
+  ])
   const cursors = pagePath.key === criteriaKey ? pagePath.cursors : [undefined]
   const pageCursor = cursors.at(-1)
   const pageIndex = cursors.length - 1
   const pageGeneration = useRef(0)
   const refreshPage = useCallback(() => setRefreshEpoch((value) => value + 1), [])
+  const clearPage = useCallback(() => {
+    pageGeneration.current += 1
+    setPagePath({ key: '', cursors: [undefined] })
+    setNextCursor(undefined)
+    setRefreshEpoch((value) => value + 1)
+  }, [])
+  const syncLocalDay = useCallback(() => {
+    const now = Date.now()
+    if (getClipboardHistoryLocalDayKey(now) !== getClipboardHistoryLocalDayKey(localDayAnchor)) {
+      setLocalDayAnchor(now)
+      return true
+    }
+    return false
+  }, [localDayAnchor])
+  const resetPage = useCallback(() => {
+    syncLocalDay()
+    clearPage()
+  }, [clearPage, syncLocalDay])
   const changeSearchQuery = useCallback((value: string) => {
-    pageGeneration.current += 1
-    setPagePath({ key: '', cursors: [undefined] })
-    setNextCursor(undefined)
+    resetPage()
     setQuery(value)
-  }, [])
+  }, [resetPage])
   const toggleSearchMatchMode = useCallback(() => {
-    pageGeneration.current += 1
-    setPagePath({ key: '', cursors: [undefined] })
-    setNextCursor(undefined)
+    resetPage()
     setSearchMatchMode((current) => current === 'literal' ? 'all-terms' : 'literal')
-  }, [])
+  }, [resetPage])
+  const changeFilter = useCallback((value: string) => {
+    const next = value as FilterKind
+    resetPage()
+    if (next === 'trash') setTimeRange('all')
+    setFilter(next)
+  }, [resetPage])
+  const changeTimeRange = useCallback((value: string) => {
+    if (filter === 'trash') return
+    resetPage()
+    setTimeRange(value as ClipboardHistoryTimeRange)
+  }, [filter, resetPage])
+  const changePage = useCallback((direction: 'previous' | 'next') => {
+    if (syncLocalDay()) {
+      clearPage()
+      return
+    }
+    if (direction === 'previous') setPagePath({ key: criteriaKey, cursors: cursors.slice(0, -1) })
+    else if (nextCursor) setPagePath({ key: criteriaKey, cursors: [...cursors, nextCursor] })
+  }, [clearPage, criteriaKey, cursors, nextCursor, syncLocalDay])
 
   useLayoutEffect(() => {
     const generation = ++pageGeneration.current
@@ -625,7 +671,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       void readMatchingHistoryPage((cursor) => repository.getPage({
         query: query.trim(), matchMode: searchMatchMode,
         filter: combining ? 'text' : filter === 'favorite' ? 'favorites' : filter,
-        frequentThreshold, cursor, limit: 100, signal: controller.signal,
+        frequentThreshold, copiedSince, cursor, limit: 100, signal: controller.signal,
       }), pageCursor, controller.signal, (count) => { if (current()) setScannedCount(count) })
         .then((page) => {
           if (!current()) return
@@ -651,11 +697,20 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }, [repository, refreshEpoch, settings.enabled])
 
   useEffect(() => {
-    const unsubscribe = subscribeCachedIndex(() => refreshPage())
-    const onFocus = () => refreshPage()
+    const refreshVisibleDay = () => {
+      if (syncLocalDay()) clearPage()
+      else refreshPage()
+    }
+    const unsubscribe = subscribeCachedIndex(refreshVisibleDay)
+    const onFocus = () => refreshVisibleDay()
     window.addEventListener('focus', onFocus)
-    return () => { unsubscribe(); window.removeEventListener('focus', onFocus) }
-  }, [refreshPage])
+    window.addEventListener('pageshow', onFocus)
+    return () => {
+      unsubscribe()
+      window.removeEventListener('focus', onFocus)
+      window.removeEventListener('pageshow', onFocus)
+    }
+  }, [clearPage, refreshPage, syncLocalDay])
 
   const restoreExpired = async () => {
     const owner = host.deliveryFeedbackOwner
@@ -820,6 +875,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     setQuery('')
     setSearchMatchMode('literal')
     setFilter('all')
+    setTimeRange('all')
     setSelectedId(items[0]?.id ?? null)
     if (listRef.current) listRef.current.scrollTop = 0
     window.getSelection()?.removeAllRanges()
@@ -1389,22 +1445,36 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                 <div className="clipboard-history-merge-instruction">
                   <strong>{t('merge.chooseText')}</strong>
                 </div>
-              ) : <SegmentedControl
-                className="clipboard-history-filter"
-                value={filter}
-                onChange={(value) => setFilter(value as FilterKind)}
-                disabled={loading || Boolean(textEdit)}
-                aria-label={t('filter.label')}
-                options={[
-                  { value: 'all', label: t('filter.all') },
-                  { value: 'favorite', label: t('filter.favorite') },
-                  { value: 'frequent', label: t('filter.frequent') },
-                  { value: 'text', label: t('filter.text') },
-                  { value: 'image', label: t('filter.image') },
-                  { value: 'files', label: t('filter.files') },
-                  { value: 'trash', label: t('filter.trash') },
-                ]}
-              />}
+              ) : <div className="clipboard-history-filter-stack">
+                <SegmentedControl
+                  className="clipboard-history-filter"
+                  value={filter}
+                  onChange={changeFilter}
+                  disabled={loading || Boolean(textEdit)}
+                  aria-label={t('filter.label')}
+                  options={[
+                    { value: 'all', label: t('filter.all') },
+                    { value: 'favorite', label: t('filter.favorite') },
+                    { value: 'frequent', label: t('filter.frequent') },
+                    { value: 'text', label: t('filter.text') },
+                    { value: 'image', label: t('filter.image') },
+                    { value: 'files', label: t('filter.files') },
+                    { value: 'trash', label: t('filter.trash') },
+                  ]}
+                />
+                {filter !== 'trash' && <SegmentedControl
+                  className="clipboard-history-filter clipboard-history-time-filter"
+                  value={timeRange}
+                  onChange={changeTimeRange}
+                  disabled={loading || Boolean(textEdit)}
+                  aria-label={t('filter.timeLabel')}
+                  options={[
+                    { value: 'all', label: t('filter.timeAll') },
+                    { value: 'today', label: t('filter.today') },
+                    { value: 'last7Days', label: t('filter.last7Days') },
+                  ]}
+                />}
+              </div>}
             </div>
             <div ref={listRef} className="clipboard-history-list" data-launcher-scrollable aria-busy={fullTextSearchState === 'loading'} style={{ overflow: 'auto', flex: 1 }}
               onScrollCapture={(event) => {
@@ -1490,8 +1560,8 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
             </div>
             <SurfaceFooterHints className="clipboard-history-footer">
               <span role="status">{t('paging.page', { page: pageIndex + 1, count: items.length })}</span>
-              <Button type="button" disabled={loading || pageIndex === 0 || Boolean(textEdit)} onClick={() => setPagePath({ key: criteriaKey, cursors: cursors.slice(0, -1) })}>{t('paging.previous')}</Button>
-              <Button type="button" disabled={loading || !nextCursor || Boolean(textEdit)} onClick={() => { if (nextCursor) setPagePath({ key: criteriaKey, cursors: [...cursors, nextCursor] }) }}>
+              <Button type="button" disabled={loading || pageIndex === 0 || Boolean(textEdit)} onClick={() => changePage('previous')}>{t('paging.previous')}</Button>
+              <Button type="button" disabled={loading || !nextCursor || Boolean(textEdit)} onClick={() => changePage('next')}>
                 {t(query.trim() && nextCursor ? 'paging.searchOlder' : 'paging.next')}
               </Button>
               {fullTextSearchState === 'error' && <Button type="button" onClick={refreshPage}>{t('paging.retry')}</Button>}
