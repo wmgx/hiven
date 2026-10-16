@@ -5,7 +5,7 @@
 
 ## One-liner
 
-Launcher-only plugin host for **precise text work**: Global Launcher is the universal entry; plugins own product semantics (Diff, JSON, Feishu, clipboard history UI).
+Launcher-only plugin host for **precise text work**: Global Launcher is the universal entry; plugins own product semantics (Diff, JSON, clipboard history UI).
 
 ## Runtime windows
 
@@ -23,7 +23,7 @@ No main workbench / multi-pane IDE window.
 1. launcher-domain     item, ranking, controller, intent eligibility, output
 2. host-runtime        window, surface, context, permissions, storage, output router
 3. providers           apps, windows, processes, browser tabs, remote docs
-4. plugins             transforms, text-diff, clipboard-history, feishu, …
+4. plugins             transforms, text-diff, clipboard-history, …
 5. kits                pure algorithms (content, lineDiff, jsonSemantic) — no framework state
 ```
 

@@ -60,7 +60,7 @@
   "settings.pathCopied": "Path copied",
   "settings.copyFailed": "Copy failed",
   "settings.enableSearch": "Enable tab search",
-  "settings.enableSearchHelp": "When on, this plugin registers browser.chromium with the host (same Desktop Target protocol as future Feishu adapters).",
+  "settings.enableSearchHelp": "When on, this plugin registers browser.chromium with the host.",
   "settings.enableSearchToggle": "Register tab source with Global Launcher",
   "settings.history": "Browsing history",
   "settings.historyHelp": "When on, the extension sends recent history to Hiven for launcher search. Raw URLs stay local.",

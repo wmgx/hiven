@@ -26,7 +26,6 @@ import {
   setDesktopWindowRootSearchEnabled,
   subscribeDesktopWindowsUpdated,
 } from '../desktopControl/windows'
-import { getDesktopDocumentLauncherDynamicItems } from '../desktopTargets/collectDocumentLauncherItems'
 import { rankLauncherItems } from './ranking'
 import {
   collectDynamicItems,
@@ -67,12 +66,6 @@ const HOST_DYNAMIC_DEBOUNCE_MS = 0
  * Previously debounce was 0 on empty open and felt like a freeze on first show.
  */
 const HOST_EMPTY_OPEN_DELAY_MS = 120
-/**
- * Remote document Desktop Targets (feishu.docs / chats / contacts via lark-cli).
- * Longer debounce so intermediate IME / pinyin fragments do not stack CLI processes.
- * (Perf log showed 10–19s pile-ups when 3×CLI fired per partial query.)
- */
-const DOCUMENT_DYNAMIC_DEBOUNCE_MS = 520
 const JEV_DEBOUNCE_MS = 250
 const EMPTY_DYNAMIC_ITEMS: readonly LauncherItem[] = []
 
@@ -260,29 +253,20 @@ export function useLauncherSession({
   const [pluginDynamicItems, pluginInputIdentity, setPluginDynamicItems, setPluginDynamicItemsNextFrame] = useFrameBatchedLauncherItems()
   /** Host dynamic items (apps / workflow / bridge tabs) — isolated from plugin path. */
   const [hostDynamicItems, hostInputIdentity, setHostDynamicItems, setHostDynamicItemsNextFrame] = useFrameBatchedLauncherItems()
-  /**
-   * Slow remote document Desktop Targets (e.g. feishu.docs).
-   * Progressive + long debounce; never blocks host apps/windows path.
-   */
-  const [documentDynamicItems, documentInputIdentity, setDocumentDynamicItems, setDocumentDynamicItemsNextFrame] = useFrameBatchedLauncherItems()
   const controllerRef = useRef<LauncherController | null>(null)
   // Registry notifications revoke an open flow synchronously, before React's
   // next render/effect. Controller entry points also check the captured lifetime.
   useEffect(() => pluginRegistry.subscribe(() => controllerRef.current?.invalidateUnavailablePlugin()), [])
   const pluginQueryRef = useRef('')
   const hostQueryRef = useRef('')
-  const documentQueryRef = useRef('')
   const requestCloseRef = useRef(requestClose)
   const launcherOpenRef = useRef(open)
   launcherOpenRef.current = open
   const prevControllerStateRef = useRef<LauncherControllerState | null>(null)
   const pluginAbortRef = useRef<AbortController | null>(null)
   const hostAbortRef = useRef<AbortController | null>(null)
-  const documentAbortRef = useRef<AbortController | null>(null)
   /** Per-plugin partial results for the in-flight generation. */
   const pluginPartialsRef = useRef(new Map<string, LauncherItem[]>())
-  /** Per document-source partial results for the in-flight generation. */
-  const documentPartialsRef = useRef(new Map<string, LauncherItem[]>())
   /**
    * User-pinned row identity. Only set when the user moves selection (↑↓ / hover).
    * Default top-of-list highlight must stay unpinned so async partials re-rank freely.
@@ -356,15 +340,11 @@ export function useLauncherSession({
     setSelectedIndexState(0)
     setPluginDynamicItems([])
     setHostDynamicItems([])
-    setDocumentDynamicItems([])
     pluginQueryRef.current = ''
     hostQueryRef.current = ''
-    documentQueryRef.current = ''
     pluginPartialsRef.current.clear()
-    documentPartialsRef.current.clear()
     pluginAbortRef.current?.abort()
     hostAbortRef.current?.abort()
-    documentAbortRef.current?.abort()
     controllerRef.current?.reset()
   }, [normalizedHostId])
 
@@ -401,7 +381,7 @@ export function useLauncherSession({
     let cancelled = false
     queueMicrotask(() => {
       if (cancelled) return
-      // Drop plugin/document partials (query-bound). Keep last empty-open host
+      // Drop plugin partials (query-bound). Keep last empty-open host
       // apps/windows when the previous host query was also empty — avoids a
       // blank host strip + re-rank flash while the 120ms empty-open delay runs.
       setPluginDynamicItems([])
@@ -411,11 +391,8 @@ export function useLauncherSession({
         setHostDynamicItems([])
         hostQueryRef.current = ''
       }
-      setDocumentDynamicItems([])
       pluginQueryRef.current = ''
-      documentQueryRef.current = ''
       pluginPartialsRef.current.clear()
-      documentPartialsRef.current.clear()
       if (!controllerRef.current) {
         const nextController = new LauncherController({
           surfaceId: normalizedHostId,
@@ -688,94 +665,6 @@ export function useLauncherSession({
     }
   }, [allowDynamicItems, appSearchAliases, collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open, query, pluginRegistryVersion, pluginPermissions, desktopTargetsVersion])
 
-  // ── Remote document Desktop Targets (feishu.docs, …) — progressive, slow debounce ──
-  useEffect(() => {
-    if (!open) return
-    if (!allowDynamicItems) {
-      setDocumentDynamicItems([])
-      documentQueryRef.current = ''
-      documentPartialsRef.current.clear()
-      documentAbortRef.current?.abort()
-      return
-    }
-    const q = query.trim()
-    if (!q) {
-      setDocumentDynamicItems([])
-      documentQueryRef.current = ''
-      documentPartialsRef.current.clear()
-      documentAbortRef.current?.abort()
-      return
-    }
-    if (normalizedHostId !== 'global-launcher') {
-      setDocumentDynamicItems([])
-      return
-    }
-
-    documentQueryRef.current = q
-    setDocumentDynamicItems([])
-    documentPartialsRef.current.clear()
-    documentAbortRef.current?.abort()
-    const scheduledAt = launcherPerfNow()
-    logLauncherPerf('session:document-dynamic-schedule', {
-      queryLength: q.length,
-      debounceMs: DOCUMENT_DYNAMIC_DEBOUNCE_MS,
-    })
-    const timer = window.setTimeout(() => {
-      if (documentQueryRef.current !== q) return
-      logLauncherPerfDuration('session:document-dynamic-debounce-wait', scheduledAt, {
-        queryLength: q.length,
-        expectedWait: true,
-      })
-      documentAbortRef.current?.abort()
-      const abortController = new AbortController()
-      documentAbortRef.current = abortController
-      documentPartialsRef.current = new Map()
-      const startedAt = launcherPerfNow()
-      void getDesktopDocumentLauncherDynamicItems(
-        {
-          query: q,
-          locale,
-          surfaceId: normalizedHostId,
-          signal: abortController.signal,
-        },
-        {
-          onPartial: (update) => {
-            if (abortController.signal.aborted) return
-            if (documentQueryRef.current !== q) return
-            const mergeStartedAt = launcherPerfNow()
-            documentPartialsRef.current.set(update.sourceId, update.items)
-            const merged = filterDynamicForSurface(mergePartials(documentPartialsRef.current, true), normalizedHostId)
-            setDocumentDynamicItemsNextFrame(merged, q)
-            logLauncherPerfDuration('session:document-dynamic-partial-apply', mergeStartedAt, {
-              sourceId: update.sourceId,
-              itemCount: update.items.length,
-              mergedCount: merged.length,
-            })
-          },
-        },
-      )
-        .then((items) => {
-          if (abortController.signal.aborted) return
-          logLauncherPerfDuration('session:document-dynamic-items', startedAt, {
-            surfaceId: normalizedHostId,
-            queryLength: q.length,
-            itemCount: items.length,
-          })
-          if (documentQueryRef.current !== q) return
-          const merged = documentPartialsRef.current.size > 0
-            ? mergePartials(documentPartialsRef.current, true)
-            : items
-          setDocumentDynamicItems(filterDynamicForSurface(merged, normalizedHostId), q)
-        })
-        .catch(() => { /* aborted or failed */ })
-    }, DOCUMENT_DYNAMIC_DEBOUNCE_MS)
-
-    return () => {
-      window.clearTimeout(timer)
-      documentAbortRef.current?.abort()
-    }
-  }, [allowDynamicItems, locale, normalizedHostId, open, query])
-
   // When offline window-title enrich finishes, re-collect host items so titles/icons update.
   useEffect(() => {
     if (!open || !allowDynamicItems) return
@@ -832,19 +721,17 @@ export function useLauncherSession({
     ? pluginDynamicItems : EMPTY_DYNAMIC_ITEMS
   const visibleHostDynamicItems = hostInputIdentity === inputIdentity && hostDynamicItems.length > 0
     ? hostDynamicItems : EMPTY_DYNAMIC_ITEMS
-  const visibleDocumentDynamicItems = documentInputIdentity === rankQuery && documentDynamicItems.length > 0
-    ? documentDynamicItems : EMPTY_DYNAMIC_ITEMS
 
   const resolvedCandidateItems = useMemo<LauncherItem[]>(() => {
     // Any live result wins over its rehydrated recent snapshot. Keeping both
     // also creates duplicate React keys, which corrupts visible quick-run indices.
-    const liveKeys = new Set([...staticCandidates, ...visiblePluginDynamicItems, ...visibleHostDynamicItems, ...visibleDocumentDynamicItems].map((item) => item.systemKey))
+    const liveKeys = new Set([...staticCandidates, ...visiblePluginDynamicItems, ...visibleHostDynamicItems].map((item) => item.systemKey))
     const recentsDeduped = persistableRecentItems.filter((item) => !liveKeys.has(item.systemKey))
     const items = [...staticCandidates, ...visiblePluginDynamicItems, ...visibleHostDynamicItems,
-      ...recentsDeduped, ...visibleDocumentDynamicItems]
+      ...recentsDeduped]
     return mapCandidate ? items.map(mapCandidate) : items
   }, [query, objectBlockText, visiblePluginDynamicItems, visibleHostDynamicItems,
-    visibleDocumentDynamicItems, staticCandidates, persistableRecentItems, mapCandidate])
+    staticCandidates, persistableRecentItems, mapCandidate])
 
   const availableItems = useMemo(() => {
     void pluginPermissions

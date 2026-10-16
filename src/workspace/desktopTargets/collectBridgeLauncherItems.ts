@@ -2,7 +2,7 @@
  * Collect D3 desktop bridge targets (browser tabs + history) → LauncherItem for host dynamic path.
  *
  * IMPORTANT: only runs the browser.chromium provider. Must not call collectDesktopTargets()
- * over *all* providers — slow plugin sources (e.g. feishu.docs CLI search) would block the
+ * over *all* providers — slow plugin sources (e.g. remote CLI search) would block the
  * host dynamic path and then be discarded by the chromium-only filter.
  */
 

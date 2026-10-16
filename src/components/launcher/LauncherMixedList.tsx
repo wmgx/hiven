@@ -293,7 +293,7 @@ function getLauncherItemKindLabel(item: LauncherMixedItem, locale: Locale) {
 
 /**
  * True when the kind pill carries real signal (open tab, history, window,
- * process, Feishu doc, …) rather than the generic App/Command fallback that
+ * process, document, …) rather than the generic App/Command fallback that
  * every plain command row would otherwise show.
  */
 function hasMeaningfulKindTag(item: LauncherMixedItem): boolean {
@@ -308,7 +308,7 @@ function isAppIconRef(icon?: string): boolean {
   return icon?.startsWith('app-icon:') === true
 }
 
-/** Feishu person/group avatars (https / data-URL) need the avatar plate, not lucide color. */
+/** Person/group avatars (https / data-URL) need the avatar plate, not lucide color. */
 function isRemoteAvatarIcon(icon?: string): boolean {
   if (!icon) return false
   return (

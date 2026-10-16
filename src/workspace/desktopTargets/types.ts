@@ -34,10 +34,6 @@ export type DesktopTarget = {
     faviconKey?: string
     cpuPercent?: number
     memoryBytes?: number
-    /** Feishu chat id (oc_…) for AppLink openChatId. */
-    openChatId?: string
-    /** Feishu user open_id (ou_…) for AppLink openId. */
-    openId?: string
     /** Stable entity id for plugin-side indexes. */
     entityId?: string
   }
@@ -50,15 +46,14 @@ export type DesktopTarget = {
   /**
    * Optional kind pill label override. Host supplies protocol defaults for
    * `kind` (App/Window/Document/…); providers may override for product copy
-   * (e.g. “飞书联系人”) without host hardcoding product strings.
+   * (e.g. a product-specific contact label) without host hardcoding product strings.
    */
   kindLabel?: string
   kindLabelI18n?: Partial<Record<Locale, string>>
   /**
    * Optional ranking bias for this target (product policy).
    * Host clamps |bias| so it cannot overturn a full match tier.
-   * Example: feishu docs use a small negative bias so plugin commands win on
-   * the same match tier without hardcoding Feishu in host ranking.
+   * A small negative bias lets plugin commands win on the same match tier.
    */
   scoreBias?: number
   /** Secondary recall result; live/primary targets always rank ahead of it. */
@@ -66,7 +61,7 @@ export type DesktopTarget = {
   /**
    * When true, host may persist this selection for cross-session recents /
    * ranking. Requires a stable identity (`persistKey` or stable `id`).
-   * Product decides what is durable (e.g. feishu person/chat/doc); host stores
+   * Product decides what is durable (e.g. a contact or document); host stores
    * only a snapshot and never invents plugin semantics.
    */
   persistable?: boolean

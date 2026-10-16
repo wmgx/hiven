@@ -174,12 +174,7 @@ function isRemoteImageIcon(iconName: string): boolean {
 function isCircularRemoteIcon(src: string): boolean {
   // Person/chat avatars & generated initials look better circular.
   if (src.startsWith('data:image/svg+xml')) return true
-  // Feishu/Lark CDN hosts for profile + group avatars (imfile, s*-imfile, etc.).
-  if (
-    /imfile\.feishucdn|feishucdn\.com|larksuite\.com|larkusercontent\.com|byteimg\.com|avatar/i.test(
-      src,
-    )
-  ) {
+  if (/avatar/i.test(src)) {
     return true
   }
   return false

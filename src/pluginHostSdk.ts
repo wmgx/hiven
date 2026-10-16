@@ -84,7 +84,7 @@ export type PluginHostI18n = {
 }
 
 export type UrlSchemeRegistryApi = {
-  /** Register non-http schemes this plugin may open via host openUrl (e.g. lark, feishu). */
+  /** Register non-http schemes this plugin may open via host openUrl (e.g. a chat app's custom scheme). */
   register: (pluginId: string, schemes: string[]) => void
   unregister: (pluginId: string) => void
   list: () => string[]
@@ -119,7 +119,7 @@ export type PluginHostSdk = {
   textError: typeof textError
   defineTextCommand: typeof defineTextCommand
   /**
-   * Desktop Target protocol: plugins register providers (browser tabs, Feishu, …)
+   * Desktop Target protocol: plugins register providers (browser tabs, …)
    * that feed Global Launcher mix — not parallel dynamicItems lists.
    */
   desktopTargets: DesktopTargetsHostApi

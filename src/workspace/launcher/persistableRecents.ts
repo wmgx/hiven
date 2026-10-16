@@ -21,7 +21,7 @@ export type PersistableLauncherPayload = {
   title: string
   subtitle?: string
   icon?: string
-  /** Open URL (https / lark / feishu scheme). */
+  /** Open URL (https or a registered custom scheme). */
   url: string
   appName?: string
   appStableKey?: string

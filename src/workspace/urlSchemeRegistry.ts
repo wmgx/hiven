@@ -1,7 +1,7 @@
 /**
  * Host-layer URL scheme allowlist for openUrl.
  *
- * Plugins register schemes they need (e.g. feishu → lark/feishu).
+ * Plugins register schemes they need (e.g. a chat app's custom scheme).
  * Host openExternalUrl routes:
  *   - built-in http(s)/mailto/tel → plugin-shell open (Tauri default scope)
  *   - plugin-registered schemes → open_system_url (native open, no Tauri shell scope change)

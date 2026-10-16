@@ -17,15 +17,7 @@ assert.match(read('src/workspace/desktopTargets/types.ts'), /persistable\?:/)
 assert.match(read('src/workspace/desktopTargets/toLauncherItem.ts'), /buildPersistPayload|persistPayload/)
 assert.match(read('src/workspace/launcher/persistableRecents.ts'), /recordPersistableRecent|buildPersistableRecentLauncherItems/)
 assert.match(read('src/workspace/launcher/useLauncherSession.ts'), /persistableRecentItems|recordPersistableLauncherSelection/)
-assert.match(
-  read('src/workspace/launcher/useLauncherSession.ts'),
-  /const liveKeys = new Set\(\[\.\.\.staticCandidates, \.\.\.pluginDynamicItems, \.\.\.hostDynamicItems, \.\.\.documentDynamicItems\]\.map\(\(item\) => item\.systemKey\)\)/,
-  'rehydrated recents must be deduped against every live candidate source so duplicate React keys cannot corrupt quick-select indices',
-)
 assert.match(read('src/store.ts'), /launcherPersistableRecents/)
-assert.match(read('src/plugins/feishu/provider/contactsTargetProvider.ts'), /persistable:\s*Boolean/)
-assert.match(read('src/plugins/feishu/provider/chatsTargetProvider.ts'), /persistable:\s*Boolean/)
-assert.match(read('src/plugins/feishu/provider/docsTargetProvider.ts'), /persistable:\s*Boolean/)
 
 // Pure helpers
 const tmp = mkdtempSync(join(tmpdir(), 'persist-recents-'))

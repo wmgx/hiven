@@ -12,7 +12,6 @@ const read = (p) => readFileSync(join(root, p), 'utf8')
 
 const perf = read('src/workspace/launcher/perf.ts')
 const shell = read('src/workspace/pluginShell.ts')
-const docs = read('src/workspace/desktopTargets/collectDocumentLauncherItems.ts')
 const bridge = read('src/workspace/desktopTargets/collectBridgeLauncherItems.ts')
 const session = read('src/workspace/launcher/useLauncherSession.ts')
 const rust = read('src-tauri/src/lib.rs')
@@ -26,17 +25,10 @@ assert.match(perf, /beginLauncherPerfOpenSession|endLauncherPerfOpenSession/, 'o
 assert.match(perf, /openId/, 'forwarded samples must include openId field')
 
 assert.match(shell, /plugin-shell:run/, 'shell.run must log duration')
-assert.match(docs, /document-target:provider-list/, 'document collect must time provider.list')
-assert.match(docs, /document-target:collect-total/, 'document collect total required')
 assert.match(bridge, /bridge-target:collect/, 'bridge collect timing required')
-assert.match(session, /session:document-dynamic-partial-apply|session:host-dynamic-partial-apply/, 'session partial apply timing')
+assert.match(session, /session:host-dynamic-partial-apply/, 'session partial apply timing')
 assert.match(session, /useFrameBatchedLauncherItems/, 'dynamic partial rows must batch commits by animation frame')
-assert.match(session, /setPluginDynamicItemsNextFrame|setDocumentDynamicItemsNextFrame/, 'progressive providers must use the frame batcher')
-assert.match(
-  session,
-  /documentQueryRef\.current = q\s+setDocumentDynamicItems\(\[\]\)[\s\S]{0,300}window\.setTimeout/,
-  'query changes must clear stale document rows before the remote debounce',
-)
+assert.match(session, /setPluginDynamicItemsNextFrame/, 'progressive providers must use the frame batcher')
 assert.match(session, /installLauncherPerfDebugApi/, 'session must install debug API')
 
 assert.match(rust, /spawn_blocking/, 'native shell must use spawn_blocking')

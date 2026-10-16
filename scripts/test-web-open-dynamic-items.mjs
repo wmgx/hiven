@@ -151,11 +151,6 @@ assert.match(
   /launcherInputIdentity\(query[\s\S]*query\.trim\(\), objectBlockText\?\.trim\(\)[\s\S]*inputIdentity:\s*string \| null; items:\s*LauncherItem\[\]/,
   'dynamic result batches must retain the query and Object Block identity that produced them',
 )
-assert.match(
-  launcherSessionSource,
-  /visiblePluginDynamicItems = pluginInputIdentity === inputIdentity[\s\S]*visibleHostDynamicItems = hostInputIdentity === inputIdentity[\s\S]*visibleDocumentDynamicItems = documentInputIdentity === rankQuery[\s\S]*\.\.\.visiblePluginDynamicItems[\s\S]*\.\.\.visibleHostDynamicItems[\s\S]*\.\.\.visibleDocumentDynamicItems/,
-  'ranking and execution must exclude dynamic rows produced for stale inputs',
-)
 
 // Non-blocking favicon path
 assert.match(

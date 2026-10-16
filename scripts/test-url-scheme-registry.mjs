@@ -16,7 +16,6 @@ const read = (p) => readFileSync(join(root, p), 'utf8')
 assert.match(read('src/workspace/urlSchemeRegistry.ts'), /registerUrlSchemes|routeHostOpenUrl/)
 assert.match(read('src/pluginHostSdk.ts'), /urlSchemes/)
 assert.match(read('src/workspace/effectRunner.ts'), /routeHostOpenUrl|urlSchemeRegistry/)
-assert.match(read('src/plugins/feishu/index.tsx'), /urlSchemes\.register|FEISHU_OPEN_SCHEMES|lark/)
 // Must NOT put product schemes into tauri shell open config
 const tauriConf = read('src-tauri/tauri.conf.json')
 assert.doesNotMatch(
@@ -34,17 +33,6 @@ assert.doesNotMatch(
   openFn,
   /is_feishu_scheme|Lark\.app|lark:\/\/|feishu:\/\//,
   'open_system_url must not hardcode Feishu/Lark delivery',
-)
-// Plugin owns dual open for navigation
-assert.match(
-  read('src/plugins/feishu/domains/windowFocus.ts'),
-  /Lark\.app/,
-  'feishu plugin must deliver deep link via open -a Lark.app',
-)
-assert.match(
-  read('src/plugins/feishu/provider/contactsTargetProvider.ts'),
-  /openChatId.*buildChatOpenUrl|buildChatOpenUrl\(openChatId\)/,
-  'contacts must try p2p openChatId',
 )
 
 let ts

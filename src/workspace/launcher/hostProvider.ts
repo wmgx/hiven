@@ -50,7 +50,7 @@ export function registerHostLauncherProviders(): void {
     // Window focus: both static L2 command and first-level dynamic mix (below).
     // Empty open: apps + cached windows + cached browser recommendations. No workflow.
     // Query present: apps + windows + bridge tabs in parallel.
-    // Slow remote document sources (feishu.docs) are NOT collected here — they stream
+    // Slow remote document sources (remote document providers) are NOT collected here — they stream
     // on a separate progressive path in useLauncherSession so typing stays responsive.
     const q = ctx.query.trim()
     return measureLauncherPerf(

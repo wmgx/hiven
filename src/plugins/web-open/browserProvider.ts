@@ -2,7 +2,7 @@ import { createBrowserIndexRefresh } from './browserIndexRefresh'
 import { browserUrlPresentation } from './browserUrlPresentation'
 /**
  * browser.chromium DesktopTargetProvider — implemented via host SDK only
- * (no workspace deep imports). Same protocol Feishu / editor adapters will use.
+ * (no workspace deep imports).
  */
 
 import {
