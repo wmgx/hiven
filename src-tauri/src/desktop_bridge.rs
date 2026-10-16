@@ -287,6 +287,11 @@ fn is_fresh(last: Option<Instant>) -> bool {
     }
 }
 
+/// Loopback-only bind address; the bridge must never listen on other interfaces.
+fn bridge_bind_addr() -> String {
+    format!("127.0.0.1:{}", DESKTOP_BRIDGE_PORT)
+}
+
 /// Start the loopback HTTP bridge once (idempotent).
 pub fn start_desktop_bridge_server(app_handle: tauri::AppHandle) {
     let _ = APP_HANDLE.set(app_handle);
@@ -299,7 +304,7 @@ pub fn start_desktop_bridge_server(app_handle: tauri::AppHandle) {
         .spawn(move || {
             // Dropped on bind failure, server exit, panic, or failed thread creation.
             let lease = lease;
-            let addr = format!("127.0.0.1:{}", DESKTOP_BRIDGE_PORT);
+            let addr = bridge_bind_addr();
             let listener = match TcpListener::bind(&addr) {
                 Ok(l) => l,
                 Err(error) => {
@@ -717,7 +722,10 @@ fn apply_snapshot(source_id: &str, body: &str) -> Result<(u16, String), String> 
             );
         }
     }
-    Ok((200, serde_json::json!({ "ok": true, "count": count }).to_string()))
+    Ok((
+        200,
+        serde_json::json!({ "ok": true, "count": count }).to_string(),
+    ))
 }
 
 fn take_commands(source_id: &str) -> Result<(u16, String), String> {
@@ -1297,6 +1305,59 @@ mod tests {
             .unwrap();
             assert_eq!(response.0, 403);
         }
+    }
+
+    #[test]
+    fn bridge_binds_loopback_only() {
+        assert!(bridge_bind_addr().starts_with("127.0.0.1:"));
+    }
+
+    #[test]
+    fn validation_rejects_foreign_origin_and_bad_token() {
+        let token = super::validation_state().lock().unwrap().token.clone();
+        let session = "/v1/validation/session";
+        let ok = route_validation_request("GET", session, "", Some("http://localhost:1420"))
+            .unwrap()
+            .unwrap();
+        assert_eq!(ok.0, 200);
+        for origin in [Some("https://evil.example"), None] {
+            let r = route_validation_request("GET", session, "", origin)
+                .unwrap()
+                .unwrap();
+            assert_eq!(r.0, 400);
+            assert!(r.1.contains("origin not allowed"));
+        }
+        let bad = route_validation_request(
+            "GET",
+            "/v1/validation/requests?token=wrong",
+            "",
+            Some("http://localhost:1420"),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(bad.0, 400);
+        let good = route_validation_request(
+            "GET",
+            &format!("/v1/validation/requests?token={token}"),
+            "",
+            Some("http://localhost:1420"),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(good.0, 200);
+    }
+
+    #[test]
+    fn validation_routes_are_debug_build_only() {
+        let (status, _) = route_request(
+            "GET",
+            "/v1/validation/session",
+            String::new(),
+            Some("http://localhost:1420"),
+        )
+        .unwrap();
+        // Debug: handled by the validation router (200). Release: falls through to 404.
+        assert_eq!(status, if cfg!(debug_assertions) { 200 } else { 404 });
     }
 
     #[test]
