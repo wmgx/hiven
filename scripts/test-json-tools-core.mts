@@ -60,18 +60,14 @@ assert.equal(invalidUrl.ok, false)
 if (!invalidUrl.ok) assert.equal(invalidUrl.code, 'urlRequired')
 console.log('json-tools core tests passed')
 
-// Guard the exported entrypoints too: editor tools and previews bypass processJson.
-for (const source of ['9007199254740993', '0.12345678901234567891', '1e400', '1e-400', '-0']) {
-  const input = `{"value":${source},"label":"unchanged"}`
-  for (const operation of ['format', 'compact', 'sort'] as const) {
-    const result = processJson(input, { operation, sortKeys: true })
-    assert.equal(result.ok, false, `${operation}: ${source}`)
-    if (!result.ok) assert.equal(result.code, 'numberFidelity')
-  }
-  for (const transform of [jsonCore.jsonPrettify, jsonCore.jsonCompact, sortJsonKeys]) {
-    assert.throws(() => transform(input), error => error instanceof Error && error.message === 'numberFidelity')
-  }
+// int64 and high-precision decimals survive format / compact / sort verbatim.
+for (const source of ['9007199254740993', '12345678901234567890', '0.12345678901234567891', '1e400', '-0']) {
+  const input = `{"value":${source},"label":"x"}`
+  assert.equal(jsonCore.jsonPrettify(input), `{\n  "value": ${source},\n  "label": "x"\n}`, source)
+  assert.equal(jsonCore.jsonCompact(input), input, source)
+  assert.equal(sortJsonKeys(input), `{\n  "label": "x",\n  "value": ${source}\n}`, source)
 }
+assert.equal(jsonCore.jsonCompact('[9007199254740993,"9007199254740993"]'), '[9007199254740993,"9007199254740993"]')
 for (const operation of ['format', 'compact', 'sort'] as const) {
   const input = '{"z":0.1,"n":1e3,"id":"9007199254740993","escaped":"\\\"-0"}'
   const result = processJson(input, { operation, sortKeys: true })

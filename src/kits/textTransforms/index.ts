@@ -1,4 +1,6 @@
-export { hasJsonNumberRisk } from '../jsonNumberFidelity.ts'
+import { parseJsonLossless, stringifyJsonLossless } from '../jsonLossless.ts'
+
+export { parseJsonLossless, stringifyJsonLossless }
 
 export function sortKeys(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortKeys)
@@ -12,12 +14,12 @@ export function sortKeys(value: unknown): unknown {
 }
 
 export function formatJson(text: string, indent = 2, shouldSort = false): string {
-  const value = JSON.parse(text)
-  return JSON.stringify(shouldSort ? sortKeys(value) : value, null, indent)
+  const value = parseJsonLossless(text)
+  return stringifyJsonLossless(shouldSort ? sortKeys(value) : value, indent)
 }
 
 export function compactJson(text: string): string {
-  return JSON.stringify(JSON.parse(text))
+  return stringifyJsonLossless(parseJsonLossless(text))
 }
 
 export function urlEncode(text: string): string {

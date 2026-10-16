@@ -217,9 +217,7 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
 
   const liveJson = useMemo(() => [parseJson(originalText), parseJson(modifiedText)], [originalText, modifiedText, parseJson])
   const jsonPair = useMemo(() => [parseJson(debouncedOriginal), parseJson(debouncedModified)], [debouncedOriginal, debouncedModified, parseJson])
-  const numberRisk = liveJson.some(side => side.reason === 'number-fidelity')
-  const comparedNumberRisk = jsonPair.some(side => side.reason === 'number-fidelity')
-  const jsonAvailable = !numberRisk && jsonPair.every(side => side.ok)
+  const jsonAvailable = jsonPair.every(side => side.ok)
 
   const renderMode: DiffMode = diffMode === 'json' && jsonAvailable ? 'json' : 'text'
 
@@ -265,7 +263,6 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
   /** Pretty-print both sides without sorting keys; only rewrites parseable sides. */
   const handleFormat = useCallback(() => {
     const { original, modified } = currentTexts.current
-    if ([parseJson(original), parseJson(modified)].some(side => side.reason === 'number-fidelity')) return
     const left = formatJsonPreserveKeyOrder(original)
     const right = formatJsonPreserveKeyOrder(modified)
     if (left != null) setOriginalText(left)
@@ -274,8 +271,8 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
 
   const canFormat = useMemo(() => {
     if (diffMode !== 'json') return false
-    return !numberRisk && !comparedNumberRisk && liveJson.some(side => side.ok)
-  }, [liveJson, numberRisk, comparedNumberRisk, diffMode])
+    return liveJson.some(side => side.ok)
+  }, [liveJson, diffMode])
 
   const handleDetach = useCallback(() => {
     leaveSurface()
@@ -434,7 +431,7 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
       {diffMode === 'json' && renderMode === 'text' && (
         <div className="td-fallback" role="status">
           <span className="td-fallback-dot" aria-hidden />
-          {t(numberRisk || comparedNumberRisk ? 'diff.numberFidelityFallback' : 'diff.fallbackToText')}
+          {t('diff.fallbackToText')}
         </div>
       )}
 

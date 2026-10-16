@@ -6,7 +6,7 @@
  * - Arrays: ordered by index
  */
 
-import { hasJsonNumberRisk } from '../jsonNumberFidelity'
+import { isLosslessNumber, losslessScalarEquals, parseJsonLossless, stringifyJsonLossless } from '../jsonLossless'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -40,7 +40,6 @@ export interface JsonParseResult {
   error?: string
   line?: number
   column?: number
-  reason?: 'number-fidelity'
 }
 
 export interface JsonDiffViewModel {
@@ -72,16 +71,15 @@ export function relaxJsonText(text: string): string {
 
 export function parseJson(text: string): JsonParseResult {
   const jsonText = text.replace(/^\uFEFF/, '')
-  if (hasJsonNumberRisk(jsonText)) return { ok: false, reason: 'number-fidelity', error: 'JSON number fidelity unavailable' }
   try {
-    return { ok: true, value: JSON.parse(jsonText) }
+    return { ok: true, value: parseJsonLossless(jsonText) as JsonValue }
   } catch {
     // Fall through to relaxed parse.
   }
 
   const relaxed = relaxJsonText(jsonText)
   try {
-    return { ok: true, value: JSON.parse(relaxed) }
+    return { ok: true, value: parseJsonLossless(relaxed) as JsonValue }
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Invalid JSON'
     const posMatch = msg.match(/position (\d+)/)
@@ -103,6 +101,7 @@ export function parseJson(text: string): JsonParseResult {
 function typeOf(value: JsonValue): string {
   if (value === null) return 'null'
   if (Array.isArray(value)) return 'array'
+  if (isLosslessNumber(value)) return 'number'
   return typeof value
 }
 
@@ -126,7 +125,7 @@ export function normalizeJson(value: JsonValue, _options: JsonDiffOptions = {}):
 }
 
 export function stableStringify(value: JsonValue, options: JsonDiffOptions = {}): string {
-  return JSON.stringify(normalizeJson(value, options), null, 2)
+  return stringifyJsonLossless(normalizeJson(value, options), 2)
 }
 
 /**
@@ -134,7 +133,7 @@ export function stableStringify(value: JsonValue, options: JsonDiffOptions = {})
  * Arrays keep index order. Comparison still ignores object key order.
  */
 export function displayStringify(value: JsonValue, _options: JsonDiffOptions = {}): string {
-  return JSON.stringify(normalizeJsonForDisplay(value), null, 2)
+  return stringifyJsonLossless(normalizeJsonForDisplay(value), 2)
 }
 
 /**
@@ -145,7 +144,7 @@ export function formatJsonPreserveKeyOrder(text: string): string | null {
   const parsed = parseJson(text)
   if (!parsed.ok || parsed.value === undefined) return null
   // JSON.stringify preserves insertion order from JSON.parse — do not sort keys.
-  return JSON.stringify(parsed.value, null, 2)
+  return stringifyJsonLossless(parsed.value, 2)
 }
 
 function normalizeJsonForDisplay(value: JsonValue): JsonValue {
@@ -187,7 +186,7 @@ export function computeJsonDiff(
     }
 
     if (origType !== 'object' && origType !== 'array') {
-      if (orig !== mod) {
+      if (!losslessScalarEquals(orig, mod)) {
         changes.push({
           kind: 'changed',
           path,
@@ -309,7 +308,7 @@ export function buildDiffTree(
     }
 
     if (origType !== 'object' && origType !== 'array') {
-      if (orig === mod) return { type: 'same', value: orig }
+      if (losslessScalarEquals(orig, mod)) return { type: 'same', value: orig }
       return { type: 'changed', oldValue: orig, newValue: mod }
     }
 
@@ -395,7 +394,7 @@ export type SideLine = {
 
 function fmtLines(value: JsonValue, depth: number, keyPrefix: string, comma: string): string[] {
   const indent = '  '.repeat(depth)
-  const lines = JSON.stringify(value, null, 2).split('\n')
+  const lines = stringifyJsonLossless(value, 2).split('\n')
   return lines.map((line, idx) => {
     const isFirst = idx === 0
     const isLast = idx === lines.length - 1

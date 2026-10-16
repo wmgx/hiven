@@ -128,25 +128,21 @@ function kinds(changes) {
 }
 
 {
-  // Numeric fidelity is a precondition for semantic comparison and rewriting.
-  // Even exactly representable integers outside the safe range are declined:
-  // callers must not infer that every adjacent identifier remains distinguishable.
+  // Numbers beyond JS precision are kept verbatim by parse, format and diff.
   const risky = [
-    '9007199254740992', '9007199254740993', '-9007199254740992',
-    '0.12345678901234567890', '0.12345678901234567891',
-    '1.0000000000000001', '1e309', '-1e309', '1e-400', '-1e-400',
-    '-0', '-0.0', '-0e999999999999999999999999',
+    '9007199254740993', '-9007199254740993', '12345678901234567890',
+    '0.12345678901234567891', '1e309', '1e-400', '-0',
   ]
   for (const token of risky) {
     for (const text of [token, `{"nested":[{"value":${token}}]}`, `\uFEFF{"value":${token},}`]) {
       const parsed = parseJson(text)
-      assert.equal(parsed.ok, false, `must decline lossy numeric source: ${text}`)
-      assert.equal(parsed.reason, 'number-fidelity', `must explain numeric fallback: ${text}`)
-      assert.equal(formatJsonPreserveKeyOrder(text), null, `must not rewrite numeric source: ${text}`)
-      assert.equal(computeJsonLineHighlights(text, '{"value":1}'), null, 'unsafe left requests text fallback')
-      assert.equal(computeJsonLineHighlights('{"value":1}', text), null, 'unsafe right requests text fallback')
+      assert.equal(parsed.ok, true, `lossless numeric source must parse: ${text}`)
+      assert.ok(formatJsonPreserveKeyOrder(text).includes(token), `format keeps ${token}`)
     }
   }
+  const bigDiff = computeJsonLineHighlights('{"id":9007199254740992}', '{"id":9007199254740993}')
+  assert.equal(bigDiff.changes.length, 1, 'adjacent big integers must differ')
+  assert.deepEqual(computeJsonLineHighlights('{"id":9007199254740993}', '{"id":9007199254740993}').changes, [])
 
   const safe = [
     '0.1', '0.10', '1e3', '1000.00', '9007199254740991', '-9007199254740991',
@@ -170,7 +166,6 @@ function kinds(changes) {
   const text = JSON.stringify(strings)
   assert.equal(parseJson(text).ok, true, 'numbers inside strings are not numeric risks')
   assert.deepEqual(JSON.parse(formatJsonPreserveKeyOrder(text)), strings, 'format preserves quoted content')
-  assert.equal(parseJson(text.replace(/}$/, ',"actual":9007199254740993}')).reason, 'number-fidelity')
 
   const equivalents = computeJsonLineHighlights(
     '{"a":0.10,"b":1e3,"nested":{"z":1.0,"a":0e999999999999999999999999}}',
