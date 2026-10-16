@@ -27,6 +27,7 @@
     "test:intent-engine": "node scripts/test-intent-engine.mjs",
     "test:browser-tabs-plugin": "node scripts/test-browser-tabs-plugin.mjs",
     "test:qr-code-plugin": "node scripts/test-qr-code-plugin.mjs",
+    "test:qr-unsaved-changes": "node scripts/test-qr-unsaved-changes.mjs",
     "test:qr-hud": "node scripts/test-qr-hud.mjs",
     "test:clean-agent-hud": "node scripts/test-clean-agent-hud.mjs",
     "test:text-result-hud-handoff": "node scripts/test-text-result-hud-handoff.mjs",

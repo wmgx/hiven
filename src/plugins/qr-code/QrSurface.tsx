@@ -41,8 +41,13 @@ export function QrSurface(props: PluginSurfaceProps) {
   const { host, t, initialText, surfaceId } = props
   const startMode = initialMode(surfaceId, initialText)
   const initialIsImage = Boolean(initialText && isImageDataUrl(initialText))
+  const baselineText = useRef(startMode === 'generate' && !initialIsImage ? (initialText ?? '') : '')
   const [mode, setMode] = useState<Mode>(startMode)
-  const [text, setText] = useState(startMode === 'generate' && !initialIsImage ? (initialText ?? '') : '')
+  const [text, setText] = useState(baselineText.current)
+  const reportUnsavedChanges = host.setUnsavedChanges
+  useLayoutEffect(() => {
+    reportUnsavedChanges?.(text !== baselineText.current)
+  }, [reportUnsavedChanges, text])
   const [ecc, setEcc] = useState<QrErrorCorrection>(DEFAULT_QR_ERROR_LEVEL)
   const [size, setSize] = useState(DEFAULT_QR_SIZE)
   const [dataUrl, setDataUrl] = useState('')
