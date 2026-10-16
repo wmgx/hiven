@@ -63,7 +63,7 @@ function api(label) {
 }
 function handoff(label) {
   const exports = {}, events = api(label)
-  vm.runInNewContext(compile('src/workspace/quickEditor/quickEditorOverwriteHandoff.ts'), { exports, require: id => { assert.equal(id, '@tauri-apps/api/event'); return events }, crypto: { randomUUID: () => `id-${++uuid}` }, Date: { now: () => now }, Number, Map, Promise, Error, setTimeout: fn => { timers.set(++timer,fn); return timer }, clearTimeout: id => timers.delete(id) })
+  vm.runInNewContext(compile('src/workspace/quickEditor/quickEditorOverwriteHandoff.ts'), { exports, require: id => { assert.equal(id, '@tauri-apps/api/event'); return events }, crypto: { randomUUID: () => `id-${++uuid}` }, Date: { now: () => now }, Number, Map, Promise, Error, AbortController, setTimeout: fn => { timers.set(++timer,fn); return timer }, clearTimeout: id => timers.delete(id) })
   return exports
 }
 const flush = async () => { for(let i=0;i<40;i++) await Promise.resolve() }
@@ -74,12 +74,42 @@ const result = await caller.requestQuickEditorOverwrite('first acknowledged B', 
 await flush()
 assert.ok(result.paneId)
 assert.equal(commits, 1, 'New window readiness delivers exactly once')
+{
+  let releaseShow
+  const controller = new AbortController()
+  let commitPoints = 0
+  const cancelled = caller.requestQuickEditorOverwrite('cancelled before target delivery', {}, () => new Promise(resolve => { releaseShow = resolve }), {
+    signal: controller.signal,
+    isCurrent: () => !controller.signal.aborted,
+    onCommit: () => { commitPoints++ },
+  })
+  await flush()
+  controller.abort()
+  releaseShow()
+  await assert.rejects(cancelled, /QuickEditorOverwriteFailed/)
+  await flush()
+  assert.equal(commitPoints, 0, 'owner cancellation before target delivery never crosses the commit point')
+  assert.equal(commits, 1, 'owner cancellation before target delivery never overwrites the draft')
+}
+{
+  const controller = new AbortController()
+  let commitPoints = 0
+  const committed = caller.requestQuickEditorOverwrite('committed despite later owner loss', {}, async () => {}, {
+    signal: controller.signal,
+    isCurrent: () => !controller.signal.aborted,
+    onCommit: () => { commitPoints++; controller.abort() },
+  })
+  await flush()
+  assert.ok((await committed).paneId)
+  assert.equal(commitPoints, 1, 'target delivery exposes one irreversible commit point')
+  assert.equal(commits, 2, 'cancellation at the commit point cannot produce a half-delivered overwrite')
+}
 const packet = packets.find(p => p.name === 'hiven://quick-editor-overwrite')
 await api('launcher').emitTo('quick-editor',packet.name,packet.payload)
-assert.equal(commits, 1, 'Duplicate delivery only replays receipt')
+assert.equal(commits, 2, 'Duplicate delivery only replays receipt')
 stop(); stop = await receiver.listenForQuickEditorOverwrites(commit)
 await api('launcher').emitTo('quick-editor',packet.name,packet.payload)
-assert.equal(commits, 1, 'An old window generation cannot overwrite a new editor')
+assert.equal(commits, 2, 'An old window generation cannot overwrite a new editor')
 rejectWrite = true
 const failedMemory = destination.getState()
 await assert.rejects(caller.requestQuickEditorOverwrite('rejected B', {}, async () => {}), /QuickEditorOverwriteFailed/)
@@ -100,4 +130,4 @@ const lostRejects = assert.rejects(lostAck, /QuickEditorOverwriteFailed/)
 await flush(); now += 8001; for(const fn of [...timers.values()]) fn(); await lostRejects
 assert.equal(store().getState().externalVersionHistory[0].text, 'recoverable if ack is lost')
 stop()
-console.log('Quick Editor: durable full-text archive/restore, failure preservation, readiness, duplicate/old-owner/expired delivery and lost-ack recovery passed')
+console.log('Quick Editor: durable full-text archive/restore, cancellable pre-commit handoff, failure preservation, readiness, duplicate/old-owner/expired delivery and lost-ack recovery passed')

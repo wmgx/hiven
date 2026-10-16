@@ -834,6 +834,11 @@ export type PluginSurfaceHostApi = {
    * No arbitrary plugin routing, clipboard reads/writes, or pane binding.
    */
   compareHistoryTexts?(snapshots: readonly Readonly<{ id: string; title: string; text: string }>[], options?: { signal?: AbortSignal }): Promise<boolean>
+  /** Bundled History only: open one validated full-text snapshot in Quick Editor.
+   * The destination archives its current draft before replacement. This bridge
+   * never reads or writes the system clipboard and does not mutate History.
+   */
+  openHistoryTextInQuickEditor?(snapshot: string, options?: { signal?: AbortSignal; commit?: () => void }): Promise<boolean>
   detachToWindow(initialText?: string): void
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
   showToast(message: string, level?: 'info' | 'success' | 'warning' | 'error', options?: { action?: { label: string; onClick: () => void }; duration?: number }): string

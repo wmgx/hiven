@@ -9,7 +9,7 @@ import type {
 import { isQuickEditorWindowOpen, showQuickEditorWindow } from '../windowManager/quickEditorWindow'
 import { requestOpenLauncherHostSurface } from '../launcherHostSurfaceBridge'
 import { isNativeDesktopRuntime } from '../webNativeBridge'
-import { requestQuickEditorOverwrite } from './quickEditorOverwriteHandoff'
+import { requestQuickEditorOverwrite, type QuickEditorOverwriteLifecycle } from './quickEditorOverwriteHandoff'
 
 export const QUICK_EDITOR_CREATE_PANE_EVENT = 'hiven://quick-editor-create-pane'
 export const QUICK_EDITOR_SET_PANE_TEXT_EVENT = 'hiven://quick-editor-set-pane-text'
@@ -146,15 +146,20 @@ export async function setQuickEditorPaneText(paneId: QuickEditorPaneId, text: st
 export async function overwriteQuickEditorText(
   text: string,
   options: QuickEditorOverwriteOptions = {},
+  lifecycle?: QuickEditorOverwriteLifecycle,
 ): Promise<OverwriteQuickEditorResult> {
   const detached = new URLSearchParams(window.location.search).get('window') === 'quick-editor'
   let result: OverwriteQuickEditorResult
   if (isNativeDesktopRuntime() && !detached) {
     // The destination hydrates its own saved draft when newly opened, or reads its
     // live draft when already open. Never archive the sender's stale store.
-    try { result = await requestQuickEditorOverwrite(text, options, showQuickEditorSurface) }
+    try { result = await requestQuickEditorOverwrite(text, options, showQuickEditorSurface, lifecycle) }
     catch { throw new Error(translate(useAppStore.getState().locale, 'quickEditor', 'overwriteFailed')) }
   } else {
+    if (lifecycle?.signal?.aborted || lifecycle?.isCurrent?.() === false) {
+      throw new Error(translate(useAppStore.getState().locale, 'quickEditor', 'overwriteFailed'))
+    }
+    lifecycle?.onCommit?.()
     const paneId = useQuickEditorStore.getState().overwriteActiveText(text, options)
     result = { paneId, historyCount: useQuickEditorStore.getState().externalVersionHistory.length }
     if (!detached) useAppStore.getState().openLauncherHostSurface('quick-editor')

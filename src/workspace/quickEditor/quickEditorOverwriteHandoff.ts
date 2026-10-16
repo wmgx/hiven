@@ -8,6 +8,12 @@ const TIMEOUT_MS = 8_000
 export type OverwriteReceipt = { paneId: string; historyCount: number }
 type Request = { id: string; owner: string; expires: number; text: string; options: QuickEditorOverwriteOptions }
 type Reply = { id: string; owner: string; ready?: boolean; result?: OverwriteReceipt; failed?: boolean }
+export type QuickEditorOverwriteLifecycle = {
+  signal?: AbortSignal
+  isCurrent?: () => boolean
+  /** Called at the last cancellable boundary, immediately before target delivery. */
+  onCommit?: () => void
+}
 
 /** Only the detached editor registers this receiver. No source-selected pane or history. */
 export async function listenForQuickEditorOverwrites(commit: (text: string, options: QuickEditorOverwriteOptions) => OverwriteReceipt): Promise<() => void> {
@@ -48,30 +54,40 @@ export async function listenForQuickEditorOverwrites(commit: (text: string, opti
 }
 
 /** Install response listeners before showing a new window; its ready signal retries only the probe. */
-export async function requestQuickEditorOverwrite(text: string, options: QuickEditorOverwriteOptions, show: () => Promise<void>): Promise<OverwriteReceipt> {
+export async function requestQuickEditorOverwrite(text: string, options: QuickEditorOverwriteOptions, show: () => Promise<void>, lifecycle?: QuickEditorOverwriteLifecycle): Promise<OverwriteReceipt> {
   const { listen, emitTo } = await import('@tauri-apps/api/event')
   const id = crypto.randomUUID()
   const expires = Date.now() + TIMEOUT_MS
   return new Promise<OverwriteReceipt>((resolve, reject) => {
     let finished = false
+    let committed = false
     let owner: string | undefined
     const stops: (() => void)[] = []
+    let abort = () => {}
+    const current = () => !finished && (committed || (!lifecycle?.signal?.aborted && lifecycle?.isCurrent?.() !== false))
     const finish = (result?: OverwriteReceipt) => {
       if (finished) return
       finished = true
       clearTimeout(timer)
+      lifecycle?.signal?.removeEventListener('abort', abort)
       for (const stop of stops) stop()
       if (result) resolve(result)
       else reject(new Error('QuickEditorOverwriteFailed'))
     }
     const timer = setTimeout(() => finish(), TIMEOUT_MS)
-    const probe = () => { if (!finished && !owner) void emitTo('quick-editor', PROBE, { id }).catch(() => finish()) }
+    abort = () => { if (!committed) finish() }
+    lifecycle?.signal?.addEventListener('abort', abort, { once: true })
+    const probe = () => { if (current() && !owner) void emitTo('quick-editor', PROBE, { id }).catch(() => finish()) }
     const keep = (stop: () => void) => { if (finished) stop(); else stops.push(stop) }
     void (async () => {
+      if (!current()) return finish()
       keep(await listen<Reply>(REPLY, ({ payload }) => {
-        if (finished || !payload || payload.id !== id || Date.now() >= expires) return
+        if (!current() || !payload || payload.id !== id || Date.now() >= expires) return
         if (payload.ready && !owner && typeof payload.owner === 'string') {
           owner = payload.owner
+          if (!current()) return finish()
+          committed = true
+          lifecycle?.onCommit?.()
           void emitTo('quick-editor', REQUEST, { id, owner, expires, text, options } satisfies Request).catch(() => finish())
         } else if (owner && payload.owner === owner && !payload.ready) {
           finish(payload.result)
@@ -79,8 +95,9 @@ export async function requestQuickEditorOverwrite(text: string, options: QuickEd
       }))
       if (finished) return
       keep(await listen(READY, probe))
-      if (finished) return
+      if (!current()) return finish()
       await show()
+      if (!current()) return finish()
       probe()
     })().catch(() => finish())
   })

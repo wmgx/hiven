@@ -533,6 +533,23 @@ export function PluginSurfaceRenderer({
               if (historyDiffRef.current === session) setHistoryDiff(session)
               return receipt.promise
             } : undefined,
+            openHistoryTextInQuickEditor: target.pluginId === 'clipboard-history' && isCurrentBundledDefinition(target.pluginId, target.source, surfaceState.definition) ? async (snapshot, options) => {
+              const owner = deliveryFeedbackOwner
+              if (!owner.isCurrent() || options?.signal?.aborted) return false
+              try {
+                const { overwriteQuickEditorText } = await import('../../workspace/quickEditor/quickEditorRequests')
+                if (!owner.isCurrent() || options?.signal?.aborted) return false
+                await overwriteQuickEditorText(snapshot, { source: 'history-item' }, {
+                  signal: options?.signal,
+                  isCurrent: owner.isCurrent,
+                  onCommit: options?.commit,
+                })
+                return true
+              } catch (error) {
+                console.warn('[hiven] Failed to open History text in Quick Editor:', error)
+                return false
+              }
+            } : undefined,
             deliveryFeedbackOwner,
             close: () => requestLeave('close'),
             complete: () => {
