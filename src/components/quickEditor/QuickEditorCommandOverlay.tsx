@@ -1,8 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, type FocusEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FocusEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useAppStore } from '../../store'
 import { useLauncherSession } from '../../workspace/launcher/useLauncherSession'
-import { filterEditorCommandBarItems } from '../../workspace/launcher/types'
 import { createQuickEditorLauncherApi } from '../../workspace/quickEditor/quickEditorActions'
+import {
+  captureQuickEditorCommandTarget,
+  createQuickEditorCommandOwner,
+  disableForMultipleSelections,
+  filterQuickEditorCommandItems,
+} from '../../workspace/quickEditor/quickEditorCommandTarget'
 import { useQuickEditorStore } from '../../workspace/quickEditor/quickEditorStore'
 import { GlobalLauncherFrameSwitch } from '../launcher/GlobalLauncherFrames'
 import { useGlobalLauncherResultFrame } from '../launcher/GlobalLauncherResults'
@@ -18,11 +23,20 @@ const MAX_OVERLAY_ITEMS = 12
 
 export function QuickEditorCommandOverlay() {
   const open = useAppStore((s) => s.quickEditorCommandOpen)
+  return open ? <OpenQuickEditorCommandOverlay /> : null
+}
+
+function OpenQuickEditorCommandOverlay() {
   const initialQuery = useAppStore((s) => s.quickEditorCommandInitialQuery)
   const closeCommand = useAppStore((s) => s.closeQuickEditorCommand)
   const locale = useAppStore((s) => s.locale)
-  const activePaneIndex = useQuickEditorStore((s) => s.paneOrder.indexOf(s.activePaneId))
   const tQuickEditor = useT('quickEditor')
+  const [commandTarget] = useState(() => {
+    const owner = createQuickEditorCommandOwner()
+    const paneId = useQuickEditorStore.getState().activePaneId
+    return quickEditorImperative.captureCommandTarget(owner, paneId)
+      ?? captureQuickEditorCommandTarget(owner, undefined, paneId)
+  })
   const panelRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const isKeyboardNavRef = useRef(false)
@@ -32,6 +46,22 @@ export function QuickEditorCommandOverlay() {
   /** Suppress blur-close while React remounts header (search → result frame). */
   const suppressBlurCloseUntilRef = useRef(0)
   const { isImeComposingRef, handleCompositionStart, handleCompositionEnd } = useGlobalLauncherImeComposition()
+  const staticItemFilter = useCallback(
+    (items: Parameters<typeof filterQuickEditorCommandItems>[0]) => filterQuickEditorCommandItems(items, commandTarget),
+    [commandTarget],
+  )
+  const mapCandidate = useCallback(
+    (item: Parameters<typeof disableForMultipleSelections>[0]) => disableForMultipleSelections(
+      item,
+      commandTarget,
+      tQuickEditor('commandMultipleSelectionsUnsupported'),
+    ),
+    [commandTarget, tQuickEditor],
+  )
+  const makeApi = useCallback(
+    (api: Parameters<typeof createQuickEditorLauncherApi>[0]) => createQuickEditorLauncherApi(api, commandTarget),
+    [commandTarget],
+  )
 
   const {
     query,
@@ -44,10 +74,12 @@ export function QuickEditorCommandOverlay() {
     rankedItems,
   } = useLauncherSession({
     hostId: 'quick-editor-command',
-    open,
+    open: true,
     requestClose: closeCommandAndRestoreFocus,
-    staticItemFilter: filterEditorCommandBarItems,
-    makeApi: createQuickEditorLauncherApi,
+    staticItemFilter,
+    mapCandidate,
+    allowDynamicItems: commandTarget.mode === 'full-text',
+    makeApi,
   })
 
   const activeResultFrame = controllerState?.frames.length
@@ -120,7 +152,7 @@ export function QuickEditorCommandOverlay() {
 
   function closeCommandAndRestoreFocus() {
     closeCommand()
-    requestAnimationFrame(() => quickEditorImperative.triggerFocus())
+    requestAnimationFrame(() => quickEditorImperative.triggerFocus(commandTarget.paneId))
   }
 
   const overlayEscapeHandler = useCallback((event: KeyboardEvent): boolean => {
@@ -133,43 +165,39 @@ export function QuickEditorCommandOverlay() {
     event.preventDefault()
     event.stopPropagation()
     closeCommand()
-    requestAnimationFrame(() => quickEditorImperative.triggerFocus())
+    requestAnimationFrame(() => quickEditorImperative.triggerFocus(commandTarget.paneId))
     return true
-  }, [closeCommand, controllerRef, inputRef])
+  }, [closeCommand, commandTarget.paneId, controllerRef, inputRef])
 
   useEffect(() => {
-    if (!open) return
     quickEditorImperative.registerOverlayEscape(overlayEscapeHandler)
     return () => quickEditorImperative.unregisterOverlayEscape()
-  }, [open, overlayEscapeHandler])
+  }, [overlayEscapeHandler])
+
+  useEffect(() => () => commandTarget.dispose(), [commandTarget])
 
   useEffect(() => {
-    if (open) {
-      if (initialQuery) {
-        setQuery(initialQuery)
-        setSelectedIndex(0, { pin: false })
-      }
-      requestAnimationFrame(() => inputRef.current?.focus())
-    } else {
-      setQuery('')
+    if (initialQuery) {
+      setQuery(initialQuery)
       setSelectedIndex(0, { pin: false })
     }
-  }, [open, initialQuery, setQuery, setSelectedIndex])
+    requestAnimationFrame(() => inputRef.current?.focus())
+  }, [initialQuery, setQuery, setSelectedIndex])
 
   // Result frame has no search input — keep the panel focused so ↑↓ / Space work.
   useEffect(() => {
-    if (!open || !isResultFrame) return
+    if (!isResultFrame) return
     suppressBlurCloseUntilRef.current = Date.now() + 120
     const frame = window.requestAnimationFrame(() => {
       panelRef.current?.focus({ preventScroll: true })
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [open, isResultFrame, activeResultFrame?.kind === 'result' ? activeResultFrame.sourceTitle : null])
+  }, [isResultFrame, activeResultFrame?.kind === 'result' ? activeResultFrame.sourceTitle : null])
 
   // Capture-phase window listener: result list has no inputs; React onKeyDown
   // only fires when the panel subtree is focused. Monaco/editor may steal focus.
   useEffect(() => {
-    if (!open || !isResultFrame) return
+    if (!isResultFrame) return
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return
       const key = event.key
@@ -218,7 +246,6 @@ export function QuickEditorCommandOverlay() {
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [
-    open,
     isResultFrame,
     controllerState,
     controllerRef,
@@ -235,8 +262,6 @@ export function QuickEditorCommandOverlay() {
     if (internalPointerResetRef.current !== null) window.clearTimeout(internalPointerResetRef.current)
     if (blurCloseFrameRef.current !== null) window.cancelAnimationFrame(blurCloseFrameRef.current)
   }, [])
-
-  if (!open) return null
 
   const isDetached = isQuickEditorDetachedWindow()
 
@@ -312,7 +337,16 @@ export function QuickEditorCommandOverlay() {
         inputRef={inputRef}
         query={query}
         searchPlaceholder={tQuickEditor('commandPlaceholder')}
-        searchContext={activePaneIndex >= 0 ? tQuickEditor('commandScope', { index: activePaneIndex + 1 }) : undefined}
+        searchContext={commandTarget.paneIndex >= 0 ? tQuickEditor(
+          commandTarget.mode === 'selection'
+            ? 'commandSelectionScope'
+            : commandTarget.mode === 'multiple-selections'
+              ? 'commandMultipleSelectionScope'
+              : commandTarget.mode === 'unavailable'
+                ? 'commandUnavailableScope'
+                : 'commandScope',
+          { index: commandTarget.paneIndex + 1 },
+        ) : undefined}
         visibleFiltered={visibleFiltered}
         selectedItem={selectedItem}
         locale={locale}

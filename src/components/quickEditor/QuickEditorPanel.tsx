@@ -15,6 +15,7 @@ import { X } from 'lucide-react'
 import { ConfirmDialog } from '../../plugin-ui'
 import { pluginRegistry } from '../../workspace/pluginRegistry'
 import { applyEffectsToQuickEditor } from '../../workspace/quickEditor/quickEditorActions'
+import { captureQuickEditorCommandTarget } from '../../workspace/quickEditor/quickEditorCommandTarget'
 
 export function QuickEditorPanel({ onRequestExit }: { onRequestExit: () => void }) {
   const pendingClose = useQuickEditorStore((s) => s.pendingPaneClose)
@@ -253,6 +254,10 @@ function QuickEditorPaneSurface({
         </div>
       )}
       onReady={(editor) => {
+        quickEditorImperative.registerPaneFocus(pane.id, () => editor.focus())
+        quickEditorImperative.registerCommandTarget(pane.id, (owner) => (
+          captureQuickEditorCommandTarget(owner, editor, pane.id)
+        ))
         const registerActiveEditor = () => {
           quickEditorImperative.registerFind(() => {
             editor.getAction('editor.action.startFindReplaceAction')?.run()
@@ -265,6 +270,8 @@ function QuickEditorPaneSurface({
         const focusSubscription = editor.onDidFocusEditorText(registerActiveEditor)
         return () => {
           focusSubscription.dispose()
+          quickEditorImperative.unregisterPaneFocus(pane.id)
+          quickEditorImperative.unregisterCommandTarget(pane.id)
           if (useQuickEditorStore.getState().activePaneId === pane.id) {
             quickEditorImperative.unregisterFind()
             quickEditorImperative.unregisterFocus()

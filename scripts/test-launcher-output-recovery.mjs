@@ -286,8 +286,8 @@ try {
     assert.equal(h.closed, 1)
   })
 
-  // A single ordinary output still auto-applies, but failed auto-apply exposes
-  // only that original primary action. It must not offer a new destination.
+  // A single ordinary output still auto-applies. Failed auto-apply exposes the
+  // original primary action plus a safe Copy fallback, but no mutating destination.
   for (const failure of ['throw', 'result']) {
     await check(`single automatic choice: ${failure} becomes a retry-only frame`, async () => {
       const h = harness()
@@ -340,6 +340,32 @@ try {
       assert.equal((await getLastSaveableRun()).actionKey, item.systemKey)
     })
   }
+
+  await check('retry-only replacement keeps Copy but blocks Insert', async () => {
+    const h = harness()
+    const item = makeItem(h, 'result', { count: 1 })
+    const result = output.replaceActiveTextResult('safe fallback', h.api, 'en')
+    const choice = result.output.choices[0]
+    const originalPrimary = choice.primaryAction
+    let attempts = 0
+    choice.primaryAction = async () => {
+      attempts++
+      if (attempts === 1) throw new Error('Frozen target changed')
+      return originalPrimary()
+    }
+    item.execute = async () => { h.executions++; return result }
+    await h.controller.selectItem(item, { objectBlockText: 'source input' })
+    assert.equal(h.top().kind, 'result')
+    assert.equal(h.top().retryOnly, true)
+    await h.controller.activateSecondary(choice, 'insert')
+    assert.equal(h.calls.editor.length, 0)
+    assert.equal(h.controller.getState().error, 'Frozen target changed')
+    await h.controller.activateSecondary(choice, 'copy')
+    assert.deepEqual(h.calls.copy, ['safe fallback'])
+    assert.equal(h.calls.editor.length, 0)
+    assert.equal(attempts, 1)
+    assert.equal(h.controller.getState().error, null)
+  })
 
   // Old success and failure may complete an external I/O, but cannot mutate a
   // newer controller flow or replace the completed-run metadata stored later.

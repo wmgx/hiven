@@ -1378,9 +1378,13 @@ export class LauncherController {
   /** Activate a result choice's secondary action by id. */
   async activateSecondary(choice: LauncherResultChoice, actionId: string): Promise<void> {
     if (!this.canActivateChoice(choice)) return
-    if (this.topFrame().kind === 'result' && (this.topFrame() as ResultFrame).retryOnly) return
     const action = choice.secondaryActions?.find((a) => a.id === actionId)
     if (!action) return
+    if (
+      this.topFrame().kind === 'result' &&
+      (this.topFrame() as ResultFrame).retryOnly &&
+      getHostOutputIntent(action) !== 'copy'
+    ) return
     trackBehavior(TelemetryEvents.launcherChoiceActivate, {
       via: 'secondary',
       actionId,

@@ -8,6 +8,12 @@ import { readNativeClipboardText } from '../nativeClipboard'
 import { pluginRegistry } from '../pluginRegistry'
 import { t } from '../../i18n'
 import { useAppStore } from '../../store'
+import type { QuickEditorCommandTarget } from './quickEditorCommandTarget'
+import {
+  insertIntoQuickEditorCommandTarget,
+  quickEditorCommandApiText,
+  replaceQuickEditorCommandTarget,
+} from './quickEditorCommandTarget'
 
 function splitLines(text: string): string[] {
   return text.split(/\r\n|\r|\n/)
@@ -106,11 +112,18 @@ async function readClipboard(): Promise<string> {
   return readNativeClipboardText()
 }
 
-export function createQuickEditorLauncherApi(baseApi: PluginLauncherApi): PluginLauncherApi {
+export function createQuickEditorLauncherApi(
+  baseApi: PluginLauncherApi,
+  target?: QuickEditorCommandTarget,
+): PluginLauncherApi {
+  const locale = () => useAppStore.getState().locale
+  const changedMessage = () => t(locale(), 'quickEditor.commandTargetChanged')
+  const multipleMessage = () => t(locale(), 'quickEditor.commandMultipleSelectionsUnsupported')
+  const targetText = target ? quickEditorCommandApiText(target) : null
   return {
     ...baseApi,
-    getActiveText: () => useQuickEditorStore.getState().text,
-    getSelectionText: () => '',
+    getActiveText: targetText?.getActiveText ?? (() => useQuickEditorStore.getState().text),
+    getSelectionText: targetText?.getSelectionText ?? (() => ''),
     getPaneSnapshot: () => {
       // Prefer the merged host snapshot (editor + quick editor) when available;
       // fall back to live quick-editor panes so diff always sees local panels.
@@ -137,9 +150,17 @@ export function createQuickEditorLauncherApi(baseApi: PluginLauncherApi): Plugin
     isPanePanelOpen: (panelId) => Boolean(useQuickEditorStore.getState().panelInstancesV2[panelId]),
     getClipboardText: () => readClipboard(),
     replaceActiveText: async (text: string) => {
+      if (target) {
+        replaceQuickEditorCommandTarget(target, text, changedMessage(), multipleMessage())
+        return
+      }
       useQuickEditorStore.getState().setText(text)
     },
     insertText: async (text: string) => {
+      if (target) {
+        insertIntoQuickEditorCommandTarget(target, text, changedMessage(), multipleMessage())
+        return
+      }
       const state = useQuickEditorStore.getState()
       const current = state.text
       const offset = offsetAt(current, state.cursorPosition)

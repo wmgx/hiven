@@ -229,6 +229,7 @@ export function adaptToolToLauncherItem(
     )
     if (
       isEditorLike &&
+      !(normalizedSurfaceId === 'quick-editor-command' && input.source === 'selection') &&
       result.ok &&
       result.output?.choices.length === 1 &&
       result.output.choices[0]?.id === REPLACE_ACTIVE_TEXT_OUTPUT_CHOICE_ID

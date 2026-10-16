@@ -70,6 +70,9 @@ export function GlobalLauncherResultFrame({
   const explicitPreview = frame.executionMode === 'explicit-text-preview'
   const singleText = selection?.type !== 'multi' && (frame.retryOnly || isSingleTextResult(choices, explicitPreview))
   const textChoice = singleText ? choices[0] : undefined
+  const retryCopyAction = frame.retryOnly
+    ? textChoice?.secondaryActions?.find((action) => getHostOutputIntent(action) === 'copy')
+    : undefined
   const previewEdit = explicitPreview && !frame.retryOnly ? frame.previewEdit : undefined
   const previewParams = onEditPreviewParam ? previewEdit?.item.params ?? [] : []
   const hasPreviewParams = previewParams.length > 0
@@ -242,6 +245,17 @@ export function GlobalLauncherResultFrame({
         {frame.retryOnly ? (
           <div className="global-launcher-footer l-foot launcher-output-actionbar">
             <LauncherHintKey keys="esc" label={t(locale, 'palette.back')} />
+            {retryCopyAction && (
+              <button
+                type="button"
+                className="l-foot-action"
+                disabled={busy}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => onSecondaryAction?.(textChoice, retryCopyAction.id)}
+              >
+                {t(locale, 'palette.copy')}
+              </button>
+            )}
             <button
               type="button"
               className="l-foot-primary"

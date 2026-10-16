@@ -83,6 +83,8 @@ type UseLauncherSessionOptions = {
   staticItemFilter?: (items: LauncherItem[]) => LauncherItem[]
   mapCandidate?: (item: LauncherItem) => LauncherItem
   collectDynamicWhenEmpty?: boolean
+  /** Skip dynamic providers and remote fallback ranking for a frozen local-only flow. */
+  allowDynamicItems?: boolean
   objectBlockText?: string
   getMaterialGeneration?: () => number | undefined
   /** Rendered list identity when the host prepends rows outside ranking. */
@@ -187,6 +189,7 @@ export function useLauncherSession({
   staticItemFilter,
   mapCandidate,
   collectDynamicWhenEmpty = false,
+  allowDynamicItems = true,
   objectBlockText,
   getMaterialGeneration,
   visibleSelectionItemsRef,
@@ -533,6 +536,13 @@ export function useLauncherSession({
   // ── Plugin dynamic path (fast debounce, progressive partials) ──────────────
   useEffect(() => {
     if (!open) return
+    if (!allowDynamicItems) {
+      setPluginDynamicItems([])
+      pluginQueryRef.current = ''
+      pluginPartialsRef.current.clear()
+      pluginAbortRef.current?.abort()
+      return
+    }
     const owner = searchOwner
     const current = () => launcherOpenRef.current && searchOwnerRef.current === owner
     const retrying = retryOwnerRef.current === owner
@@ -599,11 +609,17 @@ export function useLauncherSession({
       window.clearTimeout(timer)
       pluginAbortRef.current?.abort()
     }
-  }, [collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open, query, pluginSettings, pluginRegistryVersion, searchOwner, searchRetry])
+  }, [allowDynamicItems, collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open, query, pluginSettings, pluginRegistryVersion, searchOwner, searchRetry])
 
   // ── Host dynamic path (apps / workflow) — isolated, longer debounce ────────
   useEffect(() => {
     if (!open) return
+    if (!allowDynamicItems) {
+      setHostDynamicItems([])
+      hostQueryRef.current = ''
+      hostAbortRef.current?.abort()
+      return
+    }
     const q = query.trim()
     const inputText = q || objectBlockText?.trim() || ''
     const inputIdentity = launcherInputIdentity(q, objectBlockText)
@@ -670,11 +686,18 @@ export function useLauncherSession({
       window.clearTimeout(timer)
       hostAbortRef.current?.abort()
     }
-  }, [appSearchAliases, collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open, query, pluginRegistryVersion, pluginPermissions, desktopTargetsVersion])
+  }, [allowDynamicItems, appSearchAliases, collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open, query, pluginRegistryVersion, pluginPermissions, desktopTargetsVersion])
 
   // ── Remote document Desktop Targets (feishu.docs, …) — progressive, slow debounce ──
   useEffect(() => {
     if (!open) return
+    if (!allowDynamicItems) {
+      setDocumentDynamicItems([])
+      documentQueryRef.current = ''
+      documentPartialsRef.current.clear()
+      documentAbortRef.current?.abort()
+      return
+    }
     const q = query.trim()
     if (!q) {
       setDocumentDynamicItems([])
@@ -751,11 +774,11 @@ export function useLauncherSession({
       window.clearTimeout(timer)
       documentAbortRef.current?.abort()
     }
-  }, [locale, normalizedHostId, open, query])
+  }, [allowDynamicItems, locale, normalizedHostId, open, query])
 
   // When offline window-title enrich finishes, re-collect host items so titles/icons update.
   useEffect(() => {
-    if (!open) return
+    if (!open || !allowDynamicItems) return
     return subscribeDesktopWindowsUpdated(() => {
       const q = hostQueryRef.current
       const inputText = q || objectBlockText?.trim() || ''
@@ -774,7 +797,7 @@ export function useLauncherSession({
         setHostDynamicItems(filterDynamicForSurface(items, normalizedHostId), inputIdentity)
       }).catch(() => { /* ignore */ })
     })
-  }, [collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open])
+  }, [allowDynamicItems, collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open])
 
   // Collect static candidates separately — they change with plugin registry or
   // plugin settings (toolsFor / itemsFor), not on every keystroke.
@@ -871,7 +894,7 @@ export function useLauncherSession({
     const generation = ++jevGenerationRef.current
     jevPendingRef.current = false
     const q = query.trim()
-    if (hasLocalMatches || !open || jevFrameKind !== 'list' || !jevSettings?.enabled || !validJevSettings(jevSettings) || q.length < 2 || query.length > 500) {
+    if (!allowDynamicItems || hasLocalMatches || !open || jevFrameKind !== 'list' || !jevSettings?.enabled || !validJevSettings(jevSettings) || q.length < 2 || query.length > 500) {
       setJevSuggestion(null)
       return
     }
@@ -910,7 +933,7 @@ export function useLauncherSession({
       })
     }, JEV_DEBOUNCE_MS)
     return () => { window.clearTimeout(timer); ++jevGenerationRef.current }
-  }, [hasLocalMatches, jevFrameKind, jevSettings, jevSettledTick, locale, open, query, staticCandidates])
+  }, [allowDynamicItems, hasLocalMatches, jevFrameKind, jevSettings, jevSettledTick, locale, open, query, staticCandidates])
 
   const rankedItems = useMemo<LauncherItem[]>(() => {
     const suggestion = jevSuggestion

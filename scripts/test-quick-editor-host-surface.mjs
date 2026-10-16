@@ -357,8 +357,8 @@ assert.match(
 )
 assert.match(
   files.overlay,
-  /function closeCommandAndRestoreFocus\(\)[\s\S]{0,180}closeCommand\(\)[\s\S]{0,180}quickEditorImperative\.triggerFocus\(\)/,
-  'quick editor command overlay must restore editor focus whenever it closes',
+  /function closeCommandAndRestoreFocus\(\)[\s\S]{0,180}closeCommand\(\)[\s\S]{0,180}quickEditorImperative\.triggerFocus\(commandTarget\.paneId\)/,
+  'quick editor command overlay must restore focus to the frozen target pane whenever it closes',
 )
 assert.doesNotMatch(
   files.css,
