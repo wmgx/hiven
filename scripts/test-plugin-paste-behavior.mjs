@@ -570,7 +570,7 @@ const hostFactorySource = ts.transpileModule(`exports.build = () => { ${[...host
   const hiddenRef = { current: false }, lifetime = { active: true }
   const scope = h.recovery.createPasteRecoveryScope()
   const context = {
-    exports: {}, target, surfaceState, hiddenRef, historyDiffRef: { current: null }, pasteScope: scope,
+    exports: {}, target, surfaceState, hiddenRef, suspendedRef: { current: false }, suspensionOwnerRef: { current: 'owner' }, suspensionOwner: 'owner', historyDiffRef: { current: null }, pasteScope: scope,
     mountedRef: { current: true }, activeTargetRef: { current: target }, activeStateRef: { current: surfaceState },
     presentation: 'plugin-surface-window', pluginRegistry: { getPluginLifetime: () => lifetime }, hostStorage: undefined,
     createPluginPaste: h.api.createPluginPaste, ...h.recovery,

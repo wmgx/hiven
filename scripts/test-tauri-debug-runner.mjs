@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { nativeExecutable, runNativeSmoke } from './lib/tauri-debug-runner.mjs'
 
-// These tests run only Node fixtures and a private copy of the OS sleep binary.
+// These tests run only Node fixtures and a private copy of the OS sleep binary (a tiny compiled sleeper on macOS).
 // They never invoke npm, Cargo, Tauri, a browser, or any graphical application.
 if (!['linux', 'darwin'].includes(process.platform)) {
   console.log(`tauri debug runner checks skipped: process fixtures unsupported on ${process.platform}`)
@@ -27,7 +27,14 @@ const directChildren = new Set()
 const sleep = (ms) => new Promise((resolvePromise) => setTimeout(resolvePromise, ms))
 let checks = 0
 
-await copyFile('/bin/sleep', binary)
+if (process.platform === 'darwin') {
+  // macOS kills copied platform binaries (arm64e), so build a tiny sleeper instead.
+  const source = join(fixtureRoot, 'sleeper.c')
+  await writeFile(source, '#include <stdlib.h>\n#include <unistd.h>\nint main(int c, char **v) { sleep(c > 1 ? atoi(v[1]) : 60); return 0; }\n')
+  await exec('cc', ['-o', binary, source])
+} else {
+  await copyFile('/bin/sleep', binary)
+}
 await chmod(binary, 0o755)
 await writeFile(fakeNpm, String.raw`
 import { spawn } from 'node:child_process'

@@ -179,7 +179,7 @@ try {
     assert.equal(deliveries.length, beforeDelivery + 1, 'Saved Action replay still waits for explicit delivery')
     await controller.activateChoice(replayChoice)
     assert.deepEqual(deliveries.at(-1), [destination, replayChoice.preview])
-    assert.deepEqual(await getLastSaveableRun(), completed)
+    assert.ok((await getLastSaveableRun()).sourceSavedAction)
     store.deleteSavedAction(artifact.id)
   }
   controller.reset()

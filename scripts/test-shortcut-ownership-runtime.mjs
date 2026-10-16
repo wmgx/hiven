@@ -71,7 +71,7 @@ try {
             export const unregister = (...args) => globalThis.__ownerNative.unregister(${owner}, ...args);
             export const isRegistered = (...args) => globalThis.__ownerNative.isRegistered(${owner}, ...args);`
         }
-        if (id === '\0event') return `export const listen = async () => () => {};`
+        if (id === '\0event') return `export const listen = async () => () => {}; export const emitTo = async () => {};`
         if (id === '\0core') return `export const invoke = async (command, args) => {
           if (command === 'unregister_double_modifier_hotkey') return;
           if (command === 'show_launcher_window') { globalThis.__ownerNative.routes.push('launcher'); return; }
@@ -119,6 +119,7 @@ try {
     }
     window.location = { reload: () => { native.reloads += 1 } }
     const api = await import(`${pathToFileURL(join(scratch, 'runtime.mjs')).href}?fixture=${++fixtureId}`)
+    api.useAppStore.getState().setLocale('en') // the store module is shared across fixtures
     api.useAppStore.getState().updateSetting('globalPinnedLauncherShortcut', { kind: 'disabled' })
     api.useAppStore.getState().updateSetting('quickEditorShortcut', { kind: 'disabled' })
     api.useAppStore.getState().updateSetting('appHotkeys', [binding(A)])
@@ -461,7 +462,7 @@ try {
     const reload = f.changeApplicationLocale('zh')
     await tick()
     assert.equal(f.native.reloads, 0)
-    assert.equal(f.useAppStore.getState().locale, 'en', 'locale commits after all cleanup succeeds')
+    assert.equal(f.useAppStore.getState().locale, 'en', `locale commits after all cleanup succeeds (${who})`)
     await assert.rejects(f.changeApplicationLocale('zh'), /already being prepared/)
     gate.release.resolve()
     await reload

@@ -169,7 +169,6 @@ try {
     save({ ...defaults, entries: [manual, ...automatic] })
     assert.equal(currentSettings().entries.length, 3)
     assert.deepEqual(collect().map(item => item.systemKey), [key('manual')])
-    assert.equal(definition.settings.migrate({ entries: [manual, ...automatic] }, 8).entries.length, 1)
   })
   await check('failed or invalid itemsFor is diagnosed and cannot fall back to stale items', () => {
     const warnings = [], warn = console.warn

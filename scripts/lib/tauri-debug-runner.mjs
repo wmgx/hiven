@@ -91,7 +91,7 @@ for value in sys.argv[1:]:
     if lib.proc_pidpath(int(value), buf, len(buf)) > 0:
         paths[value] = buf.value.decode('utf-8')
 print(json.dumps(paths))`
-  const { stdout } = await exec('/usr/bin/python3', ['-c', script, ...rows.map((row) => String(row.pid))], { timeout: 1_000, killSignal: 'SIGKILL', maxBuffer: 1024 * 1024 })
+  const { stdout } = await exec('/usr/bin/python3', ['-c', script, ...rows.map((row) => String(row.pid))], { timeout: 5_000, killSignal: 'SIGKILL', maxBuffer: 1024 * 1024 })
   const paths = JSON.parse(stdout)
   return rows.map((row) => ({ ...row, executable: paths[row.pid] ?? null }))
 }

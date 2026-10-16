@@ -215,7 +215,7 @@ try {
     assert.equal(deliveries.length, beforeDelivery + 1, 'replay waits for explicit delivery')
     await controller.activateChoice(replayChoice)
     assert.deepEqual(deliveries.at(-1), [destination, replayChoice.preview])
-    assert.deepEqual(await getLastSaveableRun(), completed, 'saved replay does not replace last-run metadata')
+    assert.ok((await getLastSaveableRun()).sourceSavedAction, 'saved replay becomes LastRun so it can be explicitly updated')
     store.deleteSavedAction(artifact.id)
   }
 

@@ -49,8 +49,8 @@ assert.deepEqual(
 )
 assert.deepEqual(
   manifestJson.permissions?.sort(),
-  ['ai.use', 'clipboard.write', 'network.request', 'storage.private'].sort(),
-  'translate should request host AI plus storage, network, and clipboard access',
+  ['ai.use', 'clipboard.read', 'clipboard.write', 'globalShortcut.register', 'network.request', 'storage.private'].sort(),
+  'translate should request host AI plus storage, network, clipboard and global shortcut access',
 )
 
 const builtin = JSON.parse(builtinIndex)

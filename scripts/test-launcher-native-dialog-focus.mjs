@@ -50,7 +50,7 @@ function fixture() {
       },
     },
     '../../workspace/launcherBlurGuard': guard,
-    './GlobalLauncherLayout': {}, '../../workspace/launcher/perf': {},
+    './GlobalLauncherLayout': {}, '../../workspace/launcher/perf': {}, './surfaceInitialFocus': { focusInitialSurfaceTarget: () => () => {} },
     '@tauri-apps/api/window': nativeWindow,
     '../../workspace/pasteRecovery': recovery,
     '../../workspace/launcherWindowEvents': { LAUNCHER_NEW_SESSION_EVENT: 'hiven:launcher-new-session' },

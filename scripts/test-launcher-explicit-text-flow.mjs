@@ -207,7 +207,7 @@ try {
   await controller.activateChoice(replayChoice)
   assert.equal(top().kind, 'list')
   assert.equal(material, '{\n    "b": 1,\n    "y": 2\n}')
-  assert.equal((await getLastSaveableRun()).runId, laterRun.runId, 'saved invocation does not replace LastRun')
+  assert.ok((await getLastSaveableRun()).sourceSavedAction, 'saved invocation becomes LastRun so it can be explicitly updated')
   assert.equal(closed, 0)
 
   // Source collisions fail closed before execution, regardless of array order.
@@ -424,7 +424,7 @@ try {
       assert.equal(deliveries.length, deliveryCount + 1, 'replay waits for explicit delivery')
       await controller.activateChoice(top().output.choices[0])
       assert.deepEqual(deliveries.at(-1), [sample.destination, sample.expected])
-      assert.deepEqual(await getLastSaveableRun(), completed, 'replay does not overwrite completed-run metadata')
+      assert.ok((await getLastSaveableRun()).sourceSavedAction, 'replay becomes LastRun so it can be explicitly updated')
       for (const candidates of [[actual, { ...actual, source: 'dev' }], [{ ...actual, source: 'dev' }, actual]]) {
         const ambiguous = provider.getSavedActionLauncherItems(candidates).find((item) => item.savedActionArtifactId === saved.id)
         assert.equal(ambiguous.disabledReason.code, 'ambiguous-action')

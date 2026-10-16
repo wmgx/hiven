@@ -266,7 +266,7 @@ function hostSession({ local = false, accept = async () => true, publish = true 
     clearPendingObjectBlock: () => cleared++,
     requestAnimationFrame: (callback) => { callback(); return 1 },
     useAppStore: { getState: () => ({ openGlobalLauncherOverlay() {}, clearPluginSurfaceTool() {} }), setState() {} },
-    onBack: () => back++,
+    onBack: () => back++, refreshPasteOwner: () => {},
     showToast: (message) => messages.push(message), pickLocale: (_locale, _zh, en) => en,
     locale: 'en', presentation: 'plugin-surface-window',
   }
@@ -325,7 +325,7 @@ for (const outcome of ['accepted', 'failed', 'cancelled', 'new-draft']) {
   const result = deferred(), mergeSubmissionRef = { current: null }, mergePreview = { text: '完整预览' }
   let cancelled = 0, loading = false, retries = 0
   const context = {
-    exports: {}, AbortController, mergeSubmissionRef, mergePreview, settings: { enabled: true }, combining: true,
+    exports: {}, AbortController, mergeSubmissionRef, queueSubmissionRef: { current: null }, compareSubmissionRef: { current: null }, mergePreview, settings: { enabled: true }, combining: true,
     mergeSuspended: false, mergeSuspendedRef: { current: false }, mergeReader: { isCurrent: () => true },
     host: { returnToLauncherWithObject: () => result.promise, showMessage() {} },
     setMergeLoading: (value) => { loading = value }, setMergeRetry: () => retries++,

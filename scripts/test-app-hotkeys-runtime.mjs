@@ -325,6 +325,7 @@ try {
   // Direct settings/rehydration failures keep an old registration and show real localized errors.
   for (const locale of ['en', 'zh']) {
     const f = await fixture()
+    f.useToastStore.setState({ toasts: [] }) // the toast store is shared across fixtures
     f.useAppStore.getState().setLocale(locale)
     f.native.registered.set(B.toLowerCase(), () => {})
     f.useAppStore.getState().setAppHotkey(binding('app-a', B))
