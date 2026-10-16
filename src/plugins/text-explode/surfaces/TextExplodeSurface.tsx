@@ -73,10 +73,6 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
   const [selection, setSelection] = useState(() => ({ tokens, indexes: new Set<number>() }))
   // A selection belongs to the exact token array it was made from.
   const selected = selection.tokens === tokens ? selection.indexes : EMPTY_SELECTION
-  const reportUnsavedChanges = host.setUnsavedChanges
-  // Initial material and fragment selection are work, even before the source is edited.
-  const hasDraft = inputValue.length > 0 || inputValue !== initial || selected.size > 0
-  useLayoutEffect(() => { reportUnsavedChanges?.(hasDraft) }, [reportUnsavedChanges, hasDraft])
   const setSelected = useCallback((next: React.SetStateAction<Set<number>>) => {
     invalidateOutput()
     setSelection((previous) => {

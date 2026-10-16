@@ -12,9 +12,6 @@ function keepSelection(options: Array<{ value: string; label: string }>, value: 
 export function SummarySurface({ host, initialText, t }: PluginSurfaceProps) {
   const [session] = useState(() => new SummarySession(initialText ?? ''))
   const snapshot = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot)
-  const reportUnsavedChanges = host.setUnsavedChanges
-  const dirty = snapshot.text !== (initialText ?? '')
-  useLayoutEffect(() => { reportUnsavedChanges?.(dirty) }, [reportUnsavedChanges, dirty])
   const settingsVisit = useRef<object | null>(null)
   const mounted = useRef(false)
   useLayoutEffect(() => {

@@ -23,7 +23,6 @@ export function ListCompareSurface({ host, t, initialText = '' }: PluginSurfaceP
   const snapshot = useRef(result); snapshot.current = result
   const revoke = () => { revision.current++; pending.current?.abort(); if (active.current) setEpoch(revision.current) }
   const update = (change: () => void) => { revoke(); setStatus(''); change() }
-  useLayoutEffect(() => { host.setUnsavedChanges?.(left !== initialText || !!right || ignoreCase || trim) }, [host.setUnsavedChanges, initialText, left, right, ignoreCase, trim])
   useLayoutEffect(() => {
     active.current = true; setEpoch(revision.current)
     const stopOwner = host.deliveryFeedbackOwner?.subscribeInvalidation(revoke)

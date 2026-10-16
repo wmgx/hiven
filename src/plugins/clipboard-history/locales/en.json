@@ -150,10 +150,6 @@
   "hint.pastePlain": "Plain text",
   "hint.favorite": "Toggle favorite",
   "quickEditor.action": "Open in Quick Editor",
-  "quickEditor.confirmTitle": "Open this text in Quick Editor?",
-  "quickEditor.confirmMessage": "The current Quick Editor draft will be saved in version history before it is replaced. This history item stays unchanged.",
-  "quickEditor.confirm": "Open and replace",
-  "quickEditor.opening": "Opening…",
   "quickEditor.error.unavailable": "This history item was deleted or is unavailable. Nothing was replaced.",
   "quickEditor.error.changed": "This history item changed elsewhere. Nothing was replaced; cancel and open it again to use the latest text.",
   "quickEditor.error.failed": "Could not confirm that Quick Editor opened. The history item is unchanged; check the editor and its version history before retrying.",
@@ -220,7 +216,5 @@
   "retention.protectedItem": "Earlier record protected until explicitly included",
   "retention.restoreUntil": "Restore before",
   "retention.empty": "No recoverable items. Active history is unchanged.",
-  "retention.recordingPaused": "Recording paused · Browsing, recovery and scheduled cleanup remain available",
-  "settings.shortenTitle": "Shorten retention from {from} to {to} months?",
-  "settings.shortenMessage": "Expired items move to Recently deleted and can be restored for 30 days, then are permanently deleted automatically. Favorites are unaffected."
+  "retention.recordingPaused": "Recording paused · Browsing, recovery and scheduled cleanup remain available"
 }

@@ -18,7 +18,6 @@ export function FilePathsSurface({ host, t, initialText = '' }: PluginSurfacePro
   }, [source, format, base, style])
   const feedback = useToolDeliveryFeedback(result, host.deliveryFeedbackOwner)
   const status = result.error && result.error !== 'empty' ? t(`error.${result.error}`) : feedback.feedback?.message
-  useLayoutEffect(() => { host.setUnsavedChanges?.(source !== initialText || base !== '') }, [host.setUnsavedChanges, source, initialText, base])
   useLayoutEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
   const update = (action: () => void) => { feedback.invalidate(); action() }
   const copy = async () => {

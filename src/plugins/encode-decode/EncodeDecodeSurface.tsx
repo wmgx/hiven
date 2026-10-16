@@ -45,11 +45,6 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
   const cropMode = props.surfaceId === 'image-crop'
   const [redactMode, setRedactMode] = useState(props.surfaceId === 'image-redact')
   const [saveFocused, setSaveFocused] = useState(props.surfaceId === 'image-save')
-  const hasUnsavedChanges = inputText !== baseline.current || imageDirty
-  const reportUnsavedChanges = host.setUnsavedChanges
-  useLayoutEffect(() => {
-    reportUnsavedChanges?.(hasUnsavedChanges)
-  }, [hasUnsavedChanges, reportUnsavedChanges])
   const [imageMode, setImageMode] = useState(props.surfaceId === 'image-base64' || props.surfaceId === 'image-save')
   const [format, setFormat] = useState<EncodeDecodeFormat>(initial.format)
   const [direction, setDirection] = useState<EncodeDecodeDirection>(initial.direction)

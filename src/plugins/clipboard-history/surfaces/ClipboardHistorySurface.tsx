@@ -13,7 +13,6 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import {
   Button,
-  ConfirmDialog,
   ContextMenu,
   Dialog,
   IconButton,
@@ -54,7 +53,6 @@ import {
   createHistoryQuickEditorLifecycle,
   openHistoryQuickEditorSnapshot,
   readHistoryQuickEditorSnapshot,
-  type HistoryQuickEditorSnapshot,
 } from './historyQuickEditorOpen'
 import {
   CLIPBOARD_TEXT_MERGE_MIN_ITEMS,
@@ -113,12 +111,6 @@ type FavoriteTitleDialogState = {
   mode: 'create' | 'edit'
 }
 
-type QuickEditorOpenState = {
-  snapshot: HistoryQuickEditorSnapshot
-  busy: boolean
-  error: string | null
-}
-
 type AppliedHistorySearch = {
   key: string
   query: string
@@ -148,7 +140,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const [copyLifecycle] = useState(createHistoryCopyLifecycle)
   const [imageSaveLifecycle] = useState(createHistoryImageSaveLifecycle)
   const [quickEditorLifecycle] = useState(createHistoryQuickEditorLifecycle)
-  const [quickEditorOpen, setQuickEditorOpen] = useState<QuickEditorOpenState | null>(null)
   const matchNavigatorRef = useRef<ClipboardHistoryMatchNavigator | null>(null)
   const [imageSaveBusy, setImageSaveBusy] = useState(false)
   const imageSaveMountedRef = useRef(true)
@@ -1058,7 +1049,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }, [host, imageSaveLifecycle, repository, t])
 
   const prepareQuickEditorOpen = useCallback(async (item: ClipboardHistoryItem) => {
-    if (!resultsActionableRef.current || item.kind !== 'text' || quickEditorOpen) return
+    if (!resultsActionableRef.current || item.kind !== 'text') return
     pasteNoticeGenerationRef.current += 1
     setPasteNotice(null)
     const submission = quickEditorLifecycle.begin(host.deliveryFeedbackOwner)
@@ -1070,44 +1061,22 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         setPasteNotice(t('quickEditor.error.unavailable'))
         return
       }
-      setQuickEditorOpen({ snapshot: result.snapshot, busy: false, error: null })
+      const open = host.openHistoryTextInQuickEditor
+      const opened = open
+        ? await openHistoryQuickEditorSnapshot(repository, result.snapshot, open, submission)
+        : { status: 'failed' as const }
+      if (opened.status === 'opened' || !submission.isCurrent()) return
+      setPasteNotice(t(opened.status === 'changed'
+        ? 'quickEditor.error.changed'
+        : opened.status === 'unavailable'
+          ? 'quickEditor.error.unavailable'
+          : 'quickEditor.error.failed'))
     } catch {
       if (submission.isCurrent()) setPasteNotice(t('quickEditor.error.failed'))
     } finally {
       submission.finish()
     }
-  }, [host.deliveryFeedbackOwner, quickEditorLifecycle, quickEditorOpen, repository, t])
-
-  const confirmQuickEditorOpen = useCallback(async () => {
-    if (!quickEditorOpen || quickEditorOpen.busy) return
-    const submission = quickEditorLifecycle.begin(host.deliveryFeedbackOwner)
-    if (!submission) return
-    setQuickEditorOpen({ ...quickEditorOpen, busy: true, error: null })
-    try {
-      const open = host.openHistoryTextInQuickEditor
-      const result = open
-        ? await openHistoryQuickEditorSnapshot(repository, quickEditorOpen.snapshot, open, submission)
-        : { status: 'failed' as const }
-      if (result.status === 'opened') {
-        if (imageSaveMountedRef.current) setQuickEditorOpen(null)
-        return
-      }
-      if (!submission.isCurrent()) return
-      const errorKey = result.status === 'changed'
-        ? 'quickEditor.error.changed'
-        : result.status === 'unavailable'
-          ? 'quickEditor.error.unavailable'
-          : 'quickEditor.error.failed'
-      setQuickEditorOpen({ ...quickEditorOpen, busy: false, error: t(errorKey) })
-    } finally {
-      submission.finish()
-    }
-  }, [host.deliveryFeedbackOwner, host.openHistoryTextInQuickEditor, quickEditorLifecycle, quickEditorOpen, repository, t])
-
-  const cancelQuickEditorOpen = useCallback(() => {
-    quickEditorLifecycle.cancel()
-    setQuickEditorOpen(null)
-  }, [quickEditorLifecycle])
+  }, [host.deliveryFeedbackOwner, host.openHistoryTextInQuickEditor, quickEditorLifecycle, repository, t])
 
   const applyItemUpdate = useCallback((updated: ClipboardHistoryItem) => {
     setItems((current) =>
@@ -1359,7 +1328,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }, [host, repository, t])
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.defaultPrevented || titleDialog || legacyDialog || quickEditorOpen) return
+    if (e.defaultPrevented || titleDialog || legacyDialog ) return
     if (textEdit) { e.stopPropagation(); return }
     if (combining) {
       if (imeKeyDown.shouldIgnoreKeyDown(e)) return
@@ -1460,7 +1429,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         if (flatIndex >= 0) virtualizer.scrollToIndex(flatIndex, { align: 'auto' })
       }
     }
-  }, [selectedItem, selectedId, filteredItems, flatRows, virtualizer, handlePaste, handleReturnToLauncher, handleDelete, handleCopy, handleSaveImage, host, t, imeKeyDown, combining, cancelMerge, toggleMergeItem, titleDialog, textEdit, toggleQuickFavorite, resultsActionBlocked, settings.enabled, filter, legacyDialog, quickEditorOpen])
+  }, [selectedItem, selectedId, filteredItems, flatRows, virtualizer, handlePaste, handleReturnToLauncher, handleDelete, handleCopy, handleSaveImage, host, t, imeKeyDown, combining, cancelMerge, toggleMergeItem, titleDialog, textEdit, toggleQuickFavorite, resultsActionBlocked, settings.enabled, filter, legacyDialog])
 
   const queueActive = Boolean(queueStatus && queueStatus.remaining > 0 && (queueStatus.phase === 'ready' || queueStatus.phase === 'failed'))
   const queueReadNotice = queueReadState === 'failed' ? t('queue.statusFailed') : queueReadState === 'loading' ? t('queue.statusLoading') : null
@@ -1861,17 +1830,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
           </div>
         </SurfaceFooterHints>
       )}
-
-      <ConfirmDialog
-        open={Boolean(quickEditorOpen)}
-        title={t('quickEditor.confirmTitle')}
-        message={quickEditorOpen?.error ?? t('quickEditor.confirmMessage')}
-        confirmLabel={t(quickEditorOpen?.busy ? 'quickEditor.opening' : 'quickEditor.confirm')}
-        cancelLabel={t('action.cancel')}
-        defaultFocus="cancel"
-        onConfirm={() => { void confirmQuickEditorOpen() }}
-        onCancel={() => { if (!quickEditorOpen?.busy) cancelQuickEditorOpen() }}
-      />
 
       <Dialog
         open={legacyDialog}

@@ -355,21 +355,13 @@ export function CsvSurface(props: PluginSurfaceProps) {
   // middle edits must never make an earlier full result eligible for a new handoff.
   const resultParameters = JSON.stringify([delimiter, header, output, minify, indent, tableName, dropEmpty, dedupe, transpose, filterMode, globalFilter, sqlFilter, sortColumns])
   const fullReturnSnapshotRef = useRef<{ sourceText: string; parameters: string } | null>(null)
-  const draftBaseline = useRef({ sourceText, resultParameters, linkedFileLabel })
-  const dirty = sourceText !== draftBaseline.current.sourceText
-    || resultParameters !== draftBaseline.current.resultParameters
-    || linkedFileLabel !== draftBaseline.current.linkedFileLabel
-  const reportUnsavedChanges = host.setUnsavedChanges
-  useLayoutEffect(() => { reportUnsavedChanges?.(dirty) }, [dirty, reportUnsavedChanges])
-  // Host Back/Escape revokes delivery before showing the existing confirmation.
-  // Keep source, options and selection intact so cancelling resumes this draft.
+  // Host Back/Escape revokes pending delivery and in-flight reads before leaving.
   useLayoutEffect(() => host.subscribeLeaveIntent?.(() => {
     fileReadRef.current = null
     setFileReadingOwner(null)
     cancelSubmissions()
     abortRef.current?.abort()
     abortRef.current = null
-    // Completed full results are part of the retained draft, not pending work.
     setFullJob((job) => job.status === 'running' ? { status: 'idle' } : job)
   }), [host.subscribeLeaveIntent, cancelSubmissions])
 

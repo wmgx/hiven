@@ -19,12 +19,6 @@ export function TextToolsSurface(props: PluginSurfaceProps) {
   const initialRoute = textToolRoutes.find((route) => route.surfaceId === props.surfaceId)
   const [group, setGroup] = useState<Group>(initialRoute?.group ?? 'lines')
   const [inputText, setInputText] = useState(props.initialText ?? '')
-  const baseline = useRef(props.initialText ?? '')
-  const hasUnsavedChanges = inputText !== baseline.current
-  const reportUnsavedChanges = host.setUnsavedChanges
-  useLayoutEffect(() => {
-    reportUnsavedChanges?.(hasUnsavedChanges)
-  }, [hasUnsavedChanges, reportUnsavedChanges])
   const [selectedCase, setSelectedCase] = useState<CaseOperation>(
     initialRoute?.group === 'case' ? initialRoute.operation as CaseOperation : 'camel',
   )

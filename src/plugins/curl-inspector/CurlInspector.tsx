@@ -7,10 +7,6 @@ import { CurlParseError, curlHeaderDisplayLabels, parseCurl } from './core'
 export function CurlInspector({ host, t }: PluginSurfaceProps) {
   // Deliberately ignore initialText: a curl command belongs here, never in a launcher query.
   const [source, setSource] = useState('')
-  const reportUnsavedChanges = host.setUnsavedChanges
-  useLayoutEffect(() => {
-    reportUnsavedChanges?.(source.length > 0)
-  }, [source, reportUnsavedChanges])
   const [visible, setVisible] = useState<Set<string>>(new Set())
   const [status, setStatus] = useState('')
   const result = useMemo(() => {

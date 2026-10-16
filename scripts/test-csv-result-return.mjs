@@ -918,11 +918,9 @@ await check('clipboard late host rejection cannot bypass permission or report on
   assert.deepEqual(h.calls.messages, [])
   assert.equal(h.calls.complete, 0)
 })
-await check('empty draft stays clean; edit and cancelled leave preserve full result and retry', async () => {
+await check('edit and cancelled leave preserve full result and retry', async () => {
   const h = harness({ input: '' })
-  assert.equal(h.calls.dirty.at(-1), false)
   h.edit('SourceText', 'name,value\none,1\ntwo,2')
-  assert.equal(h.calls.dirty.at(-1), true)
   await h.full()
   const draft = h.draft(), full = h.view.fullOutputRef.current
   h.leaveIntent()

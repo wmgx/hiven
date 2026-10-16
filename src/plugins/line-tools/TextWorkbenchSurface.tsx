@@ -70,7 +70,6 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
   const [localInputText, setLocalInputText] = useState(props.initialText ?? '')
   const inputText = props.embedded?.inputText ?? localInputText
   const setInputText = props.embedded?.onInputChange ?? setLocalInputText
-  const baseline = useRef(props.initialText ?? '')
   const [localSelection, setLocalSelection] = useState<WorkbenchSelection>(() => ({
     operation: getWorkbenchOperation(props.surfaceId),
     options: { ...DEFAULT_WORKBENCH_OPTIONS },
@@ -118,13 +117,6 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
   useLayoutEffect(() => {
     currentResultRef.current = result
   }, [result])
-
-  const hasUnsavedChanges = inputText !== baseline.current
-  // The existing naming/statistics shell owns its shared draft and dirty report.
-  const reportUnsavedChanges = props.embedded ? undefined : host.setUnsavedChanges
-  useLayoutEffect(() => {
-    reportUnsavedChanges?.(hasUnsavedChanges)
-  }, [hasUnsavedChanges, reportUnsavedChanges])
 
   useLayoutEffect(() => () => reportBusy?.(false), [reportBusy])
 

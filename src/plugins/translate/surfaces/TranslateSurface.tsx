@@ -193,9 +193,6 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
   const [targetLang, setTargetLang] = useState<TargetLanguageCode>(initialProfile?.defaultTargetLang ?? settings.defaultTargetLang ?? 'smart')
   const initialText = props.initialText?.trim()
   const [inputText, setInputText] = useState(initialText ?? '')
-  const reportUnsavedChanges = host.setUnsavedChanges
-  const dirty = inputText !== (initialText ?? '')
-  useLayoutEffect(() => { reportUnsavedChanges?.(dirty) }, [reportUnsavedChanges, dirty])
   const [view, setView] = useState<TranslationView>({ identity: '', outputText: '', status: { kind: 'idle' } })
   const [usageByProfile, setUsageByProfile] = useState(() => new Map(settings.profiles.map((profile) => [profile.id, profile.usedChars])))
   const usageRef = useRef(usageByProfile)

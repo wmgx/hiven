@@ -150,10 +150,6 @@
   "hint.pastePlain": "纯文本粘贴",
   "hint.favorite": "切换收藏",
   "quickEditor.action": "在快捷编辑器中打开",
-  "quickEditor.confirmTitle": "在快捷编辑器中打开这段文本？",
-  "quickEditor.confirmMessage": "替换前会把快捷编辑器的当前草稿保存到版本历史；这条剪贴板历史不会被修改。",
-  "quickEditor.confirm": "打开并替换",
-  "quickEditor.opening": "正在打开…",
   "quickEditor.error.unavailable": "这条历史已删除或无法读取，未替换任何内容。",
   "quickEditor.error.changed": "这条历史已在别处修改，未替换任何内容；请取消后重新打开以使用最新正文。",
   "quickEditor.error.failed": "未能确认快捷编辑器已打开；历史条目保持不变，请先检查编辑器及其版本历史再重试。",
@@ -220,7 +216,5 @@
   "retention.protectedItem": "旧记录受保护，明确纳入后才适用保留期",
   "retention.restoreUntil": "请在此时间前恢复",
   "retention.empty": "暂无可恢复条目，正常历史保持不变。",
-  "retention.recordingPaused": "已暂停新记录 · 仍可浏览、恢复，并继续到期清理",
-  "settings.shortenTitle": "将保留期从 {from} 个月缩短至 {to} 个月？",
-  "settings.shortenMessage": "过期条目会移入最近删除，可在 30 天内恢复，之后自动永久删除。收藏项不受影响。"
+  "retention.recordingPaused": "已暂停新记录 · 仍可浏览、恢复，并继续到期清理"
 }

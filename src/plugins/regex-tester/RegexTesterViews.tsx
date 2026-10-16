@@ -112,13 +112,6 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
   const [pattern, setPattern] = useState(baseline.current.pattern)
   const [flags, setFlags] = useState(baseline.current.flags)
   const [sourceText, setSourceText] = useState(baseline.current.sourceText)
-  const hasUnsavedChanges = pattern !== baseline.current.pattern
-    || flags !== baseline.current.flags
-    || sourceText !== baseline.current.sourceText
-  const reportUnsavedChanges = host.setUnsavedChanges
-  useLayoutEffect(() => {
-    reportUnsavedChanges?.(hasUnsavedChanges)
-  }, [hasUnsavedChanges, reportUnsavedChanges])
   const [aiState, setAiState] = useState<AiCandidateState>({ status: 'idle' })
   const aiSession = useRef<ReturnType<typeof createAiCandidateSession> | null>(null)
   useLayoutEffect(() => {

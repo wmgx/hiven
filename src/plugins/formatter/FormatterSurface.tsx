@@ -26,12 +26,6 @@ export function FormatterSurface(props: PluginSurfaceProps) {
   const initialText = props.initialText ?? ''
   const initialRoute = formatterRoutes.find((item) => item.id === props.surfaceId)
   const [inputText, setInputText] = useState(initialText)
-  const baseline = useRef(initialText)
-  const hasUnsavedChanges = inputText !== baseline.current
-  const reportUnsavedChanges = host.setUnsavedChanges
-  useLayoutEffect(() => {
-    reportUnsavedChanges?.(hasUnsavedChanges)
-  }, [hasUnsavedChanges, reportUnsavedChanges])
   const [language, setLanguage] = useState<FormatterLanguage>(() => initialLanguage(props.surfaceId, initialText))
   const [operation, setOperation] = useState<FormatterOperation>(initialRoute?.operation ?? 'format')
   const [busy, setBusy] = useState<'copy' | 'paste' | 'return' | null>(null)
