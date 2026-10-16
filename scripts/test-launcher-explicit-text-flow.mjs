@@ -79,8 +79,13 @@ try {
   const input = '{"z":1,"a":{"c":3,"b":2}}'
   const expected = '{\n    "a": {\n        "b": 2,\n        "c": 3\n    },\n    "z": 1\n}'
 
-  await controller.selectItem(formatter)
-  assert.equal(top().kind, 'param-input', 'new mode always asks existing params in schema order')
+  {
+    const plain = makeController()
+    await plain.selectItem(formatter)
+    assert.equal(plain.getState().frames.at(-1).kind, 'collect-input', 'plain Enter keeps default params and asks only for input')
+  }
+  await controller.selectItem(formatter, { customizeParams: true })
+  assert.equal(top().kind, 'param-input', 'customize asks existing params in schema order')
   assert.equal(top().item.params[top().paramIndex].key, 'indent')
   await controller.commitCurrentParam(4)
   assert.equal(top().item.params[top().paramIndex].key, 'sortKeys')
@@ -319,7 +324,7 @@ try {
 
   const beforeInvalid = structuredClone(await getLastSaveableRun())
   controller.reset()
-  await controller.selectItem(formatter, { objectBlockText: '{bad' })
+  await controller.selectItem(formatter, { objectBlockText: '{bad', customizeParams: true })
   await controller.commitCurrentParam(2)
   await controller.commitCurrentParam(false)
   assert.equal(top().kind, 'param-input')

@@ -74,7 +74,7 @@ try {
   const top = () => controller.getState().frames.at(-1)
   async function preview(item, input, params) {
     controller.reset()
-    await controller.selectItem(item)
+    await controller.selectItem(item, { customizeParams: item.commitVia !== 'saved-action' })
     if (item.commitVia !== 'saved-action') {
       for (const param of item.params ?? []) await controller.commitCurrentParam(params[param.key] ?? item.defaultParams?.[param.key] ?? param.default)
     }
@@ -172,7 +172,7 @@ try {
   // Its Enter selection must come from the confirmed preview, not the old run.
   async function objectBlockPreview(item, material, params) {
     controller.reset()
-    await controller.selectItem(item, { objectBlockText: material })
+    await controller.selectItem(item, { objectBlockText: material, customizeParams: true })
     for (const param of item.params) await controller.commitCurrentParam(params[param.key])
     assert.equal(top().kind, 'result')
     assert.equal(controller.getState().frames.at(-2).kind, 'param-input')

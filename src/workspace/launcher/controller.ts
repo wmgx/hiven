@@ -757,7 +757,8 @@ export class LauncherController {
     })
     const recordUsage = this.shouldRecord(item, options)
 
-    if ((options.customizeParams || (this.isExplicitTextPreview(item) && item.commitVia !== 'saved-action')) && this.hasCustomizableParams(item)) {
+    // Enter runs with default params; only the explicit customize gesture (⌘↵) opens the param page.
+    if (options.customizeParams && this.hasCustomizableParams(item)) {
       trackBehavior(TelemetryEvents.launcherEnterParamInput, itemTelemetryProps(item))
       this.setState({
         frames: [...this.state.frames, this.paramFrameFor(item, undefined, 0, options.objectBlockText, recordUsage)],
