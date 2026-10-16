@@ -1,10 +1,10 @@
 {
-  "version": 153,
+  "version": 154,
   "packages": [
     {
       "pluginId": "encode-decode",
       "dir": "encode-decode",
-      "version": "2.10.0"
+      "version": "2.10.1"
     },
     {
       "pluginId": "formatter",
@@ -34,17 +34,17 @@
     {
       "pluginId": "calculator",
       "dir": "calculator",
-      "version": "1.6.4"
+      "version": "1.9.0"
     },
     {
       "pluginId": "date-time-assistant",
       "dir": "date-time-assistant",
-      "version": "1.11.1"
+      "version": "1.12.0"
     },
     {
       "pluginId": "translate",
       "dir": "translate",
-      "version": "1.0.23"
+      "version": "1.0.24"
     },
     {
       "pluginId": "ai-writing",
@@ -100,6 +100,16 @@
       "pluginId": "file-paths",
       "dir": "file-paths",
       "version": "1.0.3"
+    },
+    {
+      "pluginId": "curl-inspector",
+      "dir": "curl-inspector",
+      "version": "1.0.2"
+    },
+    {
+      "pluginId": "unix-permissions",
+      "dir": "unix-permissions",
+      "version": "1.0.1"
     }
   ]
 }
