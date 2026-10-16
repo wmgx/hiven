@@ -302,6 +302,22 @@ if (existsSync(pluginsDirForDiff)) {
   }
 }
 
+// ─── Retired window / editor concepts (moved from source-regex tests) ────────
+for (const retired of [
+  'src/components/EditorWindow.tsx',
+  'src/components/CommandPalette.tsx',
+  'src/views/EditorView.tsx',
+  'src/surfaces/PluginEditorSurface.tsx',
+]) {
+  checkForbiddenPath(retired)
+}
+checkForbiddenSourceTerms('src', [/\bisEditorWindowRuntime\b/], 'retired editor-window runtime concept')
+
+// The host SDK must not reach into plugin implementations.
+if (/from\s+['"]\.\/plugins\//.test(pluginHostSdk)) {
+  addFailure('pluginHostSdk must not import from ./plugins/')
+}
+
 if (failures.length > 0) {
   console.error('Architecture boundary check failed:')
   for (const failure of failures) {
