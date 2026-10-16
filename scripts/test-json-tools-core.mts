@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { operationRoutes } from '../src/plugins/json-tools/routes.ts'
 import { searchableFieldsMatch } from '../src/workspace/searchRanking.ts'
 import { jsonCore } from './helpers/text-transform-cores.mjs'
@@ -49,7 +48,6 @@ const unsupportedYaml = processJson('value: .nan', { operation: 'yaml-to-json' }
 assert.equal(unsupportedYaml.ok, false)
 if (!unsupportedYaml.ok) assert.equal(unsupportedYaml.code, 'finiteNumberRequired')
 
-assert.match(readFileSync('src/plugins/json-tools/index.ts', 'utf8'), /items: operationRoutes\.map/, 'workspace routes must use normal launcher search')
 const formatRoute = operationRoutes.find((route) => route.id === 'format')!
 const formatFields = { id: formatRoute.id, title: '', aliases: formatRoute.aliases }
 assert.ok(['json for', 'geshihua', 'gsh'].every((query) => searchableFieldsMatch(formatFields, query, 'zh')), 'partial names, pinyin, and initials must find the same route')

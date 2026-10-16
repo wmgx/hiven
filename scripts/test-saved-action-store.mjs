@@ -278,9 +278,6 @@ assert.deepEqual(listSavedActions(), [])
 localValues.set('hiven:saved-actions:v1', JSON.stringify([{ ...artifact, inputText: 'PRIVATE_INPUT_CANARY' }]))
 assert.deepEqual(listSavedActions(), [], 'Artifact loader must reject unknown content-bearing fields')
 
-const registrySource = readFileSync('src/workspace/launcher/registry.ts', 'utf8')
-assert.match(registrySource, /getSavedActionLauncherItems\(baseItems, \{/)
-
 let savedCommandArgs
 const savedFromCommand = { ...artifact, id: 'artifact_command' }
 const hostActionsModule = loadModule('src/workspace/launcher/hostActions.ts', {

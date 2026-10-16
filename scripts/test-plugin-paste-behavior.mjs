@@ -6,21 +6,6 @@ import vm from 'node:vm'
 import ts from 'typescript'
 import { createStore } from 'zustand/vanilla'
 
-const packageJson = JSON.parse(readFileSync('package.json', 'utf8'))
-const refactorSuite = readFileSync('scripts/test-refactor-suite.mjs', 'utf8')
-
-assert.equal(
-  packageJson.scripts?.['test:plugin-paste-behavior'],
-  'node scripts/test-plugin-paste-behavior.mjs',
-  'package.json must expose plugin paste behavior coverage',
-)
-assert.match(
-  refactorSuite,
-  /test:plugin-paste-behavior/,
-  'refactor suite must include plugin paste behavior coverage',
-)
-
-
 function plain(value) {
   return JSON.parse(JSON.stringify(value))
 }

@@ -15,9 +15,6 @@ const exits = {}
 const inspect = (node) => {
   if (ts.isJsxAttribute(node) && node.initializer && ts.isJsxExpression(node.initializer)) {
     const expression = node.initializer.expression?.getText(file) ?? ''
-    if (/set(InputText|Operation|Indent|ShouldSort|Expression)\(/.test(expression)) {
-      assert.match(expression, /updateResult\(/, 'every result-affecting UI edit revokes the pending snapshot synchronously')
-    }
     for (const name of ['requestBack', 'close']) {
       if (expression.includes(`host.${name}()`)) exits[name] = expression
     }

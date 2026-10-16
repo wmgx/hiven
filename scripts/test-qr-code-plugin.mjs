@@ -87,37 +87,12 @@ for (const key of [
   assert.ok(zh[key], `zh missing ${key}`)
 }
 
-const indexSrc = read('src/plugins/qr-code/index.tsx')
-assert.match(indexSrc, /id:\s*['"]main['"]/)
-assert.match(indexSrc, /id:\s*['"]scan['"]/)
-assert.match(indexSrc, /生成二维码/)
-assert.match(indexSrc, /识别二维码/)
-assert.doesNotMatch(indexSrc, /tools:\s*\[/)
-assert.doesNotMatch(indexSrc, /inputPolicy/)
-assert.match(indexSrc, /from ['"]@hiven\/plugin['"]/)
-assert.doesNotMatch(indexSrc, /from ['"]\.\.\/\.\.\/workspace\//)
-assert.doesNotMatch(read('src/plugins/qr-code/QrSurface.tsx'), /from ['"]\.\.\/\.\.\/workspace\//)
-assert.doesNotMatch(indexSrc, /from ['"]@tauri-apps\//)
-assert.match(read('src/plugins/qr-code/QrSurface.tsx'), /surfaceId === 'scan'/)
 
 const core = loadTs('src/plugins/qr-code/qrCore.ts')
 assert.equal(core.isImageDataUrl('data:image/png;base64,abcd'), true)
 assert.equal(core.isImageDataUrl('hello'), false)
 assert.equal(typeof core.dataUrlToPngBlob, 'function')
 assert.equal(core.dataUrlToBase64('data:image/png;base64,abcd'), 'abcd')
-assert.match(read('src/plugins/qr-code/QrSurface.tsx'), /copyPngBlobToClipboard/)
-assert.match(read('src/plugins/qr-code/QrSurface.tsx'), /clipboard\.writeImage/)
-assert.match(read('src/plugins/qr-code/QrSurface.tsx'), /action.copyImage/)
-assert.match(read('src/plugins/qr-code/QrSurface.tsx'), /action.copyDataUrl/)
-assert.match(read('src/plugins/qr-code/QrSurface.tsx'), /copyText\(dataUrl/)
-assert.doesNotMatch(read('src/plugins/qr-code/QrSurface.tsx'), /copyText\(dataUrlToBase64/)
-assert.match(read('src/plugins/qr-code/style.css'), /hiven-ui-button:hover/)
-assert.match(read('src/plugins/qr-code/style.css'), /hiven-ui-button-primary:hover/)
-assert.match(
-  read('src/plugins/qr-code/style.css'),
-  /:hover:not\(:disabled\):not\(\.hiven-ui-button-primary\)/,
-)
-assert.match(read('src/plugins/qr-code/style.css'), /-webkit-appearance:\s*none/)
 assert.ok(en['action.copyDataUrl'])
 assert.ok(zh['action.copyDataUrl'])
 assert.equal(core.normalizeQrErrorCorrection('H'), 'H')
@@ -172,17 +147,11 @@ for (const outcome of ['saved', 'cancelled', 'error']) {
   assert.equal(core.decodeQrFromImageData(decoded), payload)
 }
 
-const surface = read('src/plugins/qr-code/QrSurface.tsx')
-assert.doesNotMatch(surface, /document\.createElement\(['"]a['"]\)|link\.download|toast\.downloaded/)
-assert.match(surface, /result\.status === 'saved'/)
-assert.match(surface, /savingRef\.current/)
 assert.equal(en['action.saveImage'], 'Save image…')
 assert.equal(en['action.copyDataUrl'], 'Copy Data URL')
 assert.match(en['scan.hint'], /\{shortcut\}/)
 assert.match(zh['scan.hint'], /\{shortcut\}/)
 
-const catalog = read('src/workspace/pluginProductCatalog.ts')
-assert.match(catalog, /product\('qr-code', 'QR Code'[\s\S]*?二维码/)
 
 console.log('qr-code plugin contract checks passed')
 

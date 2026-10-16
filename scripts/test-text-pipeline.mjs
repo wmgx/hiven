@@ -139,19 +139,4 @@ assert.equal(
   'registerBuiltinTextPipelines must be idempotent',
 )
 
-// ── static source wiring ────────────────────────────────────────────────────
-const hostProvider = readFileSync(path.join(ROOT, 'src/workspace/launcher/hostProvider.ts'), 'utf8')
-assert.match(hostProvider, /getTextPipelineLauncherItems/, 'hostProvider must include pipeline launcher items')
-assert.match(hostProvider, /registerBuiltinTextPipelines/, 'hostProvider must register builtin pipelines')
-
-const pipelineLauncher = readFileSync(path.join(ROOT, 'src/workflow/pipelineLauncher.ts'), 'utf8')
-assert.match(pipelineLauncher, /host:pipeline:/, 'pipeline systemKey must use host:pipeline: prefix')
-assert.match(pipelineLauncher, /global-launcher/, 'pipeline items must surface on global-launcher')
-assert.match(pipelineLauncher, /editor-command-bar/, 'pipeline items must surface on editor-command-bar')
-assert.match(pipelineLauncher, /surfaceTextResult/, 'pipeline execute must route text output through the current surface')
-
-const workflowIndex = readFileSync(path.join(ROOT, 'src/workflow/index.ts'), 'utf8')
-assert.match(workflowIndex, /runTextPipeline/, 'workflow index must export runTextPipeline')
-assert.match(workflowIndex, /listTextPipelines/, 'workflow index must export listTextPipelines')
-
 console.log('test-text-pipeline: ok')

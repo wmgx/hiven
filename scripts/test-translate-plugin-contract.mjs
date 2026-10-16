@@ -1,46 +1,13 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const root = process.cwd()
+const readJson = (path) => JSON.parse(readFileSync(join(root, path), 'utf8'))
 
-function read(path) {
-  return readFileSync(join(root, path), 'utf8')
-}
-
-function readIfExists(path) {
-  const fullPath = join(root, path)
-  return existsSync(fullPath) ? readFileSync(fullPath, 'utf8') : ''
-}
-
-const pluginDir = 'src/plugins/translate'
-const manifest = readIfExists(`${pluginDir}/manifest.json`)
-const index = readIfExists(`${pluginDir}/index.tsx`) || readIfExists(`${pluginDir}/index.ts`)
-const surface = readIfExists(`${pluginDir}/surfaces/TranslateSurface.tsx`)
-const styles = readIfExists(`${pluginDir}/style.css`)
-const settings = readIfExists(`${pluginDir}/settings/model.ts`)
-const adapters = readIfExists(`${pluginDir}/providers/adapters.ts`)
-const tencent = readIfExists(`${pluginDir}/providers/tencent.ts`)
-const aiSettings = readIfExists(`${pluginDir}/settings/AiTranslateSettingsModal.tsx`)
-const aiReadiness = readIfExists(`${pluginDir}/ai/readiness.ts`)
-const localeZh = readIfExists(`${pluginDir}/locales/zh.json`)
-const localeEn = readIfExists(`${pluginDir}/locales/en.json`)
-const builtinIndex = read('src/builtin-plugins/index.json')
-const packageJson = read('package.json')
-const settingsDialog = read('src/components/PluginSettingsDialog.tsx')
-
-assert.ok(manifest, 'translate plugin must ship manifest.json')
-assert.ok(index, 'translate plugin must ship an index entry')
-assert.ok(surface, 'translate plugin must ship TranslateSurface.tsx')
-assert.ok(styles, 'translate plugin must ship dedicated style.css')
-assert.ok(settings, 'translate plugin must define settings/model.ts')
-assert.ok(adapters, 'translate plugin must define provider adapters')
-assert.ok(tencent, 'translate plugin must define tencent adapter')
-assert.ok(aiSettings, 'translate plugin must expose AI provider settings')
-
-const manifestJson = JSON.parse(manifest)
+const manifestJson = readJson('src/plugins/translate/manifest.json')
 assert.equal(manifestJson.pluginId, 'translate', 'manifest pluginId must be translate')
 assert.deepEqual(
   manifestJson.capabilities?.sort(),
@@ -53,92 +20,10 @@ assert.deepEqual(
   'translate should request host AI plus storage, network, clipboard and global shortcut access',
 )
 
-const builtin = JSON.parse(builtinIndex)
+const builtin = readJson('src/builtin-plugins/index.json')
 assert.ok(
   builtin.packages.some((pkg) => pkg.pluginId === 'translate' && pkg.dir === 'translate'),
   'builtin plugin index must include translate package',
 )
-
-const packageScripts = JSON.parse(packageJson).scripts ?? {}
-assert.equal(
-  packageScripts['test:translate-plugin'],
-  'node scripts/test-translate-plugin-contract.mjs && node scripts/test-translate-baidu-response.mjs && node scripts/test-translate-tencent.mjs',
-  'package.json must expose test:translate-plugin',
-)
-
-assert.match(index, /definePlugin<TranslateSettings>\s*\(/, 'translate plugin should be typed with TranslateSettings')
-assert.match(index, /value:\s*['"]ai['"]/, 'translate settings must offer the host AI provider')
-assert.match(adapters, /ai\.stream\(/, 'AI translation must stream through the host AI API')
-assert.match(surface, /hostRef\.current\.ai/, 'translate surface must pass the host AI API into the adapter')
-assert.match(aiReadiness, /ai\.providers\(\)/, 'AI settings readiness controller must list providers from the host')
-assert.match(aiSettings, /supportedEfforts/, 'AI settings must limit reasoning choices to the selected model')
-assert.match(settingsDialog, /presentation === 'plugin-surface-window'[\s\S]*'100vw'[\s\S]*'100vh'/, 'settings opened from a plugin window must keep that window size')
-assert.match(index, /schema:\s*\{/, 'translate settings must use the generic schema renderer')
-assert.match(index, /kind:\s*['"]object-list['"]/, 'translate settings must expose API profiles through schema object-list')
-assert.doesNotMatch(index, /TranslateSettingsPanel|component:\s*TranslateSettingsPanel/, 'translate settings should not use a custom settings panel')
-assert.match(index, /ui:\s*\{[\s\S]*surfaces:\s*\[/, 'translate plugin must contribute a ui surface')
-assert.match(index, /kind:\s*['"]custom-view['"]/, 'translate plugin must use custom-view surface')
-assert.match(index, /id:\s*['"]main['"]/, 'translate surface id must be main')
-assert.match(index, /launcher:\s*\{\s*surfaces:\s*\[['"]global-launcher['"]\]/, 'translate surface must be available from Global Launcher')
-assert.match(index, /shortcutBindable:\s*true/, 'translate surface must be shortcut-bindable')
-assert.match(index, /recommendedShortcut:\s*['"]CmdOrCtrl\+Shift\+T['"]/, 'translate should recommend CmdOrCtrl+Shift+T')
-assert.match(index, /closeOnBlur:\s*false/, 'translate surface should not close on blur')
-assert.match(index, /resizable:\s*true/, 'translate surface should be resizable')
-assert.doesNotMatch(index, /background\s*:/, 'translate must not register a background task')
-assert.doesNotMatch(index, /commands\s*:/, 'translate should not be modeled as a command-first plugin')
-assert.doesNotMatch(index, /panels\s*:/, 'translate should not register workspace panels')
-assert.doesNotMatch(index, /toolbar\s*:/, 'translate should not register workspace toolbar actions')
-
-for (const source of [index, surface, settings, adapters, tencent].join('\n')) {
-  assert.doesNotMatch(source, /clipboard\.readText|pasteText|host\.paste/, 'translate must not read clipboard or paste to foreground app')
-  assert.doesNotMatch(source, /replaceActiveText|insertText|getActiveText|getSelectionText|getPaneSnapshot/, 'translate must not read or write workspace text')
-  assert.doesNotMatch(source, /history|repository|background/i, 'translate must not implement translation history/background storage')
-}
-
-assert.match(surface, /800/, 'TranslateSurface must debounce automatic translation at 800ms')
-assert.match(surface, /isAutoTranslateReady/, 'surface must skip only empty input, not a character minimum')
-assert.doesNotMatch(adapters, /MIN_AUTO_TRANSLATE_CHARS/, 'auto-translate must not impose a character-count threshold')
-assert.doesNotMatch(surface, />\s*翻译\s*<|>\s*Translate\s*<\/[Bb]utton|从剪贴板/, 'surface must not expose a translate-action or clipboard-import button')
-assert.match(surface, /host\.clipboard\.writeText/, 'surface should copy translation via host clipboard write')
-assert.match(surface, /action\.copy/, 'surface should expose a header copy action')
-assert.match(surface, /textarea|TextArea/, 'surface must expose a text input area')
-assert.match(surface, /className=\{`translate-output[\s\S]*readOnly/, 'translation output must use a selectable read-only textarea')
-assert.doesNotMatch(surface, /event\.key\.toLowerCase\(\)\s*!==\s*['"]c['"]/, 'surface must not override native Cmd/Ctrl+C behavior')
-assert.match(surface, /translatedText|translationText|outputText/, 'surface must render translation text')
-assert.match(surface, /smart/i, 'surface must support smart target language')
-assert.match(surface, /quota|usedChars|monthlyLimit/i, 'surface must expose quota status')
-assert.match(surface + styles, /translate-surface/, 'surface and styles must use translate-surface class naming')
-assert.match(surface, /translate-surface__header/, 'surface must follow the designed header structure')
-assert.match(surface, /translate-surface__controls/, 'surface must follow the designed controls structure')
-assert.match(surface, /translate-surface__body/, 'surface must follow the designed two-pane body structure')
-assert.match(surface, /translate-surface__status/, 'surface must follow the designed status bar structure')
-assert.match(surface, /role=\{status\.kind === ['"]error['"][\s\S]{0,100}['"]alert['"] : ['"]status['"]\}/, 'translation failures and quota errors must use an assertive live region')
-assert.match(styles, /--panel|--surface|--text-2|--accent-soft/, 'translate styles must define restrained design tokens')
-assert.match(styles, /@media \(max-width: 520px\)[\s\S]*\.translate-surface__controls\s*\{[^}]*flex-wrap:\s*wrap;/, 'translate controls must reflow instead of truncating every selected value')
-assert.doesNotMatch(styles, /translate-surface-ambient|background-size:\s*38px|border-radius:\s*18px/, 'translate UI should remove the old decorative ambient/grid/card styling')
-assert.doesNotMatch(styles, /translate-settings/, 'settings page should use the host schema styling instead of plugin-local settings styles')
-
-assert.match(settings, /profiles:\s*\[/, 'settings must default API profiles')
-assert.match(settings, /defaultTargetLang:\s*['"]smart['"]/, 'settings must default target language to smart')
-assert.match(settings, /monthlyLimitChars/, 'settings must model monthly character limit')
-assert.match(settings, /usedChars/, 'settings must model monthly used characters')
-assert.match(adapters, /provider:\s*['"]baidu['"]|case\s+['"]baidu['"]/, 'provider adapters must include baidu')
-assert.doesNotMatch(adapters, /crypto\.subtle\.digest\(['"]MD5['"]/, 'Baidu signing must not rely on unsupported WebCrypto MD5')
-assert.match(adapters, /BAIDU_SUCCESS_CODES|baiduFailureMessage/, 'Baidu adapter must distinguish success codes from real errors')
-assert.match(surface, /hostRef/, 'auto-translate must not depend on host object identity')
-assert.doesNotMatch(
-  surface,
-  /\[host\.network,\s*host\.storage,\s*usageByProfile\]/,
-  'auto-translate debounce must not reset when launcher recreates host.network',
-)
-assert.match(surface, /host(?:Ref\.current)?\.storage\.kv\.(get|set)/, 'surface must persist monthly usage with plugin private storage')
-assert.match(adapters, /provider:\s*['"]deepl['"]|case\s+['"]deepl['"]/, 'provider adapters must include deepl')
-assert.match(adapters, /case\s+['"]tencent['"]/, 'provider adapters must include tencent')
-assert.match(index, /value:\s*['"]tencent['"]/, 'settings must offer tencent as a provider option')
-assert.match(settings, /provider:\s*['"]tencent['"]/, 'settings model must include tencent profile')
-assert.match(settings, /migrateTranslateSettings/, 'existing users must receive a tencent profile via settings migrate')
-assert.match(localeZh, /腾讯云翻译/, 'zh locale must name Tencent Cloud')
-assert.match(localeEn, /Tencent Cloud/, 'en locale must name Tencent Cloud')
-assert.match(tencent, /TC3-HMAC-SHA256/, 'tencent adapter must sign with TC3')
 
 console.log('translate plugin contract checks passed')

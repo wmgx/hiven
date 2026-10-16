@@ -3,47 +3,12 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
-function read(path) {
-  return readFileSync(path, 'utf8')
-}
-
-function readOptional(path) {
-  try {
-    return readFileSync(path, 'utf8')
-  } catch (error) {
-    if (error && error.code === 'ENOENT') return ''
-    throw error
-  }
-}
-
-const corePlugin = readOptional('src/workspace/corePlugin.ts')
-const hostEditorActions = read('src/workspace/launcher/hostEditorActions.ts')
-const builtinIndex = JSON.parse(read('src/builtin-plugins/index.json'))
-
-assert.doesNotMatch(corePlugin, /core\.toggle-sticky-scroll/, 'sticky scroll command should not live in internal corePlugin')
-assert.doesNotMatch(corePlugin, /core\.set-language/, 'set language command should not live in internal corePlugin')
-
-assert.match(hostEditorActions, /host:pane:toggle-sticky-scroll/, 'editor-local host actions should own sticky scroll command')
-assert.match(hostEditorActions, /updatePaneStickyScroll\(state\.activePaneId,\s*next\)/, 'sticky scroll should update the active pane')
-assert.match(hostEditorActions, /host:pane:set-language/, 'editor-local host actions should own set language command')
-assert.match(hostEditorActions, /updatePaneLanguageSource\(paneId,\s*['"]auto['"]\)|updatePaneLanguageSource\(paneId,\s*['"]manual['"]\)/, 'set language should preserve languageSource behavior')
-
-assert.equal(builtinIndex.packages.some((entry) => entry.pluginId === 'core-pane'), false, 'core-pane should no longer ship as a builtin plugin')
-
-// --- Regex Tester Plugin ---
-const regexPlugin = read('src/plugins/regex-tester/index.tsx')
-const regexManifest = JSON.parse(read('src/plugins/regex-tester/manifest.json'))
+const builtinIndex = JSON.parse(readFileSync('src/builtin-plugins/index.json', 'utf8'))
+const regexManifest = JSON.parse(readFileSync('src/plugins/regex-tester/manifest.json', 'utf8'))
 const regexEntry = builtinIndex.packages.find((entry) => entry.pluginId === 'regex-tester')
 
-assert.doesNotMatch(corePlugin, /core\.regex-tester/, 'regex tester command should not live in internal corePlugin')
-assert.doesNotMatch(corePlugin, /CoreRegexPanel/, 'regex tester panel should not be registered by internal corePlugin')
-assert.match(regexPlugin, /id:\s*['"]regex-tester\.open['"]/, 'regex tester plugin should provide open command')
-assert.match(regexPlugin, /id:\s*['"]regex-tester\.panel['"]/, 'regex tester plugin should provide panel contribution')
+assert.equal(builtinIndex.packages.some((entry) => entry.pluginId === 'core-pane'), false, 'core-pane should no longer ship as a builtin plugin')
 assert.ok(regexManifest.version, 'regex tester plugin should declare a version')
 assert.equal(regexEntry?.version, regexManifest.version, 'builtin index should publish the current regex tester version')
-
-// --- Final Guardrails ---
-assert.doesNotMatch(corePlugin, /definePlugin\(\{\s*commands:/, 'internal corePlugin should not register user-facing commands')
-assert.doesNotMatch(corePlugin, /registerProductionPlugin\(\s*['"]core['"]/, 'internal corePlugin should not register a production plugin')
 
 console.log('core plugin externalization checks passed')

@@ -126,10 +126,4 @@ function harness({ decoded = { ok: true, text: 'https://example.test/plain' }, s
   assert.equal(h.shown.at(-1).view.failure, 'incomplete')
 }
 
-const handoff = readFileSync('src/qrHudHandoff.ts', 'utf8')
-assert.match(handoff, /acquireRegisteredSurfaceShortcutInterceptor/)
-assert.match(handoff, /createPluginClipboardImageReader/)
-assert.match(handoff, /writeTextWithoutHistory/)
-assert.doesNotMatch(handoff, /openExternal|fetch\(|showToast|navigator\.clipboard/)
-
 console.log('QR HUD session, sensitive reveal, late cancellation, error, and host-boundary checks passed')

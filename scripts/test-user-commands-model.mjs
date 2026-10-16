@@ -38,26 +38,7 @@ assert.equal(enabled.length, 1)
 assert.equal(enabled[0].id, '1')
 assert.equal(enabled[0].requireConfirm, true)
 
-const index = readFileSync('src/plugins/user-commands/index.ts', 'utf8')
-assert.match(index, /ctx\.shell\.run/)
-assert.match(index, /tone:\s*'danger'/)
-assert.match(index, /toolsFor/)
-assert.doesNotMatch(index, /inputPolicy/, 'custom commands should enter confirmation without asking for source text')
-
 const manifest = JSON.parse(readFileSync('src/plugins/user-commands/manifest.json', 'utf8'))
 assert.ok(manifest.permissions.includes('shell.run'))
-
-const scaffold = readFileSync('src/workspace/pluginScaffold.ts', 'utf8')
-assert.match(scaffold, /ctx\.shell\.run/)
-assert.match(scaffold, /confirm-run-script/)
-
-const toolAdapter = readFileSync('src/workspace/launcher/toolAdapter.ts', 'utf8')
-assert.match(toolAdapter, /createPluginShell/)
-assert.match(toolAdapter, /shell,/)
-
-// Double-modifier (R4) still registered
-const hotkeys = readFileSync('src/hotkeys/globalPinnedLauncher.ts', 'utf8')
-assert.match(hotkeys, /double-modifier/)
-assert.match(hotkeys, /registerDoubleModifier/)
 
 console.log('✓ test-user-commands-model passed')

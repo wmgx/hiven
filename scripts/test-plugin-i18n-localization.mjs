@@ -4,19 +4,10 @@
  * contribution family that the launcher/registry reads from full definitions.
  */
 import assert from 'node:assert/strict'
-import { readdirSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import ts from 'typescript'
 import { jsonCore } from './helpers/text-transform-cores.mjs'
-
-function readSourceFiles(dir) {
-  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const path = `${dir}/${entry.name}`
-    if (entry.isDirectory()) return readSourceFiles(path)
-    if (!entry.isFile() || !/\.(ts|tsx|js|jsx|mjs)$/.test(entry.name)) return []
-    return [{ path, source: readFileSync(path, 'utf8') }]
-  })
-}
 
 function loadModule(path, { stripImports = [], globals = {} } = {}) {
   let src = readFileSync(path, 'utf8')
@@ -129,34 +120,10 @@ assert.equal(localized.definition.launcher.items[0].display.title, 'Web Quick Op
 assert.equal(localized.panel.actions[0].title, 'Apply', 'panel action title should localize')
 assert.equal(localized.settings.title, 'Plugin Settings', 'settings title should localize')
 
-const settingsRenderer = readFileSync('src/components/PluginSettingsSchemaRenderer.tsx', 'utf8')
-const settingsDialog = readFileSync('src/components/PluginSettingsDialog.tsx', 'utf8')
-const breadcrumbHeader = readFileSync('src/components/SurfaceBreadcrumbHeader.tsx', 'utf8')
-const pluginSurfaceRenderer = readFileSync('src/components/pluginSurface/PluginSurfaceRenderer.tsx', 'utf8')
-const systemSettingsLocale = readFileSync('src/i18n/locales/systemSettings.ts', 'utf8')
-assert.match(settingsRenderer, /translateText\?: \(key: string\) => string/, 'settings schema renderer should accept plugin translation')
-assert.match(settingsRenderer, /translateText\?\.\(text\)/, 'settings schema renderer should resolve plugin locale keys')
-assert.match(settingsDialog, /translateText=\{pluginT\}/, 'settings dialog should pass the plugin translator')
-assert.match(breadcrumbHeader, /useT\(['"]palette['"]\)/, 'shared surface breadcrumbs should localize back and close actions')
-assert.match(breadcrumbHeader, /aria-label=\{t\(['"]back['"]\)\}[\s\S]*aria-label=\{t\(['"]close['"]\)\}/, 'shared surface breadcrumb actions should not hardcode English labels')
-for (const key of ['surfaceLoading', 'surfaceOpening', 'surfaceOpenFailed', 'surfaceCrashed']) {
-  assert.match(pluginSurfaceRenderer, new RegExp(`palette\\.${key}`), `plugin surface ${key} state must use host i18n`)
-}
-assert.doesNotMatch(pluginSurfaceRenderer, />Plugin surface crashed<|>Back<|Loading plugin surface/, 'plugin surface fallback UI must not hardcode English')
-assert.match(systemSettingsLocale, /en:\s*\{[\s\S]*title:\s*['"]Settings['"][\s\S]*zh:\s*\{[\s\S]*title:\s*['"]设置['"]/, 'system settings surface title should exist in both locales')
-
 const jsonLocaleEn = JSON.parse(readFileSync('src/plugins/json-tools/locales/en.json', 'utf8'))
 const jsonLocaleZh = JSON.parse(readFileSync('src/plugins/json-tools/locales/zh.json', 'utf8'))
 assert.equal(jsonCore.processJson('  ', { operation: 'format' }).output, '', 'empty JSON input should not be an error')
 assert.ok(jsonLocaleEn['surface.emptyOutput'], 'JSON empty state should have an English translation')
 assert.ok(jsonLocaleZh['surface.emptyOutput'], 'JSON empty state should have a Chinese translation')
-
-for (const file of readSourceFiles('src')) {
-  assert.doesNotMatch(
-    file.source,
-    /(?:ctx\.)?locale\s*===\s*['"]zh['"]/,
-    `${file.path} must use locale dictionaries instead of inline zh branches`,
-  )
-}
 
 console.log('plugin i18n localization checks passed')

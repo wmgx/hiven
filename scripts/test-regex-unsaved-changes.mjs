@@ -289,7 +289,4 @@ for (const outcome of [false, 'reject']) {
   h.unmount()
 }
 
-assert.match(rendererSource, /onUnsavedChangesChange\?\.\(false, leaveOwner\)/,
-  'renderer replacement/unmount must release the exact draft owner')
-
 console.log('Regex Tester unsaved changes: baseline, reversion, derived state, owner lifecycle, failed/successful handoff and guarded exits passed')

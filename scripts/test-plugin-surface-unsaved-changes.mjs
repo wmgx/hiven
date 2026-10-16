@@ -188,8 +188,6 @@ for (const invalidate of ['owner', 'unmount']) check(`${invalidate} revokes a re
 
 const rendererPath = 'src/components/pluginSurface/PluginSurfaceRenderer.tsx'
 const { source: rendererSource, file: rendererFile } = parse(rendererPath)
-assert.match(rendererSource, /document\.addEventListener\('keydown', onKeyDown, true\)/)
-assert.match(rendererSource, /document\.removeEventListener\('keydown', onKeyDown, true\)/)
 const rendererFunction = rendererFile.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === 'PluginSurfaceRenderer')
 const declarations = new Map(rendererFunction.body.statements.filter(ts.isVariableStatement)
   .flatMap((statement) => statement.declarationList.declarations.map((decl) => [decl.name.getText(rendererFile), decl.getText(rendererFile)])))

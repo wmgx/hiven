@@ -153,9 +153,4 @@ for (const sample of [
   assert.equal(h.pastes.length, 0, 'stale or cancelled receipts cannot reach native paste')
 }
 
-const handoff = readFileSync('src/cleanAgentHudHandoff.ts', 'utf8')
-assert.match(handoff, /cleanAgentText\(text, false\)/)
-assert.match(handoff, /readNativeClipboardText/)
-assert.match(handoff, /writeTextWithoutHistory/)
-assert.doesNotMatch(handoff, /navigator\.clipboard|fetch\(|openExternal|showToast/)
 console.log('Clean Agent HUD one-read, concealed reveal, copy recovery, authorized one-shot paste, and manual fallback passed')

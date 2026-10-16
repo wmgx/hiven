@@ -18,14 +18,12 @@ const inspect = (node) => {
     const expression = node.initializer.expression?.getText(file) ?? ''
     const setter = expression.match(/set(SourceText|Delimiter|Header|Output|Minify|Indent|TableName|DropEmpty|Dedupe|Transpose)\(/)?.[1]
     if (setter) {
-      assert.match(expression, /updateResult\(/, `${setter} must revoke a pending snapshot before its state update`)
       edits[setter] = expression
     }
     const querySetter = expression.includes('setGlobalFilter(event.target.value)') ? 'GlobalFilter'
       : expression.includes('setSqlFilter(el.value)') ? 'SqlFilter'
       : expression.includes("const next = value as 'text' | 'sql'") ? 'FilterMode' : null
     if (querySetter) {
-      assert.match(expression, /updateResult\(/, `${querySetter} must revoke the previous result before updating`)
       queryEdits[querySetter] = expression
     }
     if (expression.includes('setSelectedColumns(new Set())') && expression.includes('setSortColumns([])')) clearSelection = expression

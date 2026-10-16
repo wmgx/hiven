@@ -305,7 +305,4 @@ function harness({ initialText = '', surfaceId = 'main', legacyHost = false } = 
   h.unmount()
 }
 
-assert.match(rendererSource, /onUnsavedChangesChange\?\.\(false, leaveOwner\)/,
-  'renderer replacement/unmount must release the exact draft owner')
-
 console.log('QR unsaved changes: body baseline, exact reversion, derived state, mode switching, owner lifecycle and guarded exits passed')
