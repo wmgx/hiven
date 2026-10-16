@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   CLIPBOARD_HISTORY_MATCH_LIMITS as limits,
   getClipboardHistoryMatchContext as context,
+  getClipboardHistoryMatchNavigationIndex as navigate,
   getClipboardHistoryMatchSnippet as snippet,
 } from '../src/plugins/clipboard-history/surfaces/clipboardHistoryMatchContext.ts'
 import {
@@ -15,6 +16,13 @@ const textItem = (text: string) => ({
   firstCopiedAt: 1, lastCopiedAt: 1, copyCount: 1, byteSize: text.length,
   preview: text.slice(0, 200), text,
 })
+
+assert.equal(navigate(0, 3, 1), 1)
+assert.equal(navigate(2, 3, 1), 0, 'next wraps from the final visible match')
+assert.equal(navigate(0, 3, -1), 2, 'previous wraps from the first visible match')
+assert.equal(navigate(-1, 3, 1), 0, 'a reset begins forward navigation at the first match')
+assert.equal(navigate(-1, 3, -1), 2, 'a reset begins reverse navigation at the final match')
+assert.equal(navigate(0, 0, 1), -1)
 
 function verifySource(text: string, query: string) {
   const result = context(text, query)

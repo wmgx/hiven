@@ -38,6 +38,8 @@
   "route.files": "剪贴板文件",
   "search.placeholder": "搜索剪贴板历史...",
   "search.allTerms": "全部词",
+  "search.previousMatch": "上一处匹配",
+  "search.nextMatch": "下一处匹配",
   "filter.all": "全部",
   "filter.frequent": "常用",
   "filter.favorite": "收藏",

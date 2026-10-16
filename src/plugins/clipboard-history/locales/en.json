@@ -38,6 +38,8 @@
   "route.files": "Clipboard Files",
   "search.placeholder": "Search clipboard history...",
   "search.allTerms": "All words",
+  "search.previousMatch": "Previous match",
+  "search.nextMatch": "Next match",
   "filter.all": "All",
   "filter.frequent": "Frequent",
   "filter.favorite": "Favorites",

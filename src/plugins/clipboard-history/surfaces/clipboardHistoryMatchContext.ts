@@ -25,6 +25,18 @@ export type ClipboardHistoryMatchContext = {
   firstMatchOffset: number | null
 }
 
+/** Resolve one wrapped step through the bounded set of rendered matches. */
+export function getClipboardHistoryMatchNavigationIndex(
+  currentIndex: number,
+  matchCount: number,
+  direction: -1 | 1,
+): number {
+  if (!Number.isSafeInteger(matchCount) || matchCount <= 0) return -1
+  const validCurrent = Number.isSafeInteger(currentIndex) && currentIndex >= 0 && currentIndex < matchCount
+  const start = validCurrent ? currentIndex : direction > 0 ? -1 : 0
+  return (start + direction + matchCount) % matchCount
+}
+
 type MatchRange = { start: number; end: number }
 
 const segmenter = typeof Intl.Segmenter === 'function'

@@ -361,6 +361,36 @@
   background: var(--bg-surface, var(--hiven-color-bg-primary));
 }
 
+.clipboard-history-preview-body {
+  min-height: 0;
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.clipboard-history-match-navigation {
+  flex: 0 0 auto;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 4px 10px 0;
+  color: var(--text-3, var(--hiven-color-text-tertiary));
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.clipboard-history-match-navigation > span {
+  min-width: 42px;
+  text-align: right;
+}
+
+.clipboard-history-match-navigation button {
+  width: 24px;
+  height: 24px;
+}
+
 .clipboard-history-preview-content {
   min-height: 0;
   flex: 1 1 0;
@@ -375,6 +405,11 @@
   color: inherit;
   background: color-mix(in srgb, var(--hiven-color-accent) 22%, transparent);
   box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--hiven-color-accent) 55%, transparent);
+}
+
+.clipboard-history-search-match.is-current {
+  background: color-mix(in srgb, var(--hiven-color-accent) 42%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--hiven-color-accent) 78%, transparent);
 }
 
 .clipboard-history-section-label {

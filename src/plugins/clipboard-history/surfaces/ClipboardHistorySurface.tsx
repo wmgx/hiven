@@ -29,6 +29,7 @@ import {
   type MenuItemSpec,
 } from '@hiven/plugin-ui'
 import { BackIcon, ClipboardIcon, CloseIcon, FileTextIcon, ImageIcon, SettingsIcon, StarIcon } from '@hiven/plugin-ui/icons'
+import { ArrowDown, ArrowUp } from 'lucide-react'
 import { resolveClipboardHistoryRetentionMonths, type ClipboardHistorySettings } from '../settings/model'
 import type { ClipboardHistoryItem } from '../storage/clipboardHistoryTypes'
 import type { ClipboardHistorySearchMatchMode } from '../storage/clipboardHistorySearch'
@@ -60,7 +61,11 @@ import {
 import { readHistoryCompareSnapshots } from '../merge/clipboardTextCompare'
 import { readClipboardQueueSnapshots } from '../queue/readClipboardQueueSnapshots'
 import { ClipboardTextMergePanel } from './ClipboardTextMergePanel'
-import { getClipboardHistoryMatchContext, getClipboardHistoryMatchSnippet } from './clipboardHistoryMatchContext'
+import {
+  getClipboardHistoryMatchContext,
+  getClipboardHistoryMatchNavigationIndex,
+  getClipboardHistoryMatchSnippet,
+} from './clipboardHistoryMatchContext'
 import {
   getClipboardHistoryShortcuts,
   observeClipboardHistoryShortcutFocus,
@@ -104,6 +109,10 @@ type QuickEditorOpenState = {
   error: string | null
 }
 
+type ClipboardHistoryMatchNavigator = {
+  move: (direction: -1 | 1) => boolean
+}
+
 export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHistorySettings>) {
   const { host, locale, t, settings } = props
 
@@ -122,6 +131,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const [imageSaveLifecycle] = useState(createHistoryImageSaveLifecycle)
   const [quickEditorLifecycle] = useState(createHistoryQuickEditorLifecycle)
   const [quickEditorOpen, setQuickEditorOpen] = useState<QuickEditorOpenState | null>(null)
+  const matchNavigatorRef = useRef<ClipboardHistoryMatchNavigator | null>(null)
   const [imageSaveBusy, setImageSaveBusy] = useState(false)
   const imageSaveMountedRef = useRef(true)
   const [filter, setFilter] = useState<FilterKind>(() => initialFilter(props.surfaceId))
@@ -1248,6 +1258,18 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       if (e.key === 'Delete' || e.key === 'Backspace') return
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'c') return
     }
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'g') {
+      if (imeKeyDown.shouldIgnoreKeyDown(e)) return
+      const target = e.target instanceof Element ? e.target : null
+      // Search input focus is intentionally preserved. Editors and transient
+      // overlays keep their own native/application key handling.
+      if (target?.closest('textarea, [contenteditable]:not([contenteditable="false"]), .monaco-editor, [role="dialog"], [role="menu"], [role="listbox"], [data-radix-popper-content-wrapper]')) return
+      if (matchNavigatorRef.current?.move(e.shiftKey ? -1 : 1)) {
+        e.preventDefault()
+        e.stopPropagation()
+      }
+      return
+    }
     const focus = readClipboardHistoryShortcutFocus(e.currentTarget as HTMLElement, e.target instanceof Element ? e.target : null, document.activeElement)
     if (focus.nativeButton) return
     if (filter === 'trash' && e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return
@@ -1524,7 +1546,14 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                       <ToolbarButton type="button" onClick={() => void openTextEdit(previewItem)}>{t('edit.action')}</ToolbarButton>
                       <ToolbarButton type="button" onClick={() => void handlePaste(previewItem, true)}>{t('action.pastePlain')}</ToolbarButton>
                     </div>}
-                    <ClipboardHistoryPreviewContent item={previewItem} query={query} matchMode={searchMatchMode} t={t} storage={host.storage} />
+                    <ClipboardHistoryPreviewContent
+                      item={previewItem}
+                      query={query}
+                      matchMode={searchMatchMode}
+                      t={t}
+                      storage={host.storage}
+                      matchNavigatorRef={matchNavigatorRef}
+                    />
                     {previewItem.isFavorite && (
                       <div className="clipboard-history-favorite-title-bar">
                         <span className="clipboard-history-favorite-title-label">
@@ -1958,39 +1987,112 @@ function ClipboardHistoryHighlightedText({ text, query, matchMode, allTermsAlrea
     : segment.text)}</>
 }
 
-function ClipboardHistoryPreviewContent({ item, query, matchMode, t, storage }: {
+function ClipboardHistoryPreviewContent({ item, query, matchMode, t, storage, matchNavigatorRef }: {
   item: ClipboardHistoryItem
   query: string
   matchMode: ClipboardHistorySearchMatchMode
   t: (key: string) => string
   storage: SurfaceStorage
+  matchNavigatorRef: { current: ClipboardHistoryMatchNavigator | null }
 }) {
   const contentRef = useRef<HTMLDivElement>(null)
-  const alignedRef = useRef<{ id: string, query: string, matchMode: ClipboardHistorySearchMatchMode, fullText: boolean } | null>(null)
+  const alignedRef = useRef<{ id: string, query: string, matchMode: ClipboardHistorySearchMatchMode, bodyVersion: string, fullText: boolean } | null>(null)
   const normalizedQuery = query.trim().toLowerCase()
   const fullText = item.kind === 'text' && Boolean(item.text)
+  const bodyVersion = `${item.hash}:${fullText ? 'full' : 'preview'}`
+  const navigationIdentity = `${item.id}\u0000${normalizedQuery}\u0000${matchMode}\u0000${bodyVersion}`
+  const navigationStateRef = useRef({ identity: '', count: 0, currentIndex: -1 })
+  const [navigationState, setNavigationState] = useState({ identity: '', count: 0, currentIndex: -1 })
+
+  const applyCurrentMatch = useCallback((matches: readonly HTMLElement[], currentIndex: number) => {
+    matches.forEach((match, index) => {
+      const current = index === currentIndex
+      match.classList.toggle('is-current', current)
+      if (current) match.setAttribute('aria-current', 'true')
+      else match.removeAttribute('aria-current')
+    })
+  }, [])
+
+  const alignMatch = useCallback((content: HTMLElement, match: HTMLElement) => {
+    const matchTop = match.getBoundingClientRect().top - content.getBoundingClientRect().top + content.scrollTop
+    content.scrollTop = Math.max(0, matchTop - Math.max(16, content.clientHeight * 0.3))
+  }, [])
 
   useLayoutEffect(() => {
     const content = contentRef.current
     if (!content) return
+    const matches = Array.from(content.querySelectorAll<HTMLElement>('.clipboard-history-search-match'))
+    const nextNavigationState = {
+      identity: navigationIdentity,
+      count: matches.length,
+      currentIndex: matches.length > 0 ? 0 : -1,
+    }
+    navigationStateRef.current = nextNavigationState
+    applyCurrentMatch(matches, nextNavigationState.currentIndex)
+    setNavigationState(nextNavigationState)
+
     const previous = alignedRef.current
-    const sameSearch = previous?.id === item.id && previous.query === normalizedQuery && previous.matchMode === matchMode
+    const sameSearch = previous?.id === item.id
+      && previous.query === normalizedQuery
+      && previous.matchMode === matchMode
+      && previous.bodyVersion === bodyVersion
     // Loading the full record gets one alignment. Re-reads and background index
     // refreshes must not move a reader who has since scrolled through the text.
     if (sameSearch && (previous.fullText || !fullText)) return
-    alignedRef.current = { id: item.id, query: normalizedQuery, matchMode, fullText }
-    const firstMatch = content.querySelector<HTMLElement>('.clipboard-history-search-match')
+    alignedRef.current = { id: item.id, query: normalizedQuery, matchMode, bodyVersion, fullText }
+    const firstMatch = matches[0]
     if (firstMatch) {
-      const matchTop = firstMatch.getBoundingClientRect().top - content.getBoundingClientRect().top + content.scrollTop
-      content.scrollTop = Math.max(0, matchTop - Math.max(16, content.clientHeight * 0.3))
+      alignMatch(content, firstMatch)
     } else if (!sameSearch) {
       content.scrollTop = 0
     }
-  }, [item.id, normalizedQuery, matchMode, fullText])
+  }, [item.id, normalizedQuery, matchMode, bodyVersion, fullText, navigationIdentity, applyCurrentMatch, alignMatch])
+
+  const moveMatch = useCallback((direction: -1 | 1) => {
+    const content = contentRef.current
+    if (!content) return false
+    const matches = Array.from(content.querySelectorAll<HTMLElement>('.clipboard-history-search-match'))
+    if (matches.length === 0) return false
+    const previous = navigationStateRef.current
+    const currentIndex = previous.identity === navigationIdentity ? previous.currentIndex : -1
+    const nextIndex = getClipboardHistoryMatchNavigationIndex(currentIndex, matches.length, direction)
+    if (nextIndex < 0) return false
+    const nextState = { identity: navigationIdentity, count: matches.length, currentIndex: nextIndex }
+    navigationStateRef.current = nextState
+    applyCurrentMatch(matches, nextIndex)
+    alignMatch(content, matches[nextIndex])
+    setNavigationState(nextState)
+    return true
+  }, [navigationIdentity, applyCurrentMatch, alignMatch])
+
+  useLayoutEffect(() => {
+    const navigator = { move: moveMatch }
+    matchNavigatorRef.current = navigator
+    return () => {
+      if (matchNavigatorRef.current === navigator) matchNavigatorRef.current = null
+    }
+  }, [matchNavigatorRef, moveMatch])
+
+  const showNavigation = Boolean(normalizedQuery)
+    && navigationState.identity === navigationIdentity
+    && navigationState.count > 0
 
   return (
-    <div ref={contentRef} className="clipboard-history-preview-content" data-launcher-scrollable>
-      {renderPreview(item, t, storage, query, matchMode)}
+    <div className="clipboard-history-preview-body">
+      {showNavigation && <div className="clipboard-history-match-navigation">
+        <span role="status" aria-live="polite">
+          {navigationState.currentIndex + 1} / {navigationState.count}
+        </span>
+        <IconButton type="button" label={t('search.previousMatch')} onClick={() => moveMatch(-1)}>
+          <ArrowUp size={13} />
+        </IconButton>
+        <IconButton type="button" label={t('search.nextMatch')} onClick={() => moveMatch(1)}>
+          <ArrowDown size={13} />
+        </IconButton>
+      </div>}
+      <div ref={contentRef} className="clipboard-history-preview-content" data-launcher-scrollable>
+        {renderPreview(item, t, storage, query, matchMode)}
+      </div>
     </div>
   )
 }
