@@ -16,8 +16,7 @@ type Snapshot = {
   pasteFailed: boolean
   pasteCopied: boolean
   complete: boolean
-  sensitive: boolean
-  failure?: 'unavailable' | 'incomplete' | 'no-change' | 'too-large' | 'refused'
+  failure?: 'unavailable' | 'incomplete' | 'no-change' | 'too-large'
   expiresAt: number
   locale: 'zh' | 'en'
   theme: 'dark' | 'light'
@@ -72,8 +71,8 @@ export function TextResultHud() {
     : snapshot.failure === 'unavailable' ? `${prefix}.unavailableStatus` : `${prefix}.error`
   return <main className="text-result-hud" data-theme={snapshot.theme} data-active={active} data-product={snapshot.product}>
     <header><span>{t(`${prefix}.title`)}</span><small>{snapshot.complete ? t(`${prefix}.complete`) : snapshot.phase === 'error' ? t(errorStatusKey) : t(`${prefix}.working`)}</small></header>
-    <pre ref={resultRef} tabIndex={active ? 0 : undefined} aria-label={t(`${prefix}.result`)} aria-live="polite">{snapshot.phase === 'error' ? t(errorKey) : !active && snapshot.product === 'clean-agent' ? t('cleanAgent.hidden') : snapshot.sensitive && !active ? t('qr.sensitive') : result || t(`${prefix}.working`)}</pre>
-    {snapshot.truncated && !active && !snapshot.sensitive && <p>{t(`${prefix}.previewTruncated`)}</p>}
+    <pre ref={resultRef} tabIndex={active ? 0 : undefined} aria-label={t(`${prefix}.result`)} aria-live="polite">{snapshot.phase === 'error' ? t(errorKey) : result || t(`${prefix}.working`)}</pre>
+    {snapshot.truncated && !active && <p>{t(`${prefix}.previewTruncated`)}</p>}
     {snapshot.copyFailed && <p role="alert">{t(`${prefix}.copyFailed`)}</p>}
     {snapshot.pasteFailed && <p role="alert">{t('cleanAgent.pasteFailed')}</p>}
     {snapshot.pasteCopied && <p role="status">{t('cleanAgent.pasteCopied')}</p>}

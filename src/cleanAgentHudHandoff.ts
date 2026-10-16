@@ -1,7 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { useAppStore } from './store'
-import { detectContent } from './kits/content'
 import { acquireRegisteredSurfaceShortcutInterceptor } from './hotkeys/pluginSurfaceShortcuts'
 import { cleanAgentText } from './plugins/line-tools/cleanAgentText'
 import { CleanAgentHudSession, type CleanAgentHudView } from './plugins/line-tools/cleanAgentHudSession'
@@ -10,7 +9,6 @@ import { getPluginPermissionSnapshot, missingPluginPermissions, usePluginPermiss
 import { pluginRegistry } from './workspace/pluginRegistry'
 import { pluginSurfaceShortcutKey, usePluginSurfaceShortcutStore } from './workspace/pluginSurfaceShortcuts'
 import { readNativeClipboardText, writeTextWithoutHistory } from './workspace/nativeClipboard'
-import { writeClipboardText } from './workspace/pluginClipboard'
 import { claimTextResultHud, type TextResultHudClaim, type TextResultHudLease } from './workspace/textResultHudOwnership'
 
 const TARGET = { source: 'builtin' as const, pluginId: 'line-tools', surfaceId: 'clean-agent-clipboard' }
@@ -18,7 +16,6 @@ const REQUIRED = ['clipboard.write'] as const
 const PASTE_REQUIRED = ['clipboard.write', 'accessibility.paste'] as const
 const ACTION_EVENT = 'hiven://text-result-hud-action'
 type NativeAction = { product: 'translation' | 'qr-scan' | 'clean-agent'; sessionId: string; revision: number; action: 'copy' | 'paste' | 'close' }
-const sensitive = (text: string) => detectContent(text).some(({ kind }) => kind === 'secret' || kind === 'secret-like')
 
 function definitionReady() {
   const definition = pluginRegistry.getPluginDefinition(TARGET.pluginId, 'production')
@@ -58,10 +55,7 @@ export function installCleanAgentHudHost(): () => void {
       if (signal.aborted || !isCurrent()) throw new DOMException('Clipboard read cancelled', 'AbortError')
     }),
     clean: (text) => cleanAgentText(text, false),
-    isSensitive: sensitive,
-    write: (text, isSensitive, signal) => isSensitive
-      ? writeClipboardText(text, { sensitive: true, signal })
-      : writeTextWithoutHistory(text, signal),
+    write: (text, signal) => writeTextWithoutHistory(text, signal),
     canPaste: pasteReady,
     paste: (sessionId, revision) => invoke('text_result_hud_paste', { sessionId, revision }).then(() => undefined),
     present: (view, fullText) => invoke<boolean>('text_result_hud_present', { snapshot: nativeSnapshot(view), fullText })

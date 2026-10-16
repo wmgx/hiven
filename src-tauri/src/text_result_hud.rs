@@ -52,7 +52,6 @@ pub(crate) enum Failure {
     Incomplete,
     NoChange,
     TooLarge,
-    Refused,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -84,7 +83,6 @@ pub(crate) struct Snapshot {
     #[serde(default)]
     paste_copied: bool,
     complete: bool,
-    sensitive: bool,
     failure: Option<Failure>,
     expires_at: u64,
     locale: Locale,
@@ -609,7 +607,6 @@ fn validate_snapshot(snapshot: &Snapshot, current_time: u64) -> Result<(), &'sta
         || snapshot.revision > 9_007_199_254_740_991
         || snapshot.preview.chars().count() > MAX_PREVIEW_CHARS
         || snapshot.preview.contains('\0')
-        || (snapshot.sensitive && snapshot.phase != Phase::Active && !snapshot.preview.is_empty())
         || (snapshot.product == Product::CleanAgent
             && snapshot.phase != Phase::Active
             && !snapshot.preview.is_empty())
@@ -1130,7 +1127,6 @@ mod tests {
             paste_failed: false,
             paste_copied: false,
             complete: true,
-            sensitive: false,
             failure: None,
             expires_at,
             locale: Locale::En,
@@ -1155,21 +1151,6 @@ mod tests {
         assert!(state.present(error.clone(), None, 100).is_err());
         error.failure = Some(Failure::Unavailable);
         assert!(state.present(error, None, 100).unwrap());
-    }
-
-    #[test]
-    fn sensitive_passive_snapshot_cannot_carry_a_preview() {
-        let mut state = State::default();
-        let mut hidden = snapshot("secret", 1, 200);
-        hidden.product = Product::QrScan;
-        hidden.sensitive = true;
-        hidden.preview.clear();
-        assert!(state.present(hidden, None, 100).unwrap());
-
-        let mut leaked = snapshot("leaked", 1, 200);
-        leaked.product = Product::QrScan;
-        leaked.sensitive = true;
-        assert!(state.present(leaked, None, 100).is_err());
     }
 
     #[test]

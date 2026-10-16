@@ -10,7 +10,6 @@ export type HudTranslationView = {
   truncated: boolean
   copyFailed: boolean
   complete: boolean
-  sensitive: false
   failure?: HudTranslationFailure
   expiresAt: number
 }
@@ -41,6 +40,8 @@ export type HudTranslationSessionOptions = {
   previewCharacters?: number
   maxInputCharacters?: number
   maxOutputCharacters?: number
+  /** Activate (full result, Enter to copy) as soon as the session starts. Defaults to true. */
+  immediateActivation?: boolean
 }
 
 type LiveSession = {
@@ -89,6 +90,7 @@ export class HudTranslationSession {
   private readonly previewCharacters: number
   private readonly maxInputCharacters: number
   private readonly maxOutputCharacters: number
+  private readonly immediateActivation: boolean
   private live: LiveSession | null = null
   private preparing: Preparation | null = null
   private triggerQueue: Promise<'started' | 'cancelled' | 'activated' | 'unavailable' | 'rejected'> = Promise.resolve('unavailable')
@@ -100,9 +102,10 @@ export class HudTranslationSession {
     this.previewCharacters = options.previewCharacters ?? DEFAULT_PREVIEW_CHARACTERS
     this.maxInputCharacters = options.maxInputCharacters ?? DEFAULT_MAX_INPUT_CHARACTERS
     this.maxOutputCharacters = options.maxOutputCharacters ?? DEFAULT_MAX_OUTPUT_CHARACTERS
+    this.immediateActivation = options.immediateActivation ?? true
   }
 
-  /** First press starts passively; a second press explicitly activates the live HUD. */
+  /** One press starts the session and (by default) activates the live HUD straight away. */
   trigger(): Promise<'started' | 'cancelled' | 'activated' | 'unavailable' | 'rejected'> {
     const current = this.live
     if (current && (current.phase === 'translating' || current.phase === 'ready' || current.phase === 'active')) {
@@ -135,7 +138,7 @@ export class HudTranslationSession {
     const previous = this.live
     if (previous) await this.retire(previous)
     if (this.preparing !== preparation) return 'cancelled'
-    const activateRequested = preparation.activateRequested
+    const activateRequested = this.immediateActivation || preparation.activateRequested
     preparation.activateRequested = false
     const controller = new AbortController()
     const session: LiveSession = {
@@ -282,7 +285,7 @@ export class HudTranslationSession {
 
   private view(session: LiveSession): HudTranslationView {
     const { preview, truncated } = boundedPreview(session.output, this.previewCharacters)
-    return { product: 'translation', sessionId: session.id, revision: session.revision, phase: session.phase, preview, truncated, copyFailed: session.copyFailed, complete: session.complete, sensitive: false, failure: session.failure, expiresAt: session.expiresAt }
+    return { product: 'translation', sessionId: session.id, revision: session.revision, phase: session.phase, preview, truncated, copyFailed: session.copyFailed, complete: session.complete, failure: session.failure, expiresAt: session.expiresAt }
   }
 
   private isCurrent(session: LiveSession): boolean { return this.live === session }

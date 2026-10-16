@@ -36,7 +36,16 @@ function deferred<T>() {
 }
 
 {
-  const h = harness(), session = new HudTranslationSession(h.dependencies, { ttlMs: 100, previewCharacters: 4 })
+  // Default: one press activates immediately; Enter (copy) works once the result completes.
+  const h = harness(), session = new HudTranslationSession(h.dependencies)
+  assert.equal(await session.trigger(), 'activated')
+  h.pending!.resolve('完整翻译结果'); await settle()
+  assert.equal(h.views.at(-1)?.phase, 'active')
+  assert.equal(h.fullTexts.at(-1), '完整翻译结果')
+  assert.equal(await session.copyAndClose(), true)
+}
+{
+  const h = harness(), session = new HudTranslationSession(h.dependencies, { immediateActivation: false, ttlMs: 100, previewCharacters: 4 })
   assert.equal(await session.trigger(), 'started')
   h.pending!.onText('一二三四五'); await settle()
   assert.deepEqual({ preview: h.views.at(-1)?.preview, truncated: h.views.at(-1)?.truncated }, { preview: '一二三四', truncated: true })
@@ -50,7 +59,7 @@ function deferred<T>() {
 {
   const h = harness()
   h.dependencies.activate = async () => h.dependencies.now() + 100
-  const session = new HudTranslationSession(h.dependencies, { ttlMs: 10, activeTtlMs: 100 })
+  const session = new HudTranslationSession(h.dependencies, { immediateActivation: false, ttlMs: 10, activeTtlMs: 100 })
   await session.trigger(); h.pending!.resolve('long reading result'); await settleUntil(() => h.views.at(-1)?.phase === 'ready')
   const stalePassiveTimer = [...h.timers.values()][0]
   assert.equal(await session.trigger(), 'activated')
@@ -63,7 +72,7 @@ function deferred<T>() {
   assert.ok(h.dismissals.length > 0, 'the fixed active reading deadline retires the session')
 }
 {
-  const h = harness(), session = new HudTranslationSession(h.dependencies, { maxOutputCharacters: 4 })
+  const h = harness(), session = new HudTranslationSession(h.dependencies, { immediateActivation: false, maxOutputCharacters: 4 })
   await session.trigger()
   assert.throws(() => h.pending!.onText('12345'))
   h.pending!.reject(Error('provider stopped after output limit')); await settle()
@@ -72,13 +81,13 @@ function deferred<T>() {
   assert.equal(h.fullTexts.some(Boolean), false)
 }
 {
-  const h = harness(), session = new HudTranslationSession(h.dependencies, { maxOutputCharacters: 4 })
+  const h = harness(), session = new HudTranslationSession(h.dependencies, { immediateActivation: false, maxOutputCharacters: 4 })
   await session.trigger(); h.pending!.resolve('12345'); await settle()
   assert.equal(h.views.at(-1)?.phase, 'error')
   assert.equal(h.views.some((view) => view.preview.includes('12345')), false, 'oversized final output fails closed')
 }
 {
-  const h = harness(), session = new HudTranslationSession(h.dependencies)
+  const h = harness(), session = new HudTranslationSession(h.dependencies, { immediateActivation: false })
   let attempts = 0
   h.dependencies.writeClipboard = async (text, signal) => {
     if (signal.aborted) throw Error('aborted')
@@ -93,7 +102,7 @@ function deferred<T>() {
   assert.deepEqual(h.writes, ['line 1\r\nline 2  '], 'retry keeps and copies the exact completed output')
 }
 {
-  const h = harness(), session = new HudTranslationSession(h.dependencies)
+  const h = harness(), session = new HudTranslationSession(h.dependencies, { immediateActivation: false })
   h.sensitive = true
   assert.equal(await session.trigger(), 'rejected')
   assert.equal(h.pending, null); assert.equal(h.views.length, 0)
@@ -101,7 +110,7 @@ function deferred<T>() {
 {
   const h = harness(); h.prepared = false
   let reads = 0; h.dependencies.readClipboard = async () => { reads += 1; return 'private' }
-  const session = new HudTranslationSession(h.dependencies)
+  const session = new HudTranslationSession(h.dependencies, { immediateActivation: false })
   assert.equal(await session.trigger(), 'unavailable'); assert.equal(reads, 0)
   assert.equal(h.views.at(-1)?.phase, 'error')
   assert.equal(h.views.at(-1)?.failure, 'unavailable', 'readiness failure gives bounded feedback without reading content')
@@ -114,46 +123,46 @@ function deferred<T>() {
   let reads = 0
   h.dependencies.prepare = async () => { throw Error('synthetic readiness failure') }
   h.dependencies.readClipboard = async () => { reads += 1; return 'private' }
-  const session = new HudTranslationSession(h.dependencies)
+  const session = new HudTranslationSession(h.dependencies, { immediateActivation: false })
   assert.equal(await session.trigger(), 'unavailable')
   assert.equal(reads, 0)
   assert.equal(h.views.at(-1)?.failure, 'unavailable', 'readiness exceptions produce the same opaque feedback')
 }
 {
   const h = harness(); h.prepared = false
-  const session = new HudTranslationSession(h.dependencies, { ttlMs: 10 })
+  const session = new HudTranslationSession(h.dependencies, { immediateActivation: false, ttlMs: 10 })
   await session.trigger(); h.advance(11)
   for (const callback of [...h.timers.values()]) callback()
   await settle()
   assert.equal(h.dismissals.length, 1, 'unavailable feedback retains the bounded passive lifetime')
 }
 {
-  const h = harness(), session = new HudTranslationSession(h.dependencies, { ttlMs: 10 })
+  const h = harness(), session = new HudTranslationSession(h.dependencies, { immediateActivation: false, ttlMs: 10 })
   await session.trigger(); const old = h.pending!
   await session.cancel('cancelled'); assert.equal(old.signal.aborted, true)
   old.onText('late secret result'); old.resolve('late result'); await settle()
   assert.equal(h.views.some(view => view.preview.includes('late')), false)
 }
 {
-  const h = harness(), session = new HudTranslationSession(h.dependencies, { ttlMs: 10 })
+  const h = harness(), session = new HudTranslationSession(h.dependencies, { immediateActivation: false, ttlMs: 10 })
   await session.trigger(); h.pending!.resolve('done'); await settle(); h.advance(11)
   for (const callback of [...h.timers.values()]) callback(); await settle()
   assert.equal(await session.copyAndClose(), false); assert.ok(h.dismissals.length > 0)
 }
 {
-  const h = harness(), session = new HudTranslationSession(h.dependencies)
+  const h = harness(), session = new HudTranslationSession(h.dependencies, { immediateActivation: false })
   await session.trigger(); h.pending!.reject(Error('provider exposed raw secret')); await settle()
   assert.equal(h.views.at(-1)?.phase, 'error'); assert.equal(h.views.at(-1)?.preview, '')
 }
 {
-  const h = harness(), session = new HudTranslationSession(h.dependencies)
+  const h = harness(), session = new HudTranslationSession(h.dependencies, { immediateActivation: false })
   h.dependencies.isSensitive = () => { throw Error('classifier unavailable') }
   assert.equal(await session.trigger(), 'rejected')
   assert.equal(h.pending, null, 'classifier failures must fail closed before provider execution')
   assert.equal(h.dismissals.length, 1)
 }
 {
-  const h = harness(), session = new HudTranslationSession(h.dependencies, { ttlMs: 10 })
+  const h = harness(), session = new HudTranslationSession(h.dependencies, { immediateActivation: false, ttlMs: 10 })
   h.dependencies.readClipboard = async () => { throw Error('synthetic clipboard failure') }
   assert.equal(await session.trigger(), 'rejected')
   assert.equal(h.views.at(-1)?.phase, 'error')
@@ -163,7 +172,7 @@ function deferred<T>() {
   assert.equal(h.dismissals.length, 1, 'read failures retain the same bounded lifetime')
 }
 {
-  const h = harness(), session = new HudTranslationSession(h.dependencies, { ttlMs: 10 })
+  const h = harness(), session = new HudTranslationSession(h.dependencies, { immediateActivation: false, ttlMs: 10 })
   const activation = deferred<number | null>()
   let activationStarted = false
   h.dependencies.activate = () => { activationStarted = true; return activation.promise }
@@ -176,7 +185,7 @@ function deferred<T>() {
   assert.equal(h.dismissals.length, 1)
 }
 {
-  const h = harness(), session = new HudTranslationSession(h.dependencies)
+  const h = harness(), session = new HudTranslationSession(h.dependencies, { immediateActivation: false })
   const activation = deferred<number | null>()
   let activationStarted = false
   h.dependencies.activate = () => { activationStarted = true; return activation.promise }
@@ -191,7 +200,7 @@ function deferred<T>() {
   assert.equal(h.dismissals.length, 1)
 }
 {
-  const h = harness(), session = new HudTranslationSession(h.dependencies)
+  const h = harness(), session = new HudTranslationSession(h.dependencies, { immediateActivation: false })
   const copy = deferred<void>()
   h.dependencies.writeClipboard = async (text) => { h.writes.push(text); await copy.promise }
   await session.trigger(); h.pending!.resolve('copy once'); await settleUntil(() => h.views.at(-1)?.phase === 'ready'); await session.trigger()
@@ -201,13 +210,13 @@ function deferred<T>() {
   assert.deepEqual(h.writes, ['copy once'])
 }
 {
-  const h = harness(), session = new HudTranslationSession(h.dependencies, { ttlMs: 10 })
+  const h = harness(), session = new HudTranslationSession(h.dependencies, { immediateActivation: false, ttlMs: 10 })
   await session.trigger(); h.advance(11); h.pending!.resolve('late result'); await settle()
   assert.equal(h.views.some(view => view.phase === 'ready'), false)
   assert.equal(h.dismissals.length, 1, 'provider completion after the deadline retires the session')
 }
 {
-  const h = harness(), session = new HudTranslationSession(h.dependencies)
+  const h = harness(), session = new HudTranslationSession(h.dependencies, { immediateActivation: false })
   const firstPresent = deferred<void>()
   const events: string[] = []
   h.dependencies.present = async (view) => {
@@ -223,7 +232,7 @@ function deferred<T>() {
   assert.deepEqual(events, ['present:1:translating', 'present:2:cancelled'], 'queued delivery cannot revive an older view after cancellation')
 }
 {
-  const h = harness(), session = new HudTranslationSession(h.dependencies)
+  const h = harness(), session = new HudTranslationSession(h.dependencies, { immediateActivation: false })
   assert.equal(await session.trigger(), 'started')
   assert.equal(await session.trigger(), 'activated', 'the second explicit shortcut activates instead of cancelling an in-flight result')
   assert.equal(h.pending!.signal.aborted, false)
@@ -231,7 +240,7 @@ function deferred<T>() {
   assert.equal(h.views.at(-1)?.phase, 'active', 'provider completion cannot demote an explicitly active HUD')
 }
 {
-  const h = harness(), session = new HudTranslationSession(h.dependencies, { ttlMs: 10, activeTtlMs: 100 })
+  const h = harness(), session = new HudTranslationSession(h.dependencies, { immediateActivation: false, ttlMs: 10, activeTtlMs: 100 })
   const activation = deferred<number | null>()
   h.dependencies.activate = () => activation.promise
   await session.trigger()
@@ -249,7 +258,7 @@ function deferred<T>() {
   assert.equal(h.views.at(-1)?.phase, 'active', 'a stale passive timer cannot clear the newly active session')
 }
 {
-  const h = harness(), session = new HudTranslationSession(h.dependencies)
+  const h = harness(), session = new HudTranslationSession(h.dependencies, { immediateActivation: false })
   const readiness = deferred<ReturnType<HudTranslationDependencies['prepare']> extends Promise<infer T> ? T : never>()
   const translated = deferred<string>()
   let reads = 0, runs = 0, activations = 0
@@ -272,7 +281,7 @@ function deferred<T>() {
   assert.equal(h.views.at(-1)?.phase, 'active')
 }
 {
-  const h = harness(), session = new HudTranslationSession(h.dependencies)
+  const h = harness(), session = new HudTranslationSession(h.dependencies, { immediateActivation: false })
   const readiness = deferred<ReturnType<HudTranslationDependencies['prepare']> extends Promise<infer T> ? T : never>()
   let reads = 0, activations = 0
   h.dependencies.prepare = () => readiness.promise
@@ -288,7 +297,7 @@ function deferred<T>() {
   assert.equal(h.views.at(-1)?.failure, 'unavailable')
 }
 {
-  const h = harness(), session = new HudTranslationSession(h.dependencies)
+  const h = harness(), session = new HudTranslationSession(h.dependencies, { immediateActivation: false })
   const readiness = deferred<ReturnType<HudTranslationDependencies['prepare']> extends Promise<infer T> ? T : never>()
   let reads = 0, activations = 0
   h.dependencies.prepare = () => readiness.promise
@@ -305,7 +314,7 @@ function deferred<T>() {
   assert.equal(h.views.some((view) => view.phase === 'active'), false)
 }
 {
-  const h = harness(), session = new HudTranslationSession(h.dependencies)
+  const h = harness(), session = new HudTranslationSession(h.dependencies, { immediateActivation: false })
   const oldReadiness = deferred<ReturnType<HudTranslationDependencies['prepare']> extends Promise<infer T> ? T : never>()
   const replacementReadiness = deferred<ReturnType<HudTranslationDependencies['prepare']> extends Promise<infer T> ? T : never>()
   const replacementOutput = deferred<string>()
@@ -329,13 +338,13 @@ function deferred<T>() {
   replacementOutput.resolve('replacement output'); await settle()
 }
 {
-  const h = harness(), session = new HudTranslationSession(h.dependencies)
+  const h = harness(), session = new HudTranslationSession(h.dependencies, { immediateActivation: false })
   h.dependencies.present = async () => { throw Error('native HUD unavailable') }
   assert.equal(await session.trigger(), 'unavailable')
   assert.equal(h.pending, null, 'clipboard content is not sent when the native HUD cannot accept the initial bounded preview')
 }
 {
-  const h = harness(), session = new HudTranslationSession(h.dependencies)
+  const h = harness(), session = new HudTranslationSession(h.dependencies, { immediateActivation: false })
   await session.trigger(); h.pending!.resolve('old result'); await settleUntil(() => h.views.at(-1)?.phase === 'ready')
   await session.trigger()
   const old = h.views.at(-1)!
@@ -349,7 +358,7 @@ function deferred<T>() {
   assert.deepEqual(h.writes, ['new result'], 'a delayed native action cannot affect the replacement session')
 }
 {
-  const h = harness(), session = new HudTranslationSession(h.dependencies)
+  const h = harness(), session = new HudTranslationSession(h.dependencies, { immediateActivation: false })
   await session.trigger(); const run = h.pending!; await session.trigger()
   const close = h.views.at(-1)!
   run.onText('newer streaming revision'); await settle()
@@ -357,7 +366,7 @@ function deferred<T>() {
   assert.equal(run.signal.aborted, true, 'close remains valid after a newer delta in the same active session')
 }
 {
-  const h = harness(), session = new HudTranslationSession(h.dependencies)
+  const h = harness(), session = new HudTranslationSession(h.dependencies, { immediateActivation: false })
   const firstPresent = deferred<void>()
   const events: string[] = []
   h.dependencies.present = async (view) => {
@@ -385,8 +394,8 @@ function deferred<T>() {
     if (events.length === 1) await blocked.promise
   }
   secondHarness.dependencies.present = (view) => { events.push(`new:${view.phase}`) }
-  const oldController = new HudTranslationSession(firstHarness.dependencies)
-  const newController = new HudTranslationSession(secondHarness.dependencies)
+  const oldController = new HudTranslationSession(firstHarness.dependencies, { immediateActivation: false })
+  const newController = new HudTranslationSession(secondHarness.dependencies, { immediateActivation: false })
   const oldStart = oldController.trigger(); await settleUntil(() => events.length === 1)
   const oldCancel = oldController.cancel('cancelled')
   const newStart = newController.trigger(); await settle()

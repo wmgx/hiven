@@ -9,7 +9,6 @@ export type QrHudView = {
   truncated: boolean
   copyFailed: boolean
   complete: boolean
-  sensitive: boolean
   failure?: QrHudFailure
   expiresAt: number
 }
@@ -17,8 +16,7 @@ export type QrHudView = {
 export type QrHudDependencies = {
   read(signal: AbortSignal, isCurrent: () => boolean): Promise<Blob>
   decode(blob: Blob): Promise<{ ok: true; text: string } | { ok: false }>
-  isSensitive(text: string): boolean
-  write(text: string, sensitive: boolean, signal: AbortSignal): Promise<void>
+  write(text: string, signal: AbortSignal): Promise<void>
   present(view: QrHudView, fullText?: string): Promise<void> | void
   activate(view: QrHudView): Promise<number | null>
   dismiss(sessionId: string, revision: number): Promise<void> | void
@@ -34,7 +32,6 @@ type Live = {
   phase: QrHudView['phase']
   controller: AbortController
   output: string
-  sensitive: boolean
   complete: boolean
   copyFailed: boolean
   failure?: QrHudFailure
@@ -79,7 +76,7 @@ export class QrHudSession {
     await this.cancel()
     const session: Live = {
       id: this.dependencies.randomId(), revision: 1, phase: 'translating', controller: new AbortController(),
-      output: '', sensitive: false, complete: false, copyFailed: false,
+      output: '', complete: false, copyFailed: false,
       expiresAt: this.dependencies.now() + PASSIVE_TTL_MS, activating: false, copying: false,
       delivery: Promise.resolve(),
     }
@@ -99,11 +96,12 @@ export class QrHudSession {
         return 'started'
       }
       session.output = decoded.text
-      session.sensitive = this.dependencies.isSensitive(decoded.text)
       session.complete = true
       session.phase = 'ready'
       session.revision += 1
-      await this.publish(session)
+      if (!await this.publish(session)) { await this.retire(session); return 'cancelled' }
+      // One press shows the full result: go straight to the reading state.
+      await this.activateCurrent(session)
       return 'started'
     } catch {
       if (this.live === session && !session.controller.signal.aborted) await this.fail(session, 'unavailable')
@@ -117,7 +115,7 @@ export class QrHudSession {
       || session.id !== expected.sessionId || session.revision !== expected.revision || this.expired(session)) return false
     session.copying = true
     try {
-      await this.dependencies.write(session.output, session.sensitive, session.controller.signal)
+      await this.dependencies.write(session.output, session.controller.signal)
       if (this.live !== session || session.controller.signal.aborted) return false
       await this.retire(session)
       return true
@@ -165,9 +163,9 @@ export class QrHudSession {
   }
 
   private view(session: Live): QrHudView {
-    const bounded = session.sensitive && session.phase !== 'active' ? { preview: '', truncated: false } : preview(session.output)
+    const bounded = preview(session.output)
     return { product: 'qr-scan', sessionId: session.id, revision: session.revision, phase: session.phase,
-      ...bounded, copyFailed: session.copyFailed, complete: session.complete, sensitive: session.sensitive,
+      ...bounded, copyFailed: session.copyFailed, complete: session.complete,
       failure: session.failure, expiresAt: session.expiresAt }
   }
 
@@ -188,7 +186,6 @@ export class QrHudSession {
     session.failure = failure
     session.output = ''
     session.complete = false
-    session.sensitive = false
     session.revision += 1
     await this.publish(session)
   }

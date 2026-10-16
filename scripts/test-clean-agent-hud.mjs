@@ -17,7 +17,7 @@ function load(rel) {
 
 const { CleanAgentHudSession, CLEAN_AGENT_MAX_INPUT_CHARS } = load('src/plugins/line-tools/cleanAgentHudSession.ts')
 
-function harness({ input = '┌─────┐\r\n│ one │\n└─────┘', output = 'one', isSensitive = false,
+function harness({ input = '┌─────┐\r\n│ one │\n└─────┘', output = 'one',
   writeFails = false, pasteFails = false, canPaste = true, pasteHook } = {}) {
   let now = 1000, reads = 0
   const shown = [], writes = [], pastes = [], dismissed = []
@@ -25,9 +25,8 @@ function harness({ input = '┌─────┐\r\n│ one │\n└───�
   const session = new CleanAgentHudSession({
     async read(signal, current) { reads += 1; assert.equal(signal.aborted, false); assert.equal(current(), true); return input },
     clean: () => output,
-    isSensitive: () => isSensitive,
-    async write(text, sensitive, signal) {
-      writes.push({ text, sensitive, aborted: signal.aborted })
+    async write(text, signal) {
+      writes.push({ text, aborted: signal.aborted })
       if (writeFails) throw new Error('synthetic failure')
     },
     canPaste: () => pasteAllowed,
@@ -49,23 +48,20 @@ function harness({ input = '┌─────┐\r\n│ one │\n└───�
   const h = harness()
   assert.equal(await h.session.trigger(), 'started')
   assert.equal(h.reads(), 1, 'the clipboard must be read exactly once')
-  assert.equal(h.shown.at(-1).view.phase, 'ready')
-  assert.equal(h.shown.at(-1).view.preview, '', 'passive HUD must not leak body text')
-  assert.equal(h.shown.at(-1).fullText, undefined)
+  // One press shows the full cleaned text; copying is the explicit step.
+  assert.equal(h.shown.at(-1).view.phase, 'active')
   assert.equal(h.writes.length, 0, 'cleaning must not overwrite the clipboard')
-  assert.equal(await h.session.trigger(), 'activated')
   const active = h.shown.at(-1)
   assert.equal(active.fullText, 'one')
   assert.equal(await h.session.copyAndClose({ sessionId: active.view.sessionId, revision: active.view.revision }), true)
-  assert.deepEqual(h.writes, [{ text: 'one', sensitive: false, aborted: false }])
+  assert.deepEqual(h.writes, [{ text: 'one', aborted: false }])
 }
 
 for (const sample of [
   { input: 'plain text', output: 'plain text', failure: 'no-change' },
-  { input: 'secret', output: 'cleaned', sensitive: true, failure: 'refused' },
   { input: 'x'.repeat(CLEAN_AGENT_MAX_INPUT_CHARS + 1), output: 'cleaned', failure: 'too-large' },
 ]) {
-  const h = harness({ input: sample.input, output: sample.output, isSensitive: sample.sensitive })
+  const h = harness({ input: sample.input, output: sample.output })
   await h.session.trigger()
   assert.equal(h.shown.at(-1).view.failure, sample.failure)
   assert.equal(h.writes.length, 0)
@@ -86,7 +82,7 @@ for (const sample of [
   await h.session.trigger(); await h.session.trigger()
   const active = h.shown.at(-1).view
   assert.equal(await h.session.pasteAndClose({ sessionId: active.sessionId, revision: active.revision }), true)
-  assert.deepEqual(h.writes, [{ text: 'one', sensitive: false, aborted: false }])
+  assert.deepEqual(h.writes, [{ text: 'one', aborted: false }])
   assert.deepEqual(h.pastes, [{ sessionId: active.sessionId, revision: active.revision }])
   assert.equal(h.dismissed.length, 1)
 }
@@ -153,4 +149,4 @@ for (const sample of [
   assert.equal(h.pastes.length, 0, 'stale or cancelled receipts cannot reach native paste')
 }
 
-console.log('Clean Agent HUD one-read, concealed reveal, copy recovery, authorized one-shot paste, and manual fallback passed')
+console.log('Clean Agent HUD one-press result, copy recovery, authorized one-shot paste, and manual fallback passed')

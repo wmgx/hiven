@@ -1,4 +1,4 @@
-export type CleanAgentHudFailure = 'unavailable' | 'no-change' | 'too-large' | 'refused'
+export type CleanAgentHudFailure = 'unavailable' | 'no-change' | 'too-large'
 
 export type CleanAgentHudView = {
   product: 'clean-agent'
@@ -11,7 +11,6 @@ export type CleanAgentHudView = {
   pasteFailed: boolean
   pasteCopied: boolean
   complete: boolean
-  sensitive: boolean
   failure?: CleanAgentHudFailure
   expiresAt: number
 }
@@ -19,8 +18,7 @@ export type CleanAgentHudView = {
 export type CleanAgentHudDependencies = {
   read(signal: AbortSignal, isCurrent: () => boolean): Promise<string>
   clean(text: string): string
-  isSensitive(text: string): boolean
-  write(text: string, sensitive: boolean, signal: AbortSignal): Promise<void>
+  write(text: string, signal: AbortSignal): Promise<void>
   canPaste(): boolean
   paste(sessionId: string, revision: number): Promise<void>
   present(view: CleanAgentHudView, fullText?: string): Promise<void> | void
@@ -34,7 +32,7 @@ export type CleanAgentHudDependencies = {
 
 type Live = {
   id: string; revision: number; phase: CleanAgentHudView['phase']; controller: AbortController
-  output: string; sensitive: boolean; complete: boolean; copyFailed: boolean; pasteFailed: boolean; pasteCopied: boolean
+  output: string; complete: boolean; copyFailed: boolean; pasteFailed: boolean; pasteCopied: boolean
   failure?: CleanAgentHudFailure; expiresAt: number; timer?: ReturnType<typeof setTimeout>
   activating: boolean; copying: boolean; pasting: boolean; pasteConsumed: boolean; delivery: Promise<void>
 }
@@ -62,7 +60,7 @@ export class CleanAgentHudSession {
   private async start(): Promise<'started' | 'cancelled'> {
     await this.cancel()
     const session: Live = { id: this.dependencies.randomId(), revision: 1, phase: 'translating',
-      controller: new AbortController(), output: '', sensitive: false, complete: false, copyFailed: false,
+      controller: new AbortController(), output: '', complete: false, copyFailed: false,
       pasteFailed: false, pasteCopied: false, expiresAt: this.dependencies.now() + PASSIVE_TTL_MS,
       activating: false, copying: false, pasting: false, pasteConsumed: false, delivery: Promise.resolve() }
     this.live = session
@@ -75,16 +73,16 @@ export class CleanAgentHudSession {
       if (input.includes('\0') || Array.from(input).length > CLEAN_AGENT_MAX_INPUT_CHARS) {
         await this.fail(session, 'too-large'); return 'started'
       }
-      if (this.dependencies.isSensitive(input)) { await this.fail(session, 'refused'); return 'started' }
       const output = this.dependencies.clean(input)
       if (!isCurrent()) return 'cancelled'
       if (!output || output === input) { await this.fail(session, 'no-change'); return 'started' }
       session.output = output
-      session.sensitive = this.dependencies.isSensitive(output)
       session.complete = true
       session.phase = 'ready'
       session.revision += 1
-      await this.publish(session)
+      if (!await this.publish(session)) { await this.retire(session); return 'cancelled' }
+      // One press shows the full result: go straight to the reading state.
+      await this.activateCurrent(session)
       return 'started'
     } catch {
       if (this.live === session && !session.controller.signal.aborted) await this.fail(session, 'unavailable')
@@ -98,7 +96,7 @@ export class CleanAgentHudSession {
       || session.id !== expected.sessionId || session.revision !== expected.revision || this.expired(session)) return false
     session.copying = true
     try {
-      await this.dependencies.write(session.output, session.sensitive, session.controller.signal)
+      await this.dependencies.write(session.output, session.controller.signal)
       if (this.live !== session || session.controller.signal.aborted) return false
       await this.retire(session)
       return true
@@ -123,7 +121,7 @@ export class CleanAgentHudSession {
         return false
       }
       try {
-        await this.dependencies.write(session.output, session.sensitive, session.controller.signal)
+        await this.dependencies.write(session.output, session.controller.signal)
       } catch {
         if (this.live === session && !this.expired(session)) {
           session.copyFailed = true; session.pasteFailed = false; session.revision += 1
@@ -175,7 +173,7 @@ export class CleanAgentHudSession {
     return { product: 'clean-agent', sessionId: session.id, revision: session.revision, phase: session.phase,
       preview: '', truncated: false, copyFailed: session.copyFailed, pasteFailed: session.pasteFailed,
       pasteCopied: session.pasteCopied, complete: session.complete,
-      sensitive: session.sensitive, failure: session.failure, expiresAt: session.expiresAt }
+      failure: session.failure, expiresAt: session.expiresAt }
   }
   private async reportPasteFailure(session: Live, copied: boolean): Promise<void> {
     if (this.live !== session || this.expired(session)) return
@@ -195,7 +193,7 @@ export class CleanAgentHudSession {
   private async fail(session: Live, failure: CleanAgentHudFailure) {
     if (this.live !== session) return
     session.phase = 'error'; session.failure = failure; session.output = ''; session.complete = false
-    session.sensitive = false; session.revision += 1
+    session.revision += 1
     await this.publish(session)
   }
   private retire(session: Live): Promise<void> {

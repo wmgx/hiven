@@ -8,7 +8,6 @@
 .curl-inspector button:disabled { opacity: .4; cursor: default; }
 .curl-inspector button:focus-visible, .curl-inspector textarea:focus-visible, .curl-inspector pre:focus-visible { outline: 2px solid var(--hiven-color-accent, #477be3); outline-offset: 2px; }
 .curl-inspector textarea { box-sizing: border-box; width: 100%; resize: vertical; padding: 9px; border: 1px solid var(--hiven-color-border); border-radius: 6px; background: var(--hiven-color-bg-secondary); color: inherit; font: 12px/1.5 monospace; }
-.curl-source-masked { -webkit-text-security: disc; }
 .curl-source-actions, .curl-field-heading, .curl-field-heading > div { display: flex; align-items: center; gap: 6px; }
 .curl-source-actions { margin: 5px 0 8px; flex-wrap: wrap; }
 .curl-field { margin-top: 9px; }

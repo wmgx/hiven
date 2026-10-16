@@ -4,14 +4,12 @@ import { useAppStore } from './store'
 import { acquireRegisteredSurfaceShortcutInterceptor } from './hotkeys/pluginSurfaceShortcuts'
 import { decodeQrFromBlob } from './plugins/qr-code/qrCore'
 import { QrHudSession, type QrHudView } from './plugins/qr-code/qrHudSession'
-import { isSensitiveQrText } from './qrHudSensitivity'
 import { isCurrentBundledDefinition } from './workspace/bundledPluginIdentity'
 import { createPluginClipboardImageReader } from './workspace/pluginClipboardImageRead'
 import { getPluginPermissionSnapshot, missingPluginPermissions, usePluginPermissionStore } from './workspace/pluginPermissions'
 import { pluginRegistry } from './workspace/pluginRegistry'
 import { pluginSurfaceShortcutKey, usePluginSurfaceShortcutStore } from './workspace/pluginSurfaceShortcuts'
-import { readNativeClipboardText, writeTextWithoutHistory } from './workspace/nativeClipboard'
-import { writeClipboardText } from './workspace/pluginClipboard'
+import { writeTextWithoutHistory } from './workspace/nativeClipboard'
 import { claimTextResultHud, type TextResultHudClaim, type TextResultHudLease } from './workspace/textResultHudOwnership'
 
 const TARGET = { source: 'builtin' as const, pluginId: 'qr-code', surfaceId: 'scan' }
@@ -55,14 +53,6 @@ export function installQrHudHost(): () => void {
     async read(signal, isCurrent) {
       const ready = permissionsReady()
       if (!ready || signal.aborted || !isCurrent()) throw new DOMException('QR read unavailable', 'AbortError')
-      // Check public text before touching image bytes. On macOS this native read
-      // atomically suppresses Concealed/Transient pasteboard content.
-      const publicText = await readNativeClipboardText(() => {
-        if (signal.aborted || !isCurrent()) throw new DOMException('QR read cancelled', 'AbortError')
-      })
-      if (signal.aborted || !isCurrent() || isSensitiveQrText(publicText)) {
-        throw new DOMException('QR read refused', 'NotAllowedError')
-      }
       const reader = createPluginClipboardImageReader(TARGET.pluginId, ready.snapshot, {
         source: TARGET.source,
         isCurrent: () => alive && isCurrent() && permissionsReady()?.definition === ready.definition,
@@ -73,10 +63,7 @@ export function installQrHudHost(): () => void {
       return new Blob([image.bytes as BlobPart], { type: image.contentType })
     },
     decode: decodeQrFromBlob,
-    isSensitive: isSensitiveQrText,
-    write: (text, sensitive, signal) => sensitive
-      ? writeClipboardText(text, { sensitive: true, signal })
-      : writeTextWithoutHistory(text, signal),
+    write: (text, signal) => writeTextWithoutHistory(text, signal),
     present: (view, fullText) => invoke<boolean>('text_result_hud_present', { snapshot: nativeSnapshot(view), fullText })
       .then((accepted) => { if (!accepted) throw new Error('Text result HUD rejected the session') }),
     activate: (view) => invoke<number | null>('text_result_hud_activate', { sessionId: view.sessionId, revision: view.revision }),

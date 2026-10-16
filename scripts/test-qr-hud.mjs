@@ -28,14 +28,8 @@ function deferred() {
 }
 
 const { QrHudSession } = load('src/plugins/qr-code/qrHudSession.ts')
-const content = load('src/kits/content/detectContent.ts')
-const { isSensitiveQrText } = load('src/qrHudSensitivity.ts', { './kits/content': content })
-assert.equal(isSensitiveQrText('https://example.test/plain'), false)
-assert.equal(isSensitiveQrText('otpauth://totp/example?secret=fake'), true)
-assert.equal(isSensitiveQrText('WIFI:T:WPA;S:Example;P:not-a-real-password;;'), true)
-assert.equal(isSensitiveQrText('eyJhbGciOiJub25lIn0.eyJzdWIiOiIxIn0.sig'), true)
 
-function harness({ decoded = { ok: true, text: 'https://example.test/plain' }, sensitive = false, pendingDecode, onDecode, writeFails = false } = {}) {
+function harness({ decoded = { ok: true, text: 'https://example.test/plain' }, pendingDecode, onDecode, writeFails = false } = {}) {
   let now = 1000
   const shown = []
   const writes = []
@@ -48,9 +42,8 @@ function harness({ decoded = { ok: true, text: 'https://example.test/plain' }, s
       return new Blob(['png'], { type: 'image/png' })
     },
     decode: () => { onDecode?.(); return pendingDecode?.promise ?? Promise.resolve(decoded) },
-    isSensitive: () => sensitive,
-    async write(text, markedSensitive, signal) {
-      writes.push({ text, sensitive: markedSensitive, aborted: signal.aborted })
+    async write(text, signal) {
+      writes.push({ text, aborted: signal.aborted })
       if (writeFails) throw new Error('synthetic write failure')
     },
     async present(view, fullText) {
@@ -78,30 +71,24 @@ function harness({ decoded = { ok: true, text: 'https://example.test/plain' }, s
   assert.equal(await h.session.copyAndClose({ sessionId: active.sessionId, revision: active.revision }), false)
   h.allowPresent()
   assert.equal(await h.session.trigger(), 'started')
-  assert.equal(h.shown.at(-1).view.phase, 'ready')
+  assert.equal(h.shown.at(-1).view.phase, 'active')
 }
 
 {
+  // One press goes straight to the full, copyable result.
   const h = harness()
   assert.equal(await h.session.trigger(), 'started')
-  assert.equal(h.shown.at(-1).view.phase, 'ready')
-  assert.equal(h.shown.at(-1).view.preview, 'https://example.test/plain')
-  assert.equal(h.shown.at(-1).fullText, undefined)
-  assert.equal(await h.session.trigger(), 'activated')
   const active = h.shown.at(-1)
   assert.equal(active.view.phase, 'active')
   assert.equal(active.fullText, 'https://example.test/plain')
   assert.equal(await h.session.copyAndClose({ sessionId: active.view.sessionId, revision: active.view.revision }), true)
-  assert.deepEqual(h.writes, [{ text: 'https://example.test/plain', sensitive: false, aborted: false }])
+  assert.deepEqual(h.writes, [{ text: 'https://example.test/plain', aborted: false }])
   assert.equal(h.dismissed.length, 1)
 }
 
 {
-  const h = harness({ decoded: { ok: true, text: 'otpauth://totp/example?secret=fake' }, sensitive: true })
-  await h.session.trigger()
-  assert.equal(h.shown.at(-1).view.sensitive, true)
-  assert.equal(h.shown.at(-1).view.preview, '')
-  assert.equal(h.shown.at(-1).fullText, undefined)
+  // Formerly hidden content (otpauth, JWT, ...) is shown like any other result.
+  const h = harness({ decoded: { ok: true, text: 'otpauth://totp/example?secret=fake' } })
   await h.session.trigger()
   assert.equal(h.shown.at(-1).fullText, 'otpauth://totp/example?secret=fake')
 }
@@ -126,4 +113,4 @@ function harness({ decoded = { ok: true, text: 'https://example.test/plain' }, s
   assert.equal(h.shown.at(-1).view.failure, 'incomplete')
 }
 
-console.log('QR HUD session, sensitive reveal, late cancellation, error, and host-boundary checks passed')
+console.log('QR HUD one-press result, late cancellation, error, and host-boundary checks passed')
