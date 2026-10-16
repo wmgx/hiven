@@ -297,6 +297,14 @@ async function describeProviders(
     descriptions.push(missing)
     onProvider?.(missing, descriptions.length, descriptions.length, descriptions.length - 1)
   }
+  return markDefaultProvider(descriptions, configuredProviderId, configuredNeverFallback)
+}
+
+function markDefaultProvider(
+  descriptions: AiProviderDescriptor[],
+  configuredProviderId: string | undefined,
+  configuredNeverFallback: boolean,
+): AiProviderDescriptor[] {
   const configured = descriptions.find((item) => item.id === configuredProviderId)
   const effectiveDefault = configuredNeverFallback
     ? configured
@@ -304,6 +312,29 @@ async function describeProviders(
       ?? descriptions.find((item) => item.status === 'ready' && !neverFallback(item.id))
       ?? configured
   return descriptions.map((item) => ({ ...item, isDefault: item.id === effectiveDefault?.id }))
+}
+
+/**
+ * Descriptions for a generation run: reuse fresh cached descriptors instead of
+ * re-running every provider's describe() before each request. Returns null when
+ * any needed provider has no fresh cache, so the caller falls back to a real describe.
+ */
+function cachedProviderDescriptions(onlyProviderId?: string): AiProviderDescriptor[] | null {
+  const adapters = [...providers.values()].filter((provider) => onlyProviderId == null || provider.id === onlyProviderId)
+  if (adapters.length === 0) return null
+  // Removed built-in providers are synthesized by describeProviders; do not special-case them here.
+  for (const providerId of builtinProviderBoundaries.keys()) {
+    if (!providers.has(providerId) && (onlyProviderId == null || providerId === onlyProviderId)) return null
+  }
+  const now = Date.now()
+  const descriptions: AiProviderDescriptor[] = []
+  for (const provider of adapters) {
+    const cached = providerCache.get(provider.id)
+    if (!cached || now - cached.cachedAt >= PROVIDER_CACHE_MS) return null
+    descriptions.push(cached.value)
+  }
+  const configuredProviderId = useAppStore.getState().settings.aiDefaultProviderId
+  return markDefaultProvider(descriptions, configuredProviderId, neverFallback(configuredProviderId))
 }
 
 function isTauri(): boolean {
@@ -525,7 +556,8 @@ export function createPluginAi(
           return
         }
         const discoveryAdapters = new Map(providers)
-        const available = await withSignal(describeProviders(undefined, request.providerId), signal)
+        const cachedAvailable = cachedProviderDescriptions(request.providerId)
+        let available = cachedAvailable ?? await withSignal(describeProviders(undefined, request.providerId), signal)
         checkPermission()
         if (pinnedAdapter && providers.get(pinnedAdapter.id) !== pinnedAdapter) {
           await finish('failed')
@@ -533,11 +565,19 @@ export function createPluginAi(
           return
         }
         const explicitProvider = request.providerId != null
-        const descriptor = pinnedAdapter
+        const pickDescriptor = () => pinnedAdapter
           ? available.find((item) => item.id === pinnedAdapter.id)
           : explicitProvider
           ? available.find((item) => item.id === request.providerId)
           : available.find((item) => item.isDefault)
+        let descriptor = pickDescriptor()
+        if (cachedAvailable && (!descriptor || descriptor.status !== 'ready')) {
+          // A stale cached failure (login expired, provider back up) gets one real refresh before failing.
+          for (const item of cachedAvailable) invalidateProvider(item.id)
+          available = await withSignal(describeProviders(undefined, request.providerId), signal)
+          checkPermission()
+          descriptor = pickDescriptor()
+        }
         if (!descriptor || descriptor.status !== 'ready') {
           await finish('failed')
           yield {
