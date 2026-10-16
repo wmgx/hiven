@@ -37,6 +37,8 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { LAUNCHER_WINDOW_LABEL } from '../../workspace/windowManager/windowLabels'
 import { pluginSurfaceInstanceId } from '../../workspace/pluginSurfaceWindows'
 import { PluginAppSettingsDialog } from './PluginAppSettingsDialog'
+import { ConfirmDialog } from '../../plugin-ui'
+import { consumeLocalEscapeLayer } from '../../utils/localEscapeLayer'
 
 type ResolvedPluginSurface = {
   target: PluginSurfaceOpenTarget
@@ -64,12 +66,24 @@ type AppSettingsSession = {
   reject: (error: Error) => void
 }
 
+type HistoryDiffChanges = {
+  owner: PluginSurfaceLeaveOwner
+  dirty: boolean
+  actions: PluginSurfaceLeaveActions
+}
+
+type PendingHistoryDiffLeave = {
+  owner: PluginSurfaceLeaveOwner
+  perform: () => void
+}
+
 function settingsInterrupted(): Error {
   return Object.assign(new Error('App settings surface interrupted'), { name: 'AbortError' })
 }
 
 /** Internal renderer identity, revoked on replacement, unload, or lifetime expiry. */
 export type PluginSurfaceLeaveOwner = { isCurrent: () => boolean; interruptPending?: () => void }
+export type PluginSurfaceLeaveActions = { back: () => void; close: () => void }
 
 export type PluginSurfaceRendererProps = {
   target: PluginSurfaceOpenTarget
@@ -78,8 +92,8 @@ export type PluginSurfaceRendererProps = {
   contextSurfaceId: string
   onBack: () => void
   onClose: () => void
-  onUnsavedChangesChange?: (hasUnsavedChanges: boolean, owner: PluginSurfaceLeaveOwner) => void
-  onRequestLeave?: (action: 'back' | 'close') => void
+  onUnsavedChangesChange?: (hasUnsavedChanges: boolean, owner: PluginSurfaceLeaveOwner, actions: PluginSurfaceLeaveActions) => void
+  onRequestLeave?: (action: 'back' | 'close', owner: PluginSurfaceLeaveOwner, actions: PluginSurfaceLeaveActions) => void
   suspended?: boolean
   onHandoffReady?: (ready: boolean) => void
 }
@@ -146,9 +160,13 @@ export function PluginSurfaceRenderer({
     return () => { leaveIntentListeners.delete(listener) }
   }, [leaveOwner, leaveIntentListeners])
   useLayoutEffect(() => () => leaveIntentListeners.clear(), [leaveIntentListeners])
+  const leaveActions = useMemo<PluginSurfaceLeaveActions>(() => ({ back: onBack, close: onClose }), [onBack, onClose])
+  const surfaceUnsavedChangesRef = useRef(false)
   const setUnsavedChanges = useCallback((hasUnsavedChanges: boolean) => {
-    if (leaveOwner.isCurrent()) onUnsavedChangesChange?.(hasUnsavedChanges, leaveOwner)
-  }, [leaveOwner, onUnsavedChangesChange])
+    if (!leaveOwner.isCurrent()) return
+    surfaceUnsavedChangesRef.current = hasUnsavedChanges
+    onUnsavedChangesChange?.(hasUnsavedChanges, leaveOwner, leaveActions)
+  }, [leaveActions, leaveOwner, onUnsavedChangesChange])
   const pasteScope = useMemo(() => createPasteRecoveryScope(), [target, surfaceState, suspended])
   const preparationScopeRef = useRef<ReturnType<typeof createPasteRecoveryScope> | null>(null)
   const [pasteOwnerVersion, refreshPasteOwner] = useState(0)
@@ -163,7 +181,92 @@ export function PluginSurfaceRenderer({
   type HistoryDiffSession = { target: PluginSurfaceOpenTarget; owner: PluginSurfaceRendererState; finish: (accepted: boolean) => void }
   const [historyDiff, setHistoryDiff] = useState<HistoryDiffSession | null>(null)
   const historyDiffRef = useRef<HistoryDiffSession | null>(null)
+  const historyDiffChangesRef = useRef<HistoryDiffChanges | null>(null)
+  const pendingHistoryDiffLeaveRef = useRef<PendingHistoryDiffLeave | null>(null)
+  const [pendingHistoryDiffLeave, setPendingHistoryDiffLeave] = useState<PendingHistoryDiffLeave | null>(null)
+  const clearHistoryDiffLeaveState = useCallback(() => {
+    historyDiffChangesRef.current = null
+    pendingHistoryDiffLeaveRef.current = null
+    if (mountedRef.current) setPendingHistoryDiffLeave(null)
+  }, [])
+  const finishHistoryDiff = useCallback(() => {
+    if (!historyDiff) return
+    clearHistoryDiffLeaveState()
+    if (leaveOwner.isCurrent()) {
+      onUnsavedChangesChange?.(surfaceUnsavedChangesRef.current, leaveOwner, leaveActions)
+    }
+    historyDiff.finish(true)
+  }, [clearHistoryDiffLeaveState, historyDiff, leaveActions, leaveOwner, onUnsavedChangesChange])
+  const onHistoryDiffUnsavedChangesChange = useCallback((dirty: boolean, owner: PluginSurfaceLeaveOwner, actions: PluginSurfaceLeaveActions) => {
+    if (!historyDiffRef.current) return
+    if (!owner.isCurrent()) {
+      if (historyDiffChangesRef.current?.owner === owner) historyDiffChangesRef.current = null
+    } else {
+      historyDiffChangesRef.current = { dirty, owner, actions }
+    }
+    const pending = pendingHistoryDiffLeaveRef.current
+    if (pending && (!dirty || pending.owner !== owner || !owner.isCurrent())) {
+      pendingHistoryDiffLeaveRef.current = null
+      setPendingHistoryDiffLeave(null)
+    }
+    onUnsavedChangesChange?.(dirty, owner, actions)
+  }, [onUnsavedChangesChange])
+  const requestHistoryDiffLeave = useCallback((action: 'back' | 'close', owner: PluginSurfaceLeaveOwner, actions: PluginSurfaceLeaveActions) => {
+    if (onRequestLeave) {
+      onRequestLeave(action, owner, actions)
+      return
+    }
+    if (!owner.isCurrent()) return
+    const changes = historyDiffChangesRef.current
+    const perform = actions[action]
+    if (changes?.dirty && changes.owner === owner) {
+      if (pendingHistoryDiffLeaveRef.current) return
+      owner.interruptPending?.()
+      const pending = { owner, perform }
+      pendingHistoryDiffLeaveRef.current = pending
+      setPendingHistoryDiffLeave(pending)
+      return
+    }
+    perform()
+  }, [onRequestLeave])
+  const cancelHistoryDiffLeave = useCallback(() => {
+    if (pendingHistoryDiffLeaveRef.current !== pendingHistoryDiffLeave) return
+    pendingHistoryDiffLeaveRef.current = null
+    setPendingHistoryDiffLeave(null)
+  }, [pendingHistoryDiffLeave])
+  const discardHistoryDiffChanges = useCallback(() => {
+    const pending = pendingHistoryDiffLeave
+    if (!pending || pendingHistoryDiffLeaveRef.current !== pending || !pending.owner.isCurrent()
+      || historyDiffChangesRef.current?.owner !== pending.owner) return
+    clearHistoryDiffLeaveState()
+    pending.perform()
+  }, [clearHistoryDiffLeaveState, pendingHistoryDiffLeave])
   const [appSettingsSession, setAppSettingsSession] = useState<AppSettingsSession | null>(null)
+  useEffect(() => {
+    if (presentation !== 'plugin-surface-window' || !historyDiff) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented
+        || event.isComposing || (event as unknown as { keyCode: number }).keyCode === 229) return
+      if (pendingHistoryDiffLeaveRef.current) {
+        event.preventDefault()
+        event.stopPropagation()
+        pendingHistoryDiffLeaveRef.current = null
+        setPendingHistoryDiffLeave(null)
+        return
+      }
+      if (consumeLocalEscapeLayer(event, document.body)) return
+      // Monaco owns its find-widget dismissal before the surface owns Escape.
+      if (event.target instanceof Element && event.target.closest('.monaco-editor')?.querySelector('.find-widget.visible')) return
+      const changes = historyDiffChangesRef.current
+      if (!changes?.owner.isCurrent()) return
+      event.preventDefault()
+      event.stopPropagation()
+      requestHistoryDiffLeave('back', changes.owner, changes.actions)
+    }
+    // Capture before Monaco consumes Escape in its own keydown handling.
+    document.addEventListener('keydown', onKeyDown, true)
+    return () => document.removeEventListener('keydown', onKeyDown, true)
+  }, [historyDiff, presentation, requestHistoryDiffLeave])
   const finishAppSettings = useCallback((session: AppSettingsSession | null, completed = false) => {
     if (!session || sessionRef.current !== session) return
     sessionRef.current = null
@@ -212,7 +315,7 @@ export function PluginSurfaceRenderer({
   }, [])
   useLayoutEffect(() => () => preparationScopeRef.current?.invalidate(), [target])
   // The renderer owns cleanup; retained plugin setters cannot clear a newer owner.
-  useLayoutEffect(() => () => onUnsavedChangesChange?.(false, leaveOwner), [leaveOwner, onUnsavedChangesChange])
+  useLayoutEffect(() => () => onUnsavedChangesChange?.(false, leaveOwner, leaveActions), [leaveActions, leaveOwner, onUnsavedChangesChange])
 
   // External tool shortcuts replace target without resetting the launcher session.
   useLayoutEffect(() => () => interruptSettings(), [target, surfaceState, interruptSettings])
@@ -476,7 +579,7 @@ export function PluginSurfaceRenderer({
   const requestLeave = (action: 'back' | 'close') => {
     if (!isCurrentSurface()) return
     // Keep this renderer intact until the Launcher decides whether to leave.
-    if (onRequestLeave) onRequestLeave(action)
+    if (onRequestLeave) onRequestLeave(action, leaveOwner, leaveActions)
     else leaveSurface(action === 'back' ? onBack : onClose)
   }
 
@@ -525,6 +628,7 @@ export function PluginSurfaceRenderer({
               const receipt = createHistoryDiffReturnReceipt(owner, options?.signal, () => {
                 if (historyDiffRef.current !== session) return
                 historyDiffRef.current = null
+                clearHistoryDiffLeaveState()
                 if (mountedRef.current) setHistoryDiff(null)
               })
               const session: HistoryDiffSession = { target: diffTarget, owner: surfaceState, finish: receipt.finish }
@@ -733,9 +837,21 @@ export function PluginSurfaceRenderer({
         <PluginSurfaceRenderer
           target={historyDiff.target} locale={locale} presentation={presentation}
           contextSurfaceId={contextSurfaceId}
-          onBack={() => historyDiff.finish(true)} onClose={() => historyDiff.finish(true)}
+          onBack={finishHistoryDiff} onClose={finishHistoryDiff}
+          onUnsavedChangesChange={onHistoryDiffUnsavedChangesChange}
+          onRequestLeave={requestHistoryDiffLeave}
         />
       )}
+      <ConfirmDialog
+        open={Boolean(!onRequestLeave && pendingHistoryDiffLeave && pendingHistoryDiffLeave.owner.isCurrent())}
+        title={t(locale, 'palette.surfaceDiscardTitle')}
+        message={t(locale, 'palette.surfaceDiscardMessage')}
+        confirmLabel={t(locale, 'palette.surfaceDiscardConfirm')}
+        cancelLabel={t(locale, 'palette.surfaceDiscardCancel')}
+        defaultFocus="cancel"
+        onConfirm={discardHistoryDiffChanges}
+        onCancel={cancelHistoryDiffLeave}
+      />
       {appSettingsSession && appSettingsSession.target === target && appSettingsSession.owner === surfaceState && (
         <PluginAppSettingsDialog locale={locale} onClose={() => finishAppSettings(appSettingsSession, isCurrentSurface() && document.visibilityState !== 'hidden')} />
       )}

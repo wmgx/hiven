@@ -25,7 +25,7 @@ const frameCode = compile(frameSource.slice(0, frameReturn.expression.getStart(f
 function frameHarness() {
   const slots = [], queuedEffects = []
   let cursor = 0, target = {}, view
-  const calls = { back: 0, close: 0 }
+  const calls = { back: 0, close: 0, reports: [] }
   const useState = (initial) => {
     const i = cursor++
     if (!(i in slots)) slots[i] = typeof initial === 'function' ? initial() : initial
@@ -44,6 +44,7 @@ function frameHarness() {
   }
   const modules = {
     react, 'react/jsx-runtime': {}, '../../i18n': {}, '../../plugin-ui': {},
+    '../../utils/localEscapeLayer': { consumeLocalEscapeLayer: () => false },
     './launcherEscapeInterceptor': { useLauncherEscapeInterceptor() {} },
     '../pluginSurface/PluginSurfaceRenderer': {}, '../SurfaceBreadcrumbHeader': {},
   }
@@ -52,7 +53,8 @@ function frameHarness() {
   function render() {
     cursor = 0
     view = context.exports.GlobalLauncherPluginSurfaceFrame({ target, locale: 'en', shellHeight: 600,
-      onBack: () => calls.back++, onClose: () => calls.close++ })
+      onBack: () => calls.back++, onClose: () => calls.close++,
+      onUnsavedChangesReport: (report) => calls.reports.push(report) })
     queuedEffects.splice(0).forEach((run) => run())
     return view
   }
@@ -84,6 +86,29 @@ for (const action of ['back', 'close']) check(`${action}: dirty prompts once, ca
   h.view.discardChanges(); h.view.discardChanges(); h.render()
   assert.equal(h.calls[action], 1)
   assert.equal(h.view.pendingLeave, null)
+})
+check('nested surface confirmation returns through its captured route', () => {
+  const h = frameHarness(), nested = owner()
+  const nestedCalls = { back: 0, close: 0 }
+  const actions = { back: () => nestedCalls.back++, close: () => nestedCalls.close++ }
+  h.view.onUnsavedChangesChange(true, nested, actions)
+  h.view.requestLeave('back', nested, actions); h.render()
+  assert.ok(h.view.pendingLeave)
+  h.view.discardChanges(); h.render()
+  assert.deepEqual(nestedCalls, { back: 1, close: 0 })
+  assert.equal(h.calls.back + h.calls.close, 0, 'discard must not leave the owning History surface')
+  assert.equal(h.calls.reports.at(-1)?.kind, 'release')
+  assert.equal(h.calls.reports.at(-1)?.owner, nested, 'confirmed nested discard releases its background-idle owner')
+})
+check('clean nested surface owns Escape without leaving its parent', () => {
+  const h = frameHarness(), nested = owner()
+  const nestedCalls = { back: 0, close: 0 }
+  const actions = { back: () => nestedCalls.back++, close: () => nestedCalls.close++ }
+  h.view.onUnsavedChangesChange(false, nested, actions)
+  const event = { key: 'Escape', target: null, preventDefault() {}, stopPropagation() {} }
+  assert.equal(h.view.escapeHandler(event), true)
+  assert.deepEqual(nestedCalls, { back: 1, close: 0 })
+  assert.equal(h.calls.back + h.calls.close, 0)
 })
 check('clean and reverted owners navigate without a prompt', () => {
   const h = frameHarness(), first = owner()
@@ -162,7 +187,9 @@ for (const invalidate of ['owner', 'unmount']) check(`${invalidate} revokes a re
 })
 
 const rendererPath = 'src/components/pluginSurface/PluginSurfaceRenderer.tsx'
-const { file: rendererFile } = parse(rendererPath)
+const { source: rendererSource, file: rendererFile } = parse(rendererPath)
+assert.match(rendererSource, /document\.addEventListener\('keydown', onKeyDown, true\)/)
+assert.match(rendererSource, /document\.removeEventListener\('keydown', onKeyDown, true\)/)
 const rendererFunction = rendererFile.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === 'PluginSurfaceRenderer')
 const declarations = new Map(rendererFunction.body.statements.filter(ts.isVariableStatement)
   .flatMap((statement) => statement.declarationList.declarations.map((decl) => [decl.name.getText(rendererFile), decl.getText(rendererFile)])))
@@ -181,9 +208,11 @@ function rendererHarness({ guarded = true, presentation = 'global-launcher' } = 
   state.target = target
   const calls = { back: 0, close: 0, interrupt: 0, reports: [], requests: [] }
   const suspensionOwner = {}
+  const leaveIntentListeners = new Set()
   let deliveryCurrent = true
   const context = { exports: {}, target, surfaceState: state, lifetime, presentation,
-    suspensionOwner, suspensionOwnerRef: { current: suspensionOwner }, suspendedRef: { current: false },
+    suspensionOwner, leaveIntentListeners, suspensionOwnerRef: { current: suspensionOwner }, suspendedRef: { current: false },
+    surfaceUnsavedChangesRef: { current: false },
     surfaceOwner: { isCurrent: () => deliveryCurrent },
     interruptSettingsRef: { current: () => { calls.interrupt++; deliveryCurrent = false } },
     refreshPasteOwner: () => {},
@@ -193,7 +222,7 @@ function rendererHarness({ guarded = true, presentation = 'global-launcher' } = 
     onRequestLeave: guarded ? (action) => calls.requests.push(action) : undefined,
     onBack: () => calls.back++, onClose: () => calls.close++, interruptSettings: () => calls.interrupt++,
   }
-  const code = ['leaveOwner', 'setUnsavedChanges', 'isCurrentSurface', 'leaveSurface', 'requestLeave']
+  const code = ['leaveOwner', 'leaveActions', 'setUnsavedChanges', 'isCurrentSurface', 'leaveSurface', 'requestLeave']
     .map((name) => `const ${declarations.get(name)};`).join('\n')
     + `\nexports.api = { owner: leaveOwner, setUnsavedChanges, back: ${callbacks.requestBack}, close: ${callbacks.close}, complete: ${callbacks.complete} };`
   vm.runInNewContext(compile(code), context, { filename: rendererPath })

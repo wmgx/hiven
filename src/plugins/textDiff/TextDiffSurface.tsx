@@ -7,6 +7,7 @@ import { useDiffSourceText } from './useDiffSourceText'
 import { createDiffSourceReader } from './sourceReadLifetime'
 import { createDiffSideCopier, type DiffCopySide } from './copySideText'
 import { buildHighlightNavigationTargets, clampDiffHunkIndex, moveDiffHunkIndex } from './diffNavigation'
+import { hasTextDiffUnsavedChanges } from './unsavedChanges'
 
 type DiffMode = 'text' | 'json'
 
@@ -134,6 +135,12 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
   const [modifiedSource, setModifiedSource] = useState(payload.modified)
   const [originalText, writeOriginalText] = useDiffSourceText(originalSource)
   const [modifiedText, writeModifiedText] = useDiffSourceText(modifiedSource)
+  const baseline = useRef({ original: payload.original.text ?? '', modified: payload.modified.text ?? '' })
+  const hasUnsavedChanges = hasTextDiffUnsavedChanges(baseline.current, originalText, modifiedText)
+  const reportUnsavedChanges = host.setUnsavedChanges
+  useLayoutEffect(() => {
+    reportUnsavedChanges?.(hasUnsavedChanges)
+  }, [hasUnsavedChanges, reportUnsavedChanges])
   const currentTexts = useRef({ original: originalText, modified: modifiedText })
   currentTexts.current = { original: originalText, modified: modifiedText }
   const [originalReader] = useState(createDiffSourceReader)
@@ -180,6 +187,7 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
     invalidateCopy()
     invalidateSourceReads()
   }, [invalidateCopy, invalidateSourceReads])
+  useLayoutEffect(() => host.subscribeLeaveIntent?.(leaveSurface), [host.subscribeLeaveIntent, leaveSurface])
   const [diffMode, setDiffMode] = useState<DiffMode>(payload.mode ?? (surfaceId === 'json' ? 'json' : 'text'))
 
   const sourceOptions = payload.sources?.length ? payload.sources : [

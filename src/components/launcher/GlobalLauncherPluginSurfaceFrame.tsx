@@ -4,13 +4,14 @@ import { t, type Locale } from '../../i18n'
 import type { PluginSurfaceOpenTarget } from '../../store'
 import { ConfirmDialog } from '../../plugin-ui'
 import { useLauncherEscapeInterceptor } from './launcherEscapeInterceptor'
-import { PluginSurfaceRenderer, type PluginSurfaceLeaveOwner } from '../pluginSurface/PluginSurfaceRenderer'
+import { PluginSurfaceRenderer, type PluginSurfaceLeaveActions, type PluginSurfaceLeaveOwner } from '../pluginSurface/PluginSurfaceRenderer'
 import { SurfaceBreadcrumbHeader } from '../SurfaceBreadcrumbHeader'
 import type { LauncherSurfaceUnsavedChangesReport } from './useLauncherSurfaceBackgroundIdle'
 
 const BREADCRUMB_HEIGHT = 40
 type LeaveAction = 'back' | 'close'
-type PendingLeave = { action: LeaveAction; target: PluginSurfaceOpenTarget; owner: PluginSurfaceLeaveOwner }
+type SurfaceChanges = { owner: PluginSurfaceLeaveOwner; dirty: boolean; actions: PluginSurfaceLeaveActions }
+type PendingLeave = { action: LeaveAction; target: PluginSurfaceOpenTarget; owner: PluginSurfaceLeaveOwner; perform: () => void }
 
 export function GlobalLauncherPluginSurfaceFrame({
   target,
@@ -38,7 +39,7 @@ export function GlobalLauncherPluginSurfaceFrame({
   const activeTargetRef = useRef(target)
   activeTargetRef.current = target
   const mountedRef = useRef(false)
-  const changesRef = useRef<{ owner: PluginSurfaceLeaveOwner; dirty: boolean } | null>(null)
+  const changesRef = useRef<SurfaceChanges | null>(null)
   const reportRef = useRef(onUnsavedChangesReport)
   reportRef.current = onUnsavedChangesReport
   const pendingRef = useRef<PendingLeave | null>(null)
@@ -56,14 +57,14 @@ export function GlobalLauncherPluginSurfaceFrame({
     setPendingLeave(null)
   }, [target])
 
-  const onUnsavedChangesChange = useCallback((dirty: boolean, owner: PluginSurfaceLeaveOwner) => {
+  const onUnsavedChangesChange = useCallback((dirty: boolean, owner: PluginSurfaceLeaveOwner, actions: PluginSurfaceLeaveActions) => {
     if (!mountedRef.current || activeTargetRef.current !== target) return
     if (!owner.isCurrent()) {
       if (changesRef.current?.owner !== owner) return
       changesRef.current = null
       reportRef.current?.({ kind: 'release', target, owner })
     } else {
-      changesRef.current = { owner, dirty }
+      changesRef.current = { owner, dirty, actions }
       reportRef.current?.({ kind: 'change', target, owner, dirty })
     }
     if (pendingRef.current && (!dirty || pendingRef.current.owner !== owner || !owner.isCurrent())) {
@@ -72,21 +73,24 @@ export function GlobalLauncherPluginSurfaceFrame({
     }
   }, [target])
 
-  const requestLeave = useCallback((action: LeaveAction) => {
+  const requestLeave = useCallback((action: LeaveAction, requestedOwner?: PluginSurfaceLeaveOwner, requestedActions?: PluginSurfaceLeaveActions) => {
     if (!mountedRef.current || activeTargetRef.current !== target) return
     const changes = changesRef.current
-    if (changes?.dirty && changes.owner.isCurrent()) {
+    if (requestedOwner && !requestedOwner.isCurrent()) return
+    const owner = requestedOwner ?? (changes?.owner.isCurrent() ? changes.owner : undefined)
+    const actions = requestedActions ?? (owner && changes?.owner === owner ? changes.actions : undefined)
+    const perform = actions?.[action] ?? (action === 'back' ? onBack : onClose)
+    if (changes?.dirty && owner && changes.owner === owner && owner.isCurrent()) {
       if (pendingRef.current) return
       // Capture-phase Escape and chrome navigation share this synchronous revocation.
       // Keep the renderer/draft owner alive so cancelling can resume fresh actions.
-      changes.owner.interruptPending?.()
-      const pending = { action, target, owner: changes.owner }
+      owner.interruptPending?.()
+      const pending = { action, target, owner, perform }
       pendingRef.current = pending
       setPendingLeave(pending)
       return
     }
-    if (action === 'back') onBack()
-    else onClose()
+    perform()
   }, [target, onBack, onClose])
 
   const cancelLeave = useCallback(() => {
@@ -100,11 +104,11 @@ export function GlobalLauncherPluginSurfaceFrame({
       || pendingLeave.target !== activeTargetRef.current
       || changesRef.current?.owner !== pendingLeave.owner || !pendingLeave.owner.isCurrent()) return
     pendingRef.current = null
+    reportRef.current?.({ kind: 'release', target, owner: pendingLeave.owner })
     changesRef.current = null
     setPendingLeave(null)
-    // Confirmed exits use raw host navigation, never a plugin callback.
-    if (pendingLeave.action === 'back') onBack()
-    else onClose()
+    // Confirmed exits use the raw route captured for this exact surface owner.
+    pendingLeave.perform()
   }
 
   const escapeHandler = useCallback((event: KeyboardEvent): boolean => {
