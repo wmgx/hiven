@@ -33,7 +33,6 @@ mod host_text_export;
 mod text_material;
 mod toast_hud;
 mod text_result_hud;
-mod short_countdown;
 mod history_paste_queue;
 pub mod desktop_bridge;
 pub mod hotkeys;
@@ -7782,7 +7781,6 @@ pub fn run() {
 
             // D3/D4: localhost bridge for Chromium tabs + editor documents.
             desktop_bridge::start_desktop_bridge_server(app.handle().clone());
-            short_countdown::start(app.handle().clone());
 
             Ok(())
         })
@@ -7794,10 +7792,6 @@ pub fn run() {
             history_paste_queue::get_history_queue_availability,
             history_paste_queue::begin_history_queue_paste,
             history_paste_queue::paste_history_queue_text,
-            short_countdown::short_countdown_status,
-            short_countdown::short_countdown_start,
-            short_countdown::short_countdown_cancel,
-            short_countdown::short_countdown_context,
             toast_hud::route_toast,
             toast_hud::capture_hud_target,
             toast_hud::hud_ready,
@@ -7947,7 +7941,6 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
-            if matches!(event, tauri::RunEvent::Exit) { short_countdown::interrupt(); }
             let _ = (&app, &event); // suppress unused warnings on non-macOS
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen { .. } = event {

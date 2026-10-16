@@ -383,11 +383,6 @@ export type PluginLauncherApi = {
   isPanePanelOpen(panelId: string): boolean
   /** Optional host handoff for the bundled explicit PNG save action; no caller-selected payload. */
   saveClipboardImageAsPng?(): Promise<void>
-  /** Restricted bundled time-assistant handoff; not a scheduling API. */
-  shortCountdown?(request: { action: 'status' } | { action: 'start'; seconds: number } | { action: 'cancel'; id: string }): Promise<{
-    supported: boolean; started?: boolean; storageError: boolean; remainingSeconds: number;
-    record: { id: string; seconds: number; phase: 'running' | 'expired' | 'cancelled' | 'interrupted' } | null;
-  }>
   getClipboardText(): Promise<string>
   replaceActiveText(text: string): Promise<void>
   insertText(text: string): Promise<void>

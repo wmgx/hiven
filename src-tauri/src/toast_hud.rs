@@ -9,7 +9,6 @@ use tauri::{Emitter, Manager};
 const LABEL: &str = "toast-hud";
 const EVENT: &str = "hiven://hud-toast";
 const MAX_LIFETIME: u64 = 15_000;
-const SUCCESS_MIN_VISIBLE: Duration = Duration::from_secs(1);
 static CREATION: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -25,7 +24,7 @@ pub(crate) enum Theme { Light, Dark }
 pub(crate) struct Progress { completed: u32, total: u32 }
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "kebab-case")]
-pub(crate) enum ResultKind { Copied, Pasted, CopyFailed, PasteFailed, CopiedPasteFailed, QueueReady, QueuePasted, QueueFailed, ImageSaved, ImageSavedPathFailed, ImageSaveFailed, ImageSaveCancelled, CountdownExpired }
+pub(crate) enum ResultKind { Copied, Pasted, CopyFailed, PasteFailed, CopiedPasteFailed, QueueReady, QueuePasted, QueueFailed, ImageSaved, ImageSavedPathFailed, ImageSaveFailed, ImageSaveCancelled }
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Receipt {
@@ -41,7 +40,7 @@ impl Receipt {
         });
         uuid && self.target.as_ref().map_or(true, |token| token.len() == 16 && token.bytes().all(|c| c.is_ascii_hexdigit())) && self.revision <= 9_007_199_254_740_991 && match self.result {
             ResultKind::Copied | ResultKind::Pasted | ResultKind::QueuePasted | ResultKind::ImageSaved => matches!(level, Level::Success),
-            ResultKind::QueueReady | ResultKind::ImageSaveCancelled | ResultKind::CountdownExpired => matches!(level, Level::Info),
+            ResultKind::QueueReady | ResultKind::ImageSaveCancelled => matches!(level, Level::Info),
             _ => matches!(level, Level::Error),
         }
     }
@@ -60,7 +59,7 @@ pub(crate) struct Snapshot {
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct HudUpdate { revision: u64, toast: Option<Snapshot> }
 #[derive(Clone)]
-struct Pending { owner: String, sequence: u64, snapshot: Snapshot, target: Option<PlacementTarget>, visible_since: Option<Instant> }
+struct Pending { owner: String, sequence: u64, snapshot: Snapshot, target: Option<PlacementTarget> }
 #[derive(Clone)]
 struct PlacementTarget {
     #[cfg(target_os = "linux")]
@@ -147,7 +146,6 @@ fn target_monitor(window: &tauri::WebviewWindow, target: Option<&PlacementTarget
 #[derive(Default)]
 struct State {
     pending: Option<Pending>,
-    deferred_passive: Option<Pending>,
     sequences: HashMap<String, u64>,
     dismissed: HashMap<String, HashSet<String>>,
     ready: bool,
@@ -185,29 +183,6 @@ impl State {
                 && !matches!(level, Level::Error) && !same_operation
         })
     }
-    fn passive_delay(&self, incoming: &Snapshot, now: Instant) -> Option<Duration> {
-        if !is_passive_info(incoming) { return None; }
-        let current = self.pending.as_ref()?;
-        if !is_user_success(&current.snapshot) { return None; }
-        Some(current.visible_since.and_then(|shown| SUCCESS_MIN_VISIBLE.checked_sub(now.saturating_duration_since(shown))).unwrap_or(SUCCESS_MIN_VISIBLE))
-    }
-    fn promote_deferred(&mut self, owner: &str, sequence: u64, id: &str, wall_now: u64, instant_now: Instant) -> Option<Pending> {
-        let matches = self.deferred_passive.as_ref().is_some_and(|pending| pending.owner == owner && pending.sequence == sequence && pending.snapshot.id == id);
-        if !matches { return None; }
-        if self.deferred_passive.as_ref().is_some_and(|pending| pending.snapshot.expires_at <= wall_now) {
-            self.deferred_passive = None;
-            return None;
-        }
-        let Some(current) = self.pending.as_ref() else { self.deferred_passive = None; return None; };
-        if !is_user_success(&current.snapshot) || current.visible_since.is_none_or(|shown| instant_now.saturating_duration_since(shown) < SUCCESS_MIN_VISIBLE) {
-            return None;
-        }
-        let mut next = self.deferred_passive.take()?;
-        next.visible_since = Some(instant_now);
-        self.pending = Some(next.clone());
-        self.revision = self.revision.saturating_add(1);
-        Some(next)
-    }
     fn cancel(&mut self, owner: &str, id: &str) -> bool {
         // Bounded per-owner tombstones cover dismiss-before-route races.
         let ids = self.dismissed.entry(owner.into()).or_default();
@@ -218,17 +193,8 @@ impl State {
         ids.insert(id.into());
         let matches = self.pending.as_ref().is_some_and(|p| p.owner == owner && p.snapshot.id == id);
         if matches { self.pending = None; }
-        let deferred = self.deferred_passive.as_ref().is_some_and(|p| p.owner == owner && p.snapshot.id == id);
-        if deferred { self.deferred_passive = None; }
-        matches || deferred
+        matches
     }
-}
-fn is_user_success(snapshot: &Snapshot) -> bool {
-    matches!(snapshot.level, Level::Success) && snapshot.receipt.as_ref().is_some_and(|receipt| matches!(receipt.result,
-        ResultKind::Copied | ResultKind::Pasted | ResultKind::QueuePasted | ResultKind::ImageSaved))
-}
-fn is_passive_info(snapshot: &Snapshot) -> bool {
-    matches!(snapshot.level, Level::Info) && snapshot.receipt.as_ref().is_some_and(|receipt| receipt.result == ResultKind::CountdownExpired)
 }
 fn registry() -> &'static Mutex<State> { static STATE: OnceLock<Mutex<State>> = OnceLock::new(); STATE.get_or_init(|| Mutex::new(State::default())) }
 // Fixed lifecycle stages only: no owner labels, ids, bodies, paths, or credentials.
@@ -348,14 +314,6 @@ fn show_current(app: &tauri::AppHandle) -> Result<HudUpdate, String> {
     trace("show-map-enter");
     window.emit(EVENT, &update).map_err(|_| "hud-unavailable")?;
     window.show().map_err(|_| "hud-unavailable")?;
-    {
-        let mut state = registry().lock().map_err(|_| "hud-unavailable")?;
-        if same_pending(state.pending.as_ref(), &pending) {
-            if let Some(current) = state.pending.as_mut() {
-                current.visible_since.get_or_insert_with(Instant::now);
-            }
-        }
-    }
     // Tao's GTK backend unwraps the GdkWindow when applying an input shape.
     // A never-shown hidden window has no GdkWindow yet. Queue this after show
     // (GTK show_all realizes it); focused(false)+focusable(false) already
@@ -380,7 +338,7 @@ fn ensure_window(app: &tauri::AppHandle) -> Result<(), String> {
     // launcher focus/blur handlers: this window is never a user input target.
     window.on_window_event(|event| {
         if matches!(event, tauri::WindowEvent::Destroyed) {
-            if let Ok(mut state) = registry().lock() { state.ready = false; state.pending = None; state.deferred_passive = None; }
+            if let Ok(mut state) = registry().lock() { state.ready = false; state.pending = None; }
         }
     });
     Ok(())
@@ -408,7 +366,7 @@ fn spawn_pending_monitor(app: tauri::AppHandle, owner: String, sequence: u64, id
                 let cleared = {
                     let mut state = registry().lock().map_err(|_| "hud-unavailable")?;
                     if !same_pending(state.pending.as_ref(), &pending) { return Ok(false); }
-                    if expired { state.pending = None; state.deferred_passive = None; }
+                    if expired { state.pending = None; }
                     expired
                 };
                 if cleared { hide(app); return Ok(false); }
@@ -419,33 +377,6 @@ fn spawn_pending_monitor(app: tauri::AppHandle, owner: String, sequence: u64, id
         }
     });
 }
-fn schedule_deferred_passive(app: tauri::AppHandle, owner: String, sequence: u64, id: String, delay: Duration, monotonic_until: Option<Instant>) {
-    tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(delay.saturating_add(Duration::from_millis(1))).await;
-        let expected_owner = owner.clone();
-        let expected_id = id.clone();
-        let (shown, retry) = ui(app.clone(), move |app| {
-            let next = {
-                let mut state = registry().lock().map_err(|_| "hud-unavailable")?;
-                if monotonic_until.is_some_and(|until| Instant::now() >= until) {
-                    let matches = state.deferred_passive.as_ref().is_some_and(|pending| pending.owner == expected_owner && pending.sequence == sequence && pending.snapshot.id == expected_id);
-                    if matches { state.deferred_passive = None; }
-                    return Ok((false, None));
-                }
-                let Some(next) = state.promote_deferred(&expected_owner, sequence, &expected_id, now(), Instant::now()) else {
-                    let retry = state.deferred_passive.as_ref().filter(|pending| pending.owner == expected_owner && pending.sequence == sequence && pending.snapshot.id == expected_id)
-                        .and_then(|pending| state.passive_delay(&pending.snapshot, Instant::now()));
-                    return Ok((false, retry));
-                };
-                next
-            };
-            show_current(app)?;
-            Ok((same_pending(registry().lock().map_err(|_| "hud-unavailable")?.pending.as_ref(), &next), None))
-        }).await.unwrap_or((false, None));
-        if shown { spawn_pending_monitor(app, owner, sequence, id, monotonic_until); }
-        else if let Some(retry) = retry { schedule_deferred_passive(app, owner, sequence, id, retry, monotonic_until); }
-    });
-}
 #[tauri::command]
 pub(crate) async fn route_toast(app: tauri::AppHandle, window: tauri::WebviewWindow, id: String, sequence: u64, level: Level, expires_at: u64, locale: Locale, theme: Theme, progress: Option<Progress>, receipt: Option<Receipt>) -> Result<Option<String>, String> {
     trace("route-enter");
@@ -453,27 +384,21 @@ pub(crate) async fn route_toast(app: tauri::AppHandle, window: tauri::WebviewWin
     if receipt.as_ref().is_some_and(|r| !r.valid(&level)) || !surface(&owner) || id.is_empty() || id.len() > 160 || progress.as_ref().is_some_and(|p| !(1..=20).contains(&p.total) || p.completed > p.total) { return Err("hud-unavailable".into()); }
     let timer_owner = owner.clone();
     let timer_id = id.clone();
-    let (target, needs_hud, deferred_delay) = ui(app.clone(), move |app| {
+    let (target, needs_hud) = ui(app.clone(), move |app| {
         trace("route-ui-enter");
         let mut state = registry().lock().map_err(|_| "hud-unavailable")?;
-        if !state.accept(&owner, sequence, &id, expires_at, now()) { return Ok((None, false, None)); }
-        if !state.accept_receipt(&owner, receipt.as_ref(), now()) { return Ok((None, false, None)); }
-        if state.protects_failure(&owner, receipt.as_ref(), &level, now()) { return Ok((None, false, None)); }
+        if !state.accept(&owner, sequence, &id, expires_at, now()) { return Ok((None, false)); }
+        if !state.accept_receipt(&owner, receipt.as_ref(), now()) { return Ok((None, false)); }
+        if state.protects_failure(&owner, receipt.as_ref(), &level, now()) { return Ok((None, false)); }
         let snapshot = Snapshot { id, level, expires_at, locale, theme, progress, receipt };
-        if let Some(delay) = state.passive_delay(&snapshot, Instant::now()) {
-            state.deferred_passive = Some(Pending { target: take_target(&owner, snapshot.receipt.as_ref()), owner, sequence, snapshot, visible_since: None });
-            return Ok((None, false, Some(delay)));
-        }
-        // A newer explicit result supersedes the one waiting passive notice.
-        state.deferred_passive = None;
         let replacing = state.pending.is_some();
         state.pending = None;
         drop(state);
         trace("route-ui-accepted");
         trace("route-visible-query-enter");
         match foreground_target(app, &owner) {
-            Ok(Some(target)) => { hide(app); trace("route-visible-target"); return Ok((Some(target), false, None)); },
-            Err(()) => { hide(app); return Ok((None, false, None)); },
+            Ok(Some(target)) => { hide(app); trace("route-visible-target"); return Ok((Some(target), false)); },
+            Err(()) => { hide(app); return Ok((None, false)); },
             Ok(None) => {},
         }
         // Updating the single card must not unmap/remap it between receipts.
@@ -482,14 +407,10 @@ pub(crate) async fn route_toast(app: tauri::AppHandle, window: tauri::WebviewWin
         {
             let mut state = registry().lock().map_err(|_| "hud-unavailable")?;
             state.revision = state.revision.saturating_add(1);
-            state.pending = Some(Pending { target: take_target(&owner, snapshot.receipt.as_ref()), owner, sequence, snapshot, visible_since: None });
+            state.pending = Some(Pending { target: take_target(&owner, snapshot.receipt.as_ref()), owner, sequence, snapshot });
         }
-        Ok((None, true, None))
+        Ok((None, true))
     }).await?;
-    if let Some(delay) = deferred_delay {
-        schedule_deferred_passive(app, timer_owner, sequence, timer_id, delay, None);
-        return Ok(None);
-    }
     if !needs_hud { return Ok(target); }
 
     // On Linux WebviewWindowBuilder synchronously waits for webview creation
@@ -539,9 +460,7 @@ pub(crate) fn invalidate_owner(app: &tauri::AppHandle, owner: &str) {
         state.sequences.insert(owner.into(), now().saturating_mul(1000).saturating_add(999));
         let current = state.pending.as_ref().is_some_and(|p| p.owner == owner);
         if current { state.pending = None; }
-        let deferred = state.deferred_passive.as_ref().is_some_and(|p| p.owner == owner);
-        if deferred { state.deferred_passive = None; }
-        current || deferred
+        current
     };
     if cleared { hide(app); }
 }
@@ -564,7 +483,7 @@ mod tests {
     #[test]
     fn dismissal_is_owner_and_id_scoped() {
         let mut s = State::default();
-        s.pending = Some(Pending { owner: "launcher".into(), sequence: 12, target: None, visible_since: Some(Instant::now()), snapshot: Snapshot { id: "new".into(), level: Level::Success, expires_at: 200, locale: Locale::En, theme: Theme::Dark, progress: None, receipt: None } });
+        s.pending = Some(Pending { owner: "launcher".into(), sequence: 12, target: None, snapshot: Snapshot { id: "new".into(), level: Level::Success, expires_at: 200, locale: Locale::En, theme: Theme::Dark, progress: None, receipt: None } });
         assert!(!s.cancel("launcher", "old"));
         assert!(!s.cancel("editor:1", "new"));
         assert!(s.pending.is_some());
@@ -590,7 +509,7 @@ mod tests {
     #[test]
     fn failure_survives_unrelated_success_but_retry_can_resolve_it() {
         let mut state = State::default();
-        state.pending = Some(Pending { owner: "launcher".into(), sequence: 1, target: None, visible_since: Some(Instant::now()), snapshot: Snapshot {
+        state.pending = Some(Pending { owner: "launcher".into(), sequence: 1, target: None, snapshot: Snapshot {
             id: "notice".into(), level: Level::Error, expires_at: 1000, locale: Locale::En, theme: Theme::Dark,
             progress: None, receipt: Some(receipt(1, ResultKind::PasteFailed)),
         } });
@@ -598,48 +517,6 @@ mod tests {
         assert!(state.protects_failure("editor:1", Some(&receipt(2, ResultKind::Pasted)), &Level::Success, 100));
         assert!(!state.protects_failure("launcher", Some(&receipt(2, ResultKind::Pasted)), &Level::Success, 100));
         assert!(!state.protects_failure("launcher", None, &Level::Success, 1000));
-    }
-    fn snapshot(id: &str, level: Level, result: ResultKind, expires_at: u64) -> Snapshot {
-        Snapshot { id: id.into(), level, expires_at, locale: Locale::En, theme: Theme::Dark, progress: None, receipt: Some(receipt(1, result)) }
-    }
-    fn pending(owner: &str, sequence: u64, snapshot: Snapshot, visible_since: Instant) -> Pending {
-        Pending { owner: owner.into(), sequence, snapshot, target: None, visible_since: Some(visible_since) }
-    }
-    #[test]
-    fn user_success_defers_only_latest_passive_info_until_readable() {
-        let start = Instant::now();
-        let mut state = State::default();
-        state.pending = Some(pending("launcher", 1, snapshot("success", Level::Success, ResultKind::Copied, 10_000), start));
-        let first = snapshot("passive-1", Level::Info, ResultKind::CountdownExpired, 10_000);
-        let second = snapshot("passive-2", Level::Info, ResultKind::CountdownExpired, 10_000);
-        assert_eq!(state.passive_delay(&first, start + Duration::from_millis(500)), Some(Duration::from_millis(500)));
-        state.pending.as_mut().unwrap().visible_since = None;
-        assert_eq!(state.passive_delay(&first, start + Duration::from_secs(5)), Some(SUCCESS_MIN_VISIBLE));
-        state.pending.as_mut().unwrap().visible_since = Some(start);
-        assert!(state.passive_delay(&snapshot("queue", Level::Info, ResultKind::QueueReady, 10_000), start + Duration::from_millis(500)).is_none());
-        state.deferred_passive = Some(pending("short-countdown", 2, first, start));
-        state.deferred_passive = Some(pending("short-countdown", 3, second, start));
-        assert!(state.promote_deferred("short-countdown", 2, "passive-1", 1_000, start + SUCCESS_MIN_VISIBLE).is_none());
-        let promoted = state.promote_deferred("short-countdown", 3, "passive-2", 1_000, start + SUCCESS_MIN_VISIBLE).unwrap();
-        assert_eq!(promoted.snapshot.id, "passive-2");
-        assert!(state.deferred_passive.is_none());
-    }
-    #[test]
-    fn cancelled_or_superseded_deferred_info_cannot_reappear() {
-        let start = Instant::now();
-        let mut state = State::default();
-        state.pending = Some(pending("launcher", 1, snapshot("success", Level::Success, ResultKind::Copied, 10_000), start));
-        state.deferred_passive = Some(pending("launcher", 2, snapshot("passive", Level::Info, ResultKind::CountdownExpired, 10_000), start));
-        assert!(state.cancel("launcher", "passive"));
-        assert!(state.promote_deferred("launcher", 2, "passive", 1_000, start + SUCCESS_MIN_VISIBLE).is_none());
-        state.deferred_passive = Some(pending("launcher", 3, snapshot("passive-2", Level::Info, ResultKind::CountdownExpired, 10_000), start));
-        state.pending = Some(pending("launcher", 4, snapshot("new-success", Level::Success, ResultKind::Pasted, 10_000), start));
-        state.deferred_passive = None;
-        assert!(state.promote_deferred("launcher", 3, "passive-2", 1_000, start + SUCCESS_MIN_VISIBLE).is_none());
-        state.pending.as_mut().unwrap().visible_since = None;
-        state.deferred_passive = Some(pending("launcher", 5, snapshot("expired", Level::Info, ResultKind::CountdownExpired, 999), start));
-        assert!(state.promote_deferred("launcher", 5, "expired", 1_000, start + SUCCESS_MIN_VISIBLE).is_none());
-        assert!(state.deferred_passive.is_none());
     }
     #[test]
     fn target_overlap_handles_negative_coordinates_and_disjoint_screens() {
@@ -654,35 +531,4 @@ mod tests {
     }
     #[test]
     fn hud_is_not_an_eligible_surface() { assert!(!surface(LABEL)); assert!(surface("launcher")); assert!(surface("plugin-surface:builtin:x:y")); }
-}
-
-/// App-owned deadline receipt; no plugin text, external target or generic scheduling API.
-pub(crate) async fn short_countdown_due(app: tauri::AppHandle, id: String) -> Result<(), String> {
-    { let _guard = CREATION.lock().await; ensure_window(&app)?; }
-    let shown_id = id.clone();
-    let (shown, deferred) = ui(app.clone(), move |app| {
-        if !matches!(foreground_target(app, "short-countdown"), Ok(None)) { return Ok((false, None)); }
-        let Some((locale, theme)) = super::short_countdown::presentation(&shown_id) else { return Ok((false, None)); };
-        let receipt = Receipt { operation: shown_id.clone(), revision: 1, result: ResultKind::CountdownExpired, target: None };
-        let mut s = registry().lock().map_err(|_| "hud-unavailable")?;
-        if s.protects_failure("short-countdown", Some(&receipt), &Level::Info, now()) { return Ok((false, None)); }
-        let sequence = now().saturating_mul(1000).max(s.latest_sequence.saturating_add(1))
-            .max(s.sequences.get("short-countdown").copied().unwrap_or(0).saturating_add(1));
-        if !s.accept("short-countdown", sequence, &shown_id, now() + MAX_LIFETIME, now()) { return Ok((false, None)); }
-        let snapshot = Snapshot { id: shown_id, level: Level::Info, expires_at: now() + MAX_LIFETIME, locale, theme, progress: None, receipt: Some(receipt) };
-        if let Some(delay) = s.passive_delay(&snapshot, Instant::now()) {
-            s.deferred_passive = Some(Pending { owner: "short-countdown".into(), sequence, target: None, snapshot, visible_since: None });
-            return Ok((false, Some((sequence, delay))));
-        }
-        s.deferred_passive = None;
-        s.revision = s.revision.saturating_add(1);
-        s.pending = Some(Pending { owner: "short-countdown".into(), sequence, target: None, snapshot, visible_since: None });
-        drop(s); show_current(app)?; Ok((true, Some((sequence, Duration::ZERO))))
-    }).await?;
-    let display_until = Instant::now() + Duration::from_millis(MAX_LIFETIME);
-    if let Some((sequence, delay)) = deferred {
-        if shown { spawn_pending_monitor(app, "short-countdown".into(), sequence, id, Some(display_until)); }
-        else { schedule_deferred_passive(app, "short-countdown".into(), sequence, id, delay, Some(display_until)); }
-    }
-    Ok(())
 }
