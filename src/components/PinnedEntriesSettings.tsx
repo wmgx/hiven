@@ -52,15 +52,11 @@ export function PinnedEntriesSettings() {
       }}>
       <summary>{t(locale, 'settings.pinnedEntriesManage', { count: keys.length })}</summary>
       {expanded && <div className="app-hotkeys-settings">
-        <p className="app-hotkeys-empty">{t(locale, 'settings.pinnedEntriesHint')}</p>
         <button ref={refreshButton} type="button" className="app-hotkeys-add-btn"
           onClick={() => { scanGeneration.current += 1; setScan({ status: 'loading', apps: [] }); setRevision((value) => value + 1) }}>
           {t(locale, 'settings.pinnedEntriesRefresh')}
         </button>
-        <p role="status" className="app-hotkeys-empty">{t(locale, {
-          loading: 'settings.pinnedEntriesLoading', ready: 'settings.pinnedEntriesScanned',
-          error: 'settings.pinnedEntriesScanFailed', unknown: 'settings.pinnedEntriesUnknownScan',
-        }[scan.status])}</p>
+        {(scan.status === 'loading' || scan.status === 'error') && <p role="status" className="app-hotkeys-empty">{t(locale, scan.status === 'loading' ? 'settings.pinnedEntriesLoading' : 'settings.pinnedEntriesScanFailed')}</p>}
         {keys.length === 0 && <p>{t(locale, 'settings.pinnedEntriesEmpty')}</p>}
         <ul style={{ listStyle: 'none', margin: 0, padding: 0, maxHeight: 280, overflowY: 'auto' }}>
           {keys.map((key, index) => {
@@ -69,10 +65,7 @@ export function PinnedEntriesSettings() {
               ?? t(locale, 'settings.pinnedEntriesUnnamed', { number: index + 1 })
             return <li key={key} style={{ padding: '10px 0', overflowWrap: 'anywhere' }}>
               <div>{name}</div>
-              <p className="app-hotkeys-empty">{t(locale, {
-                loading: 'settings.pinnedEntriesLoading', available: 'settings.pinnedEntriesAvailable',
-                'not-found': 'settings.pinnedEntriesNotFound', unknown: 'settings.pinnedEntriesUnknown',
-              }[entry.status])}</p>
+              {entry.status === 'not-found' && <p className="app-hotkeys-empty">{t(locale, 'settings.pinnedEntriesNotFound')}</p>}
               <button type="button" className="app-hotkeys-add-btn"
                 aria-label={t(locale, 'settings.pinnedEntriesRemoveLabel', { name })}
                 onClick={() => {

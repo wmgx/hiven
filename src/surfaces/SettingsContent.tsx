@@ -59,7 +59,7 @@ export function SettingsContent() {
         </div>
       )}
       <SettingGroup title={t('general')}>
-        <SettingsListRow icon={<Languages size={15} strokeWidth={2} />} name={t('language')} desc={t('languageInfo')}>
+        <SettingsListRow icon={<Languages size={15} strokeWidth={2} />} name={t('language')}>
           <LocaleSelect
             value={locale}
             options={[
@@ -79,10 +79,10 @@ export function SettingsContent() {
             }}
           />
         </SettingsListRow>
-        <SettingsListRow icon={<Moon size={15} strokeWidth={2} />} name={t('darkTheme')} desc={t('darkThemeInfo')}>
+        <SettingsListRow icon={<Moon size={15} strokeWidth={2} />} name={t('darkTheme')}>
           <Switch checked={settings.theme === 'dark'} onCheckedChange={(value) => updateSetting('theme', value ? 'dark' : 'light')} aria-label={t('darkTheme')} />
         </SettingsListRow>
-        <SettingsListRow icon={<Save size={15} strokeWidth={2} />} name={t('persistParams')} desc={t('persistParamsInfo')}>
+        <SettingsListRow icon={<Save size={15} strokeWidth={2} />} name={t('persistParams')}>
           <Switch checked={settings.persistParams} onCheckedChange={(value) => updateSetting('persistParams', value)} aria-label={t('persistParams')} />
         </SettingsListRow>
       </SettingGroup>
@@ -99,10 +99,10 @@ export function SettingsContent() {
       </SettingGroup>
 
       <SettingGroup title={t('hotkeys')}>
-        <SettingsListRow stacked icon={<Command size={15} strokeWidth={2} />} name={t('pinnedEntries')} desc={t('pinnedEntriesInfo')}>
+        <SettingsListRow stacked icon={<Command size={15} strokeWidth={2} />} name={t('pinnedEntries')}>
           <PinnedEntriesSettings />
         </SettingsListRow>
-        <SettingsListRow icon={<Command size={15} strokeWidth={2} />} name={t('globalPinnedLauncherShortcut')} desc={t('globalPinnedLauncherShortcutInfo')}>
+        <SettingsListRow icon={<Command size={15} strokeWidth={2} />} name={t('globalPinnedLauncherShortcut')}>
           <ShortcutRecorder
             value={settings.globalPinnedLauncherShortcut ?? { kind: 'double-modifier', modifier: 'Command' }}
             allowDoubleModifier
@@ -114,7 +114,7 @@ export function SettingsContent() {
             onClear={() => updateSetting('globalPinnedLauncherShortcut', { kind: 'disabled' })}
           />
         </SettingsListRow>
-        <SettingsListRow icon={<Command size={15} strokeWidth={2} />} name={t('quickEditorShortcut')} desc={t('quickEditorShortcutInfo')}>
+        <SettingsListRow icon={<Command size={15} strokeWidth={2} />} name={t('quickEditorShortcut')}>
           <ShortcutRecorder
             value={settings.quickEditorShortcut ?? { kind: 'disabled' }}
             status={formatHotkeyRegistrationStatus(settings.quickEditorShortcut, t)}
@@ -122,13 +122,13 @@ export function SettingsContent() {
             onClear={() => updateSetting('quickEditorShortcut', { kind: 'disabled' })}
           />
         </SettingsListRow>
-        <SettingsListRow stacked icon={<Command size={15} strokeWidth={2} />} name={t('appHotkeys')} desc={t('appHotkeysInfo')}>
+        <SettingsListRow stacked icon={<Command size={15} strokeWidth={2} />} name={t('appHotkeys')}>
           <AppHotkeysSettings />
         </SettingsListRow>
       </SettingGroup>
 
       <SettingGroup title={t('editor')}>
-        <SettingsListRow icon={<Type size={15} strokeWidth={2} />} name={t('fontSize')} desc={t('fontSizeInfo')}>
+        <SettingsListRow icon={<Type size={15} strokeWidth={2} />} name={t('fontSize')}>
           <NumberField
             value={settings.fontSize}
             min={10}
@@ -137,10 +137,10 @@ export function SettingsContent() {
             onChange={(value) => updateSetting('fontSize', value)}
           />
         </SettingsListRow>
-        <SettingsListRow icon={<WrapText size={15} strokeWidth={2} />} name={t('wordWrap')} desc={t('wordWrapInfo')}>
+        <SettingsListRow icon={<WrapText size={15} strokeWidth={2} />} name={t('wordWrap')}>
           <Switch checked={settings.wordWrap} onCheckedChange={(value) => updateSetting('wordWrap', value)} aria-label={t('wordWrap')} />
         </SettingsListRow>
-        <SettingsListRow icon={<Hash size={15} strokeWidth={2} />} name={t('lineNumbers')} desc={t('lineNumbersInfo')}>
+        <SettingsListRow icon={<Hash size={15} strokeWidth={2} />} name={t('lineNumbers')}>
           <Switch checked={settings.lineNumbers} onCheckedChange={(value) => updateSetting('lineNumbers', value)} aria-label={t('lineNumbers')} />
         </SettingsListRow>
       </SettingGroup>
@@ -497,12 +497,6 @@ export function AiSubscriptionsContent() {
                   {t(chatGptFeedback.key)}
                 </p>
               )}
-              {!requiresAccount && (
-                <details className="px-4 pb-3 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                  <summary className="cursor-pointer">{t('ollamaLocalHelp')}</summary>
-                  <p className="mt-2">{t('ollamaLocalBoundary')}</p>
-                </details>
-              )}
               {ready && <AiQuotaUsage provider={provider} locale={locale} t={t} />}
             </div>
           )
@@ -511,7 +505,7 @@ export function AiSubscriptionsContent() {
       </SettingGroup>
 
       <SettingGroup title={t('aiDefaults')}>
-        <SettingsListRow icon={<BrainCircuit size={15} strokeWidth={2} />} name={t('aiDefaultProvider')} desc={t('aiDefaultProviderInfo')}>
+        <SettingsListRow icon={<BrainCircuit size={15} strokeWidth={2} />} name={t('aiDefaultProvider')}>
           <LocaleSelect
             value={(keepConfiguredDefault ? settings.aiDefaultProviderId : defaultProvider?.id) ?? ''}
             options={providerOptions}
@@ -534,7 +528,7 @@ export function AiSubscriptionsContent() {
             }}
           />
         </SettingsListRow>
-        <SettingsListRow icon={<BrainCircuit size={15} strokeWidth={2} />} name={t('aiDefaultAgent')} desc={t('aiDefaultAgentInfo')}>
+        <SettingsListRow icon={<BrainCircuit size={15} strokeWidth={2} />} name={t('aiDefaultAgent')}>
           <LocaleSelect
             value={selectedAgentId}
             options={agentOptions}
@@ -547,7 +541,7 @@ export function AiSubscriptionsContent() {
             onChange={(value) => updateSetting('aiDefaultAgentId', value)}
           />
         </SettingsListRow>
-        <SettingsListRow icon={<BrainCircuit size={15} strokeWidth={2} />} name={t('aiDefaultEffort')} desc={t(effortUnknown ? 'aiEffortSelectModel' : effortUnsupported ? 'aiEffortUnsupported' : 'aiDefaultEffortInfo')}>
+        <SettingsListRow icon={<BrainCircuit size={15} strokeWidth={2} />} name={t('aiDefaultEffort')} desc={!effortUnknown && effortUnsupported ? t('aiEffortUnsupported') : undefined}>
           <LocaleSelect
             value={effortDisabled ? '' : settings.aiDefaultEffort}
             wide
@@ -619,10 +613,10 @@ function JevCommandSettings() {
           }}
         />
       </SettingsListRow>
-      <SettingsListRow icon={<BrainCircuit size={15} />} name={t('jevEndpoint')} desc={t('jevEndpointInfo')}>
+      <SettingsListRow icon={<BrainCircuit size={15} />} name={t('jevEndpoint')}>
         <input className="hiven-ui-input" style={inputStyle} value={draft.endpoint} disabled={testing} onChange={(event) => editDraft({ ...draft, enabled: false, apiKey: '', endpoint: event.target.value })} aria-label={t('jevEndpoint')} spellCheck={false} />
       </SettingsListRow>
-      <SettingsListRow icon={<BrainCircuit size={15} />} name={t('jevApiKey')} desc={t('jevKeyInfo')}>
+      <SettingsListRow icon={<BrainCircuit size={15} />} name={t('jevApiKey')}>
         <input className="hiven-ui-input" style={inputStyle} type="password" autoComplete="off" value={draft.apiKey} disabled={testing} onChange={(event) => editDraft({ ...draft, enabled: false, apiKey: event.target.value })} aria-label={t('jevApiKey')} />
       </SettingsListRow>
       <SettingsListRow icon={<BrainCircuit size={15} />} name={t('jevModel')}>

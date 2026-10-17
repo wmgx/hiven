@@ -88,7 +88,7 @@ function AppSearchAliasEditor({ app, apps }: { app: DiscoveredApp; apps: readonl
           rows={4}
           value={draft.text}
           placeholder={t(locale, 'settings.appSearchAliasesPlaceholder')}
-          aria-describedby={`${fieldId}-hint${validationError ? ` ${fieldId}-error` : ''}${shownConflicts.length ? ` ${fieldId}-conflicts` : ''}`}
+          aria-describedby={[validationError ? `${fieldId}-error` : '', shownConflicts.length ? `${fieldId}-conflicts` : ''].filter(Boolean).join(' ') || undefined}
           aria-invalid={Boolean(validationError || shownConflicts.length)}
           onChange={(event) => {
             setDraft({ ...draft, text: event.currentTarget.value, edited: true })
@@ -98,7 +98,6 @@ function AppSearchAliasEditor({ app, apps }: { app: DiscoveredApp; apps: readonl
           }}
         />
       </label>
-      <p id={`${fieldId}-hint`} className="app-hotkeys-empty">{t(locale, 'settings.appSearchAliasesHint')}</p>
       {validationError ? <p id={`${fieldId}-error`} className="app-hotkeys-error" role="alert">{validationError}</p> : null}
       {shownConflicts.length > 0 ? (
         <div id={`${fieldId}-conflicts`} className="app-hotkeys-error" role="alert">
@@ -304,7 +303,6 @@ export function AppHotkeysSettings() {
 
       <div className="app-hotkeys-add">
         <span className="app-hotkeys-name">{t(locale, 'settings.appSearchAliases')}</span>
-        <p className="app-hotkeys-empty">{t(locale, 'settings.appSearchAliasesInfo')}</p>
         <label className="app-hotkeys-field">
           <span>{t(locale, 'settings.appHotkeysPickApp')}</span>
           <Combobox
