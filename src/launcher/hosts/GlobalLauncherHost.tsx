@@ -1045,7 +1045,7 @@ export function GlobalLauncherHost() {
     try { inputRef.current?.focus({ preventScroll: true }) } catch { /* best-effort caret restore */ }
     if (result.status === 'error') {
       setDeliveryFailure({ message: t(locale, CURRENT_TEXT_EXPORT_ERROR_KEYS[result.code]), isCurrent: scope.isCurrent })
-    } else if (result.status === 'saved') showToast(t(locale, 'palette.currentTextExportSaved'), 'success')
+    }
   }, [locale, standaloneLauncher])
 
   const executeObjectAction = useCallback(async (action: RecommendedAction, target: RecommendedOutputTarget) => {

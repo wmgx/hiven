@@ -61,9 +61,7 @@ export function LauncherOutputTargetsBar({
   const pasteAvailability = usePasteAvailability(hasPaste)
   const pasteStatusId = useId()
   const blockedMessageKey = pasteAvailabilityMessageKey(pasteAvailability)
-  const pasteMessage = hasPaste ? t(locale, blockedMessageKey ?? (
-    pasteAvailability === 'can-attempt' ? 'palette.outputPasteCanAttempt' : 'palette.outputPasteUnknown'
-  )) : undefined
+  const pasteMessage = hasPaste ? t(locale, blockedMessageKey ?? 'palette.outputPasteCanAttempt') : undefined
   if (destinations.length === 0 && footerHints == null) return null
   // Keep the default Enter action trailing without moving focused controls when
   // the active keyboard destination changes. Other callers keep their layout.

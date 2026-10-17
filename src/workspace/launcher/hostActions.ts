@@ -105,7 +105,7 @@ export function createSaveLastRunItem(options: {
           placeholder: 'Name | optional aliases',
           placeholderI18n: { zh: '名称 | 可选别名' },
           emptyInputMessage: 'A name is required',
-          emptyInputMessageI18n: { zh: '请输入名称' },
+          emptyInputMessageI18n: { zh: '需要名称' },
         },
       },
       surfaces: ['global-launcher'],
@@ -242,7 +242,7 @@ export function createRenameSavedActionItem(artifactId: string): LauncherItem {
         placeholder: 'New name (up to 80 characters)',
         placeholderI18n: { zh: '新名称（最多 80 个字符）' },
         emptyInputMessage: 'A name is required',
-        emptyInputMessageI18n: { zh: '请输入名称' },
+        emptyInputMessageI18n: { zh: '需要名称' },
       },
     },
     prepare: (ctx) => {

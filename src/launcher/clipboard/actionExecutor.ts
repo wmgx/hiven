@@ -323,11 +323,11 @@ export const OUTPUT_TARGET_LABELS: Record<RecommendedOutputTarget, { en: string;
   'open-plugin-surface': { en: 'Open tool window', zh: '打开工具窗口' },
   'open-url': { en: 'Open URL', zh: '打开 URL' },
   'replace-selection': { en: 'Replace selection', zh: '覆盖选区' },
-  'replace-pane': { en: 'Replace pane', zh: '覆盖当前 pane' },
-  'new-pane': { en: 'New pane', zh: '新建 pane' },
+  'replace-pane': { en: 'Replace content', zh: '覆盖当前内容' },
+  'new-pane': { en: 'New draft', zh: '新建草稿' },
   'insert-below': { en: 'Insert below', zh: '插入到下方' },
   'open-bottom-panel': { en: 'Open bottom panel', zh: '打开底部面板' },
-  'set-renderer': { en: 'Open renderer', zh: '进入 renderer' },
+  'set-renderer': { en: 'Open tool', zh: '打开工具' },
 }
 
 export function getOutputTargetLabel(target: RecommendedOutputTarget, locale: 'en' | 'zh' = 'zh'): string {
