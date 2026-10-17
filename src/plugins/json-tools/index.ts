@@ -85,11 +85,12 @@ export const jsonToolsPlugin = definePlugin({
     ],
   },
   launcher: {
-    items: operationRoutes.map((route) => ({
+    // Prettify is already a launcher tool (json.prettify); only the other routes open the workbench.
+    items: operationRoutes.filter((route) => route.id !== 'format').map((route) => ({
       id: `open-${route.id}`,
       display: {
-        title: route.id === 'format' ? 'route.formatWorkbench' : route.titleKey,
-        subtitle: 'route.open',
+        title: route.titleKey,
+        subtitle: route.descriptionKey,
         icon: 'Braces',
         aliases: route.aliases,
       },
@@ -137,7 +138,7 @@ export const jsonToolsPlugin = definePlugin({
       title: 'json.prettify.title',
       subtitle: 'json.prettify.description',
       icon: 'Braces',
-      aliases: ['fmt', '格式化', 'pretty', 'json format', 'json格式化', 'pretty json', 'json beautify', 'format json', '格式化 JSON'],
+      aliases: ['fmt', '格式化', 'pretty', 'json format', 'json格式化', 'json 格式化', 'pretty json', 'json pretty', 'pretty-json', 'json-format', 'json beautify', 'format json', '格式化 JSON'],
       inputPolicy: { mode: 'auto' },
       policy: LEARNABLE_PURE,
       explicitTextPreview: { run: prettifyText },

@@ -82,16 +82,10 @@ export function applyProductProviderToLauncherItem(item: LauncherItem): Launcher
   if (!item.pluginId) return item
   const metadata = resolvePluginProductMetadata(item.pluginId)
   const productProvider = metadata.provider
-  const hasSubtitle = item.display.subtitle != null || item.display.subtitleI18n != null
   return {
     ...item,
     display: {
       ...item.display,
-      subtitle: hasSubtitle ? item.display.subtitle : `From ${productProvider}`,
-      subtitleI18n: hasSubtitle ? item.display.subtitleI18n : {
-        en: `From ${productProvider}`,
-        zh: `来自 ${metadata.providerZh ?? productProvider}`,
-      },
       aliases: [...(item.display.aliases ?? []), productProvider, metadata.providerZh ?? productProvider, metadata.productId],
     },
     metadata: item.metadata,

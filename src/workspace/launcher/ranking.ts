@@ -58,6 +58,11 @@ const TEXT_MATCH_BOOST = 800 // strong boost when tool can process the content; 
 const DYNAMIC_ITEM_BOOST = 900 // dynamic items are plugin-asserted matches; rank above static items without text match
 /** |scoreBias| cap — must stay below one match tier (1000). */
 const SCORE_BIAS_CAP = 500
+/**
+ * Query equals the item's own title in any language. Beats usage/favorite limbs so the main
+ * entry of a product outranks its sub-views, which only match through the shared product name.
+ */
+const OWN_TITLE_EXACT_BONUS = 700
 /** Empty-open ranked cap after scoring (UI may show fewer). */
 const EMPTY_QUERY_RANK_CAP = 16
 
@@ -397,6 +402,8 @@ export function scoreLauncherItem(
 ): number {
   const q = ctx.query.trim().toLowerCase()
   const matchScore = scoreSearchableFields(getCachedSearchableFields(item, ctx.locale), q, ctx.locale)
+  const ownTitleBonus = q && [item.display.title, ...Object.values(item.display.titleI18n ?? {})]
+    .some((title) => title?.trim().toLowerCase() === q) ? OWN_TITLE_EXACT_BONUS : 0
   const textMatchBoost = ctx.contentText && item.textMatch
     ? (safeTextMatch(item.textMatch, ctx.contentText) ? TEXT_MATCH_BOOST : 0)
     : 0
@@ -408,6 +415,7 @@ export function scoreLauncherItem(
   const scoreBias = clampScoreBias(item.ranking?.scoreBias)
   let score =
     matchScore +
+    ownTitleBonus +
     frecencyScore(ctx, item) +
     favoriteBoost(ctx, item) +
     staticPriority(item) +

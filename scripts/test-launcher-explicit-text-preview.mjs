@@ -68,14 +68,14 @@ try {
   const naturalQueries = [
     ['remove duplicates', 'plugin:line-tools:launcher:open-line-dedup', 'plugin:line-tools:tool:line-tools.dedup'],
     ['删除重复行', 'plugin:line-tools:launcher:open-line-dedup', 'plugin:line-tools:tool:line-tools.dedup'],
-    ['格式化 JSON', 'plugin:json-tools:launcher:open-format', 'plugin:json-tools:tool:json.prettify'],
+    ['格式化 JSON', null, 'plugin:json-tools:tool:json.prettify'],
   ]
   for (const locale of ['en', 'zh']) {
     for (const [query, workbenchKey, toolKey] of naturalQueries) {
       for (const surfaceId of ['global-launcher', 'editor-command-bar']) {
         const candidates = collectStaticCandidates(surfaceId)
         const workbenchItem = candidates.find((candidate) => candidate.systemKey === workbenchKey)
-        if (surfaceId === 'global-launcher') assert.ok(workbenchItem && itemMatchesQuery(workbenchItem, query, locale), `${locale} ${surfaceId} should discover ${workbenchKey} using ${query}`)
+        if (surfaceId === 'global-launcher' && workbenchKey) assert.ok(workbenchItem && itemMatchesQuery(workbenchItem, query, locale), `${locale} ${surfaceId} should discover ${workbenchKey} using ${query}`)
         const toolItem = candidates.find((candidate) => candidate.systemKey === toolKey)
         if (surfaceId === 'editor-command-bar' || toolKey === key) {
           assert.ok(toolItem && itemMatchesQuery(toolItem, query, locale), `${locale} ${surfaceId} should discover ${toolKey} using ${query}`)
@@ -92,10 +92,7 @@ try {
   assert.equal(item.display.titleI18n.zh, 'JSON 格式化')
   assert.deepEqual(items.filter((candidate) => candidate.executionMode).map((candidate) => candidate.systemKey).sort(), [key, 'plugin:encode-decode:tool:base64.decode', 'plugin:line-tools:tool:line-tools.remove-blank-lines', 'plugin:line-tools:tool:line-tools.clean-list', 'plugin:line-tools:tool:line-tools.extract-list'].sort(), 'only the explicitly declared bundled tools opt in')
   assert.ok(collectStaticCandidates('editor-command-bar').some((candidate) => candidate.systemKey === key), 'editor entry remains')
-  const workbench = items.find((candidate) => candidate.systemKey === 'plugin:json-tools:launcher:open-format')
-  assert.equal(workbench.display.title, 'JSON Prettify Workbench')
-  assert.equal(workbench.display.titleI18n.zh, 'JSON 格式化工作台')
-  assert.ok(workbench.display.aliases.includes('json format'), 'workbench aliases and identity remain intact')
+  assert.equal(items.some((candidate) => candidate.systemKey === 'plugin:json-tools:launcher:open-format'), false, 'prettify has no separate workbench duplicate')
 
   const savedRun = {
     status: 'ready', runId: 'registry-read-test', actionKey: key,
