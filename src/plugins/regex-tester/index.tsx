@@ -40,7 +40,6 @@ export const regexTesterPlugin = definePlugin({
         id: 'regex-tester.open',
         display: {
           title: 'command.open.title',
-          subtitle: 'command.open.description',
           icon: 'Regex',
           aliases: ['regex', 'regexp', '正则'],
         },
@@ -63,7 +62,6 @@ export const regexTesterPlugin = definePlugin({
     {
       id: 'regex-tester.open',
       title: 'command.open.title',
-      description: 'command.open.description',
       icon: 'Regex',
       aliases: ['regex', 'regexp', '正则'],
       inputs: [{ key: 'input', label: 'Input', kind: 'pane' as const, required: true }],

@@ -1,5 +1,5 @@
 {
-  "version": 158,
+  "version": 159,
   "packages": [
     {
       "pluginId": "encode-decode",
@@ -44,17 +44,17 @@
     {
       "pluginId": "translate",
       "dir": "translate",
-      "version": "1.0.26"
+      "version": "1.0.27"
     },
     {
       "pluginId": "ai-writing",
       "dir": "ai-writing",
-      "version": "1.0.2"
+      "version": "1.0.3"
     },
     {
       "pluginId": "regex-tester",
       "dir": "regex-tester",
-      "version": "1.4.2"
+      "version": "1.4.3"
     },
     {
       "pluginId": "text-diff",
@@ -74,7 +74,7 @@
     {
       "pluginId": "qr-code",
       "dir": "qr-code",
-      "version": "1.0.14"
+      "version": "1.0.15"
     },
     {
       "pluginId": "random",

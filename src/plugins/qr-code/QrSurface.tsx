@@ -154,12 +154,11 @@ export function QrSurface(props: PluginSurfaceProps) {
     if (file) void decodeBlob(file)
   }, [decodeBlob])
 
-  const copyText = useCallback(async (value: string, toastKey: string) => {
+  const copyText = useCallback(async (value: string) => {
     if (!value) return
     handoff.interrupt()
     try {
       await host.clipboard.writeText(value)
-      host.showMessage(t(toastKey), 'success')
       host.complete()
     } catch {
       host.showMessage(t('toast.copyFailed'), 'error')
@@ -168,7 +167,7 @@ export function QrSurface(props: PluginSurfaceProps) {
 
   const copyDataUrl = useCallback(async () => {
     if (!dataUrl) return
-    await copyText(dataUrl, 'toast.copiedDataUrl')
+    await copyText(dataUrl)
   }, [copyText, dataUrl])
 
   const copyImage = useCallback(async () => {
@@ -177,7 +176,6 @@ export function QrSurface(props: PluginSurfaceProps) {
       const bytes = dataUrlToBytes(dataUrl)
       const ref = await host.storage.blob.put({ bytes, contentType: 'image/png', extension: 'png' })
       await host.clipboard.writeImage(ref.blobId)
-      host.showMessage(t('toast.copiedImage'), 'success')
       host.complete()
       return
     } catch {
@@ -185,7 +183,6 @@ export function QrSurface(props: PluginSurfaceProps) {
     }
     try {
       await copyPngBlobToClipboard(dataUrlToPngBlob(dataUrl))
-      host.showMessage(t('toast.copiedImage'), 'success')
       host.complete()
     } catch {
       host.showMessage(t('toast.copyFailed'), 'error')
@@ -211,8 +208,7 @@ export function QrSurface(props: PluginSurfaceProps) {
     savingRef.current = true
     setSaving(true)
     try {
-      const result = await saveQrImage(host.storage, dataUrl)
-      if (mountedRef.current && result.status === 'saved') host.showMessage(t('toast.saved'), 'success')
+      await saveQrImage(host.storage, dataUrl)
     } catch (error) {
       if (mountedRef.current) {
         host.showMessage(t(error instanceof Error && error.name === 'NotSupportedError' ? 'toast.saveUnavailable' : 'toast.saveFailed'), 'error')
@@ -256,7 +252,7 @@ export function QrSurface(props: PluginSurfaceProps) {
             type="button"
             variant="primary"
             disabled={!scanResult}
-            onClick={() => void copyText(scanResult, 'toast.copiedText')}
+            onClick={() => void copyText(scanResult)}
           >
             {t('action.copyText')}
           </Button>
@@ -355,7 +351,6 @@ export function QrSurface(props: PluginSurfaceProps) {
             >
               {scanPreview ? <img src={scanPreview} alt={t('mode.scan')} /> : null}
               <div className="qr-surface__drop-title">{t('scan.drop')}</div>
-              <div className="qr-surface__drop-hint">{t(host.clipboard.readImage ? 'scan.nativeHint' : 'scan.hint').replace('{shortcut}', /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘V' : 'Ctrl+V')}</div>
               <Button
                 type="button"
                 onClick={(event) => {
@@ -387,7 +382,7 @@ export function QrSurface(props: PluginSurfaceProps) {
                   </pre>
                 }
                 items={[
-                  { key: 'copy-text', label: t('action.copyText'), onSelect: () => void copyText(scanResult, 'toast.copiedText') },
+                  { key: 'copy-text', label: t('action.copyText'), onSelect: () => void copyText(scanResult) },
                 ]}
               />
             )}

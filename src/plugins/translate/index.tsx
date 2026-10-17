@@ -35,10 +35,8 @@ const PROFILE_FIELDS: PluginSettingsObjectListItemField[] = [
   },
   {
     key: 'aiSettings',
-    label: 'System provider, model, and reasoning',
-    labelI18n: { zh: '系统服务商、模型和思考深度' },
-    description: 'Choose from the AI providers available in Hiven.',
-    descriptionI18n: { zh: '从 Hiven 当前可用的系统 AI 中选择。' },
+    label: 'AI provider and model',
+    labelI18n: { zh: 'AI 服务商与模型' },
     kind: 'modal',
     modalId: 'ai-provider',
     buttonLabel: 'Configure',
@@ -172,16 +170,12 @@ export default definePlugin<TranslateSettings>({
           id: 'defaults',
           title: 'Defaults',
           titleI18n: { zh: '默认设置' },
-          description: 'Choose the profile and target language used when the translate surface opens.',
-          descriptionI18n: { zh: '设置翻译浮层打开时使用的默认配置组和目标语种。' },
           fields: [
             {
               kind: 'select',
               key: 'defaultProfileId',
               label: 'Default profile',
               labelI18n: { zh: '默认配置组' },
-              description: 'Pick from existing API profiles.',
-              descriptionI18n: { zh: '从已有配置组中选择，无需填写 ID。' },
               options: (DEFAULT_TRANSLATE_SETTINGS?.profiles ?? []).map((profile) => ({
                 value: profile.id,
                 label: profile.name,
@@ -205,8 +199,6 @@ export default definePlugin<TranslateSettings>({
           id: 'profiles',
           title: 'API profiles',
           titleI18n: { zh: 'API 配置组' },
-          description: 'Configure translation provider credentials and character limits.',
-          descriptionI18n: { zh: '配置翻译服务商凭据和字符额度。凭据随服务商切换显示。' },
           fields: [
             {
               kind: 'object-list',

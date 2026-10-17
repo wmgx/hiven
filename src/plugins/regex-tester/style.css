@@ -194,12 +194,6 @@
   font: 700 20px/1 var(--font-mono);
 }
 
-.regex-tester-surface__empty p {
-  margin: 0;
-  color: var(--color-text-tertiary);
-  font-size: 11.5px;
-}
-
 .regex-tester-surface__more {
   padding: 8px;
   color: var(--color-text-tertiary);

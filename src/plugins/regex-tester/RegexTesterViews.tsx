@@ -220,7 +220,6 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
           <BackIcon size={14} strokeWidth={2} />
         </IconButton>
         <strong>{t('surface.title')}</strong>
-        <span>{t('surface.subtitle')}</span>
         <div className="regex-tester-surface__header-spacer" />
         <IconButton type="button" label={t('surface.close')} onClick={() => { invalidateResult(); host.close() }}>
           <CloseIcon size={14} strokeWidth={2} />
@@ -316,7 +315,6 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
               <div className="regex-tester-surface__empty">
                 <span aria-hidden="true">.*</span>
                 <strong>{pattern ? t('panel.regex.noMatches') : t('surface.enterPattern')}</strong>
-                <p>{pattern ? t('surface.noMatchesHint') : t('surface.enterPatternHint')}</p>
               </div>
             )}
             {result.status === 'ready' && result.matches.length > 0 && (

@@ -90,7 +90,7 @@ export function SummarySurface({ host, initialText, t }: PluginSurfaceProps) {
       <div className="ai-summary-readiness" role="status" aria-live="polite" aria-busy={readiness.status === 'checking'} data-state={readiness.status}>
         <div className="ai-summary-readiness-text">
           {snapshot.providerId && snapshot.agentId && <strong>{t('selection.destination', { provider: `${providerName} (${snapshot.providerId})`, model: `${modelName} (${snapshot.agentId})` })}</strong>}
-          <span>{t(`readiness.${readiness.reason}`)}</span>
+          {readiness.reason !== 'configuration_ready' && <span>{t(`readiness.${readiness.reason}`)}</span>}
           {readiness.result?.message && readiness.status !== 'ready' && <details><summary>{t('readiness.diagnostic')}</summary><p>{readiness.result.message}</p></details>}
         </div>
         <div className="ai-summary-readiness-actions">
@@ -99,8 +99,6 @@ export function SummarySurface({ host, initialText, t }: PluginSurfaceProps) {
           {readiness.reason === 'permission_denied' && <Button type="button" onClick={() => { void session.refresh(); host.openSettings({ preserveSurface: true }) }}>{t('action.pluginPermissions')}</Button>}
         </div>
       </div>
-
-      <details className="ai-summary-explanation"><summary>{t('surface.aboutGeneration')}</summary><p>{t('surface.sendHint')} {t('surface.outputHint')}</p></details>
 
       <main className="ai-summary-editors">
         <section className="ai-summary-pane">
@@ -115,7 +113,7 @@ export function SummarySurface({ host, initialText, t }: PluginSurfaceProps) {
 
       <footer className="ai-summary-footer">
         <div className="ai-summary-status" role={snapshot.phase === 'error' ? 'alert' : 'status'}>
-          <span>{snapshot.suspended ? t('status.settings') : snapshot.phase === 'error' ? t(`error.${snapshot.errorCode ?? 'provider'}`) : snapshot.phase === 'idle' ? '' : t(`status.${snapshot.phase}`)}</span>
+          <span>{snapshot.suspended ? t('status.settings') : snapshot.phase === 'error' ? t(`error.${snapshot.errorCode ?? 'provider'}`) : snapshot.phase === 'idle' || snapshot.phase === 'success' ? '' : t(`status.${snapshot.phase}`)}</span>
           {snapshot.errorDetail && <details><summary>{t('readiness.diagnostic')}</summary><p>{snapshot.errorDetail}</p></details>}
         </div>
         <div className="ai-summary-actions">

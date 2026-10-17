@@ -48,7 +48,7 @@ export function AiGlossaryEditor({ saved, onCommit, t }: {
       return
     }
     replaceDraft(checked.value)
-    setMessage({ kind: 'success', text: t(clear || !checked.value ? 'ai.glossary.cleared' : 'ai.glossary.saved') })
+    setMessage(null)
   }
 
   const languageOptions = [
@@ -62,9 +62,7 @@ export function AiGlossaryEditor({ saved, onCommit, t }: {
   return (
     <section className="translate-glossary-editor" aria-label={t('ai.glossary.title')}>
       <div className="font-medium">{t('ai.glossary.title')}</div>
-      <p>{t('ai.glossary.description')}</p>
       <p>{t('ai.glossary.privacy')}</p>
-      <p>{t('ai.glossary.limits')}</p>
       <label className="flex flex-col gap-1.5">
         <span>{t('ai.glossary.targetLanguage')}</span>
         <Select value={draft.targetLang} options={languageOptions} onChange={(event) => edit({ ...draft, targetLang: event.currentTarget.value })} />
@@ -90,7 +88,6 @@ export function AiGlossaryEditor({ saved, onCommit, t }: {
         <Button type="button" disabled={saved === undefined} onClick={() => commit(true)}>{t('ai.glossary.clear')}</Button>
         <Button type="button" disabled={!dirty && !savedChanged && !message} onClick={() => { replaceDraft(saved); setMessage(null) }}>{t('ai.glossary.cancel')}</Button>
       </div>
-      <p>{t('ai.glossary.draftHint')}</p>
       {!savedValidation.ok && <p role="alert">{t('ai.glossary.invalidSaved')}</p>}
       {savedChanged && <p role="status">{t('ai.glossary.changed')}</p>}
       {message && <p role={message.kind === 'error' ? 'alert' : 'status'}>{message.text}</p>}

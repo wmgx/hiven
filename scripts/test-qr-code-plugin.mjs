@@ -149,8 +149,6 @@ for (const outcome of ['saved', 'cancelled', 'error']) {
 
 assert.equal(en['action.saveImage'], 'Save image…')
 assert.equal(en['action.copyDataUrl'], 'Copy Data URL')
-assert.match(en['scan.hint'], /\{shortcut\}/)
-assert.match(zh['scan.hint'], /\{shortcut\}/)
 
 
 console.log('qr-code plugin contract checks passed')
@@ -434,6 +432,4 @@ for (const overrides of [
   assert.deepEqual(calls, ['blob', 'dataUrl', 'unreadable'])
 }
 assert.ok(en['error.clipboardRead'] && zh['error.clipboardRead'])
-assert.match(en['scan.nativeHint'], /\{shortcut\}/)
-assert.match(zh['scan.nativeHint'], /\{shortcut\}/)
 console.log('qr-code scan lifetime and explicit paste checks passed')

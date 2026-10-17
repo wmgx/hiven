@@ -517,7 +517,6 @@
 
 .translate-ai-readiness__details { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .translate-ai-readiness__selection { color: var(--hiven-color-text-primary); font-weight: 600; }
-.translate-ai-readiness__hint { color: var(--hiven-color-text-tertiary); }
 .translate-ai-readiness__actions { display: flex; flex-wrap: wrap; gap: 6px; flex-shrink: 0; }
 .translate-ai-readiness[data-state="blocked"] { color: var(--hiven-color-danger); }
 

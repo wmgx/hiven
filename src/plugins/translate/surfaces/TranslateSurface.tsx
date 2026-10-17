@@ -529,10 +529,8 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
       {activeProfile?.provider === 'ai' && (
         <AiReadinessNotice readiness={readiness} profile={activeProfile} t={t} onRefresh={() => { cancelCurrentRun(); void readinessController.refresh(true) }} onSettings={openSettings} onAppSettings={host.openAppSettings ? () => { void openAiSettings() } : undefined} />
       )}
-      {glossary && (!glossary.ok || glossary.value) && (
-        <p className="translate-glossary-notice" role="status">
-          {!glossary.ok ? t('ai.glossary.invalidSaved') : glossary.value && t(glossary.value.targetLang === resolvedTarget ? 'ai.glossary.applies' : 'ai.glossary.notApplied').replace('{language}', t(`language.${glossary.value.targetLang}`))}
-        </p>
+      {glossary && !glossary.ok && (
+        <p className="translate-glossary-notice" role="status">{t('ai.glossary.invalidSaved')}</p>
       )}
 
       <div className="translate-surface__body">

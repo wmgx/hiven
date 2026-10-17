@@ -48,7 +48,7 @@ export function AiCandidateControls({ host, t, state, invalidate, generate, canc
         {host.openAppSettings && <Button type="button" disabled={settingsBusy} onClick={() => void openSettings()}>{t('ai.settings')}</Button>}
       </div>
       <div className="regex-ai__status" role={state.status === 'failed' ? 'alert' : 'status'} aria-live="polite">
-        {state.status !== 'idle' && <p>{t(state.status === 'failed' ? `ai.failure.${state.reason}` : `ai.status.${state.status}`)}</p>}
+        {state.status !== 'idle' && state.status !== 'ready' && <p>{t(state.status === 'failed' ? `ai.failure.${state.reason}` : `ai.status.${state.status}`)}</p>}
         {state.candidate && <>
           <label><span>{t('ai.candidate')}</span><textarea rows={2} readOnly value={`/${state.candidate.pattern}/${state.candidate.flags}`} /></label>
           {state.validation?.filter((item) => !item.passed).map((item) => <p key={`${item.kind}:${item.index}`}>{t(`ai.failed.${item.kind}`, { index: item.index + 1 })}</p>)}
