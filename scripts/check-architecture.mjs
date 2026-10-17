@@ -197,6 +197,42 @@ function checkPluginCssBoundaries() {
   }
 }
 
+// Everything under src/ except src/plugins/ is host code: it may not import plugin implementations.
+// Bundled plugins reach the host only through the registry; the three loaders below enumerate
+// the plugin packages with import.meta.glob and are the only legitimate composition roots.
+const hostPluginGlobLoaders = new Set([
+  'src/builtinPluginSources.ts',
+  'src/configInit.ts',
+  'src/workspace/bundledPluginLoader.ts',
+])
+
+function checkHostDoesNotDependOnPlugins() {
+  const pluginsDir = join(root, 'src/plugins')
+  const importRe = /\b(?:import|export)\s+(?:[^'"]*?\s+from\s+)?['"]([^'"]+)['"]|import\(\s*['"]([^'"]+)['"]\s*\)/g
+  const globRe = /import\.meta\.glob\(\s*(?:\[\s*)?['"]([^'"]+)['"]/g
+  for (const file of walk(join(root, 'src'))) {
+    if (isWithin(file, pluginsDir)) continue
+    const text = read(file)
+    importRe.lastIndex = 0
+    let match
+    while ((match = importRe.exec(text))) {
+      const spec = match[1] ?? match[2]
+      if (!spec.startsWith('.')) continue
+      const resolved = normalize(join(dirname(file), spec))
+      if (isWithin(resolved, pluginsDir)) {
+        addFailure(`host code must not depend on plugins: ${rel(file)} imports "${spec}"`)
+      }
+    }
+    globRe.lastIndex = 0
+    while ((match = globRe.exec(text))) {
+      const resolved = normalize(join(dirname(file), match[1].replace(/[*{].*$/, '')))
+      if (isWithin(resolved, pluginsDir) && !hostPluginGlobLoaders.has(rel(file))) {
+        addFailure(`host code must not enumerate plugins with import.meta.glob: ${rel(file)}`)
+      }
+    }
+  }
+}
+
 checkForbiddenPath('src/workspace/jsonDiff.ts')
 checkForbiddenPath('src/workspace/lineDiff.ts')
 checkForbiddenPath('src/presentations/CoreJsonDiffRenderer.tsx')
@@ -231,11 +267,7 @@ checkImports('src/kits', [
   /^\.\.\/\.\.\/plugins/,
 ], 'kits must not depend on framework or plugins')
 
-checkImports('src/workspace', [
-  /(^|\/)plugins(\/|$)/,
-  /^\.\.\/plugins/,
-  /^\.\.\/\.\.\/plugins/,
-], 'workspace must not depend on plugins')
+checkHostDoesNotDependOnPlugins()
 
 checkPluginCrossImports()
 checkPluginHostDeepImports()
