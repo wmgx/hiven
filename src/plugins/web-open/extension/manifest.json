@@ -1,15 +1,23 @@
 {
   "manifest_version": 3,
   "name": "Hiven Browser",
-  "version": "0.3.5",
+  "version": "0.3.8",
   "description": "Sends open tabs and history to Hiven for search.",
-  "permissions": ["tabs", "alarms", "history", "storage"],
-  "host_permissions": ["http://127.0.0.1:19246/*"],
+  "default_locale": "en",
+  "permissions": [
+    "tabs",
+    "alarms",
+    "history",
+    "storage"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:19246/*"
+  ],
   "background": {
     "service_worker": "background.js",
     "type": "module"
   },
   "action": {
-    "default_title": "Hiven tabs bridge"
+    "default_title": "__MSG_actionTitle__"
   }
 }

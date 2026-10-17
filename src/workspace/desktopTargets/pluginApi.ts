@@ -48,7 +48,8 @@ export type DesktopTargetsHostApi = {
       onBatch?: (items: DesktopBridgeHistoryDto[], received: number) => void | Promise<void>,
     ) => Promise<number>
     listEvents: (sourceId?: string, sinceTs?: number) => Promise<DesktopBridgeEventDto[]>
-    focusTarget: (sourceId: string, id: string, windowId?: string | null) => Promise<void>
+    /** `url` lets the extension reopen the page if the tab closed meanwhile. */
+    focusTarget: (sourceId: string, id: string, windowId?: string | null, url?: string | null) => Promise<void>
     openUrl: (sourceId: string, url: string) => Promise<void>
     setSourceConfig: (sourceId: string, config: DesktopBridgeSourceConfig) => Promise<void>
     invalidateCache: () => void
@@ -77,7 +78,7 @@ export function createDesktopTargetsHostApi(): DesktopTargetsHostApi {
       listHistory: (sourceId) => listDesktopBridgeHistory(sourceId),
       importHistory: (sourceId, onBatch) => importDesktopBridgeHistory(sourceId, onBatch),
       listEvents: (sourceId, sinceTs) => listDesktopBridgeEvents(sourceId, sinceTs),
-      focusTarget: (sourceId, id, windowId) => focusDesktopBridgeTarget(sourceId, id, windowId),
+      focusTarget: (sourceId, id, windowId, url) => focusDesktopBridgeTarget(sourceId, id, windowId, url),
       openUrl: (sourceId, url) => openDesktopBridgeUrl(sourceId, url),
       setSourceConfig: (sourceId, config) => setDesktopBridgeSourceConfig(sourceId, config),
       invalidateCache: () => invalidateDesktopBridgeListCache(),

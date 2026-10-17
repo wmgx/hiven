@@ -15,12 +15,20 @@ const MIN_IDLE_TIMEOUT_MINUTES = 5
 const HISTORY_MAX = 200
 const HISTORY_IMPORT_MAX = 5_000
 const HISTORY_IMPORT_BATCH_SIZE = 500
+/** Fallback only: the alarm restarts the long-poll loop if the worker was evicted. */
 const POLL_ALARM_MINUTES = 0.5
+/** Desktop parks `/commands?wait=` up to this long; must stay under MV3's 30 s fetch limit. */
+const COMMAND_WAIT_MS = 20_000
+const COMMAND_FETCH_TIMEOUT_MS = COMMAND_WAIT_MS + 5_000
+/** Floor between polls when the desktop answers instantly (older build without long-poll). */
+const COMMAND_MIN_INTERVAL_MS = 1_000
 /** Pages enriched with per-visit timestamps (one getVisits call each). */
 const VISITS_DETAIL_MAX_URLS = 60
 /** Timestamps kept per page — enough to establish span without bloating the POST. */
 const VISITS_PER_URL_MAX = 80
 const CONFIG_KEY = 'hivenBridgeConfig'
+/** Reported with every snapshot so Hiven can tell when the loaded copy is outdated. */
+const EXTENSION_VERSION = chrome.runtime.getManifest().version
 
 /** @type {{ historyEnabled: boolean, autoCloseIdleTabs: boolean, idleTimeoutMinutes: number }} */
 let config = {
@@ -111,14 +119,37 @@ async function collectTabs() {
     })
 }
 
+let outdatedShown = null
+
+/**
+ * Unpacked extensions never auto-update, so after a Hiven upgrade the browser
+ * keeps running this old copy. Badge the toolbar icon until it is reloaded.
+ */
+async function markOutdated(outdated) {
+  if (outdated === outdatedShown) return
+  outdatedShown = outdated
+  try {
+    await chrome.action.setBadgeText({ text: outdated ? '!' : '' })
+    if (outdated) await chrome.action.setBadgeBackgroundColor({ color: '#d97706' })
+    await chrome.action.setTitle({ title: chrome.i18n.getMessage(outdated ? 'actionTitleOutdated' : 'actionTitle') })
+  } catch {
+    outdatedShown = null
+  }
+}
+
 async function pushSnapshot() {
+  void commandLoop()
   try {
     const tabs = await collectTabs()
-    await fetch(`${BRIDGE}/v1/sources/${SOURCE_ID}/snapshot`, {
+    const res = await fetch(`${BRIDGE}/v1/sources/${SOURCE_ID}/snapshot`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ appName: browserLabel(), tabs }),
+      body: JSON.stringify({ appName: browserLabel(), extensionVersion: EXTENSION_VERSION, tabs }),
     })
+    if (res.ok) {
+      const data = await res.json()
+      void markOutdated(typeof data.bundledExtensionVersion === 'string' && data.bundledExtensionVersion !== EXTENSION_VERSION)
+    }
   } catch {
     // Hiven not running — silent
   }
@@ -352,41 +383,94 @@ async function openUrl(url) {
   await chrome.tabs.create({ url, active: true })
 }
 
-async function pollCommands() {
-  try {
-    const res = await fetch(`${BRIDGE}/v1/sources/${SOURCE_ID}/commands`)
-    if (!res.ok) return
-    const data = await res.json()
-    const commands = Array.isArray(data.commands) ? data.commands : []
-    for (const cmd of commands) {
-      if (cmd.type === 'history.import' && typeof cmd.requestId === 'string') {
-        await pushHistoryImport(cmd)
-        continue
+async function runCommands(commands) {
+  for (const cmd of commands) {
+    if (cmd.type === 'history.import' && typeof cmd.requestId === 'string') {
+      await pushHistoryImport(cmd)
+      continue
+    }
+    if (cmd.type === 'config') {
+      await applyConfig(cmd)
+      continue
+    }
+    if (cmd.type === 'open' && typeof cmd.url === 'string') {
+      try {
+        await openUrl(cmd.url)
+      } catch {
+        // ignore
       }
-      if (cmd.type === 'config') {
-        await applyConfig(cmd)
-        continue
-      }
-      if (cmd.type === 'open' && typeof cmd.url === 'string') {
+      continue
+    }
+    if (cmd.type !== 'focus' || cmd.id == null) continue
+    const tabId = Number(cmd.id)
+    if (!Number.isFinite(tabId)) continue
+    try {
+      const windowId = cmd.windowId != null ? Number(cmd.windowId) : undefined
+      await focusTab(tabId, windowId)
+    } catch {
+      // Tab closed since Hiven listed it: reopen the page rather than doing nothing.
+      if (typeof cmd.url === 'string') {
         try {
           await openUrl(cmd.url)
         } catch {
           // ignore
         }
-        continue
-      }
-      if (cmd.type !== 'focus' || cmd.id == null) continue
-      const tabId = Number(cmd.id)
-      if (!Number.isFinite(tabId)) continue
-      try {
-        const windowId = cmd.windowId != null ? Number(cmd.windowId) : undefined
-        await focusTab(tabId, windowId)
-      } catch {
-        // tab may have closed
       }
     }
-  } catch {
-    // bridge offline
+  }
+}
+
+async function fetchCommands() {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), COMMAND_FETCH_TIMEOUT_MS)
+  try {
+    const res = await fetch(`${BRIDGE}/v1/sources/${SOURCE_ID}/commands?wait=${COMMAND_WAIT_MS}`, {
+      signal: controller.signal,
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    return Array.isArray(data.commands) ? data.commands : []
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+let commandLoopRunning = false
+
+/**
+ * Long-poll loop: the desktop holds the request until a focus/open lands, so a
+ * tab jump is delivered immediately instead of on the next 30 s alarm.
+ */
+async function commandLoop() {
+  if (commandLoopRunning) return
+  commandLoopRunning = true
+  try {
+    while (true) {
+      const startedAt = Date.now()
+      let commands = null
+      try {
+        commands = await fetchCommands()
+      } catch {
+        // bridge offline / aborted — fall through to backoff
+      }
+      if (commands) {
+        try {
+          await runCommands(commands)
+        } catch {
+          // a failed history import must not end the loop
+        }
+      }
+      if (commands === null) {
+        // Offline: stop; the alarm or the next tab event restarts the loop.
+        return
+      }
+      const elapsed = Date.now() - startedAt
+      if (elapsed < COMMAND_MIN_INTERVAL_MS) {
+        await new Promise((resolve) => setTimeout(resolve, COMMAND_MIN_INTERVAL_MS - elapsed))
+      }
+    }
+  } finally {
+    commandLoopRunning = false
   }
 }
 
@@ -411,7 +495,7 @@ chrome.runtime.onStartup.addListener(() => {
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === PUSH_ALARM) void pushSnapshot()
-  if (alarm.name === POLL_ALARM) void pollCommands()
+  if (alarm.name === POLL_ALARM) void commandLoop()
   if (alarm.name === HISTORY_ALARM) void pushHistory()
   if (alarm.name === IDLE_ALARM) void closeIdleTabs()
 })

@@ -338,20 +338,28 @@ function createChromiumTabsProvider(index: BrowserIndex): DesktopTargetProvider 
 
       return [...tabs, ...historyTargets]
     },
-    async activate(target) {
+    async activate(target, ctx) {
       const { desktopTargets } = getPluginHostSdk()
-      if (target.actionClass === 'open' && target.meta?.url) {
-        await desktopTargets.bridge.openUrl(CHROMIUM_SOURCE_ID, target.meta.url)
+      const url = target.meta?.url
+      try {
+        if (target.actionClass === 'open' && url) {
+          await desktopTargets.bridge.openUrl(CHROMIUM_SOURCE_ID, url)
+        } else {
+          await desktopTargets.bridge.focusTarget(
+            CHROMIUM_SOURCE_ID,
+            nativeIdFromTargetId(target.sourceId, target.kind, target.id),
+            target.meta?.windowId,
+            url,
+          )
+        }
+      } catch (error) {
+        // Bridge rejected the command (extension disconnected / snapshot stale):
+        // the launcher has already hidden, so open the page instead of failing silently.
+        if (!url || !ctx.openUrl) throw error
+        await ctx.openUrl(url)
+      } finally {
         desktopTargets.bridge.invalidateCache()
-        return
       }
-      const nativeId = nativeIdFromTargetId(target.sourceId, target.kind, target.id)
-      await desktopTargets.bridge.focusTarget(
-        CHROMIUM_SOURCE_ID,
-        nativeId,
-        target.meta?.windowId,
-      )
-      desktopTargets.bridge.invalidateCache()
     },
   }
 }

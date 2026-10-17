@@ -7048,6 +7048,17 @@ const BROWSER_TABS_EXTENSION_MANIFEST: &str =
     include_str!("../../src/plugins/web-open/extension/manifest.json");
 const BROWSER_TABS_EXTENSION_BACKGROUND: &str =
     include_str!("../../src/plugins/web-open/extension/background.js");
+/// `default_locale` in the manifest makes these mandatory — Chrome refuses to load without them.
+const BROWSER_TABS_EXTENSION_LOCALES: &[(&str, &str)] = &[
+    (
+        "en",
+        include_str!("../../src/plugins/web-open/extension/_locales/en/messages.json"),
+    ),
+    (
+        "zh_CN",
+        include_str!("../../src/plugins/web-open/extension/_locales/zh_CN/messages.json"),
+    ),
+];
 
 /// Ensure `plugins/builtin/web-open/extension` exists (plugin dir, not bridges/)
 /// and return that path for Chrome “Load unpacked”.
@@ -7067,6 +7078,11 @@ fn prepare_chromium_extension_package() -> Result<String, String> {
         .map_err(|e| e.to_string())?;
     fs::write(dest.join("background.js"), BROWSER_TABS_EXTENSION_BACKGROUND)
         .map_err(|e| e.to_string())?;
+    for (locale, messages) in BROWSER_TABS_EXTENSION_LOCALES {
+        let dir = dest.join("_locales").join(locale);
+        fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        fs::write(dir.join("messages.json"), messages).map_err(|e| e.to_string())?;
+    }
 
     // Best-effort: also copy any extra files from an on-disk plugin package.
     if let Ok(source) = resolve_chromium_extension_source_dir() {
@@ -7109,7 +7125,6 @@ fn resolve_chromium_extension_source_dir() -> Result<PathBuf, String> {
                 .join("web-open")
                 .join("extension"),
         );
-        candidates.push(cwd.join("extensions").join("hiven-chromium-tabs"));
     }
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {

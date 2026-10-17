@@ -94,6 +94,8 @@ export type DesktopTargetActivateContext = {
   locale: Locale
   surfaceId: LauncherSurfaceId
   signal?: AbortSignal
+  /** Open a URL in the system default browser — fallback when a bridge is unreachable. */
+  openUrl?: (url: string) => Promise<void>
 }
 
 export type DesktopTargetProvider = {

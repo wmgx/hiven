@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::{LazyLock, Mutex, OnceLock};
+use std::sync::{Condvar, LazyLock, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::Emitter;
@@ -33,6 +33,8 @@ const EVENT_CAP: usize = 256;
 pub const DESKTOP_BRIDGE_PORT: u16 = 19246;
 /// Freshness window: health fails (silent empty list) after this.
 const SNAPSHOT_FRESH_MS: u128 = 5_000;
+/// Long-poll cap for `/commands?wait=`; stays under the 30 s an MV3 worker lets a fetch hang.
+const COMMAND_WAIT_MAX_MS: u64 = 20_000;
 const MAX_HTTP_BODY_BYTES: usize = 2 * 1024 * 1024;
 // Validation relays JSON-encoded byte arrays; a permitted 10 MB image can expand to ~40 MB.
 const MAX_VALIDATION_RESULT_BODY_BYTES: usize = 64 * 1024 * 1024;
@@ -57,6 +59,8 @@ pub struct BridgeTarget {
 pub struct BridgeFocusCommand {
     pub id: String,
     pub window_id: Option<String>,
+    /// Lets the extension reopen the page when the tab closed after listing.
+    pub url: Option<String>,
     pub enqueued_at_ms: u64,
 }
 
@@ -132,6 +136,7 @@ struct SourceState {
     history_imports: HashMap<String, HistoryImportState>,
     config: Option<BridgeSourceConfig>,
     app_name: Option<String>,
+    extension_version: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -273,6 +278,12 @@ fn bridge_state() -> &'static Mutex<BridgeState> {
     STATE.get_or_init(|| Mutex::new(BridgeState::default()))
 }
 
+/// Signalled whenever focus / open / history-import is enqueued, waking long-polls.
+fn command_ready() -> &'static Condvar {
+    static READY: OnceLock<Condvar> = OnceLock::new();
+    READY.get_or_init(Condvar::new)
+}
+
 fn now_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -323,17 +334,13 @@ pub fn start_desktop_bridge_server(app_handle: tauri::AppHandle) {
                     Ok(stream) => {
                         let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
                         let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
-                        // Soft-fail incomplete/empty clients without spamming EOF parse noise.
-                        if let Err(error) = handle_http(stream) {
-                            let lower = error.to_lowercase();
-                            if lower.contains("empty")
-                                || lower.contains("incomplete")
-                                || lower.contains("eof")
-                            {
-                                // common during extension unload / half-closed sockets
-                            } else {
-                                eprintln!("[hiven] desktop bridge request error: {}", error);
-                            }
+                        // One thread per connection: a parked `/commands?wait=` long-poll
+                        // must not stall snapshot pushes from the same extension.
+                        let spawned = thread::Builder::new()
+                            .name("hiven-desktop-bridge-conn".into())
+                            .spawn(move || serve_connection(stream));
+                        if let Err(error) = spawned {
+                            eprintln!("[hiven] desktop bridge connection thread failed: {}", error);
                         }
                     }
                     Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
@@ -346,6 +353,18 @@ pub fn start_desktop_bridge_server(app_handle: tauri::AppHandle) {
         });
     if let Err(error) = result {
         eprintln!("[hiven] desktop bridge thread start failed: {}", error);
+    }
+}
+
+fn serve_connection(stream: TcpStream) {
+    // Soft-fail incomplete/empty clients without spamming EOF parse noise.
+    if let Err(error) = handle_http(stream) {
+        let lower = error.to_lowercase();
+        if lower.contains("empty") || lower.contains("incomplete") || lower.contains("eof") {
+            // common during extension unload / half-closed sockets
+        } else {
+            eprintln!("[hiven] desktop bridge request error: {}", error);
+        }
     }
 }
 
@@ -519,13 +538,15 @@ fn route_request(
         }
     }
 
-    // GET /v1/sources/{id}/commands
+    // GET /v1/sources/{id}/commands[?wait=ms]
     if method == "GET" {
-        if let Some(source_id) = path
+        let (pathname, query) = path.split_once('?').unwrap_or((path, ""));
+        if let Some(source_id) = pathname
             .strip_prefix("/v1/sources/")
             .and_then(|rest| rest.strip_suffix("/commands"))
         {
-            return take_commands(source_id);
+            let wait_ms = query_param(query, "wait").parse::<u64>().unwrap_or(0);
+            return take_commands_waiting(source_id, wait_ms);
         }
     }
 
@@ -668,6 +689,7 @@ struct SnapshotBody {
     targets: Option<Vec<BridgeTarget>>,
     tabs: Option<Vec<BridgeTarget>>,
     app_name: Option<String>,
+    extension_version: Option<String>,
 }
 
 fn apply_snapshot(source_id: &str, body: &str) -> Result<(u16, String), String> {
@@ -710,6 +732,7 @@ fn apply_snapshot(source_id: &str, body: &str) -> Result<(u16, String), String> 
     if parsed.app_name.is_some() {
         entry.app_name = parsed.app_name;
     }
+    entry.extension_version = parsed.extension_version;
     let count = entry.targets.len();
     drop(guard);
     // Invalidation only: snapshots include reconnects and removals without page events.
@@ -722,16 +745,51 @@ fn apply_snapshot(source_id: &str, body: &str) -> Result<(u16, String), String> 
             );
         }
     }
+    // Lets an unpacked extension badge itself when Hiven ships a newer copy.
     Ok((
         200,
-        serde_json::json!({ "ok": true, "count": count }).to_string(),
+        serde_json::json!({
+            "ok": true,
+            "count": count,
+            "bundledExtensionVersion": bundled_extension_version(),
+        })
+        .to_string(),
     ))
 }
 
+fn has_pending_command(entry: &SourceState) -> bool {
+    entry.pending_focus.is_some()
+        || entry.pending_open.is_some()
+        || entry.pending_history_import.is_some()
+}
+
+#[cfg(test)]
 fn take_commands(source_id: &str) -> Result<(u16, String), String> {
+    take_commands_waiting(source_id, 0)
+}
+
+/// Returns at once when a command is queued; otherwise parks up to `wait_ms`
+/// so a tab focus reaches the extension immediately instead of on its next alarm.
+/// Sticky config alone never ends the wait.
+fn take_commands_waiting(source_id: &str, wait_ms: u64) -> Result<(u16, String), String> {
+    let deadline = Instant::now() + Duration::from_millis(wait_ms.min(COMMAND_WAIT_MAX_MS));
     let mut guard = bridge_state()
         .lock()
         .map_err(|_| "bridge lock poisoned".to_string())?;
+    loop {
+        let pending = guard
+            .sources
+            .get(source_id)
+            .is_some_and(has_pending_command);
+        let now = Instant::now();
+        if pending || now >= deadline {
+            break;
+        }
+        guard = command_ready()
+            .wait_timeout(guard, deadline - now)
+            .map_err(|_| "bridge lock poisoned".to_string())?
+            .0;
+    }
     let entry = guard.sources.entry(source_id.to_string()).or_default();
     let mut commands = Vec::new();
     if let Some(cmd) = entry.pending_focus.take() {
@@ -739,6 +797,7 @@ fn take_commands(source_id: &str) -> Result<(u16, String), String> {
             "type": "focus",
             "id": cmd.id,
             "windowId": cmd.window_id,
+            "url": cmd.url,
             "enqueuedAtMs": cmd.enqueued_at_ms,
         }));
     }
@@ -944,6 +1003,9 @@ pub struct DesktopBridgeStatus {
     pub running: bool,
     pub port: u16,
     pub sources: Vec<DesktopBridgeSourceStatus>,
+    /// Version of the Chromium extension shipped with this build; a lower
+    /// `extensionVersion` on a source means the browser still runs an old copy.
+    pub bundled_extension_version: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -955,6 +1017,8 @@ pub struct DesktopBridgeSourceStatus {
     pub history_count: usize,
     pub event_count: usize,
     pub app_name: Option<String>,
+    /// Reported by the extension in each snapshot; `None` = pre-0.3.7 extension.
+    pub extension_version: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -986,6 +1050,12 @@ pub struct DesktopBridgeEventDto {
     pub app_name: Option<String>,
 }
 
+fn bundled_extension_version() -> Option<String> {
+    let manifest: serde_json::Value =
+        serde_json::from_str(crate::BROWSER_TABS_EXTENSION_MANIFEST).ok()?;
+    manifest.get("version")?.as_str().map(str::to_string)
+}
+
 #[tauri::command]
 pub fn desktop_bridge_status() -> Result<DesktopBridgeStatus, String> {
     let guard = bridge_state()
@@ -1001,12 +1071,14 @@ pub fn desktop_bridge_status() -> Result<DesktopBridgeStatus, String> {
             history_count: s.history.len(),
             event_count: s.events.len(),
             app_name: s.app_name.clone(),
+            extension_version: s.extension_version.clone(),
         })
         .collect();
     Ok(DesktopBridgeStatus {
         running: SERVER_LIFECYCLE.running(),
         port: DESKTOP_BRIDGE_PORT,
         sources,
+        bundled_extension_version: bundled_extension_version(),
     })
 }
 
@@ -1065,6 +1137,7 @@ pub fn focus_desktop_bridge_target(
     source_id: String,
     id: String,
     window_id: Option<String>,
+    url: Option<String>,
 ) -> Result<(), String> {
     let mut guard = bridge_state()
         .lock()
@@ -1079,8 +1152,11 @@ pub fn focus_desktop_bridge_target(
     entry.pending_focus = Some(BridgeFocusCommand {
         id,
         window_id,
+        url,
         enqueued_at_ms: now_ms(),
     });
+    drop(guard);
+    command_ready().notify_all();
     Ok(())
 }
 
@@ -1141,6 +1217,8 @@ pub fn begin_desktop_bridge_history_import(source_id: String) -> Result<String, 
     entry
         .history_imports
         .insert(request_id.clone(), HistoryImportState::default());
+    drop(guard);
+    command_ready().notify_all();
     Ok(request_id)
 }
 
@@ -1237,11 +1315,18 @@ pub fn open_desktop_bridge_url(source_id: String, url: String) -> Result<(), Str
     let mut guard = bridge_state()
         .lock()
         .map_err(|_| "bridge lock poisoned".to_string())?;
-    let entry = guard.sources.entry(source_id).or_default();
+    let entry = guard.sources.entry(source_id.clone()).or_default();
+    // Same contract as focus: refuse when no extension is listening, so the
+    // caller can fall back instead of queueing a command nobody will take.
+    if !is_fresh(entry.last_seen) {
+        return Err(format!("source snapshot stale: {}", source_id));
+    }
     entry.pending_open = Some(BridgeOpenCommand {
         url: trimmed,
         enqueued_at_ms: now_ms(),
     });
+    drop(guard);
+    command_ready().notify_all();
     Ok(())
 }
 
@@ -1376,16 +1461,53 @@ mod tests {
     #[test]
     fn snapshot_and_list_fresh() {
         let body = r#"{"appName":"Chrome","tabs":[{"id":"1","windowId":"w1","title":"Example","url":"https://example.com","active":true}]}"#;
-        let (status, _) = apply_snapshot("browser.chromium", body).unwrap();
+        let (status, json) = apply_snapshot("browser.chromium", body).unwrap();
         assert_eq!(status, 200);
+        assert!(json.contains("\"bundledExtensionVersion\""));
         let listed = list_desktop_bridge_targets(Some("browser.chromium".into())).unwrap();
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].title, "Example");
-        focus_desktop_bridge_target("browser.chromium".into(), "1".into(), Some("w1".into()))
-            .unwrap();
+        focus_desktop_bridge_target(
+            "browser.chromium".into(),
+            "1".into(),
+            Some("w1".into()),
+            Some("https://example.com".into()),
+        )
+        .unwrap();
         let (st, json) = take_commands("browser.chromium").unwrap();
         assert_eq!(st, 200);
         assert!(json.contains("\"type\":\"focus\""));
+        assert!(json.contains("\"url\":\"https://example.com\""));
+        assert!(bundled_extension_version().is_some());
+    }
+
+    #[test]
+    fn long_poll_wakes_on_open_and_times_out_when_idle() {
+        let source = "browser.long-poll-test";
+        apply_snapshot(source, r#"{"tabs":[]}"#).unwrap();
+        let started = Instant::now();
+        let (st, json) = take_commands_waiting(source, 50).unwrap();
+        assert_eq!(st, 200);
+        assert!(!json.contains("\"type\":\"open\""));
+        assert!(started.elapsed() >= Duration::from_millis(50));
+
+        let waiter = thread::spawn(move || take_commands_waiting(source, 5_000).unwrap());
+        thread::sleep(Duration::from_millis(50));
+        let enqueued = Instant::now();
+        open_desktop_bridge_url(source.into(), "https://example.com".into()).unwrap();
+        let (_, json) = waiter.join().unwrap();
+        assert!(json.contains("\"type\":\"open\""));
+        assert!(enqueued.elapsed() < Duration::from_secs(2));
+    }
+
+    #[test]
+    fn open_is_refused_without_a_live_extension() {
+        let err = open_desktop_bridge_url(
+            "browser.never-connected".into(),
+            "https://example.com".into(),
+        )
+        .unwrap_err();
+        assert!(err.contains("stale"));
     }
 
     #[test]
@@ -1436,6 +1558,7 @@ mod tests {
         assert_eq!(newer[0].event_type, "tab.activated");
 
         set_desktop_bridge_source_config(source.into(), true, true, 45).unwrap();
+        apply_snapshot(source, r#"{"tabs":[]}"#).unwrap();
         open_desktop_bridge_url(source.into(), "https://example.com/open".into()).unwrap();
         let (st, json) = take_commands(source).unwrap();
         assert_eq!(st, 200);

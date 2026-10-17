@@ -28,6 +28,9 @@ type BridgeLine = {
   targetCount: number
   historyCount: number
   port: number
+  /** Version the browser is running; null = extension too old to report one. */
+  extensionVersion: string | null
+  bundledExtensionVersion: string | null
 }
 
 function StatusChip({ label, tone }: { label: string; tone: 'on' | 'off' | 'muted' }) {
@@ -100,6 +103,8 @@ export function BrowserTabsConnectionModal(props: PluginSettingsModalBodyProps<W
         targetCount: src?.targetCount ?? 0,
         historyCount: src?.historyCount ?? 0,
         port: status.port,
+        extensionVersion: src?.extensionVersion ?? null,
+        bundledExtensionVersion: status.bundledExtensionVersion ?? null,
       })
     } catch {
       setBridge(null)
@@ -123,6 +128,11 @@ export function BrowserTabsConnectionModal(props: PluginSettingsModalBodyProps<W
     if (!bridge.fresh) return t('settings.waiting')
     return t('settings.connectedShort') // e.g. "已连接"
   })()
+  // Unpacked extensions don't auto-update: after a Hiven upgrade the browser keeps
+  // running the old copy until it is reloaded, which silently breaks new protocol.
+  const extensionOutdated = Boolean(
+    connected && bridge?.bundledExtensionVersion && bridge.extensionVersion !== bridge.bundledExtensionVersion,
+  )
   const statusDetail =
     connected && bridge
       ? t('settings.connectedDetail', { tabs: bridge.targetCount, history: bridge.historyCount, port: bridge.port })
@@ -137,6 +147,14 @@ export function BrowserTabsConnectionModal(props: PluginSettingsModalBodyProps<W
         </div>
         {statusDetail && (
           <ui.Text style={{ fontSize: 11.5, color: 'var(--text-2)' }}>{statusDetail}</ui.Text>
+        )}
+        {extensionOutdated && bridge && (
+          <ui.Text style={{ fontSize: 11.5, color: 'var(--color-warning)', lineHeight: 1.5 }}>
+            {t('settings.extensionOutdated', {
+              current: bridge.extensionVersion ?? t('settings.extensionVersionUnknown'),
+              bundled: bridge.bundledExtensionVersion ?? '',
+            })}
+          </ui.Text>
         )}
         <ui.Button
           type="button"

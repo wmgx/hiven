@@ -35,7 +35,11 @@ export type DesktopBridgeStatus = {
     historyCount?: number
     eventCount?: number
     appName?: string | null
+    /** Reported by the extension; absent on extensions older than 0.3.7. */
+    extensionVersion?: string | null
   }>
+  /** Extension version shipped with this build. */
+  bundledExtensionVersion?: string | null
 }
 
 export type DesktopBridgeHistoryDto = {
@@ -114,6 +118,7 @@ export async function focusDesktopBridgeTarget(
   sourceId: string,
   id: string,
   windowId?: string | null,
+  url?: string | null,
 ): Promise<void> {
   if (!isTauriRuntime()) {
     throw new Error('Desktop bridge only available in desktop app')
@@ -122,6 +127,7 @@ export async function focusDesktopBridgeTarget(
     sourceId,
     id,
     windowId: windowId ?? null,
+    url: url ?? null,
   })
 }
 

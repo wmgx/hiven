@@ -1,0 +1,8 @@
+{
+  "actionTitle": {
+    "message": "Hiven tabs bridge"
+  },
+  "actionTitleOutdated": {
+    "message": "Hiven has been updated — open the extensions page and click Reload on this extension"
+  }
+}

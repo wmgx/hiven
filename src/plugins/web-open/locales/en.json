@@ -21,6 +21,8 @@
   "settings.waiting": "Waiting for the extension…",
   "settings.connectedShort": "Connected",
   "settings.connectedDetail": "{tabs} tabs · {history} history entries",
+  "settings.extensionOutdated": "Your browser is running extension {current}, but Hiven ships {bundled}. Click Reload on the browser's extensions page, or tab switching may not work",
+  "settings.extensionVersionUnknown": "an old version",
   "settings.install": "Install browser extension",
   "settings.installSteps": "Load the unpacked extension and select this folder",
   "settings.openFolder": "Open extension folder",

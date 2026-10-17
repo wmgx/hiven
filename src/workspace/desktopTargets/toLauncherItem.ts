@@ -248,7 +248,12 @@ export function desktopTargetToLauncherItem(
             title: target.title,
             url: target.meta?.url ?? null,
           })
-          await activate(target, { locale, surfaceId: 'global-launcher' })
+          await activate(target, {
+            locale,
+            surfaceId: 'global-launcher',
+            // Lazy: keeps this mapper free of the effect runner's store graph.
+            openUrl: async (url) => (await import('../effectRunner')).openExternalUrl(url),
+          })
           if (!transientWindow) console.info('[desktop-target:execute] ok', { id: target.id })
           return { ok: true as const }
         } catch (error) {
