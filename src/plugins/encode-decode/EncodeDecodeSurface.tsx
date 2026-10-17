@@ -38,8 +38,7 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
   const initialText = props.initialText ?? ''
   const [initial] = useState(() => initialOperation(initialText, props.surfaceId))
   const [inputText, setInputText] = useState(initialText)
-  const baseline = useRef(initialText)
-  const [imageDirty, setImageDirty] = useState(false)
+  const [, setImageDirty] = useState(false)
   const imageInvalidation = useRef<(() => void) | null>(null)
   const resizeMode = props.surfaceId === 'image-resize'
   const cropMode = props.surfaceId === 'image-crop'

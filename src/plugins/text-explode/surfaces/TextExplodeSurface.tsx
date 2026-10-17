@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import { Button, IconButton, ToolbarButton, useImeKeyboard } from '@hiven/plugin-ui'
 import { CloseIcon } from '@hiven/plugin-ui/icons'

@@ -131,7 +131,7 @@ try {
     controller.reset()
     const previousRun = structuredClone(await getLastSaveableRun())
     const beforeDelivery = deliveries.length
-    await controller.selectItem(item)
+    await controller.selectItem(item, { customizeParams: true })
     await chooseParams({ kind, dedup })
     assert.equal(top().kind, 'collect-input')
     await controller.submitInput()
@@ -183,14 +183,14 @@ try {
     store.deleteSavedAction(artifact.id)
   }
   controller.reset()
-  await controller.selectItem(item, { objectBlockText: 'Keep this source: https://example.com/preserved' })
+  await controller.selectItem(item, { objectBlockText: 'Keep this source: https://example.com/preserved', customizeParams: true })
   await chooseParams({ kind: 'urls', dedup: true })
   assert.equal(top().kind, 'result', 'explicit attached material uses the same preview route')
   assert.equal(top().output.choices[0].preview, 'https://example.com/preserved')
   const beforeErrors = deliveries.length
   const previousRun = structuredClone(await getLastSaveableRun())
   controller.reset()
-  await controller.selectItem(item)
+  await controller.selectItem(item, { customizeParams: true })
   await chooseParams({ kind: 'emails', dedup: true })
   controller.setInputText('Keep this original text')
   await controller.submitInput()

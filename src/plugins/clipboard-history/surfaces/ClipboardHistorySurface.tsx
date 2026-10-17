@@ -177,7 +177,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   useLayoutEffect(() => {
     const invalidate = () => {
       quickEditorLifecycle.cancel()
-      setQuickEditorOpen(null)
     }
     const unsubscribeOwner = host.deliveryFeedbackOwner?.subscribeInvalidation(invalidate)
     const unsubscribeLeave = host.subscribeLeaveIntent?.(invalidate)
@@ -636,7 +635,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   useLayoutEffect(() => {
     copyLifecycle.cancel()
     quickEditorLifecycle.cancel()
-    setQuickEditorOpen(null)
   }, [requestKey, refreshEpoch, copyLifecycle, quickEditorLifecycle])
   const refreshPage = useCallback(() => {
     setFullTextSearchState('loading')

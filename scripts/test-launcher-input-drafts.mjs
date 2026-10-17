@@ -156,7 +156,7 @@ try {
   {
     const h = harness()
     const malformed = '  {"customer":"synthetic-edit", broken}\n'
-    await h.controller.selectItem(json, { recordUsage: false })
+    await h.controller.selectItem(json, { recordUsage: false, customizeParams: true })
     await h.controller.commitCurrentParam(4)
     await h.controller.commitCurrentParam(true)
     h.controller.setInputText(malformed)
@@ -210,7 +210,7 @@ try {
     if (leave === 'exit') h.controller.exitCommand()
     else if (leave === 'reset') h.controller.reset()
     else if (leave === 'back') for (let i = 0; i < 3; i++) h.controller.back()
-    else await h.controller.selectItem({ ...json, systemKey: 'host:test:other-command' }, { recordUsage: false })
+    else await h.controller.selectItem({ ...json, systemKey: 'host:test:other-command' }, { recordUsage: false, customizeParams: true })
     if (leave === 'select') {
       assert.equal(h.controller.getState().frames.length, 2)
       assert.equal(h.top().inputText, undefined)
@@ -219,7 +219,7 @@ try {
     const leaveRequest = h.controller.getState().inputDraftLeave
     if (leaveRequest) h.controller.resolveInputDraftLeave(leaveRequest, true)
     assert.deepEqual(h.controller.getState().frames, [{ kind: 'list' }])
-    await h.controller.selectItem(json, { recordUsage: false })
+    await h.controller.selectItem(json, { recordUsage: false, customizeParams: true })
     assert.equal(h.top().query, '2')
     await h.controller.commitCurrentParam(2)
     assert.equal(h.top().params.sortKeys, false)

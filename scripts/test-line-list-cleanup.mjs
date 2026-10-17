@@ -153,7 +153,7 @@ try {
     controller.reset()
     const previousRun = structuredClone(await getLastSaveableRun())
     const beforeDelivery = deliveries.length
-    await controller.selectItem(item)
+    await controller.selectItem(item, { customizeParams: true })
     await chooseParams(params)
     assert.equal(top().kind, 'collect-input')
     await controller.submitInput()
@@ -222,7 +222,7 @@ try {
   // Empty results are meaningful for both delivery actions, including return material.
   for (const destination of ['copy', 'return-to-launcher']) {
     controller.reset()
-    await controller.selectItem(item, { objectBlockText: ' \t\r\n\u00a0\n' })
+    await controller.selectItem(item, { objectBlockText: ' \t\r\n\u00a0\n', customizeParams: true })
     await chooseParams(variants[2].params)
     assert.equal(top().kind, 'result', 'attached explicit text proceeds to preview after parameters')
     assert.equal(top().output.choices[0].preview, '')
