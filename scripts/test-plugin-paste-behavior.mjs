@@ -189,7 +189,7 @@ function loadPluginPaste({
   assert.deepEqual(plain(result), {
     ok: false,
     fallback: 'copied',
-    message: 'Copied to clipboard. Grant Accessibility access in System Settings → Privacy & Security → Accessibility to enable auto-paste.',
+    message: 'Copied. Allow Accessibility to enable auto-paste',
   }, 'Accessibility permission failures must return the explicit copied fallback message')
   assert.deepEqual(plain(calls), [
     ['tauri.writeText', 'needs permission'],
