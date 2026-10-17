@@ -324,7 +324,7 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
               className="td-ib"
               onClick={handleFormat}
               disabled={!canFormat}
-              title={t('diff.formatHint')}
+              title={t('diff.format')}
               aria-label={t('diff.format')}
             >
               <IconFormat />
@@ -359,15 +359,14 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
                 void sideCopier.copy({ side, text, revision: copyRevision },
                   (snapshot) => host.clipboard.writeText(snapshot),
                   (pendingSide) => { if (copyMounted.current) setCopyingSide(pendingSide) },
-                  (success) => host.showToast(t(success ? 'diff.copySuccess' : 'diff.copyFailed', {
-                    side: t(`surface.${side}`),
-                  }), success ? 'success' : 'error'))
+                  (success) => {
+                    if (!success) host.showToast(t('diff.copyFailed', { side: t(`surface.${side}`) }), 'error')
+                  })
               }}
             >
               <IconCopy />{t(copyingSide === side ? 'diff.copyPending' : 'diff.copySide')}
             </button>
             <Menu
-              header={t('source.snapshotHint')}
               trigger={<button type="button" className="td-source" aria-label={t('source.choose', { side: t(`surface.${side}`) })}>{source.title || t('source.chooseShort')} ▾</button>}
               items={sourceOptions.map((option) => ({
                 key: option.sourceId,

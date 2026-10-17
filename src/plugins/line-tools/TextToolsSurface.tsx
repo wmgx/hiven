@@ -177,7 +177,7 @@ export function TextToolsSurface(props: PluginSurfaceProps) {
           <section className="text-tools-results" aria-label={t('pane.caseResults')}>
             <div className={`text-tools-pane-header${delivery.feedback ? ' has-delivery' : ''}`}>
               <strong>{t('pane.caseResults')}</strong>
-              <span className={delivery.feedback ? `text-tools-delivery is-${delivery.feedback.tone}` : ''} role="status" aria-live="polite">{delivery.feedback?.message ?? t('case.copyHint')}</span>
+              <span className={delivery.feedback ? `text-tools-delivery is-${delivery.feedback.tone}` : ''} role="status" aria-live="polite">{delivery.feedback?.message}</span>
             </div>
             <ul data-launcher-scrollable>
               {caseResults.map((result) => (
@@ -191,10 +191,10 @@ export function TextToolsSurface(props: PluginSurfaceProps) {
                     <small>{t('action.copy')}</small>
                   </button>
                   <div className="text-tools-pane-actions">
-                    <IconButton type="button" label={t('action.continueProcessingDescription')} disabled={!result.output || busy !== null} onClick={() => deliver('return', result.output)}>
+                    <IconButton type="button" label={t('workbench.return')} disabled={!result.output || busy !== null} onClick={() => deliver('return', result.output)}>
                       <CornerDownLeft size={14} />
                     </IconButton>
-                    <IconButton type="button" label={t('action.pasteBackDescription')} disabled={!result.output || busy !== null} onClick={() => void deliver('paste', result.output)}>
+                    <IconButton type="button" label={t('action.pasteBack')} disabled={!result.output || busy !== null} onClick={() => void deliver('paste', result.output)}>
                       <ClipboardPaste size={14} />
                     </IconButton>
                   </div>

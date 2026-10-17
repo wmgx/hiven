@@ -112,7 +112,6 @@ export const textDiffPlugin = definePlugin({
       id: mode === 'main' ? 'text-diff.compare' : 'text-diff.json',
       display: {
         title: mode === 'main' ? 'command.compare.title' : 'command.json.title',
-        subtitle: 'command.compare.description',
         icon: 'GitCompare',
         aliases: mode === 'main'
           ? ['diff', 'compare', 'text diff', 'text-diff', '文本对比']

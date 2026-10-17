@@ -7,7 +7,7 @@ export default definePlugin({
       const parsed = parsePermissionQuery(ctx.query ?? '')
       if (!parsed) return []
       if (!parsed.ok) return [{
-        id: 'permissions-error', display: { title: ctx.t(`error.${parsed.error}`), subtitle: ctx.t('help'), icon: 'Lock' },
+        id: 'permissions-error', display: { title: ctx.t(`error.${parsed.error}`), icon: 'Lock' },
         behavior: { type: 'perform' }, surfaces: ['global-launcher'], directAnswer: true,
         execute() { return { ok: false, message: ctx.t(`error.${parsed.error}`) } },
       }]
@@ -24,7 +24,6 @@ export default definePlugin({
         ctx.t('meaning'),
         ...special.map((name) => ctx.t(`special.${name}`)),
         ...(special.length ? [ctx.t('special.case')] : []),
-        ctx.t('localOnly'),
       ].join('\n')
       return [{
         id: 'permissions-answer', display: { title, subtitle: `${compactGroups.join(' · ')} · ${ctx.t('copy')}`, icon: 'Lock' },

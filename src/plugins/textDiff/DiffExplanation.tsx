@@ -54,8 +54,8 @@ export function DiffExplanation({ host, t, original, modified }: Props) {
       {permissionDenied && <button type="button" className="td-nav-b" onClick={() => host.openSettings({ preserveSurface: true })}>{t('explain.permissions')}</button>}
       {!checking && !busy && selection?.status !== 'ready' && <button type="button" className="td-nav-b" onClick={() => refresh.current()}>{t('explain.recheck')}</button>}
     </div>
-    <div className="td-explanation-hint">{t(overLimit ? 'explain.limits' : original && modified ? 'explain.both' : 'explain.single')}</div>
-    {state.status !== 'idle' && <div className="td-explanation-result" role={state.status === 'failed' ? 'alert' : 'status'} aria-live="polite">
+    <div className="td-explanation-hint">{t(overLimit ? 'explain.failure.limits' : 'explain.privacy')}</div>
+    {state.status !== 'idle' && state.status !== 'cancelled' && <div className="td-explanation-result" role={state.status === 'failed' ? 'alert' : 'status'} aria-live="polite">
       {state.status === 'ready' ? state.text : t(state.status === 'failed' ? `explain.failure.${state.reason}` : `explain.${state.status}`)}
     </div>}
   </div>

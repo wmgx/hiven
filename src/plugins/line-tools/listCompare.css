@@ -2,9 +2,6 @@
 .list-compare > header { display: flex; align-items: center; gap: 8px; }
 .list-compare > header strong { flex: 1; }
 .list-compare-options { display: flex; gap: 16px; flex-wrap: wrap; align-items: start; font-size: 12px; }
-.list-compare-options details { max-width: 420px; }
-.list-compare-options summary { cursor: pointer; }
-.list-compare-options p { margin: 6px 0 0; line-height: 1.5; }
 .list-compare-inputs, .list-compare-results { display: grid; gap: 12px; min-height: 0; flex: 1; }
 .list-compare-inputs { grid-template-columns: repeat(2,minmax(0,1fr)); }
 .list-compare-results { grid-template-columns: repeat(3,minmax(0,1fr)); }

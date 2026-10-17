@@ -276,7 +276,6 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
         </IconButton>
         <div className="text-workbench-heading">
           <strong>{t('workbench.title')}</strong>
-          <span>{t('workbench.material', { count: inputText.length })}</span>
         </div>
         <IconButton type="button" label={t('action.close')} onClick={() => update(() => host.close())}>
           <CloseIcon size={14} strokeWidth={2} />
@@ -331,8 +330,8 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
             </Checkbox>
           ) : null}
           {operation === 'clean-list' ? (['trim', 'removeBlank', 'dedup'] as const).map((key) => (
-            <Checkbox key={key} checked={options[key]} title={t(`param.cleanList.${key}Hint`)} onChange={(event) => changeOption(key, (event.target as HTMLInputElement).checked)}>
-              {t(`workbench.cleanup.${key}`)}
+            <Checkbox key={key} checked={options[key]} onChange={(event) => changeOption(key, (event.target as HTMLInputElement).checked)}>
+              {t(`param.cleanList.${key}`)}
             </Checkbox>
           )) : null}
           {operation === 'clean-agent-text' ? (
@@ -361,7 +360,6 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
               <TextInput value={options[key]} aria-label={t(`param.${key}`)} onChange={(event) => changeOption(key, event.currentTarget.value)} />
             </label>
           ))}
-          {!['json-format', 'sort', 'dedup', 'clean-list', 'join', 'prepend', 'append', 'wrap', 'find-duplicates'].includes(operation) ? <span>{t(operation === 'markdown-plain-text' ? 'markdownPlain.hint' : operation === 'clean-agent-text' ? 'cleanAgent.hint' : operation === 'regex-escape' ? 'regexEscape.hint' : operation === 'extract-urls' ? 'extractUrls.hint' : 'option.livePreview')}</span> : null}
         </div>
       </div>
 
@@ -393,7 +391,6 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
           </div>
           {duplicateGroups ? (
             <div className="text-workbench-duplicates" data-launcher-scrollable aria-label={t('duplicates.title')}>
-              <p className="text-workbench-duplicates-hint">{t(noDuplicates ? 'duplicates.noneHint' : 'duplicates.hint')}</p>
               {duplicateGroups.slice(duplicatePage * DUPLICATE_GROUP_PAGE_SIZE, (duplicatePage + 1) * DUPLICATE_GROUP_PAGE_SIZE).map((group) => (
                 <DuplicateLineCard key={`${revision}:${group.occurrences[0].line}`} group={group} locateLine={locateLine} t={t} />
               ))}
@@ -425,22 +422,22 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
             <Button type="button" variant="secondary" disabled={busy !== null} onClick={() => undoContinuation(true)}>{t('workbench.confirmUndo')}</Button>
             <Button type="button" variant="ghost" onClick={() => { setConfirmUndo(false); inputRef.current?.focus() }}>{t('workbench.cancelUndo')}</Button>
           </> : <>
-            <Button type="button" variant="secondary" disabled={outputDisabled || operation === 'find-duplicates'} title={t('workbench.useResultDescription')} onClick={useResult}>
+            <Button type="button" variant="secondary" disabled={outputDisabled || operation === 'find-duplicates'} onClick={useResult}>
               {t('workbench.useResult')}
             </Button>
-            {continuation ? <Button type="button" variant="ghost" disabled={busy !== null} title={t('workbench.undoDescription')} onClick={() => undoContinuation()}>{t('workbench.undo')}</Button> : null}
+            {continuation ? <Button type="button" variant="ghost" disabled={busy !== null} onClick={() => undoContinuation()}>{t('workbench.undo')}</Button> : null}
           </>}
         </div>
         <div className="text-workbench-output-actions">
-          <Button type="button" variant="ghost" disabled={outputDisabled} title={t('workbench.returnDescription')} onClick={() => void deliver('return')}>
+          <Button type="button" variant="ghost" disabled={outputDisabled} onClick={() => void deliver('return')}>
             <CornerDownLeft size={14} aria-hidden="true" />
             {t(busy === 'return' ? 'workbench.returning' : 'workbench.return')}
           </Button>
-          <Button type="button" variant="ghost" disabled={outputDisabled} title={t('action.pasteBackDescription')} onClick={() => void deliver('paste')}>
+          <Button type="button" variant="ghost" disabled={outputDisabled} onClick={() => void deliver('paste')}>
             <ClipboardPaste size={14} aria-hidden="true" />
             {t(busy === 'paste' ? 'workbench.pasting' : 'action.pasteBack')}
           </Button>
-          <Button type="button" variant="primary" disabled={outputDisabled} title={t('action.copyDescription')} onClick={() => void deliver('copy')}>
+          <Button type="button" variant="primary" disabled={outputDisabled} onClick={() => void deliver('copy')}>
             <Copy size={14} aria-hidden="true" />
             {t(busy === 'copy' ? 'workbench.copying' : 'action.copy')}
           </Button>

@@ -421,7 +421,6 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
       ) : (
         <div className="tx-empty">
           <Bomb size={22} aria-hidden="true" />
-          <span>{t('empty.hint')}</span>
         </div>
       )}
 
@@ -431,12 +430,11 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
           <span>{t('preview.characters', { count: assembled.length })}</span>
         </div>
         <div className="tx-preview-body">
-          {assembled || <span className="tx-preview-empty">{t('preview.empty')}</span>}
+          {assembled}
         </div>
       </div>
 
       <div className="tx-footer">
-        <span className="tx-footer-hint">{t('footer.hint')}</span>
         <Button disabled={outputDisabled} onClick={() => void copySelection()}>
           {copyFeedback?.text === assembled
             ? t(copyFeedback.error ? 'error.copyFailed' : 'message.copied')

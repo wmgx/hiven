@@ -316,28 +316,15 @@
   min-height: 20px;
 }
 
-.tx-preview-empty {
-  color: var(--text-3);
-  font-family: var(--font, var(--font-sans));
-  font-size: 12px;
-}
-
 /* ─── footer ─── */
 
 .tx-footer {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 10px;
   padding: 10px 14px 14px;
-}
-
-.tx-footer-hint {
-  flex: 1;
-  min-width: 0;
-  text-align: center;
-  color: var(--text-3);
-  font-size: 11.5px;
 }
 
 @media (max-width: 540px) {
@@ -358,9 +345,5 @@
 
   .tx-selection-actions .hiven-ui-toolbar-button {
     flex: 1;
-  }
-
-  .tx-footer-hint {
-    display: none;
   }
 }

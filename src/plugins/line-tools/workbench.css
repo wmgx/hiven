@@ -84,7 +84,6 @@
 .text-workbench-result-meta.is-error { color: var(--hiven-color-danger); }
 
 .text-workbench-duplicates { flex: 1; min-height: 0; overflow: auto; padding: 8px 18px 16px; }
-.text-workbench-duplicates-hint { margin: 0 0 10px; color: var(--color-text-secondary); font-size: 11px; line-height: 1.5; }
 .text-workbench-duplicate { padding: 10px 0; border-bottom: 1px solid var(--workbench-border); }
 .text-workbench-duplicate-heading { display: flex; align-items: baseline; gap: 10px; }
 .text-workbench-duplicate-heading pre { flex: 1; min-width: 0; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.5 var(--font-mono, monospace); }

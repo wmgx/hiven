@@ -101,9 +101,9 @@ try {
     ['trim', 'boolean', false, true], ['removeBlank', 'boolean', true, true], ['dedup', 'boolean', false, true],
   ])
   for (const param of item.params) {
-    assert.ok(param.label && param.labelI18n.zh && param.hint && param.hintI18n.zh, 'all parameter labels and hints are localized')
+    assert.ok(param.label && param.labelI18n.zh, 'all parameter labels are localized')
     assert.notEqual(param.label, param.labelI18n.zh)
-    assert.ok(!param.label.startsWith('param.') && !param.hint.startsWith('param.'), 'locale keys are resolved by the actual loader')
+    assert.ok(!param.label.startsWith('param.'), 'locale keys are resolved by the actual loader')
   }
   assert.ok(collectStaticCandidates('editor-command-bar').some((candidate) => candidate.systemKey === key), 'editor route remains available')
   assert.ok(collectStaticCandidates('quick-editor-command').some((candidate) => candidate.systemKey === key), 'quick editor route remains available')

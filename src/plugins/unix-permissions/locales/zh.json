@@ -1,8 +1,7 @@
 {
-  "help": "在功能词后输入：Unix权限 755、权限解析 4755 或 rwxr-xr-x。编辑查询可修改权限值，Enter 复制解释；仅解析，不访问文件。",
-  "error.syntax": "请输入 3–4 位八进制数或恰好 9 位权限字符，不接受其他命令或路径。",
-  "error.octal": "八进制权限须为 3–4 位，数字限定 0–7（0000–7777）。",
-  "error.symbolic": "请遵循 rwx 位置：s/S 仅用于所有者或组的执行位，t/T 仅用于其他人的执行位。",
+  "error.syntax": "输入 3–4 位八进制或 9 位权限串",
+  "error.octal": "八进制每位须为 0–7",
+  "error.symbolic": "s/S 只能在所有者或组，t/T 只能在其他人",
   "owner": "所有者",
   "group": "所属组",
   "others": "其他人",
@@ -10,11 +9,10 @@
   "write": "写",
   "execute": "执行/搜索",
   "none": "无权限",
-  "copy": "Enter：复制完整解释",
-  "meaning": "r/w/x：文件为读取/写入/执行；目录为列出/修改条目/搜索。实际访问还受 ACL、挂载选项和操作系统规则影响。",
-  "special.setuid": "setuid（4000）：受支持的可执行文件运行时可使用文件所有者的有效 UID，受操作系统规则约束。",
-  "special.setgid": "setgid（2000）：受支持的可执行文件可使用文件所属组的有效 GID；目录可让新条目继承所属组。",
-  "special.sticky": "sticky（1000）：用于目录时，删除/重命名受限于条目所有者、目录所有者或特权用户。",
-  "special.case": "s/t 同时具有执行位；S/T 表示特殊位已设置但没有执行位。",
-  "localOnly": "仅本地解析，未执行 chmod，也未访问任何文件。"
+  "copy": "Enter 复制",
+  "meaning": "r 读 · w 写 · x 执行（目录为搜索）",
+  "special.setuid": "setuid（4000）：以文件所有者身份运行",
+  "special.setgid": "setgid（2000）：以所属组身份运行；目录新条目继承组",
+  "special.sticky": "sticky（1000）：目录内仅所有者可删除或重命名",
+  "special.case": "小写含执行位，大写不含"
 }

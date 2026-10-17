@@ -38,7 +38,7 @@ export function ListCompareSurface({ host, t, initialText = '' }: PluginSurfaceP
     setCopying(true); setStatus('compare.copying')
     try {
       await host.clipboard.writeText(result.values[category].join('\n'), { signal: controller.signal })
-      if (current()) setStatus('compare.copied')
+      if (current()) setStatus('')
     } catch { if (current()) setStatus('compare.copyFailed') }
     finally { if (pending.current === controller) pending.current = null; if (active.current) { setCopying(false); if (!current()) setStatus('') } }
   }
@@ -47,7 +47,6 @@ export function ListCompareSurface({ host, t, initialText = '' }: PluginSurfaceP
     <div className="list-compare-options">
       <Checkbox checked={ignoreCase} onChange={() => update(() => setIgnoreCase(!ignoreCase))}>{t('compare.ignoreCase')}</Checkbox>
       <Checkbox checked={trim} onChange={() => update(() => setTrim(!trim))}>{t('compare.trim')}</Checkbox>
-      <details><summary>{t('compare.rules')}</summary><p>{t('compare.rulesText', { limit: MAX_LIST_LINES })}</p></details>
     </div>
     <div className="list-compare-inputs">
       {(['left', 'right'] as const).map(side => <label key={side}><span>{t(`compare.${side}`)}</span><textarea aria-label={t(`compare.${side}`)} autoFocus={side === 'left'} value={side === 'left' ? left : right} spellCheck={false} onChange={event => update(() => (side === 'left' ? setLeft : setRight)(event.target.value))} /></label>)}
@@ -59,6 +58,6 @@ export function ListCompareSurface({ host, t, initialText = '' }: PluginSurfaceP
         <textarea readOnly spellCheck={false} aria-label={t(`compare.${category}`)} value={result.ok ? result.values[category].join('\n') : ''} placeholder={t('compare.empty')} />
       </section>)}
     </div>
-    <footer><span role="status" aria-live="polite">{status ? t(status) : ''}</span>{result.ok && (result.ignored.left + result.ignored.right + result.duplicates.left + result.duplicates.right > 0) ? <span>{t('compare.excluded', { leftBlank: result.ignored.left, rightBlank: result.ignored.right, leftDup: result.duplicates.left, rightDup: result.duplicates.right })}</span> : null}</footer>
+    <footer><span role="status" aria-live="polite">{status ? t(status) : ''}</span>{result.ok && (result.ignored.left + result.ignored.right + result.duplicates.left + result.duplicates.right > 0) ? <span>{t('compare.excluded', { blank: result.ignored.left + result.ignored.right, dup: result.duplicates.left + result.duplicates.right })}</span> : null}</footer>
   </section>
 }

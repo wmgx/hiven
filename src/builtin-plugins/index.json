@@ -1,5 +1,5 @@
 {
-  "version": 156,
+  "version": 157,
   "packages": [
     {
       "pluginId": "encode-decode",
@@ -19,7 +19,7 @@
     {
       "pluginId": "line-tools",
       "dir": "line-tools",
-      "version": "3.7.3"
+      "version": "3.7.4"
     },
     {
       "pluginId": "crypto",
@@ -59,7 +59,7 @@
     {
       "pluginId": "text-diff",
       "dir": "textDiff",
-      "version": "3.4.7"
+      "version": "3.4.8"
     },
     {
       "pluginId": "clipboard-history",
@@ -84,7 +84,7 @@
     {
       "pluginId": "text-explode",
       "dir": "text-explode",
-      "version": "1.0.10"
+      "version": "1.0.11"
     },
     {
       "pluginId": "user-commands",
@@ -109,7 +109,7 @@
     {
       "pluginId": "unix-permissions",
       "dir": "unix-permissions",
-      "version": "1.0.1"
+      "version": "1.0.2"
     }
   ]
 }
