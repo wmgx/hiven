@@ -15,6 +15,7 @@ import {
   Button,
   ContextMenu,
   Dialog,
+  Menu,
   IconButton,
   SearchField,
   SegmentedControl,
@@ -28,7 +29,7 @@ import {
   type MenuItemSpec,
 } from '@hiven/plugin-ui'
 import { BackIcon, ClipboardIcon, CloseIcon, FileTextIcon, ImageIcon, SettingsIcon, StarIcon } from '@hiven/plugin-ui/icons'
-import { ArrowDown, ArrowUp } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, ListFilter } from 'lucide-react'
 import { resolveClipboardHistoryRetentionMonths, type ClipboardHistorySettings } from '../settings/model'
 import type { ClipboardHistoryItem } from '../storage/clipboardHistoryTypes'
 import type { ClipboardHistorySearchMatchMode } from '../storage/clipboardHistorySearch'
@@ -1449,6 +1450,34 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     </div>
   ) : null
 
+  const filterOptionLabel = (checked: boolean, text: string) => (
+    <span className="clipboard-history-filter-option">
+      <Check size={13} aria-hidden="true" style={{ visibility: checked ? 'visible' : 'hidden' }} />
+      {text}
+    </span>
+  )
+  const filterMenuItems: MenuItemSpec[] = [
+    ...(filter === 'trash' ? [] : [
+      { key: 'time-all', label: filterOptionLabel(timeRange === 'all', t('filter.timeAll')), onSelect: () => changeTimeRange('all') },
+      { key: 'time-today', label: filterOptionLabel(timeRange === 'today', t('filter.today')), onSelect: () => changeTimeRange('today') },
+      { key: 'time-last7Days', label: filterOptionLabel(timeRange === 'last7Days', t('filter.last7Days')), onSelect: () => changeTimeRange('last7Days') },
+    ]),
+    { key: 'all-terms', label: filterOptionLabel(searchMatchMode === 'all-terms', t('search.allTerms')), onSelect: toggleSearchMatchMode, closeOnClick: false },
+  ]
+  const filterActive = (filter !== 'trash' && timeRange !== 'all') || searchMatchMode === 'all-terms'
+  const filterMenu = (
+    <Menu
+      items={filterMenuItems}
+      trigger={<IconButton
+        type="button"
+        className="clipboard-history-filter-trigger"
+        label={t('filter.options')}
+        data-active={filterActive ? 'true' : undefined}
+        disabled={Boolean(textEdit)}
+      ><ListFilter size={17} /></IconButton>}
+    />
+  )
+
   const renderContent = () => {
     if (searchPresentation.showInitialSkeleton) {
       return (
@@ -1497,18 +1526,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                     { value: 'trash', label: t('filter.trash') },
                   ]}
                 />
-                {filter !== 'trash' && <SegmentedControl
-                  className="clipboard-history-filter clipboard-history-time-filter"
-                  value={timeRange}
-                  onChange={changeTimeRange}
-                  disabled={Boolean(textEdit)}
-                  aria-label={t('filter.timeLabel')}
-                  options={[
-                    { value: 'all', label: t('filter.timeAll') },
-                    { value: 'today', label: t('filter.today') },
-                    { value: 'last7Days', label: t('filter.last7Days') },
-                  ]}
-                />}
               </div>}
             </div>
             <div ref={listRef} className="clipboard-history-list" data-launcher-scrollable aria-busy={fullTextSearchState === 'loading'} style={{ overflow: 'auto', flex: 1 }}
@@ -1740,15 +1757,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
           placeholder={t('search.placeholder')}
           disabled={Boolean(textEdit)}
         />
-        <Button
-          type="button"
-          className="clipboard-history-search-mode"
-          aria-pressed={searchMatchMode === 'all-terms'}
-          disabled={Boolean(textEdit)}
-          onClick={toggleSearchMatchMode}
-        >
-          {t('search.allTerms')}
-        </Button>
+        {filterMenu}
         {!combining && !searchPresentation.showInitialSkeleton && (
           <Button type="button" disabled={resultsActionBlocked || Boolean(textEdit) || filter === 'trash' || retentionBusy} onClick={startMerge}>
             {t('merge.start')}

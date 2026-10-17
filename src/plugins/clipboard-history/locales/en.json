@@ -47,6 +47,7 @@
   "filter.image": "Image",
   "filter.files": "Files",
   "filter.label": "Type filter",
+  "filter.options": "Filters",
   "filter.timeLabel": "Time range",
   "filter.timeAll": "Any time",
   "filter.today": "Today",
