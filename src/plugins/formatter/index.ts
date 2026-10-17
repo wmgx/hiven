@@ -62,7 +62,6 @@ export const formatterPlugin = definePlugin({
       id: `open-${route.id}`,
       display: {
         title: route.titleKey,
-        subtitle: 'route.open',
         icon: route.language === 'sql' ? 'Database' : route.language === 'css' ? 'Paintbrush' : 'Code',
         aliases: route.aliases,
       },

@@ -620,14 +620,6 @@ export function CsvSurface(props: PluginSurfaceProps) {
         bytes: new TextEncoder().encode(result.output).byteLength,
       })
       setMainView('output')
-      try {
-        host.showMessage?.(
-          localizedText(t, 'job.doneToast', 'Full file ready: {rows} rows', { rows: result.rowCount }),
-          'success',
-        )
-      } catch {
-        // optional host toast
-      }
     } catch (error) {
       if (!isCurrent()) return
       if (error instanceof Error && error.name === 'AbortError') {
@@ -706,8 +698,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
         signal: submission.signal,
       })
       if (!isCurrent()) return
-      if (receipt.status === 'saved') host.showMessage(t('toast.saved'), 'success')
-      else if (receipt.status !== 'cancelled') host.showMessage(t('toast.saveFailed'), 'error')
+      if (receipt.status !== 'cancelled' && receipt.status !== 'saved') host.showMessage(t('toast.saveFailed'), 'error')
     } catch (error) {
       if (!isCurrent()) return
       const name = error && typeof error === 'object' && 'name' in error ? error.name : undefined
@@ -734,6 +725,12 @@ export function CsvSurface(props: PluginSurfaceProps) {
     : ''
 
   const cols = finalTable?.headers.length ?? 0
+  const outputHintText = finalTable
+    ? localizedText(t, 'table.previewScope', '{total} rows · previewing {shown}', {
+        total: totalDataRows,
+        shown: outputPreviewTable?.rows.length ?? 0,
+      })
+    : !errorMessage && !filterError && tableFull ? t('table.pendingFull') : ''
   const sizeLabel = localizedText(t, 'meta.size', '{rows} × {cols}', {
     rows: totalDataRows,
     cols,
@@ -1202,7 +1199,6 @@ export function CsvSurface(props: PluginSurfaceProps) {
           <button
             type="button"
             className="csv-tools-surface__file-btn"
-            title={t(returnNeedsFullProcess && !fullReturnReady ? 'action.returnNeedsFull' : 'action.returnToSearchDescription')}
             disabled={!canReturnOutput || returning || saving}
             onClick={() => void returnOutput()}
           >
@@ -1248,7 +1244,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
             <div className="csv-tools-surface__banner-text">
               {fullJob.status === 'running' ? (
                 <>
-                  {localizedText(t, 'job.running', 'Processing full file… {pct}% ({phase})', {
+                  {localizedText(t, 'job.running', 'Processing… {pct}% ({phase})', {
                     pct: Math.round(fullJob.ratio * 100),
                     phase:
                       fullJob.phase === 'parse'
@@ -1265,7 +1261,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
                 localizedText(
                   t,
                   'job.done',
-                  'Final result ready: {rows} × {cols}, {size}. Save As supports up to 10 MiB; Return to Search supports up to 1 MiB.',
+                  'Result ready: {rows} × {cols} · {size}',
                   {
                     rows: fullJob.rows,
                     cols: fullJob.cols,
@@ -1273,12 +1269,12 @@ export function CsvSurface(props: PluginSurfaceProps) {
                   },
                 )
               ) : fullJob.status === 'error' ? (
-                localizedText(t, 'job.error', 'Full process failed: {message}', { message: fullJob.message })
+                localizedText(t, 'job.error', 'Processing failed: {message}', { message: fullJob.message })
               ) : (
                 localizedText(
                   t,
                   'meta.truncated',
-                  'Source: ≈{total} lines, {size}. Process the full file to apply the current filters and sorting before previewing the result.',
+                  'Source ≈{total} lines · {size}',
                   {
                     total: estimatedLines,
                     size: formatBytes(sourceText.length),
@@ -1445,7 +1441,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
               ? localizedText(t, 'meta.selectedBlock', 'Block selected')
               : localizedText(t, 'meta.selectedCols', '{count} columns', { count: selectedColumns.size })}
             {finalTable
-              ? ` · ${localizedText(t, 'table.previewScope', '{total} result rows · previewing {shown}', {
+              ? ` · ${localizedText(t, 'table.previewScope', '{total} rows · previewing {shown}', {
                   shown: displayGridRows.length,
                   total: totalDataRows,
                 })}`
@@ -1460,7 +1456,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
                 })}`
               : ''}
             {mainView === 'table' && finalTable
-              ? ` · ${localizedText(t, 'table.previewScope', '{total} result rows · previewing {shown}', { shown: displayGridRows.length, total: totalDataRows })}`
+              ? ` · ${localizedText(t, 'table.previewScope', '{total} rows · previewing {shown}', { shown: displayGridRows.length, total: totalDataRows })}`
               : ''}
           </span>
         )}
@@ -1606,9 +1602,9 @@ export function CsvSurface(props: PluginSurfaceProps) {
                       ) : null}
                     </div>
                   )}
-                  <span className="csv-tools-surface__table-hint" title={t('table.filterScope')}>
+                  <span className="csv-tools-surface__table-hint">
                     {finalTable
-                      ? localizedText(t, 'table.previewScope', '{total} result rows · previewing {shown}', { shown: displayGridRows.length, total: totalDataRows })
+                      ? localizedText(t, 'table.previewScope', '{total} rows · previewing {shown}', { shown: displayGridRows.length, total: totalDataRows })
                       : t(filterError ? 'table.invalidQuery' : 'table.pendingFull')}
                   </span>
                   {(selectedColumns.size > 0 ||
@@ -1645,7 +1641,6 @@ export function CsvSurface(props: PluginSurfaceProps) {
                   <div className="csv-tools-surface__statistics" role="region" aria-label={t('statistics.title')} data-launcher-scrollable>
                     <div className="csv-tools-surface__statistics-scope">
                       {finalTable ? t(statisticsFiltered ? 'statistics.filtered' : 'statistics.all', { count: totalDataRows }) : t('statistics.title')}
-                      <span title={t('statistics.rules')}> · {t('statistics.precision')}</span>
                     </div>
                     {!finalTable ? t('statistics.pendingFull') : statisticsFailed ? t('statistics.failed') : !currentStatistics ? t('statistics.calculating') : currentStatistics.length === 0 ? t('statistics.notInResult') : currentStatistics.map((stats) => (
                       <div key={stats.index} className="csv-tools-surface__statistics-row">
@@ -1654,7 +1649,6 @@ export function CsvSurface(props: PluginSurfaceProps) {
                         <span>{t('statistics.counts', { valid: stats.valid, empty: stats.empty, invalid: stats.invalid, range: stats.outOfRange })}</span>
                       </div>
                     ))}
-                    <details><summary>{t('statistics.rulesLabel')}</summary>{t('statistics.rules')}</details>
                   </div>
                 ) : null}
                 <div className="csv-tools-surface__grid-host" data-no-drag data-launcher-scrollable>
@@ -1684,7 +1678,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
               <div className="csv-tools-surface__empty csv-tools-surface__empty--start">
                 <span className="csv-tools-surface__empty-mark" aria-hidden="true">CSV</span>
                 <strong>{localizedText(t, 'empty.title', 'Start with table data')}</strong>
-                <p>{localizedText(t, 'empty.source', 'Paste CSV, TSV, or a JSON array of objects')}</p>
+                <p>{localizedText(t, 'empty.source', 'CSV, TSV, or JSON array')}</p>
                 <div className="csv-tools-surface__empty-actions">
                   <button
                     type="button"
@@ -1709,18 +1703,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
 
         {mainView === 'output' ? (
           <div className="csv-tools-surface__output-wrap">
-            {output === 'markdown' ? <div className="csv-tools-surface__output-hint">{t('output.markdownRules')}</div> : null}
-            {sortColumns.length > 0 || (filterMode === 'text' ? globalFilter : sqlFilter).trim() ? (
-              <div className="csv-tools-surface__output-hint">{t('table.filterScope')}</div>
-            ) : null}
-            <div className="csv-tools-surface__output-hint">
-              {finalTable
-                ? localizedText(t, 'job.outputHint', '{total} result rows · previewing up to {shown}. Copy and Save As use the complete result; Return to Search supports up to 1 MiB.', {
-                    total: totalDataRows,
-                    shown: outputPreviewTable?.rows.length ?? 0,
-                  })
-                : !errorMessage && !filterError && tableFull ? t('table.pendingFull') : ''}
-            </div>
+            {outputHintText ? <div className="csv-tools-surface__output-hint">{outputHintText}</div> : null}
             <pre className={errorMessage || filterError ? 'is-error' : undefined}>
               {errorMessage || (filterError ? localizedText(t, 'table.sqlError', 'SQL: {message}', { message: filterError }) : outputText)}
             </pre>
@@ -1737,7 +1720,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
                 {localizedText(
                   t,
                   'source.largeBody',
-                  'Editing {size} of text in the browser may freeze the UI. Use Process full file to calculate the complete result; the table and output views show limited previews.',
+                  'Editing {size} of text may be slow.',
                   { size: formatBytes(sourceText.length) },
                 )}
               </p>
@@ -1754,7 +1737,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
                   className="csv-tools-surface__file-btn"
                   onClick={() => void writeClipboard(sourceText)}
                 >
-                  {localizedText(t, 'source.copyRaw', 'Copy raw source')}
+                  {localizedText(t, 'source.copyRaw', 'Copy source')}
                 </button>
               </div>
             </div>
@@ -1770,7 +1753,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
                 })
               }}
               spellCheck={false}
-              placeholder={localizedText(t, 'empty.source', 'Paste CSV, TSV, or a JSON array of objects')}
+              placeholder={localizedText(t, 'empty.source', 'CSV, TSV, or JSON array')}
             />
           )
         ) : null}

@@ -22,7 +22,6 @@
 }
 .curl-title { flex: 1; min-width: 0; font-size: 13px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .curl-main { flex: 1; min-height: 0; overflow: auto; padding: 14px 18px; }
-.curl-note { margin: 6px 0 10px; color: var(--color-text-secondary, var(--hiven-color-text-secondary)); font-size: 12px; }
 .curl-surface h3 { margin: 16px 0 2px; font-size: 12px; font-weight: 650; }
 .curl-source-heading, .curl-field-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; font-size: 12px; color: var(--color-text-secondary, var(--hiven-color-text-secondary)); }
 .curl-source-actions { display: flex; align-items: center; gap: 4px; }

@@ -178,18 +178,18 @@ export function FormatterSurface(props: PluginSurfaceProps) {
           <div className="formatter-pane-header">
             <strong>{t('pane.output')}</strong>
             <div className="formatter-pane-actions">
-              <Button type="button" variant="ghost" title={t('action.useAsInputDescription')} aria-label={t('action.useAsInputDescription')} disabled={!hasOutput || busy !== null} onClick={() => update(() => setInputText(outputText))}>
+              <Button type="button" variant="ghost" disabled={!hasOutput || busy !== null} onClick={() => update(() => setInputText(outputText))}>
                 {t('action.useAsInput')}
               </Button>
-              <Button type="button" variant="ghost" title={t('action.continueProcessingDescription')} aria-label={t('action.continueProcessingDescription')} disabled={!hasOutput || busy !== null} onClick={() => deliver('return')}>
+              <Button type="button" variant="ghost" disabled={!hasOutput || busy !== null} onClick={() => deliver('return')}>
                 <CornerDownLeft size={14} aria-hidden="true" />
                 {t('action.continueProcessing')}
               </Button>
-              <Button type="button" variant="ghost" title={t('action.pasteBackDescription')} aria-label={t('action.pasteBackDescription')} disabled={!hasOutput || busy !== null} onClick={() => void deliver('paste')}>
+              <Button type="button" variant="ghost" disabled={!hasOutput || busy !== null} onClick={() => void deliver('paste')}>
                 <ClipboardPaste size={14} aria-hidden="true" />
                 {t('action.pasteBack')}
               </Button>
-              <Button type="button" title={t('action.copyDescription')} aria-label={t('action.copyDescription')} disabled={!hasOutput || busy !== null} onClick={() => void deliver('copy')}>
+              <Button type="button" disabled={!hasOutput || busy !== null} onClick={() => void deliver('copy')}>
                 {t('action.copy')}
               </Button>
             </div>
@@ -205,7 +205,7 @@ export function FormatterSurface(props: PluginSurfaceProps) {
                   readOnly: true,
                   domReadOnly: true,
                   tabSize: 2,
-                  placeholder: result.ok ? t('surface.emptyOutput') : '',
+                  placeholder: '',
                 }}
               />
             </Suspense>
@@ -223,7 +223,7 @@ export function FormatterSurface(props: PluginSurfaceProps) {
         <div>
           <span>{t('meta.characters', { count: inputText.length })}</span>
           <span className={delivery.feedback ? `is-${delivery.feedback.tone}` : !result.ok ? 'is-error' : ''} role="status">
-            {delivery.feedback?.message ?? (!result.ok ? t('status.error') : hasOutput ? t('status.ready') : t('status.waiting'))}
+            {delivery.feedback?.message}
           </span>
         </div>
         <span>{t('meta.characters', { count: outputText.length })}</span>

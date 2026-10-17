@@ -120,10 +120,6 @@ assert.equal(localized.definition.launcher.items[0].display.title, 'Web Quick Op
 assert.equal(localized.panel.actions[0].title, 'Apply', 'panel action title should localize')
 assert.equal(localized.settings.title, 'Plugin Settings', 'settings title should localize')
 
-const jsonLocaleEn = JSON.parse(readFileSync('src/plugins/json-tools/locales/en.json', 'utf8'))
-const jsonLocaleZh = JSON.parse(readFileSync('src/plugins/json-tools/locales/zh.json', 'utf8'))
 assert.equal(jsonCore.processJson('  ', { operation: 'format' }).output, '', 'empty JSON input should not be an error')
-assert.ok(jsonLocaleEn['surface.emptyOutput'], 'JSON empty state should have an English translation')
-assert.ok(jsonLocaleZh['surface.emptyOutput'], 'JSON empty state should have a Chinese translation')
 
 console.log('plugin i18n localization checks passed')

@@ -115,10 +115,6 @@ export function JsonSurface(props: PluginSurfaceProps) {
     wordWrap: props.appearance.wordWrap,
   }
   const editorLoading = <div className="jt-editor-loading" role="status">{t('surface.editorLoading')}</div>
-  const reverseOperation = reverseOperations[operation]
-  const useAsInputDescription = reverseOperation
-    ? t('action.useAsInputReverseDescription', { operation: operations.find((item) => item.value === reverseOperation)!.title })
-    : t(operation === 'expression' ? 'action.useAsInputExpressionDescription' : 'action.useAsInputDescription')
 
   const useOutputAsInput = () => {
     updateResult(() => {
@@ -298,16 +294,16 @@ export function JsonSurface(props: PluginSurfaceProps) {
             <div className="jt-pane-header">
               <strong>{t('pane.output')}</strong>
               <div className="jt-pane-actions">
-                <Button type="button" title={t('action.copyDescription')} aria-label={t('action.copyDescription')} onClick={() => void deliverOutput('copy')} disabled={!hasOutput || returning || copying}>
+                <Button type="button" onClick={() => void deliverOutput('copy')} disabled={!hasOutput || returning || copying}>
                   {t('action.copy')}
                 </Button>
-                <Button type="button" title={t('action.pasteDescription')} aria-label={t('action.pasteDescription')} onClick={() => void deliverOutput('paste')} disabled={!hasOutput || returning || copying}>
+                <Button type="button" onClick={() => void deliverOutput('paste')} disabled={!hasOutput || returning || copying}>
                   {t('action.paste')}
                 </Button>
                 <Menu
                   items={[
-                    { key: 'use-as-input', label: t('action.useAsInput'), description: useAsInputDescription, disabled: !hasOutput || operation === 'typescript', onSelect: useOutputAsInput },
-                    { key: 'continue', label: t('action.continueProcessing'), description: t('action.continueProcessingDescription'), disabled: !canReturnOutput || returning || copying, onSelect: () => void returnOutput() },
+                    { key: 'use-as-input', label: t('action.useAsInput'), disabled: !hasOutput || operation === 'typescript', onSelect: useOutputAsInput },
+                    { key: 'continue', label: t('action.continueProcessing'), disabled: !canReturnOutput || returning || copying, onSelect: () => void returnOutput() },
                   ]}
                   trigger={<IconButton type="button" label={t('action.more')}><Ellipsis size={16} /></IconButton>}
                 />
@@ -325,8 +321,7 @@ export function JsonSurface(props: PluginSurfaceProps) {
                     readOnly: true,
                     domReadOnly: true,
                     tabSize: indent,
-                    placeholder: result && !result.ok ? '' : operation === 'expression' && !result
-                      ? t('expression.emptyOutput') : t('surface.emptyOutput'),
+                    placeholder: '',
                   }}
                 />
               </Suspense>
@@ -344,7 +339,7 @@ export function JsonSurface(props: PluginSurfaceProps) {
           <div className="jt-status-input">
             <span>{t('meta.characters', { count: inputText.length })}</span>
             <span className={delivery.feedback?.tone === 'error' || (result && !result.ok) ? 'jt-status-error' : ''}>
-              {cursorMessage || delivery.feedback?.message || (operation === 'typescript' && hasOutput ? t('typescript.observed') : '') || (result && !result.ok ? t('status.error') : hasOutput ? t('status.ready') : t('status.waiting'))}
+              {cursorMessage || delivery.feedback?.message}
             </span>
           </div>
           <div className="jt-status-output">

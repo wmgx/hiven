@@ -16,7 +16,6 @@ export function UrlQueryEditor({ value, onChange, t, disabled }: Props) {
   }
   return (
     <div className="jt-url-query">
-      <p>{t('urlQuery.warning')}</p>
       {!parsed.value ? <p role="status">{t(`error.${parsed.error}`)}</p> : (
         <details open>
           <summary>{t('urlQuery.parameters', { count: parsed.value.parameters.length })}</summary>

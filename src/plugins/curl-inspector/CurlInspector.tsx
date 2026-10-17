@@ -15,7 +15,7 @@ export function CurlInspector({ host, t }: PluginSurfaceProps) {
   }, [source])
   const headerLabels = useMemo(() => result?.request ? curlHeaderDisplayLabels(result.request.headers) : [], [result])
   const copy = async (text: string) => {
-    try { await host.clipboard.writeText(text, { recordInHistory: false }); setStatus(t('copy.ok')) }
+    try { await host.clipboard.writeText(text, { recordInHistory: false }); setStatus('') }
     catch { setStatus(t('copy.failed')) }
   }
   const field = (id: string, label: string, value: string) => <div className="curl-field" key={id}>
@@ -32,14 +32,13 @@ export function CurlInspector({ host, t }: PluginSurfaceProps) {
       ? target.value.slice(target.selectionStart, target.selectionEnd)
       : window.getSelection()?.toString() ?? ''
     if (text) void copy(text)
-  }} onCut={(event) => { event.preventDefault(); setStatus(t('cut.hint')) }}>
+  }} onCut={(event) => event.preventDefault()}>
     <header className="curl-header">
       <IconButton type="button" label={t('back')} onClick={() => host.requestBack()}><BackIcon size={14} strokeWidth={2} /></IconButton>
       <strong className="curl-title">{t('title')}</strong>
       <IconButton type="button" label={t('close')} onClick={() => host.close()}><CloseIcon size={14} strokeWidth={2} /></IconButton>
     </header>
     <main className="curl-main">
-      <p className="curl-note">{t('privacy')}</p>
       <div className="curl-source-heading">
         <label htmlFor="curl-source">{t('source')}</label>
         <div className="curl-source-actions">
@@ -47,16 +46,14 @@ export function CurlInspector({ host, t }: PluginSurfaceProps) {
           <Button type="button" variant="ghost" disabled={!source} onClick={() => { setSource(''); setStatus('') }}>{t('clear')}</Button>
         </div>
       </div>
-      <TextArea id="curl-source" value={source} spellCheck={false} autoComplete="off" autoCorrect="off" autoCapitalize="off" rows={4}
-        aria-describedby="curl-hint" onChange={(event) => { setSource(event.target.value); setStatus('') }} />
-      <p id="curl-hint" className="curl-note">{t('hint')}</p>
+      <TextArea id="curl-source" value={source} spellCheck={false} autoComplete="off" autoCorrect="off" autoCapitalize="off" rows={4} onChange={(event) => { setSource(event.target.value); setStatus('') }} />
       {result?.error && <p className="curl-error" role="alert">{t(`error.${result.error}`)}</p>}
       {result?.request && <section className="curl-parsed" aria-label={t('parsed')}>
         {field('method', t('method'), result.request.method)}
         {field('url', t('url'), result.request.url)}
-        <h3>{t('headers')}</h3><p className="curl-note">{t('headers.hint')}</p>
-        {result.request.headers.length ? result.request.headers.map((header, index) => field(`header-${index}`, headerLabels[index], header.value)) : <p className="curl-note">{t('headers.empty')}</p>}
-        {result.request.body !== null ? field('body', t('body'), result.request.body) : <p className="curl-note">{t('body.empty')}</p>}
+        {result.request.headers.length > 0 && <h3>{t('headers')}</h3>}
+        {result.request.headers.map((header, index) => field(`header-${index}`, headerLabels[index], header.value))}
+        {result.request.body !== null && field('body', t('body'), result.request.body)}
       </section>}
     </main>
     <footer className="curl-status" role="status" aria-live="polite">{status}</footer>

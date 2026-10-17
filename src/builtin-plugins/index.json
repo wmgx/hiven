@@ -1,5 +1,5 @@
 {
-  "version": 159,
+  "version": 160,
   "packages": [
     {
       "pluginId": "encode-decode",
@@ -9,12 +9,12 @@
     {
       "pluginId": "formatter",
       "dir": "formatter",
-      "version": "2.1.11"
+      "version": "2.1.12"
     },
     {
       "pluginId": "json-tools",
       "dir": "json-tools",
-      "version": "2.7.3"
+      "version": "2.7.4"
     },
     {
       "pluginId": "line-tools",
@@ -29,7 +29,7 @@
     {
       "pluginId": "csv",
       "dir": "csv",
-      "version": "1.11.10"
+      "version": "1.11.11"
     },
     {
       "pluginId": "calculator",
@@ -99,12 +99,12 @@
     {
       "pluginId": "file-paths",
       "dir": "file-paths",
-      "version": "1.0.4"
+      "version": "1.0.5"
     },
     {
       "pluginId": "curl-inspector",
       "dir": "curl-inspector",
-      "version": "1.0.4"
+      "version": "1.0.5"
     },
     {
       "pluginId": "unix-permissions",
