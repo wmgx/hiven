@@ -4,7 +4,7 @@
   "displayNameI18n": {
     "zh": "文本对比"
   },
-  "version": "3.4.5",
+  "version": "3.4.6",
   "capabilities": [
     "command",
     "surface"
