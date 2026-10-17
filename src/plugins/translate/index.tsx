@@ -3,6 +3,7 @@ import type { TranslateSettings } from './settings/model'
 import { DEFAULT_TRANSLATE_SETTINGS, migrateTranslateSettings } from './settings/model'
 import { TranslateSurface } from './surfaces/TranslateSurface'
 import { AiTranslateSettingsModal } from './settings/AiTranslateSettingsModal'
+import { createTranslationHud, hudTranslationProfile } from './hud/controller'
 import './style.css'
 
 const LANGUAGE_OPTIONS = [
@@ -258,6 +259,21 @@ export default definePlugin<TranslateSettings>({
           launcher: { surfaces: ['global-launcher'] },
           shortcutBindable: true,
           recommendedShortcut: 'CmdOrCtrl+Shift+T',
+        },
+        textResultHud: {
+          product: 'translation',
+          permissions: ['ai.use', 'globalShortcut.register', 'clipboard.read', 'clipboard.write'],
+          isConfigured: (settings) => hudTranslationProfile(settings) !== null,
+          labels: (t) => ({
+            title: t('hud.title'),
+            result: t('hud.result'),
+            working: t('hud.working'),
+            error: t('hud.error'),
+            errorStatus: t('hud.errorStatus'),
+            'error.unavailable': t('hud.error.unavailable'),
+            'errorStatus.unavailable': t('hud.errorStatus.unavailable'),
+          }),
+          create: createTranslationHud,
         },
         shell: {
           defaultWidth: 960,

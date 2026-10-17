@@ -21,7 +21,7 @@
 
 ## 已集成的受限入口
 
-`src/historyPasteQueueHandoff.ts` 在长期存活的 Launcher 中持有队列。History 仅取得绑定当前 bundled definition 与 surface owner 的桥；原生只允许 Launcher 和指定 History 窗口发起该协议，不接受其它插件或任意目标。状态广播只有会话、版本、计数和条目 ID，不含正文。取消、权限变化、设置禁用或插件 definition 替换会使旧请求失效。
+`src/shortcutHosts/pasteQueue.ts` 在长期存活的 Launcher 中持有队列（队列状态机在 `src/workspace/pasteQueue/`；插件通过 surface 上的 `pasteQueue` 声明参与）。声明了 `pasteQueue` 的 bundled 插件（目前是 History）仅取得绑定当前 bundled definition 与 surface owner 的桥；原生只允许 Launcher 和指定 History 窗口发起该协议，不接受其它插件或任意目标。状态广播只有会话、版本、计数和条目 ID，不含正文。取消、权限变化、设置禁用或插件 definition 替换会使旧请求失效。
 
 `src/hotkeys/pluginSurfaceShortcuts.ts` 在原 surface 快捷键回调打开窗口之前截获显式队列。已有 History Control+Shift+V 时复用原注册，否则尝试临时注册；冲突明确失败，不抢占。按下/释放锁避免同一次长按反复尝试；注销失败保留同一释放句柄以便重试。完成或取消释放临时注册，复用注册则恢复原开窗语义。
 

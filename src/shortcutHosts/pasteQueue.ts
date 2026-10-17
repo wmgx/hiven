@@ -1,19 +1,23 @@
-import { captureHudTarget } from './workspace/toastRouting'
-/** App composition only: bundled History -> one session-only hidden-launcher queue. */
-import type { HistoryPasteQueueBridge, HistoryPasteQueueStatus } from './workspace/pluginTypes'
-import { createClipboardPasteQueue, validateQueueSnapshots } from './plugins/clipboard-history/queue/clipboardPasteQueue'
-import { acquireSurfaceShortcutInterceptor } from './hotkeys/pluginSurfaceShortcuts'
-import { registerHotkeyReloadParticipant } from './hotkeys/pageReload'
-import { pluginRegistry } from './workspace/pluginRegistry'
-import { getPluginPermissionSnapshot, missingPluginPermissions, usePluginPermissionStore } from './workspace/pluginPermissions'
-import { usePluginSurfaceShortcutStore } from './workspace/pluginSurfaceShortcuts'
-import { isCurrentBundledDefinition } from './workspace/bundledPluginIdentity'
+/** App composition only: a bundled plugin's `pasteQueue` surface -> one session-only hidden-launcher queue. */
+import { captureHudTarget } from '../workspace/toastRouting'
+import type { PasteQueueBridge, PasteQueueStatus, PluginPasteQueueContribution } from '../workspace/pluginTypes'
+import { CLIPBOARD_QUEUE_MAX_ITEMS, createClipboardPasteQueue, validateQueueSnapshots } from '../workspace/pasteQueue/clipboardPasteQueue'
+import { acquireSurfaceShortcutInterceptor } from '../hotkeys/pluginSurfaceShortcuts'
+import { registerHotkeyReloadParticipant } from '../hotkeys/pageReload'
+import { pluginRegistry } from '../workspace/pluginRegistry'
+import { usePluginPermissionStore } from '../workspace/pluginPermissions'
+import { usePluginSurfaceShortcutStore } from '../workspace/pluginSurfaceShortcuts'
+import { BUNDLED_SOURCE, grantedPermissions, isLauncherNativeRuntime, listBundledSurfaceTasks, type BundledSurfaceTask } from './bundledSurfaces'
 
-const TARGET = { source: 'builtin' as const, pluginId: 'clipboard-history', surfaceId: 'main' }
+type Task = BundledSurfaceTask<PluginPasteQueueContribution>
+/** The (single) bundled surface that opted into the paste queue. */
+function provider(): Task | undefined {
+  return listBundledSurfaceTasks<PluginPasteQueueContribution>((surface) => surface.pasteQueue)[0]
+}
+const targetOf = (task: Task) => ({ source: BUNDLED_SOURCE, pluginId: task.pluginId, surfaceId: task.surfaceId })
 const REQUEST = 'hiven://history-queue-request'
 const REPLY = 'hiven://history-queue-reply'
 const STATUS = 'hiven://history-queue-status'
-const REQUIRED = ['clipboard.write', 'accessibility.paste', 'globalShortcut.register'] as const
 type QueueAvailability = 'can-attempt' | 'unsupported' | 'unknown'
 async function readQueueAvailability(): Promise<QueueAvailability> {
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -24,30 +28,27 @@ async function readQueueAvailability(): Promise<QueueAvailability> {
     ])
   } finally { if (timer) clearTimeout(timer) }
 }
-const emptyStatus = (): HistoryPasteQueueStatus => ({ sessionId: '', version: 0, phase: 'idle', busy: false, total: 0, completed: 0, remaining: 0, currentId: null })
+const emptyStatus = (): PasteQueueStatus => ({ sessionId: '', version: 0, phase: 'idle', busy: false, total: 0, completed: 0, remaining: 0, currentId: null })
 type Snapshot = Readonly<{ id: string; text: string }>
 type Request = { id: string; action: 'start' | 'cancel' | 'status'; items: Snapshot[]; sessionId?: string }
-type Reply = { id: string; ok: boolean; status: HistoryPasteQueueStatus; errorCode?: string }
-export type HistoryPasteQueueNotice = 'ready' | 'delivered' | 'failed' | 'cancelled'
+type Reply = { id: string; ok: boolean; status: PasteQueueStatus; errorCode?: string }
+export type PasteQueueNotice = 'ready' | 'delivered' | 'failed' | 'cancelled'
 
 function allowed(): boolean {
-  const entry = pluginRegistry.getAllPluginDefinitions().find((entry) => entry.pluginId === TARGET.pluginId && entry.source === 'production')
-  if (!entry || !isCurrentBundledDefinition(TARGET.pluginId, 'builtin', entry.definition)) return false
+  const task = provider()
   // The History setting only pauses capture; existing-history actions remain explicit.
-  const requested = pluginRegistry.getPluginPermissions(TARGET.pluginId, 'builtin')
-  return REQUIRED.every((permission) => requested.includes(permission))
-    && missingPluginPermissions(getPluginPermissionSnapshot('builtin', TARGET.pluginId, requested), [...REQUIRED]).length === 0
+  return !!task && grantedPermissions(task.pluginId, task.contribution.permissions) !== null
 }
 
 let installedStop: (() => void) | null = null
 /** Install only in the long-lived native launcher, never a plugin webview. */
-export function installHistoryPasteQueueHost(options: { notify?: (status: HistoryPasteQueueStatus, outcome: HistoryPasteQueueNotice, hud: { operation: string; target?: string }) => void } = {}): () => void {
-  if (installedStop || new URLSearchParams(window.location.search).get('window') !== 'launcher' || !(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return () => {}
+export function installPasteQueueHost(options: { notify?: (status: PasteQueueStatus, outcome: PasteQueueNotice, hud: { operation: string; target?: string }) => void } = {}): () => void {
+  if (installedStop || !isLauncherNativeRuntime()) return () => {}
   let alive = true
   let sessionId = ''
   let hudOperation = crypto.randomUUID()
   let deliveryHudTarget: string | undefined
-  let sessionDefinition = pluginRegistry.getPluginDefinition(TARGET.pluginId, 'production')
+  let sessionDefinition = provider()?.definition
   let generation = 0
   let statusRevision = 0
   let publishFlight = Promise.resolve()
@@ -76,7 +77,7 @@ export function installHistoryPasteQueueHost(options: { notify?: (status: Histor
       finally { signal.removeEventListener('abort', cancel); cancel() }
     },
   })
-  const status = (): HistoryPasteQueueStatus => {
+  const status = (): PasteQueueStatus => {
     const state = queue.getSnapshot()
     return { sessionId, version: statusRevision, phase: state.phase, busy: state.busy, total: state.total, completed: state.completed, remaining: state.remaining, currentId: state.current?.id ?? null }
   }
@@ -136,12 +137,14 @@ export function installHistoryPasteQueueHost(options: { notify?: (status: Histor
         if (await readQueueAvailability() !== 'can-attempt') throw new Error('QueuePlatformUnavailableError')
         const snapshots = validateQueueSnapshots(request.items)
         const requestedGeneration = ++generation
-        const requestedDefinition = pluginRegistry.getPluginDefinition(TARGET.pluginId, 'production')
+        const task = provider()
+        if (!task) throw new Error('QueueUnavailableError')
+        const requestedDefinition = task.definition
         startingId = request.id
         try { await releaseFlight } catch { await releaseShortcut() }
         if (!alive || cancelled.has(request.id) || requestedGeneration !== generation) throw new Error('QueueCancelledError')
-        if (!release) release = await acquireSurfaceShortcutInterceptor(TARGET, 'Control+Shift+V', next)
-        if (!alive || !allowed() || requestedDefinition !== pluginRegistry.getPluginDefinition(TARGET.pluginId, 'production') || cancelled.has(request.id) || requestedGeneration !== generation) {
+        if (!release) release = await acquireSurfaceShortcutInterceptor(targetOf(task), task.contribution.nextShortcut, next)
+        if (!alive || !allowed() || requestedDefinition !== provider()?.definition || cancelled.has(request.id) || requestedGeneration !== generation) {
           await releaseShortcut()
           throw new Error('QueueCancelledError')
         }
@@ -166,7 +169,7 @@ export function installHistoryPasteQueueHost(options: { notify?: (status: Histor
     if (alive) stops.push(stop); else stop()
   })
   stops.push(pluginRegistry.subscribe(() => {
-    if (!allowed() || (sessionId && sessionDefinition !== pluginRegistry.getPluginDefinition(TARGET.pluginId, 'production'))) cancelQueue()
+    if (!allowed() || (sessionId && sessionDefinition !== provider()?.definition)) cancelQueue()
   }))
   stops.push(usePluginPermissionStore.subscribe(() => { if (!allowed()) cancelQueue() }))
   stops.push(usePluginSurfaceShortcutStore.subscribe((state, previous) => {
@@ -188,19 +191,19 @@ export function installHistoryPasteQueueHost(options: { notify?: (status: Histor
   installedStop = stop
   const unregisterReload = registerHotkeyReloadParticipant('history-paste-queue', {
     stop: async () => { stop(); await releaseFlight },
-    resume: () => { installHistoryPasteQueueHost(options) },
+    resume: () => { installPasteQueueHost(options) },
   })
   return () => { stop(); unregisterReload() }
 }
 
-/** Caller must be the current bundled History surface; native verifies its real window. */
-export function createHistoryPasteQueueBridge(options: {
+/** Caller must be the current bundled surface that declares `pasteQueue`; native verifies its real window. */
+export function createPasteQueueBridge(options: {
   source: string; pluginId: string; isCurrent: () => boolean
   subscribeInvalidation?: (listener: () => void) => () => void
-}): HistoryPasteQueueBridge {
+}): PasteQueueBridge {
   let latest = emptyStatus()
   const check = () => {
-    if (options.source !== 'builtin' || options.pluginId !== 'clipboard-history' || !options.isCurrent()) throw new Error('QueueUnavailableError')
+    if (options.source !== BUNDLED_SOURCE || provider()?.pluginId !== options.pluginId || !options.isCurrent()) throw new Error('QueueUnavailableError')
   }
   async function rpc(action: Request['action'], items?: readonly Snapshot[], signal?: AbortSignal, cancelId?: string): Promise<Reply> {
     const { invoke } = await import('@tauri-apps/api/core')
@@ -264,6 +267,7 @@ export function createHistoryPasteQueueBridge(options: {
     })
   }
   return {
+    maxItems: CLIPBOARD_QUEUE_MAX_ITEMS,
     getAvailability,
     async start(snapshots, options) {
       check()
@@ -286,7 +290,7 @@ export function createHistoryPasteQueueBridge(options: {
     subscribe(listener) {
       let active = true
       let stop = () => {}
-      void import('@tauri-apps/api/event').then(({ listen }) => listen<HistoryPasteQueueStatus>(STATUS, (event) => {
+      void import('@tauri-apps/api/event').then(({ listen }) => listen<PasteQueueStatus>(STATUS, (event) => {
         if (active && options.isCurrent() && event.payload.version >= latest.version) { latest = event.payload; listener(latest) }
       })).then((unlisten) => { if (active) stop = unlisten; else unlisten() }).catch(() => undefined)
       return () => { active = false; stop() }

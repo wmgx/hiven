@@ -12,26 +12,26 @@ function fixture(recordingEnabled = true) {
   const h = { calls, notices, beginGate: null, pasteGate: null, failPaste: false }
   const subscribe = (fn) => { subscriptions.push(fn); return () => {} }
   const emit = (name, payload) => { for (const fn of [...(listeners.get(name) ?? [])]) fn({ payload }) }
-  let definition = { settings: {} }
+  const makeDefinition = () => ({ ui: { surfaces: [{ id: 'main', pasteQueue: { permissions: ['clipboard.write', 'accessibility.paste', 'globalShortcut.register'], nextShortcut: 'Control+Shift+V' } }] } })
+  let definition = makeDefinition()
   const modules = {
-    './workspace/toastRouting': { captureHudTarget: async (operation, attemptId) => { h.hudCapture = { operation, attemptId }; return '0000000000000001' } },
-    './hotkeys/pluginSurfaceShortcuts': { acquireSurfaceShortcutInterceptor: async (_target, accelerator, handle) => {
+    '../workspace/toastRouting': { captureHudTarget: async (operation, attemptId) => { h.hudCapture = { operation, attemptId }; return '0000000000000001' } },
+    '../hotkeys/pluginSurfaceShortcuts': { acquireSurfaceShortcutInterceptor: async (_target, accelerator, handle) => {
       assert.equal(accelerator, 'Control+Shift+V'); handler = handle
       return async () => { releaseCount++; handler = undefined }
     } },
-    './hotkeys/pageReload': { registerHotkeyReloadParticipant: () => () => {} },
-    './workspace/pluginRegistry': { pluginRegistry: {
+    '../hotkeys/pageReload': { registerHotkeyReloadParticipant: () => () => {} },
+    '../workspace/pluginRegistry': { pluginRegistry: {
       getAllPluginDefinitions: () => [{ pluginId: 'clipboard-history', source: 'production', definition }],
       getPluginDefinition: () => definition,
       getPluginPermissions: () => ['clipboard.write', 'accessibility.paste', 'globalShortcut.register'], subscribe,
     } },
-    './workspace/pluginPermissions': {
+    '../workspace/pluginPermissions': {
       getPluginPermissionSnapshot: () => ({}), missingPluginPermissions: () => allowed ? [] : ['clipboard.write'],
       usePluginPermissionStore: { subscribe },
     },
-    './workspace/pluginSurfaceShortcuts': { usePluginSurfaceShortcutStore: { subscribe: () => () => {} } },
-    './workspace/pluginSettingsStore': { resolvePluginSettings: () => ({ value: { enabled: recordingEnabled } }), usePluginSettingsStore: { subscribe } },
-    './workspace/bundledPluginIdentity': { isCurrentBundledDefinition: () => true },
+    '../workspace/pluginSurfaceShortcuts': { usePluginSurfaceShortcutStore: { subscribe: () => () => {} } },
+    '../workspace/bundledPluginIdentity': { isCurrentBundledDefinition: () => true },
     '@tauri-apps/api/event': { listen: async (name, fn) => {
       const set = listeners.get(name) ?? new Set(); set.add(fn); listeners.set(name, set)
       return () => set.delete(fn)
@@ -60,16 +60,17 @@ function fixture(recordingEnabled = true) {
     })
     return exports
   }
-  modules['./plugins/clipboard-history/queue/clipboardPasteQueue'] = load('src/plugins/clipboard-history/queue/clipboardPasteQueue.ts')
-  const api = load('src/historyPasteQueueHandoff.ts')
-  h.stop = api.installHistoryPasteQueueHost({ notify: (status, outcome, hud) => notices.push({ status, outcome, hud }) })
-  h.createBridge = (owner = { isCurrent: () => true }) => api.createHistoryPasteQueueBridge({ source: 'builtin', pluginId: 'clipboard-history', ...owner })
+  modules['../workspace/pasteQueue/clipboardPasteQueue'] = load('src/workspace/pasteQueue/clipboardPasteQueue.ts')
+  modules['./bundledSurfaces'] = load('src/shortcutHosts/bundledSurfaces.ts')
+  const api = load('src/shortcutHosts/pasteQueue.ts')
+  h.stop = api.installPasteQueueHost({ notify: (status, outcome, hud) => notices.push({ status, outcome, hud }) })
+  h.createBridge = (owner = { isCurrent: () => true }) => api.createPasteQueueBridge({ source: 'builtin', pluginId: 'clipboard-history', ...owner })
   h.bridge = h.createBridge()
   h.next = () => handler?.()
   h.setRecording = (value) => { recordingEnabled = value; subscriptions.forEach((fn) => fn()) }
   h.revoke = () => { allowed = false; subscriptions.forEach((fn) => fn()) }
   // Even a newly trusted bundled definition cannot inherit an old queue.
-  h.replaceDefinition = () => { definition = { settings: {} }; subscriptions.forEach((fn) => fn()) }
+  h.replaceDefinition = () => { definition = makeDefinition(); subscriptions.forEach((fn) => fn()) }
   h.expire = () => { for (const fn of [...timers.values()]) fn() }
   h.releaseCount = () => releaseCount
   return h

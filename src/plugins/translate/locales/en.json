@@ -136,5 +136,12 @@
   "ai.glossary.error.control": "Row {row}: remove line breaks or control characters from the term.",
   "ai.glossary.error.duplicate": "Row {row}: this source term is already listed. Remove the duplicate row.",
   "ai.glossary.error.conflict": "Row {row}: this source term has different preferred wording in another row. Keep one version.",
-  "ai.glossary.error.bytes": "There is too much term content. Shorten or remove some entries before saving."
+  "ai.glossary.error.bytes": "There is too much term content. Shorten or remove some entries before saving.",
+  "hud.title": "Translation",
+  "hud.result": "Translation result",
+  "hud.working": "Translating…",
+  "hud.error": "Translation did not complete",
+  "hud.errorStatus": "Translation did not complete",
+  "hud.error.unavailable": "Translation is unavailable. Check the AI service and try again.",
+  "hud.errorStatus.unavailable": "Unavailable"
 }

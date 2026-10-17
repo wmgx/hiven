@@ -1,7 +1,6 @@
 export type QrHudFailure = 'unavailable' | 'incomplete'
 
 export type QrHudView = {
-  product: 'qr-scan'
   sessionId: string
   revision: number
   phase: 'translating' | 'ready' | 'active' | 'error'
@@ -164,7 +163,7 @@ export class QrHudSession {
 
   private view(session: Live): QrHudView {
     const bounded = preview(session.output)
-    return { product: 'qr-scan', sessionId: session.id, revision: session.revision, phase: session.phase,
+    return { sessionId: session.id, revision: session.revision, phase: session.phase,
       ...bounded, copyFailed: session.copyFailed, complete: session.complete,
       failure: session.failure, expiresAt: session.expiresAt }
   }

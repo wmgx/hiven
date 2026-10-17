@@ -199,6 +199,10 @@ export default definePlugin<ClipboardHistorySettings>({
           recommendedShortcut: 'CmdOrCtrl+Shift+V',
           shortcutPresentation: 'window',
         },
+        pasteQueue: {
+          permissions: ['clipboard.write', 'accessibility.paste', 'globalShortcut.register'],
+          nextShortcut: 'Control+Shift+V',
+        },
         shell: CLIPBOARD_HISTORY_SHELL,
       },
       ...FILTER_ROUTES.map((route) => ({

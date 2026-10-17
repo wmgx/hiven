@@ -1,7 +1,6 @@
 export type CleanAgentHudFailure = 'unavailable' | 'no-change' | 'too-large'
 
 export type CleanAgentHudView = {
-  product: 'clean-agent'
   sessionId: string
   revision: number
   phase: 'translating' | 'ready' | 'active' | 'error'
@@ -170,7 +169,7 @@ export class CleanAgentHudSession {
   }
 
   private view(session: Live): CleanAgentHudView {
-    return { product: 'clean-agent', sessionId: session.id, revision: session.revision, phase: session.phase,
+    return { sessionId: session.id, revision: session.revision, phase: session.phase,
       preview: '', truncated: false, copyFailed: session.copyFailed, pasteFailed: session.pasteFailed,
       pasteCopied: session.pasteCopied, complete: session.complete,
       failure: session.failure, expiresAt: session.expiresAt }

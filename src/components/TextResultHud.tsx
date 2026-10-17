@@ -6,7 +6,7 @@ import { acceptTextResultHudUpdate, type TextResultHudUpdate } from './textResul
 import './TextResultHud.css'
 
 type Snapshot = {
-  product: 'translation' | 'qr-scan' | 'clean-agent'
+  product: string
   sessionId: string
   revision: number
   phase: 'translating' | 'ready' | 'active' | 'cancelled' | 'error'
@@ -15,6 +15,9 @@ type Snapshot = {
   copyFailed: boolean
   pasteFailed: boolean
   pasteCopied: boolean
+  pasteable: boolean
+  /** Plugin-supplied strings; missing generic ones fall back to host defaults. */
+  labels: Record<string, string>
   complete: boolean
   failure?: 'unavailable' | 'incomplete' | 'no-change' | 'too-large'
   expiresAt: number
@@ -56,30 +59,27 @@ export function TextResultHud() {
     return () => window.removeEventListener('keydown', keydown)
   }, [snapshot?.sessionId, snapshot?.revision, snapshot?.phase])
   if (!snapshot) return null
-  const t = (key: string) => translate(snapshot.locale, 'hud', key)
+  const hostText = (key: string) => translate(snapshot.locale, 'hud', `generic.${key}`)
+  const t = (key: string) => snapshot.labels[key] ?? hostText(key)
   const action = (name: 'copy' | 'paste' | 'close') => invoke('text_result_hud_action', {
     sessionId: snapshot.sessionId, revision: snapshot.revision, action: name,
   }).catch(() => undefined)
-  const prefix = snapshot.product === 'qr-scan' ? 'qr' : snapshot.product === 'clean-agent' ? 'cleanAgent' : 'translation'
   const active = snapshot.phase === 'active'
   const result = active && snapshot.fullText != null ? snapshot.fullText : snapshot.preview
-  const errorKey = snapshot.product === 'clean-agent' && snapshot.failure
-    ? `cleanAgent.${snapshot.failure}`
-    : snapshot.failure === 'unavailable' ? `${prefix}.unavailable` : `${prefix}.error`
-  const errorStatusKey = snapshot.product === 'clean-agent'
-    ? 'cleanAgent.errorStatus'
-    : snapshot.failure === 'unavailable' ? `${prefix}.unavailableStatus` : `${prefix}.error`
+  const failure = snapshot.failure
+  const errorText = (failure && snapshot.labels[`error.${failure}`]) || snapshot.labels.error || hostText('error')
+  const errorStatus = (failure && snapshot.labels[`errorStatus.${failure}`]) || snapshot.labels.errorStatus || errorText
   return <main className="text-result-hud" data-theme={snapshot.theme} data-active={active} data-product={snapshot.product}>
-    <header><span>{t(`${prefix}.title`)}</span><small>{snapshot.complete ? t(`${prefix}.complete`) : snapshot.phase === 'error' ? t(errorStatusKey) : t(`${prefix}.working`)}</small></header>
-    <pre ref={resultRef} tabIndex={active ? 0 : undefined} aria-label={t(`${prefix}.result`)} aria-live="polite">{snapshot.phase === 'error' ? t(errorKey) : result || t(`${prefix}.working`)}</pre>
-    {snapshot.truncated && !active && <p>{t(`${prefix}.previewTruncated`)}</p>}
-    {snapshot.copyFailed && <p role="alert">{t(`${prefix}.copyFailed`)}</p>}
-    {snapshot.pasteFailed && <p role="alert">{t('cleanAgent.pasteFailed')}</p>}
-    {snapshot.pasteCopied && <p role="status">{t('cleanAgent.pasteCopied')}</p>}
+    <header><span>{snapshot.labels.title ?? ''}</span><small>{snapshot.complete ? t('complete') : snapshot.phase === 'error' ? errorStatus : t('working')}</small></header>
+    <pre ref={resultRef} tabIndex={active ? 0 : undefined} aria-label={t('result')} aria-live="polite">{snapshot.phase === 'error' ? errorText : result || t('working')}</pre>
+    {snapshot.truncated && !active && <p>{t('previewTruncated')}</p>}
+    {snapshot.copyFailed && <p role="alert">{t('copyFailed')}</p>}
+    {snapshot.pasteFailed && <p role="alert">{t('pasteFailed')}</p>}
+    {snapshot.pasteCopied && <p role="status">{t('pasteCopied')}</p>}
     {active && <footer>
-      {snapshot.product === 'clean-agent' && <button type="button" disabled={!snapshot.complete || snapshot.pasteCopied} onClick={() => { void action('paste') }}>{t('cleanAgent.paste')}</button>}
-      <button type="button" disabled={!snapshot.complete} onClick={() => { void action('copy') }}>{t(`${prefix}.copy`)}</button>
-      <button type="button" onClick={() => { void action('close') }}>{t(`${prefix}.close`)}</button>
+      {snapshot.pasteable && <button type="button" disabled={!snapshot.complete || snapshot.pasteCopied} onClick={() => { void action('paste') }}>{t('paste')}</button>}
+      <button type="button" disabled={!snapshot.complete} onClick={() => { void action('copy') }}>{t('copy')}</button>
+      <button type="button" onClick={() => { void action('close') }}>{t('close')}</button>
     </footer>}
   </main>
 }

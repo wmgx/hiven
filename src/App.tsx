@@ -1,6 +1,6 @@
 import { beginSuggestionSession } from './workspace/launcher/contextSuggestionsStore'
 import { translate } from './i18n'
-import { installHistoryPasteQueueHost } from './historyPasteQueueHandoff'
+import { installPasteQueueHost } from './shortcutHosts/pasteQueue'
 import { dismissToast, showToast } from './workspace/toast'
 import { useEffect, useRef } from 'react'
 import { useAppStore } from './store'
@@ -18,10 +18,8 @@ import { prefetchDesktopWindowsOnStartup } from './workspace/desktopControl/wind
 import { registerHostLauncherProviders } from './workspace/launcher/hostProvider'
 import { installGlobalPinnedLauncherHotkeys, routeGlobalPinnedLauncherShortcut } from './hotkeys/globalPinnedLauncher'
 import { installPluginSurfaceShortcutHotkeys } from './hotkeys/pluginSurfaceShortcuts'
-import { installTranslationHudHost } from './translationHudHandoff'
-import { installQrHudHost } from './qrHudHandoff'
-import { installCleanAgentHudHost } from './cleanAgentHudHandoff'
-import { installClipboardImageSaveShortcut } from './clipboardImageSaveShortcut'
+import { installTextResultHudHosts } from './shortcutHosts/textResultHud'
+import { installClipboardImageSaveShortcuts } from './shortcutHosts/clipboardImageSave'
 import { installAppHotkeys } from './hotkeys/appHotkeys'
 import { installQuickEditorHotkeys } from './hotkeys/quickEditor'
 import { consumePendingPluginSurfaceOpenTarget, isPluginSurfaceOpenTarget, openLauncherHostedPluginSurface } from './workspace/pluginSurfaceOpenRequest'
@@ -147,16 +145,14 @@ function LauncherRuntimeApp() {
 
   useEffect(() => isNativeDesktopRuntime() ? installGlobalPinnedLauncherHotkeys() : undefined, [])
   useEffect(() => isNativeDesktopRuntime() ? installPluginSurfaceShortcutHotkeys() : undefined, [])
-  useEffect(() => isNativeDesktopRuntime() ? installTranslationHudHost() : undefined, [])
-  useEffect(() => isNativeDesktopRuntime() ? installQrHudHost() : undefined, [])
-  useEffect(() => isNativeDesktopRuntime() ? installCleanAgentHudHost() : undefined, [])
-  useEffect(() => isNativeDesktopRuntime() ? installClipboardImageSaveShortcut() : undefined, [])
+  useEffect(() => isNativeDesktopRuntime() ? installTextResultHudHosts() : undefined, [])
+  useEffect(() => isNativeDesktopRuntime() ? installClipboardImageSaveShortcuts() : undefined, [])
   useEffect(() => isNativeDesktopRuntime() ? installAppHotkeys() : undefined, [])
   useEffect(() => isNativeDesktopRuntime() ? installQuickEditorHotkeys() : undefined, [])
   useEffect(() => {
     if (!isNativeDesktopRuntime()) return
     let session = '', lastNotice: string | undefined
-    const stop = installHistoryPasteQueueHost({ notify: (status, outcome, hud) => {
+    const stop = installPasteQueueHost({ notify: (status, outcome, hud) => {
       if (outcome === 'cancelled' || status.sessionId !== session) {
         if (lastNotice) dismissToast(lastNotice)
         lastNotice = undefined

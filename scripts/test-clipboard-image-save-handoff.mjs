@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import ts from 'typescript'
-const code = ts.transpileModule(readFileSync('src/clipboardImageSaveHandoff.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
+const code = ts.transpileModule(readFileSync('src/shortcutHosts/clipboardImageSave.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r }); return { promise, resolve } }
 const flush = async () => { for (let i = 0; i < 30; i++) await Promise.resolve() }
 function fixture() {
@@ -11,26 +11,32 @@ function fixture() {
   const subscribe = fn => { listeners.add(fn); return () => listeners.delete(fn) }
   h.invalidate = () => { state.globalLauncherSessionId++; for (const fn of listeners) fn() }
   h.revoke = () => { h.allowed = false; for (const fn of listeners) fn(); h.allowed = true }
-  const modules = {
-    './store': { useAppStore: { getState: () => state, subscribe } },
-    './workspace/bundledPluginIdentity': { isCurrentBundledDefinition: () => h.bundled },
-    './workspace/pluginRegistry': { pluginRegistry: { subscribe, getPluginDefinition: () => ({}) } },
-    './workspace/pluginPermissions': { getPluginPermissionSnapshot: () => ({}), requirePluginPermissions: () => { if (!h.allowed) throw Error('revoked') }, usePluginPermissionStore: { subscribe } },
-    './workspace/pluginStorage': { createPluginPrivateStorage: (_s, _p, _permissions, owner) => { h.owner = owner; return {} } },
-    './workspace/pluginClipboardImageRead': { createPluginClipboardImageReader: () => async () => { h.readCount++; return { bytes: new Uint8Array([1]), contentType: 'image/png' } } },
-    './workspace/launcherBlurGuard': { acquireLauncherNativeDialogFocus: () => () => {} },
-    './workspace/toastRouting': { captureHudTarget: async () => '0000000000000001', nativeToastRoutingAvailable: () => true },
-    './workspace/toast': { dismissToast: id => h.dismissed.push(id), showToast: (_text, _level, options) => notices.push(options.hud) },
-    './i18n': { t: (_locale, key) => key },
-    './plugins/encode-decode/imageBase64': { inspectRaster: () => ({}), decodeRaster: async bytes => ({ png: bytes }) },
-    './plugins/encode-decode/saveClipboardPng': { saveClipboardPng: async (_storage, _png, current) => {
+  const task = { pluginId: 'encode-decode', surfaceId: 'image-save', definition: {}, contribution: {
+    launcherItemId: 'open-image-save', permissions: ['clipboard.read'],
+    run: async ({ isCurrent }) => {
       h.saves++
       if (h.committed) h.owner.onCommit()
       await h.gate.promise
-      if (!h.committed && !current()) throw Error('cancelled')
+      if (!h.committed && !isCurrent()) throw Error('cancelled')
       if (h.fail) throw Error('private/path must never leak')
       return h.result
-    } },
+    },
+  } }
+  const modules = {
+    '../store': { useAppStore: { getState: () => state, subscribe } },
+    '../workspace/bundledPluginIdentity': { isCurrentBundledDefinition: () => h.bundled },
+    '../workspace/pluginRegistry': { pluginRegistry: { subscribe, getPluginDefinition: () => ({}) } },
+    '../workspace/pluginPermissions': { getPluginPermissionSnapshot: () => ({}), requirePluginPermissions: () => { if (!h.allowed) throw Error('revoked') }, usePluginPermissionStore: { subscribe } },
+    '../workspace/pluginStorage': { createPluginPrivateStorage: (_s, _p, _permissions, owner) => { h.owner = owner; return {} } },
+    '../workspace/pluginClipboardImageRead': { createPluginClipboardImageReader: () => async () => { h.readCount++; return { bytes: new Uint8Array([1]), contentType: 'image/png' } } },
+    '../workspace/launcherBlurGuard': { acquireLauncherNativeDialogFocus: () => () => {} },
+    '../workspace/toastRouting': { captureHudTarget: async () => '0000000000000001', nativeToastRoutingAvailable: () => true },
+    '../workspace/toast': { dismissToast: id => h.dismissed.push(id), showToast: (_text, _level, options) => notices.push(options.hud) },
+    '../workspace/launcher/identity': { getPluginLauncherItemKey: (pluginId, itemId) => `plugin:${pluginId}:launcher:${itemId}` },
+    '../workspace/pluginSurfaceShortcuts': { pluginSurfaceShortcutKey: () => 'key', usePluginSurfaceShortcutStore: { getState: () => ({ shortcuts: {} }) } },
+    '../hotkeys/pluginSurfaceShortcuts': { installRegisteredSurfaceShortcutHandler: () => () => {} },
+    '../i18n': { t: (_locale, key) => key },
+    './bundledSurfaces': { BUNDLED_SOURCE: 'builtin', grantedPermissions: () => ({}), isLauncherNativeRuntime: () => true, listBundledSurfaceTasks: () => [task] },
   }
   const module = { exports: {} }; let id = 0
   vm.runInNewContext(code, { module, exports: module.exports, require: key => { if (!modules[key]) throw Error(key); return modules[key] }, AbortController, crypto: { randomUUID: () => `operation-${++id}` } })
@@ -41,8 +47,8 @@ function fixture() {
     async () => { h.closes++; state.globalLauncherOpen = false },
     async () => { h.restores++ },
   )
-  const shortcut = (current = () => true) => module.exports.saveClipboardImageFromShortcut(current, {})
-  return { ...h, h, notices, bind, shortcut, state }
+  const shortcut = (current = () => true) => module.exports.saveClipboardImageFromShortcut(task, current)
+  return { ...h, h, notices, bind, shortcut, state, task }
 }
 {
   const { h, bind, notices } = fixture(); const api = bind(); const first = api.saveClipboardImageAsPng(); await flush(); await api.saveClipboardImageAsPng()

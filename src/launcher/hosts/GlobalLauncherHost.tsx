@@ -67,7 +67,7 @@ import { getPluginPermissionSnapshot } from '../../workspace/pluginPermissions'
 import { selectLauncherVisibleItems } from '../../workspace/launcher/visibleItems'
 import type { LauncherBrowseCategory } from '../../workspace/launcher/browseItems'
 import { showToast } from '../../workspace/toast'
-import { withClipboardImageSave } from '../../clipboardImageSaveHandoff'
+import { withClipboardImageSave } from '../../shortcutHosts/clipboardImageSave'
 import { captureHudTarget } from '../../workspace/toastRouting'
 
 type CurrentTextActionScope = { block: LauncherObjectBlock } & ReturnType<typeof captureCurrentTextDeliveryScope>

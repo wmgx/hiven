@@ -16,7 +16,7 @@ import { createPluginNetwork } from '../../workspace/pluginNetwork'
 import { createPluginAi } from '../../workspace/ai/runtime'
 import { createPluginShell } from '../../workspace/pluginShell'
 import { isCurrentBundledDefinition } from '../../workspace/bundledPluginIdentity'
-import { createHistoryPasteQueueBridge } from '../../historyPasteQueueHandoff'
+import { createPasteQueueBridge } from '../../shortcutHosts/pasteQueue'
 import { createHistoryDiffReturnReceipt, prepareHistoryDiffTarget } from '../../historyDiffHandoff'
 import { createPluginSurfaceTextSaver } from '../../workspace/pluginSurfaceTextSave'
 import { acquireLauncherNativeDialogFocus } from '../../workspace/launcherBlurGuard'
@@ -531,10 +531,10 @@ export function PluginSurfaceRenderer({
     if (surfaceState.status === 'error' || surfaceState.status === 'surface-not-found' || surfaceState.status === 'permission-gate') onHandoffReady?.(false)
   }, [surfaceState, target, onHandoffReady])
 
-  const historyPasteQueue = useMemo(() => target.pluginId === 'clipboard-history'
-    && surfaceState && 'definition' in surfaceState
+  const pasteQueue = useMemo(() => surfaceState && 'definition' in surfaceState
+    && surfaceState.definition.ui?.surfaces?.some((surface) => surface.id === target.surfaceId && surface.pasteQueue)
     && isCurrentBundledDefinition(target.pluginId, target.source, surfaceState.definition)
-    ? createHistoryPasteQueueBridge({ source: target.source, pluginId: target.pluginId,
+    ? createPasteQueueBridge({ source: target.source, pluginId: target.pluginId,
       isCurrent: deliveryFeedbackOwner.isCurrent, subscribeInvalidation: deliveryFeedbackOwner.subscribeInvalidation }) : undefined,
   [target, surfaceState, deliveryFeedbackOwner])
 
@@ -616,7 +616,7 @@ export function PluginSurfaceRenderer({
           permissions={surfaceState.permissions}
           initialText={target.initialText}
           host={{
-            historyPasteQueue,
+            pasteQueue,
             compareHistoryTexts: target.pluginId === 'clipboard-history' && isCurrentBundledDefinition(target.pluginId, target.source, surfaceState.definition) ? async (snapshots, options) => {
               const owner = deliveryFeedbackOwner
               if (!owner.isCurrent() || options?.signal?.aborted || historyDiffRef.current) return false

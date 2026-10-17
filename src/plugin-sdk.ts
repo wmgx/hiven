@@ -128,6 +128,19 @@ export type {
   // Plugin Paste types
   PluginPasteApi,
   PluginPasteResult,
+  // Bundled shortcut tasks
+  PluginTextResultHudContribution,
+  PluginTextResultHudHost,
+  PluginTextResultHudRunner,
+  PluginTextResultHudView,
+  PluginTextResultHudLabels,
+  PluginTextResultHudExpected,
+  PluginTextResultHudFailure,
+  PluginClipboardImageSaveContribution,
+  PluginClipboardImageSaveContext,
+  PluginPasteQueueContribution,
+  PasteQueueBridge,
+  PasteQueueStatus,
 } from './workspace/pluginTypes'
 export type {
   LauncherSurfaceId,

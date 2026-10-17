@@ -7,6 +7,7 @@
 
 import { definePlugin, type PluginToolExplicitTextPreviewContext, type PluginToolTextPreviewResult, type PluginToolSurfaces } from '@hiven/plugin'
 import { EncodeDecodeSurface } from './EncodeDecodeSurface'
+import { saveClipboardImageAsPng } from './saveClipboardImage'
 import {
   base64Decode,
   base64Encode,
@@ -87,6 +88,13 @@ export const encodeDecodePlugin = definePlugin({
         titleI18n: { zh: route.id === 'image-save' ? '截图存为文件' : '编解码' },
         component: EncodeDecodeSurface,
         entry: { launcher: false, shortcutBindable: route.id === 'image-save' },
+        clipboardImageSave: route.id === 'image-save'
+          ? {
+              launcherItemId: 'open-image-save',
+              permissions: ['clipboard.read', 'clipboard.image', 'storage.blob', 'clipboard.write'] as const,
+              run: saveClipboardImageAsPng,
+            }
+          : undefined,
         shell: WORKSPACE_SHELL,
       })),
     ],

@@ -222,5 +222,15 @@
   "markdownPlain.hint": "Keeps addresses, task states, code and definitions. HTML and entities stay literal; nothing is loaded or executed. Input ≤128 KiB; full output ≤512 KiB.",
   "markdownPlain.limit": "Input, output or nesting exceeds the conversion limit. Reduce the input; no partial result is available.",
   "markdownPlain.timeout": "Conversion took too long. Your input is kept; simplify it to retry.",
-  "markdownPlain.failed": "Could not convert the text. Your input is kept; edit to retry."
+  "markdownPlain.failed": "Could not convert the text. Your input is kept; edit to retry.",
+  "hud.title": "Clean Agent Text",
+  "hud.result": "Cleaned text",
+  "hud.working": "Cleaning clipboard text…",
+  "hud.errorStatus": "Not changed",
+  "hud.error.unavailable": "Clipboard text could not be read.",
+  "hud.error.no-change": "No complete Unicode box was found. Clipboard was not changed.",
+  "hud.error.too-large": "Clipboard text is too large to clean safely.",
+  "hud.pasteFailed": "Paste is not permitted. The result is still available.",
+  "hud.pasteCopied": "Copied. Automatic paste did not complete; close this window and paste manually.",
+  "hud.paste": "Paste cleaned result"
 }

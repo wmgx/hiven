@@ -4,7 +4,7 @@
 //! held only for the matching active session and sent only to the HUD window.
 
 use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -20,6 +20,10 @@ const ACTIVE_READING_LIFETIME_MS: u64 = 120_000;
 const MAX_PREVIEW_CHARS: usize = 512;
 const MAX_FULL_TEXT_CHARS: usize = 1_000_000;
 const MAX_SESSION_ID_BYTES: usize = 128;
+const MAX_PRODUCT_BYTES: usize = 48;
+const MAX_LABELS: usize = 32;
+const MAX_LABEL_KEY_BYTES: usize = 64;
+const MAX_LABEL_VALUE_CHARS: usize = 400;
 const MAX_DISMISSED_SESSIONS: usize = 32;
 const PASSIVE_WIDTH: f64 = 420.0;
 const PASSIVE_HEIGHT: f64 = 168.0;
@@ -35,14 +39,6 @@ pub(crate) enum Phase {
     Active,
     Cancelled,
     Error,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
-pub(crate) enum Product {
-    Translation,
-    QrScan,
-    CleanAgent,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -71,7 +67,8 @@ pub(crate) enum Theme {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct Snapshot {
-    product: Product,
+    /// Opaque product id chosen by the owning plugin; echoed back with every action.
+    product: String,
     session_id: String,
     revision: u64,
     phase: Phase,
@@ -82,6 +79,15 @@ pub(crate) struct Snapshot {
     paste_failed: bool,
     #[serde(default)]
     paste_copied: bool,
+    /// The product offers the Paste action.
+    #[serde(default)]
+    pasteable: bool,
+    /// Keep the preview empty until the HUD is activated.
+    #[serde(default)]
+    hide_passive_preview: bool,
+    /// Plugin-supplied display strings, rendered by the HUD window.
+    #[serde(default)]
+    labels: BTreeMap<String, String>,
     complete: bool,
     failure: Option<Failure>,
     expires_at: u64,
@@ -109,7 +115,7 @@ pub(crate) enum Action {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ActionRequest {
-    product: Product,
+    product: String,
     session_id: String,
     revision: u64,
     action: Action,
@@ -447,7 +453,7 @@ impl State {
             || !revision_matches
             || current.expires_at <= now
             || (action == Action::Paste
-                && (current.product != Product::CleanAgent || self.paste_attempted))
+                && (!current.pasteable || self.paste_attempted))
         {
             return None;
         }
@@ -515,7 +521,7 @@ impl State {
             || !self.restore_allowed
             || self.pending_action != Some(Action::Paste)
             || self.paste_attempted
-            || current.product != Product::CleanAgent
+            || !current.pasteable
             || current.phase != Phase::Active
             || !current.complete
             || current.session_id != session_id
@@ -597,6 +603,29 @@ fn valid_session_id(value: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
 }
 
+fn valid_product(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= MAX_PRODUCT_BYTES
+        && !value.starts_with('-')
+        && !value.ends_with('-')
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+}
+
+fn valid_labels(labels: &BTreeMap<String, String>) -> bool {
+    labels.len() <= MAX_LABELS
+        && labels.iter().all(|(key, value)| {
+            !key.is_empty()
+                && key.len() <= MAX_LABEL_KEY_BYTES
+                && key
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'_'))
+                && value.chars().count() <= MAX_LABEL_VALUE_CHARS
+                && !value.contains('\0')
+        })
+}
+
 fn validate_snapshot(snapshot: &Snapshot, current_time: u64) -> Result<(), &'static str> {
     let max_lifetime = if snapshot.phase == Phase::Active {
         ACTIVE_READING_LIFETIME_MS
@@ -607,7 +636,9 @@ fn validate_snapshot(snapshot: &Snapshot, current_time: u64) -> Result<(), &'sta
         || snapshot.revision > 9_007_199_254_740_991
         || snapshot.preview.chars().count() > MAX_PREVIEW_CHARS
         || snapshot.preview.contains('\0')
-        || (snapshot.product == Product::CleanAgent
+        || !valid_product(&snapshot.product)
+        || !valid_labels(&snapshot.labels)
+        || (snapshot.hide_passive_preview
             && snapshot.phase != Phase::Active
             && !snapshot.preview.is_empty())
         || (snapshot.phase == Phase::Error) != snapshot.failure.is_some()
@@ -1104,6 +1135,24 @@ mod tests {
     use super::*;
 
     #[test]
+    fn product_and_labels_are_validated_opaque_values() {
+        assert!(valid_product("clean-agent"));
+        assert!(valid_product("qr-scan"));
+        assert!(!valid_product(""));
+        assert!(!valid_product("Translation"));
+        assert!(!valid_product("a/b"));
+        assert!(!valid_product("-lead"));
+        let mut labels = BTreeMap::new();
+        labels.insert("error.no-change".to_string(), "ok".to_string());
+        assert!(valid_labels(&labels));
+        labels.insert("bad key".to_string(), "x".to_string());
+        assert!(!valid_labels(&labels));
+        let mut long = BTreeMap::new();
+        long.insert("title".to_string(), "x".repeat(MAX_LABEL_VALUE_CHARS + 1));
+        assert!(!valid_labels(&long));
+    }
+
+    #[test]
     fn deserializes_clean_agent_kebab_case_failures() {
         assert_eq!(
             serde_json::from_str::<Failure>("\"no-change\"").unwrap(),
@@ -1117,7 +1166,10 @@ mod tests {
 
     fn snapshot(session: &str, revision: u64, expires_at: u64) -> Snapshot {
         Snapshot {
-            product: Product::Translation,
+            product: "translation".into(),
+            pasteable: false,
+            hide_passive_preview: false,
+            labels: BTreeMap::new(),
             session_id: session.into(),
             revision,
             phase: Phase::Ready,
@@ -1342,7 +1394,7 @@ mod tests {
     }
 
     #[test]
-    fn paste_receipt_is_exact_clean_agent_only_and_one_shot() {
+    fn paste_receipt_is_exact_pasteable_only_and_one_shot() {
         let mut state = State::default();
         let mut current = snapshot("one", 4, 200);
         current.phase = Phase::Active;
@@ -1350,10 +1402,10 @@ mod tests {
         state.active = true;
         assert!(state.action("one", 4, Action::Paste, 100).is_none());
 
-        state.current.as_mut().unwrap().product = Product::CleanAgent;
+        state.current.as_mut().unwrap().pasteable = true;
         assert!(state.action("one", 3, Action::Paste, 100).is_none());
         let request = state.action("one", 4, Action::Paste, 100).unwrap();
-        assert_eq!(request.product, Product::CleanAgent);
+        assert_eq!(request.product, "translation");
         assert_eq!(request.action, Action::Paste);
         assert!(state.action("one", 4, Action::Paste, 100).is_none());
     }

@@ -48,5 +48,13 @@
   "param.size.option.480": "480px",
   "action.saving": "保存中…",
   "toast.saveFailed": "图片保存失败，请重试。",
-  "toast.saveUnavailable": "请在桌面应用中保存图片。"
+  "toast.saveUnavailable": "请在桌面应用中保存图片。",
+  "hud.title": "二维码识别",
+  "hud.result": "二维码文本",
+  "hud.working": "正在读取剪贴板图片…",
+  "hud.complete": "已识别",
+  "hud.error": "剪贴板图片中未识别到二维码。",
+  "hud.errorStatus": "剪贴板图片中未识别到二维码。",
+  "hud.error.unavailable": "无法读取剪贴板图片。",
+  "hud.errorStatus.unavailable": "当前不可用"
 }

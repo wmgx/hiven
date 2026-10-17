@@ -8,6 +8,7 @@ import type { ComponentType } from 'react'
 import type { Locale } from '../i18n'
 import type { FluxEffect, PaneId } from './types'
 import type { PluginAiApi } from './ai/types'
+import type { PluginT } from '../i18n/pluginI18nRegistry'
 import type {
   LauncherItemContribution,
   LauncherDynamicItemProvider,
@@ -789,8 +790,8 @@ export type PluginSurfaceFeedbackOwner = {
   subscribeInvalidation(listener: () => void): () => void
 }
 
-/** Bundled History only. Session snapshots; never a generic plugin workflow. */
-export type HistoryPasteQueueStatus = {
+/** Session-only paste queue snapshot; only surfaces that declare `pasteQueue` receive the bridge. */
+export type PasteQueueStatus = {
   sessionId: string
   version: number
   phase: 'idle' | 'ready' | 'failed' | 'completed' | 'cancelled'
@@ -800,16 +801,19 @@ export type HistoryPasteQueueStatus = {
   remaining: number
   currentId: string | null
 }
-export type HistoryPasteQueueBridge = {
+export type PasteQueueBridge = {
+  /** Largest number of snapshots one session accepts. */
+  readonly maxItems: number
   getAvailability(): Promise<'can-attempt' | 'unsupported' | 'unknown'>
   start(snapshots: readonly Readonly<{ id: string; text: string }>[], options?: { signal?: AbortSignal }): Promise<boolean>
   cancel(): Promise<void>
-  getStatus(): Promise<HistoryPasteQueueStatus>
-  subscribe(listener: (status: HistoryPasteQueueStatus) => void): () => void
+  getStatus(): Promise<PasteQueueStatus>
+  subscribe(listener: (status: PasteQueueStatus) => void): () => void
 }
 
 export type PluginSurfaceHostApi = {
-  historyPasteQueue?: HistoryPasteQueueBridge
+  /** Present only on surfaces that declare `pasteQueue`. */
+  pasteQueue?: PasteQueueBridge
   /** Stable across ordinary renders; revoked on replacement, hide, or session expiry. */
   deliveryFeedbackOwner?: PluginSurfaceFeedbackOwner
   close(): void
@@ -925,6 +929,110 @@ export type PluginUiSurfaceContribution<TSettings = unknown> = {
     shortcutPresentation?: PluginSurfaceShortcutPresentation
   }
   shell?: PluginSurfaceShell
+  /** Bundled plugins only: the surface's shortcut produces a text result shown in the host-owned HUD. */
+  textResultHud?: PluginTextResultHudContribution<TSettings>
+  /** Bundled plugins only: the surface's shortcut (and launcher item) saves the clipboard image through the host flow. */
+  clipboardImageSave?: PluginClipboardImageSaveContribution
+  /** Bundled plugins only: the surface may start a session-only sequential paste queue. */
+  pasteQueue?: PluginPasteQueueContribution
+}
+
+// ─── Shortcut tasks hosted by the app (bundled plugins only) ─────────────────
+
+export type PluginTextResultHudFailure = 'unavailable' | 'incomplete' | 'no-change' | 'too-large'
+
+/** Plugin-owned session state shown by the native text result HUD; the host stamps product, locale and theme. */
+export type PluginTextResultHudView = {
+  sessionId: string
+  revision: number
+  phase: 'translating' | 'ready' | 'active' | 'cancelled' | 'error'
+  preview: string
+  truncated: boolean
+  copyFailed: boolean
+  pasteFailed?: boolean
+  pasteCopied?: boolean
+  complete: boolean
+  failure?: PluginTextResultHudFailure
+  expiresAt: number
+}
+
+export type PluginTextResultHudExpected = { sessionId: string; revision: number }
+
+/**
+ * Plugin-owned HUD controller. The host forwards the shortcut and native HUD actions to it;
+ * it never sees windows, shortcuts or native commands.
+ */
+export type PluginTextResultHudRunner = {
+  trigger(): Promise<unknown>
+  cancel(): Promise<unknown>
+  copyAndClose(expected: PluginTextResultHudExpected): Promise<unknown>
+  pasteAndClose?(expected: PluginTextResultHudExpected): Promise<unknown>
+  cancelExpected(expected: PluginTextResultHudExpected): Promise<unknown>
+}
+
+/** Host capabilities a text result HUD controller may use. Every call is bounded to the live registration. */
+export type PluginTextResultHudHost<TSettings = unknown> = {
+  readonly pluginId: string
+  /** Resolved current settings of the plugin. */
+  settings(): TSettings
+  /** False once the registration, permissions or shortcut binding that started this task changed. */
+  isCurrent(): boolean
+  /** True when the contribution declares `pasteRequires` and the user granted all of them. */
+  canPaste(): boolean
+  /** AI API bound to the permissions granted right now. */
+  createAi(): PluginAiApi
+  readClipboardText(beforeRead?: () => void): Promise<string>
+  /** Write text without recording it in clipboard history. */
+  writeClipboardText(text: string, signal?: AbortSignal): Promise<void>
+  readClipboardImage(options: { signal: AbortSignal; isCurrent: () => boolean }): Promise<PluginClipboardImage>
+  present(view: PluginTextResultHudView, fullText?: string): Promise<void>
+  /** Resolves to the native-owned absolute reading deadline. */
+  activate(view: PluginTextResultHudView): Promise<number | null>
+  dismiss(sessionId: string, revision: number): Promise<void>
+  paste(sessionId: string, revision: number): Promise<void>
+}
+
+/**
+ * Strings shown by the native HUD. Recognised keys: title, result, working, complete, copy, close,
+ * previewTruncated, copyFailed, paste, pasteFailed, pasteCopied, error, errorStatus and
+ * `error.<failure>` / `errorStatus.<failure>` overrides. Missing generic keys fall back to host defaults.
+ */
+export type PluginTextResultHudLabels = Record<string, string>
+
+export type PluginTextResultHudContribution<TSettings = unknown> = {
+  /** Opaque, stable product id echoed by native HUD actions: lowercase letters, digits and dashes. */
+  product: string
+  /** Every permission must be granted before the shortcut is intercepted. */
+  permissions: readonly PluginPermission[]
+  /** Extra permissions that enable the HUD paste action. */
+  pasteRequires?: readonly PluginPermission[]
+  /** Keep the preview empty until the user activates the HUD (for content that must not show passively). */
+  hidePassivePreview?: boolean
+  /** Return false when the product has nothing to run with the current settings. */
+  isConfigured?(settings: TSettings): boolean
+  labels(t: PluginT): PluginTextResultHudLabels
+  create(host: PluginTextResultHudHost<TSettings>): PluginTextResultHudRunner
+}
+
+export type PluginClipboardImageSaveContext = {
+  image: PluginClipboardImage
+  storage: PluginPrivateStorageApi
+  signal: AbortSignal
+  isCurrent(): boolean
+}
+
+export type PluginClipboardImageSaveContribution = {
+  /** Launcher item id that runs the same flow from the Global Launcher. */
+  launcherItemId: string
+  permissions: readonly PluginPermission[]
+  /** Convert and save the image through `storage`; the host owns reading, busy state and the result HUD. */
+  run(context: PluginClipboardImageSaveContext): Promise<PluginBlobSaveResult>
+}
+
+export type PluginPasteQueueContribution = {
+  permissions: readonly PluginPermission[]
+  /** Accelerator held only while a queue session is running; pressing it pastes the next snapshot. */
+  nextShortcut: string
 }
 
 export type PluginUiContribution<TSettings = unknown> = {

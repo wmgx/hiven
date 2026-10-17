@@ -95,7 +95,7 @@ type MetaRow = {
   value: string
 }
 
-type QueueStatus = Awaited<ReturnType<NonNullable<PluginSurfaceProps<ClipboardHistorySettings>['host']['historyPasteQueue']>['getStatus']>>
+type QueueStatus = Awaited<ReturnType<NonNullable<PluginSurfaceProps<ClipboardHistorySettings>['host']['pasteQueue']>['getStatus']>>
 
 type TextEditState = {
   id: string
@@ -261,7 +261,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const queueSubmissionRef = useRef<AbortController | null>(null)
   const queueStatusEpochRef = useRef(0)
   const queueShortcut = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌃⇧V' : 'Ctrl+Shift+V'
-  const queueApi = host.historyPasteQueue
+  const queueApi = host.pasteQueue
   const [queueAvailability, setQueueAvailability] = useState<'loading' | 'can-attempt' | 'unsupported' | 'unknown'>('loading')
   useEffect(() => {
     if (!queueApi) return
@@ -550,7 +550,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       setQueueAvailability(availability)
       if (availability !== 'can-attempt') throw new Error('QueuePlatformUnavailableError')
       const selection = mergeIds.map((id) => ({ id, hash: mergeItemsRef.current.get(id)?.hash ?? '' }))
-      const snapshots = await readClipboardQueueSnapshots(repository, selection, isCurrent)
+      const snapshots = await readClipboardQueueSnapshots(repository, selection, isCurrent, queueApi.maxItems)
       if (!isCurrent()) return
       const accepted = await queueApi.start(snapshots, { signal: submission.signal })
       if (!isCurrent()) return

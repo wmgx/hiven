@@ -48,5 +48,13 @@
   "param.size.option.480": "480px",
   "action.saving": "Saving…",
   "toast.saveFailed": "Could not save image. Try again.",
-  "toast.saveUnavailable": "Save image is available in the desktop app."
+  "toast.saveUnavailable": "Save image is available in the desktop app.",
+  "hud.title": "QR code",
+  "hud.result": "Decoded QR text",
+  "hud.working": "Reading clipboard image…",
+  "hud.complete": "Ready",
+  "hud.error": "No QR code was found in the clipboard image.",
+  "hud.errorStatus": "No QR code was found in the clipboard image.",
+  "hud.error.unavailable": "The clipboard image could not be read.",
+  "hud.errorStatus.unavailable": "Unavailable"
 }

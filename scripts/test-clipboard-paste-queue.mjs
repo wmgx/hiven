@@ -3,11 +3,11 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import ts from 'typescript'
-const root = 'src/plugins/clipboard-history/queue/'
+const roots = { clipboardPasteQueue: 'src/workspace/pasteQueue/', readClipboardQueueSnapshots: 'src/plugins/clipboard-history/queue/' }
 const urls = new Map()
 function moduleUrl(name) {
   if (urls.has(name)) return urls.get(name)
-  let code = ts.transpileModule(readFileSync(`${root}${name}.ts`, 'utf8'), {
+  let code = ts.transpileModule(readFileSync(`${roots[name]}${name}.ts`, 'utf8'), {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
   }).outputText
   code = code.replace(/from ['"]\.\/(\w+)['"]/g, (_, dependency) => `from '${moduleUrl(dependency)}'`)
@@ -102,21 +102,21 @@ assert.equal(duringPublish.getSnapshot().busy, false)
 const selection = [{ id: 'b', hash: 'hb' }, { id: 'a', hash: 'ha' }]
 const items = { a: { id: 'a', hash: 'ha', kind: 'text', text: 'A\r\n' }, b: { id: 'b', hash: 'hb', kind: 'text', text: 'B😀' } }
 const repository = { getItem: async (id) => items[id], getFreshListItems: async () => Object.values(items) }
-assert.deepEqual(await readClipboardQueueSnapshots(repository, selection, () => true), [{ id: 'b', text: 'B😀' }, { id: 'a', text: 'A\r\n' }])
-await assert.rejects(readClipboardQueueSnapshots({ ...repository, getFreshListItems: async () => [items.a] }, selection, () => true), /Read/)
-await assert.rejects(readClipboardQueueSnapshots({ ...repository, getFreshListItems: async () => [{ ...items.b, hash: 'edited' }, items.a] }, selection, () => true), /Read/)
-await assert.rejects(readClipboardQueueSnapshots({ ...repository, getItem: async () => ({ ...items.a, kind: 'image' }) }, selection, () => true), /Read/)
-await assert.rejects(readClipboardQueueSnapshots({ ...repository, getItem: async () => { throw new Error('private storage path') } }, selection, () => true), /^Error: QueueReadError$/)
+assert.deepEqual(await readClipboardQueueSnapshots(repository, selection, () => true, 20), [{ id: 'b', text: 'B😀' }, { id: 'a', text: 'A\r\n' }])
+await assert.rejects(readClipboardQueueSnapshots({ ...repository, getFreshListItems: async () => [items.a] }, selection, () => true, 20), /Read/)
+await assert.rejects(readClipboardQueueSnapshots({ ...repository, getFreshListItems: async () => [{ ...items.b, hash: 'edited' }, items.a] }, selection, () => true, 20), /Read/)
+await assert.rejects(readClipboardQueueSnapshots({ ...repository, getItem: async () => ({ ...items.a, kind: 'image' }) }, selection, () => true, 20), /Read/)
+await assert.rejects(readClipboardQueueSnapshots({ ...repository, getItem: async () => { throw new Error('private storage path') } }, selection, () => true, 20), /^Error: QueueReadError$/)
 const firstRead = deferred()
 const mutableSelection = [{ id: 'a', hash: 'ha' }]
-const fixedRead = readClipboardQueueSnapshots({ ...repository, getItem: () => firstRead.promise }, mutableSelection, () => true)
+const fixedRead = readClipboardQueueSnapshots({ ...repository, getItem: () => firstRead.promise }, mutableSelection, () => true, 20)
 mutableSelection[0].hash = 'mutated while awaiting'
 mutableSelection[0].id = 'b'
 firstRead.resolve(items.a)
 assert.deepEqual(await fixedRead, [{ id: 'a', text: 'A\r\n' }])
 let current = true
 const readPending = deferred()
-const reading = readClipboardQueueSnapshots({ ...repository, getFreshListItems: () => readPending.promise }, selection, () => current)
+const reading = readClipboardQueueSnapshots({ ...repository, getFreshListItems: () => readPending.promise }, selection, () => current, 20)
 await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
 current = false
 readPending.resolve(Object.values(items))

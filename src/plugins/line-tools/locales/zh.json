@@ -222,5 +222,15 @@
   "markdownPlain.hint": "保留地址、任务状态、代码及引用定义。HTML 和实体保留原文，不加载或执行。输入最多128 KiB，完整输出最多512 KiB。",
   "markdownPlain.limit": "输入、输出或嵌套超过转换限制。请减少输入，不提供截断结果。",
   "markdownPlain.timeout": "转换超时，输入已保留。请简化内容后重试。",
-  "markdownPlain.failed": "转换失败，输入已保留。请编辑后重试。"
+  "markdownPlain.failed": "转换失败，输入已保留。请编辑后重试。",
+  "hud.title": "清理 AI 终端文本",
+  "hud.result": "清理结果",
+  "hud.working": "正在清理剪贴板文本…",
+  "hud.errorStatus": "未更改",
+  "hud.error.unavailable": "无法读取剪贴板文本。",
+  "hud.error.no-change": "未发现完整的 Unicode 边框，剪贴板未更改。",
+  "hud.error.too-large": "剪贴板文本过长，无法安全清理。",
+  "hud.pasteFailed": "当前不允许粘贴，结果仍可继续操作。",
+  "hud.pasteCopied": "已复制，自动粘贴未完成；关闭窗口后可手动粘贴。",
+  "hud.paste": "粘贴清理结果"
 }

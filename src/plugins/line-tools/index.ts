@@ -2,6 +2,7 @@ import { ListCompareSurface } from './ListCompareSurface'
 import { definePlugin, type PluginToolContext, type PluginToolExplicitTextPreviewContext, type PluginToolTextPreviewResult, type PluginToolSurfaces } from '@hiven/plugin'
 import { TextToolsSurface } from './TextToolsSurface'
 import { TextWorkbenchSurface } from './TextWorkbenchSurface'
+import { createCleanAgentHud } from './cleanAgentHudController'
 import {
   appendLines,
   cleanLineList,
@@ -104,6 +105,25 @@ export const lineToolsPlugin = definePlugin({
         aliases: ['clean agent clipboard', 'clean terminal clipboard', '清理剪贴板终端文本', '清理 AI 剪贴板文本'],
         component: TextWorkbenchSurface,
         entry: { launcher: false, shortcutBindable: true },
+        textResultHud: {
+          product: 'clean-agent',
+          permissions: ['clipboard.write'],
+          pasteRequires: ['accessibility.paste'],
+          hidePassivePreview: true,
+          labels: (t) => ({
+            title: t('hud.title'),
+            result: t('hud.result'),
+            working: t('hud.working'),
+            errorStatus: t('hud.errorStatus'),
+            'error.unavailable': t('hud.error.unavailable'),
+            'error.no-change': t('hud.error.no-change'),
+            'error.too-large': t('hud.error.too-large'),
+            paste: t('hud.paste'),
+            pasteFailed: t('hud.pasteFailed'),
+            pasteCopied: t('hud.pasteCopied'),
+          }),
+          create: createCleanAgentHud,
+        },
         shell: WORKSPACE_SHELL,
       },
       ...textToolRoutes.map((route) => ({

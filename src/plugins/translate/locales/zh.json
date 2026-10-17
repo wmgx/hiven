@@ -136,5 +136,12 @@
   "ai.glossary.error.control": "第 {row} 条：请移除术语中的换行或控制字符。",
   "ai.glossary.error.duplicate": "第 {row} 条：原词已存在，请移除重复条目。",
   "ai.glossary.error.conflict": "第 {row} 条：另一条为相同原词设置了不同译法，请只保留一种。",
-  "ai.glossary.error.bytes": "术语内容过多，请缩短或移除部分条目后保存。"
+  "ai.glossary.error.bytes": "术语内容过多，请缩短或移除部分条目后保存。",
+  "hud.title": "翻译",
+  "hud.result": "翻译结果",
+  "hud.working": "正在翻译…",
+  "hud.error": "翻译未完成",
+  "hud.errorStatus": "翻译未完成",
+  "hud.error.unavailable": "翻译当前不可用，请检查 AI 服务后重试。",
+  "hud.errorStatus.unavailable": "当前不可用"
 }
