@@ -437,7 +437,7 @@ for (const action of ['copy', 'continue']) {
 {
   const manifest = JSON.parse(readFileSync('src/plugins/ai-writing/manifest.json', 'utf8'))
   assert.equal(manifest.pluginId, 'ai-writing')
-  assert.equal(manifest.version, '1.0.2')
+  assert.equal(manifest.version, '1.0.3')
   assert.deepEqual(manifest.permissions.sort(), ['ai.use', 'clipboard.write'])
   const en = JSON.parse(readFileSync('src/plugins/ai-writing/locales/en.json', 'utf8'))
   const zh = JSON.parse(readFileSync('src/plugins/ai-writing/locales/zh.json', 'utf8'))
