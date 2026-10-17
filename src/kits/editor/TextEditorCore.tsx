@@ -7,12 +7,11 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import Editor from '@monaco-editor/react'
-import * as monaco from 'monaco-editor'
 import type { editor as MonacoEditor } from 'monaco-editor'
 import { createMonacoDisposableBucket } from '../../utils/monacoDisposables'
 import { registerFluxMonacoThemes } from '../../utils/monacoTheme'
 import { installMonacoHoverOverlay } from '../../utils/monacoHoverOverlay'
-import { configureMonacoRuntime } from './monacoRuntime'
+import { configureMonacoRuntime, monaco } from './monacoRuntime'
 import { syncExternalEditorValue } from './syncExternalEditorValue'
 import type { TextEditorCoreHandle, TextEditorCoreProps } from './types'
 
