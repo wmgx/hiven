@@ -9,6 +9,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import ts from 'typescript'
+import { objectBlockText, objectBlockTextModule } from './helpers/object-block-text.mjs'
 
 function transpileAndRun(path, globals = {}) {
   let src = readFileSync(path, 'utf8')
@@ -32,6 +33,7 @@ const attachPolicy = transpileAndRun('src/launcher/clipboard/attachPolicy.ts', {
   isSoftClipboardOperand: snapshot.isSoftClipboardOperand,
 })
 const objectBlock = transpileAndRun('src/launcher/clipboard/objectBlock.ts', {
+  objectBlockText,
   detectContent: detect.detectContent,
   shouldAutoAttachClipboard: snapshot.shouldAutoAttachClipboard,
   shouldShowRecentClipboardHint: snapshot.shouldShowRecentClipboardHint,
@@ -45,9 +47,7 @@ const objectBlock = transpileAndRun('src/launcher/clipboard/objectBlock.ts', {
 const expectedSources = [
   'clipboard',
   'editor-selection',
-  'editor-pane',
   'editor-document',
-  'multi-pane',
   'history-item',
   'query',
   'snapshot',
@@ -61,29 +61,6 @@ for (const kind of expectedKinds) {
   assert.equal(typeof objectBlock.getKindLabel(kind), 'string', `kind ${kind} should have a visible label`)
 }
 
-const pane = objectBlock.createEditorPaneObjectBlock({
-  text: 'select * from users',
-  kind: 'sql',
-  title: 'query.sql',
-  paneId: 'pane-1',
-  lineCount: 1,
-})
-assert.equal(pane.source, 'editor-pane')
-assert.equal(pane.kind, 'sql')
-assert.equal(pane.validity, 'unknown')
-assert.equal(pane.removable, true)
-assert.ok(pane.subtitle.includes('query.sql'))
-assert.equal(pane.meta?.lineCount, 1)
-
-const multi = objectBlock.createMultiPaneObjectBlock({
-  left: { paneId: 'old', title: 'old.json', kind: 'json' },
-  right: { paneId: 'new', title: 'new.json', kind: 'json' },
-})
-assert.equal(multi.source, 'multi-pane')
-assert.equal(multi.kind, 'json')
-assert.equal(multi.state, 'multi-object')
-assert.match(multi.subtitle, /JSON \+ JSON/)
-
 const snapshotBlock = objectBlock.createSnapshotObjectBlock({
   editorWindowId: 'editor-2',
   paneId: 'pane-2',
@@ -95,7 +72,7 @@ const snapshotBlock = objectBlock.createSnapshotObjectBlock({
 assert.equal(snapshotBlock.source, 'snapshot')
 assert.equal(snapshotBlock.state, 'snapshot')
 assert.equal(snapshotBlock.meta?.contentProvider, 'snapshot')
-assert.ok(snapshotBlock.subtitle.includes('snapshot'))
+assert.ok(snapshotBlock.subtitle.includes('快照'))
 
 const history = objectBlock.createHistoryItemObjectBlock({
   text: 'hello',

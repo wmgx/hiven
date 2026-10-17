@@ -16,15 +16,14 @@ import {
   shouldShowRecentClipboardHint,
 } from './clipboardSnapshot'
 import { isStrongClipboardAttachEligible } from './attachPolicy'
+import { objectBlockText } from './objectBlockText'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 export type ObjectBlockSource =
   | 'clipboard'
   | 'editor-selection'
-  | 'editor-pane'
   | 'editor-document'
-  | 'multi-pane'
   | 'history-item'
   | 'query'
   | 'snapshot'
@@ -46,7 +45,6 @@ export type ObjectBlockState =
   | 'secret-masked'
   | 'selected-for-deletion'
   | 'invalid'
-  | 'multi-object'
   | 'snapshot'
 
 export type ObjectBlockMeta = {
@@ -61,8 +59,6 @@ export type ObjectBlockMeta = {
   /** The payload is already file contents, even when its text looks like another path. */
   textOrigin?: 'file-content'
   fileName?: string
-  leftTitle?: string
-  rightTitle?: string
 }
 
 export type ObjectBlockImagePayload = {
@@ -113,58 +109,28 @@ export function getObjectBlockRecommendationText(
 // ─── Age label ─────────────────────────────────────────────────────────────────
 
 export function formatAgeLabel(ageMs: number): string {
-  if (ageMs < 1000) return '刚刚'
+  if (ageMs < 1000) return objectBlockText('age.justNow')
   const seconds = Math.floor(ageMs / 1000)
-  if (seconds < 60) return `${seconds} 秒前`
+  if (seconds < 60) return objectBlockText('age.seconds', { n: seconds })
   const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes} 分钟前`
-  return `${Math.floor(minutes / 60)} 小时前`
+  if (minutes < 60) return objectBlockText('age.minutes', { n: minutes })
+  return objectBlockText('age.hours', { n: Math.floor(minutes / 60) })
 }
 
 // ─── Kind label ────────────────────────────────────────────────────────────────
 
-const KIND_LABELS: Record<ObjectBlockKind, string> = {
-  json: 'JSON',
-  url: 'URL',
-  text: 'Text',
-  command: 'Command',
-  secret: 'Secret-like Text',
-  'secret-like': 'Secret-like Text',
-  unknown: 'Unknown',
-  markdown: 'Markdown',
-  'plain-text': 'Text',
-  sql: 'SQL',
-  css: 'CSS',
-  xml: 'XML',
-  csv: 'CSV',
-  jwt: 'JWT',
-  timestamp: 'Timestamp',
-  yaml: 'YAML',
-  'query-string': 'Query String',
-  image: 'Image',
-  files: 'Files',
-}
-
 export function getKindLabel(kind: ObjectBlockKind): string {
-  return KIND_LABELS[kind] ?? kind
+  const key = `kind.${kind}`
+  const label = objectBlockText(key)
+  return label === key ? kind : label
 }
 
 // ─── Source label ──────────────────────────────────────────────────────────────
 
-const SOURCE_LABELS: Record<ObjectBlockSource, string> = {
-  clipboard: '剪贴板',
-  'editor-selection': '当前选区',
-  'editor-pane': '当前 pane',
-  'editor-document': '当前文档',
-  'multi-pane': '两个 pane',
-  'history-item': '剪贴板历史',
-  query: 'Query',
-  snapshot: 'Snapshot',
-  'tool-result': '计算结果',
-}
-
 export function getSourceLabel(source: ObjectBlockSource): string {
-  return SOURCE_LABELS[source] ?? source
+  const key = `source.${source}`
+  const label = objectBlockText(key)
+  return label === key ? source : label
 }
 
 // ─── Factory ───────────────────────────────────────────────────────────────────
@@ -252,7 +218,7 @@ export function createEditorSelectionObjectBlock(params: {
     source: 'editor-selection',
     kind,
     title: getSourceLabel('editor-selection'),
-    subtitle: `${getKindLabel(kind)} · ${params.lineCount} 行`,
+    subtitle: `${getKindLabel(kind)} · ${objectBlockText('detail.lines', { n: params.lineCount })}`,
     text: params.text,
     masked: isSecretKind(kind),
     validity: kind === 'json' ? 'valid' : 'unknown',
@@ -270,61 +236,11 @@ export function createEditorDocumentObjectBlock(params: {
     source: 'editor-document',
     kind,
     title: getSourceLabel('editor-document'),
-    subtitle: `${getKindLabel(kind)} · ${params.charCount} 字`,
+    subtitle: `${getKindLabel(kind)} · ${objectBlockText('detail.chars', { n: params.charCount })}`,
     text: params.text,
     masked: isSecretKind(kind),
     validity: kind === 'json' ? 'valid' : 'unknown',
     meta: { charCount: params.charCount },
-  })
-}
-
-export function createEditorPaneObjectBlock(params: {
-  text: string
-  kind: ObjectBlockKind
-  title: string
-  paneId: string
-  lineCount?: number
-  editorWindowId?: string
-}): LauncherObjectBlock {
-  const kind = normalizeSecretKind(params.kind)
-  return createGenericObjectBlock({
-    source: 'editor-pane',
-    kind,
-    title: getSourceLabel('editor-pane'),
-    subtitle: `${getKindLabel(kind)} · ${params.title}`,
-    text: params.text,
-    masked: isSecretKind(kind),
-    validity: kind === 'json' ? 'valid' : 'unknown',
-    meta: {
-      paneId: params.paneId,
-      editorWindowId: params.editorWindowId,
-      lineCount: params.lineCount,
-      contentProvider: 'live',
-    },
-  })
-}
-
-export function createMultiPaneObjectBlock(params: {
-  left: { paneId: string; title: string; kind: ObjectBlockKind }
-  right: { paneId: string; title: string; kind: ObjectBlockKind }
-}): LauncherObjectBlock {
-  const leftKind = normalizeSecretKind(params.left.kind)
-  const rightKind = normalizeSecretKind(params.right.kind)
-  const sameKind = leftKind === rightKind
-  return createGenericObjectBlock({
-    source: 'multi-pane',
-    kind: sameKind ? leftKind : 'text',
-    title: getSourceLabel('multi-pane'),
-    subtitle: `${getKindLabel(leftKind)} + ${getKindLabel(rightKind)}`,
-    removable: true,
-    validity: 'unknown',
-    state: 'multi-object',
-    meta: {
-      paneId: params.left.paneId,
-      leftTitle: params.left.title,
-      rightTitle: params.right.title,
-      contentProvider: 'live',
-    },
   })
 }
 
@@ -341,7 +257,7 @@ export function createSnapshotObjectBlock(params: {
     source: 'snapshot',
     kind,
     title: params.editorWindowId ? `${params.editorWindowId}` : getSourceLabel('snapshot'),
-    subtitle: `${params.title} · snapshot`,
+    subtitle: `${params.title} · ${objectBlockText('detail.snapshot')}`,
     text: params.text,
     masked: isSecretKind(kind),
     validity: kind === 'json' ? 'valid' : 'unknown',
@@ -423,7 +339,7 @@ export function createHistoryItemObjectBlock(params: CreateHistoryItemObjectBloc
     }
   }
 
-  const names = params.fileNames?.length ? params.fileNames.join(', ') : `${params.paths.length} files`
+  const names = params.fileNames?.length ? params.fileNames.join(', ') : objectBlockText('detail.fileCount', { n: params.paths.length })
   const subtitleParts = [params.ageLabel, getKindLabel('files'), names, params.sizeLabel].filter(Boolean)
   return {
     id: `object-block:history-item:${++blockIdCounter}`,

@@ -10,6 +10,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import ts from 'typescript'
+import { objectBlockText, objectBlockTextModule } from './helpers/object-block-text.mjs'
 
 const memoryStorage = (() => {
   const map = new Map()
@@ -54,6 +55,7 @@ function loadTs(path, stubs = {}) {
 
 const snapshot = loadTs('src/launcher/clipboard/clipboardSnapshot.ts')
 const objectBlock = loadTs('src/launcher/clipboard/objectBlock.ts', {
+  objectBlockText,
   shouldAutoAttachClipboard: snapshot.shouldAutoAttachClipboard,
   shouldShowRecentClipboardHint: snapshot.shouldShowRecentClipboardHint,
   detectClipboardFilePath: snapshot.detectClipboardFilePath,

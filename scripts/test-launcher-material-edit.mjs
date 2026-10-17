@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import ts from 'typescript'
+import { objectBlockText, objectBlockTextModule } from './helpers/object-block-text.mjs'
 
 const values = new Map()
 const storage = {
@@ -36,7 +37,7 @@ const snapshot = load('src/launcher/clipboard/clipboardSnapshot.ts', { '../../ki
 const attachPolicy = load('src/launcher/clipboard/attachPolicy.ts', {
   '../../kits/content/index': content, './clipboardSnapshot': snapshot,
 })
-const blocks = load('src/launcher/clipboard/objectBlock.ts', { '../../kits/content/index': content, './clipboardSnapshot': snapshot, './attachPolicy': attachPolicy })
+const blocks = load('src/launcher/clipboard/objectBlock.ts', { '../../kits/content/index': content, './clipboardSnapshot': snapshot, './attachPolicy': attachPolicy, './objectBlockText': objectBlockTextModule })
 const material = load('src/launcher/clipboard/currentMaterial.ts')
 const pending = load('src/launcher/clipboard/pendingObjectBlock.ts')
 let inputReads = 0

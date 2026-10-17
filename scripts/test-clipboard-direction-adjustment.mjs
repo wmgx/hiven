@@ -20,6 +20,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import ts from 'typescript'
+import { objectBlockText, objectBlockTextModule } from './helpers/object-block-text.mjs'
 
 function transpileAndRun(path, globals = {}) {
   let src = readFileSync(path, 'utf8')
@@ -45,6 +46,7 @@ const attachPolicy = transpileAndRun('src/launcher/clipboard/attachPolicy.ts', {
   isSoftClipboardOperand: snapshot.isSoftClipboardOperand,
 })
 const objectBlock = transpileAndRun('src/launcher/clipboard/objectBlock.ts', {
+  objectBlockText,
   detectContent: detect.detectContent,
   shouldAutoAttachClipboard: snapshot.shouldAutoAttachClipboard,
   shouldShowRecentClipboardHint: snapshot.shouldShowRecentClipboardHint,

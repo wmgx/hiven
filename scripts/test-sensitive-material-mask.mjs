@@ -6,6 +6,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import vm from 'node:vm'
 import ts from 'typescript'
+import { objectBlockText, objectBlockTextModule } from './helpers/object-block-text.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const allowed = new Set([
@@ -33,6 +34,7 @@ function load(relative) {
   vm.runInNewContext(code, {
     exports: module.exports, module, Date, Buffer,
     require(specifier) {
+      if (specifier === './objectBlockText') return objectBlockTextModule
       assert.ok(specifier.startsWith('.'), `External I/O dependency: ${specifier}`)
       return load(path.relative(root, path.resolve(path.dirname(filename), `${specifier}.ts`)))
     },
@@ -73,7 +75,6 @@ const factories = [
   ['explicit history kind', (text) => blocks.createHistoryItemObjectBlock({ kind: 'text', text, detectedKind: 'json' })],
   ['editor selection', (text) => blocks.createEditorSelectionObjectBlock({ text, kind: 'json', lineCount: 2 })],
   ['editor document', (text) => blocks.createEditorDocumentObjectBlock({ text, kind: 'json', charCount: text.length })],
-  ['editor pane', (text) => blocks.createEditorPaneObjectBlock({ text, kind: 'json', title: 'synthetic.json', paneId: 'synthetic-pane' })],
   ['snapshot', (text) => blocks.createSnapshotObjectBlock({ text, kind: 'json', title: 'synthetic.json', snapshotAt: 123 })],
   ['file contents', (text) => fileText.createFileTextMaterial('/synthetic/never-read.json', text)],
   ['generic explicit kind', (text) => blocks.createGenericObjectBlock({ source: 'query', kind: 'json', title: 'synthetic', text, masked: false })],

@@ -14,6 +14,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import ts from 'typescript'
+import { objectBlockText, objectBlockTextModule } from './helpers/object-block-text.mjs'
 
 function loadModule(path, { stripImports = [], globals = {} } = {}) {
   let src = readFileSync(path, 'utf8')
@@ -74,8 +75,10 @@ const objectBlock = loadModule('src/launcher/clipboard/objectBlock.ts', {
     /import\s*\{\s*detectContent\s*\}\s*from\s*'\.\.\/\.\.\/kits\/content\/index'\s*;?\s*\n?/,
     /import\s*\{[^}]*\}\s*from\s*'\.\/clipboardSnapshot'\s*;?\s*\n?/,
     /import\s*\{[^}]*\}\s*from\s*'\.\/attachPolicy'\s*;?\s*\n?/,
+    /import\s*\{[^}]*\}\s*from\s*'\.\/objectBlockText'\s*;?\s*\n?/,
   ],
   globals: {
+    objectBlockText,
     isStrongClipboardAttachEligible: attachPolicy.isStrongClipboardAttachEligible,
     detectContent: detectContentModule.detectContent,
     detectClipboardFilePath: clipboardSnapshot.detectClipboardFilePath,
