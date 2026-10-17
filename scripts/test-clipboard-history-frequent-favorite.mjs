@@ -21,7 +21,6 @@ const requiredKeys = [
   'favorite.titleDialog',
   'favorite.titlePlaceholder',
   'favorite.untitled',
-  'settings.frequentPasteThreshold',
   'action.favorite',
   'action.unfavorite',
   'action.confirmFavorite',

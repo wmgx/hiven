@@ -1,9 +1,9 @@
 {
   "command.sha256.title": "SHA-256",
-  "command.sha256.description": "计算 SHA-256 哈希",
+  "command.sha256.description": "SHA-256 哈希",
   "command.sha1.title": "SHA-1",
-  "command.sha1.description": "计算 SHA-1 哈希",
+  "command.sha1.description": "SHA-1 哈希",
   "command.sha512.title": "SHA-512",
-  "command.sha512.description": "计算 SHA-512 哈希",
-  "error.hash": "哈希计算失败：{message}"
+  "command.sha512.description": "SHA-512 哈希",
+  "error.hash": "哈希失败：{message}"
 }

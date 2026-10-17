@@ -79,8 +79,6 @@ export default definePlugin<ClipboardHistorySettings>({
           id: 'recording',
           title: 'Recording',
           titleI18n: { zh: '记录设置' },
-          description: 'Choose which clipboard changes hiven should keep.',
-          descriptionI18n: { zh: '选择 hiven 要保留哪些剪贴板变化。' },
           fields: [
             {
               kind: 'switch',
@@ -89,8 +87,6 @@ export default definePlugin<ClipboardHistorySettings>({
               label: 'Enable clipboard history',
               labelI18n: { zh: '启用剪贴板历史' },
               requires: ['clipboard.watch', 'storage.private'],
-              description: 'Starts background recording when permissions are ready.',
-              descriptionI18n: { zh: '权限齐全后启动后台记录。' },
             },
             {
               kind: 'switch',
@@ -121,8 +117,6 @@ export default definePlugin<ClipboardHistorySettings>({
               key: 'retentionMonths',
               label: 'Retention months',
               labelI18n: { zh: '保留月数' },
-              description: '1–12 UTC calendar months, default 3; no item-count limit. Favorites are exempt from automatic expiry. Earlier history stays protected until explicitly included. Expired or manually deleted items are recoverable for 30 days, then permanently deleted automatically. Turning off recording does not pause cleanup.',
-              descriptionI18n: { zh: '1–12 个 UTC 日历月，默认 3 个月，不限制条数。固定（收藏）项免自动过期；旧历史在明确纳入前受保护。过期或手动删除的条目可恢复 30 天，之后自动永久删除。停用记录不会暂停清理。' },
               icon: 'CalendarDays',
               min: 1,
               max: 12,

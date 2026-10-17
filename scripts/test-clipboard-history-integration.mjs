@@ -20,13 +20,6 @@ const enLocale = JSON.parse(read('src/plugins/clipboard-history/locales/en.json'
 const zhLocale = JSON.parse(read('src/plugins/clipboard-history/locales/zh.json'))
 
 const requiredKeys = [
-  'settings.enabled',
-  'settings.recordText',
-  'settings.recordImages',
-  'settings.recordFiles',
-  'settings.retentionMonths',
-  'settings.clearAll',
-  'settings.clearAll.confirm',
   'surface.main.title',
   'search.placeholder',
   'filter.all',
@@ -37,7 +30,6 @@ const requiredKeys = [
   'group.today',
   'group.yesterday',
   'state.loading',
-  'state.disabled',
   'state.empty',
   'preview.empty',
   'hint.paste',
@@ -50,8 +42,6 @@ const requiredKeys = [
   'action.copy',
   'action.close',
   'message.copied',
-  'message.cleared',
-  'message.deleted',
   'meta.contentType',
   'meta.characters',
   'meta.words',

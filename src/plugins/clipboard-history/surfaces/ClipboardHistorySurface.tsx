@@ -491,7 +491,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         mergeIds.map((id) => ({ id, hash: mergeItemsRef.current.get(id)?.hash ?? '' })),
         mergeSeparator, customMergeSeparator, isCurrent,
         (text) => host.clipboard.writeText(text, { recordInHistory: false }))
-      if (isCurrent()) setCompareNotice(t('merge.copied'))
+      if (isCurrent()) setCompareNotice(t('message.copied'))
     } catch (error) {
       if (isCurrent()) setCompareNotice(t(error instanceof Error && error.message === 'too-large' ? 'merge.tooLarge' : 'merge.copyFailed'))
     } finally {
@@ -770,7 +770,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       const restored = await repository.restoreItem(selectedId)
       if (owner?.isCurrent() === false) return
       if (!restored) throw new Error('unavailable')
-      setPasteNotice(t('retention.restored'))
       refreshPage()
     } catch { if (owner?.isCurrent() !== false) setPasteNotice(t('retention.failed')) }
     finally { setRetentionBusy(false) }
@@ -784,7 +783,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       await repository.enableLegacyRetention(resolveClipboardHistoryRetentionMonths(settings.retentionMonths))
       if (owner?.isCurrent() === false) return
       setLegacyDialog(false)
-      setPasteNotice(t('retention.legacyEnabled'))
       refreshPage()
     } catch { if (owner?.isCurrent() !== false) setPasteNotice(t('retention.failed')) }
     finally { setRetentionBusy(false) }
@@ -1002,7 +1000,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       }
       if (!submission.isCurrent()) return
       submission.commit()
-      host.showMessage(t('message.copied'), 'success')
       resetBrowser()
       host.complete()
     } catch {
@@ -1027,9 +1024,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     try {
       const result = await saveClipboardHistoryImage(repository, host.storage, item.id, submission.isCurrent)
       if (!submission.isCurrent() || generation !== pasteNoticeGenerationRef.current) return
-      if (result.status === 'saved') setPasteNotice(t('imageSave.saved'))
-      else if (result.status === 'cancelled') setPasteNotice(t('imageSave.cancelled'))
-      else if (result.status === 'unavailable') setPasteNotice(t('imageSave.unavailable'))
+      if (result.status === 'unavailable') setPasteNotice(t('imageSave.unavailable'))
     } catch {
       if (submission.isCurrent() && generation === pasteNoticeGenerationRef.current) {
         setPasteNotice(t('imageSave.failed'))
@@ -1132,7 +1127,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       if (generation !== editGeneration.current || host.deliveryFeedbackOwner?.isCurrent() === false) return
       applyItemUpdate(updated)
       setTextEdit(null)
-      setPasteNotice(t('edit.saved'))
       requestAnimationFrame(() => searchRef.current?.focus())
     } catch (error) {
       if (generation !== editGeneration.current) return
@@ -1443,7 +1437,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         }))}
       </span>
       {queueActive && <>
-        <span>{t('queue.snapshot')}</span>
         <Button type="button" disabled={queueCancelling} onClick={() => void cancelQueue()}>{t('queue.cancel')}</Button>
         <Button type="button" disabled={queueBusy || Boolean(textEdit)} onClick={() => host.close()}>{t('queue.returnExternal')}</Button>
       </>}
@@ -1651,7 +1644,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                 {textEdit ? (
                   <div className="clipboard-history-text-edit">
                     <strong>{t('edit.title')}</strong>
-                    <p>{t('edit.description')}</p>
                     <textarea ref={editInputRef} aria-label={t('edit.title')} value={textEdit.draft}
                       disabled={textEdit.busy} spellCheck={false}
                       onChange={(event) => setTextEdit({ ...textEdit, draft: event.target.value, error: null })}
@@ -1794,8 +1786,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         </IconButton>}
       </div>
 
-      {!combining && (filter === 'trash' || (retentionStatus?.legacyProtectedCount ?? 0) > 0 || fullTextSearchState === 'loading') && <SurfaceFooterHints className="clipboard-history-footer">
-        {filter === 'trash' && <span>{t('retention.trashHint')}</span>}
+      {!combining && ((retentionStatus?.legacyProtectedCount ?? 0) > 0 || fullTextSearchState === 'loading') && <SurfaceFooterHints className="clipboard-history-footer">
         {retentionStatus && retentionStatus.legacyProtectedCount > 0 && <>
           <span>{t('retention.legacyProtected', { count: retentionStatus.legacyProtectedCount })}</span>
           <Button type="button" disabled={retentionBusy || !retentionStatus.migrationComplete || Boolean(textEdit)} onClick={() => setLegacyDialog(true)}>{t('retention.enableLegacy')}</Button>
@@ -2313,7 +2304,6 @@ function getMetaRows(item: ClipboardHistoryItem, locale: string, t: (key: string
   }
   if (item.isFavorite) {
     rows.push({ label: t('meta.favorite'), value: item.favoriteTitle?.trim() || t('favorite.untitled') })
-    rows.push({ label: t('retention.label'), value: t('retention.favoriteExempt') })
   }
   if (item.legacyProtected) rows.push({ label: t('retention.label'), value: t('retention.protectedItem') })
   if (item.purgeAfter) rows.push({ label: t('retention.restoreUntil'), value: new Intl.DateTimeFormat(resolveIntlLocale(locale), { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(item.purgeAfter)) })

@@ -64,8 +64,7 @@ function buildCommandTools(settings: UserCommandsSettings): PluginToolContributi
                 return { ok: false as const, message: msg }
               }
               const msg = ctx.t('result.ok', {
-                code: String(code),
-                  stdout: stdout || ctx.t('result.noOutput'),
+                stdout: stdout || ctx.t('result.noOutput'),
               })
               // Show output as a copyable result by writing via secondary path:
               // return ok and let host toast; also copy stdout when non-empty.
@@ -123,8 +122,6 @@ export default definePlugin<UserCommandsSettings>({
               icon: 'Power',
               label: 'settings.enabled',
               labelI18n: { zh: '启用自定义命令' },
-              description: 'settings.enabled.desc',
-              descriptionI18n: { zh: '仅控制命令是否出现在 Launcher，启用不代表已获得执行权限。' },
             },
           ],
         },
@@ -144,7 +141,7 @@ export default definePlugin<UserCommandsSettings>({
               itemLabel: 'settings.item',
               itemLabelI18n: { zh: '命令' },
               emptyText: 'settings.empty',
-              emptyTextI18n: { zh: '还没有自定义命令。' },
+              emptyTextI18n: { zh: '暂无命令' },
               itemDefaults: {
                 id: 'cmd-new',
                 title: 'New command',
@@ -167,16 +164,12 @@ export default definePlugin<UserCommandsSettings>({
                   key: 'command',
                   label: 'field.command',
                   labelI18n: { zh: 'Shell 命令' },
-                  description: 'field.command.desc',
-                  descriptionI18n: {
-                    zh: '每次运行都需确认，并且需要命令执行权限（shell.run）；授权状态见插件权限。',
-                  },
                 },
                 {
                   kind: 'text',
                   key: 'cwd',
                   label: 'field.cwd',
-                  labelI18n: { zh: '工作目录（可选）' },
+                  labelI18n: { zh: '工作目录' },
                 },
                 {
                   kind: 'number',

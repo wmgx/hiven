@@ -1,5 +1,3 @@
 {
-  "result.copy": "复制 {format} · {hex} · sRGB",
-  "provider.title": "颜色转换",
-  "provider.subtitle": "将十六进制颜色转换为 RGB、HSL 和 OKLCH"
+  "result.copy": "复制 {format} · {hex}"
 }
