@@ -58,6 +58,7 @@
   "status.ready": "输出已就绪",
   "status.waiting": "等待输入",
   "status.error": "请检查输入",
+  "action.more": "更多",
   "action.back": "返回",
   "action.copy": "复制",
   "action.copyDescription": "复制当前结果",

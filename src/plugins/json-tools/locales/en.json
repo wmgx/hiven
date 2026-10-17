@@ -58,6 +58,7 @@
   "status.ready": "Output ready",
   "status.waiting": "Waiting for input",
   "status.error": "Input needs attention",
+  "action.more": "More",
   "action.back": "Back",
   "action.copy": "Copy",
   "action.copyDescription": "Copy the current result",

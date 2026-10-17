@@ -1,7 +1,8 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, Checkbox, IconButton, SegmentedControl, TextEditor, TextInput, getEditorTheme, useImeKeyboard, useToolDeliveryFeedback } from '@hiven/plugin-ui'
+import { Button, Checkbox, IconButton, Menu, SegmentedControl, TextEditor, TextInput, getEditorTheme, useImeKeyboard, useToolDeliveryFeedback } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
+import { Ellipsis } from 'lucide-react'
 import { UrlQueryEditor } from './UrlQueryEditor'
 import { useJsonCursorPath } from './useJsonCursorPath'
 import { operationRoutes } from './routes'
@@ -254,13 +255,18 @@ export function JsonSurface(props: PluginSurfaceProps) {
           <section className="jt-pane">
             <div className="jt-pane-header">
               <strong>{t('pane.input')}</strong>
-              {activeGroup === 'json' && <div className="jt-pane-actions">
-                <Button type="button" variant="ghost" onClick={() => void inputCursor.copy('jsonPath')}>{t('cursor.jsonPath')}</Button>
-                <Button type="button" variant="ghost" onClick={() => void inputCursor.copy('pointer')}>{t('cursor.pointer')}</Button>
-              </div>}
-              <Button type="button" variant="ghost" onClick={() => updateResult(() => setInputText(''))} disabled={!inputText}>
-                {t('action.clear')}
-              </Button>
+              <div className="jt-pane-actions">
+                <Button type="button" variant="ghost" onClick={() => updateResult(() => setInputText(''))} disabled={!inputText}>
+                  {t('action.clear')}
+                </Button>
+                {activeGroup === 'json' && <Menu
+                  items={[
+                    { key: 'jsonPath', label: t('cursor.jsonPath'), onSelect: () => void inputCursor.copy('jsonPath') },
+                    { key: 'pointer', label: t('cursor.pointer'), onSelect: () => void inputCursor.copy('pointer') },
+                  ]}
+                  trigger={<IconButton type="button" label={t('action.more')}><Ellipsis size={16} /></IconButton>}
+                />}
+              </div>
             </div>
             <div className="jt-editor" data-launcher-scrollable>
               <Suspense fallback={editorLoading}>
@@ -292,18 +298,19 @@ export function JsonSurface(props: PluginSurfaceProps) {
             <div className="jt-pane-header">
               <strong>{t('pane.output')}</strong>
               <div className="jt-pane-actions">
-                <Button type="button" variant="ghost" title={useAsInputDescription} aria-label={useAsInputDescription} disabled={!hasOutput || operation === 'typescript'} onClick={useOutputAsInput}>
-                  {t('action.useAsInput')}
-                </Button>
-                <Button type="button" variant="ghost" title={t('action.continueProcessingDescription')} aria-label={t('action.continueProcessingDescription')} disabled={!canReturnOutput || returning || copying} onClick={() => void returnOutput()}>
-                  {t('action.continueProcessing')}
-                </Button>
                 <Button type="button" title={t('action.copyDescription')} aria-label={t('action.copyDescription')} onClick={() => void deliverOutput('copy')} disabled={!hasOutput || returning || copying}>
                   {t('action.copy')}
                 </Button>
                 <Button type="button" title={t('action.pasteDescription')} aria-label={t('action.pasteDescription')} onClick={() => void deliverOutput('paste')} disabled={!hasOutput || returning || copying}>
                   {t('action.paste')}
                 </Button>
+                <Menu
+                  items={[
+                    { key: 'use-as-input', label: t('action.useAsInput'), description: useAsInputDescription, disabled: !hasOutput || operation === 'typescript', onSelect: useOutputAsInput },
+                    { key: 'continue', label: t('action.continueProcessing'), description: t('action.continueProcessingDescription'), disabled: !canReturnOutput || returning || copying, onSelect: () => void returnOutput() },
+                  ]}
+                  trigger={<IconButton type="button" label={t('action.more')}><Ellipsis size={16} /></IconButton>}
+                />
               </div>
             </div>
             <div className="jt-editor jt-editor-output" data-launcher-scrollable>
