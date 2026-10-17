@@ -93,7 +93,7 @@ export const textDiffPlugin = definePlugin({
         title: 'Text Compare',
         titleI18n: { zh: '文本对比' },
         icon: 'GitCompare',
-        aliases: ['diff', 'compare', 'text diff', '文本对比', 'duibi'],
+        aliases: ['diff', 'compare', 'text diff', '文本对比'],
         component: LazyTextDiffSurface,
         entry: { launcher: false, shortcutBindable: false },
         shell: {
@@ -115,7 +115,7 @@ export const textDiffPlugin = definePlugin({
         subtitle: 'command.compare.description',
         icon: 'GitCompare',
         aliases: mode === 'main'
-          ? ['diff', 'compare', 'text diff', 'text-diff', '文本对比', 'duibi', 'wenbenduibi']
+          ? ['diff', 'compare', 'text diff', 'text-diff', '文本对比']
           : ['json diff', 'json compare', 'compare json', 'json对比', 'json差异'],
       },
       behavior: { type: 'perform' as const },

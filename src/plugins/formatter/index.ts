@@ -37,7 +37,7 @@ export const formatterPlugin = definePlugin({
         title: 'Formatter',
         titleI18n: { zh: '格式化工具' },
         icon: 'Braces',
-        aliases: ['formatter', 'format', 'formatter tools', '格式化', '格式化工具', 'geshihua'],
+        aliases: ['formatter', 'format', 'formatter tools', '格式化', '格式化工具'],
         textMatch: (text) => (['css', 'sql', 'xml'] as const).some((kind) => matchesContentKind(text, kind)),
         component: FormatterSurface,
         entry: {

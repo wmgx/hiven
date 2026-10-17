@@ -19,7 +19,7 @@ function loadTs(path, importStubs) {
   }).outputText
   const moduleExports = {}
   const requireShim = (id) => {
-    if (id === 'pinyin-pro') return { pinyin: (t) => t } // identity stub; tests use ascii
+    if (id === 'pinyin-pro') return { pinyin: (t) => t, customPinyin: () => {} } // identity stub; tests use ascii
     throw new Error('unexpected require: ' + id)
   }
   const sandbox = { exports: moduleExports, module: { exports: moduleExports }, console, require: requireShim }

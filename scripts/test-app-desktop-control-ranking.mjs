@@ -24,7 +24,7 @@ function loadTs(path, importStubs = [], globals = {}) {
   }).outputText
   const moduleExports = {}
   const requireShim = (id) => {
-    if (id === 'pinyin-pro') return { pinyin: (t) => t }
+    if (id === 'pinyin-pro') return { pinyin: (t) => t, customPinyin: () => {} }
     throw new Error('unexpected require: ' + id)
   }
   const sandbox = {

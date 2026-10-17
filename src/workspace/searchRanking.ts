@@ -1,5 +1,8 @@
-import { pinyin } from 'pinyin-pro'
+import { customPinyin, pinyin } from 'pinyin-pro'
 import type { Locale } from '../i18n'
+
+// pinyin-pro reads 重 as zhòng here; this common word is always chóng.
+customPinyin({ 去重: 'qù chóng' })
 
 export type SearchableFields = {
   id: string

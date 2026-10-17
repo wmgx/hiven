@@ -458,7 +458,7 @@ for (const [saved, base] of [
 
 const usageModule = loadModule('src/workspace/launcher/usage.ts', { './types': launcherTypes })
 const actualRanking = loadModule('src/workspace/launcher/ranking.ts', {
-  '../searchRanking': loadModule('src/workspace/searchRanking.ts', { 'pinyin-pro': { pinyin } }),
+  '../searchRanking': loadModule('src/workspace/searchRanking.ts', { 'pinyin-pro': { pinyin, customPinyin: () => {} } }),
   '../desktopTargets/browserWindowPolicy': loadModule('src/workspace/desktopTargets/browserWindowPolicy.ts'),
   './intentEngine': loadModule('src/workspace/launcher/intentEngine.ts'),
   './usage': usageModule, './display': launcherDisplay,

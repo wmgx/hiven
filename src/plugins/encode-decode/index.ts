@@ -72,7 +72,7 @@ export const encodeDecodePlugin = definePlugin({
         title: 'Encode / Decode',
         titleI18n: { zh: '编解码' },
         icon: 'Binary',
-        aliases: ['encode', 'decode', 'encode decode', 'encoder', 'decoder', '编码', '解码', '编解码', 'bianma', 'jiema'],
+        aliases: ['encode', 'decode', 'encode decode', 'encoder', 'decoder', '编码', '解码', '编解码'],
         textMatch: (text) => isBase64(text) || isUrlEncoded(text) || hasHtmlEntities(text) || hasEscapeSequences(text) || isJwt(text),
         component: EncodeDecodeSurface,
         entry: {

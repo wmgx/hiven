@@ -253,7 +253,7 @@ export default definePlugin<TranslateSettings>({
         title: 'Translate',
         titleI18n: { zh: '翻译' },
         icon: 'Languages',
-        aliases: ['translate', 'translation', '翻译', 'fanyi'],
+        aliases: ['translate', 'translation', '翻译'],
         component: TranslateSurface,
         entry: {
           launcher: { surfaces: ['global-launcher'] },
