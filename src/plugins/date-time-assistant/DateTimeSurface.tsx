@@ -55,11 +55,6 @@ export function DateTimeSurface({ defaultOffset, host, initialText, t, convert }
       </header>
 
       <main className="date-time-surface__body" data-launcher-scrollable>
-        <div className="date-time-surface__intro">
-          <strong>{t('surface.heading')}</strong>
-          <span>{t('surface.description')}</span>
-        </div>
-
         <div className="date-time-surface__inputs">
           <label className="date-time-surface__input">
             <span>{t('surface.input')}</span>
@@ -85,7 +80,6 @@ export function DateTimeSurface({ defaultOffset, host, initialText, t, convert }
           </label>
           <Button type="button" onClick={() => setInput(String(Date.now()))}>{t('surface.useNow')}</Button>
         </div>
-        <p className="date-time-surface__hint">{t('surface.offsetHint')}</p>
 
         <section className="date-time-surface__results" aria-label={t('surface.results')} aria-live="polite">
           {result.ok ? values.map((item) => (
@@ -100,12 +94,9 @@ export function DateTimeSurface({ defaultOffset, host, initialText, t, convert }
           )) : (
             <p className="date-time-surface__error" role="alert">
               <strong>{t('surface.invalid')}</strong>
-              <span>{t('surface.invalidHint')}</span>
             </p>
           )}
         </section>
-
-        <p className="date-time-surface__examples">{t('surface.examples')}</p>
       </main>
     </section>
   )

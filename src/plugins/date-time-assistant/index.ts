@@ -497,7 +497,6 @@ export const dateTimeAssistantPlugin = definePlugin({
     {
       id: 'timestamp.run',
       title: 'command.timestamp.title',
-      subtitle: 'command.timestamp.description',
       icon: 'Clock',
       aliases: ['ts', '时间戳', 'unix-time', 'epoch', 'date-convert'],
       inputPolicy: { mode: 'auto' },
@@ -518,7 +517,6 @@ export const dateTimeAssistantPlugin = definePlugin({
     {
       id: 'timestamp.run',
       title: 'command.timestamp.title',
-      description: 'command.timestamp.description',
       icon: 'Clock',
       aliases: ['ts', '时间戳', 'unix-time', 'epoch', 'date-convert'],
       live: { live: { enabled: true, trigger: 'on-input', sideEffects: 'none', debounceMs: 250 } },
@@ -544,7 +542,6 @@ export const dateTimeAssistantPlugin = definePlugin({
       id: `open-${route.id}`,
       display: {
         title: route.title,
-        subtitle: 'route.open',
         icon: 'Clock',
         aliases: route.aliases,
       },
@@ -562,18 +559,17 @@ export const dateTimeAssistantPlugin = definePlugin({
       const relative = parseRelativeTimeAnswer(input, now)
       if (relative) {
         if (!relative.ok) return [{
-          id: 'dt-relative-error', display: { title: ctx.t(`relative.error.${relative.error}`), subtitle: ctx.t('relative.help'), icon: 'Clock' },
+          id: 'dt-relative-error', display: { title: ctx.t(`relative.error.${relative.error}`), icon: 'Clock' },
           behavior: { type: 'perform' }, surfaces: ['global-launcher'], directAnswer: true,
           execute() { return { ok: false, message: ctx.t(`relative.error.${relative.error}`) } },
         }]
         const value = relative.value
         const base = ctx.t('relative.base', { time: value.base, zone: value.zone })
-        const rule = ctx.t(value.mode === 'calendar' ? 'relative.calendar' : 'relative.elapsed')
         // Copy this explicit displayed base and result together, rather than
         // silently moving the reference time when the user activates the answer.
-        const copied = `${input.trim()} → ${value.target} (${value.zone}) · ${base} · ${rule}`
+        const copied = `${input.trim()} → ${value.target} (${value.zone}) · ${base}`
         return [{
-          id: 'dt-relative-answer', display: { title: `${input.trim()} → ${value.target}`, subtitle: `${base} · ${rule} · ${ctx.t('relative.copy')}`, icon: 'Clock' },
+          id: 'dt-relative-answer', display: { title: `${input.trim()} → ${value.target}`, subtitle: base, icon: 'Clock' },
           behavior: { type: 'perform' }, surfaces: ['global-launcher'], directAnswer: true,
           async execute(execution) { await execution.api.copyText(copied); return { ok: true } },
         }]
@@ -581,7 +577,7 @@ export const dateTimeAssistantPlugin = definePlugin({
       const cron = parseCronAnswer(input, now)
       if (cron) {
         if (!cron.ok) return [{
-          id: 'dt-cron-error', display: { title: ctx.t(`cron.error.${cron.error}`), subtitle: ctx.t('cron.help'), icon: 'Clock' },
+          id: 'dt-cron-error', display: { title: ctx.t(`cron.error.${cron.error}`), icon: 'Clock' },
           behavior: { type: 'perform' }, surfaces: ['global-launcher'], directAnswer: true,
           execute() { return { ok: false, message: ctx.t(`cron.error.${cron.error}`) } },
         }]
@@ -590,9 +586,8 @@ export const dateTimeAssistantPlugin = definePlugin({
           ? ctx.t('cron.everyMinutes', { count: value.everyMinutes })
           : ctx.t('cron.fields', { minute: value.fields[0], hour: value.fields[1], day: value.fields[2], month: value.fields[3], weekday: value.fields[4] })
         const next = ctx.t('cron.next', { time: value.next, zone: value.zone })
-        const rule = ctx.t(value.dayOr ? 'cron.dayOr' : 'cron.dayRule')
         return [{
-          id: 'dt-cron-answer', display: { title: next, subtitle: `${ctx.t('cron.copy')} · ${description} · ${rule}`, icon: 'Clock' },
+          id: 'dt-cron-answer', display: { title: next, subtitle: description, icon: 'Clock' },
           behavior: { type: 'perform' }, surfaces: ['global-launcher'], directAnswer: true,
           async execute(execution) {
             // The suggestion may have been idle across its next occurrence. Keep
@@ -600,7 +595,7 @@ export const dateTimeAssistantPlugin = definePlugin({
             const fresh = parseCronAnswer(input, new Date(), value.zone)
             if (!fresh?.ok) return { ok: false, message: ctx.t(`cron.error.${fresh?.error ?? 'syntax'}`) }
             const freshNext = ctx.t('cron.next', { time: fresh.value.next, zone: fresh.value.zone })
-            await execution.api.copyText(`${fresh.value.expression} · ${description} · ${freshNext} · ${rule}`)
+            await execution.api.copyText(`${fresh.value.expression} · ${description} · ${freshNext}`)
             return { ok: true }
           },
         }]
@@ -609,7 +604,7 @@ export const dateTimeAssistantPlugin = definePlugin({
       if (zoneResult) {
         if (!zoneResult.ok) return [{
           id: 'dt-zone-error',
-          display: { title: ctx.t(`zone.error.${zoneResult.error}`), subtitle: ctx.t('zone.help'), icon: 'Clock' },
+          display: { title: ctx.t(`zone.error.${zoneResult.error}`), icon: 'Clock' },
           behavior: { type: 'perform' }, surfaces: ['global-launcher'], directAnswer: true,
           execute() { return { ok: false, message: ctx.t(`zone.error.${zoneResult.error}`) } },
         }]
@@ -622,7 +617,7 @@ export const dateTimeAssistantPlugin = definePlugin({
         const copied = `${source} → ${value.targets.map((target) => `${ctx.t(`zone.${target.key}`)} ${target.date} ${target.time}`).join(' · ')}`
         return [{
           id: 'dt-zone-answer',
-          display: { title: summary, subtitle: `${source} · ${ctx.t(value.fixed ? 'zone.fixed' : 'zone.dateRules')} · ${ctx.t('zone.copy')}`, icon: 'Clock' },
+          display: { title: summary, subtitle: source, icon: 'Clock' },
           behavior: { type: 'perform' }, surfaces: ['global-launcher'], directAnswer: true,
           async execute(execution) {
             await execution.api.copyText(copied)

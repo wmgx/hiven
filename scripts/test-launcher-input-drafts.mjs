@@ -116,7 +116,7 @@ try {
     const h = harness('editor-command-bar')
     await h.controller.selectItem(random, { customizeParams: true, recordUsage: false })
     for (const value of [10, 5, 7]) await h.controller.commitCurrentParam(value)
-    assert.match(h.controller.getState().error, /Max must be greater than or equal to min/)
+    assert.match(h.controller.getState().error, /Max can't be less than min/)
     assert.deepEqual(h.deliveries, [])
     h.controller.back()
     assert.equal(h.top().query, '5')

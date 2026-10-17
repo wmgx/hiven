@@ -1,10 +1,10 @@
 {
-  "version": 160,
+  "version": 161,
   "packages": [
     {
       "pluginId": "encode-decode",
       "dir": "encode-decode",
-      "version": "2.10.3"
+      "version": "2.10.4"
     },
     {
       "pluginId": "formatter",
@@ -34,12 +34,12 @@
     {
       "pluginId": "calculator",
       "dir": "calculator",
-      "version": "1.9.0"
+      "version": "1.9.1"
     },
     {
       "pluginId": "date-time-assistant",
       "dir": "date-time-assistant",
-      "version": "1.12.0"
+      "version": "1.12.1"
     },
     {
       "pluginId": "translate",
@@ -69,7 +69,7 @@
     {
       "pluginId": "web-open",
       "dir": "web-open",
-      "version": "1.12.13"
+      "version": "1.12.14"
     },
     {
       "pluginId": "qr-code",
@@ -79,7 +79,7 @@
     {
       "pluginId": "random",
       "dir": "random",
-      "version": "1.2.3"
+      "version": "1.2.4"
     },
     {
       "pluginId": "text-explode",

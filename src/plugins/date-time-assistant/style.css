@@ -35,22 +35,11 @@
   overflow: auto;
 }
 
-.date-time-surface__intro { display: grid; gap: 5px; }
-.date-time-surface__intro strong { font-size: 16px; font-weight: 650; }
-.date-time-surface__intro span,
-.date-time-surface__hint,
-.date-time-surface__examples {
-  color: var(--color-text-tertiary, var(--hiven-color-text-tertiary));
-  font-size: 11px;
-  line-height: 1.55;
-}
-
 .date-time-surface__inputs {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 180px auto;
   align-items: end;
   gap: 10px;
-  margin-top: 22px;
 }
 
 .date-time-surface__input,
@@ -63,7 +52,6 @@
 }
 .date-time-surface__inputs .hiven-ui-input { height: 34px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .date-time-surface__inputs .hiven-ui-button { height: 34px; }
-.date-time-surface__hint { margin: 7px 0 0; }
 
 .date-time-surface__results {
   margin-top: 22px;
@@ -100,8 +88,6 @@
   color: var(--hiven-color-danger);
 }
 .date-time-surface__error strong { font-size: 12px; }
-.date-time-surface__error span { color: var(--color-text-secondary); font-size: 11px; }
-.date-time-surface__examples { margin: 12px 0 0; font-family: var(--font-mono); }
 
 @media (max-width: 720px) {
   .date-time-surface__header { gap: 6px; padding: 0 8px; }

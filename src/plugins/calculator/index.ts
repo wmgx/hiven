@@ -377,7 +377,6 @@ function CalculationResultPanel({ inputs, host }: PanelPropsV2<CalculationResult
     e('div', { className: 'calculator-result-panel__header' },
       e('div', null,
         e('div', { className: 'calculator-result-panel__title' }, t('panel.result.title')),
-        e('div', { className: 'calculator-result-panel__subtitle' }, t('panel.result.subtitle')),
       ),
       e('button', {
         type: 'button',
@@ -429,7 +428,7 @@ function CalculatorWorkspace(props: PluginSurfaceProps) {
 
 // ─── Plugin Definition ───────────────────────────────────────────────────────
 
-function numberAnswerItem(id: string, title: string, subtitle: string, text?: string): LauncherItemContribution {
+function numberAnswerItem(id: string, title: string, subtitle?: string, text?: string): LauncherItemContribution {
   return {
     id,
     display: { title, subtitle, icon: 'Calculator' },
@@ -471,7 +470,6 @@ const definition: PluginDefinition = {
     {
       id: 'calculator.run',
       title: 'command.run.title',
-      subtitle: 'command.run.description',
       icon: 'Calculator',
       aliases: ['calc', 'formula'],
       inputPolicy: { mode: 'auto' },
@@ -492,7 +490,6 @@ const definition: PluginDefinition = {
     {
       id: 'calculator.sum',
       title: 'command.sum.title',
-      subtitle: 'command.sum.description',
       icon: 'Sigma',
       aliases: ['sum', 'add', 'total'],
       inputPolicy: { mode: 'auto' },
@@ -504,7 +501,6 @@ const definition: PluginDefinition = {
     {
       id: 'calculator.base',
       title: 'command.base.title',
-      subtitle: 'command.base.description',
       icon: 'Binary',
       aliases: ['decimal', 'binary', 'hex', 'hex-convert'],
       inputPolicy: { mode: 'auto' },
@@ -543,7 +539,6 @@ const definition: PluginDefinition = {
     {
       id: 'calculator.run',
       title: 'command.run.title',
-      description: 'command.run.description',
       icon: 'Calculator',
       aliases: ['calc', 'formula'],
       live: { live: { enabled: true, trigger: 'on-input', sideEffects: 'none', debounceMs: 250 } },
@@ -560,7 +555,6 @@ const definition: PluginDefinition = {
     {
       id: 'calculator.sum',
       title: 'command.sum.title',
-      description: 'command.sum.description',
       icon: 'Sigma',
       aliases: ['sum', 'add', 'total'],
       inputs: [
@@ -576,7 +570,6 @@ const definition: PluginDefinition = {
     {
       id: 'calculator.base',
       title: 'command.base.title',
-      description: 'command.base.description',
       icon: 'Binary',
       aliases: ['decimal', 'binary', 'hex', 'hex-convert'],
       params: [
@@ -625,25 +618,25 @@ const definition: PluginDefinition = {
       const thousands = parseThousandsQuery(input)
       if (thousands) {
         return [thousands.ok
-          ? numberAnswerItem('thousands-answer', thousands.text, ctx.t('thousands.copyHint'), thousands.text)
-          : numberAnswerItem('thousands-answer-error', ctx.t(`thousands.error.${thousands.error}`), ctx.t('thousands.syntax'))]
+          ? numberAnswerItem('thousands-answer', thousands.text, undefined, thousands.text)
+          : numberAnswerItem('thousands-answer-error', ctx.t(`thousands.error.${thousands.error}`))]
       }
       const chinese = parseChineseNumeralQuery(input)
       if (chinese) {
         return [chinese.ok
-          ? numberAnswerItem('chinese-number', `${input.trim()} = ${chinese.text}`, ctx.t(`chinese.${chinese.mode}Hint`), chinese.text)
-          : numberAnswerItem('chinese-number-error', ctx.t(`chinese.error.${chinese.error}`), ctx.t('chinese.syntax'))]
+          ? numberAnswerItem('chinese-number', `${input.trim()} = ${chinese.text}`, undefined, chinese.text)
+          : numberAnswerItem('chinese-number-error', ctx.t(`chinese.error.${chinese.error}`))]
       }
       const radix = parseRadixQuery(input)
       if (radix) {
-        if (!radix.ok) return [numberAnswerItem('radix-answer-error', ctx.t(`radix.error.${radix.error}`), ctx.t('radix.syntax'))]
+        if (!radix.ok) return [numberAnswerItem('radix-answer-error', ctx.t(`radix.error.${radix.error}`))]
         const text = radix.answers.length === 1
           ? radix.answers[0].text
           : radix.answers.map((answer) => `${ctx.t(`radix.base.${answer.base}`)}: ${answer.text}`).join('\n')
         return [numberAnswerItem(
           'radix-answer',
           `${input.trim()} = ${radix.answers.map((answer) => answer.text).join(' · ')}`,
-          ctx.t('radix.copyHint', { bases: radix.answers.map((answer) => ctx.t(`radix.base.${answer.base}`)).join(' / ') }),
+          undefined,
           text,
         )]
       }
@@ -653,7 +646,7 @@ const definition: PluginDefinition = {
           const message = ctx.t(`units.error.${conversion.error}`)
           return [{
             id: 'unit-conversion-error',
-            display: { title: message, subtitle: ctx.t('units.syntax'), icon: 'Calculator' },
+            display: { title: message, icon: 'Calculator' },
             behavior: { type: 'perform' },
             surfaces: ['global-launcher'],
             directAnswer: true,
@@ -664,7 +657,6 @@ const definition: PluginDefinition = {
           id: 'unit-conversion',
           display: {
             title: `${input.trim()} ${conversion.approximate ? '≈' : '='} ${conversion.text}`,
-            subtitle: ctx.t(conversion.dimension === 'data' ? 'units.dataHint' : 'units.copyHint'),
             icon: 'Calculator',
           },
           behavior: { type: 'perform' },

@@ -29,7 +29,7 @@ export function ImageBase64Panel({ host, t, initialText, active, saveFocused, on
   useLayoutEffect(() => {
     const stop = host.deliveryFeedbackOwner?.subscribeInvalidation(() => {
       invalidate()
-      if (pending.current) { setBusy(false); setStatus('image.cancelled') }
+      if (pending.current) { setBusy(false); setStatus('') }
     })
     return () => { invalidate(); stop?.() }
   }, [host.deliveryFeedbackOwner])
@@ -37,7 +37,7 @@ export function ImageBase64Panel({ host, t, initialText, active, saveFocused, on
   useLayoutEffect(() => {
     const interrupt = () => {
       invalidate()
-      if (pending.current) { setBusy(false); setStatus('image.cancelled') }
+      if (pending.current) { setBusy(false); setStatus('') }
     }
     invalidateRef.current = interrupt
     return () => { if (invalidateRef.current === interrupt) invalidateRef.current = null }
@@ -63,7 +63,7 @@ export function ImageBase64Panel({ host, t, initialText, active, saveFocused, on
       setResult(next)
       setDeliveryReady(true)
     }
-    return 'image.ready'
+    return ''
   }
   const deliver = (action: 'uri' | 'copy' | 'save') => {
     if (!result || deliverableRef.current !== result) return
@@ -71,15 +71,14 @@ export function ImageBase64Panel({ host, t, initialText, active, saveFocused, on
       if (action === 'uri') { await host.clipboard.writeText(result.uri); return 'image.copied' }
       const blob = await host.storage.blob.put({ bytes: result.png, contentType: 'image/png', extension: 'png' })
       try {
-        if (!current()) return 'image.cancelled'
+        if (!current()) return ''
         if (action === 'copy') { await host.clipboard.writeImage(blob.blobId); return 'image.copied' }
         const saved = await host.storage.blob.savePng(blob.blobId, { suggestedFilename: 'image.png' })
-        return saved.status === 'saved' ? 'image.saved' : 'image.cancelled'
+        return saved.status === 'saved' ? 'image.saved' : ''
       } finally { await host.storage.blob.delete(blob.blobId) }
     })
   }
   return <main className="image-base64-panel" hidden={!active} data-launcher-scrollable>
-    {saveFocused && <p>{t('image.saveTaskHint')}</p>}
     <div className="image-base64-actions">
       {!saveFocused && <Button disabled={busy || !host.clipboard.readImage} onClick={() => void run(async (signal, current) => {
         const image = await host.clipboard.readImage!({ signal }); return load(image.bytes, signal, current, image.contentType)
@@ -88,10 +87,10 @@ export function ImageBase64Panel({ host, t, initialText, active, saveFocused, on
         const image = await host.clipboard.readImage!({ signal })
         const info = inspectRaster(image.bytes, image.contentType)
         const decoded = await decodeRaster(image.bytes, info, signal)
-        if (!current()) return 'image.cancelled'
+        if (!current()) return ''
         try {
           const saved = await saveClipboardPng(host.storage, decoded.png, current)
-          if (saved.status === 'cancelled') return 'image.saveClipboardCancelled'
+          if (saved.status === 'cancelled') return ''
           return saved.pathCopied ? 'image.savedPathCopied' : 'image.savedPathCopyFailed'
         } catch { return 'image.saveClipboardFailed' }
       })}>{t('image.saveClipboard')}</Button>
@@ -111,7 +110,7 @@ export function ImageBase64Panel({ host, t, initialText, active, saveFocused, on
       <Button disabled={busy || !text.trim()} onClick={() => void run(async (signal, current) => {
         const parsed = parseImageBase64(text); return load(parsed.bytes, signal, current, parsed.info.mime)
       }, true)}>{t('image.decode')}</Button>
-      {busy && <Button onClick={() => { invalidate(); setBusy(false); setStatus('image.cancelled') }}>{t('image.cancel')}</Button>}
+      {busy && <Button onClick={() => { invalidate(); setBusy(false); setStatus('') }}>{t('image.cancel')}</Button>}
     </div>
     {result && <>
       <div className="image-base64-preview"><img src={result.preview} alt={t('image.preview')} /><span>{t('image.dimensions', { width: result.width, height: result.height })}</span></div>
@@ -123,9 +122,8 @@ export function ImageBase64Panel({ host, t, initialText, active, saveFocused, on
       </div>
     </>}
     </>}
-    {saveFocused && busy && <Button onClick={() => { invalidate(); setBusy(false); setStatus('image.cancelled') }}>{t('image.cancel')}</Button>}
+    {saveFocused && busy && <Button onClick={() => { invalidate(); setBusy(false); setStatus('') }}>{t('image.cancel')}</Button>}
     {(status || (result && !deliveryReady)) && <p role="status" aria-live="polite">{status && t(status)}{!saveFocused && result && !deliveryReady ? ` ${t('image.previousNotUpdated')}` : ''}</p>}
-    <details><summary>{t('image.limits')}</summary><p>{t('image.hint')}</p></details>
     {saveFocused && <Button variant="ghost" onClick={onShowWorkbench}>{t('image.openWorkbench')}</Button>}
   </main>
 }

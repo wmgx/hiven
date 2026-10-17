@@ -106,7 +106,6 @@ export function RandomSurface({ host, t, generate, getGenerationKey, surfaceId }
         </IconButton>
         <div>
           <strong>{t('surface.title')}</strong>
-          <span>{t('surface.subtitle')}</span>
         </div>
         <div className="random-surface__spacer" />
         <IconButton type="button" label={t('surface.close')} onClick={() => host.close()}>

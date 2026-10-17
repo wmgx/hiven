@@ -104,7 +104,6 @@ export const encodeDecodePlugin = definePlugin({
       id: `open-${route.id}`,
       display: {
         title: route.id === 'base64-decode' ? 'route.base64DecodeWorkbench' : route.title,
-        subtitle: route.id === 'image-save' ? 'image.saveRouteDescription' : 'route.open',
         icon: 'Binary',
         aliases: [...route.aliases],
       },
@@ -124,7 +123,6 @@ export const encodeDecodePlugin = definePlugin({
     {
       id: 'base64.encode',
       title: 'base64.encode.title',
-      subtitle: 'base64.encode.description',
       icon: 'Binary',
       aliases: ['base64 encode', 'base64编码', 'b64 encode', 'btoa', 'encode base64', '编码'],
       inputPolicy: { mode: 'auto' },
@@ -139,7 +137,6 @@ export const encodeDecodePlugin = definePlugin({
     {
       id: 'base64.decode',
       title: 'base64.decode.title',
-      subtitle: 'base64.decode.description',
       icon: 'Binary',
       aliases: ['b64', 'base64', 'base64 decode', 'base64解码', 'b64 decode', 'atob', 'decode base64', '解码'],
       inputPolicy: { mode: 'auto' },
@@ -156,7 +153,6 @@ export const encodeDecodePlugin = definePlugin({
     {
       id: 'url.encode',
       title: 'url.encode.title',
-      subtitle: 'url.encode.description',
       icon: 'Link',
       aliases: ['urlencode', 'url编码', 'percent encode', 'url encode', 'encode url', '编码'],
       inputPolicy: { mode: 'auto' },
@@ -169,7 +165,6 @@ export const encodeDecodePlugin = definePlugin({
     {
       id: 'url.decode',
       title: 'url.decode.title',
-      subtitle: 'url.decode.description',
       icon: 'Link',
       aliases: ['urldecode', 'url解码', 'percent decode', 'url decode', 'decode url', '解码'],
       inputPolicy: { mode: 'auto' },
@@ -184,7 +179,6 @@ export const encodeDecodePlugin = definePlugin({
     {
       id: 'html.encode',
       title: 'html.encode.title',
-      subtitle: 'html.encode.description',
       icon: 'FileCode',
       aliases: ['html-entities encode', 'html-escape', 'html编码', 'html encode', 'encode html', 'html escape', '编码'],
       inputPolicy: { mode: 'auto' },
@@ -194,7 +188,6 @@ export const encodeDecodePlugin = definePlugin({
     {
       id: 'html.decode',
       title: 'html.decode.title',
-      subtitle: 'html.decode.description',
       icon: 'FileCode',
       aliases: ['html-entities decode', 'html-unescape', 'html解码', 'html decode', 'decode html', 'html unescape', '解码'],
       inputPolicy: { mode: 'auto' },
@@ -205,7 +198,6 @@ export const encodeDecodePlugin = definePlugin({
     {
       id: 'slashes.escape',
       title: 'slashes.escape.title',
-      subtitle: 'slashes.escape.description',
       icon: 'Quote',
       aliases: ['escape', 'addslashes', '转义', 'add slashes', '添加转义'],
       inputPolicy: { mode: 'auto' },
@@ -215,7 +207,6 @@ export const encodeDecodePlugin = definePlugin({
     {
       id: 'slashes.unescape',
       title: 'slashes.unescape.title',
-      subtitle: 'slashes.unescape.description',
       icon: 'Quote',
       aliases: ['unescape', 'stripslashes', '反转义', 'remove slashes', '去除转义'],
       inputPolicy: { mode: 'auto' },
@@ -226,7 +217,6 @@ export const encodeDecodePlugin = definePlugin({
     {
       id: 'jwt.decode',
       title: 'jwt.decode.title',
-      subtitle: 'jwt.decode.description',
       icon: 'Key',
       aliases: ['jwt', '解jwt', 'decode jwt', 'jwt-decode', 'json-web-token', 'jwt解码', '解码'],
       inputPolicy: { mode: 'auto' },

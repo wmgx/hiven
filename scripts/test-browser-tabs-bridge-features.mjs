@@ -66,18 +66,14 @@ const localesZh = JSON.parse(read('src/plugins/web-open/locales/zh.json'))
 for (const key of [
   'settings.history',
   'settings.historyHelp',
-  'settings.historyToggle',
   'settings.historySearchRange',
   'settings.historySearchRange.days',
   'settings.historySearchRange.all',
   'settings.idle',
   'settings.idleHelp',
-  'settings.idleToggle',
   'settings.idleTimeout',
   'settings.idleTimeout.3d',
   'settings.idleTimeout.7d',
-  'settings.footer',
-  'settings.reloadHint',
 ]) {
   assert.ok(localesEn[key], `en locale missing ${key}`)
   assert.ok(localesZh[key], `zh locale missing ${key}`)

@@ -226,9 +226,6 @@ export function BrowserTabsConnectionModal(props: PluginSettingsModalBodyProps<W
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
             <ui.Text style={{ fontSize: 12.5, fontWeight: 600 }}>{t('settings.enableSearch')}</ui.Text>
-            <ui.Text style={{ fontSize: 11.5, color: 'var(--text-2)', lineHeight: 1.5 }}>
-              {t('settings.enableSearchHelp')}
-            </ui.Text>
           </div>
           <Switch
             className="is-compact"
@@ -240,9 +237,6 @@ export function BrowserTabsConnectionModal(props: PluginSettingsModalBodyProps<W
 
       <ui.Stack gap={8} style={{ marginTop: 4 }}>
         <ui.Text style={{ fontSize: 12.5, fontWeight: 600 }}>{t('settings.install')}</ui.Text>
-        <ui.Text style={{ fontSize: 11.5, color: 'var(--text-2)', lineHeight: 1.5 }}>
-          {t('settings.installHelp')}
-        </ui.Text>
         <ui.Text style={{ fontSize: 11.5, color: 'var(--text-2)', lineHeight: 1.55, whiteSpace: 'pre-line' }}>
           {t('settings.installSteps')}
         </ui.Text>
@@ -257,7 +251,6 @@ export function BrowserTabsConnectionModal(props: PluginSettingsModalBodyProps<W
                 .openChromiumExtensionInstallFolder()
                 .then(({ path }) => {
                   setLastPath(path)
-                  setMessage(t('settings.folderOpened'))
                 })
                 .catch((error: unknown) => {
                   setMessage(error instanceof Error ? error.message : String(error))
@@ -288,10 +281,6 @@ export function BrowserTabsConnectionModal(props: PluginSettingsModalBodyProps<W
         )}
         {message && <ui.Text style={{ fontSize: 12, color: 'var(--text-2)' }}>{message}</ui.Text>}
       </ui.Stack>
-
-      <ui.Text style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.45 }}>
-        {t('settings.footer')}
-      </ui.Text>
     </ui.Stack>
   )
 }

@@ -58,10 +58,6 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
     }
   }, [direction, format, inputText])
   const hasOutput = result.ok && inputText.length > 0
-  const useAsInputDescription = t('action.useAsInputDescription', {
-    format: t(`format.${format}`),
-    direction: t(`direction.${direction === 'encode' ? 'decode' : 'encode'}`),
-  })
 
   const chooseFormat = (nextFormat: EncodeDecodeFormat) => {
     update(() => {
@@ -212,19 +208,19 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
             <strong>{t('pane.output')}</strong>
             <div className="encode-pane-actions">
               {format !== 'jwt' ? (
-                <Button type="button" variant="ghost" title={useAsInputDescription} aria-label={useAsInputDescription} disabled={!hasOutput || busy !== null} onClick={useOutputAsInput}>
+                <Button type="button" variant="ghost" disabled={!hasOutput || busy !== null} onClick={useOutputAsInput}>
                   {t('action.useAsInput')}
                 </Button>
               ) : null}
-              <Button type="button" variant="ghost" title={t('action.continueProcessingDescription')} aria-label={t('action.continueProcessingDescription')} disabled={!hasOutput || busy !== null} onClick={() => deliver('return')}>
+              <Button type="button" variant="ghost" disabled={!hasOutput || busy !== null} onClick={() => deliver('return')}>
                 <CornerDownLeft size={14} aria-hidden="true" />
                 {t('action.continueProcessing')}
               </Button>
-              <Button type="button" variant="ghost" title={t('action.pasteBackDescription')} aria-label={t('action.pasteBackDescription')} disabled={!hasOutput || busy !== null} onClick={() => void deliver('paste')}>
+              <Button type="button" variant="ghost" disabled={!hasOutput || busy !== null} onClick={() => void deliver('paste')}>
                 <ClipboardPaste size={14} aria-hidden="true" />
                 {t('action.pasteBack')}
               </Button>
-              <Button type="button" title={t('action.copyDescription')} aria-label={t('action.copyDescription')} disabled={!hasOutput || busy !== null} onClick={() => void deliver('copy')}>
+              <Button type="button" disabled={!hasOutput || busy !== null} onClick={() => void deliver('copy')}>
                 {t('action.copy')}
               </Button>
             </div>
@@ -246,7 +242,7 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
       <footer className={`encode-status${delivery.feedback ? ' has-delivery' : ''}`} aria-live="polite">
         <span>{t('meta.characters', { count: inputText.length })}</span>
         <span className={delivery.feedback ? `is-${delivery.feedback.tone}` : !result.ok ? 'is-error' : ''} role="status">
-          {delivery.feedback?.message ?? (!result.ok ? t('status.error') : format === 'url' ? t(`hint.url.${direction}`) : hasOutput ? t('status.ready') : t('status.waiting'))}
+          {delivery.feedback?.message}
         </span>
         <span>{t('meta.characters', { count: result.output.length })}</span>
       </footer>

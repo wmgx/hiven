@@ -67,7 +67,6 @@ export function FaviconCacheModal({
     try {
       await removeFaviconCacheEntry(host.storage, domain)
       await reload()
-      host.showMessage(t('faviconCache.removed', { domain }), 'success')
     } catch {
       host.showMessage(t('faviconCache.removeFailed'), 'error')
     } finally {
@@ -78,9 +77,8 @@ export function FaviconCacheModal({
   const handleClearAll = async () => {
     setBusy(true)
     try {
-      const count = await clearFaviconCache(host.storage)
+      await clearFaviconCache(host.storage)
       await reload()
-      host.showMessage(t('faviconCache.cleared', { count }), 'success')
     } catch {
       host.showMessage(t('faviconCache.clearFailed'), 'error')
     } finally {
@@ -90,10 +88,6 @@ export function FaviconCacheModal({
 
   return (
     <div className="web-open-favicon-cache">
-      <p style={{ margin: '0 0 12px', fontSize: 12, color: 'var(--color-text-secondary)' }}>
-        {t('faviconCache.description')}
-      </p>
-
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
         <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>
           {loading ? t('faviconCache.loading') : t('faviconCache.count', { count: entries.length })}

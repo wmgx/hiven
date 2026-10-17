@@ -91,7 +91,7 @@ export function ImageResizePanel({ host, t, onDirtyChange, invalidateRef }: Prop
           if (current()) { setDirty(false); setStatus('image.copied') }
         } else {
           const saved = await host.storage.blob.savePng(blob.blobId, { suggestedFilename: 'resized.png' })
-          if (current()) { setStatus(saved.status === 'saved' ? 'image.saved' : 'image.cancelled'); if (saved.status === 'saved') setDirty(false) }
+          if (current()) { setStatus(saved.status === 'saved' ? 'image.saved' : ''); if (saved.status === 'saved') setDirty(false) }
         }
       } finally { try { await host.storage.blob.delete(blob.blobId) } catch { /* Delivery result takes priority over cleanup. */ } }
     })
@@ -108,13 +108,12 @@ export function ImageResizePanel({ host, t, onDirtyChange, invalidateRef }: Prop
     {replacement && <div role="alert" className="image-crop-replace"><span>{t('resize.replace')}</span><Button onClick={() => choose(replacement, true)}>{t('redact.replaceConfirm')}</Button><Button onClick={cancelReplacement}>{t('redact.keep')}</Button></div>}
     {original && !ready && !busy && <div className="image-crop-replace"><span>{t('resize.previous')}</span><Button onClick={() => { readyRef.current = true; setReady(true); setStatus('') }}>{t('redact.keep')}</Button></div>}
     <div className="image-crop-fields">
-      <label>{t('resize.width')}<input type="number" min={1} max={original?.width} step={1} value={width} disabled={busy || !ready || !original} aria-invalid={!!original && !size} aria-describedby="resize-size-status resize-hint" onChange={event => {
+      <label>{t('resize.width')}<input type="number" min={1} max={original?.width} step={1} value={width} disabled={busy || !ready || !original} aria-invalid={!!original && !size} aria-describedby="resize-size-status" onChange={event => {
         if (pending.current) return
         invalidate(); setWidth(event.target.value); setDirty(true); setStatus('')
       }} /></label>
       {original && <span>{t('resize.source', { width: original.width, height: original.height })}</span>}
     </div>
-    <small id="resize-hint">{t('resize.hint')}</small>
     <div className="image-crop-viewport" data-launcher-scrollable>
       {original ? <canvas ref={canvas} aria-label={t('resize.preview')} style={{ cursor: 'default' }} /> : <p className="image-crop-empty">{t('crop.empty')}</p>}
     </div>

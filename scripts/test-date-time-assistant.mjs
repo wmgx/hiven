@@ -248,7 +248,7 @@ const idleCron = (await provider({ query: '*/5 * * * *', locale: 'en', settings:
 assert.match(idleCron.display.title, /2026-06-10 12:10:00/)
 assert.match(idleCron.display.title, /^cron.next /, 'next occurrence leads the answer, before scheduling details')
 assert.doesNotMatch(idleCron.display.title, /cron.everyMinutes|cron.fields/, 'field descriptions do not displace the requested time')
-assert.match(idleCron.display.subtitle, /^cron.copy .*cron.everyMinutes .*cron.dayRule /, 'copy action and complete rules remain available as details')
+assert.match(idleCron.display.subtitle, /^cron.everyMinutes /, 'schedule description remains available as detail')
 fixedEpochMs += 7 * 60_000
 const freshCopies = []
 const idleResult = await idleCron.execute({ api: { copyText: async (text) => freshCopies.push(text) } })

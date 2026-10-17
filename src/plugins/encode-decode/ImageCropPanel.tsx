@@ -115,7 +115,7 @@ export function ImageCropPanel({ host, t, onDirtyChange, invalidateRef }: Props)
           if (current()) { setDirty(false); setStatus('image.copied') }
         } else {
           const saved = await host.storage.blob.savePng(blob.blobId, { suggestedFilename: 'cropped.png' })
-          if (current()) { setStatus(saved.status === 'saved' ? 'image.saved' : 'image.cancelled'); if (saved.status === 'saved') setDirty(false) }
+          if (current()) { setStatus(saved.status === 'saved' ? 'image.saved' : ''); if (saved.status === 'saved') setDirty(false) }
         }
       } finally { try { await host.storage.blob.delete(blob.blobId) } catch { /* Delivery result takes priority over cleanup. */ } }
     })
@@ -153,7 +153,7 @@ export function ImageCropPanel({ host, t, onDirtyChange, invalidateRef }: Props)
       }} onPointerCancel={cancelDraft} onLostPointerCapture={() => { if (drag.current) cancelDraft() }} /> : <p className="image-crop-empty">{t('crop.empty')}</p>}
     </div>
     <footer className="image-crop-footer">
-      <span id="crop-size-status" role="status" aria-live="polite">{status ? t(status) : selection ? t('crop.dimensions', { width: selection.width, height: selection.height }) : t(original ? fields.width || fields.height ? 'crop.invalid' : 'crop.select' : 'crop.empty')}</span>
+      <span id="crop-size-status" role="status" aria-live="polite">{status ? t(status) : selection ? t('crop.dimensions', { width: selection.width, height: selection.height }) : (original ? (fields.width || fields.height ? t('crop.invalid') : '') : t('crop.empty'))}</span>
       <Button disabled={busy || !ready || !selection || dragActive} onClick={() => deliver('copy')}>{t('image.copyImage')}</Button>
       <Button disabled={busy || !ready || !selection || dragActive} onClick={() => deliver('save')}>{t('image.save')}</Button>
     </footer>

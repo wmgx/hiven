@@ -277,7 +277,6 @@ export const randomPlugin = definePlugin({
       id: `open-${route.id}`,
       display: {
         title: route.title,
-        subtitle: 'route.open',
         icon: route.icon,
         aliases: [...route.aliases],
       },

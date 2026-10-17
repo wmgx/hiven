@@ -20,7 +20,6 @@
 }
 .random-surface__header > div:not(.random-surface__spacer) { display: grid; gap: 1px; }
 .random-surface__header strong { font-size: 13px; }
-.random-surface__header span { font-size: 10.5px; color: var(--text-3, var(--hiven-color-text-tertiary)); }
 .random-surface__spacer { flex: 1; }
 
 .random-surface__body {

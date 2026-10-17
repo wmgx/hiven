@@ -56,7 +56,7 @@ export function ImageRedactionPanel({ host, t, onDirtyChange, invalidateRef }: P
     const data = await read(signal)
     const image = await loadRedactionImage(data.bytes, signal, data.contentType)
     if (!current()) return
-    setOriginal(image); setReady(true); setRectangles([]); setDirty(false); setStatus('redact.ready'); setReplacement(null)
+    setOriginal(image); setReady(true); setRectangles([]); setDirty(false); setStatus(''); setReplacement(null)
   })
   const choose = (kind: 'file' | 'clipboard', confirmed = false) => {
     if (pending.current) return
@@ -88,7 +88,7 @@ export function ImageRedactionPanel({ host, t, onDirtyChange, invalidateRef }: P
           if (current()) { setDirty(false); setStatus('image.copied') }
         } else {
           const saved = await host.storage.blob.savePng(blob.blobId, { suggestedFilename: 'redacted.png' })
-          if (current()) { setStatus(saved.status === 'saved' ? 'image.saved' : 'image.cancelled'); if (saved.status === 'saved') setDirty(false) }
+          if (current()) { setStatus(saved.status === 'saved' ? 'image.saved' : ''); if (saved.status === 'saved') setDirty(false) }
         }
       } finally { try { await host.storage.blob.delete(blob.blobId) } catch { /* Cleanup cannot turn completed delivery into failure. */ } }
     })

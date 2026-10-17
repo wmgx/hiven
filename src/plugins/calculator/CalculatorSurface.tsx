@@ -1,6 +1,6 @@
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { IconButton, TextInput, Tooltip, useImeKeyboard } from '@hiven/plugin-ui'
+import { IconButton, TextInput, useImeKeyboard } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
 import { readHistory, rememberCalculation, type HistoryEntry } from './history'
 
@@ -19,7 +19,6 @@ export function CalculatorSurface({ host, initialText, t, calculate, calculateVa
   const [historyIndex, setHistoryIndex] = useState(-1)
   const [variables, setVariables] = useState<ReadonlyMap<string, string>>(() => new Map())
   const inputRef = useRef<HTMLInputElement>(null)
-  const syntaxId = useId()
   const draftRef = useRef(initialExpression)
   const hostRef = useRef(host)
   hostRef.current = host
@@ -183,30 +182,10 @@ export function CalculatorSurface({ host, initialText, t, calculate, calculateVa
         </div>
 
         <p className="calculator-surface__keyboard-hint">
-          {t('surface.keyboardHint')}{' · '}
           <button type="button" disabled={!displayedResult} onClick={() => void copyResult()}>
             {t('surface.copyResult')}
           </button>
         </p>
-        <Tooltip.Root>
-          <Tooltip.Trigger className="calculator-surface__syntax-trigger" aria-describedby={syntaxId} delay={150}>
-            {t('surface.syntax')}
-          </Tooltip.Trigger>
-          <Tooltip.Portal>
-            <Tooltip.Positioner side="top" align="start" sideOffset={8} className="calculator-surface__syntax-positioner">
-              <Tooltip.Popup id={syntaxId} role="tooltip" className="calculator-surface__syntax" data-launcher-scrollable>
-                <p>{t('surface.variableHint')}</p>
-                <dl>
-                  <div><dt>{t('surface.power')}</dt><dd><code>a^2 · a^3 · a**n</code></dd></div>
-                  <div><dt>{t('surface.root')}</dt><dd><code>sqrt(a)</code></dd></div>
-                  <div><dt>{t('surface.absolute')}</dt><dd><code>abs(a)</code></dd></div>
-                  <div><dt>{t('surface.rounding')}</dt><dd><code>round(a) · floor(a) · ceil(a)</code></dd></div>
-                </dl>
-                <p>{t('surface.powerHint')}</p>
-              </Tooltip.Popup>
-            </Tooltip.Positioner>
-          </Tooltip.Portal>
-        </Tooltip.Root>
 
         <section className="calculator-surface__history" aria-label={t('surface.history')}>
           <div className="calculator-surface__history-heading">
@@ -220,10 +199,7 @@ export function CalculatorSurface({ host, initialText, t, calculate, calculateVa
               </button>
             )}
           </div>
-          <p className="calculator-surface__history-hint">
-            {t(historyStatus === 'loading' ? 'surface.historyLoading'
-              : historyStatus === 'unavailable' ? 'surface.historyLoadFailed' : 'surface.historyHint')}
-          </p>
+          {historyStatus === 'unavailable' && <p className="calculator-surface__history-hint">{t('surface.historyLoadFailed')}</p>}
           {history.length === 0 ? (
             <p>{t('surface.emptyHistory')}</p>
           ) : (
