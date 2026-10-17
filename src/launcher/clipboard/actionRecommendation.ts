@@ -55,6 +55,7 @@ export type RecommendedAction = {
 
 const OPEN_QUICK_EDITOR: RecommendedAction = {
   id: 'open-in-quick-editor',
+  icon: 'SquarePen',
   title: 'Open in Quick Editor',
   titleZh: '打开到快捷编辑器',
   provider: 'Quick Editor',
@@ -64,6 +65,7 @@ const OPEN_QUICK_EDITOR: RecommendedAction = {
 /** Alias id kept for older host rows that filtered defaultOutput === 'open-editor'. */
 const OPEN_CLIPBOARD_EDITOR: RecommendedAction = {
   id: 'open-clipboard-editor',
+  icon: 'SquarePen',
   title: 'Open in Quick Editor',
   titleZh: '打开到快捷编辑器',
   provider: 'Quick Editor',
@@ -73,6 +75,7 @@ const OPEN_CLIPBOARD_EDITOR: RecommendedAction = {
 const TEXT_HISTORY_ACTIONS: RecommendedAction[] = [
   {
     id: 'paste-history-text',
+    icon: 'ClipboardPaste',
     title: 'Paste to Front App',
     titleZh: '粘贴到前台应用',
     provider: 'Clipboard History',
@@ -80,6 +83,7 @@ const TEXT_HISTORY_ACTIONS: RecommendedAction[] = [
   },
   {
     id: 'copy-history-text',
+    icon: 'Copy',
     title: 'Copy to Clipboard',
     titleZh: '复制到剪贴板',
     provider: 'Clipboard History',
@@ -87,6 +91,7 @@ const TEXT_HISTORY_ACTIONS: RecommendedAction[] = [
   },
   {
     id: 'open-history-in-quick-editor',
+    icon: 'SquarePen',
     title: 'Open in Quick Editor',
     titleZh: '打开到快捷编辑器',
     provider: 'Quick Editor',
@@ -97,12 +102,14 @@ const TEXT_HISTORY_ACTIONS: RecommendedAction[] = [
 const CURRENT_TEXT_ACTIONS: RecommendedAction[] = [
   {
     id: 'paste-current-text',
+    icon: 'ClipboardPaste',
     title: t('en', 'palette.pasteCurrentText'),
     titleZh: t('zh', 'palette.pasteCurrentText'),
     defaultOutput: 'copy',
   },
   {
     id: 'copy-current-text',
+    icon: 'Copy',
     title: t('en', 'palette.copyCurrentText'),
     titleZh: t('zh', 'palette.copyCurrentText'),
     defaultOutput: 'copy',
@@ -112,6 +119,7 @@ const CURRENT_TEXT_ACTIONS: RecommendedAction[] = [
 const IMAGE_HISTORY_ACTIONS: RecommendedAction[] = [
   {
     id: 'paste-history-image',
+    icon: 'ClipboardPaste',
     title: 'Paste Image',
     titleZh: '粘贴图片',
     provider: 'Clipboard History',
@@ -119,6 +127,7 @@ const IMAGE_HISTORY_ACTIONS: RecommendedAction[] = [
   },
   {
     id: 'copy-history-image',
+    icon: 'Copy',
     title: 'Copy Image to Clipboard',
     titleZh: '复制图片到剪贴板',
     provider: 'Clipboard History',
@@ -129,6 +138,7 @@ const IMAGE_HISTORY_ACTIONS: RecommendedAction[] = [
 const FILES_HISTORY_ACTIONS: RecommendedAction[] = [
   {
     id: 'paste-history-files',
+    icon: 'ClipboardPaste',
     title: 'Paste Files',
     titleZh: '粘贴文件',
     provider: 'Clipboard History',
@@ -136,6 +146,7 @@ const FILES_HISTORY_ACTIONS: RecommendedAction[] = [
   },
   {
     id: 'copy-history-file-paths',
+    icon: 'Copy',
     title: 'Copy File Paths',
     titleZh: '复制文件路径',
     provider: 'Clipboard History',
@@ -143,6 +154,7 @@ const FILES_HISTORY_ACTIONS: RecommendedAction[] = [
   },
   {
     id: 'convert-history-file-paths',
+    icon: 'FileSymlink',
     title: 'Convert File Paths',
     titleZh: '转换文件路径',
     pluginId: 'file-paths',
@@ -176,6 +188,7 @@ export function getSearchOnlyActions(): RecommendedAction[] {
   return [
     {
       id: 'open-editor',
+      icon: 'SquarePen',
       title: 'Open Quick Editor',
       titleZh: '打开快捷编辑器',
       provider: 'Quick Editor',
@@ -183,6 +196,7 @@ export function getSearchOnlyActions(): RecommendedAction[] {
     },
     {
       id: 'open-clipboard-history',
+      icon: 'History',
       title: 'Open Clipboard History',
       titleZh: '打开剪贴板历史',
       pluginId: 'clipboard-history',

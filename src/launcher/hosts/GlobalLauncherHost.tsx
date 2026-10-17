@@ -528,6 +528,7 @@ export function GlobalLauncherHost() {
         ? objectActions
         : [{
             id: 'open-in-quick-editor',
+            icon: 'SquarePen',
             title: 'Open in Quick Editor',
             titleZh: '打开到快捷编辑器',
             provider: 'Quick Editor',
@@ -582,6 +583,7 @@ export function GlobalLauncherHost() {
           display: {
             title,
             titleI18n: { en: action.title, zh: action.titleZh },
+            icon: action.icon,
             subtitle: action.provider,
             kindLabel: kindLabel.en,
             kindLabelI18n: kindLabel,
@@ -604,7 +606,7 @@ export function GlobalLauncherHost() {
       const title = t(locale, 'palette.comparePreviousMaterial')
       const domainItem: LauncherItem = {
         systemKey: `object-action:${CURRENT_MATERIAL_COMPARE_ACTION}`,
-        kind: 'host', display: { title, titleI18n: compareTitles, kindLabel: kindLabel.en, kindLabelI18n: kindLabel },
+        kind: 'host', display: { title, titleI18n: compareTitles, icon: 'GitCompare', kindLabel: kindLabel.en, kindLabelI18n: kindLabel },
         behavior: { type: 'perform' }, execute: async () => ({ ok: true, keepOpen: true }),
         experienceRecord: false, recordUsage: false,
       }
@@ -622,7 +624,7 @@ export function GlobalLauncherHost() {
         const title = t(locale, 'palette.saveCurrentText')
         const domainItem: LauncherItem = {
           systemKey: `object-action:${CURRENT_TEXT_EXPORT_ACTION}`,
-          kind: 'host', display: { title, titleI18n, kindLabel: kindLabel.en, kindLabelI18n: kindLabel },
+          kind: 'host', display: { title, titleI18n, icon: 'Save', kindLabel: kindLabel.en, kindLabelI18n: kindLabel },
           behavior: { type: 'perform' }, execute: async () => ({ ok: true, keepOpen: true }),
           experienceRecord: false, recordUsage: false,
         }
@@ -1228,6 +1230,7 @@ export function GlobalLauncherHost() {
       const fromCatalog = objectActions.find((entry) => entry.id === objectActionId)
       const action: RecommendedAction = fromCatalog ?? {
         id: objectActionId,
+        icon: 'SquarePen',
         title: 'Open in Quick Editor',
         titleZh: '打开到快捷编辑器',
         provider: 'Quick Editor',
