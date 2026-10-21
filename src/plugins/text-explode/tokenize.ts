@@ -1,8 +1,8 @@
 /**
  * Text Explode tokenizer — splits arbitrary text into selectable fragments.
  *
- * Word/punctuation split is regex-based (no CJK dictionary segmentation yet;
- * CJK runs fall back to per-character tokens). URLs get their own structural
+ * Word/punctuation split is Unicode-aware (\p{L}\p{N}); CJK runs go through
+ * Intl.Segmenter (per-character fallback). URLs get their own structural
  * breakdown (origin / path segments / query key-value) so a pasted link can
  * be picked apart instead of staying one opaque blob.
  */
@@ -22,62 +22,115 @@ export type TokenType =
 
 export type ExplodeToken = {
   text: string
+  /** Original fragment when `text` is a decoded display form (URL parts). */
+  raw?: string
   type: TokenType
   /** Shared id for tokens that came from the same URL — lets the UI cluster them. */
   group?: string
 }
 
-const CJK_RANGE = '一-鿿'
+const CJK_CLASS = '\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}'
 const URL_STOP_CHARS = '，。！？、；："\'“”‘’」』'
+const URL_TRAILING_PUNCT = new Set(['.', ',', ';', ':', '!', '?', "'", '"'])
+const BRACKET_PAIRS: Record<string, string> = { ')': '(', ']': '[', '}': '{', '>': '<' }
+
+/** Drops sentence punctuation / unbalanced closing brackets glued to the end of a URL. */
+function trimUrlTail(url: string): string {
+  let end = url.length
+  while (end > 0) {
+    const last = url[end - 1]!
+    if (URL_TRAILING_PUNCT.has(last)) {
+      end -= 1
+      continue
+    }
+    const open = BRACKET_PAIRS[last]
+    if (open) {
+      const body = url.slice(0, end)
+      const opens = body.split(open).length - 1
+      const closes = body.split(last).length - 1
+      if (closes > opens) {
+        end -= 1
+        continue
+      }
+    }
+    break
+  }
+  return url.slice(0, end)
+}
+
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+/** Display text is decoded when possible; `raw` keeps the original fragment for reassembly. */
+function urlPart(raw: string, type: TokenType, group: string): ExplodeToken {
+  return { text: safeDecode(raw), raw, type, group }
+}
 
 function urlToTokens(urlText: string, groupId: string): ExplodeToken[] {
-  let url: URL
-  try {
-    url = new URL(urlText)
-  } catch {
-    return [{ text: urlText, type: 'url', group: groupId }]
-  }
+  const originMatch = /^(https?:\/\/[^/?#]*)([^?#]*)(?:\?([^#]*))?(?:#(.*))?$/s.exec(urlText)
+  if (!originMatch) return [{ text: urlText, type: 'url', group: groupId }]
+  const [, origin, path = '', query, hash] = originMatch
 
-  const out: ExplodeToken[] = [{ text: url.protocol + '//' + url.host, type: 'url-origin', group: groupId }]
+  const out: ExplodeToken[] = [{ text: origin!, type: 'url-origin', group: groupId }]
 
-  url.pathname
+  path
     .split('/')
-    .filter(Boolean)
+    .slice(1)
     .forEach((segment) => {
       out.push({ text: '/', type: 'url-punct', group: groupId })
-      out.push({ text: decodeURIComponent(segment), type: 'url-seg', group: groupId })
+      if (segment) out.push(urlPart(segment, 'url-seg', groupId))
     })
 
-  if (url.search) {
+  if (query !== undefined) {
     out.push({ text: '?', type: 'url-punct', group: groupId })
-    const params = [...url.searchParams.entries()]
-    params.forEach(([key, value], index) => {
+    query.split('&').forEach((pair, index) => {
       if (index > 0) out.push({ text: '&', type: 'url-punct', group: groupId })
-      out.push({ text: key, type: 'url-key', group: groupId })
-      if (value !== '') {
+      if (!pair) return
+      const eq = pair.indexOf('=')
+      const key = eq === -1 ? pair : pair.slice(0, eq)
+      if (key) out.push(urlPart(key, 'url-key', groupId))
+      if (eq !== -1) {
         out.push({ text: '=', type: 'url-punct', group: groupId })
-        out.push({ text: value, type: 'url-val', group: groupId })
+        const value = pair.slice(eq + 1)
+        if (value) out.push(urlPart(value, 'url-val', groupId))
       }
     })
   }
 
-  if (url.hash) {
+  if (hash !== undefined) {
     out.push({ text: '#', type: 'url-punct', group: groupId })
-    out.push({ text: url.hash.slice(1), type: 'url-seg', group: groupId })
+    if (hash) out.push(urlPart(hash, 'url-seg', groupId))
   }
 
   return out
 }
 
+function segmentCjkRun(run: string): string[] {
+  if (typeof Intl === 'undefined' || typeof Intl.Segmenter !== 'function') return Array.from(run)
+  const locale = /[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(run) ? 'ja' : 'zh'
+  try {
+    return Array.from(new Intl.Segmenter(locale, { granularity: 'word' }).segment(run), (part) => part.segment)
+  } catch {
+    return Array.from(run)
+  }
+}
+
+const WORD_CHAR = `(?:(?![${CJK_CLASS}])[\\p{L}\\p{N}\\p{M}_])`
+
 export function tokenize(text: string): ExplodeToken[] {
   const pattern = new RegExp(
     `(https?://[^\\s${URL_STOP_CHARS}]+)` + // 1: url
-      '|([A-Za-z0-9_]+(?:[.@:/-][A-Za-z0-9_]+)*)' + // 2: word
-      `|([${CJK_RANGE}]+)` + // 3: cjk run
+      `|(${WORD_CHAR}+(?:[.@:/-]${WORD_CHAR}+)*)` + // 2: word
+      `|([${CJK_CLASS}]+)` + // 3: cjk run
       '|(\\n)' + // 4: line break
       '|(\\s+)' + // 5: space run
-      `|([^\\sA-Za-z0-9_${CJK_RANGE}])`, // 6: single punctuation char
-    'g',
+      '|(\\S)', // 6: single punctuation char
+    'gu',
   )
 
   const tokens: ExplodeToken[] = []
@@ -86,12 +139,15 @@ export function tokenize(text: string): ExplodeToken[] {
 
   while ((match = pattern.exec(text))) {
     if (match[1]) {
+      const trimmed = trimUrlTail(match[1])
+      pattern.lastIndex = match.index + trimmed.length
+      if (trimmed.length === 0) continue
       urlGroupCounter += 1
-      tokens.push(...urlToTokens(match[1], `url-${urlGroupCounter}`))
+      tokens.push(...urlToTokens(trimmed, `url-${urlGroupCounter}`))
     } else if (match[2]) {
       tokens.push({ text: match[2], type: 'word' })
     } else if (match[3]) {
-      for (const char of match[3]) tokens.push({ text: char, type: 'cjk' })
+      for (const piece of segmentCjkRun(match[3])) tokens.push({ text: piece, type: 'cjk' })
     } else if (match[4]) {
       tokens.push({ text: match[4], type: 'break' })
     } else if (match[5]) {
@@ -120,10 +176,10 @@ export function assembleFromSelection(tokens: ExplodeToken[], selected: Readonly
       const prev = selectedIndexes[i - 1]
       const between = tokens.slice(prev + 1, idx)
       out += between.every((token) => token.type === 'space' || token.type === 'break')
-        ? between.map((token) => token.text).join('')
+        ? between.map((token) => token.raw ?? token.text).join('')
         : ' '
     }
-    out += tokens[idx].text
+    out += tokens[idx].raw ?? tokens[idx].text
   }
 
   return out
