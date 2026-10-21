@@ -48,19 +48,64 @@ export function compactSql(text: string): string {
   return output
 }
 
+/** The scanner could not prove a safe layout (unclosed string/comment/bracket): report instead of guessing. */
+export class CssFormatterError extends Error {
+  readonly code = 'invalidCss' as const
+  constructor() { super('invalidCss') }
+}
+
+/** End (exclusive) of a custom property value that starts at `start`, stopping at a top-level `;` or `}`. */
+function customPropertyValueEnd(text: string, start: number): number {
+  let nesting = 0
+  for (let i = start; i < text.length;) {
+    const end = protectedEnd(text, i, false)
+    if (end === -1) throw new CssFormatterError()
+    if (end !== undefined) { i = end; continue }
+    const char = text[i]
+    if (char === '\\') { i += 2; continue }
+    if (char === '(' || char === '[' || char === '{') nesting++
+    else if (char === ')' || char === ']') nesting--
+    else if (char === '}') { if (nesting === 0) return i; nesting-- }
+    else if (char === ';' && nesting === 0) return i
+    i++
+  }
+  throw new CssFormatterError()
+}
+
+/** Compact mode: no whitespace around the declaration colon or before `;`. */
+function tightenDeclaration(segment: string): string {
+  return segment.replace(/^\s+/, '').replace(/^([^:]*?)\s*:\s*/, '$1:').replace(/\s+$/, '')
+}
+
 export function layoutCss(text: string, compact: boolean): string {
-  // Custom property values may contain arbitrary blocks and meaningful whitespace.
-  // Escaped identifiers can also spell custom properties: retain rather than guess.
-  if (/--[^:{};]*:|\\/.test(text)) return text
   let output = ''
+  let segmentStart = 0
   let parentheses = 0
   let brackets = 0
   let depth = 0
   let boundary = false
+  const finishDeclaration = () => {
+    if (compact && depth > 0) output = output.slice(0, segmentStart) + tightenDeclaration(output.slice(segmentStart))
+  }
   for (let i = 0; i < text.length;) {
     const end = protectedEnd(text, i, false)
-    if (end === -1) return text
+    if (end === -1) throw new CssFormatterError()
     if (end !== undefined) { output += text.slice(i, end); i = end; boundary = false; continue }
+    // Escaped characters (`.sm\:flex`) are identifier text, never structure.
+    if (text[i] === '\\' && i + 1 < text.length) { output += text.slice(i, i + 2); i += 2; boundary = false; continue }
+    // Custom property values may contain blocks and meaningful whitespace: keep them verbatim.
+    if (boundary && depth > 0 && !parentheses && !brackets) {
+      const name = /^--[^\s:;{}()\[\]"']*\s*:/.exec(text.slice(i))
+      if (name) {
+        const valueStart = i + name[0].length
+        const valueEnd = customPropertyValueEnd(text, valueStart)
+        const value = text.slice(valueStart, valueEnd).trim()
+        output += text.slice(i, valueStart).replace(/\s+:$/, ':') + (value && !compact ? ' ' : '') + value
+        i = valueEnd
+        boundary = false
+        continue
+      }
+    }
     const char = text[i++]
     if (boundary && /[\t\r\n ]/.test(char)) continue
     boundary = false
@@ -68,19 +113,25 @@ export function layoutCss(text: string, compact: boolean): string {
     if (char === ')') parentheses--
     if (char === '[') brackets++
     if (char === ']') brackets--
-    if (parentheses < 0 || brackets < 0) return text
+    if (parentheses < 0 || brackets < 0) throw new CssFormatterError()
     if (!parentheses && !brackets && (char === '{' || char === '}' || char === ';')) {
       if (char === '}') {
-        if (--depth < 0) return text
+        finishDeclaration()
+        if (--depth < 0) throw new CssFormatterError()
         output = output.replace(/[\t\r\n ]+$/, '')
         output += compact ? '}' : `\n${'  '.repeat(depth)}}\n${'  '.repeat(depth)}`
       } else if (char === '{') {
         output = output.replace(/[\t\r\n ]+$/, '')
         depth++
         output += compact ? '{' : ` {\n${'  '.repeat(depth)}`
-      } else output += compact ? ';' : `;\n${'  '.repeat(depth)}`
+      } else {
+        finishDeclaration()
+        output += compact ? ';' : `;\n${'  '.repeat(depth)}`
+      }
+      segmentStart = output.length
       boundary = true
     } else output += char
   }
-  return parentheses || brackets || depth ? text : output.trim()
+  if (parentheses || brackets || depth) throw new CssFormatterError()
+  return output.trim()
 }

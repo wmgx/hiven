@@ -41,5 +41,6 @@
   "toast.copied": "已复制",
   "toast.copyFailed": "复制失败，请重试。",
   "toast.pasteFailed": "粘贴失败，请重试。",
-  "toast.returnFailed": "带回搜索失败，请重试。"
+  "toast.returnFailed": "带回搜索失败，请重试。",
+  "error.invalidCss": "无法格式化该 CSS：请检查是否有未闭合的引号、注释或括号。"
 }

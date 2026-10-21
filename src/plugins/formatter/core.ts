@@ -1,5 +1,5 @@
 import { format as sqlFormat } from 'sql-formatter'
-import { compactSql, layoutCss } from './lexical.ts'
+import { compactSql, CssFormatterError, layoutCss } from './lexical.ts'
 import { formatXml, XmlFormatterError, type XmlFormatterErrorCode } from './xml.ts'
 
 export type FormatterLanguage = 'sql' | 'css' | 'xml'
@@ -8,7 +8,7 @@ export type FormatterRouteId = `${FormatterLanguage}-${FormatterOperation}`
 
 export type FormatterResult =
   | { ok: true; output: string }
-  | { ok: false; message: string; code?: XmlFormatterErrorCode }
+  | { ok: false; message: string; code?: XmlFormatterErrorCode | 'invalidCss' }
 
 export const formatterRoutes: {
   id: FormatterRouteId
@@ -25,8 +25,19 @@ export const formatterRoutes: {
   { id: 'xml-compact', language: 'xml', operation: 'compact', titleKey: 'xml.compact.title', aliases: ['xml compact', 'xml minify', 'compact xml', 'minify xml', 'xml压缩', 'xml 压缩', 'xml yasuo', 'xml ys'] },
 ]
 
+/** MySQL first (`#` comments, backticks), then PostgreSQL (`::`, `->>`, `$1`), then standard SQL. */
+const SQL_DIALECTS = ['mysql', 'postgresql', 'sql'] as const
+
+function formatSql(text: string): string {
+  let lastError: unknown
+  for (const language of SQL_DIALECTS) {
+    try { return sqlFormat(text, { language }) } catch (error) { lastError = error }
+  }
+  throw lastError
+}
+
 export function formatText(language: FormatterLanguage, operation: FormatterOperation, text: string): string {
-  if (language === 'sql') return operation === 'format' ? sqlFormat(text) : compactSql(text)
+  if (language === 'sql') return operation === 'format' ? formatSql(text) : compactSql(text)
   if (language === 'css') return layoutCss(text, operation === 'compact')
   return formatXml(text, operation)
 }
@@ -40,7 +51,7 @@ export function processFormatter(language: FormatterLanguage, operation: Formatt
   try {
     return { ok: true, output: formatText(language, operation, text) }
   } catch (error) {
-    if (error instanceof XmlFormatterError) return { ok: false, message: error.message, code: error.code }
+    if (error instanceof XmlFormatterError || error instanceof CssFormatterError) return { ok: false, message: error.message, code: error.code }
     return { ok: false, message: formatterErrorMessage(error) }
   }
 }
