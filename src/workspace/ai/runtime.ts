@@ -38,6 +38,10 @@ const builtinProviderBoundaries = new Map<string, Readonly<ProviderBoundary>>(
   })] as const),
 )
 
+function aiText(key: string): string {
+  return translate(useAppStore.getState().locale, 'settings', key)
+}
+
 function providerBoundary(providerId: string, adapter: ProviderBoundary | undefined = providers.get(providerId)): ProviderBoundary {
   return builtinProviderBoundaries.get(providerId) ?? {
     authentication: adapter?.authentication,
@@ -584,12 +588,12 @@ export function createPluginAi(
             type: 'error', runId,
             code: descriptor?.status === 'login_required' ? 'provider_login_required' : 'provider_unavailable',
             message: descriptor?.statusMessage ?? (descriptor?.status === 'login_required'
-              ? 'The AI provider requires login' : translate(useAppStore.getState().locale, 'settings', 'aiProviderUnavailable')),
+              ? aiText('aiProviderLoginRequired') : aiText('aiProviderUnavailable')),
           }
           return
         }
         adapter = providers.get(descriptor.id)
-        if (!adapter) throw new Error('The selected AI provider is no longer available')
+        if (!adapter) throw new Error(aiText('aiProviderGone'))
         const requiresModelBinding = neverFallback(descriptor.id, adapter)
         if (requiresModelBinding && discoveryAdapters.get(descriptor.id) !== adapter) {
           await finish('failed')
@@ -623,7 +627,7 @@ export function createPluginAi(
         }
         if (request.input.length === 0) {
           await finish('failed')
-          yield { type: 'error', runId, code: 'invalid_request', message: 'AI input must not be empty' }
+          yield { type: 'error', runId, code: 'invalid_request', message: aiText('aiInputEmpty') }
           return
         }
         const strictInputModalities = providerBoundary(adapter.id, adapter).strictInputModalities
@@ -666,7 +670,7 @@ export function createPluginAi(
           if (next.done) {
             await finish('failed')
             void cancelProvider()
-            yield { type: 'error', runId, code: 'provider_incomplete', message: 'The AI stream ended without a terminal event' }
+            yield { type: 'error', runId, code: 'provider_incomplete', message: aiText('aiStreamIncomplete') }
             return
           }
           const event = next.value
@@ -721,7 +725,7 @@ export function createPluginAi(
 
 export async function loginAiProvider(providerId: string): Promise<AiProviderLogin> {
   const adapter = providers.get(providerId)
-  if (!adapter?.login) throw new Error('This provider does not support login')
+  if (!adapter?.login) throw new Error(aiText('aiLoginUnsupported'))
   invalidateProvider(providerId)
   try { return await adapter.login() } finally { invalidateProvider(providerId) }
 }
@@ -735,7 +739,7 @@ export async function cancelAiProviderLogin(providerId: string, loginId: string)
 
 export async function logoutAiProvider(providerId: string): Promise<void> {
   const adapter = providers.get(providerId)
-  if (!adapter?.logout) throw new Error('This provider does not support logout')
+  if (!adapter?.logout) throw new Error(aiText('aiLogoutUnsupported'))
   invalidateProvider(providerId)
   try { await adapter.logout() } finally { invalidateProvider(providerId) }
 }
