@@ -54,7 +54,7 @@
     {
       "pluginId": "ai-writing",
       "dir": "ai-writing",
-      "version": "1.0.3"
+      "version": "1.0.4"
     },
     {
       "pluginId": "regex-tester",
