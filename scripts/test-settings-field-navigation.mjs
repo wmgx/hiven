@@ -204,7 +204,7 @@ const renderer = load('src/components/PluginSettingsSchemaRenderer.tsx', {
   'lucide-react': require('lucide-react'),
   '../workspace/pluginPermissions': { describePluginPermission: () => 'permission' },
   '../i18n': { translate: (_locale, _namespace, key) => key },
-  '../plugin-ui': { NumberField: 'NumberField', Select: 'Select', Switch: 'Switch' },
+  '../plugin-ui': { NumberField: 'NumberField', Select: 'Select', Switch: 'Switch', useImeKeyboard: () => ({}) },
 })
 function nodes(element) {
   if (!element || typeof element !== 'object') return []
@@ -276,7 +276,7 @@ test('actual field selection and one Back keep the selected identity after late 
   const state = { selectedIndex: 0, query: 'settings field', settingsOpen: false, focusCount: 0 }
   const scope = {
     useCallback: (callback) => callback,
-    selectedKeyRef, selectedIndexRef, visibleSelectionItemsRef,
+    selectedKeyRef, selectedIndexRef, visibleSelectionItemsRef, controllerRef: { current: null },
     rankedItemsRef: { current: [] }, extraSelectionRowsRef: { current: [] },
     setSelectedIndexState: (next) => { state.selectedIndex = typeof next === 'function' ? next(state.selectedIndex) : next },
     resolvePreservedSelection,
@@ -284,7 +284,7 @@ test('actual field selection and one Back keep the selected identity after late 
   const setSelectedIndex = actualCallback('src/workspace/launcher/useLauncherSession.ts', variable('setSelectedIndex'), scope)
   const syncSelection = actualCallback('src/workspace/launcher/useLauncherSession.ts', variable('syncSelection'), scope)
   const select = actualCallback('src/launcher/hosts/GlobalLauncherHost.tsx', variable('selectItemWithObjectActions'), {
-    useCallback: scope.useCallback, visibleFiltered: visible, setSelectedIndex,
+    useCallback: scope.useCallback, visibleFiltered: visible, showingSuggestions: false, suggestionSession: null, currentSuggestionKeys: new Set(), locale: 'en', CURRENT_MATERIAL_COMPARE_ACTION: 'compare-current-material', isCurrentTextDeliveryAction: () => false, setSelectedIndex,
     clipboardBlock: { cancelFileTextRead() {} }, CURRENT_TEXT_EXPORT_ACTION: 'export',
     executeCurrentTextAction() {}, executeCurrentTextExport() {}, executeObjectAction() {}, objectActions: [],
     selectItem: (item) => { state.settingsOpen = item === field },

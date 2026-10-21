@@ -78,7 +78,7 @@ function fixture({ initiallyFocused = true } = {}) {
     './telemetry': { trackBehavior() {} }, '@tauri-apps/api/core': { invoke: async () => 'attempt' },
   })
   const lifecycle = load('src/components/launcher/GlobalLauncherWindowLifecycle.ts', {
-    react: hostHooks.react,
+    react: hostHooks.react, './surfaceInitialFocus': { focusInitialSurfaceTarget() {} },
     '../../workspace/windowManager/launcherWindow': {
       onCurrentLauncherWindowFocusChanged: async (callback) => {
         focusListeners.add(callback); return () => focusListeners.delete(callback)
@@ -91,7 +91,7 @@ function fixture({ initiallyFocused = true } = {}) {
   const background = load('src/components/launcher/useLauncherSurfaceBackgroundIdle.ts', { react: hostHooks.react })
   const PluginSurfaceRenderer = () => null
   const frame = load('src/components/launcher/GlobalLauncherPluginSurfaceFrame.tsx', {
-    react: frameHooks.react,
+    react: frameHooks.react, '../../utils/localEscapeLayer': { consumeLocalEscapeLayer: () => false },
     'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) },
     '../../i18n': { t: (_, key) => key }, '../../plugin-ui': { ConfirmDialog: () => null },
     './launcherEscapeInterceptor': { useLauncherEscapeInterceptor() {} },

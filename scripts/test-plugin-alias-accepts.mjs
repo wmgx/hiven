@@ -80,6 +80,16 @@ function loadPluginDefinition(pluginDir) {
           textError: (text) => ({ output: { kind: 'error', text } }),
         }
       }
+      if (specifier === './routes') {
+        // Route tables are pure data and feed launcher items; load the real one.
+        const routesPath = join(ROOT, 'src/plugins', pluginDir, 'routes.ts')
+        const routesModule = { exports: {} }
+        const routesJs = ts.transpileModule(readFileSync(routesPath, 'utf8'), {
+          compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023 },
+        }).outputText
+        vm.runInNewContext(routesJs, { module: routesModule, exports: routesModule.exports, require: () => ({}) }, { filename: routesPath })
+        return routesModule.exports
+      }
       if (specifier.startsWith('.')) {
         return new Proxy(
           { __esModule: true, default: function Stub() {} },

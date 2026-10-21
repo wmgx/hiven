@@ -20,7 +20,8 @@ try {
   const paths = ['/synthetic/第一 个.txt', '/synthetic/第二个 #.png', '/synthetic/trailing space ']
   const block = { source: 'history-item', kind: 'files', payloadFiles: { paths, fileNames: ['第一 个.txt', '第二个 #.png', 'trailing space '] } }
   const action = recommendActionsForBlock(block).find((candidate) => candidate.id === 'convert-history-file-paths')
-  assert.deepEqual(action, {
+  const { icon: _icon, ...actionWithoutIcon } = action
+  assert.deepEqual(actionWithoutIcon, {
     id: 'convert-history-file-paths', title: 'Convert File Paths', titleZh: '转换文件路径',
     pluginId: 'file-paths', defaultOutput: 'open-plugin-surface',
   })

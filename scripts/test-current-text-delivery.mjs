@@ -37,6 +37,7 @@ try {
   const { requirePluginPermissions } = await vite.ssrLoadModule('/src/workspace/pluginPermissions.ts')
   const { pasteAvailabilityMessageKey } = await vite.ssrLoadModule('/src/workspace/pasteAvailability.ts')
   const { t } = await vite.ssrLoadModule('/src/i18n/index.ts')
+  const pasteRecovery = await vite.ssrLoadModule('/src/workspace/pasteRecovery.ts')
   const original = blocks.createHistoryItemObjectBlock({ kind: 'text', text: Array.from({ length: 9 }, (_, i) => `original line ${i + 1}`).join('\r\n') })
   const text = `${original.payloadText}\r\n  edited tenth line ${'complete payload '.repeat(30)}  \r\n\r\n`
   const edited = blocks.createQueryObjectBlock({ query: text })
@@ -145,6 +146,7 @@ try {
   }
 
   // Run the actual native paste orchestration with only its I/O replaced.
+  globalThis.window.__TAURI_INTERNALS__ = { invoke: async (command) => (command === 'begin_paste_attempt' ? 'synthetic-attempt' : undefined) }
   const native = { availability: 'can-attempt', writes: [], hides: [], open: true, fail: false }
   const code = ts.transpileModule(readFileSync('src/workspace/pluginPaste.ts', 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -154,6 +156,9 @@ try {
     './pluginPermissions': { requirePluginPermissions }, './pluginClipboard': { writeClipboardImageBytes: forbidden },
     '../i18n': { t }, '../store': { useAppStore: { getState: () => ({ locale: 'en', setGlobalLauncherOpen: (value) => { native.open = value } }) } },
     './pasteAvailability': { readPasteAvailability: async () => native.availability, pasteAvailabilityMessageKey },
+    './pasteRecovery': { ...pasteRecovery, captureLauncherPasteOwner: () => ({
+      isCurrent: () => true, subscribeInvalidation: () => () => {}, complete() { native.open = false },
+    }) }, './telemetry': { trackBehavior() {} },
     './nativeClipboard': { writeText: async (value) => native.writes.push(value) },
     '@tauri-apps/api/core': { invoke: async (command, args) => { native.hides.push([command, args]); if (native.fail) throw new Error('native paste failed') } },
   }
@@ -176,9 +181,12 @@ try {
   const fallback = await exports.createPluginPaste().pasteText(text)
   assert.equal(fallback.fallback, 'copied')
   assert.deepEqual(native.writes, [text])
-  assert.equal(native.open, false, 'native paste closes its original launcher session before completion')
+  assert.equal(native.open, true, 'failed native handoff keeps the original launcher session open for recovery')
   assert.equal(native.hides[0][0], 'hide_launcher_and_paste')
-  assert.match(fallback.message, /Copied to clipboard/)
+  assert.match(fallback.message, /Copied\. Paste manually/)
+  native.fail = false
+  assert.equal((await exports.createPluginPaste().pasteText(text)).ok, true)
+  assert.equal(native.open, false, 'confirmed native paste completes (closes) its original launcher session')
   console.log('Current text delivery passed: exact payload, source continuity, exclusions, stale rows, single flight, lifecycle, permissions and native fallback')
 } finally {
   await vite.close()

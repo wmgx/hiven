@@ -633,7 +633,7 @@ await check('save captures complete filtered output, waits for saved receipt and
   assert.equal(h.view.saving, true)
   assert.deepEqual(h.calls.messages, [])
   receipt.resolve({ status: 'saved' }); await pending; h.render()
-  assert.deepEqual(h.calls.messages, [['toast.saved', 'success']])
+  assert.deepEqual(h.calls.messages, [], 'a saved receipt shows no extra toast; the native dialog is the confirmation')
   assert.equal(h.view.saving, false)
   assert.equal(h.view.fullOutputRef.current, complete)
   assert.equal(h.view.fullJobReady, true)
@@ -654,7 +654,7 @@ await check('cancel preserves complete result and allows an immediate retry with
   assert.deepEqual(h.calls.messages, [])
   await h.view.saveFullResult(); h.render()
   assert.deepEqual(h.calls.saves.map((save) => save.text), [complete, complete])
-  assert.deepEqual(h.calls.messages, [['toast.saved', 'success']])
+  assert.deepEqual(h.calls.messages, [], 'a saved receipt shows no extra toast; the native dialog is the confirmation')
   assert.deepEqual(h.draft(), draft)
 })
 
@@ -758,7 +758,7 @@ for (const oldOutcome of ['saved', 'cancelled', 'error']) await check(`late old 
   assert.equal(h.calls.saves[1].signal.aborted, false)
   receipts[1].resolve({ status: 'saved' }); await current; h.render()
   assert.equal(h.view.saving, false)
-  assert.deepEqual(h.calls.messages, [['toast.saved', 'success']])
+  assert.deepEqual(h.calls.messages, [], 'a saved receipt shows no extra toast; the native dialog is the confirmation')
 })
 
 const saveLimit = 10 * 1024 * 1024
@@ -788,7 +788,7 @@ for (const operation of ['to-ndjson', 'to-sql']) await check(`a full ${operation
   assert.equal(h.view.fullOutputRef.current, '')
   await h.view.saveFullResult()
   assert.equal(h.calls.saves[0].text, '')
-  assert.deepEqual(h.calls.messages, [['toast.saved', 'success']])
+  assert.deepEqual(h.calls.messages, [], 'a saved receipt shows no extra toast; the native dialog is the confirmation')
 })
 
 for (const [operation, extension] of [['to-json', 'json'], ['to-array', 'json'], ['to-columns', 'json'], ['to-keyed', 'json'], ['to-ndjson', 'ndjson'], ['to-csv', 'csv'], ['to-tsv', 'tsv'], ['to-markdown', 'md'], ['to-sql', 'sql']]) {
@@ -811,7 +811,7 @@ await check('ordinary surface rerenders preserve a pending save snapshot', async
   assert.equal(h.view.fullJobReady, true)
   assert.equal(h.view.fullOutputRef.current, complete)
   receipt.resolve({ status: 'saved' }); await pending; h.render()
-  assert.deepEqual(h.calls.messages, [['toast.saved', 'success']])
+  assert.deepEqual(h.calls.messages, [], 'a saved receipt shows no extra toast; the native dialog is the confirmation')
 })
 
 await check('expanded synchronous JSON saves complete output after return limit, cancellation and filter changes', async () => {

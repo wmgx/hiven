@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+// Pin the process zone: the host zone leaks into the copies asserted below.
+process.env.TZ = 'Asia/Shanghai'
+
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'

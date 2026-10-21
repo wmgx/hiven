@@ -61,7 +61,7 @@ async function harness(presentation = 'plugin-surface-window') {
     target, surfaceState: ready, presentation, pasteOwnerVersion: 0,
     appSettingsSession: null, launcherSettingsTarget: null, launcherSessionId: 1,
     activeTargetRef: { current: target }, activeStateRef: { current: ready }, mountedRef: { current: false },
-    hiddenRef: { current: false }, sessionRef: { current: null }, preparationScopeRef: { current: null },
+    hiddenRef: { current: false }, suspendedRef: { current: false }, suspensionOwnerRef: { current: 'owner' }, suspensionOwner: 'owner', detachRef: { current: null }, sessionRef: { current: null }, preparationScopeRef: { current: null },
     exportSessionRef: { current: 0 }, handoffRef: { current: null }, deliveredHandoffRef: { current: null },
     historyDiffRef: { current: null },
     pasteScope: scope, ...recoveryExports,
@@ -198,7 +198,7 @@ await check('own handoff refreshes feedback ownership without cancelling itself;
     isNativeDesktopRuntime: () => true,
     getCurrentWindow: () => ({ label: 'synthetic-independent' }), LAUNCHER_WINDOW_LABEL: 'launcher',
     requestLauncherObjectHandoff: (_block, options) => { requests++; assert.equal(options.signal.aborted, false); return handoffResult },
-    showToast() {}, pickLocale: (_locale, _zh, en) => en, locale: 'en',
+    showToast() {}, t: (_locale, key) => key, pickLocale: (_locale, _zh, en) => en, locale: 'en',
   })
   const pending = returnToLauncher({ kind: 'text', text: 'synthetic handoff' })
   assert.equal(first.isCurrent(), false, 'handoff invalidates old feedback synchronously')

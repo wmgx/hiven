@@ -139,8 +139,8 @@ const JWT_SAMPLE =
   const plugin = item('plugin:example:launcher:vim', 'Other tool', { aliases: ['Vim'] })
   const spoof = item('host:app-launcher:app:spoof', 'Other tool', { aliases: ['Vim'] })
   assert.equal(ranking.scoreLauncherItem(ctx, plugin), 6000, 'plugin exact aliases retain their score')
-  assert.deepEqual(rank([plugin, vim]), [plugin.systemKey, vim.systemKey], 'no app alias collision leaves mixed exact-match order unchanged')
-  assert.deepEqual(rank([spoof, vim]), [spoof.systemKey, vim.systemKey], 'non-host rows cannot trigger the collision policy')
+  assert.deepEqual(rank([plugin, vim]), [vim.systemKey, plugin.systemKey], 'an own-title match outranks another item\'s exact alias')
+  assert.deepEqual(rank([spoof, vim]), [vim.systemKey, spoof.systemKey], 'an own-title match outranks an alias-only row regardless of source')
   assert.deepEqual(rank([plugin, mousepad]).slice(0, 1), [mousepad.systemKey], 'alias-only queries retain existing favorite intent')
 }
 
@@ -239,6 +239,7 @@ const hostAppSandbox = {
   launcherPerfNow: () => 0,
   normalizeHostAppEntries: hostAppIndex.normalizeHostAppEntries,
   require: (id) => {
+    if (id === '../../i18n') return { t: (_locale, key) => key }
     if (id === '../../store') return { useAppStore: { getState: () => ({ settings: { appSearchAliases: {} } }) } }
     if (id === './appSearchAliases') return loadTs('src/workspace/appLauncher/appSearchAliases.ts')
     if (id === './appLaunchError') return { rethrowAppLaunchError: (error) => { throw error } }

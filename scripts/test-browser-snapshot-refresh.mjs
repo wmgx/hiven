@@ -18,7 +18,7 @@ function fixture() {
     if (mocks.has(path)) return mocks.get(path)
     if (modules.has(path)) return modules.get(path).exports
     const module = { exports: {} }; modules.set(path, module)
-    const code = ts.transpileModule(readFileSync(path, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
+    const code = ts.transpileModule(readFileSync(path, 'utf8').replaceAll('import.meta.env.DEV', 'false'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
     const require = spec => {
       if (mocks.has(spec)) return mocks.get(spec)
       assert.ok(spec.startsWith('.'), `Unexpected external import: ${spec}`)

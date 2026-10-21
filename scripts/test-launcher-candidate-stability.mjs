@@ -70,7 +70,7 @@ try {
       return slots[index].value
     }
     const react = {
-      useMemo, useCallback: (callback, deps) => useMemo(() => callback, deps), useEffect() {},
+      useMemo, useCallback: (callback, deps) => useMemo(() => callback, deps), useEffect() {}, useSyncExternalStore: (_subscribe, getSnapshot) => getSnapshot(),
       useRef(value) { const index = cursor++; return slots[index] ??= { current: value } },
       useState(initial) {
         const index = cursor++
@@ -97,6 +97,7 @@ try {
         rankCalls.push({ context, items, result })
         return result
       } },
+      '../desktopTargets/registry': { subscribeDesktopTargets: () => () => {}, getDesktopTargetsVersion: () => 0 },
       './perf': { measureLauncherPerfSync: (_label, run) => run() },
     }
     const exports = {}
@@ -117,11 +118,11 @@ try {
       render() { cursor = 0; h.session = exports.useLauncherSession(options); return h.session },
       publish(lane, items, inputIdentity) { lanes[lane].set({ items, inputIdentity }); return h.render() },
       query(text) { h.session.setQuery(text); return h.render() },
-      identity(lane) { return lane === 2 ? h.session.query.trim() : JSON.stringify([h.session.query.trim(), options.objectBlockText?.trim() ?? '']) },
+      identity() { return JSON.stringify([h.session.query.trim(), options.objectBlockText?.trim() ?? '']) },
       get candidates() { return rankCalls.at(-1).items },
     }
     h.render()
-    assert.equal(lanes.length, 3, 'all three actual dynamic state slots are exercised')
+    assert.equal(lanes.length, 2, 'both actual dynamic state slots are exercised')
     return h
   }
 
@@ -137,7 +138,7 @@ try {
     try { run(); passed++ } catch (error) { error.message = `${name}: ${error.message}`; throw error }
   }
 
-  for (const [lane, name] of ['plugin', 'host', 'document'].entries()) {
+  for (const [lane, name] of ['plugin', 'host'].entries()) {
     check(`${name}: empty deliveries and stale generations preserve candidates and ranking`, () => {
       const h = fixture()
       const candidates = h.candidates, ranked = h.session.rankedItems, available = h.session.availableItems
@@ -206,19 +207,18 @@ try {
       assert.equal(h.rankCalls.length, count + 1, 'raw query remains a ranking dependency')
       assert.equal(h.rankCalls.at(-1).context.query, query.trim())
       const candidates = h.candidates
-      for (let lane = 0; lane < 3; lane++) h.publish(lane, [], h.identity(lane))
+      for (let lane = 0; lane < 2; lane++) h.publish(lane, [], h.identity(lane))
       assert.equal(h.candidates, candidates)
       assert.equal(h.rankCalls.length, count + 1, 'empty provider settlements add no rerank')
     }
   })
 
-  check('object material invalidates plugin/host rows while document query identity is retained', () => {
-    const h = fixture(), rows = [item('plugin'), item('host'), item('document')]
+  check('object material invalidates plugin/host rows', () => {
+    const h = fixture(), rows = [item('plugin'), item('host')]
     rows.forEach((row, lane) => h.publish(lane, [row], h.identity(lane)))
     h.options.objectBlockText = 'new material'
     h.render()
     assert.ok(!h.candidates.includes(rows[0]) && !h.candidates.includes(rows[1]))
-    assert.ok(h.candidates.includes(rows[2]))
     assert.equal(h.rankCalls.at(-1).context.contentText, 'new material')
     const count = h.rankCalls.length
     h.options.objectBlockText = 'different material'

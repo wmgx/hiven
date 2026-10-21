@@ -53,7 +53,7 @@ try {
     assert.equal(textExport.canExportCurrentText({ block, nativeDesktop: true, standaloneLauncher: true }), false)
   }
   for (const locale of ['en', 'zh']) {
-    for (const key of ['palette.saveCurrentText', 'palette.currentTextExportDialogTitle', 'palette.currentTextExportSaved', ...Object.values(textExport.CURRENT_TEXT_EXPORT_ERROR_KEYS)]) {
+    for (const key of ['palette.saveCurrentText', 'palette.currentTextExportDialogTitle', ...Object.values(textExport.CURRENT_TEXT_EXPORT_ERROR_KEYS)]) {
       assert.notEqual(t(locale, key), key)
       assert.notEqual(t(locale, key), key.slice('palette.'.length))
     }

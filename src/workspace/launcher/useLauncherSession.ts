@@ -205,7 +205,7 @@ export function useLauncherSession({
   const recordPersistableLauncherSelection = useAppStore((s) => s.recordPersistableLauncherSelection)
   const rankingNow = useMemo(() => Date.now(), [open])
   const pluginRegistryVersion = usePluginRegistryVersion()
-  const desktopTargetsVersion = useSyncExternalStore(subscribeDesktopTargets, getDesktopTargetsVersion)
+  const desktopTargetsVersion = useSyncExternalStore(subscribeDesktopTargets, getDesktopTargetsVersion, getDesktopTargetsVersion)
   // toolsFor and launcher.itemsFor depend on live settings; recollect after edits.
   const pluginSettings = usePluginSettingsStore((s) => s.pluginSettings)
   const pluginPermissions = usePluginPermissionStore((s) => s.permissions)

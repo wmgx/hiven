@@ -196,7 +196,7 @@ try {
       target, surfaceState: ready, presentation: 'global-launcher', pasteOwnerVersion: 0,
       appSettingsSession: null, launcherSettingsTarget: null, launcherSessionId: 1,
       activeTargetRef: { current: target }, activeStateRef: { current: ready }, mountedRef: { current: true },
-      hiddenRef: { current: false }, sessionRef: { current: null }, ownedSettingsTargetRef: { current: null }, localeRef: { current: 'en' },
+      hiddenRef: { current: false }, suspendedRef: { current: false }, suspensionOwnerRef: { current: 'owner' }, suspensionOwner: 'owner', sessionRef: { current: null }, ownedSettingsTargetRef: { current: null }, localeRef: { current: 'en' },
       pasteScope: createPasteRecoveryScope(), pluginRegistry: { getPluginLifetime: () => lifetime },
       combinePasteRecoveryOwners, captureLauncherPasteOwner: () => { const valid = launcherCurrent; return { isCurrent: () => valid && launcherCurrent, subscribeInvalidation: () => () => {} } },
       useAppStore: { getState: () => ({ globalLauncherOpen: launcherCurrent, globalLauncherSessionId: 1 }) },

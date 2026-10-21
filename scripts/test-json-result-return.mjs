@@ -22,7 +22,7 @@ const inspect = (node) => {
   ts.forEachChild(node, inspect)
 }
 inspect(returned)
-const fields = 'inputText, operation, indent, shouldSort, expression, expressionRun, outputText, hasOutput, canReturnOutput, returning, returnOutput, copyOutput: () => deliverOutput("copy"), useOutputAsInput, runExpression, updateResult, setInputText, setOperation, setIndent, setShouldSort, setExpression'
+const fields = 'inputText, operation, indent, shouldSort, expression, manualRun, outputText, hasOutput, canReturnOutput, returning, returnOutput, copyOutput: () => deliverOutput("copy"), useOutputAsInput, runManual, updateResult, setInputText, setOperation, setIndent, setShouldSort, setExpression'
 // Preserve the complete production function body; replace only the final JSX with a logic probe.
 const source = surfaceSource.slice(0, returned.expression.getStart(file))
   + `({ ${fields}, back: ${exits.requestBack}, close: ${exits.close} })`
@@ -62,6 +62,7 @@ function harness({ input = '{"b":2,"a":1}', operation = 'format', outcome = () =
     useState,
     useRef: (initial) => useState(() => ({ current: initial }))[0],
     useMemo: (factory) => factory(),
+    useDeferredValue: (value) => value,
     useEffect: (setup, deps) => {
       const index = cursor++
       const previous = slots[index]
@@ -85,7 +86,7 @@ function harness({ input = '{"b":2,"a":1}', operation = 'format', outcome = () =
         return { feedback: controller.getSnapshot().feedback, invalidate: controller.invalidate,
           beginAttempt: () => controller.beginAttempt(result, owner, controller.getSnapshot().revision) }
       } },
-    '@hiven/plugin-ui/icons': {}, './routes': routes, './jsonCore': core,
+    '@hiven/plugin-ui/icons': {}, './useJsonCursorPath': { useJsonCursorPath: () => ({ onReady() {}, copy: async () => {} }) }, './routes': routes, './jsonCore': core,
   }, source)
   const host = {
     returnToLauncherWithObject: (block, options) => {
@@ -112,8 +113,8 @@ function harness({ input = '{"b":2,"a":1}', operation = 'format', outcome = () =
       view.updateResult(() => view[`set${name}`](value))
       if (rerender) render()
     },
-    run() { view.runExpression(); render() },
-    draft: () => plain(Object.fromEntries(['inputText', 'operation', 'indent', 'shouldSort', 'expression', 'expressionRun', 'outputText'].map((key) => [key, view[key]]))),
+    run() { view.runManual(); render() },
+    draft: () => plain(Object.fromEntries(['inputText', 'operation', 'indent', 'shouldSort', 'expression', 'manualRun', 'outputText'].map((key) => [key, view[key]]))),
     unmount() { mounted = false; for (const effect of effects) effect.cleanup?.() },
     replayEffects() { for (const effect of effects) { effect.cleanup?.(); effect.cleanup = effect.setup() } },
   }
@@ -146,7 +147,7 @@ for (const input of ['', ' \r\n\t', '{invalid']) await check(`invalid/absent inp
 for (const value of [0, false, '']) await check(`expression ${JSON.stringify(value)} needs a current manual run`, async () => {
   const h = harness({ operation: 'expression', input: JSON.stringify({ value }) })
   h.edit('Expression', '.value')
-  assert.equal(h.view.expressionRun, null)
+  assert.equal(h.view.manualRun, null)
   assert.equal(h.view.canReturnOutput, false)
   await h.view.returnOutput()
   assert.equal(h.calls.handoff.length, 0)
@@ -169,11 +170,11 @@ await check('expression errors never expose output; edits and to-input do not ex
   await h.view.returnOutput()
   assert.equal(h.calls.handoff.length, 0)
   h.edit('Expression', '.value'); h.run()
-  const previousRun = h.view.expressionRun
+  const previousRun = h.view.manualRun
   h.view.useOutputAsInput(); h.render()
   assert.equal(h.view.inputText, 'text')
   assert.equal(h.view.operation, 'expression')
-  assert.equal(h.view.expressionRun, previousRun)
+  assert.equal(h.view.manualRun, previousRun)
   assert.equal(h.view.canReturnOutput, false)
 })
 for (const outcome of [false, true, undefined, 'reject', 'throw']) await check(`ack ${String(outcome)} retains draft and gates duplicate delivery`, async () => {

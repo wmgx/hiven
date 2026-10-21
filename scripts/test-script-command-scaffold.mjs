@@ -4,7 +4,6 @@
  *
  * - createPluginScaffoldFiles({ template: 'script-command' }) manifest has shell.run
  * - default template does not request shell.run
- * - scaffold index does not execute real shell
  *
  * Run: node scripts/test-script-command-scaffold.mjs
  */
@@ -67,19 +66,12 @@ assert.equal(
   'script-command manifest must declare shell.run',
 )
 assert.equal(scriptFiles.manifest.pluginId, 'my-script')
-assert.match(scriptFiles.indexSource, /tools:\s*\[/, 'script-command index must use tools')
-assert.match(
-  scriptFiles.indexSource,
-  /Script command template — wire shell runtime to enable|tool\.script\.placeholder/,
-  'script-command run must return placeholder text, not execute shell',
-)
-assert.doesNotMatch(
-  scriptFiles.indexSource,
-  /child_process|execSync|spawn\(|invoke\(\s*['"]run_shell|shell\.run\(/,
-  'script-command template must not execute real shell commands',
-)
-assert.match(scriptFiles.localeEn, /tool\.script\.title/, 'en locale keys required')
-assert.match(scriptFiles.localeZh, /tool\.script\.title/, 'zh locale keys required')
-assert.match(scriptFiles.localeZh, /脚本命令模板/, 'zh locale should localize subtitle/placeholder')
+// The generated source text is intentionally not asserted (no source-string tests);
+// the scaffold now confirms before running ctx.shell, gated by the shell.run permission above.
+const keysOf = (json) => Object.keys(JSON.parse(json))
+for (const key of ['tool.script.title', 'tool.script.subtitle']) {
+  assert.ok(keysOf(scriptFiles.localeEn).includes(key), `en locale defines ${key}`)
+  assert.ok(keysOf(scriptFiles.localeZh).includes(key), `zh locale defines ${key}`)
+}
 
 console.log('test-script-command-scaffold: ok')
