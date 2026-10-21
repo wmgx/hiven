@@ -1,38 +1,61 @@
 # hiven
 
-跨平台 **launcher-only 精确文本工作台**：全局唤起 → 识别当前文本 → 推荐并执行动作 → 结果继续处理或回到前台。
+**更懂你的 macOS 全能 launcher。** 一个热键唤起，搜应用、切窗口、算一下、查一下、处理手上的内容；AI 负责听懂你想做什么，把你带到对的能力上。
 
-灵感来自 [Boop](https://boop.okat.best/)，交互参考 Raycast / Alfred 一类全局入口，但**不做全能 OS launcher**。
+交互参考 Raycast / Alfred，不同在于：hiven 先看你**当下手上是什么、正在做什么**，再决定给你什么。
+
+## 「懂你」从哪里来
+
+| 来源 | 含义 |
+|------|------|
+| 当下上下文 | 前台应用、选中文本、剪贴板、浏览器当前页 |
+| 内容识别 | JSON、URL、时间戳、JWT、Base64… 识别出来就直接给出可用动作 |
+| 意图理解（AI） | 自然语言或模糊输入，由 AI 映射到已有能力并带上参数 |
+| 你明确设定的偏好 | 收藏、别名、默认参数、快捷键 |
+
+## AI 融合原则
+
+1. **本地确定性优先**：能本地算出来的（计算、换算、格式化、应用搜索）不走 AI。
+2. **AI 做理解和兜底，不做主路径**：本地无结果或输入是自然语言时才调用，且不阻塞首帧和本地结果。
+3. **AI 是可选的**：不配置任何 AI，hiven 仍是完整可用的 launcher。
+4. **发出去的内容可见**：哪些内容会发给 AI，在调用前就清楚。
+5. **不替你执行有副作用的操作**：AI 只推荐，粘贴、删除、打开外部应用由你确认触发。
 
 ## 产品形态
 
 ```text
 系统托盘（唯一常驻入口）
-  → 全局热键 / 托盘 打开 Global Launcher
+  → 全局热键打开 Global Launcher
   → 搜索 / 参数 / 结果（同一 launcher 会话）
   → host surface 原地展开：快捷编辑器 · 设置 · 插件管理
   → 插件独立 surface 窗口（Diff、剪贴板历史、翻译…）
-  → 快捷编辑器可 detach 为独立窗口
 ```
 
-没有持久主工作台窗口，也没有多 pane IDE 工作区。
+没有持久主窗口。唤起和关闭不改变原前台应用状态。
 
 ## 主要能力
 
-- **文本变换插件** — 编解码、格式化、JSON/CSV/YAML、行工具、Hash 等
-- **内容感知** — Object Block + accepts/intent ranking（少搜命令全名）
-- **Global Launcher** — 算式/时间/URL 即时结果、App/窗口/进程（macOS）、飞书（可选）
-- **Quick Editor** — Monaco 快捷编辑，可与 launcher 协作
+- **启动与切换** — 应用（含别名）、窗口、进程、系统命令
+- **即时结果** — 算式、单位换算、时间与时区、URL
+- **内容处理** — 编解码、格式化、JSON/CSV/YAML、行工具、Hash、文本对比
 - **剪贴板历史** — 历史项可回到 launcher 继续处理
-- **text-diff 插件** — 双栏文本/JSON semantic 对比（产品在插件内，不在 framework）
-- **中英 i18n** · **Tauri v2** · 插件目录扩展
+- **浏览器** — 打开网址、站点搜索、浏览器标签
+- **AI** — 翻译、写作、意图理解；支持 Codex、xAI、Ollama
+- **快捷编辑器** — Monaco 单编辑器，可 detach
+- **插件** — 能力以插件目录交付；中英 i18n
 
 ## 明确不做
 
-- 全能桌面 launcher / 文件全局搜索主路径  
-- 截图标注、窗管 Widgets、必选 LLM  
-- Raycast 扩展商店兼容 / 云同步账号  
-- 把 host 做成 code-review IDE  
+- 工作流 / 自动化编排
+- 文件全局搜索
+- 第三方插件分发与市场（插件能力保留，暂不开放）
+- Windows / Linux 正式支持（当前只面向 macOS）
+- 截图标注、窗口布局管理、云同步账号
+- 把 host 做成 code-review IDE
+
+## 性能底线
+
+launcher 是高频入口：唤起首帧 p90 < 120ms；本地结果不等待任何网络或 AI 请求。埋点见 `doc/launcher-perf-telemetry.md`。
 
 ## 技术栈
 
@@ -43,7 +66,7 @@
 | 编辑 | Monaco（Quick Editor） |
 | 发布 | GitHub Actions + Tauri Updater |
 
-**发布矩阵：** macOS arm64 / x64、Windows x64。Linux 未进正式发布流水线。
+**目标平台：** macOS（arm64 / x64）。发布流水线仍会产出 Windows x64，但不做产品验收；Linux 未进流水线。
 
 ## 开发
 
@@ -105,5 +128,5 @@ npm run build:desktop:debug
 
 ## 致谢
 
-- [Boop](https://boop.okat.best/) — 文本工作台灵感  
+- [Boop](https://boop.okat.best/) — 最初的文本工具灵感  
 - [Tauri](https://tauri.app/) — 跨平台桌面框架  

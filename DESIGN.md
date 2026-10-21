@@ -62,7 +62,7 @@ Raycast-like rows: icon + title/sub, type label on the right, neutral selected b
 2. Crisp neutrals over decorative translucency  
 3. Product semantics in **plugins**; host chrome stays minimal  
 4. Keyboard primary; IME composition must not confirm  
-5. Diff / JSON / Feishu UI are plugins — not host concepts  
+5. Diff / JSON / clipboard-history UI are plugins — not host concepts  
 
 ## Components (current)
 
@@ -75,7 +75,9 @@ Raycast-like rows: icon + title/sub, type label on the right, neutral selected b
 
 - Multi-pane IDE workbench as default form factor  
 - Diff product model inside framework public SDK  
-- Omnipotent OS launcher (screenshot, widgets, file spotlight)  
+- Workflow / automation authoring  
+- Global file search, screenshot annotation, window layout widgets  
+- Third-party plugin marketplace (for now)  
 
 ## Validation
 

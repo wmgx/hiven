@@ -6,11 +6,13 @@ product
 
 ## Users
 
-Developers and technical users who need a focused desktop text-processing tool for formatting, transforming, comparing, and inspecting text without leaving their workflow.
+Developers and technical users on macOS who want one hotkey to launch, switch, compute, look up, and act on whatever they are holding right now, without leaving the current app.
 
 ## Product Purpose
 
-hiven is a cross-platform text utility inspired by Boop, extended with Monaco editing, command palette workflows, first-party plugin packages, and user-managed plugins. Success means common text operations are quick to find, predictable to run, and easy to extend.
+hiven is an all-in-one macOS launcher that understands the user's current context. It reads what is in hand (selection, clipboard, foreground app, browser page), recognizes content, and uses AI to understand intent and route it to existing capabilities. Local deterministic results come first; AI understands and falls back, never blocks the first frame, is optional, and never runs side-effecting actions on its own. Success means the first result is usually the right one, it appears instantly, and nothing changes the user's foreground app.
+
+Not in scope: workflow/automation authoring, global file search, third-party plugin marketplace (for now), official Windows/Linux support.
 
 ## Brand Personality
 
