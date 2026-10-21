@@ -23,6 +23,7 @@
   "settings.connectedDetail": "{tabs} 个标签 · {history} 条历史",
   "settings.extensionOutdated": "浏览器里的扩展是 {current}，当前 Hiven 自带 {bundled}。请在浏览器扩展页点「重新加载」，否则标签跳转可能失效",
   "settings.extensionVersionUnknown": "旧版本",
+  "settings.extensionUpgrade": "浏览器扩展版本过旧或缺少授权文件，Hiven 无法连接。请先点下方「打开扩展目录」更新扩展文件，再到浏览器的扩展页重新加载该扩展。",
   "settings.install": "安装浏览器扩展",
   "settings.installSteps": "加载已解压的扩展程序，选择该文件夹",
   "settings.openFolder": "打开扩展目录",

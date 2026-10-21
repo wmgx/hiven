@@ -37,9 +37,13 @@ export type DesktopBridgeStatus = {
     appName?: string | null
     /** Reported by the extension; absent on extensions older than 0.3.7. */
     extensionVersion?: string | null
+    /** The reported version predates the bridge token and can no longer connect. */
+    extensionOutdated?: boolean
   }>
   /** Extension version shipped with this build. */
   bundledExtensionVersion?: string | null
+  /** An extension request was rejected (no / wrong token) moments ago. */
+  unauthorizedExtension?: boolean
 }
 
 export type DesktopBridgeHistoryDto = {

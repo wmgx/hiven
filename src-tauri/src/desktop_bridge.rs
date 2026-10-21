@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Condvar, LazyLock, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -48,6 +48,12 @@ const HISTORY_IMPORTS_PER_SOURCE_CAP: usize = 4;
 /// Concurrent connections, including parked `/commands?wait=` long-polls.
 const MAX_CONNECTIONS: usize = 32;
 static ACTIVE_CONNECTIONS: AtomicUsize = AtomicUsize::new(0);
+/// First extension build that sends the bridge token; older copies are rejected with 401.
+const MIN_EXTENSION_VERSION: &str = "0.4.0";
+/// How long a rejected extension request keeps the settings page showing the upgrade hint.
+const UNAUTHORIZED_HINT_WINDOW_MS: u64 = 120_000;
+/// Wall-clock ms of the last tokenless / wrong-token extension request (0 = never).
+static LAST_UNAUTHORIZED_EXTENSION_MS: AtomicU64 = AtomicU64::new(0);
 const MAX_HTTP_BODY_BYTES: usize = 2 * 1024 * 1024;
 // Validation relays JSON-encoded byte arrays; a permitted 10 MB image can expand to ~40 MB.
 const MAX_VALIDATION_RESULT_BODY_BYTES: usize = 64 * 1024 * 1024;
@@ -484,6 +490,11 @@ fn guard_and_route(request: HttpRequest, token: Option<&str>) -> Result<(u16, St
         if request.path.starts_with("/v1/sources/")
             && !auth::bearer_matches(request.authorization.as_deref(), token)
         {
+            // Browsers send the extension origin; an extension copy that predates
+            // the token sends none. Web origins were already rejected above.
+            if request.origin.as_deref().map_or(true, auth::is_extension_origin) {
+                LAST_UNAUTHORIZED_EXTENSION_MS.store(now_ms(), Ordering::Relaxed);
+            }
             return Ok((
                 401,
                 serde_json::json!({ "error": "missing or invalid bridge token" }).to_string(),
@@ -1188,6 +1199,9 @@ pub struct DesktopBridgeStatus {
     /// Version of the Chromium extension shipped with this build; a lower
     /// `extensionVersion` on a source means the browser still runs an old copy.
     pub bundled_extension_version: Option<String>,
+    /// An extension request was rejected (no / wrong token) moments ago: the
+    /// browser is running a copy that predates the bridge token.
+    pub unauthorized_extension: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1201,6 +1215,8 @@ pub struct DesktopBridgeSourceStatus {
     pub app_name: Option<String>,
     /// Reported by the extension in each snapshot; `None` = pre-0.3.7 extension.
     pub extension_version: Option<String>,
+    /// The reported version is older than the first token-aware build.
+    pub extension_outdated: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1232,6 +1248,23 @@ pub struct DesktopBridgeEventDto {
     pub app_name: Option<String>,
 }
 
+/// True when `version` is a dotted number string strictly below `minimum`.
+fn version_below(version: &str, minimum: &str) -> bool {
+    let parse = |value: &str| -> Vec<u64> {
+        value.split('.').map(|part| part.trim().parse().unwrap_or(0)).collect()
+    };
+    let (mut left, mut right) = (parse(version), parse(minimum));
+    let len = left.len().max(right.len());
+    left.resize(len, 0);
+    right.resize(len, 0);
+    left < right
+}
+
+fn unauthorized_extension_recently() -> bool {
+    let last = LAST_UNAUTHORIZED_EXTENSION_MS.load(Ordering::Relaxed);
+    last != 0 && now_ms().saturating_sub(last) <= UNAUTHORIZED_HINT_WINDOW_MS
+}
+
 fn bundled_extension_version() -> Option<String> {
     let manifest: serde_json::Value =
         serde_json::from_str(crate::BROWSER_TABS_EXTENSION_MANIFEST).ok()?;
@@ -1254,6 +1287,10 @@ pub fn desktop_bridge_status() -> Result<DesktopBridgeStatus, String> {
             event_count: s.events.len(),
             app_name: s.app_name.clone(),
             extension_version: s.extension_version.clone(),
+            extension_outdated: s
+                .extension_version
+                .as_deref()
+                .is_some_and(|version| version_below(version, MIN_EXTENSION_VERSION)),
         })
         .collect();
     Ok(DesktopBridgeStatus {
@@ -1261,6 +1298,7 @@ pub fn desktop_bridge_status() -> Result<DesktopBridgeStatus, String> {
         port: DESKTOP_BRIDGE_PORT,
         sources,
         bundled_extension_version: bundled_extension_version(),
+        unauthorized_extension: unauthorized_extension_recently(),
     })
 }
 
@@ -1793,6 +1831,18 @@ mod tests {
         ok.authorization = Some("Bearer tok".into());
         ok.origin = Some("chrome-extension://abc".into());
         assert_eq!(guard_and_route(ok, Some("tok")).unwrap().0, 200);
+    }
+
+    #[test]
+    fn rejected_extension_requests_raise_the_upgrade_hint() {
+        let path = "/v1/sources/browser.chromium.auth-test/snapshot";
+        let mut stale = request("POST", path, "127.0.0.1:19246");
+        stale.origin = Some("chrome-extension://abc".into());
+        assert_eq!(guard_and_route(stale, Some("tok")).unwrap().0, 401);
+        assert!(unauthorized_extension_recently());
+        assert!(version_below("0.3.8", MIN_EXTENSION_VERSION));
+        assert!(!version_below("0.4.0", MIN_EXTENSION_VERSION));
+        assert!(!version_below("0.10.0", MIN_EXTENSION_VERSION));
     }
 
     #[test]

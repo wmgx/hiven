@@ -31,6 +31,8 @@ type BridgeLine = {
   /** Version the browser is running; null = extension too old to report one. */
   extensionVersion: string | null
   bundledExtensionVersion: string | null
+  /** The extension cannot authenticate: it predates the bridge token or was rejected. */
+  needsUpgrade: boolean
 }
 
 function StatusChip({ label, tone }: { label: string; tone: 'on' | 'off' | 'muted' }) {
@@ -105,6 +107,7 @@ export function BrowserTabsConnectionModal(props: PluginSettingsModalBodyProps<W
         port: status.port,
         extensionVersion: src?.extensionVersion ?? null,
         bundledExtensionVersion: status.bundledExtensionVersion ?? null,
+        needsUpgrade: Boolean(status.unauthorizedExtension) || status.sources.some((s) => s.extensionOutdated === true),
       })
     } catch {
       setBridge(null)
@@ -148,7 +151,12 @@ export function BrowserTabsConnectionModal(props: PluginSettingsModalBodyProps<W
         {statusDetail && (
           <ui.Text style={{ fontSize: 11.5, color: 'var(--text-2)' }}>{statusDetail}</ui.Text>
         )}
-        {extensionOutdated && bridge && (
+        {bridge?.needsUpgrade && (
+          <ui.Text style={{ fontSize: 11.5, color: 'var(--color-warning)', lineHeight: 1.5 }}>
+            {t('settings.extensionUpgrade')}
+          </ui.Text>
+        )}
+        {!bridge?.needsUpgrade && extensionOutdated && bridge && (
           <ui.Text style={{ fontSize: 11.5, color: 'var(--color-warning)', lineHeight: 1.5 }}>
             {t('settings.extensionOutdated', {
               current: bridge.extensionVersion ?? t('settings.extensionVersionUnknown'),
