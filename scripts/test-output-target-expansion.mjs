@@ -5,7 +5,6 @@
  * Verifies:
  *  - actionExecutor transforms text correctly (format JSON, minify)
  *  - getActionOutputTargets returns default + alternatives
- *  - getOutputTargetLabel provides Chinese labels
  */
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -43,16 +42,6 @@ const jsonAction = {
 }
 const targets = executor.getActionOutputTargets(jsonAction)
 assert.deepEqual(JSON.parse(JSON.stringify(targets)), ['copy', 'open-editor'], 'should return default + alternatives')
-
-// ─── getOutputTargetLabel ──────────────────────────────────────────────────────
-assert.equal(executor.getOutputTargetLabel('copy', 'zh'), '复制结果')
-assert.equal(executor.getOutputTargetLabel('copy-and-keep-open', 'zh'), '复制并保持打开')
-assert.equal(executor.getOutputTargetLabel('open-url', 'zh'), '打开 URL')
-// "Editor" became the quick editor, and the verb became 覆盖 because this target
-// overwrites the editor contents rather than opening a new document.
-assert.equal(executor.getOutputTargetLabel('open-editor', 'zh'), '覆盖到快捷编辑器')
-assert.equal(executor.getOutputTargetLabel('open-editor', 'en'), 'Overwrite Quick Editor')
-assert.equal(executor.getOutputTargetLabel('open-plugin-surface', 'zh'), '打开工具窗口')
 
 // ─── executeRecommendedAction: format JSON → copy ──────────────────────────────
 let copiedText = ''

@@ -8,7 +8,6 @@ import { LauncherMixedList, type LauncherMixedItem } from './LauncherMixedList'
 import type { ClipboardObjectBlockState } from '../../launcher/clipboard/useClipboardObjectBlock'
 import { ObjectBlockToken } from './ObjectBlockToken'
 import { RecentClipboardHint } from './RecentClipboardHint'
-import type { RecommendedAction, RecommendedOutputTarget } from '../../launcher/clipboard/actionRecommendation'
 import { LauncherEmptyWell } from './LauncherEmptyWell'
 import { getPlatformShortcutMeta } from './launcherParamShortcuts'
 import { FILE_TEXT_ERROR_KEYS } from '../../launcher/clipboard/fileTextMaterial'
@@ -107,11 +106,6 @@ export function GlobalLauncherSearchFrame({
   onHoverIndex: (index: number) => void
   onMouseMove: (event: ReactMouseEvent) => void
   isKeyboardNavRef?: MutableRefObject<boolean>
-  /** @deprecated Dedicated object-action rows removed; ranking + textMatch is the path. */
-  onExecuteAction?: (action: RecommendedAction, target: RecommendedOutputTarget) => void
-  selectedActionIndex?: number
-  onSelectedActionIndexChange?: (index: number) => void
-  onObjectActionController?: (controller: { expand: () => void; execute: (keepOpen?: boolean) => void } | null) => void
 }) {
   const block = clipboardBlock?.block ?? null
   const blockExiting = Boolean(clipboardBlock?.isExiting)

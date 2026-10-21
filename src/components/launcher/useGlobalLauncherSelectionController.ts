@@ -97,7 +97,10 @@ export function useGlobalLauncherSelectionController({
           const surface = getPluginSurfaceDefinition(pluginSurfaceTarget)
           if (!surface) {
             showToast(
-              `Surface unavailable: ${pluginSurfaceTarget.pluginId}/${pluginSurfaceTarget.surfaceId}`,
+              t(locale, 'palette.surfaceUnavailable', {
+                pluginId: pluginSurfaceTarget.pluginId,
+                surfaceId: pluginSurfaceTarget.surfaceId,
+              }),
               'error',
             )
             return

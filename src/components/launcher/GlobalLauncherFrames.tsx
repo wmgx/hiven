@@ -13,7 +13,6 @@ import { GlobalLauncherSettingsFrame } from './GlobalLauncherSettingsFrame'
 import { GlobalLauncherPluginSurfaceFrame } from './GlobalLauncherPluginSurfaceFrame'
 import { GlobalLauncherSearchFrame } from './GlobalLauncherSearchFrame'
 import type { ClipboardObjectBlockState } from '../../launcher/clipboard/useClipboardObjectBlock'
-import type { RecommendedAction, RecommendedOutputTarget } from '../../launcher/clipboard/actionRecommendation'
 import { GlobalLauncherResultFrame } from './GlobalLauncherResultFrame'
 import { GlobalLauncherPermissionFrame, type GlobalLauncherPermissionFrameState } from './GlobalLauncherPermissionFrame'
 import { GlobalLauncherCollectInputFrame } from './GlobalLauncherCollectInputFrame'
@@ -92,10 +91,6 @@ export function GlobalLauncherFrameSwitch({
   clipboardBlock,
   onEditMaterial,
   clipboardHintSelected,
-  onExecuteAction,
-  selectedActionIndex,
-  onSelectedActionIndexChange,
-  onObjectActionController,
 }: {
   hostSurfaceTarget: LauncherHostSurfaceTarget | null
   hostSurfaceHeight: number
@@ -170,10 +165,6 @@ export function GlobalLauncherFrameSwitch({
   onEditMaterial?: () => void
   /** Recent-clipboard hint is the focused row (selectedIndex === -1). */
   clipboardHintSelected?: boolean
-  onExecuteAction?: (action: RecommendedAction, target: RecommendedOutputTarget) => void
-  selectedActionIndex?: number
-  onSelectedActionIndexChange?: (index: number) => void
-  onObjectActionController?: (controller: { expand: () => void; execute: (keepOpen?: boolean) => void } | null) => void
 }) {
   if (hostSurfaceTarget) {
     return (
@@ -363,10 +354,6 @@ export function GlobalLauncherFrameSwitch({
       onHoverIndex={onSearchHoverIndex}
       onMouseMove={onSearchMouseMove}
       isKeyboardNavRef={isKeyboardNavRef}
-      onExecuteAction={onExecuteAction}
-      selectedActionIndex={selectedActionIndex}
-      onSelectedActionIndexChange={onSelectedActionIndexChange}
-      onObjectActionController={onObjectActionController}
     />
     </>
   )

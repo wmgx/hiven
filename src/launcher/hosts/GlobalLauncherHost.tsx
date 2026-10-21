@@ -39,8 +39,8 @@ import { canExportCurrentText, captureCurrentTextExportScope, createCurrentTextE
 import { setPendingObjectBlock, subscribePendingObjectBlock } from '../clipboard/pendingObjectBlock'
 import { subscribeLauncherObjectHandoff } from '../clipboard/launcherObjectHandoff'
 import { isNativeDesktopRuntime } from '../../workspace/webNativeBridge'
-import { executeRecommendedAction } from '../clipboard/actionExecutor'
-import { recommendActionsForBlock, type RecommendedAction, type RecommendedOutputTarget } from '../clipboard/actionRecommendation'
+import { ACTION_ERROR_KEYS, executeRecommendedAction } from '../clipboard/actionExecutor'
+import { OPEN_QUICK_EDITOR, recommendActionsForBlock, type RecommendedAction, type RecommendedOutputTarget } from '../clipboard/actionRecommendation'
 import { createPluginClipboard, writeClipboardText } from '../../workspace/pluginClipboard'
 import { createGlobalLauncherPluginApi } from '../clipboard/globalLauncherApi'
 import { createPluginPaste } from '../../workspace/pluginPaste'
@@ -48,8 +48,6 @@ import { cancelPendingPasteRecovery, captureLauncherPasteOwner, isPasteCancelled
 import { LAUNCHER_NEW_SESSION_EVENT } from '../../workspace/launcherWindowEvents'
 import type { PluginPasteResult } from '../../workspace/pluginTypes'
 import { createPluginPrivateStorage } from '../../workspace/pluginStorage'
-import { createQuickEditorPane } from '../../workspace/quickEditor/quickEditorRequests'
-import { openExternalUrl } from '../../workspace/effectRunner'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
 import { invalidateCurrentLauncherWindowResize, restoreLauncherInputSource, startCurrentLauncherWindowResize, type LauncherWindowResizeDirection } from '../../workspace/windowManager/launcherWindow'
 import { getHostSurfaceShell } from '../../components/launcher/hostSurfaceShell'
@@ -125,7 +123,6 @@ export function GlobalLauncherHost() {
   const panelRef = useRef<HTMLDivElement>(null)
   const visibleSelectionItemsRef = useRef<readonly LauncherItem[]>([])
   const extraSelectionRowsRef = useRef<readonly SelectableExtraRow[]>([])
-  const [selectedObjectActionIndex, setSelectedObjectActionIndex] = useState(0)
   const [browsingActions, setBrowsingActions] = useState(false)
   const [browseCategory, setBrowseCategory] = useState<LauncherBrowseCategory>('all')
   const [currentTextBusy, setCurrentTextBusy] = useState(false)
@@ -142,7 +139,6 @@ export function GlobalLauncherHost() {
   const textExportMountedRef = useRef(true)
   const textExportQueryGenerationRef = useRef(0)
   const launcherFavoriteKeys = useAppStore((s) => s.launcherFavoriteKeys)
-  const objectActionControllerRef = useRef<{ expand: () => void; execute: (keepOpen?: boolean) => void } | null>(null)
   const { isImeComposingRef, handleCompositionStart, handleCompositionEnd } = useGlobalLauncherImeComposition()
   const standaloneLauncher = isStandaloneLauncherWindow()
   const launcherSettingsTarget = settingsDialogTarget?.presentation === 'global-launcher'
@@ -387,10 +383,6 @@ export function GlobalLauncherHost() {
     }
   }, [open])
 
-  useEffect(() => {
-    setSelectedObjectActionIndex((index) => Math.min(index, Math.max(0, objectActions.length - 1)))
-  }, [objectActions.length])
-
   const {
     surfaceFrame,
     setSurfaceFrame,
@@ -533,28 +525,25 @@ export function GlobalLauncherHost() {
     } else if (hasText && !isMedia) {
       actions = objectActions.length > 0
         ? objectActions
-        : [{
-            id: 'open-in-quick-editor',
-            icon: 'SquarePen',
-            title: 'Open in Quick Editor',
-            titleZh: '打开到快捷编辑器',
-            provider: 'Quick Editor',
-            defaultOutput: 'open-editor',
-          }]
+        : [OPEN_QUICK_EDITOR]
     } else actions = []
 
+    const labelOf = (key: string) => ({ en: t('en', key), zh: t('zh', key) })
     const kindLabel =
       block.kind === 'image'
-        ? { en: 'Image', zh: '图片' }
+        ? labelOf('palette.kindLabelImage')
         : block.kind === 'files'
-          ? { en: 'Files', zh: '文件' }
+          ? labelOf('palette.kindLabelFiles')
           : block.source === 'history-item'
-            ? { en: 'History', zh: '历史' }
+            ? labelOf('palette.kindLabelHistory')
             : block.source === 'tool-result'
-              ? { en: 'Result', zh: '结果' }
+              ? labelOf('palette.kindLabelResult')
               : block.source === 'query'
-                ? { en: t('en', 'palette.currentTextSourceInput'), zh: t('zh', 'palette.currentTextSourceInput') }
-                : { en: 'Clipboard', zh: '剪贴板' }
+                ? labelOf('palette.currentTextSourceInput')
+                : labelOf('palette.kindLabelClipboard')
+
+    const providerLabel = (action: RecommendedAction) =>
+      action.provider ? pickLocale(locale, action.providerZh ?? action.provider, action.provider) : ''
 
     const textScope: CurrentTextActionScope = {
       block,
@@ -591,7 +580,7 @@ export function GlobalLauncherHost() {
             title,
             titleI18n: { en: action.title, zh: action.titleZh },
             icon: action.icon,
-            subtitle: action.provider,
+            subtitle: providerLabel(action),
             kindLabel: kindLabel.en,
             kindLabelI18n: kindLabel,
           },
@@ -603,7 +592,7 @@ export function GlobalLauncherHost() {
           kind: 'domain' as const,
           id: domainItem.systemKey,
           title,
-          subtitle: action.provider ?? '',
+          subtitle: providerLabel(action),
           domainItem,
         }
       })
@@ -778,7 +767,6 @@ export function GlobalLauncherHost() {
     if (settingsTarget?.presentation === 'global-launcher' || settingsTarget?.context?.surfaceId === 'global-launcher') {
       closeSettingsDialog()
     }
-    setSelectedObjectActionIndex(0)
     setBrowsingActions(false)
     setBrowseCategory('all')
     isImeComposingRef.current = false
@@ -1100,7 +1088,6 @@ export function GlobalLauncherHost() {
 
     const result = await executeRecommendedAction({ block, action, target }, {
       copyText: writeClipboardText,
-      copyAndKeepOpen: writeClipboardText,
       openInEditor: async (text, options) => {
         const { overwriteQuickEditorText } = await import('../../workspace/quickEditor/quickEditorRequests')
         await overwriteQuickEditorText(text, {
@@ -1120,24 +1107,6 @@ export function GlobalLauncherHost() {
       readLocalFileText: async (path) => {
         const { invoke } = await import('@tauri-apps/api/core')
         return invoke<string>('read_file', { path })
-      },
-      openUrl: async (url) => {
-        await openExternalUrl(url)
-      },
-      replaceSelection: async (text) => {
-        await createQuickEditorPane({ text })
-      },
-      newPane: async (text, options) => {
-        await createQuickEditorPane({ text, language: options?.language })
-      },
-      insertBelow: async (text) => {
-        await createQuickEditorPane({ text })
-      },
-      openBottomPanel: async (actionId, text) => {
-        await createQuickEditorPane({ text: `${actionId}\n\n${text}` })
-      },
-      setRenderer: async (actionId, text) => {
-        await createQuickEditorPane({ text: `${actionId}\n\n${text}` })
       },
       pasteText: async (text) => {
         requirePasteDelivery(await historyPaste.pasteText(text))
@@ -1163,13 +1132,16 @@ export function GlobalLauncherHost() {
     if (pasteAttempted && (pasteCancelled || !pasteOwner?.isCurrent())) return
     if (!result.ok) {
       if (generation !== deliveryGenerationRef.current) return
-      if (result.error) setDeliveryFailure({ message: result.error === 'FilePathLineBreakError'
-        ? t(locale, 'workspace.filePaths.lineBreakUnsupported') : result.error, isCurrent: () =>
-        clipboardBlock.getMaterialGeneration() === materialGeneration && clipboardBlock.hasMaterial(block) })
+      setDeliveryFailure({
+        message: result.error === 'ExecutionFailed' && result.detail
+          ? result.detail
+          : t(locale, ACTION_ERROR_KEYS[result.error]),
+        isCurrent: () => clipboardBlock.getMaterialGeneration() === materialGeneration && clipboardBlock.hasMaterial(block),
+      })
       return
     }
 
-    if (result.ok && target !== 'copy-and-keep-open') {
+    if (result.ok) {
       // Navigation into another Launcher surface is continuation, not completion.
       if (target === 'open-plugin-surface' || useAppStore.getState().launcherHostSurfaceTarget) {
         clipboardBlock.markBlockConsumed()
@@ -1235,14 +1207,7 @@ export function GlobalLauncherHost() {
     clipboardBlock.cancelFileTextRead()
     if (objectActionId != null) {
       const fromCatalog = objectActions.find((entry) => entry.id === objectActionId)
-      const action: RecommendedAction = fromCatalog ?? {
-        id: objectActionId,
-        icon: 'SquarePen',
-        title: 'Open in Quick Editor',
-        titleZh: '打开到快捷编辑器',
-        provider: 'Quick Editor',
-        defaultOutput: 'open-editor',
-      }
+      const action: RecommendedAction = fromCatalog ?? { ...OPEN_QUICK_EDITOR, id: objectActionId }
       void executeObjectAction(action, action.defaultOutput)
       return
     }
@@ -1379,13 +1344,6 @@ export function GlobalLauncherHost() {
         handleCompositionEnd={handleCompositionEnd}
         clipboardBlock={clipboardBlock}
         onEditMaterial={editMaterial}
-        onExecuteObjectAction={executeObjectAction}
-        objectActionCount={objectActions.length}
-        selectedActionIndex={selectedObjectActionIndex}
-        setSelectedActionIndex={(value) => setSelectedObjectActionIndex(value)}
-        onObjectActionController={(controller) => { objectActionControllerRef.current = controller }}
-        expandSelectedObjectAction={() => objectActionControllerRef.current?.expand()}
-        executeSelectedObjectAction={(keepOpen) => objectActionControllerRef.current?.execute(keepOpen)}
       />
       {open && resizableSurface && <WindowResizeHandles inset={8} onResizeStart={beginResize} />}
     </div>

@@ -15,7 +15,6 @@ import { getPlatformShortcutMeta, supportsParamCustomization } from './launcherP
 import { handleGlobalLauncherKeyDown } from './GlobalLauncherKeyboard'
 import type { GlobalLauncherItem } from './GlobalLauncherItems'
 import type { ClipboardObjectBlockState } from '../../launcher/clipboard/useClipboardObjectBlock'
-import type { RecommendedAction, RecommendedOutputTarget } from '../../launcher/clipboard/actionRecommendation'
 import { GLOBAL_LAUNCHER_SETTINGS_HEIGHT, STANDALONE_SURFACE_MAX_HEIGHT } from './GlobalLauncherLayout'
 import { useAppStore } from '../../store'
 import { showToast } from '../../workspace/toast'
@@ -83,13 +82,6 @@ type GlobalLauncherPanelProps = {
   handleCompositionEnd: () => void
   clipboardBlock: ClipboardObjectBlockState
   onEditMaterial?: () => void
-  onExecuteObjectAction?: (action: RecommendedAction, target: RecommendedOutputTarget) => void
-  objectActionCount?: number
-  selectedActionIndex?: number
-  setSelectedActionIndex?: (index: number | ((index: number) => number)) => void
-  onObjectActionController?: (controller: { expand: () => void; execute: (keepOpen?: boolean) => void } | null) => void
-  expandSelectedObjectAction?: () => void
-  executeSelectedObjectAction?: (keepOpen?: boolean) => void
 }
 
 
@@ -149,13 +141,6 @@ export function GlobalLauncherPanel({
   handleCompositionEnd,
   clipboardBlock,
   onEditMaterial,
-  onExecuteObjectAction,
-  objectActionCount = 0,
-  selectedActionIndex,
-  setSelectedActionIndex,
-  onObjectActionController,
-  expandSelectedObjectAction,
-  executeSelectedObjectAction,
 }: GlobalLauncherPanelProps) {
   const activatePreviewPaste = pastePreviewText
     ? (choice: LauncherResultChoice) => controllerRef.current?.activatePreviewPaste(choice, pastePreviewText)
@@ -310,14 +295,6 @@ export function GlobalLauncherPanel({
         attachHintAsBlock: clipboardBlock?.attachHintAsBlock,
         isClipboardHintSelected: selectedIndex < 0,
         selectedIndex,
-        // Clipboard recommendations are rendered as normal launcher list rows
-        // (plugin dynamicItems). Dedicated RecommendedActionRow UI is disabled,
-        // so arrow keys must drive selectedIndex — not selectedObjectActionIndex.
-        hasObjectActions: false,
-        objectActionCount,
-        setSelectedObjectActionIndex: setSelectedActionIndex,
-        expandSelectedObjectAction,
-        executeSelectedObjectAction,
         onToggleFavorite: handleToggleFavorite,
       })}
       onCompositionStart={handleCompositionStart}
@@ -400,10 +377,6 @@ export function GlobalLauncherPanel({
         clipboardBlock={clipboardBlock}
         onEditMaterial={onEditMaterial}
         clipboardHintSelected={selectedIndex < 0}
-        onExecuteAction={onExecuteObjectAction}
-        selectedActionIndex={selectedActionIndex}
-        onSelectedActionIndexChange={setSelectedActionIndex}
-        onObjectActionController={onObjectActionController}
       />
     </LauncherView>
   )

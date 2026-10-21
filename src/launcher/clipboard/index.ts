@@ -60,7 +60,6 @@ export {
   type RecommendedOutputTarget,
   type RecommendedAction,
   recommendActionsForBlock,
-  getSearchOnlyActions,
 } from './actionRecommendation'
 
 export {
@@ -80,12 +79,8 @@ export {
   type ActionExecutionResult,
   type ActionExecutionHandlers,
   executeRecommendedAction,
-  getOutputTargetLabel,
   getActionOutputTargets,
-  OUTPUT_TARGET_LABELS,
 } from './actionExecutor'
 
 // pluginActionManifest removed in B2 — transform actions use accepts/textMatch ranking.
 // See actionRecommendation.ts (host pins only) and workspace/launcher/normalizeContribution.ts.
-
-export { recommendActionsWithPlugins } from './actionRecommendation'

@@ -21,16 +21,8 @@ import { t } from '../../i18n'
 
 export type RecommendedOutputTarget =
   | 'copy'
-  | 'copy-and-keep-open'
   | 'open-editor'
   | 'open-plugin-surface'
-  | 'open-url'
-  | 'replace-selection'
-  | 'replace-pane'
-  | 'new-pane'
-  | 'insert-below'
-  | 'open-bottom-panel'
-  | 'set-renderer'
 
 export type RecommendedAction = {
   id: string
@@ -41,6 +33,7 @@ export type RecommendedAction = {
   pluginId?: string
   /** Product-level provider label shown to users; plugin ids stay internal. */
   provider?: string
+  providerZh?: string
   defaultOutput: RecommendedOutputTarget
   alternativeOutputs?: RecommendedOutputTarget[]
   requiresParams?: boolean
@@ -53,12 +46,22 @@ export type RecommendedAction = {
 
 // ─── Host pins only ────────────────────────────────────────────────────────────
 
-const OPEN_QUICK_EDITOR: RecommendedAction = {
+/** Both locales are resolved up front; the host picks one with pickLocale. */
+function labels(titleKey: string, providerKey?: string): Pick<RecommendedAction, 'title' | 'titleZh' | 'provider' | 'providerZh'> {
+  return {
+    title: t('en', titleKey),
+    titleZh: t('zh', titleKey),
+    ...(providerKey ? { provider: t('en', providerKey), providerZh: t('zh', providerKey) } : {}),
+  }
+}
+
+const QUICK_EDITOR_PROVIDER = 'palette.actionProviderQuickEditor'
+const CLIPBOARD_HISTORY_PROVIDER = 'palette.actionProviderClipboardHistory'
+
+export const OPEN_QUICK_EDITOR: RecommendedAction = {
   id: 'open-in-quick-editor',
   icon: 'SquarePen',
-  title: 'Open in Quick Editor',
-  titleZh: '打开到快捷编辑器',
-  provider: 'Quick Editor',
+  ...labels('palette.actionOpenInQuickEditor', QUICK_EDITOR_PROVIDER),
   defaultOutput: 'open-editor',
 }
 
@@ -66,9 +69,7 @@ const OPEN_QUICK_EDITOR: RecommendedAction = {
 const OPEN_CLIPBOARD_EDITOR: RecommendedAction = {
   id: 'open-clipboard-editor',
   icon: 'SquarePen',
-  title: 'Open in Quick Editor',
-  titleZh: '打开到快捷编辑器',
-  provider: 'Quick Editor',
+  ...labels('palette.actionOpenInQuickEditor', QUICK_EDITOR_PROVIDER),
   defaultOutput: 'open-editor',
 }
 
@@ -76,25 +77,19 @@ const TEXT_HISTORY_ACTIONS: RecommendedAction[] = [
   {
     id: 'paste-history-text',
     icon: 'ClipboardPaste',
-    title: 'Paste to Front App',
-    titleZh: '粘贴到前台应用',
-    provider: 'Clipboard History',
+    ...labels('palette.actionPasteHistoryText', CLIPBOARD_HISTORY_PROVIDER),
     defaultOutput: 'copy',
   },
   {
     id: 'copy-history-text',
     icon: 'Copy',
-    title: 'Copy to Clipboard',
-    titleZh: '复制到剪贴板',
-    provider: 'Clipboard History',
+    ...labels('palette.actionCopyHistoryText', CLIPBOARD_HISTORY_PROVIDER),
     defaultOutput: 'copy',
   },
   {
     id: 'open-history-in-quick-editor',
     icon: 'SquarePen',
-    title: 'Open in Quick Editor',
-    titleZh: '打开到快捷编辑器',
-    provider: 'Quick Editor',
+    ...labels('palette.actionOpenInQuickEditor', QUICK_EDITOR_PROVIDER),
     defaultOutput: 'open-editor',
   },
 ]
@@ -103,15 +98,13 @@ const CURRENT_TEXT_ACTIONS: RecommendedAction[] = [
   {
     id: 'paste-current-text',
     icon: 'ClipboardPaste',
-    title: t('en', 'palette.pasteCurrentText'),
-    titleZh: t('zh', 'palette.pasteCurrentText'),
+    ...labels('palette.pasteCurrentText'),
     defaultOutput: 'copy',
   },
   {
     id: 'copy-current-text',
     icon: 'Copy',
-    title: t('en', 'palette.copyCurrentText'),
-    titleZh: t('zh', 'palette.copyCurrentText'),
+    ...labels('palette.copyCurrentText'),
     defaultOutput: 'copy',
   },
 ]
@@ -120,17 +113,13 @@ const IMAGE_HISTORY_ACTIONS: RecommendedAction[] = [
   {
     id: 'paste-history-image',
     icon: 'ClipboardPaste',
-    title: 'Paste Image',
-    titleZh: '粘贴图片',
-    provider: 'Clipboard History',
+    ...labels('palette.actionPasteHistoryImage', CLIPBOARD_HISTORY_PROVIDER),
     defaultOutput: 'copy',
   },
   {
     id: 'copy-history-image',
     icon: 'Copy',
-    title: 'Copy Image to Clipboard',
-    titleZh: '复制图片到剪贴板',
-    provider: 'Clipboard History',
+    ...labels('palette.actionCopyHistoryImage', CLIPBOARD_HISTORY_PROVIDER),
     defaultOutput: 'copy',
   },
 ]
@@ -139,24 +128,19 @@ const FILES_HISTORY_ACTIONS: RecommendedAction[] = [
   {
     id: 'paste-history-files',
     icon: 'ClipboardPaste',
-    title: 'Paste Files',
-    titleZh: '粘贴文件',
-    provider: 'Clipboard History',
+    ...labels('palette.actionPasteHistoryFiles', CLIPBOARD_HISTORY_PROVIDER),
     defaultOutput: 'copy',
   },
   {
     id: 'copy-history-file-paths',
     icon: 'Copy',
-    title: 'Copy File Paths',
-    titleZh: '复制文件路径',
-    provider: 'Clipboard History',
+    ...labels('palette.actionCopyHistoryFilePaths', CLIPBOARD_HISTORY_PROVIDER),
     defaultOutput: 'copy',
   },
   {
     id: 'convert-history-file-paths',
     icon: 'FileSymlink',
-    title: 'Convert File Paths',
-    titleZh: '转换文件路径',
+    ...labels('palette.actionConvertHistoryFilePaths'),
     pluginId: 'file-paths',
     defaultOutput: 'open-plugin-surface',
   },
@@ -182,40 +166,6 @@ export function recommendActionsForBlock(block: LauncherObjectBlock): Recommende
   }
 
   return []
-}
-
-export function getSearchOnlyActions(): RecommendedAction[] {
-  return [
-    {
-      id: 'open-editor',
-      icon: 'SquarePen',
-      title: 'Open Quick Editor',
-      titleZh: '打开快捷编辑器',
-      provider: 'Quick Editor',
-      defaultOutput: 'open-editor',
-    },
-    {
-      id: 'open-clipboard-history',
-      icon: 'History',
-      title: 'Open Clipboard History',
-      titleZh: '打开剪贴板历史',
-      pluginId: 'clipboard-history',
-      provider: 'Clipboard History',
-      defaultOutput: 'open-plugin-surface',
-    },
-  ]
-}
-
-/** Max host pins returned for one object block. */
-export const RECOMMENDED_ACTIONS_MAX = 5
-
-/**
- * @deprecated Transform plugins must use accepts/textMatch ranking.
- * Kept as a thin alias of {@link recommendActionsForBlock} (host pins only).
- * The old pluginActionManifest merge path is removed.
- */
-export function recommendActionsWithPlugins(block: LauncherObjectBlock): RecommendedAction[] {
-  return recommendActionsForBlock(block).slice(0, RECOMMENDED_ACTIONS_MAX)
 }
 
 // Keep content-accepts recommend on the reachable import graph (host pins path).

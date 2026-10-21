@@ -19,22 +19,35 @@ export type ActionExecutionContext = {
   target: RecommendedOutputTarget
 }
 
+/** Machine-readable failure; the host maps it to localized copy. */
+export type ActionExecutionErrorCode =
+  | 'TextPayloadMissing'
+  | 'ImagePayloadMissing'
+  | 'FilesPayloadMissing'
+  | 'HandlerUnavailable'
+  | 'FilePathLineBreakError'
+  | 'NoPluginSurface'
+  | 'ExecutionFailed'
+
+/** Locale keys the host uses to render each failure code. */
+export const ACTION_ERROR_KEYS: Record<ActionExecutionErrorCode, string> = {
+  TextPayloadMissing: 'palette.actionErrorTextMissing',
+  ImagePayloadMissing: 'palette.actionErrorImageMissing',
+  FilesPayloadMissing: 'palette.actionErrorFilesMissing',
+  HandlerUnavailable: 'palette.actionErrorUnavailable',
+  FilePathLineBreakError: 'workspace.filePaths.lineBreakUnsupported',
+  NoPluginSurface: 'palette.actionErrorNoSurface',
+  ExecutionFailed: 'palette.quickEntryError',
+}
+
 export type ActionExecutionResult =
-  | { ok: true; message?: string }
-  | { ok: false; error: string }
+  | { ok: true }
+  | { ok: false; error: ActionExecutionErrorCode; detail?: string }
 
 export type ActionExecutionHandlers = {
   copyText: (text: string) => Promise<void>
-  copyAndKeepOpen?: (text: string) => Promise<void>
   openInEditor: (text: string, options?: { language?: string; title?: string }) => Promise<void>
   openPluginSurface: (pluginId: string, options?: { initialText?: string }) => Promise<void>
-  openUrl?: (url: string) => Promise<void>
-  replaceSelection?: (text: string) => Promise<void>
-  replacePane?: (text: string) => Promise<void>
-  newPane?: (text: string, options?: { language?: string; title?: string }) => Promise<void>
-  insertBelow?: (text: string) => Promise<void>
-  openBottomPanel?: (actionId: string, text: string) => Promise<void>
-  setRenderer?: (actionId: string, text: string) => Promise<void>
   /** Resolve a local file path to its text content when the clipboard holds a path. */
   readLocalFileText?: (path: string) => Promise<string>
   getPluginSurfaceInitialTextMode?: (pluginId: string) => 'literal' | undefined
@@ -58,9 +71,9 @@ export async function executeRecommendedAction(
   try {
     if (isCurrentTextDeliveryAction(action.id)) {
       const payload = getCurrentTextPayload(block)
-      if (payload === null) return { ok: false, error: 'Text payload missing' }
+      if (payload === null) return { ok: false, error: 'TextPayloadMissing' }
       if (action.id === 'paste-current-text' || action.id === 'paste-history-text') {
-        if (!handlers.pasteText) return { ok: false, error: 'Paste text handler unavailable' }
+        if (!handlers.pasteText) return { ok: false, error: 'HandlerUnavailable' }
         await handlers.pasteText(payload)
       } else {
         await handlers.copyText(payload)
@@ -70,34 +83,34 @@ export async function executeRecommendedAction(
     // History media actions retain their private blob/permission boundary.
     if (action.id === 'paste-history-image') {
       const blobId = block.payloadImage?.blobId
-      if (!blobId) return { ok: false, error: 'Image payload missing' }
-      if (!handlers.pasteImage) return { ok: false, error: 'Paste image handler unavailable' }
+      if (!blobId) return { ok: false, error: 'ImagePayloadMissing' }
+      if (!handlers.pasteImage) return { ok: false, error: 'HandlerUnavailable' }
       await handlers.pasteImage(blobId)
       return { ok: true }
     }
     if (action.id === 'copy-history-image') {
       const blobId = block.payloadImage?.blobId
-      if (!blobId) return { ok: false, error: 'Image payload missing' }
-      if (!handlers.writeImage) return { ok: false, error: 'Write image handler unavailable' }
+      if (!blobId) return { ok: false, error: 'ImagePayloadMissing' }
+      if (!handlers.writeImage) return { ok: false, error: 'HandlerUnavailable' }
       await handlers.writeImage(blobId)
-      return { ok: true, message: '已复制' }
+      return { ok: true }
     }
     if (action.id === 'paste-history-files') {
       const paths = block.payloadFiles?.paths
-      if (!paths?.length) return { ok: false, error: 'Files payload missing' }
-      if (!handlers.pasteFiles) return { ok: false, error: 'Paste files handler unavailable' }
+      if (!paths?.length) return { ok: false, error: 'FilesPayloadMissing' }
+      if (!handlers.pasteFiles) return { ok: false, error: 'HandlerUnavailable' }
       await handlers.pasteFiles(paths)
       return { ok: true }
     }
     if (action.id === 'copy-history-file-paths') {
       const paths = block.payloadFiles?.paths
-      if (!paths?.length) return { ok: false, error: 'Files payload missing' }
+      if (!paths?.length) return { ok: false, error: 'FilesPayloadMissing' }
       await handlers.copyText(paths.join('\n'))
-      return { ok: true, message: '已复制' }
+      return { ok: true }
     }
     if (action.id === 'convert-history-file-paths') {
       const paths = block.payloadFiles?.paths
-      if (!paths?.length) return { ok: false, error: 'Files payload missing' }
+      if (!paths?.length) return { ok: false, error: 'FilesPayloadMissing' }
       // The file-paths surface intentionally accepts one path per text line.
       // Never flatten a legal POSIX filename containing a newline into extra files.
       if (paths.some((path) => /[\r\n]/.test(path))) return { ok: false, error: 'FilePathLineBreakError' }
@@ -109,12 +122,7 @@ export async function executeRecommendedAction(
       case 'copy': {
         const result = await transformActionText(action, text)
         await handlers.copyText(result)
-        return { ok: true, message: '已复制' }
-      }
-      case 'copy-and-keep-open': {
-        const result = await transformActionText(action, text)
-        await (handlers.copyAndKeepOpen ?? handlers.copyText)(result)
-        return { ok: true, message: '已复制' }
+        return { ok: true }
       }
       case 'open-editor': {
         const result = await transformActionText(action, text)
@@ -136,53 +144,13 @@ export async function executeRecommendedAction(
           await handlers.openPluginSurface(action.pluginId, { initialText })
           return { ok: true }
         }
-        return { ok: false, error: 'No plugin surface available' }
-      }
-      case 'open-url': {
-        const result = await transformActionText(action, text)
-        if (!handlers.openUrl) return { ok: false, error: 'Open URL handler unavailable' }
-        await handlers.openUrl(result)
-        return { ok: true }
-      }
-      case 'replace-selection': {
-        const result = await transformActionText(action, text)
-        if (!handlers.replaceSelection) return { ok: false, error: 'Replace selection handler unavailable' }
-        await handlers.replaceSelection(result)
-        return { ok: true }
-      }
-      case 'replace-pane': {
-        const result = await transformActionText(action, text)
-        if (!handlers.replacePane) return { ok: false, error: 'Replace pane handler unavailable' }
-        await handlers.replacePane(result)
-        return { ok: true }
-      }
-      case 'new-pane': {
-        const result = await transformActionText(action, text)
-        if (!handlers.newPane) return { ok: false, error: 'New pane handler unavailable' }
-        await handlers.newPane(result, { title: action.titleZh })
-        return { ok: true }
-      }
-      case 'insert-below': {
-        const result = await transformActionText(action, text)
-        if (!handlers.insertBelow) return { ok: false, error: 'Insert below handler unavailable' }
-        await handlers.insertBelow(result)
-        return { ok: true }
-      }
-      case 'open-bottom-panel': {
-        if (!handlers.openBottomPanel) return { ok: false, error: 'Bottom panel handler unavailable' }
-        await handlers.openBottomPanel(action.id, text)
-        return { ok: true }
-      }
-      case 'set-renderer': {
-        if (!handlers.setRenderer) return { ok: false, error: 'Renderer handler unavailable' }
-        await handlers.setRenderer(action.id, text)
-        return { ok: true }
+        return { ok: false, error: 'NoPluginSurface' }
       }
       default:
-        return { ok: false, error: `Unknown output target: ${target}` }
+        return { ok: false, error: 'HandlerUnavailable' }
     }
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    return { ok: false, error: 'ExecutionFailed', detail: error instanceof Error ? error.message : String(error) }
   }
 }
 
@@ -312,26 +280,6 @@ function htmlDecode(text: string): string {
     .replace(/&gt;/g, '>')
     .replace(/&lt;/g, '<')
     .replace(/&amp;/g, '&')
-}
-
-// ─── Output target labels ──────────────────────────────────────────────────────
-
-export const OUTPUT_TARGET_LABELS: Record<RecommendedOutputTarget, { en: string; zh: string }> = {
-  copy: { en: 'Copy result', zh: '复制结果' },
-  'copy-and-keep-open': { en: 'Copy and keep open', zh: '复制并保持打开' },
-  'open-editor': { en: 'Overwrite Quick Editor', zh: '覆盖到快捷编辑器' },
-  'open-plugin-surface': { en: 'Open tool window', zh: '打开工具窗口' },
-  'open-url': { en: 'Open URL', zh: '打开 URL' },
-  'replace-selection': { en: 'Replace selection', zh: '覆盖选区' },
-  'replace-pane': { en: 'Replace content', zh: '覆盖当前内容' },
-  'new-pane': { en: 'New draft', zh: '新建草稿' },
-  'insert-below': { en: 'Insert below', zh: '插入到下方' },
-  'open-bottom-panel': { en: 'Open bottom panel', zh: '打开底部面板' },
-  'set-renderer': { en: 'Open tool', zh: '打开工具' },
-}
-
-export function getOutputTargetLabel(target: RecommendedOutputTarget, locale: 'en' | 'zh' = 'zh'): string {
-  return OUTPUT_TARGET_LABELS[target]?.[locale] ?? target
 }
 
 // ─── Get all targets for an action ─────────────────────────────────────────────

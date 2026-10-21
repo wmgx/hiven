@@ -1,5 +1,5 @@
 import { searchableFieldsMatch, type SearchableFields } from '../searchRanking'
-import type { Locale } from '../../i18n'
+import { t, type Locale } from '../../i18n'
 import type { DiscoveredApp, LauncherItem, LauncherSurfaceId } from '../launcher/types'
 import type { AppWorkObject } from '../../workflow/workObject'
 import { logLauncherPerfDuration, launcherPerfNow } from '../launcher/perf'
@@ -112,16 +112,16 @@ export async function launchHostAppObject(appId: string): Promise<void> {
   await launchInstalledApp(appId)
 }
 
-function sourceLabel(app: HostAppEntry): string {
+function sourceLabel(app: HostAppEntry, locale: Locale): string {
   switch (app.source) {
     case 'applications':
-      return 'Application'
+      return t(locale, 'appLauncher.sourceApplication')
     case 'start-menu':
-      return 'Start menu'
+      return t(locale, 'appLauncher.sourceStartMenu')
     case 'app-paths':
-      return 'App paths'
+      return t(locale, 'appLauncher.sourceAppPaths')
     case 'desktop-entry':
-      return 'Desktop entry'
+      return t(locale, 'appLauncher.sourceDesktopEntry')
   }
 }
 
@@ -262,7 +262,7 @@ export async function getHostAppLauncherDynamicItems({
     display: {
       title: app.name,
       titleI18n: app.nameI18n,
-      subtitle: app.displayPath || sourceLabel(app),
+      subtitle: app.displayPath || sourceLabel(app, locale),
       icon: appIconRef(app.appId),
       // Human names only — ranking must not match path/appId via aliases.
       aliases: getAppSearchAliases(app, aliases),
@@ -299,7 +299,7 @@ export function getHostAppWorkObjects(query: string, locale: Locale): AppWorkObj
       id: `app:${app.appId}`,
       type: 'app',
       title: app.name,
-      subtitle: app.displayPath || sourceLabel(app),
+      subtitle: app.displayPath || sourceLabel(app, locale),
       icon: appIconRef(app.appId),
       source: 'host.app-index',
       bundleId: app.appId,

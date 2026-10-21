@@ -33,11 +33,6 @@ export function handleGlobalLauncherKeyDown({
   /** When true, Enter attaches the recent-clipboard hint (must be the focused row). */
   isClipboardHintSelected,
   selectedIndex,
-  hasObjectActions,
-  objectActionCount,
-  setSelectedObjectActionIndex,
-  expandSelectedObjectAction,
-  executeSelectedObjectAction,
   onToggleFavorite,
 }: {
   event: ReactKeyboardEvent<HTMLElement>
@@ -75,11 +70,6 @@ export function handleGlobalLauncherKeyDown({
   isClipboardHintSelected?: boolean
   /** Current list selection index; -1 means recent-clipboard hint is focused. */
   selectedIndex?: number
-  hasObjectActions?: boolean
-  objectActionCount?: number
-  setSelectedObjectActionIndex?: (updater: number | ((index: number) => number)) => void
-  expandSelectedObjectAction?: () => void
-  executeSelectedObjectAction?: (keepOpen?: boolean) => void
   /** Pin / unpin the focused list row (⌘P). */
   onToggleFavorite?: (item: LauncherMixedItem) => void
 }) {
@@ -204,29 +194,6 @@ export function handleGlobalLauncherKeyDown({
   const onSearchRoot = !controllerState || controllerState.frames.length <= 1
   const keyTarget = event.target as HTMLElement | null
   if (onSearchRoot && keyTarget?.closest?.('button')) return
-
-  if (hasObjectActions && event.key === 'ArrowDown') {
-    event.preventDefault()
-    isKeyboardNavRef.current = true
-    setSelectedObjectActionIndex?.((index) => Math.min(index + 1, Math.max(0, (objectActionCount ?? 0) - 1)))
-    return
-  }
-  if (hasObjectActions && event.key === 'ArrowUp') {
-    event.preventDefault()
-    isKeyboardNavRef.current = true
-    setSelectedObjectActionIndex?.((index) => Math.max(index - 1, 0))
-    return
-  }
-  if (hasObjectActions && (event.key === 'Tab' || event.key === 'ArrowRight')) {
-    event.preventDefault()
-    expandSelectedObjectAction?.()
-    return
-  }
-  if (hasObjectActions && event.key === 'Enter') {
-    event.preventDefault()
-    executeSelectedObjectAction?.(event.metaKey || event.ctrlKey)
-    return
-  }
 
   // ⌘1–8 / Ctrl+1–8: select and immediately run the Nth visible row (SuperCmd-style).
   if (onSearchRoot && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey) {

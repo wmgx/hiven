@@ -6,6 +6,10 @@ export default {
     rejected: 'Launch rejected. Check the app is still installed',
     interrupted: 'Launch interrupted. The app may already be open',
     unconfirmed: 'Could not confirm the app opened',
+    sourceApplication: 'Application',
+    sourceStartMenu: 'Start menu',
+    sourceAppPaths: 'App paths',
+    sourceDesktopEntry: 'Desktop entry',
   },
   zh: {
     unavailable: '应用已不可用，请刷新列表',
@@ -14,5 +18,9 @@ export default {
     rejected: '启动请求被拒绝，请检查应用是否仍已安装',
     interrupted: '启动被中断，应用可能已打开',
     unconfirmed: '无法确认应用是否已打开',
+    sourceApplication: '应用',
+    sourceStartMenu: '开始菜单',
+    sourceAppPaths: '应用路径',
+    sourceDesktopEntry: '桌面入口',
   },
 }
