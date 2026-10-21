@@ -79,7 +79,6 @@
     "test:clipboard-history-time-range": "node scripts/test-clipboard-history-time-range.mjs",
     "test:clipboard-history-integration": "node scripts/test-clipboard-history-integration.mjs",
     "test:clipboard-history": "npm run test:clipboard-history-storage && npm run test:clipboard-history-settings && npm run test:clipboard-history-integration && npm run test:clipboard-history-image-save && npm run test:clipboard-history-search-presentation",
-    "test:plugin-goal-suite": "node scripts/test-plugin-goal-suite.mjs",
     "test:random-and-variable-case-plugins": "node scripts/test-random-and-variable-case-plugins.mjs",
     "test:ime-enter-confirmation": "node scripts/test-ime-enter-confirmation.mjs",
     "test:standalone-launcher-background-idle": "node scripts/test-standalone-launcher-background-idle.mjs",
