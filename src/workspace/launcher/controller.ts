@@ -258,6 +258,11 @@ export class LauncherController {
   /** Last journaled command id (for prev_command_id chain). */
   private lastJournalCommandId: string | null = null
 
+  /** Locale switches must reach an already-created controller (errors, titles, plugin ctx.t). */
+  updateLocale(locale: LauncherControllerDeps['locale'], makeT: LauncherControllerDeps['makeT']): void {
+    this.deps = { ...this.deps, locale, makeT }
+  }
+
   constructor(deps: LauncherControllerDeps) {
     this.deps = deps
     this.state = {

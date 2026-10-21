@@ -490,6 +490,7 @@ export function useLauncherSession({
         controllerRef.current = nextController
         setController(nextController)
       }
+      controllerRef.current.updateLocale(locale, (item) => makePluginT(item.pluginId ?? '', locale))
       controllerRef.current.reset()
       logLauncherPerfDuration('session:open:controller-reset', openedAt, { surfaceId: normalizedHostId })
     })
