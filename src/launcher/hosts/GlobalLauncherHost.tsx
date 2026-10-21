@@ -169,7 +169,6 @@ export function GlobalLauncherHost() {
   const clipboardBlock = useClipboardObjectBlock({
     open,
     readClipboard: readLauncherClipboard,
-    skipAutomaticRead: () => suggestionSettings.enabled,
     // Do not replace an in-progress query with clipboard suggestions.
     suppressAutoAttach: () => (
       Boolean(liveQueryRef.current.trim())
