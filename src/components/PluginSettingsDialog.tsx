@@ -90,7 +90,7 @@ export function PluginSettingsDialog() {
   return (
     <Dialog.Root open onOpenChange={(open) => { if (!open && !isClosing) closeSettingsDialog() }}>
       <Dialog.Portal>
-        <Dialog.Backdrop className={`plugin-settings-dialog-backdrop fixed inset-0 bg-black/40 z-[1200]${isClosing ? ' is-closing' : ''}`} />
+        <Dialog.Backdrop className={`plugin-settings-dialog-backdrop fixed inset-0 z-[1200]${fillsPluginWindow ? '' : ' bg-black/40'}${isClosing ? ' is-closing' : ''}`} />
         <Dialog.Popup
           aria-labelledby={titleId}
           initialFocus={activeTarget.target ? false : () => document.querySelector<HTMLElement>('[data-settings-dialog-close]')}
@@ -101,7 +101,7 @@ export function PluginSettingsDialog() {
             maxHeight: fillsPluginWindow ? '100vh' : 'min(680px, calc(100vh - 48px))',
             background: 'var(--panel, var(--bg-surface, #ffffff))',
             border: '1px solid var(--border, var(--color-border-secondary))',
-            borderRadius: fillsPluginWindow ? 0 : '14px',
+            borderRadius: fillsPluginWindow ? 'var(--plugin-surface-window-radius, 12px)' : '14px',
             boxShadow: 'var(--shadow-panel, 0 20px 50px -12px rgba(18, 22, 28, 0.22), 0 0 0 1px rgba(18, 22, 28, 0.06))',
             outline: 'none',
           }}

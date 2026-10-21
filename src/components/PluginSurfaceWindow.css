@@ -1,3 +1,9 @@
+:root {
+  /* Transparent surface windows draw their own corners; anything that fills the
+     window (frame, settings) must use the same radius. */
+  --plugin-surface-window-radius: 12px;
+}
+
 .plugin-surface-window-shell {
   min-height: 100vh;
   background: transparent;
@@ -12,7 +18,7 @@
   overflow: hidden;
   background: var(--panel, #ffffff);
   border: 1px solid var(--border, #ececed);
-  border-radius: 12px;
+  border-radius: var(--plugin-surface-window-radius);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.18);
 }
 
