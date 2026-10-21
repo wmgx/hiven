@@ -49,15 +49,22 @@ export function TextResultHud() {
   useEffect(() => {
     if (snapshot?.phase !== 'active') return
     const keydown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
+      if (event.isComposing || event.keyCode === 229) return
+      let name: 'copy' | 'paste' | 'close' | null = null
+      if (event.key === 'Escape') name = 'close'
+      else if (event.key === 'Enter' && snapshot.complete) {
+        if (event.shiftKey) name = snapshot.pasteable && !snapshot.pasteCopied ? 'paste' : null
+        else name = 'copy'
+      }
+      if (!name) return
       event.preventDefault()
       void invoke('text_result_hud_action', {
-        sessionId: snapshot.sessionId, revision: snapshot.revision, action: 'close',
+        sessionId: snapshot.sessionId, revision: snapshot.revision, action: name,
       }).catch(() => undefined)
     }
     window.addEventListener('keydown', keydown)
     return () => window.removeEventListener('keydown', keydown)
-  }, [snapshot?.sessionId, snapshot?.revision, snapshot?.phase])
+  }, [snapshot?.sessionId, snapshot?.revision, snapshot?.phase, snapshot?.complete, snapshot?.pasteable, snapshot?.pasteCopied])
   if (!snapshot) return null
   const hostText = (key: string) => translate(snapshot.locale, 'hud', `generic.${key}`)
   const t = (key: string) => snapshot.labels[key] ?? hostText(key)
