@@ -79,7 +79,7 @@
     {
       "pluginId": "qr-code",
       "dir": "qr-code",
-      "version": "1.0.15"
+      "version": "1.0.16"
     },
     {
       "pluginId": "random",
