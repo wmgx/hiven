@@ -7096,6 +7096,9 @@ fn prepare_chromium_extension_package() -> Result<String, String> {
         fs::write(dir.join("messages.json"), messages).map_err(|e| e.to_string())?;
     }
 
+    // Per-machine bridge token: the extension must send it with every request.
+    desktop_bridge::write_extension_token(&dest)?;
+
     // Best-effort: also copy any extra files from an on-disk plugin package.
     if let Ok(source) = resolve_chromium_extension_source_dir() {
         if source != dest {

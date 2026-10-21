@@ -9,12 +9,15 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Condvar, LazyLock, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::Emitter;
 
+mod auth;
 mod server_lifecycle;
+pub(crate) use auth::write_extension_token;
 static SERVER_LIFECYCLE: LazyLock<server_lifecycle::ServerLifecycle> =
     LazyLock::new(server_lifecycle::ServerLifecycle::default);
 
@@ -35,6 +38,16 @@ pub const DESKTOP_BRIDGE_PORT: u16 = 19246;
 const SNAPSHOT_FRESH_MS: u128 = 5_000;
 /// Long-poll cap for `/commands?wait=`; stays under the 30 s an MV3 worker lets a fetch hang.
 const COMMAND_WAIT_MAX_MS: u64 = 20_000;
+/// Distinct source ids kept in memory; real extensions use one or two.
+const MAX_SOURCES: usize = 16;
+const MAX_SOURCE_ID_LEN: usize = 64;
+/// Queued focus/open commands per source; oldest are dropped first.
+const PENDING_COMMAND_CAP: usize = 8;
+/// Concurrent history imports per source (each holds up to HISTORY_IMPORT_CAP items).
+const HISTORY_IMPORTS_PER_SOURCE_CAP: usize = 4;
+/// Concurrent connections, including parked `/commands?wait=` long-polls.
+const MAX_CONNECTIONS: usize = 32;
+static ACTIVE_CONNECTIONS: AtomicUsize = AtomicUsize::new(0);
 const MAX_HTTP_BODY_BYTES: usize = 2 * 1024 * 1024;
 // Validation relays JSON-encoded byte arrays; a permitted 10 MB image can expand to ~40 MB.
 const MAX_VALIDATION_RESULT_BODY_BYTES: usize = 64 * 1024 * 1024;
@@ -130,8 +143,8 @@ struct SourceState {
     history: Vec<BridgeHistoryItem>,
     events: VecDeque<BridgeEvent>,
     last_seen: Option<Instant>,
-    pending_focus: Option<BridgeFocusCommand>,
-    pending_open: Option<BridgeOpenCommand>,
+    pending_focus: VecDeque<BridgeFocusCommand>,
+    pending_open: VecDeque<BridgeOpenCommand>,
     pending_history_import: Option<String>,
     history_imports: HashMap<String, HistoryImportState>,
     config: Option<BridgeSourceConfig>,
@@ -142,6 +155,34 @@ struct SourceState {
 #[derive(Debug, Default)]
 struct BridgeState {
     sources: HashMap<String, SourceState>,
+}
+
+fn push_capped<T>(queue: &mut VecDeque<T>, item: T) {
+    queue.push_back(item);
+    while queue.len() > PENDING_COMMAND_CAP {
+        queue.pop_front();
+    }
+}
+
+fn valid_source_id(source_id: &str) -> bool {
+    !source_id.is_empty()
+        && source_id.len() <= MAX_SOURCE_ID_LEN
+        && source_id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_'))
+}
+
+impl BridgeState {
+    /// Entry for `source_id`, created on first use. Refuses malformed ids and a flood of new ids.
+    fn source_entry(&mut self, source_id: &str) -> Result<&mut SourceState, String> {
+        if !valid_source_id(source_id) {
+            return Err("invalid source id".to_string());
+        }
+        if !self.sources.contains_key(source_id) && self.sources.len() >= MAX_SOURCES {
+            return Err("too many sources".to_string());
+        }
+        Ok(self.sources.entry(source_id.to_string()).or_default())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -329,16 +370,29 @@ pub fn start_desktop_bridge_server(app_handle: tauri::AppHandle) {
             }
             lease.listening();
             eprintln!("[hiven] desktop bridge listening on {}", addr);
+            // Keep an already prepared unpacked extension in step with the machine token.
+            if let Ok(config) = crate::config_dir() {
+                let extension = config.join("plugins").join("builtin").join("web-open").join("extension");
+                if extension.is_dir() {
+                    let _ = auth::write_extension_token(&extension);
+                }
+            }
             for stream in listener.incoming() {
                 match stream {
                     Ok(stream) => {
                         let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
                         let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
+                        let Some(slot) = ConnectionSlot::acquire() else {
+                            continue; // over the cap: drop the socket
+                        };
                         // One thread per connection: a parked `/commands?wait=` long-poll
                         // must not stall snapshot pushes from the same extension.
                         let spawned = thread::Builder::new()
                             .name("hiven-desktop-bridge-conn".into())
-                            .spawn(move || serve_connection(stream));
+                            .spawn(move || {
+                                let _slot = slot;
+                                serve_connection(stream)
+                            });
                         if let Err(error) = spawned {
                             eprintln!("[hiven] desktop bridge connection thread failed: {}", error);
                         }
@@ -356,6 +410,26 @@ pub fn start_desktop_bridge_server(app_handle: tauri::AppHandle) {
     }
 }
 
+/// Holds one of `MAX_CONNECTIONS` slots; released on drop, including when the thread never starts.
+struct ConnectionSlot;
+
+impl ConnectionSlot {
+    fn acquire() -> Option<Self> {
+        let previous = ACTIVE_CONNECTIONS.fetch_add(1, Ordering::AcqRel);
+        if previous >= MAX_CONNECTIONS {
+            ACTIVE_CONNECTIONS.fetch_sub(1, Ordering::AcqRel);
+            return None;
+        }
+        Some(Self)
+    }
+}
+
+impl Drop for ConnectionSlot {
+    fn drop(&mut self) {
+        ACTIVE_CONNECTIONS.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
 fn serve_connection(stream: TcpStream) {
     // Soft-fail incomplete/empty clients without spamming EOF parse noise.
     if let Err(error) = handle_http(stream) {
@@ -368,18 +442,66 @@ fn serve_connection(stream: TcpStream) {
     }
 }
 
+#[derive(Debug, Default)]
+struct HttpRequest {
+    method: String,
+    path: String,
+    body: String,
+    origin: Option<String>,
+    host: Option<String>,
+    authorization: Option<String>,
+}
+
 fn handle_http(mut stream: TcpStream) -> Result<(), String> {
-    let (method, path, body, origin) = read_http_request(&mut stream)?;
-    let (status, body_out) = route_request(&method, &path, body, origin.as_deref())?;
-    write_http_response(&mut stream, status, &body_out)
+    let request = read_http_request(&mut stream)?;
+    let cors_origin = cors_origin_for(request.origin.as_deref());
+    let (status, body_out) = guard_and_route(request, auth::bridge_token())?;
+    write_http_response(&mut stream, status, &body_out, cors_origin.as_deref())
+}
+
+/// Origins that may read responses cross-origin: the extension, and (debug builds only)
+/// the validation page. Everything else gets no CORS headers at all.
+fn cors_origin_for(origin: Option<&str>) -> Option<String> {
+    let origin = origin?;
+    (auth::is_extension_origin(origin) || (cfg!(debug_assertions) && validation_origin_allowed(origin)))
+        .then(|| origin.to_string())
+}
+
+fn forbidden(reason: &str) -> (u16, String) {
+    (403, serde_json::json!({ "error": reason }).to_string())
+}
+
+/// Host / Origin / token checks, then routing. Tokenless access is limited to `/health`.
+fn guard_and_route(request: HttpRequest, token: Option<&str>) -> Result<(u16, String), String> {
+    if !auth::host_allowed(request.host.as_deref()) {
+        return Ok(forbidden("host not allowed"));
+    }
+    let is_validation = cfg!(debug_assertions) && request.path.starts_with("/v1/validation/");
+    if !is_validation {
+        if !auth::origin_allowed(request.origin.as_deref()) {
+            return Ok(forbidden("origin not allowed"));
+        }
+        if request.path.starts_with("/v1/sources/")
+            && !auth::bearer_matches(request.authorization.as_deref(), token)
+        {
+            return Ok((
+                401,
+                serde_json::json!({ "error": "missing or invalid bridge token" }).to_string(),
+            ));
+        }
+    }
+    route_request(
+        &request.method,
+        &request.path,
+        request.body,
+        request.origin.as_deref(),
+    )
 }
 
 /// Read a full HTTP/1.x request (headers + Content-Length body).
 /// A single `stream.read` often returns only headers while the body is still
 /// in flight — that produced empty-body JSON EOFs in the logs.
-fn read_http_request(
-    stream: &mut TcpStream,
-) -> Result<(String, String, String, Option<String>), String> {
+fn read_http_request(stream: &mut TcpStream) -> Result<HttpRequest, String> {
     let mut raw = Vec::with_capacity(8192);
     let mut chunk = [0u8; 8192];
     let header_end = loop {
@@ -433,11 +555,17 @@ fn read_http_request(
         body.truncate(content_length);
     }
 
-    let origin = header.lines().skip(1).find_map(|line| {
-        let (name, value) = line.split_once(':')?;
-        name.eq_ignore_ascii_case("origin")
-            .then(|| value.trim().to_string())
-    });
+    let header_value = |wanted: &str| {
+        header.lines().skip(1).find_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            name.trim()
+                .eq_ignore_ascii_case(wanted)
+                .then(|| value.trim().to_string())
+        })
+    };
+    let origin = header_value("origin");
+    let host = header_value("host");
+    let authorization = header_value("authorization");
     let mut lines = header.lines();
     let request_line = lines.next().ok_or_else(|| "empty request".to_string())?;
     let mut parts = request_line.split_whitespace();
@@ -450,7 +578,14 @@ fn read_http_request(
         .ok_or_else(|| "missing path".to_string())?
         .to_string();
     let body = String::from_utf8_lossy(&body).into_owned();
-    Ok((method, path, body, origin))
+    Ok(HttpRequest {
+        method,
+        path,
+        body,
+        origin,
+        host,
+        authorization,
+    })
 }
 
 fn find_header_end(raw: &[u8]) -> Option<usize> {
@@ -467,20 +602,37 @@ fn parse_content_length(header: &str) -> Option<usize> {
     None
 }
 
-fn write_http_response(stream: &mut TcpStream, status: u16, body: &str) -> Result<(), String> {
+fn write_http_response(
+    stream: &mut TcpStream,
+    status: u16,
+    body: &str,
+    cors_origin: Option<&str>,
+) -> Result<(), String> {
     let reason = match status {
         200 => "OK",
         204 => "No Content",
         400 => "Bad Request",
+        401 => "Unauthorized",
+        403 => "Forbidden",
         404 => "Not Found",
         405 => "Method Not Allowed",
         _ => "Error",
     };
+    let cors = cors_origin
+        .filter(|origin| !origin.contains(['\r', '\n']))
+        .map(|origin| {
+            format!(
+                "Access-Control-Allow-Origin: {}\r\nVary: Origin\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\n",
+                origin
+            )
+        })
+        .unwrap_or_default();
     let response = format!(
-        "HTTP/1.1 {} {}\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\nConnection: close\r\n\r\n{}",
+        "HTTP/1.1 {} {}\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\n{}Connection: close\r\n\r\n{}",
         status,
         reason,
         body.len(),
+        cors,
         body
     );
     stream
@@ -563,6 +715,17 @@ fn route_request(
     Ok((404, r#"{"error":"not found"}"#.to_string()))
 }
 
+fn validation_origin_allowed(origin: &str) -> bool {
+    matches!(
+        origin,
+        "http://127.0.0.1:1420"
+            | "http://localhost:1420"
+            | "http://tauri.localhost"
+            | "https://tauri.localhost"
+            | "tauri://localhost"
+    )
+}
+
 fn route_validation_request(
     method: &str,
     path: &str,
@@ -574,15 +737,7 @@ fn route_validation_request(
         return Ok(None);
     }
 
-    let allowed_origin = matches!(
-        origin,
-        Some("http://127.0.0.1:1420")
-            | Some("http://localhost:1420")
-            | Some("http://tauri.localhost")
-            | Some("https://tauri.localhost")
-            | Some("tauri://localhost")
-    );
-    if !allowed_origin {
+    if !origin.is_some_and(validation_origin_allowed) {
         return Ok(Some((400, r#"{"error":"origin not allowed"}"#.to_string())));
     }
 
@@ -692,6 +847,13 @@ struct SnapshotBody {
     extension_version: Option<String>,
 }
 
+fn source_rejected(reason: &str) -> (u16, String) {
+    (
+        400,
+        serde_json::json!({ "ok": false, "error": reason }).to_string(),
+    )
+}
+
 fn apply_snapshot(source_id: &str, body: &str) -> Result<(u16, String), String> {
     let trimmed = body.trim();
     // Incomplete TCP frames or empty POSTs must not spam the log as hard errors.
@@ -725,7 +887,10 @@ fn apply_snapshot(source_id: &str, body: &str) -> Result<(u16, String), String> 
     let mut guard = bridge_state()
         .lock()
         .map_err(|_| "bridge lock poisoned".to_string())?;
-    let entry = guard.sources.entry(source_id.to_string()).or_default();
+    let entry = match guard.source_entry(source_id) {
+        Ok(entry) => entry,
+        Err(error) => return Ok(source_rejected(&error)),
+    };
     let changed = entry.targets != targets || !is_fresh(entry.last_seen);
     entry.targets = targets;
     entry.last_seen = Some(Instant::now());
@@ -758,8 +923,8 @@ fn apply_snapshot(source_id: &str, body: &str) -> Result<(u16, String), String> 
 }
 
 fn has_pending_command(entry: &SourceState) -> bool {
-    entry.pending_focus.is_some()
-        || entry.pending_open.is_some()
+    !entry.pending_focus.is_empty()
+        || !entry.pending_open.is_empty()
         || entry.pending_history_import.is_some()
 }
 
@@ -790,9 +955,12 @@ fn take_commands_waiting(source_id: &str, wait_ms: u64) -> Result<(u16, String),
             .map_err(|_| "bridge lock poisoned".to_string())?
             .0;
     }
-    let entry = guard.sources.entry(source_id.to_string()).or_default();
+    let entry = match guard.source_entry(source_id) {
+        Ok(entry) => entry,
+        Err(error) => return Ok(source_rejected(&error)),
+    };
     let mut commands = Vec::new();
-    if let Some(cmd) = entry.pending_focus.take() {
+    for cmd in entry.pending_focus.drain(..) {
         commands.push(serde_json::json!({
             "type": "focus",
             "id": cmd.id,
@@ -801,7 +969,7 @@ fn take_commands_waiting(source_id: &str, wait_ms: u64) -> Result<(u16, String),
             "enqueuedAtMs": cmd.enqueued_at_ms,
         }));
     }
-    if let Some(cmd) = entry.pending_open.take() {
+    for cmd in entry.pending_open.drain(..) {
         commands.push(serde_json::json!({
             "type": "open",
             "url": cmd.url,
@@ -870,10 +1038,21 @@ fn apply_history(source_id: &str, body: &str) -> Result<(u16, String), String> {
     let mut guard = bridge_state()
         .lock()
         .map_err(|_| "bridge lock poisoned".to_string())?;
-    let entry = guard.sources.entry(source_id.to_string()).or_default();
+    let entry = match guard.source_entry(source_id) {
+        Ok(entry) => entry,
+        Err(error) => return Ok(source_rejected(&error)),
+    };
     if let Some(request_id) = parsed.request_id {
-        let count = items.len();
+        if !entry.history_imports.contains_key(&request_id)
+            && entry.history_imports.len() >= HISTORY_IMPORTS_PER_SOURCE_CAP
+        {
+            return Ok(source_rejected("too many history imports"));
+        }
         let import = entry.history_imports.entry(request_id).or_default();
+        if import.received >= HISTORY_IMPORT_CAP {
+            items.clear();
+        }
+        let count = items.len();
         import.received += count;
         if count > 0 {
             import.batches.push_back(items);
@@ -921,7 +1100,10 @@ fn apply_events(source_id: &str, body: &str) -> Result<(u16, String), String> {
     let mut guard = bridge_state()
         .lock()
         .map_err(|_| "bridge lock poisoned".to_string())?;
-    let entry = guard.sources.entry(source_id.to_string()).or_default();
+    let entry = match guard.source_entry(source_id) {
+        Ok(entry) => entry,
+        Err(error) => return Ok(source_rejected(&error)),
+    };
     let mut accepted = Vec::new();
     for mut event in incoming {
         if event.event_type.trim().is_empty() {
@@ -1149,12 +1331,15 @@ pub fn focus_desktop_bridge_target(
     if !is_fresh(entry.last_seen) {
         return Err(format!("source snapshot stale: {}", source_id));
     }
-    entry.pending_focus = Some(BridgeFocusCommand {
-        id,
-        window_id,
-        url,
-        enqueued_at_ms: now_ms(),
-    });
+    push_capped(
+        &mut entry.pending_focus,
+        BridgeFocusCommand {
+            id,
+            window_id,
+            url,
+            enqueued_at_ms: now_ms(),
+        },
+    );
     drop(guard);
     command_ready().notify_all();
     Ok(())
@@ -1213,6 +1398,9 @@ pub fn begin_desktop_bridge_history_import(source_id: String) -> Result<String, 
         .sources
         .get_mut(&source_id)
         .ok_or_else(|| format!("source not connected: {}", source_id))?;
+    if entry.history_imports.len() >= HISTORY_IMPORTS_PER_SOURCE_CAP {
+        entry.history_imports.clear();
+    }
     entry.pending_history_import = Some(request_id.clone());
     entry
         .history_imports
@@ -1315,16 +1503,19 @@ pub fn open_desktop_bridge_url(source_id: String, url: String) -> Result<(), Str
     let mut guard = bridge_state()
         .lock()
         .map_err(|_| "bridge lock poisoned".to_string())?;
-    let entry = guard.sources.entry(source_id.clone()).or_default();
+    let entry = guard.source_entry(&source_id)?;
     // Same contract as focus: refuse when no extension is listening, so the
     // caller can fall back instead of queueing a command nobody will take.
     if !is_fresh(entry.last_seen) {
         return Err(format!("source snapshot stale: {}", source_id));
     }
-    entry.pending_open = Some(BridgeOpenCommand {
-        url: trimmed,
-        enqueued_at_ms: now_ms(),
-    });
+    push_capped(
+        &mut entry.pending_open,
+        BridgeOpenCommand {
+            url: trimmed,
+            enqueued_at_ms: now_ms(),
+        },
+    );
     drop(guard);
     command_ready().notify_all();
     Ok(())
@@ -1341,7 +1532,7 @@ pub fn set_desktop_bridge_source_config(
     let mut guard = bridge_state()
         .lock()
         .map_err(|_| "bridge lock poisoned".to_string())?;
-    let entry = guard.sources.entry(source_id).or_default();
+    let entry = guard.source_entry(&source_id)?;
     entry.config = Some(BridgeSourceConfig {
         history_enabled,
         auto_close_idle_tabs,
@@ -1571,6 +1762,118 @@ mod tests {
         let (st, json) = take_commands(source).unwrap();
         assert_eq!(st, 200);
         assert!(json.contains("\"idleTimeoutMinutes\":10080"));
+    }
+
+    fn request(method: &str, path: &str, host: &str) -> HttpRequest {
+        HttpRequest {
+            method: method.into(),
+            path: path.into(),
+            host: Some(host.into()),
+            body: r#"{"tabs":[]}"#.into(),
+            ..HttpRequest::default()
+        }
+    }
+
+    #[test]
+    fn sources_routes_require_bearer_token() {
+        let path = "/v1/sources/browser.chromium.auth-test/snapshot";
+        let host = "127.0.0.1:19246";
+        let missing = guard_and_route(request("POST", path, host), Some("tok")).unwrap();
+        assert_eq!(missing.0, 401);
+
+        let mut wrong = request("POST", path, host);
+        wrong.authorization = Some("Bearer nope".into());
+        assert_eq!(guard_and_route(wrong, Some("tok")).unwrap().0, 401);
+
+        let mut no_server_token = request("POST", path, host);
+        no_server_token.authorization = Some("Bearer tok".into());
+        assert_eq!(guard_and_route(no_server_token, None).unwrap().0, 401);
+
+        let mut ok = request("POST", path, host);
+        ok.authorization = Some("Bearer tok".into());
+        ok.origin = Some("chrome-extension://abc".into());
+        assert_eq!(guard_and_route(ok, Some("tok")).unwrap().0, 200);
+    }
+
+    #[test]
+    fn foreign_host_or_web_origin_is_rejected_even_with_token() {
+        let path = "/v1/sources/browser.chromium.auth-test/targets";
+        let mut rebinding = request("GET", path, "evil.example:19246");
+        rebinding.authorization = Some("Bearer tok".into());
+        assert_eq!(guard_and_route(rebinding, Some("tok")).unwrap().0, 403);
+
+        let mut web = request("GET", path, "localhost:19246");
+        web.authorization = Some("Bearer tok".into());
+        web.origin = Some("https://evil.example".into());
+        assert_eq!(guard_and_route(web, Some("tok")).unwrap().0, 403);
+
+        let mut health = request("GET", "/health", "127.0.0.1:19246");
+        health.origin = Some("https://evil.example".into());
+        assert_eq!(guard_and_route(health, Some("tok")).unwrap().0, 403);
+    }
+
+    #[test]
+    fn cors_is_only_granted_to_extension_origins() {
+        assert_eq!(cors_origin_for(Some("https://evil.example")), None);
+        assert_eq!(cors_origin_for(None), None);
+        assert_eq!(
+            cors_origin_for(Some("chrome-extension://abc")).as_deref(),
+            Some("chrome-extension://abc")
+        );
+    }
+
+    #[test]
+    fn pending_commands_queue_and_stay_bounded() {
+        let source = "browser.chromium.queue-test";
+        let body = r#"{"tabs":[{"id":"1","title":"A"}]}"#;
+        apply_snapshot(source, body).unwrap();
+        for i in 0..(PENDING_COMMAND_CAP + 3) {
+            focus_desktop_bridge_target(source.into(), i.to_string(), None, None).unwrap();
+        }
+        let (_, json) = take_commands(source).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let ids: Vec<_> = parsed["commands"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|c| c["type"] == "focus")
+            .map(|c| c["id"].as_str().unwrap().to_string())
+            .collect();
+        assert_eq!(ids.len(), PENDING_COMMAND_CAP);
+        assert_eq!(ids[0], "3", "oldest commands are dropped first");
+    }
+
+    #[test]
+    fn source_count_and_id_shape_are_bounded() {
+        let mut state = BridgeState::default();
+        for i in 0..MAX_SOURCES {
+            assert!(state.source_entry(&format!("s{i}")).is_ok());
+        }
+        assert!(state.source_entry("one-too-many").is_err());
+        assert!(state.source_entry("s0").is_ok(), "existing sources stay reachable");
+        assert!(BridgeState::default().source_entry("bad/id").is_err());
+        assert!(BridgeState::default().source_entry("").is_err());
+    }
+
+    #[test]
+    fn history_imports_per_source_are_bounded() {
+        let source = "browser.chromium.import-cap-test";
+        for i in 0..HISTORY_IMPORTS_PER_SOURCE_CAP {
+            let body = format!(r#"{{"requestId":"r{i}","items":[]}}"#);
+            assert_eq!(apply_history(source, &body).unwrap().0, 200);
+        }
+        let body = r#"{"requestId":"overflow","items":[]}"#;
+        assert_eq!(apply_history(source, body).unwrap().0, 400);
+    }
+
+    #[test]
+    fn connection_slots_are_capped_and_released() {
+        let held: Vec<_> = (0..MAX_CONNECTIONS).filter_map(|_| ConnectionSlot::acquire()).collect();
+        // Other tests never open real connections, so the cap is exact here.
+        assert_eq!(held.len(), MAX_CONNECTIONS);
+        assert!(ConnectionSlot::acquire().is_none());
+        drop(held);
+        assert!(ConnectionSlot::acquire().is_some());
     }
 
     fn validation_request(id: &str, client_id: &str) -> ValidationRequest {
