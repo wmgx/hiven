@@ -143,6 +143,8 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const [items, setItems] = useState<ClipboardHistoryItem[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  // Telemetry: when this browsing session opened (mount or a genuine reopen); cleared once the first list lands.
+  const openStartedAtRef = useRef<number | null>(performance.now())
   // IME: while composing, keep searching with the text from before composition started.
   const [composingFrom, setComposingFrom] = useState<string | null>(null)
   const [searchMatchMode, setSearchMatchMode] = useState<ClipboardHistorySearchMatchMode>('literal')
@@ -727,6 +729,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     )
     lastRequestedCriteriaKeyRef.current = criteriaKey
     const timer = window.setTimeout(() => {
+      const searchStartedAt = performance.now()
       void (async () => {
         let cursor: string | undefined
         let loaded: ClipboardHistoryItem[] = []
@@ -747,6 +750,13 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       })()
         .then((page) => {
           if (!current()) return
+          const settledAt = performance.now()
+          const telemetryDetails = { pages: page.pages, items: page.items.length, hasQuery: Boolean(requestedQuery), filter: requestedFilter }
+          host.telemetry?.trackLatency(requestedQuery ? 'search' : 'list.read', settledAt - searchStartedAt, telemetryDetails)
+          if (openStartedAtRef.current !== null) {
+            host.telemetry?.trackLatency('open.first-list', settledAt - openStartedAtRef.current, telemetryDetails)
+            openStartedAtRef.current = null
+          }
           pagesLoadedRef.current = page.pages
           setItems(page.items)
           setNextCursor(page.nextCursor)
@@ -986,6 +996,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       // starts a fresh browsing session without treating ordinary blur, dialogs,
       // or an internal preview return as a new open.
       setSearchMatchMode('literal')
+      openStartedAtRef.current = performance.now()
       resetHistoryOpenSession({
         invalidatePasteNotice: () => { pasteNoticeGenerationRef.current += 1 },
         clearPasteNotice: () => setPasteNotice(null),
@@ -2181,17 +2192,18 @@ function renderItemIcon(item: ClipboardHistoryItem) {
 
 function ClipboardImagePreview({ item, storage, t }: { item: ImageHistoryItem, storage: SurfaceStorage, t: (key: string) => string }) {
   const [imageUrl, setImageUrl] = useState('')
+  // Page rows only carry the list thumbnail; the full item adds the original.
+  const blobId = item.blobId || item.previewBlobId
 
   useEffect(() => {
     let disposed = false
-    void storage.blob.url(item.previewBlobId).then((url) => {
+    void storage.blob.url(blobId).then((url) => {
       if (!disposed) setImageUrl(url)
     })
     return () => {
       disposed = true
-      setImageUrl('')
     }
-  }, [item.previewBlobId, storage])
+  }, [blobId, storage])
 
   if (!imageUrl) {
     return (

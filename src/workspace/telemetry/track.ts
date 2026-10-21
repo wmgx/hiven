@@ -39,6 +39,18 @@ export function trackLatencyFrom(
   logLauncherPerfDuration(name, startedAt, withKind('latency', props))
 }
 
+/** Plugin-scoped tracker handed to surfaces through the host API. */
+export function createPluginTelemetry(pluginId: string): {
+  trackLatency(name: string, durationMs: number, details?: TrackProps): void
+  trackBehavior(name: string, details?: TrackProps): void
+} {
+  const label = (name: string) => `plugin:${pluginId}:${name.replace(/[^\w.-]/g, '_').slice(0, 64)}`
+  return {
+    trackLatency: (name, durationMs, details) => trackLatency(label(name), durationMs, details),
+    trackBehavior: (name, details) => trackBehavior(label(name), details),
+  }
+}
+
 /** Internal perf (ranking, debounce, native) — same sink, kind=perf. */
 export function trackPerf(name: string, props?: TrackProps): void {
   logLauncherPerf(name, withKind('perf', props))

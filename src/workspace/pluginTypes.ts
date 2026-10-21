@@ -835,6 +835,13 @@ export type PasteQueueBridge = {
   subscribe(listener: (status: PasteQueueStatus) => void): () => void
 }
 
+export type PluginTelemetryDetails = Record<string, string | number | boolean>
+
+export type PluginSurfaceTelemetry = {
+  trackLatency(name: string, durationMs: number, details?: PluginTelemetryDetails): void
+  trackBehavior(name: string, details?: PluginTelemetryDetails): void
+}
+
 export type PluginSurfaceHostApi = {
   /** Present only on surfaces that declare `pasteQueue`. */
   pasteQueue?: PasteQueueBridge
@@ -870,6 +877,12 @@ export type PluginSurfaceHostApi = {
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
   showToast(message: string, level?: 'info' | 'success' | 'warning' | 'error', options?: { action?: { label: string; onClick: () => void }; duration?: number }): string
   dismissToast(id: string): void
+  /**
+   * Content-free diagnostics into the host perf log (`npm run telemetry`).
+   * Labels are recorded as `plugin:<pluginId>:<name>`; never pass user content
+   * in details. Older hosts may omit this capability.
+   */
+  telemetry?: PluginSurfaceTelemetry
   /**
    * Explicitly save this surface's frozen text through the desktop save dialog.
    * Accepts at most 10 MiB of UTF-8, including an empty string. Returns no path,

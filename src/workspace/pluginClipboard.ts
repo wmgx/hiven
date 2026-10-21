@@ -31,8 +31,12 @@ type ClipboardImageSnapshot = {
   contentType: string
   width?: number
   height?: number
-  toStoredImage: () => Promise<ClipboardImage>
+  /** Original image plus an optional downscaled preview for list thumbnails. */
+  toStoredImage: () => Promise<ClipboardImage & { preview?: { bytes: Uint8Array; contentType: string } }>
 }
+
+/** Long edge of stored list previews (covers 2x displays for small thumbnails). */
+const PREVIEW_MAX_SIDE = 256
 
 async function readClipboardText(beforeRead?: () => void): Promise<string> {
   return readNativeClipboardText(beforeRead)
@@ -152,12 +156,10 @@ async function readClipboardImageSnapshot(): Promise<ClipboardImageSnapshot | nu
       contentType: 'image/png',
       width: size.width,
       height: size.height,
-      toStoredImage: async () => ({
-        bytes: await encodeRgbaAsPng(rgba, size.width, size.height),
-        contentType: 'image/png',
-        width: size.width,
-        height: size.height,
-      }),
+      toStoredImage: async () => {
+        const { bytes, preview } = await encodeRgbaAsPng(rgba, size.width, size.height)
+        return { bytes, contentType: 'image/png', width: size.width, height: size.height, preview }
+      },
     }
   } catch {
     // Native image read fails whenever the pasteboard has no image — the common
@@ -186,7 +188,19 @@ async function readClipboardImageSnapshot(): Promise<ClipboardImageSnapshot | nu
   return null
 }
 
-async function encodeRgbaAsPng(rgba: Uint8Array, width: number, height: number): Promise<Uint8Array> {
+function canvasToPng(canvas: HTMLCanvasElement): Promise<Uint8Array> {
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((result) => {
+      if (result) resolve(result)
+      else reject(new Error('Failed to encode clipboard image'))
+    }, 'image/png')
+  }).then(async (blob) => new Uint8Array(await blob.arrayBuffer()))
+}
+
+async function encodeRgbaAsPng(rgba: Uint8Array, width: number, height: number): Promise<{
+  bytes: Uint8Array
+  preview?: { bytes: Uint8Array; contentType: string }
+}> {
   if (typeof document === 'undefined') {
     throw new Error('Cannot encode clipboard image without DOM canvas support')
   }
@@ -196,13 +210,27 @@ async function encodeRgbaAsPng(rgba: Uint8Array, width: number, height: number):
   const context = canvas.getContext('2d')
   if (!context) throw new Error('Cannot encode clipboard image without canvas context')
   context.putImageData(new ImageData(new Uint8ClampedArray(rgba), width, height), 0, 0)
-  const blob = await new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob((result) => {
-      if (result) resolve(result)
-      else reject(new Error('Failed to encode clipboard image'))
-    }, 'image/png')
-  })
-  return new Uint8Array(await blob.arrayBuffer())
+  const bytes = await canvasToPng(canvas)
+  // Small images are their own preview; only downscale when it saves real decode work.
+  const scale = PREVIEW_MAX_SIDE / Math.max(width, height)
+  if (scale >= 2 / 3) return { bytes }
+  const previewCanvas = document.createElement('canvas')
+  previewCanvas.width = Math.max(1, Math.round(width * scale))
+  previewCanvas.height = Math.max(1, Math.round(height * scale))
+  const previewContext = previewCanvas.getContext('2d')
+  if (!previewContext) return { bytes }
+  previewContext.imageSmoothingQuality = 'high'
+  previewContext.drawImage(canvas, 0, 0, previewCanvas.width, previewCanvas.height)
+  try {
+    return { bytes, preview: { bytes: await canvasToPng(previewCanvas), contentType: 'image/png' } }
+  } catch {
+    return { bytes }
+  } finally {
+    canvas.width = 0
+    canvas.height = 0
+    previewCanvas.width = 0
+    previewCanvas.height = 0
+  }
 }
 
 function hashString(text: string): string {
@@ -369,11 +397,14 @@ export function createPluginClipboard(
             lastImageHash = imageHash
             if (!options.maxImageBytes || storedImage.bytes.length <= options.maxImageBytes) {
               const blobRef = await storage!.blob.put({ bytes: storedImage.bytes, contentType: storedImage.contentType })
+              const previewRef = storedImage.preview
+                ? await storage!.blob.put(storedImage.preview).catch(() => null)
+                : null
               const sourceApp = await readClipboardSourceApp()
               emitChange({
                 kind: 'image',
                 blobId: blobRef.blobId,
-                previewBlobId: blobRef.blobId,
+                previewBlobId: previewRef?.blobId ?? blobRef.blobId,
                 contentType: blobRef.contentType,
                 byteSize: blobRef.byteSize,
                 width: storedImage.width,
