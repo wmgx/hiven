@@ -94,43 +94,72 @@ fn launcher_perf_log_path() -> Result<PathBuf, String> {
 /// Background writer so perf logging never does file I/O on the main thread.
 /// Each synchronous append was ~90–190ms during launcher show and, with ~7 native
 /// marks per open, gated first paint. Hand lines to a dedicated writer thread.
-fn perf_log_sender() -> &'static std::sync::mpsc::Sender<String> {
-    static SENDER: OnceLock<std::sync::mpsc::Sender<String>> = OnceLock::new();
+fn perf_log_sender() -> &'static std::sync::mpsc::SyncSender<String> {
+    static SENDER: OnceLock<std::sync::mpsc::SyncSender<String>> = OnceLock::new();
     SENDER.get_or_init(|| {
-        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        // Bounded: a stuck disk drops telemetry lines instead of growing memory without limit.
+        let (tx, rx) = std::sync::mpsc::sync_channel::<String>(2048);
         let _ = thread::Builder::new()
             .name("hiven-perf-log".into())
             .spawn(move || {
+                let mut writer = PerfLogWriter::default();
                 for line in rx {
-                    write_launcher_perf_line(&line);
+                    writer.write_line(&line);
                 }
             });
         tx
     })
 }
 
-/// Actual NDJSON append (rotation + write). Runs only on the perf-log writer thread.
-fn write_launcher_perf_line(line: &str) {
-    let Ok(path) = launcher_perf_log_path() else {
-        return;
-    };
-    // Soft rotate ~5MB so agents can always read a bounded file.
-    if let Ok(meta) = fs::metadata(&path) {
-        if meta.len() > 5 * 1024 * 1024 {
-            let bak = path.with_extension("ndjson.1");
-            let _ = fs::rename(&path, &bak);
+const PERF_LOG_ROTATE_BYTES: u64 = 5 * 1024 * 1024;
+
+/// Keeps the NDJSON file open between lines and counts bytes itself, instead of
+/// create_dir_all + metadata + open + close on every line.
+#[derive(Default)]
+struct PerfLogWriter {
+    file: Option<fs::File>,
+    written: u64,
+}
+
+impl PerfLogWriter {
+    fn open(&mut self) -> Option<&mut fs::File> {
+        if self.file.is_none() {
+            let path = launcher_perf_log_path().ok()?;
+            let file = fs::OpenOptions::new().create(true).append(true).open(&path).ok()?;
+            self.written = file.metadata().map(|meta| meta.len()).unwrap_or(0);
+            self.file = Some(file);
         }
+        self.file.as_mut()
     }
-    if let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(&path) {
+
+    fn rotate(&mut self) {
+        self.file = None;
+        if let Ok(path) = launcher_perf_log_path() {
+            // Soft rotate ~5MB so agents can always read a bounded file.
+            let _ = fs::rename(&path, path.with_extension("ndjson.1"));
+        }
+        self.written = 0;
+    }
+
+    fn write_line(&mut self, line: &str) {
         use std::io::Write;
-        let _ = writeln!(file, "{}", line);
+        if self.written > PERF_LOG_ROTATE_BYTES {
+            self.rotate();
+        }
+        let Some(file) = self.open() else { return };
+        if writeln!(file, "{}", line).is_ok() {
+            self.written += line.len() as u64 + 1;
+        } else {
+            self.file = None; // reopen on the next line (e.g. log dir was removed)
+        }
     }
 }
 
 /// Non-blocking: hand the line to the background writer thread (never blocks the
 /// main thread on disk I/O).
 fn append_launcher_perf_file(line: &str) {
-    let _ = perf_log_sender().send(line.to_string());
+    // try_send: never block the caller; a full queue drops the line.
+    let _ = perf_log_sender().try_send(line.to_string());
 }
 
 fn now_unix_ms() -> u128 {
@@ -7050,6 +7079,10 @@ fn list_plugin_dirs(path: String) -> Result<Vec<PluginDirSummary>, String> {
     for entry in fs::read_dir(&root).map_err(|e| e.to_string())? {
         let entry = entry.map_err(|e| e.to_string())?;
         let folder = entry.path();
+        // `.plugin-tmp-*` / `.plugin-backup-*` are install scratch dirs, never plugins.
+        if entry.file_name().to_string_lossy().starts_with('.') {
+            continue;
+        }
         if folder.is_dir() && folder.join("manifest.json").exists() {
             match read_plugin_manifest_summary(&folder) {
                 Ok(summary) => plugins.push(summary),
@@ -7721,13 +7754,12 @@ fn ensure_plugin_path_for_write(path: &Path) -> Result<(), String> {
 }
 
 fn make_temp_dir(parent: &Path) -> Result<PathBuf, String> {
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|e| e.to_string())?
-        .as_millis();
-    let dir = parent.join(format!(".plugin-tmp-{}", millis));
-    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    Ok(dir)
+    // Random suffix: two installs in the same millisecond (or a stale crash leftover) must not collide.
+    tempfile::Builder::new()
+        .prefix(".plugin-tmp-")
+        .tempdir_in(parent)
+        .map(|dir| dir.keep())
+        .map_err(|e| e.to_string())
 }
 
 fn extract_zip_to_dir(zip_path: &Path, target: &Path) -> Result<(), String> {
@@ -7742,12 +7774,25 @@ fn extract_zip_bytes_to_dir(bytes: &[u8], target: &Path) -> Result<(), String> {
     extract_zip_archive(&mut archive, target)
 }
 
+const ZIP_MAX_ENTRIES: usize = 5_000;
+const ZIP_MAX_TOTAL_BYTES: u64 = 256 * 1024 * 1024;
+
 fn extract_zip_archive<R: Read + std::io::Seek>(
     archive: &mut ZipArchive<R>,
     target: &Path,
 ) -> Result<(), String> {
+    if archive.len() > ZIP_MAX_ENTRIES {
+        return Err(format!("Zip archive has more than {ZIP_MAX_ENTRIES} entries"));
+    }
+    let mut total_bytes: u64 = 0;
+    let mut written_bytes: u64 = 0;
     for i in 0..archive.len() {
         let mut file = archive.by_index(i).map_err(|e| e.to_string())?;
+        // Declared sizes can lie, so the copy below is capped by the remaining budget as well.
+        total_bytes = total_bytes.saturating_add(file.size());
+        if total_bytes > ZIP_MAX_TOTAL_BYTES {
+            return Err("Zip archive expands beyond the allowed size".to_string());
+        }
         let enclosed = file
             .enclosed_name()
             .ok_or_else(|| "Zip archive contains an unsafe path".to_string())?
@@ -7761,7 +7806,13 @@ fn extract_zip_archive<R: Read + std::io::Seek>(
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
         let mut out = fs::File::create(&out_path).map_err(|e| e.to_string())?;
-        std::io::copy(&mut file, &mut out).map_err(|e| e.to_string())?;
+        let budget = ZIP_MAX_TOTAL_BYTES.saturating_sub(written_bytes);
+        let copied = std::io::copy(&mut (&mut file).take(budget + 1), &mut out)
+            .map_err(|e| e.to_string())?;
+        written_bytes += copied;
+        if written_bytes > ZIP_MAX_TOTAL_BYTES {
+            return Err("Zip archive expands beyond the allowed size".to_string());
+        }
     }
     Ok(())
 }
@@ -8751,6 +8802,27 @@ HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\App Paths\Example.e
         run["sourceSavedAction"]["snapshot"] = serde_json::json!(snapshot.to_string());
         run["inputBinding"] = serde_json::json!("selection");
         assert!(validate_last_saveable_run(&run).is_err());
+    }
+
+    #[test]
+    fn zip_extraction_rejects_too_many_entries_and_temp_dirs_are_unique() {
+        use std::io::Write;
+        let mut buffer = Cursor::new(Vec::new());
+        {
+            let mut writer = zip::ZipWriter::new(&mut buffer);
+            let options = zip::write::SimpleFileOptions::default();
+            for i in 0..=ZIP_MAX_ENTRIES {
+                writer.start_file(format!("f{i}.txt"), options).unwrap();
+                writer.write_all(b"x").unwrap();
+            }
+            writer.finish().unwrap();
+        }
+        let parent = tempfile::tempdir().unwrap();
+        let target = make_temp_dir(parent.path()).unwrap();
+        let other = make_temp_dir(parent.path()).unwrap();
+        assert_ne!(target, other);
+        let error = extract_zip_bytes_to_dir(buffer.get_ref(), &target).unwrap_err();
+        assert!(error.contains("entries"), "{error}");
     }
 
     #[test]

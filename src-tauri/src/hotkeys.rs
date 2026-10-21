@@ -3,14 +3,24 @@ use std::time::Duration;
 #[cfg(target_os = "macos")]
 use std::time::Instant;
 
-/// Debug: append a line to /tmp/hiven-hotkey.log for diagnosing release builds.
+/// Diagnostic log for hotkey routing. Written only in debug builds or with `HIVEN_LAUNCHER_PERF=1`,
+/// into `<config>/logs/` (not a fixed, world-writable /tmp path).
 #[cfg(target_os = "macos")]
 pub(crate) fn hotkey_log(msg: &str) {
     use std::io::Write;
+    if !(cfg!(debug_assertions) || std::env::var("HIVEN_LAUNCHER_PERF").ok().as_deref() == Some("1")) {
+        return;
+    }
+    let Ok(dir) = crate::config_dir().map(|root| root.join("logs")) else {
+        return;
+    };
+    if std::fs::create_dir_all(&dir).is_err() {
+        return;
+    }
     if let Ok(mut f) = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open("/tmp/hiven-hotkey.log")
+        .open(dir.join("hotkey.log"))
     {
         let _ = writeln!(f, "[{:?}] {}", Instant::now(), msg);
     }
