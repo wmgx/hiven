@@ -87,7 +87,7 @@ export function colorAnswer(input: string): ColorAnswer | null {
   if (!parsed) return null
   const { rgb, alpha } = parsed
   const hex = `#${rgb.map(BYTE_HEX).join('')}${alpha < 1 ? BYTE_HEX(alpha * 255) : ''}`
-  const color = new Color('srgb', rgb.map((value) => value / 255), alpha)
+  const color = new Color('srgb', [rgb[0] / 255, rgb[1] / 255, rgb[2] / 255], alpha)
   const suffix = alpha < 1 ? ` / ${number(alpha)}` : ''
   const [h, s, l] = color.to('hsl').coords
   const [okL, okC, okH] = color.to('oklch').coords
