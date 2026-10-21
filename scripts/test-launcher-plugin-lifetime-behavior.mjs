@@ -13,7 +13,7 @@ const fail = name => () => { throw new Error('Forbidden I/O: ' + name); };
 function loadSource(src, imports = {}, extra = {}, filename = 'probe') {
   const out = ts.transpileModule(src, {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2023,esModuleInterop:true,jsx:ts.JsxEmit.ReactJSX}}).outputText;
   const exports = {};
-  const box = {exports,module:{exports},console,URL,setTimeout,clearTimeout,structuredClone,...extra,require:id=>{
+  const box = {exports,module:{exports},console,URL,setTimeout,clearTimeout,structuredClone,AbortController,...extra,require:id=>{
     if (Object.hasOwn(imports,id)) return imports[id];
     throw new Error('Unstubbed dependency: ' + id + ' in ' + filename);
   }};
