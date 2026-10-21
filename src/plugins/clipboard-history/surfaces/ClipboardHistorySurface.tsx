@@ -618,6 +618,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const [retentionStatus, setRetentionStatus] = useState<{ legacyProtectedCount: number; trashCount: number; migrationComplete: boolean } | null>(null)
   const [legacyDialog, setLegacyDialog] = useState(false)
   const [emptyTrashDialog, setEmptyTrashDialog] = useState(false)
+  const [purgeDialog, setPurgeDialog] = useState(false)
   const [retentionBusy, setRetentionBusy] = useState(false)
   const desiredQuery = query.trim()
   const desiredFilter: FilterKind = combining ? 'text' : filter
@@ -818,11 +819,12 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
 
   const purgeSelected = async () => {
     const owner = host.deliveryFeedbackOwner
-    if (!selectedId || retentionBusy || filter !== 'trash' || owner?.isCurrent() === false) return
+    if (!selectedId || retentionBusy || !purgeDialog || filter !== 'trash' || owner?.isCurrent() === false) return
     setRetentionBusy(true)
     try {
       if (!(await repository.purgeTrashItem(selectedId))) throw new Error('unavailable')
       if (owner?.isCurrent() === false) return
+      setPurgeDialog(false)
       refreshPage()
     } catch { if (owner?.isCurrent() !== false) setPasteNotice(t('retention.failed')) }
     finally { setRetentionBusy(false) }
@@ -1393,7 +1395,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }, [host, repository, t])
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.defaultPrevented || titleDialog || legacyDialog || emptyTrashDialog) return
+    if (e.defaultPrevented || titleDialog || legacyDialog || emptyTrashDialog || purgeDialog) return
     if (textEdit) { e.stopPropagation(); return }
     if (combining) {
       if (imeKeyDown.shouldIgnoreKeyDown(e)) return
@@ -1828,7 +1830,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
           </Button>
         )}
         {!combining && filter === 'trash' && <>
-          <Button type="button" disabled={!selectedItem || resultsActionBlocked || Boolean(textEdit) || retentionBusy} onClick={() => void purgeSelected()}>
+          <Button type="button" disabled={!selectedItem || resultsActionBlocked || Boolean(textEdit) || retentionBusy} onClick={() => setPurgeDialog(true)}>
             {t('retention.purge')}
           </Button>
           <Button type="button" disabled={(retentionStatus?.trashCount ?? 0) === 0 || resultsActionBlocked || Boolean(textEdit) || retentionBusy} onClick={() => setEmptyTrashDialog(true)}>
@@ -1908,6 +1910,18 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
           </div>
         </SurfaceFooterHints>
       )}
+
+      <Dialog
+        open={purgeDialog}
+        onOpenChange={(open) => { if (!retentionBusy) setPurgeDialog(open) }}
+        title={t('retention.purgeConfirmTitle')}
+      >
+        <p>{t('retention.purgeConfirm')}</p>
+        <div className="clipboard-history-title-dialog-actions">
+          <Button type="button" disabled={retentionBusy} onClick={() => void purgeSelected()}>{t('retention.purge')}</Button>
+          <Button type="button" disabled={retentionBusy} onClick={() => setPurgeDialog(false)}>{t('action.cancel')}</Button>
+        </div>
+      </Dialog>
 
       <Dialog
         open={emptyTrashDialog}

@@ -149,6 +149,8 @@
   "retention.emptyTrash": "清空回收站",
   "retention.emptyTrashConfirmTitle": "清空回收站？",
   "retention.emptyTrashConfirm": "回收站中的 {count} 项将被永久删除，无法恢复。",
+  "retention.purgeConfirmTitle": "彻底删除？",
+  "retention.purgeConfirm": "该项将被永久删除，无法恢复。",
   "paging.loaded": "{count} 项",
   "paging.loadingMore": "正在加载更多… {count} 项",
   "retention.restore": "恢复",

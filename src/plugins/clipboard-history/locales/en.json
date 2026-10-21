@@ -149,6 +149,8 @@
   "retention.emptyTrash": "Empty trash",
   "retention.emptyTrashConfirmTitle": "Empty trash?",
   "retention.emptyTrashConfirm": "{count} items in the trash will be permanently deleted. This cannot be undone.",
+  "retention.purgeConfirmTitle": "Delete permanently?",
+  "retention.purgeConfirm": "This item will be permanently deleted. This cannot be undone.",
   "paging.loaded": "{count} items",
   "paging.loadingMore": "Loading more… {count} items",
   "retention.restore": "Restore",
