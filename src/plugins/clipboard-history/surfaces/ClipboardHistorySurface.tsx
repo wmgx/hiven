@@ -8,7 +8,7 @@
  * - Keyboard shortcuts: Enter=paste, Cmd/Ctrl+C=copy selection in preview, Delete=remove
  */
 
-import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, useId, memo, type KeyboardEvent } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useDeferredValue, useMemo, useRef, useId, memo, type CompositionEvent, type KeyboardEvent } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import {
@@ -143,6 +143,8 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const [items, setItems] = useState<ClipboardHistoryItem[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  // IME: while composing, keep searching with the text from before composition started.
+  const [composingFrom, setComposingFrom] = useState<string | null>(null)
   const [searchMatchMode, setSearchMatchMode] = useState<ClipboardHistorySearchMatchMode>('literal')
   const [pasteNotice, setPasteNotice] = useState<string | null>(null)
   const pasteNoticeGenerationRef = useRef(0)
@@ -620,7 +622,8 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const [emptyTrashDialog, setEmptyTrashDialog] = useState(false)
   const [purgeDialog, setPurgeDialog] = useState(false)
   const [retentionBusy, setRetentionBusy] = useState(false)
-  const desiredQuery = query.trim()
+  // Deferred so typing stays responsive while the list re-reads.
+  const desiredQuery = useDeferredValue(composingFrom ?? query).trim()
   const desiredFilter: FilterKind = combining ? 'text' : filter
   const criteriaKey = JSON.stringify([
     desiredQuery, searchMatchMode, desiredFilter, frequentThreshold, copiedSince ?? null,
@@ -671,9 +674,20 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     clearPage()
   }, [clearPage, syncLocalDay])
   const changeSearchQuery = useCallback((value: string) => {
+    if (composingFrom === null && value.trim() !== desiredQuery) resetPage()
+    setQuery(value)
+  }, [composingFrom, desiredQuery, resetPage])
+  const startSearchComposition = useCallback((event: CompositionEvent<HTMLInputElement>) => {
+    imeKeyDown.onCompositionStart()
+    setComposingFrom(event.currentTarget.value)
+  }, [imeKeyDown])
+  const endSearchComposition = useCallback((event: CompositionEvent<HTMLInputElement>) => {
+    imeKeyDown.onCompositionEnd()
+    const value = event.currentTarget.value
+    setComposingFrom(null)
     if (value.trim() !== desiredQuery) resetPage()
     setQuery(value)
-  }, [desiredQuery, resetPage])
+  }, [desiredQuery, imeKeyDown, resetPage])
   const toggleSearchMatchMode = useCallback(() => {
     resetPage()
     setSearchMatchMode((current) => current === 'literal' ? 'all-terms' : 'literal')
@@ -859,7 +873,18 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   useEffect(() => {
     if (searchPresentation.showInitialSkeleton) return
     const frame = requestAnimationFrame(() => searchRef.current?.focus())
-    return () => cancelAnimationFrame(frame)
+    // WKWebView does not always flip visibilityState when the window is hidden and
+    // shown again, so also recover focus whenever the window becomes key with
+    // nothing focused (dialogs and editors keep their own focus).
+    const onWindowFocus = () => {
+      const active = document.activeElement
+      if (!active || active === document.body) searchRef.current?.focus()
+    }
+    window.addEventListener('focus', onWindowFocus)
+    return () => {
+      cancelAnimationFrame(frame)
+      window.removeEventListener('focus', onWindowFocus)
+    }
   }, [searchPresentation.showInitialSkeleton, settings.enabled, combining])
 
   // Flush pending soft-delete on unmount
@@ -1818,8 +1843,8 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
           data-plugin-surface-autofocus
           value={query}
           onChange={(e) => changeSearchQuery(e.target.value)}
-          onCompositionStart={imeKeyDown.onCompositionStart}
-          onCompositionEnd={imeKeyDown.onCompositionEnd}
+          onCompositionStart={startSearchComposition}
+          onCompositionEnd={endSearchComposition}
           placeholder={t('search.placeholder')}
           disabled={Boolean(textEdit)}
         />

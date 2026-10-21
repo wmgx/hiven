@@ -449,6 +449,18 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* macOS-native selection: system highlight (follows the user's accent colour),
+   text keeps its own colour. Controls are not selectable, like AppKit chrome. */
+::selection {
+  background-color: Highlight;
+  color: inherit;
+}
+
+:is(button, label, kbd, [role='button'], [role='tab'], [role='option'], [role='menuitem'], [role='menuitemradio'], [role='menuitemcheckbox'], [role='switch']) {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 html[data-window='launcher'],
 html[data-window='launcher'] body,
 html[data-window='launcher'] #root {

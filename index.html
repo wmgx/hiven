@@ -5,6 +5,17 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Hiven</title>
+    <script>
+      // Tag the window before the stylesheet applies so transparent windows never
+      // flash the default page background while the module graph loads.
+      // main.tsx sets the same attribute again (and handles the launcher fallback).
+      ;(function () {
+        var type = new URLSearchParams(window.location.search).get('window')
+        if (type === 'launcher' || type === 'plugin-surface' || type === 'quick-editor' || type === 'toast-hud' || type === 'text-result-hud') {
+          document.documentElement.dataset.window = type
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>
