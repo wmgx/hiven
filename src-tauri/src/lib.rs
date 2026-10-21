@@ -4286,29 +4286,6 @@ fn is_denied_desktop_process_name(name: &str) -> bool {
         .any(|denied| *denied == base.as_str())
 }
 
-fn applescript_escape(value: &str) -> String {
-    value.replace('\\', "\\\\").replace('"', "\\\"")
-}
-
-fn run_osascript(source: &str) -> Result<(), String> {
-    let output = Command::new("osascript")
-        .args(["-e", source])
-        .output()
-        .map_err(|e| format!("Failed to run osascript: {e}"))?;
-    if output.status.success() {
-        return Ok(());
-    }
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if !stderr.is_empty() {
-        Err(stderr)
-    } else if !stdout.is_empty() {
-        Err(stdout)
-    } else {
-        Err("osascript failed".to_string())
-    }
-}
-
 /// Cap AX enrich batch size. One osascript for many PIDs; keep offline path bounded.
 const AX_TITLE_ENRICH_MAX_PIDS: usize = 28;
 
@@ -4831,6 +4808,26 @@ fn ax_raise_window(
     target_cg_id: u32,
     cg_bounds: Option<(f64, f64, f64, f64)>,
 ) -> Result<&'static str, String> {
+    ax_window_action(pid, target_cg_id, cg_bounds, false)
+}
+
+/// Presses the close button of the exact CG window (never matched by title).
+#[cfg(target_os = "macos")]
+fn ax_close_window(
+    pid: u32,
+    target_cg_id: u32,
+    cg_bounds: Option<(f64, f64, f64, f64)>,
+) -> Result<&'static str, String> {
+    ax_window_action(pid, target_cg_id, cg_bounds, true)
+}
+
+#[cfg(target_os = "macos")]
+fn ax_window_action(
+    pid: u32,
+    target_cg_id: u32,
+    cg_bounds: Option<(f64, f64, f64, f64)>,
+    close: bool,
+) -> Result<&'static str, String> {
     use core_foundation::array::{CFArray, CFArrayRef};
     use core_foundation::base::{CFType, CFTypeRef, TCFType};
     use core_foundation::boolean::CFBoolean;
@@ -4974,6 +4971,20 @@ fn ax_raise_window(
             ));
         };
 
+        if close {
+            let button = copy_attribute(target, "AXCloseButton")
+                .map_err(|err| format!("window has no close button (AXError {err})"))?;
+            let press = CFString::new("AXPress");
+            let press_err = AXUIElementPerformAction(
+                button.as_CFTypeRef() as AXUIElementRef,
+                press.as_concrete_TypeRef(),
+            );
+            if press_err != AX_SUCCESS {
+                return Err(format!("AXPress on close button failed (AXError {press_err})"));
+            }
+            return Ok(method);
+        }
+
         // Make it main/focused first so the follow-up app activation lands on
         // this window, then raise it above its siblings. Main/focused writes are
         // best-effort — AXRaise is the one that must succeed.
@@ -5088,45 +5099,25 @@ fn close_desktop_window(id: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         let window = find_desktop_window(&id)?;
-        let pid = window.pid;
-        let title = applescript_escape(&window.title);
-        let app_name = applescript_escape(&window.app_name);
-        let script = if !window.title.trim().is_empty() {
-            format!(
-                r#"tell application "System Events"
-  tell (first process whose unix id is {pid})
-    set frontmost to true
-    try
-      perform action "AXPress" of (first button whose subrole is "AXCloseButton") of (first window whose name is "{title}")
-    on error
-      try
-        click (first button whose subrole is "AXCloseButton") of (first window whose name is "{title}")
-      on error errMsg
-        error "Failed to close window: " & errMsg
-      end try
-    end try
-  end tell
-end tell"#
-            )
-        } else {
-            format!(
-                r#"tell application "System Events"
-  tell (first process whose unix id is {pid})
-    set frontmost to true
-    try
-      perform action "AXPress" of (first button whose subrole is "AXCloseButton") of window 1
-    on error
-      try
-        click (first button whose subrole is "AXCloseButton") of window 1
-      on error errMsg
-        error "Failed to close window of {app_name}: " & errMsg
-      end try
-    end try
-  end tell
-end tell"#
-            )
+        let cg_id = window
+            .id
+            .parse::<u32>()
+            .map_err(|_| format!("invalid CG window id: {}", window.id))?;
+        if !ax_is_trusted(false) {
+            return Err(
+                "Accessibility permission is not granted (System Settings → Privacy & Security → Accessibility)"
+                    .to_string(),
+            );
+        }
+        let bounds = match (window.x, window.y, window.width, window.height) {
+            (Some(x), Some(y), Some(w), Some(h)) if w >= 2.0 && h >= 2.0 => Some((x, y, w, h)),
+            _ => None,
         };
-        run_osascript(&script)
+        // Same AX lookup as focus: the window is identified by CGWindowNumber, so two windows
+        // with the same title can no longer be confused.
+        ax_close_window(window.pid, cg_id, bounds)
+            .map(|_| ())
+            .map_err(|reason| format!("Failed to close \"{}\" window {}: {reason}", window.app_name, window.id))
     }
 }
 
