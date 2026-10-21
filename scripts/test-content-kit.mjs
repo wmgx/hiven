@@ -255,4 +255,28 @@ function assertDetectionShape(results, label) {
   assert.equal(results[0].normalized, '')
 }
 
+// ─── 9. 普通搜索词不得命中 secret/base64/sql；真实样本仍命中 ─────────────────
+{
+  const hasKind = (text, kind, options) => Boolean(findKind(detectContent(text, options), kind))
+  for (const word of ['1password', 'task-manager', 'visualstudiocode', 'internationalisation', 'select one from the list']) {
+    for (const kind of ['secret-like', 'base64', 'sql']) {
+      assert.ok(!hasKind(word, kind), `"${word}" must not detect ${kind}`)
+    }
+  }
+  assert.ok(hasKind('sk-abcdefghijklmnopqrstuvwx', 'secret-like'), 'sk- key should be secret-like')
+  assert.ok(hasKind('Authorization: Bearer abcdefghijklmnop1234', 'secret-like'), 'bearer token should be secret-like')
+  const jwt = [
+    Buffer.from('{"alg":"HS256","typ":"JWT"}').toString('base64url'),
+    Buffer.from('{"sub":"1"}').toString('base64url'),
+    'c2lnbmF0dXJl',
+  ].join('.')
+  assert.ok(hasKind(jwt, 'jwt'), 'JWT should detect jwt')
+  assert.ok(hasKind(Buffer.from('hello world, this is text').toString('base64'), 'base64'), 'real base64 should detect base64')
+  assert.ok(hasKind('SELECT id, name FROM users WHERE id = 1', 'sql'), 'real SQL should detect sql')
+  assert.ok(hasKind('INSERT INTO users (id) VALUES (1)', 'sql'), 'INSERT should detect sql')
+  // Typed query: secret/base64 are clipboard-only, structured kinds still detected.
+  assert.ok(!hasKind('sk-abcdefghijklmnopqrstuvwx', 'secret-like', { source: 'query' }))
+  assert.ok(hasKind('{"a":1}', 'json', { source: 'query' }))
+}
+
 console.log('content-kit detectContent checks passed')

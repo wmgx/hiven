@@ -35,8 +35,8 @@ function transpileAndRun(path, globals = {}) {
 }
 
 // ─── Load modules ──────────────────────────────────────────────────────────────
-const snapshot = transpileAndRun('src/launcher/clipboard/clipboardSnapshot.ts')
 const detect = transpileAndRun('src/kits/content/detectContent.ts')
+const snapshot = transpileAndRun('src/launcher/clipboard/clipboardSnapshot.ts', { detectContent: detect.detectContent })
 // Real attach policy, not a hand-written approximation of it — see the same note
 // in test-clipboard-direction-adjustment.mjs.
 const attachPolicy = transpileAndRun('src/launcher/clipboard/attachPolicy.ts', {

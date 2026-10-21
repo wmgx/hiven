@@ -185,83 +185,11 @@ export function detectClipboardType(text: string): ClipboardDetectedType {
   if (filePath) return filePath.kind
 
   // Delegate content classification to content-kit (confidence-ordered multi-label).
-  // `typeof` guards isolated test harnesses that strip ESM imports before transpile.
-  if (typeof detectContent === 'function') {
-    const results = detectContent(text)
-    for (const result of results) {
-      const mapped = mapContentKindToClipboard(result.kind)
-      if (mapped) return mapped
-    }
-    return 'text'
+  for (const result of detectContent(text)) {
+    const mapped = mapContentKindToClipboard(result.kind)
+    if (mapped) return mapped
   }
-
-  // Fallback when content-kit import is stripped (standalone transpile harnesses).
-  return legacyDetectClipboardType(trimmed)
-}
-
-/** Pre-kit heuristics kept only for import-stripped unit harnesses. */
-function legacyDetectClipboardType(trimmed: string): ClipboardDetectedType {
-  if (/(?:sk-|token|password|Authorization|Bearer)/i.test(trimmed)) return 'secret-like'
-  if ((trimmed.startsWith('{') || trimmed.startsWith('[')) && isValidJson(trimmed)) return 'json'
-  if (/^https?:\/\//i.test(trimmed)) return 'url'
-  // Strong JWT only: header segment must base64url-decode to JSON with `alg`
-  // (avoids false positives like `ipb.xxx.yyy`).
-  if (/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(trimmed)) {
-    try {
-      const headerSeg = trimmed.split('.')[0] ?? ''
-      const padded = headerSeg + '='.repeat((4 - (headerSeg.length % 4)) % 4)
-      const b64 = padded.replace(/-/g, '+').replace(/_/g, '/')
-      const json =
-        typeof Buffer !== 'undefined'
-          ? Buffer.from(b64, 'base64').toString('utf8')
-          : typeof atob === 'function'
-            ? atob(b64)
-            : ''
-      const header = JSON.parse(json) as { alg?: unknown }
-      if (header && typeof header === 'object' && typeof header.alg === 'string' && header.alg) {
-        return 'jwt'
-      }
-    } catch {
-      // fall through
-    }
-  }
-  if (/^\d{10,13}$/.test(trimmed)) return 'timestamp'
-  if (/^<\?xml|^<[A-Za-z][\s\S]*>$/.test(trimmed)) return 'xml'
-  if (/^[.#]?[A-Za-z0-9_-]+\s*\{[\s\S]*\}$/.test(trimmed)) return 'css'
-  if (/\bselect\b[\s\S]+\bfrom\b|\binsert\s+into\b|\bupdate\b[\s\S]+\bset\b/i.test(trimmed)) return 'sql'
-  if (looksLikeDelimitedTable(trimmed)) return 'csv'
-  if (looksLikeYaml(trimmed)) return 'yaml'
-  if (looksLikeQueryString(trimmed)) return 'query-string'
-  if (/^(?:ssh|curl|npm|git|brew|pip|docker|kubectl|cargo|go |apt)\b/i.test(trimmed)) return 'command'
   return 'text'
-}
-
-function isValidJson(text: string): boolean {
-  try {
-    JSON.parse(text)
-    return true
-  } catch {
-    return false
-  }
-}
-
-function looksLikeDelimitedTable(text: string): boolean {
-  const lines = text.split(/\r?\n/).filter(Boolean)
-  if (lines.length < 2) return false
-  return [',', '\t', ';', '|'].some((delimiter) => lines.every((line) => line.includes(delimiter)))
-}
-
-function looksLikeYaml(text: string): boolean {
-  if (text.startsWith('---')) return true
-  const lines = text.split(/\r?\n/).filter(Boolean)
-  if (lines.length < 2) return false
-  const kvCount = lines.filter((l) => /^[\w.-]+:\s+\S/.test(l)).length
-  return kvCount >= 2
-}
-
-function looksLikeQueryString(text: string): boolean {
-  const qs = text.startsWith('?') ? text.slice(1) : text
-  return /^[\w%+.-]+=[\w%+.*-]*(?:&[\w%+.-]+=[\w%+.*-]*)+$/.test(qs)
 }
 
 // ─── Snapshot creation / update ────────────────────────────────────────────────

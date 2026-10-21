@@ -10,7 +10,23 @@
 
 import type { ContentDetection, ContentKind } from './types'
 
-const SECRET_RE = /(?:sk-|token|password|Authorization|Bearer)/i
+/** Token-shaped secrets only; bare words like "password" or "1password" must not match. */
+const SECRET_RES: readonly RegExp[] = [
+  /\bsk-[A-Za-z0-9_-]{16,}/,
+  /\bBearer\s+[A-Za-z0-9._~+/=-]{16,}/i,
+  /\b(?:authorization|password|passwd|api[_-]?key|secret|access[_-]?token|token)["']?\s*[:=]\s*["']?[^\s"']{3,}/i,
+  /\b(?:ghp|gho|ghs|github_pat)_[A-Za-z0-9_]{16,}/,
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
+]
+
+/** Where the text came from. Typed queries only get structured strong kinds. */
+export type DetectContentSource = 'clipboard' | 'query'
+
+export type DetectContentOptions = { source?: DetectContentSource }
+
+export function hasSecretShape(text: string): boolean {
+  return SECRET_RES.some((re) => re.test(text))
+}
 const URL_RE = /^https?:\/\//i
 const JWT_RE = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/
 const TIMESTAMP_RE = /^(?:\d{10}|\d{13})$/
@@ -18,7 +34,14 @@ const TIMESTAMP_MIN_MS = Date.UTC(2000, 0, 1)
 const TIMESTAMP_MAX_MS = Date.UTC(2101, 0, 1)
 const XML_RE = /^<\?xml|^<[A-Za-z][\s\S]*>$/
 const CSS_RE = /^[.#]?[A-Za-z0-9_-]+\s*\{[\s\S]*\}$/
-const SQL_RE = /\bselect\b[\s\S]+\bfrom\b|\binsert\s+into\b|\bupdate\b[\s\S]+\bset\b/i
+const SQL_IDENT = '[\\w.`"\\[\\]]+'
+const SQL_RES: readonly RegExp[] = [
+  new RegExp(`^\\s*select\\s+[\\s\\S]+?\\s+from\\s+${SQL_IDENT}\\s*(?:$|;|\\)|\\b(?:where|join|inner|left|right|full|cross|group|order|limit|having|union|as)\\b)`, 'i'),
+  new RegExp(`^\\s*insert\\s+into\\s+${SQL_IDENT}\\s*(?:\\(|values\\b|select\\b)`, 'i'),
+  new RegExp(`^\\s*update\\s+${SQL_IDENT}\\s+set\\s+${SQL_IDENT}\\s*=`, 'i'),
+  new RegExp(`^\\s*delete\\s+from\\s+${SQL_IDENT}`, 'i'),
+  new RegExp(`^\\s*(?:create|alter|drop)\\s+table\\s+\\S+`, 'i'),
+]
 const COMMAND_RE = /^(?:ssh|curl|npm|git|brew|pip|docker|kubectl|cargo|go |apt)\b/i
 const COLOR_HEX_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/
 const COLOR_RGB_RE = /^rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)$/i
@@ -91,50 +114,56 @@ function looksLikeMarkdown(text: string): boolean {
  * High-confidence base64: alphabet + padding rules + length floor +
  * successful decode. Short plain words like "hello" must stay low/absent.
  */
+function decodeBase64Bytes(trimmed: string): Uint8Array | null {
+  try {
+    if (typeof Buffer !== 'undefined') return new Uint8Array(Buffer.from(trimmed, 'base64'))
+    if (typeof atob === 'function') {
+      const bin = atob(trimmed)
+      return Uint8Array.from(bin, (c) => c.charCodeAt(0))
+    }
+  } catch {
+    // fall through
+  }
+  return null
+}
+
+/** Share of decoded characters that are ordinary printable text (strict UTF-8). */
+function printableRatio(bytes: Uint8Array): number {
+  if (bytes.length === 0) return 0
+  let decoded: string
+  try {
+    decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    return 0
+  }
+  let ok = 0
+  for (const ch of decoded) {
+    const code = ch.codePointAt(0) ?? 0
+    if (code === 9 || code === 10 || code === 13 || (code >= 32 && code !== 127 && code !== 0xfffd)) ok += 1
+  }
+  return ok / [...decoded].length
+}
+
+/**
+ * Base64 must look like an encoded payload: valid alphabet/length AND
+ * the decoded bytes are readable text. Plain long words ("visualstudiocode")
+ * decode to binary garbage and are rejected.
+ */
 function detectBase64(trimmed: string): ContentDetection | null {
   if (trimmed.length < 8) return null
   if (!BASE64_BODY_RE.test(trimmed)) return null
   if (trimmed.length % 4 !== 0) return null
 
-  // Reject pure alpha short-ish tokens that look like words (no + / =)
-  const hasSpecial = /[+/=]/.test(trimmed)
-  if (!hasSpecial && trimmed.length < 16 && /^[A-Za-z]+$/.test(trimmed)) {
-    return null
-  }
+  const bytes = decodeBase64Bytes(trimmed)
+  if (!bytes || bytes.length === 0) return null
+  if (printableRatio(bytes) < 0.9) return null
 
-  try {
-    // Prefer Buffer when available (Node / test harness); fall back to atob.
-    let decoded: string
-    if (typeof Buffer !== 'undefined') {
-      decoded = Buffer.from(trimmed, 'base64').toString('utf8')
-      // Round-trip check to reject non-canonical padding abuse
-      const reencoded = Buffer.from(decoded, 'utf8').toString('base64')
-      if (reencoded.replace(/=+$/, '') !== trimmed.replace(/=+$/, '')) {
-        // Still accept if decode produced bytes; use lower confidence later
-      }
-    } else if (typeof atob === 'function') {
-      decoded = atob(trimmed)
-    } else {
-      return null
-    }
-
-    // Empty decode is not useful
-    if (!decoded || decoded.length === 0) return null
-
-    // Prefer padded or longer payloads for high confidence
-    const confidence =
-      hasSpecial || trimmed.length >= 16
-        ? 0.92
-        : 0.65
-
-    return {
-      kind: 'base64',
-      confidence,
-      normalized: trimmed,
-      captures: { decoded: decoded.slice(0, 256) },
-    }
-  } catch {
-    return null
+  const decoded = new TextDecoder('utf-8').decode(bytes)
+  return {
+    kind: 'base64',
+    confidence: /[+/=]/.test(trimmed) || trimmed.length >= 16 ? 0.92 : 0.65,
+    normalized: trimmed,
+    captures: { decoded: decoded.slice(0, 256) },
   }
 }
 
@@ -246,7 +275,8 @@ function push(
  * Detect content kinds for arbitrary text. Returns one or more detections,
  * sorted by confidence descending. Empty input yields a single `unknown`.
  */
-export function detectContent(text: string): ContentDetection[] {
+export function detectContent(text: string, options?: DetectContentOptions): ContentDetection[] {
+  const fromQuery = options?.source === 'query'
   if (text === '') {
     return [{ kind: 'unknown', confidence: 1, normalized: '' }]
   }
@@ -259,7 +289,7 @@ export function detectContent(text: string): ContentDetection[] {
   const results: ContentDetection[] = []
 
   // 1. Secret / secret-like (highest priority for security UX)
-  if (SECRET_RE.test(normalized)) {
+  if (!fromQuery && hasSecretShape(normalized)) {
     push(results, 'secret-like', 0.9, normalized)
   }
 
@@ -291,7 +321,7 @@ export function detectContent(text: string): ContentDetection[] {
   if (CSS_RE.test(normalized)) {
     push(results, 'css', 0.88, normalized)
   }
-  if (SQL_RE.test(normalized)) {
+  if (SQL_RES.some((re) => re.test(normalized))) {
     push(results, 'sql', 0.9, normalized)
   }
 
@@ -318,7 +348,7 @@ export function detectContent(text: string): ContentDetection[] {
   }
 
   // 8. Kit-only kinds
-  const b64 = detectBase64(normalized)
+  const b64 = fromQuery ? null : detectBase64(normalized)
   if (b64) results.push(b64)
 
   const ue = detectUrlEncoded(normalized)

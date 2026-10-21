@@ -32,8 +32,8 @@ function transpileAndRun(path, globals = {}) {
 }
 
 // ─── Load modules ──────────────────────────────────────────────────────────────
-const snapshot = transpileAndRun('src/launcher/clipboard/clipboardSnapshot.ts')
 const content = transpileAndRun('src/kits/content/detectContent.ts')
+const snapshot = transpileAndRun('src/launcher/clipboard/clipboardSnapshot.ts', { detectContent: content.detectContent })
 // attachPolicy needs isSoft + detectClipboardFilePath + detectContent stub
 function detectContentStub(text) {
   const t = String(text).trim()
@@ -155,8 +155,8 @@ assert.equal(snapshot.detectClipboardType('[1, 2, 3]'), 'json')
 assert.equal(snapshot.detectClipboardType('https://example.com'), 'url')
 assert.equal(snapshot.detectClipboardType('ssh user@host'), 'command')
 assert.equal(snapshot.detectClipboardType('curl https://api.example.com'), 'command')
-assert.equal(snapshot.detectClipboardType('sk-abc123 is a secret'), 'secret-like')
-assert.equal(snapshot.detectClipboardType('Bearer token123'), 'secret-like')
+assert.equal(snapshot.detectClipboardType('sk-abc123abc123abc123abc is a secret'), 'secret-like')
+assert.equal(snapshot.detectClipboardType('Bearer token1234567890abcdef'), 'secret-like')
 assert.equal(snapshot.detectClipboardType('hello world plain text'), 'text')
 assert.equal(snapshot.detectClipboardType('   '), 'unknown')
 
@@ -247,8 +247,8 @@ assert.equal(noBlock2, null, 'unknown age should not create block')
 
 // Secret block should mask preview
 const secretSnap = {
-  text: 'sk-abc123',
-  hash: snapshot.hashClipboardText('sk-abc123'),
+  text: 'sk-abc123abc123abc123abc',
+  hash: snapshot.hashClipboardText('sk-abc123abc123abc123abc'),
   detectedType: 'secret',
   firstSeenAt: Date.now(),
   lastSeenAt: Date.now(),

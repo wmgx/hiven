@@ -102,7 +102,7 @@ assert.equal(snapshotBlock.meta.contentProvider, 'snapshot')
 for (const text of [sensitiveText, sensitiveJson, 'https://example.test/?password=synthetic-demo-not-a-secret.json']) {
   const hits = attach.findStrongClipboardAttachHits(text)
   assert.ok(hits.length > 0)
-  assert.ok(hits.every((hit) => hit.kind === 'secret' || hit.kind === 'secret-like'), 'sensitive attach signal precedes format and path spelling')
+  assert.ok(hits.some((hit) => hit.kind === 'secret' || hit.kind === 'secret-like'), 'sensitive attach signal is kept alongside format hits')
 }
 assert.equal(attach.findStrongClipboardAttachHits(ordinaryJson)[0].kind, 'json')
 

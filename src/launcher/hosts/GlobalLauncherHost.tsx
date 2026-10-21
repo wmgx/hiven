@@ -166,9 +166,15 @@ export function GlobalLauncherHost() {
       void releaseDesktopWindowSearch()
     }
   }, [])
+  // Text the user pulled back out of an auto-attached query block must not be re-attached.
+  const rejectedQueryBlockTextRef = useRef<string | null>(null)
   const clipboardBlock = useClipboardObjectBlock({
     open,
     readClipboard: readLauncherClipboard,
+    onQueryBlockRemoved: (text) => {
+      rejectedQueryBlockTextRef.current = text
+      setQuery(text)
+    },
     // Do not replace an in-progress query with clipboard suggestions.
     suppressAutoAttach: () => (
       Boolean(liveQueryRef.current.trim())
@@ -417,7 +423,9 @@ export function GlobalLauncherHost() {
   const rootListActive = !surfaceFrame && !hostSurfaceTarget && !launcherSettingsTarget &&
     (controllerState?.frames.length ?? 1) <= 1
   useEffect(() => {
+    if (!open) rejectedQueryBlockTextRef.current = null
     if (!open || !rootListActive || clipboardBlock.block || browsingActions || !query.trim()) return
+    if (rejectedQueryBlockTextRef.current === query) return
     if (!createStrongQueryObjectBlock(query)) return
     const timer = window.setTimeout(() => {
       if (isImeComposingRef.current) return

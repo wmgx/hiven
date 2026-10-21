@@ -53,8 +53,10 @@ function loadTs(path, stubs = {}) {
   return sandbox.module.exports
 }
 
-const snapshot = loadTs('src/launcher/clipboard/clipboardSnapshot.ts')
+const content = loadTs('src/kits/content/detectContent.ts')
+const snapshot = loadTs('src/launcher/clipboard/clipboardSnapshot.ts', { detectContent: content.detectContent })
 const objectBlock = loadTs('src/launcher/clipboard/objectBlock.ts', {
+  detectContent: content.detectContent,
   objectBlockText,
   shouldAutoAttachClipboard: snapshot.shouldAutoAttachClipboard,
   shouldShowRecentClipboardHint: snapshot.shouldShowRecentClipboardHint,

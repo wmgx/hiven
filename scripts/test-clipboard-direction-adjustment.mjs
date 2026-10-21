@@ -34,8 +34,8 @@ function transpileAndRun(path, globals = {}) {
   return sandbox.module.exports
 }
 
-const snapshot = transpileAndRun('src/launcher/clipboard/clipboardSnapshot.ts')
 const detect = transpileAndRun('src/kits/content/detectContent.ts')
+const snapshot = transpileAndRun('src/launcher/clipboard/clipboardSnapshot.ts', { detectContent: detect.detectContent })
 // Load the REAL attach policy rather than re-deriving it here. This test used to
 // stub isStrongClipboardAttachEligible with a hand-written "{ or [ or http or
 // .csv" rule; production later added secret/jwt/base64/… to STRONG_ATTACH_CONTENT_KINDS
@@ -118,7 +118,7 @@ for (const action of jsonActions) {
   if (action.pluginId) assert.ok(!action.titleZh.startsWith(action.pluginId), '#9: title should not start with plugin name')
 }
 // ─── #11: Secret mask ──────────────────────────────────────────────────────────
-const secretSnap = { ...s1, changedAt: Date.now() - 5_000, ageConfidence: 'known', detectedType: 'secret', text: 'sk-abc123' }
+const secretSnap = { ...s1, changedAt: Date.now() - 5_000, ageConfidence: 'known', detectedType: 'secret', text: 'sk-abc123abc123abc123abc' }
 const secretBlock = objectBlock.createClipboardObjectBlock(secretSnap)
 assert.ok(secretBlock, '#11: secret block created')
 assert.equal(secretBlock.secretMasked, true, '#11: secret block masked')

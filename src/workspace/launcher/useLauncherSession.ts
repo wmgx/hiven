@@ -743,7 +743,7 @@ export function useLauncherSession({
     // The original ranking input and scoring remain shared by every host.
     const rankQuery = query.trim()
     const contentText = objectBlockText ?? (rankQuery || undefined)
-    const detections = contentText ? detectContent(contentText) : []
+    const detections = contentText ? detectContent(contentText, { source: objectBlockText ? 'clipboard' : 'query' }) : []
     return measureLauncherPerfSync('session:rank-items', () => rankLauncherItems(
       {
         query: rankQuery,

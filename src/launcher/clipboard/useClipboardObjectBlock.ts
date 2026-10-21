@@ -101,6 +101,8 @@ export function useClipboardObjectBlock(params: {
    * forceAttach / history pending still work.
    */
   suppressAutoAttach?: () => boolean
+  /** Called with the original text when the user removes a block that came from typed query text. */
+  onQueryBlockRemoved?: (text: string) => void
   filePicker?: {
     choose: () => Promise<string | string[] | null>
     /** Captures the host's root controller identity before opening the native dialog. */
@@ -109,7 +111,9 @@ export function useClipboardObjectBlock(params: {
     onComplete?: () => void
   }
 }): ClipboardObjectBlockState {
-  const { open, readClipboard, suppressAutoAttach, filePicker } = params
+  const { open, readClipboard, suppressAutoAttach, filePicker, onQueryBlockRemoved } = params
+  const onQueryBlockRemovedRef = useRef(onQueryBlockRemoved)
+  onQueryBlockRemovedRef.current = onQueryBlockRemoved
   const [material, setMaterial] = useState(() => replaceCurrentMaterial(null))
   const block = material.block
   const [isExiting, setIsExiting] = useState(false)
@@ -362,6 +366,7 @@ export function useClipboardObjectBlock(params: {
       source: block.source,
     })
     clearPendingObjectBlock()
+    if (block.source === 'query' && block.payloadText) onQueryBlockRemovedRef.current?.(block.payloadText)
     const snapshot = getLastClipboardSnapshot()
     if (snapshot) dismissClipboardBlock(snapshot)
     setIsExiting(true)

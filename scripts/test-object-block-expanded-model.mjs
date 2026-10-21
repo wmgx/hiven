@@ -23,8 +23,8 @@ function transpileAndRun(path, globals = {}) {
   return sandbox.module.exports
 }
 
-const snapshot = transpileAndRun('src/launcher/clipboard/clipboardSnapshot.ts')
 const detect = transpileAndRun('src/kits/content/detectContent.ts')
+const snapshot = transpileAndRun('src/launcher/clipboard/clipboardSnapshot.ts', { detectContent: detect.detectContent })
 // Real attach policy, not a hand-written approximation of it — see the same note
 // in test-clipboard-direction-adjustment.mjs.
 const attachPolicy = transpileAndRun('src/launcher/clipboard/attachPolicy.ts', {
@@ -97,7 +97,7 @@ const secret = objectBlock.createGenericObjectBlock({
   source: 'clipboard',
   kind: 'secret-like',
   title: '剪贴板',
-  text: 'sk-secret',
+  text: 'sk-secret0123456789abcdef',
   masked: true,
   validity: 'unknown',
 })

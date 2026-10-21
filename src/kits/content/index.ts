@@ -4,4 +4,5 @@
  */
 
 export type { ContentDetection, ContentKind } from './types'
-export { detectContent } from './detectContent'
+export { detectContent, hasSecretShape } from './detectContent'
+export type { DetectContentOptions, DetectContentSource } from './detectContent'

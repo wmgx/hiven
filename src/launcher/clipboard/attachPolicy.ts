@@ -40,6 +40,19 @@ export const STRONG_ATTACH_CONTENT_KINDS: ReadonlySet<ContentKind> = new Set([
   'secret-like',
 ])
 
+/**
+ * Typed query text: only unambiguous structured kinds. secret/base64/sql/url-encoded
+ * stay clipboard-only because ordinary search words collide with them.
+ */
+export const STRONG_QUERY_ATTACH_CONTENT_KINDS: ReadonlySet<ContentKind> = new Set([
+  'json',
+  'url',
+  'jwt',
+  'xml',
+  'timestamp',
+  'query-string',
+])
+
 export type StrongAttachHit = {
   kind: ContentKind
   confidence: number
@@ -49,21 +62,25 @@ export type StrongAttachHit = {
  * Pure content gate: soft operands / plain text stay silent;
  * only strong detections (or known file paths) qualify for hard-attach.
  */
-export function findStrongClipboardAttachHits(text: string): StrongAttachHit[] {
+export function findStrongClipboardAttachHits(
+  text: string,
+  source: 'clipboard' | 'query' = 'clipboard',
+): StrongAttachHit[] {
   const trimmed = text.trim()
   if (!trimmed) return []
   if (isSoftClipboardOperand(trimmed)) return []
 
-  const detections: ContentDetection[] = typeof detectContent === 'function' ? detectContent(trimmed) : []
+  const detections: ContentDetection[] = typeof detectContent === 'function' ? detectContent(trimmed, { source }) : []
+  const allowed = source === 'query' ? STRONG_QUERY_ATTACH_CONTENT_KINDS : STRONG_ATTACH_CONTENT_KINDS
   const hits: StrongAttachHit[] = []
   for (const d of detections) {
-    if (!STRONG_ATTACH_CONTENT_KINDS.has(d.kind)) continue
+    if (!allowed.has(d.kind)) continue
     if (d.confidence < STRONG_ATTACH_MIN_CONFIDENCE) continue
     hits.push({ kind: d.kind, confidence: d.confidence })
   }
-  // Sensitive material takes precedence over format confidence and path spelling.
-  const sensitive = hits.filter((hit) => hit.kind === 'secret' || hit.kind === 'secret-like')
-  if (sensitive.length) return sensitive
+  // Sensitive hits keep every other hit alongside them; masking is decided elsewhere.
+  const hasSensitive = hits.some((hit) => hit.kind === 'secret' || hit.kind === 'secret-like')
+  if (hasSensitive || source === 'query') return hits
 
   // Preserve the mainline extension-based path attach behavior for other content.
   const filePath = detectClipboardFilePath(trimmed)
@@ -81,6 +98,9 @@ export function findStrongClipboardAttachHits(text: string): StrongAttachHit[] {
  * dedicated action catalog or plugin `accepts` (json/url/jwt/base64/…).
  * Generic text encode/decode is intentionally not a gate.
  */
-export function isStrongClipboardAttachEligible(text: string): boolean {
-  return findStrongClipboardAttachHits(text).length > 0
+export function isStrongClipboardAttachEligible(
+  text: string,
+  source: 'clipboard' | 'query' = 'clipboard',
+): boolean {
+  return findStrongClipboardAttachHits(text, source).length > 0
 }
