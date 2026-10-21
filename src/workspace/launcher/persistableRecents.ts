@@ -6,7 +6,7 @@
  * re-running remote search (contacts / chats / docs).
  */
 
-import { pickLocale, type Locale } from '../../i18n'
+import { translate, type Locale } from '../../i18n'
 import { openExternalUrl } from '../effectRunner'
 import type { LauncherItem } from './types'
 
@@ -45,10 +45,10 @@ export const PERSISTABLE_RECENTS_QUERY_BOOST = 20
 /** Host bridge: plugin settings may dispatch this to clear recents without importing store. */
 export const CLEAR_PERSISTABLE_RECENTS_EVENT = 'hiven:launcher-clear-persistable-recents'
 
-const KIND_LABELS: Record<PersistableContentKind, { en: string; zh: string }> = {
-  document: { en: 'Recently visited', zh: '最近访问' },
-  chat: { en: 'Recent chat', zh: '最近会话' },
-  person: { en: 'Recent person', zh: '最近联系人' },
+const KIND_LABEL_KEYS: Record<PersistableContentKind, string> = {
+  document: 'recentDocument',
+  chat: 'recentChat',
+  person: 'recentPerson',
 }
 
 export function emptyPersistableRecents(): PersistableRecentEntry[] {
@@ -117,7 +117,7 @@ export function buildPersistableRecentLauncherItems(options: {
   const boost = emptyQuery ? PERSISTABLE_RECENTS_EMPTY_BOOST : PERSISTABLE_RECENTS_QUERY_BOOST
 
   return matched.map((row, index) => {
-    const labels = KIND_LABELS[row.kind]
+    const labelKey = KIND_LABEL_KEYS[row.kind]
     // Browser-history snapshots saved before `fallback` existed still need the
     // same secondary rank after upgrade; explicit false remains authoritative.
     const fallback = row.fallback ?? (row.sourceId === 'browser.chromium' && row.kind === 'document')
@@ -131,8 +131,8 @@ export function buildPersistableRecentLauncherItems(options: {
         subtitle: row.subtitle,
         icon: row.icon,
         aliases: [row.title, row.subtitle, ...(row.keywords ?? []), row.persistKey].filter((value): value is string => Boolean(value)),
-        kindLabel: pickLocale(locale, labels.zh, labels.en),
-        kindLabelI18n: { en: labels.en, zh: labels.zh },
+        kindLabel: translate(locale, 'launcherHost', labelKey),
+        kindLabelI18n: { en: translate('en', 'launcherHost', labelKey), zh: translate('zh', 'launcherHost', labelKey) },
       },
       behavior: { type: 'perform' as const },
       surfaces: ['global-launcher' as const],

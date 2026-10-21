@@ -1,4 +1,4 @@
-import { pickLocale, type Locale } from '../../i18n'
+import { translate, type Locale } from '../../i18n'
 import { resolveInstalledAppIdByName } from '../appLauncher/hostAppLauncher'
 import type { LauncherExecuteResult, LauncherItem, LauncherSurfaceId } from '../launcher/types'
 import { scheduleIdleWork } from '../scheduleIdleWork'
@@ -127,15 +127,15 @@ function releaseLinuxSnapshot(previous: LinuxWindowSearch): Promise<void> {
 export function desktopWindowErrorMessage(error: unknown, locale: Locale): string {
   const code = error instanceof Error ? error.message : String(error)
   if (code.includes('x11-window-unsupported')) {
-    return pickLocale(locale, '窗口搜索仅支持 X11 桌面；当前会话不支持（包括 Wayland）。', 'Window search requires an X11 desktop. This session is unsupported, including Wayland.')
+    return translate(locale, 'launcherHost', 'x11WindowUnsupported')
   }
   if (code.includes('x11-window-expired')) {
-    return pickLocale(locale, '窗口列表已过期，请重新搜索后选择。', 'The window list expired. Search again and choose a window.')
+    return translate(locale, 'launcherHost', 'x11WindowExpired')
   }
   if (code.includes('x11-window-unavailable')) {
-    return pickLocale(locale, '该窗口已关闭、隐藏或不可用，请重新搜索。', 'This window was closed, hidden, or became unavailable. Search again.')
+    return translate(locale, 'launcherHost', 'x11WindowUnavailable')
   }
-  return pickLocale(locale, '无法切换到该窗口，请重新搜索后重试。', 'Could not switch to this window. Search again and retry.')
+  return translate(locale, 'launcherHost', 'windowSwitchFailed')
 }
 
 function linuxSearchIsCurrent(search: LinuxWindowSearch): boolean {

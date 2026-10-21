@@ -3,7 +3,7 @@
  * (same UX as web-open: select command → type to filter suggestions → pick row → L2 confirm).
  */
 
-import { pickLocale, type Locale } from '../../i18n'
+import { translate, type Locale } from '../../i18n'
 import type {
   LauncherExecuteResult,
   LauncherItem,
@@ -201,21 +201,13 @@ export function getKillProcessHostItem(): LauncherItem {
       if (choices.length === 0) {
         return {
           ok: false as const,
-          message: pickLocale(
-            ctx.locale,
-            '未找到匹配进程，请从列表中选择',
-            'No matching process — pick one from the list',
-          ),
+          message: translate(ctx.locale, 'launcherHost', 'processNoMatch'),
         }
       }
       // Multiple matches: stay on suggest list (caller should select).
       return {
         ok: false as const,
-        message: pickLocale(
-          ctx.locale,
-          '多个匹配，请用方向键选择进程后回车',
-          'Multiple matches — highlight a process and press Enter',
-        ),
+        message: translate(ctx.locale, 'launcherHost', 'processMultiple'),
       }
     },
   }

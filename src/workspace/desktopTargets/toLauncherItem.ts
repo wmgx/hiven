@@ -5,7 +5,7 @@
  * - surfaces forced to global-launcher only
  */
 
-import { pickLocale, type Locale } from '../../i18n'
+import { pickLocale, translate, type Locale } from '../../i18n'
 import type { PersistableContentKind, PersistableLauncherPayload } from '../launcher/persistableRecents'
 import type { LauncherItem } from '../launcher/types'
 import { clampProviderPriority } from './constants'
@@ -20,20 +20,20 @@ function clampTargetScoreBias(bias: number | undefined): number | undefined {
   return clamped === 0 ? undefined : clamped
 }
 
-const KIND_LABELS: Record<string, { en: string; zh: string }> = {
-  app: { en: 'App', zh: '应用' },
-  window: { en: 'Window', zh: '窗口' },
-  tab: { en: 'Browser', zh: '浏览器' },
-  document: { en: 'Document', zh: '文档' },
-  chat: { en: 'Chat', zh: '会话' },
-  person: { en: 'Person', zh: '联系人' },
+const KIND_LABEL_KEYS: Record<string, string> = {
+  app: 'kindApp',
+  window: 'kindWindow',
+  tab: 'kindTab',
+  document: 'kindDocument',
+  chat: 'kindChat',
+  person: 'kindPerson',
 }
 
 /** Protocol default kind pill for a DesktopTargetKind (host vocabulary). */
 export function kindLabelFor(kind: string, locale: Locale): string {
-  const row = KIND_LABELS[kind]
-  if (!row) return kind
-  return pickLocale(locale, row.zh, row.en)
+  const key = KIND_LABEL_KEYS[kind]
+  if (!key) return kind
+  return translate(locale, 'launcherHost', key)
 }
 
 /**
@@ -43,8 +43,10 @@ export function resolveKindLabel(
   target: Pick<DesktopTarget, 'kind' | 'kindLabel' | 'kindLabelI18n'>,
   locale: Locale,
 ): { kindLabel: string; kindLabelI18n?: Partial<Record<Locale, string>> } {
-  const protocol = KIND_LABELS[target.kind]
-  const protocolI18n = protocol ? { en: protocol.en, zh: protocol.zh } : undefined
+  const protocolKey = KIND_LABEL_KEYS[target.kind]
+  const protocolI18n = protocolKey
+    ? { en: translate('en', 'launcherHost', protocolKey), zh: translate('zh', 'launcherHost', protocolKey) }
+    : undefined
 
   const overrideI18n = target.kindLabelI18n
   const hasOverrideI18n =

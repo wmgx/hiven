@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import ts from 'typescript'
+import { translate as launcherHostTranslate } from './helpers/launcher-host-locale.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const read = (p) => readFileSync(join(root, p), 'utf8')
@@ -18,7 +19,7 @@ const tmp = mkdtempSync(join(tmpdir(), 'persist-recents-'))
 const src = read('src/workspace/launcher/persistableRecents.ts')
 // Strip effectRunner import for isolated test
 const stripped = src
-  .replace(/import \{ pickLocale, type Locale \} from '[^']+'\n/, "const pickLocale = (locale, zh, en) => locale === 'zh' ? zh : en\n")
+  .replace(/import \{ translate, type Locale \} from '[^']+'\n/, 'const translate = globalThis.__launcherHostTranslate\n')
   .replace(/import \{ openExternalUrl \} from '[^']+'\n/, '')
   .replace(/import type \{ LauncherItem \} from '[^']+'\n/, '')
   .replace(/const openUrl = options\.openUrl \?\? openExternalUrl/, 'const openUrl = options.openUrl ?? (async () => {})')
@@ -32,6 +33,7 @@ writeFileSync(
   }).outputText,
 )
 
+globalThis.__launcherHostTranslate = launcherHostTranslate
 const mod = await import(pathToFileURL(out).href)
 
 const payload = {

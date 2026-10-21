@@ -8,6 +8,7 @@ import vm from 'node:vm'
 import ts from 'typescript'
 import { createRequire } from 'node:module'
 import path from 'node:path'
+import { translate as launcherHostTranslate } from './helpers/launcher-host-locale.mjs'
 
 const require = createRequire(import.meta.url)
 const root = process.cwd()
@@ -33,7 +34,7 @@ function loadTsTree(entryRel) {
       // that branch would load the entire locale registry instead of falling
       // through to this stub. Only pickLocale is actually needed here.
       if (spec === '../../i18n' || spec.endsWith('/i18n')) {
-        return { pickLocale: (locale, zh, en) => (String(locale).startsWith('zh') ? zh : en) }
+        return { pickLocale: (locale, zh, en) => (String(locale).startsWith('zh') ? zh : en), translate: launcherHostTranslate }
       }
       if (spec.startsWith('.')) {
         const base = path.dirname(resolved)
