@@ -36,7 +36,6 @@ import { readNativeClipboardText } from './workspace/nativeClipboard'
 import { startNativeValidationRelay } from './workspace/webNativeBridge'
 
 // Register built-in panels
-import './panels/register'
 
 /** Lightweight text-only read for age tracking (avoid file-path IPC every tick). */
 function readClipboardTextForAgeTracker(): Promise<string> {

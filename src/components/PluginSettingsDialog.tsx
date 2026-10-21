@@ -140,17 +140,6 @@ export function PluginSettingsContent({
   // Resolve the plugin's settings contribution from the registry
   const registryVersion = usePluginRegistryVersion()
   const contribution = useMemo(() => {
-    const registrySource = source === 'dev' ? 'dev' : 'production'
-    const allCommands = pluginRegistry.getAllCommands()
-    // Find plugin definition by pluginId - look through registered contributions
-    for (const entry of allCommands) {
-      if (entry.meta.pluginId === pluginId && entry.meta.source === registrySource) {
-        // Found a command from this plugin; now get the definition
-        const def = pluginRegistry.getPluginDefinition(pluginId, registrySource)
-        return def?.settings as PluginSettingsContribution<unknown> | undefined
-      }
-    }
-    // Also try directly via definition lookup
     const def = pluginRegistry.getPluginDefinition(pluginId, source === 'dev' ? 'dev' : 'production')
     return def?.settings as PluginSettingsContribution<unknown> | undefined
   }, [pluginId, source, registryVersion])
