@@ -2,7 +2,7 @@
   "pluginId": "color-tools",
   "displayName": "Color Conversion",
   "displayNameI18n": { "zh": "颜色转换", "en": "Color Conversion" },
-  "version": "1.0.1",
+  "version": "1.0.2",
   "capabilities": ["instant-suggestion"],
   "permissions": ["clipboard.write"]
 }

@@ -16,7 +16,7 @@ const definition: PluginDefinition = {
         },
         behavior: { type: 'perform' as const },
         surfaces: ['global-launcher' as const],
-        directAnswer: true,
+        directAnswer: answer.direct,
         async execute(run) {
           await run.api.copyText(text)
           return { ok: true as const }
