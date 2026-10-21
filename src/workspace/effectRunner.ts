@@ -45,6 +45,8 @@ export interface EffectRunnerResult {
   pendingConfirmations?: ConflictInfo[]
 }
 
+let commandOwnerSeq = 0
+
 /**
  * Apply a list of effects to the workspace.
  * Processing order:
@@ -56,8 +58,6 @@ export interface EffectRunnerResult {
  * 6. Apply new effects
  * 7. Record new occupancies
  */
-let commandOwnerSeq = 0
-
 export function applyEffects(
   effects: FluxEffect[],
   conflictPolicy: ConflictPolicy = 'ask'
