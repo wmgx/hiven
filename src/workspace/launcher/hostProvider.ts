@@ -21,6 +21,7 @@ import {
   setHostLauncherItemsProvider,
 } from './registry'
 import { measureLauncherPerf } from './perf'
+import { getDevtoolsHostItems } from './hostDevtoolsItem'
 import { getHostPaneControlItems, getHostSavedActionItems, getHostSystemPowerItems } from './hostActions'
 import { registerPluginSurfacePanelProvider } from '../pluginSurfacePanelProvider'
 import { registerWorkflowOutputShelfPanelProvider } from '../workflowOutputShelfPanelProvider'
@@ -38,6 +39,7 @@ export function registerHostLauncherProviders(): void {
     ...getHostSystemPowerItems(),
     ...getHostSavedActionItems(() => filterAvailableLauncherItems(collectBaseCandidates(), 'global-launcher')),
     ...getHostAppLauncherStaticItems(),
+    ...getDevtoolsHostItems(),
     ...getTextPipelineLauncherItems(),
     // Kill Process: first-level command → collect-input second level (suggest list).
     getKillProcessHostItem(),

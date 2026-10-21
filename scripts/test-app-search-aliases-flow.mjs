@@ -68,6 +68,7 @@ function fixture() {
         if (path.endsWith('/launcher/persistableRecents.ts') && id === '../../i18n') return { pickLocale: (locale) => locale }
         if (path.endsWith('/launcher/persistableRecents.ts') && id === '../effectRunner') return { openExternalUrl() { assert.fail('No external navigation in this test') } }
         if (path.endsWith('/appLauncher/hostAppLauncher.ts') && id === '../launcher/perf') return { launcherPerfNow: () => 0, logLauncherPerfDuration() {} }
+        if (path.endsWith('/appLauncher/hostAppLauncher.ts') && id === '../../i18n') return { t: (_locale, key) => key }
         if (path.endsWith('/appLauncher/hostAppLauncher.ts') && id === './appLaunchError') return { rethrowAppLaunchError(error) { throw error } }
         assert.ok(id.startsWith('.'), `Unexpected external module ${id} from ${path}`)
         const base = resolve(dirname(path), id)

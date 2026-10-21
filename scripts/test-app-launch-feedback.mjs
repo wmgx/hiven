@@ -43,6 +43,7 @@ const native = {
 const host = load('src/workspace/appLauncher/hostAppLauncher.ts', {
   '../searchRanking': { searchableFieldsMatch: () => true },
   '../launcher/perf': { launcherPerfNow: () => 0, logLauncherPerfDuration() {} },
+  '../../i18n': { t: (_locale, key) => key },
   './hostAppIndex': load('src/workspace/appLauncher/hostAppIndex.ts'),
   './appLaunchError': errors,
   '../../store': { useAppStore: { getState: () => ({ settings: { appSearchAliases: {} } }) } },

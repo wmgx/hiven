@@ -394,6 +394,7 @@ const hostRegistration = loadModule('src/workspace/launcher/hostProvider.ts', {
     getHostPaneControlItems: () => currentBaseItems,
     getHostSystemPowerItems: () => [],
   },
+  './hostDevtoolsItem': { getDevtoolsHostItems: () => [] },
   '../appLauncher/hostAppLauncher': { getHostAppLauncherStaticItems: () => [] },
   '../../workflow/pipelineLauncher': { getTextPipelineLauncherItems: () => [] },
   '../desktopControl/killProcessCommand': { getKillProcessHostItem: () => inertHostItem('kill') },
