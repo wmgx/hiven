@@ -109,7 +109,7 @@
     {
       "pluginId": "unix-permissions",
       "dir": "unix-permissions",
-      "version": "1.0.2"
+      "version": "1.0.3"
     }
   ]
 }
