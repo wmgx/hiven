@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { makePluginT } from '../../i18n/pluginI18nRegistry'
 import { translate } from '../../i18n'
 import { detectContent } from '../../kits/content'
+import { refreshHostApplicationIndexIfStale, subscribeHostAppIndexUpdated } from '../appLauncher/hostAppLauncher'
 import { useAppStore } from '../../store'
 import { subscribeDesktopTargets, getDesktopTargetsVersion } from '../desktopTargets/registry'
 import { pluginRegistry, usePluginRegistryVersion } from '../pluginRegistry'
@@ -589,6 +590,15 @@ export function useLauncherSession({
     }
   }, [allowDynamicItems, collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open, query, pluginSettings, pluginRegistryVersion, searchOwner, searchRetry])
 
+  // Rescan installed apps when the launcher opens (throttled inside); re-collect once new apps land.
+  const [appIndexVersion, setAppIndexVersion] = useState(0)
+  useEffect(() => {
+    if (!open || !allowDynamicItems) return
+    const unsubscribe = subscribeHostAppIndexUpdated(() => setAppIndexVersion((v) => v + 1))
+    refreshHostApplicationIndexIfStale()
+    return unsubscribe
+  }, [allowDynamicItems, open])
+
   // ── Host dynamic path (apps / workflow) — isolated, longer debounce ────────
   useEffect(() => {
     if (!open) return
@@ -664,7 +674,7 @@ export function useLauncherSession({
       window.clearTimeout(timer)
       hostAbortRef.current?.abort()
     }
-  }, [allowDynamicItems, appSearchAliases, collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open, query, pluginRegistryVersion, pluginPermissions, desktopTargetsVersion])
+  }, [allowDynamicItems, appSearchAliases, collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open, query, pluginRegistryVersion, pluginPermissions, desktopTargetsVersion, appIndexVersion])
 
   // When offline window-title enrich finishes, re-collect host items so titles/icons update.
   useEffect(() => {

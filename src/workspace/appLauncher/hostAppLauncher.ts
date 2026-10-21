@@ -11,7 +11,17 @@ import { getAppSearchAliases } from './appSearchAliases'
 // v2: drop stale caches that used path-hash appIds (binary Info.plist parse failures)
 // and avoid matching internal ids/paths in search.
 const HOST_APP_INDEX_CACHE_KEY = 'hiven:host-app-launcher:index:v2'
-const APP_INDEX_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000
+/** Reopening the launcher refreshes the index in the background once it is this old. */
+const APP_INDEX_CACHE_MAX_AGE_MS = 10 * 60 * 1000
+
+const indexListeners = new Set<() => void>()
+let refreshInFlight: Promise<{ ok: true; count: number; refreshed: boolean } | { ok: false; message: string }> | null = null
+
+/** Notified after a background scan replaced the cached app list. */
+export function subscribeHostAppIndexUpdated(listener: () => void): () => void {
+  indexListeners.add(listener)
+  return () => { indexListeners.delete(listener) }
+}
 
 type HostAppEntry = DiscoveredApp
 
@@ -138,28 +148,40 @@ function appIconRef(appId: string): string {
   return `app-icon:${appId}`
 }
 
-async function refreshApplicationIndex(options: { force?: boolean } = {}): Promise<{ ok: true; count: number } | { ok: false; message: string }> {
+async function refreshApplicationIndex(options: { force?: boolean } = {}): Promise<{ ok: true; count: number; refreshed: boolean } | { ok: false; message: string }> {
   if (options.force !== true) {
     const cache = readCache()
     if (cache.apps.length > 0 && !shouldRefreshApplicationIndex(cache.refreshedAt)) {
-      return { ok: true, count: cache.apps.length }
+      return { ok: true, count: cache.apps.length, refreshed: false }
     }
   }
+  if (refreshInFlight) return refreshInFlight
 
-  try {
-    const apps = await discoverInstalledApps()
-    const cache = writeCache(apps)
-    return { ok: true, count: cache.apps.length }
-  } catch (error) {
-    return { ok: false, message: error instanceof Error ? error.message : String(error) }
-  }
+  refreshInFlight = (async () => {
+    try {
+      const apps = await discoverInstalledApps()
+      const cache = writeCache(apps)
+      for (const listener of indexListeners) listener()
+      return { ok: true as const, count: cache.apps.length, refreshed: true }
+    } catch (error) {
+      return { ok: false as const, message: error instanceof Error ? error.message : String(error) }
+    } finally {
+      refreshInFlight = null
+    }
+  })()
+  return refreshInFlight
+}
+
+/** Called when the launcher opens: rescans only when the cache is older than the max age. */
+export function refreshHostApplicationIndexIfStale(): void {
+  if (!isTauriRuntime()) return
+  void refreshApplicationIndex().then((result) => {
+    if (!result.ok) console.warn('[app-launcher] Application index refresh failed:', result.message)
+  })
 }
 
 export function refreshHostApplicationIndexOnStartup(): void {
-  if (!isTauriRuntime()) return
-  void refreshApplicationIndex({ force: true }).then((result) => {
-    if (!result.ok) console.warn('[app-launcher] Startup application index refresh failed:', result.message)
-  })
+  refreshHostApplicationIndexIfStale()
 }
 
 /**
