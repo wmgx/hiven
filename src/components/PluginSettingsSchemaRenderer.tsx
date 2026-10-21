@@ -27,6 +27,7 @@ import type {
   PluginSettingsActionField,
   PluginSettingsActionProgress,
   PluginSettingsModalField,
+  PluginSettingsObjectListField,
   PluginSettingsObjectListItemField,
   PluginSettingsSchema,
   PluginPermission,
@@ -306,11 +307,23 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
     )
   }
 
+  /** Text of a list item field; shipped, unedited defaults follow the locale via localizedDefaults. */
+  function itemFieldText(
+    localizedDefaults: PluginSettingsObjectListField['localizedDefaults'],
+    item: Record<string, unknown>,
+    key: string,
+  ): string {
+    const raw = String(item[key] ?? '')
+    const spec = localizedDefaults?.[String(item.id ?? '')]?.[key]
+    return spec && raw === spec.value && translateText ? translateText(spec.textKey) : raw
+  }
+
   function renderObjectListItemField(
     itemField: PluginSettingsObjectListItemField,
     item: Record<string, unknown>,
     controlId: string,
     onChange: (next: unknown) => void,
+    localizedDefaults?: PluginSettingsObjectListField['localizedDefaults'],
   ) {
     const label = localizeText(itemField.label, itemField.labelI18n)
     const description = localizeText(itemField.description, itemField.descriptionI18n)
@@ -479,7 +492,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
         <input
           className={`wr-in ${itemField.mono || itemField.key.toLowerCase().includes('url') ? 'wr-mono' : ''}`}
           type="text"
-          value={String(value ?? '')}
+          value={itemFieldText(localizedDefaults, item, itemField.key)}
           placeholder={placeholder}
           onChange={(event) => onChange(event.currentTarget.value)}
         />
@@ -716,7 +729,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
             <div className="schema-object-list-master">
               {items.map((item, itemIndex) => {
                 const cardId = String(item.id ?? itemIndex)
-                const title = String(item[titleKey] ?? '') || `${itemLabel} ${itemIndex + 1}`
+                const title = itemFieldText(field.localizedDefaults, item, titleKey) || `${itemLabel} ${itemIndex + 1}`
                 const isActive = itemIndex === activeIndex
                 const isEnabled = item.enabled !== false
                 const aliases = Array.isArray(item.aliases) ? item.aliases.map(String).filter(Boolean) : []
@@ -765,7 +778,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
                 <>
                   <div className="schema-object-list-detail-head">
                     <span className="schema-object-list-detail-title">
-                      {String(activeItem[titleKey] ?? '') || `${itemLabel} ${activeIndex + 1}`}
+                      {itemFieldText(field.localizedDefaults, activeItem, titleKey) || `${itemLabel} ${activeIndex + 1}`}
                     </span>
                     <button
                       type="button"
@@ -815,7 +828,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
                               setFieldValue(field.key, items.map((candidate, index) => (
                                 index === activeIndex ? { ...candidate, [itemField.key]: next } : candidate
                               )))
-                            })}
+                            }, field.localizedDefaults)}
                           </div>
                         ))
                         if (grp.advanced) {

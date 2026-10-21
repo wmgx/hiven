@@ -493,6 +493,14 @@ export default definePlugin<WebQuickOpenSettings>({
               itemTagLabelsI18n: {
                 [AUTO_CREATED_TAG]: { en: 'Auto', zh: '自动创建' },
               },
+              // Shipped rules follow the UI language until the user edits their text.
+              localizedDefaults: Object.fromEntries(DEFAULT_WEB_QUICK_OPEN_SETTINGS.entries.map((entry) => [
+                entry.id,
+                {
+                  title: { value: entry.title, textKey: `default.${entry.id}.title` },
+                  placeholder: { value: entry.placeholder, textKey: `default.${entry.id}.placeholder` },
+                },
+              ])),
               addLabel: 'Add rule',
               addLabelI18n: { zh: '添加规则' },
               itemLabel: 'Rule',

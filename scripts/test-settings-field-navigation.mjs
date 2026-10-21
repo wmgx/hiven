@@ -231,6 +231,21 @@ test('the real list renderer never saves an untouched field on navigation blur',
   assert.equal(invalid.value, textarea.props.defaultValue, 'invalid edits still restore the persisted representation')
 })
 
+test('list renderer shows shipped default text by locale key until the user edits it', () => {
+  const field = {
+    kind: 'object-list', key: 'rules', label: 'Rules', itemTitleKey: 'title',
+    localizedDefaults: { google: { title: { value: 'Google Search', textKey: 'default.google.title' } } },
+    fields: [{ kind: 'text', key: 'title', label: 'Name' }],
+  }
+  const titles = (rules) => nodes(renderer.PluginSettingsSchemaRenderer({
+    schema: { sections: [{ id: 's', fields: [field] }] }, locale: 'zh', translateText: (key) => `zh:${key}`,
+    value: { rules }, updateValue() {}, onOpenModal() {}, onRunAction() {},
+  })).filter((node) => node.props?.className === 'schema-object-list-master-title').map((node) => node.props.children)
+  assert.deepEqual(titles([{ id: 'google', title: 'Google Search' }]), ['zh:default.google.title'])
+  assert.deepEqual(titles([{ id: 'google', title: 'My search' }]), ['My search'], 'edited text stays literal')
+  assert.deepEqual(titles([{ id: 'other', title: 'Google Search' }]), ['Google Search'], 'only declared ids follow the locale')
+})
+
 function actualCallback(path, find, scope) {
   const source = ts.createSourceFile(path, readFileSync(path, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
   let expression

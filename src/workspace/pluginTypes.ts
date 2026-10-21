@@ -391,6 +391,13 @@ export type PluginSettingsObjectListField<TSettings = unknown> = PluginSettingsF
    * string is ever persisted into the data.
    */
   itemTagLabelsI18n?: Record<string, Partial<Record<Locale, string>>>
+  /**
+   * Shipped items whose text fields follow the UI locale until the user edits
+   * them. Keyed by item `id`, then by item field key. While the stored value
+   * still equals `value` (the shipped text), the host displays the plugin
+   * locale key `textKey` instead; the stored data is never rewritten.
+   */
+  localizedDefaults?: Record<string, Record<string, { value: string; textKey: string }>>
   addLabel?: string
   addLabelI18n?: Partial<Record<Locale, string>>
   emptyText?: string
