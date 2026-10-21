@@ -12,7 +12,7 @@ export type PluginProductMetadata = {
 const PRODUCT_CATALOG: PluginProductMetadata[] = [
   product('calculator', 'Calculator', ['calculator'], '计算器'),
   product('date-time-assistant', 'Date Time Assistant', ['date-time-assistant'], '日期时间助手'),
-  product('json-tools', 'JSON / YAML Tools', ['json-tools', 'json', 'yaml', 'js-filter', 'sort-json'], 'JSON / YAML 工具'),
+  product('json-tools', 'JSON / YAML Tools', ['json-tools', 'json', 'yaml', 'js-filter'], 'JSON / YAML 工具'),
   product('random', 'Random Generator', ['random'], '随机生成器'),
   product('text-diff', 'Text Diff', ['text-diff'], '文本对比'),
   product('regex-tester', 'Regex Tester', ['regex-tester'], '正则测试器'),
