@@ -4072,7 +4072,12 @@ fn installed_app_target(app_id: &str) -> Result<String, String> {
     let cached_target = installed_app_targets()
         .lock()
         .ok()
-        .and_then(|targets| targets.get(app_id).cloned());
+        .and_then(|targets| targets.get(app_id).cloned())
+        // An uninstalled or moved app leaves a stale path behind: rediscover instead of failing.
+        .filter(|target| {
+            let path = Path::new(target);
+            !path.is_absolute() || path.exists()
+        });
     let target = if let Some(target) = cached_target {
         target
     } else {
