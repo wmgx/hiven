@@ -19,8 +19,8 @@
   "error.empty": "Command is empty",
   "error.shell": "Failed to run: {message}",
   "error.permission": "No permission to run commands. Enable it in plugin permissions.",
-  "result.ok": "{stdout}",
   "result.fail": "exit {code}\n{stderr}",
+  "result.copyOutput": "Copy output",
   "result.noOutput": "No output",
   "result.timedOut": "Timed out",
   "result.failedFallback": "Failed to run"
