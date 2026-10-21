@@ -19,8 +19,6 @@ import { isQuickEditorDetachedWindow } from '../../workspace/windowManager/quick
 import { quickEditorImperative } from './quickEditorImperative'
 import { useT } from '../../i18n'
 
-const MAX_OVERLAY_ITEMS = 12
-
 export function QuickEditorCommandOverlay() {
   const open = useAppStore((s) => s.quickEditorCommandOpen)
   return open ? <OpenQuickEditorCommandOverlay /> : null
@@ -99,7 +97,7 @@ function OpenQuickEditorCommandOverlay() {
   })
 
   const visibleFiltered = useMemo(() => buildGlobalLauncherItems({
-    rankedLauncherItems: rankedItems.slice(0, MAX_OVERLAY_ITEMS),
+    rankedLauncherItems: rankedItems,
     query: rankingQuery,
     locale,
   }), [locale, rankingQuery, rankedItems])

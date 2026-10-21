@@ -125,8 +125,11 @@ export function LauncherParamStep({
   const reachedMax = isMultiParam && selectedCount >= maxSelect
 
   useEffect(() => {
-    requestAnimationFrame(() => inputRef.current?.focus())
-  }, [frame.paramIndex])
+    // A disabled input drops focus; refocus when busy clears (failed submit) as well.
+    if (busy) return
+    const raf = requestAnimationFrame(() => inputRef.current?.focus())
+    return () => cancelAnimationFrame(raf)
+  }, [frame.paramIndex, busy])
 
   function commitTextParam() {
     if (!param || busy) return
