@@ -23,7 +23,6 @@
   "diff.noChanges": "无差异",
   "diff.semanticUnavailable": "需两侧均为有效 JSON",
   "diff.fallbackToText": "不是有效 JSON，已按文本对比",
-  "command.json.title": "JSON 对比",
   "source.empty": "空白文本",
   "source.choose": "选择{side}来源",
   "source.chooseShort": "选择来源",
@@ -34,10 +33,6 @@
   "explain.action": "AI 解释",
   "explain.cancel": "取消",
   "explain.language": "简体中文",
-  "explain.unavailable": "AI 不可用",
-  "explain.settings": "AI 设置",
-  "explain.permissions": "插件权限",
-  "explain.settingsFailed": "无法打开 AI 设置",
   "explain.checking": "正在检查 AI…",
   "explain.running": "正在解释…",
   "explain.failure.limits": "文本过长，上限 60,000 字符",
@@ -46,6 +41,5 @@
   "explain.failure.response": "回复无效，请重试",
   "explain.failure.changed": "AI 已更换，请重试",
   "explain.failure.timeout": "解释超时，请重试",
-  "explain.recheck": "重新检查",
   "explain.privacy": "文本将发送给所选 AI"
 }

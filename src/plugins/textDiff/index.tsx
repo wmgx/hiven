@@ -85,9 +85,15 @@ function buildSourceList(ctx: TextDiffLauncherContext, snapshot: PaneSnapshot): 
   ]
 }
 
+function looksLikeJson(text: string): boolean {
+  const value = text.trim()
+  if (!(value.startsWith('{') || value.startsWith('['))) return false
+  try { JSON.parse(value); return true } catch { return false }
+}
+
 export const textDiffPlugin = definePlugin({
   ui: {
-    surfaces: ['main', 'json'].map((id) => ({
+    surfaces: ['main'].map((id) => ({
         id,
         kind: 'custom-view',
         title: 'Text Compare',
@@ -108,27 +114,27 @@ export const textDiffPlugin = definePlugin({
       })),
   },
   launcher: {
-    items: ['main', 'json'].map((mode) => ({
-      id: mode === 'main' ? 'text-diff.compare' : 'text-diff.json',
+    items: [{
+      id: 'text-diff.compare',
       display: {
-        title: mode === 'main' ? 'command.compare.title' : 'command.json.title',
+        title: 'command.compare.title',
         icon: 'GitCompare',
-        aliases: mode === 'main'
-          ? ['diff', 'compare', 'text diff', 'text-diff', '文本对比']
-          : ['json diff', 'json compare', 'compare json', 'json对比', 'json差异'],
+        aliases: ['diff', 'compare', 'text diff', 'text-diff', '文本对比', 'json diff', 'json compare', 'json对比', 'json差异'],
       },
       behavior: { type: 'perform' as const },
       surfaces: ['command-palette', 'global-launcher', 'editor-command-bar', 'quick-editor-command'],
       execute(ctx) {
+        const inputText = ctx.input?.text ?? ''
         const sources = buildSourceList(ctx, ctx.api.getPaneSnapshot() as PaneSnapshot)
-        ctx.api.openSurface(mode, { initialText: JSON.stringify({
-          original: { sourceId: 'original', kind: 'empty', text: ctx.input?.text ?? '' },
+        ctx.api.openSurface('main', { initialText: JSON.stringify({
+          original: { sourceId: 'original', kind: 'empty', text: inputText },
           modified: { sourceId: 'modified', kind: 'empty', text: '' },
           sources,
+          mode: looksLikeJson(inputText) ? 'json' : undefined,
         }) })
         return { ok: true as const, keepOpen: true }
       },
-    })),
+    }],
   },
 })
 

@@ -23,7 +23,6 @@
   "diff.noChanges": "No changes",
   "diff.semanticUnavailable": "Both sides must be valid JSON",
   "diff.fallbackToText": "Not valid JSON; compared as text",
-  "command.json.title": "JSON Compare",
   "source.empty": "Blank text",
   "source.choose": "Choose {side} source",
   "source.chooseShort": "Choose source",
@@ -34,10 +33,6 @@
   "explain.action": "Explain with AI",
   "explain.cancel": "Cancel",
   "explain.language": "English",
-  "explain.unavailable": "AI unavailable",
-  "explain.settings": "AI settings",
-  "explain.permissions": "Plugin permissions",
-  "explain.settingsFailed": "Could not open AI settings",
   "explain.checking": "Checking AI…",
   "explain.running": "Explaining…",
   "explain.failure.limits": "Text too long (limit 60,000 characters)",
@@ -46,6 +41,5 @@
   "explain.failure.response": "Invalid response. Try again.",
   "explain.failure.changed": "AI changed. Try again.",
   "explain.failure.timeout": "Timed out. Try again.",
-  "explain.recheck": "Check again",
   "explain.privacy": "Text is sent to the selected AI"
 }
