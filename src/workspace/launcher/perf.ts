@@ -185,6 +185,7 @@ function bindPerfUnloadFlush(): void {
   // Best-effort: don't lose buffered samples when the launcher window hides/closes.
   window.addEventListener('pagehide', flushPerfLines)
   window.addEventListener('beforeunload', flushPerfLines)
+  if (typeof document === 'undefined') return
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flushPerfLines()
   })
@@ -273,7 +274,12 @@ export function logLauncherPerf(label: string, details?: Record<string, unknown>
   }
   // Always: ring + file. Console only when enabled.
   pushRing(sample)
-  forwardLauncherPerfSample(sample)
+  // Telemetry must never break the caller (e.g. flip a shortcut status to failed).
+  try {
+    forwardLauncherPerfSample(sample)
+  } catch {
+    // best-effort
+  }
 
   if (!isLauncherPerfEnabled()) return
   if (details) {

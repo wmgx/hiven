@@ -161,7 +161,7 @@ async function registerShortcut(
       })
       if (conflictRetries < MAX_CONFLICT_RETRIES) {
         conflictRetries += 1
-        window.setTimeout(() => { if (installed) void enqueueSync() }, CONFLICT_RETRY_MS)
+        setTimeout(() => { if (installed) void enqueueSync() }, CONFLICT_RETRY_MS)
       }
       return
     }
