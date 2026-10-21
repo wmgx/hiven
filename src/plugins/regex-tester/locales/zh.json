@@ -1,13 +1,10 @@
 {
-  "command.open.title": "正则测试器",
-  "panel.main.title": "正则测试器",
   "panel.regex.pattern": "表达式",
   "panel.regex.flags": "标记",
   "panel.regex.match": "{count} 个匹配",
   "panel.regex.matches": "{count} 个匹配",
   "panel.regex.more": "还有 {count} 个",
   "panel.regex.noMatches": "无匹配",
-  "panel.close": "关闭",
   "surface.title": "正则测试器",
   "surface.expression": "表达式",
   "surface.quickFlags": "快捷标记",

@@ -59,7 +59,7 @@
     {
       "pluginId": "regex-tester",
       "dir": "regex-tester",
-      "version": "1.4.3"
+      "version": "1.4.4"
     },
     {
       "pluginId": "text-diff",

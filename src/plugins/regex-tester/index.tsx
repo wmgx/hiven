@@ -1,12 +1,11 @@
 /**
  * First-party Regex Tester plugin.
  *
- * Provides the regex tester command and panel, migrated from the internal
- * corePlugin to a standalone first-party plugin package.
+ * Regex tester as a single launcher-entered surface (no pane panel).
  */
 
-import { definePlugin, type PaneInput } from '@hiven/plugin'
-import { RegexTesterPluginPanel, RegexTesterSurface } from './RegexTesterViews'
+import { definePlugin } from '@hiven/plugin'
+import { RegexTesterSurface } from './RegexTesterViews'
 import './style.css'
 
 const WORKSPACE_SHELL = {
@@ -34,60 +33,6 @@ export const regexTesterPlugin = definePlugin({
       },
     ],
   },
-  launcher: {
-    items: [
-      {
-        id: 'regex-tester.open',
-        display: {
-          title: 'command.open.title',
-          icon: 'Regex',
-          aliases: ['regex', 'regexp', '正则'],
-        },
-        surfaces: ['command-palette'],
-        execute(ctx) {
-          const result = ctx.api.dispatchEffects([{
-            type: 'panel.openV2' as const,
-            panelId: 'regex-tester.panel',
-            placement: 'pane-bottom' as const,
-            scope: { type: 'pane' as const, paneId: ctx.api.getPaneSnapshot().activePaneId },
-            ownerPluginId: 'regex-tester',
-          }])
-          if (result.errors.length > 0) return { ok: false, message: result.errors[0] }
-          return { ok: true }
-        },
-      },
-    ],
-  },
-  commands: [
-    {
-      id: 'regex-tester.open',
-      title: 'command.open.title',
-      icon: 'Regex',
-      aliases: ['regex', 'regexp', '正则'],
-      inputs: [{ key: 'input', label: 'Input', kind: 'pane' as const, required: true }],
-      inputResolution: { strategy: 'use-active', fallback: 'fail' },
-      run(ctx) {
-        const paneId = (ctx.inputs.input as PaneInput).paneId
-        return {
-          effects: [{
-            type: 'panel.openV2' as const,
-            panelId: 'regex-tester.panel',
-            placement: 'pane-bottom' as const,
-            scope: { type: 'pane' as const, paneId },
-            ownerPluginId: 'regex-tester',
-          }],
-        }
-      },
-    },
-  ],
-  panels: [
-    {
-      id: 'regex-tester.panel',
-      title: 'panel.main.title',
-      defaultPlacement: 'bottom',
-      component: RegexTesterPluginPanel,
-    },
-  ],
 })
 
 export default regexTesterPlugin

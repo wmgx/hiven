@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { getPluginHostSdk, type PanelPropsV2, type PluginSurfaceProps } from '@hiven/plugin'
+import type { PluginSurfaceProps } from '@hiven/plugin'
 import { Button, IconButton, Select } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
 import { MAX_REGEX_MATCHES, type MatchResult } from './regexCore'
@@ -9,98 +9,6 @@ import { createAiCandidateSession, type AiCandidateState } from './aiCandidateSe
 import { AiCandidateControls } from './AiCandidateControls'
 
 const COMMON_FLAGS = ['g', 'i', 'm', 's', 'u'] as const
-
-export function RegexTesterPluginPanel({ host, paneId }: PanelPropsV2<unknown>) {
-  const { hooks, react: React } = getPluginHostSdk()
-  const t = hooks.useT('regex-tester')
-  const paneText = hooks.usePaneText(paneId ?? '') ?? ''
-  const [pattern, setPattern] = React.useState('')
-  const [flags, setFlags] = React.useState('g')
-  const execution = useRegexExecution(pattern, flags, paneText)
-  const result = execution.result
-
-  return (
-    <div className="flex flex-col h-full overflow-hidden" style={{ background: 'var(--color-background-primary)' }}>
-      <div
-        className="h-[28px] flex items-center px-3 gap-2 shrink-0"
-        style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}
-      >
-        <span className="text-[11px] font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-          {t('panel.main.title')}
-        </span>
-        <span className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>
-          · {paneId || 'editor'}
-        </span>
-        <button
-          className="ml-auto text-[10px] px-1.5 py-0.5 rounded hover:opacity-80"
-          style={{ background: 'var(--color-background-tertiary)', color: 'var(--color-text-secondary)' }}
-          onClick={() => { execution.cancel(); host.close() }}
-        >
-          {t('panel.close')}
-        </button>
-      </div>
-
-      <div className="flex items-center px-3 py-1.5 gap-2" style={{ borderBottom: '0.5px solid var(--color-border-tertiary)' }}>
-        <span className="text-[10px] shrink-0" style={{ color: 'var(--color-text-tertiary)' }}>/</span>
-        <input
-          className="flex-1 text-[12px] bg-transparent outline-none"
-          style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}
-          placeholder={t('panel.regex.pattern')}
-          value={pattern}
-          onChange={(event) => { execution.cancel(); setPattern(event.target.value) }}
-          autoFocus
-        />
-        <span className="text-[10px] shrink-0" style={{ color: 'var(--color-text-tertiary)' }}>/</span>
-        <input
-          className="w-[40px] text-[12px] bg-transparent outline-none text-center"
-          style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}
-          placeholder={t('panel.regex.flags')}
-          value={flags}
-          onChange={(event) => { execution.cancel(); setFlags(event.target.value) }}
-        />
-      </div>
-
-      <div className="flex-1 overflow-auto px-3 py-1.5" aria-live="polite">
-        {result.status === 'running' || result.status === 'cancelled' ? <p role="status">{t(`execution.${result.status}`)}</p> : null}
-        {(result.status === 'invalid' || result.status === 'timeout' || result.status === 'failed') && (
-          <div role="alert" className="text-[11px] py-1" style={{ color: 'var(--color-error-text)' }}>
-            {t(result.status === 'invalid' ? 'error.invalid' : `execution.${result.status}`)}
-          </div>
-        )}
-        {result.status === 'ready' && result.matches.length > 0 && (
-          <div className="text-[11px]" style={{ color: 'var(--color-text-secondary)' }}>
-            <span style={{ color: 'var(--color-success-text)' }}>
-              {t(result.matches.length === 1 ? 'panel.regex.match' : 'panel.regex.matches', { count: result.matches.length })}
-            </span>
-            {result.matches.slice(0, 20).map((match, index) => (
-              <div key={`${match.index}-${index}`} className="flex gap-2 py-0.5" style={{ color: 'var(--color-text-tertiary)' }}>
-                <span className="shrink-0">{match.line}:{match.col}</span>
-                <span className="truncate" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}>
-                  {match.text.slice(0, 50)}{match.text.length > 50 ? '…' : ''}
-                </span>
-                {match.groups.length > 0 && (
-                  <span style={{ color: 'var(--color-text-tertiary)' }}>
-                    [{match.groups.map((group) => group || '∅').join(', ')}]
-                  </span>
-                )}
-              </div>
-            ))}
-            {result.matches.length > 20 && (
-              <div className="py-0.5" style={{ color: 'var(--color-text-tertiary)' }}>
-                {t('panel.regex.more', { count: result.matches.length - 20 })}
-              </div>
-            )}
-          </div>
-        )}
-        {result.status === 'ready' && pattern && result.matches.length === 0 && (
-          <div className="text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>
-            {t('panel.regex.noMatches')}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
 
 export function RegexTesterSurface(props: PluginSurfaceProps) {
   const { host, t } = props
