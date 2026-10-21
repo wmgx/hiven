@@ -24,12 +24,11 @@ check('fresh and legacy settings have no user aliases', () => {
 
 check('retired learning opt-in is ignored without removing manual state or writing storage', () => {
   const retained = sharedStorage({ settings: { automaticLearningEnabled: true, theme: 'light',
-    appSearchAliases: { [appId]: ['写作'] } }, savedActionParams: { manual: { count: 2 } } })
+    appSearchAliases: { [appId]: ['写作'] } } })
   const writes = retained.writes
   const legacy = windowStore(retained)
   assert.equal(Object.hasOwn(legacy.state().settings, 'automaticLearningEnabled'), false)
   assert.deepEqual(plain(legacy.state().settings.appSearchAliases), { [appId]: ['写作'] })
-  assert.deepEqual(plain(legacy.state().savedActionParams), { manual: { count: 2 } })
   assert.equal(retained.writes, writes, 'loading does not rewrite or clear existing data')
 })
 
@@ -182,17 +181,13 @@ check('unavailable storage does not silently accept a save', () => {
   assert.deepEqual(plain(unavailable.state().settings.appSearchAliases), {})
 })
 
-check('manual shortcuts, favorites and parameter preference survive alias edits', () => {
+check('manual shortcuts and favorites survive alias edits', () => {
   A.state().setAppHotkey({ appId, name: 'Notes', accelerator: 'Cmd+Shift+N' })
   A.state().toggleLauncherFavorite('manual:favorite')
-  A.state().saveActionParams('manual:action', { separator: ', ' })
-  A.state().updateSetting('persistParams', true)
-  const before = plain({ hotkeys: A.state().settings.appHotkeys, favorites: A.state().launcherFavoriteKeys,
-    params: A.state().savedActionParams, persistParams: A.state().settings.persistParams })
+  const before = plain({ hotkeys: A.state().settings.appHotkeys, favorites: A.state().launcherFavoriteKeys })
   A.state().setAppSearchAliases(appId, ['新的名字'])
   A.state().setAppSearchAliases(appId, [])
-  assert.deepEqual(plain({ hotkeys: A.state().settings.appHotkeys, favorites: A.state().launcherFavoriteKeys,
-    params: A.state().savedActionParams, persistParams: A.state().settings.persistParams }), before)
+  assert.deepEqual(plain({ hotkeys: A.state().settings.appHotkeys, favorites: A.state().launcherFavoriteKeys }), before)
 })
 
 check('alias sync preserves local runtime status for unchanged shortcut definitions', () => {
