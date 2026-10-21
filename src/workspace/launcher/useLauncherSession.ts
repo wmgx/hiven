@@ -504,6 +504,13 @@ export function useLauncherSession({
   const [searchRetry, setSearchRetry] = useState(0)
   const [searchStatus, setSearchStatus] = useState<{ owner: object; failed: boolean; pending: boolean } | null>(null)
   const retryOwnerRef = useRef<object | null>(null)
+  /** Owner whose host (apps/windows) provider failed; folded into the plugin attempt's status. */
+  const hostFailedOwnerRef = useRef<object | null>(null)
+  const reportHostFailure = () => {
+    const owner = searchOwnerRef.current
+    hostFailedOwnerRef.current = owner
+    setSearchStatus((prev) => (prev && prev.owner === owner ? { ...prev, failed: true } : prev))
+  }
   const retrySearch = () => {
     if (!open || searchOwnerRef.current !== searchOwner || searchStatus?.owner !== searchOwner
       || !searchStatus.failed || searchStatus.pending || retryOwnerRef.current === searchOwner) return
@@ -527,7 +534,7 @@ export function useLauncherSession({
     const retrying = retryOwnerRef.current === owner
     const attempt = createSearchAttempt(current, (failed, pending) => {
       if (!pending && retryOwnerRef.current === owner) retryOwnerRef.current = null
-      setSearchStatus({ owner, failed, pending })
+      setSearchStatus({ owner, failed: failed || hostFailedOwnerRef.current === owner, pending })
     }, retrying)
     setSearchStatus({ owner, failed: retrying, pending: true })
     const q = query.trim()
@@ -635,6 +642,7 @@ export function useLauncherSession({
     })
     const timer = window.setTimeout(() => {
       if (hostQueryRef.current !== q) return
+      if (hostFailedOwnerRef.current === searchOwnerRef.current) hostFailedOwnerRef.current = null
       logLauncherPerfDuration('session:host-dynamic-debounce-wait', scheduledAt, {
         queryLength: q.length,
         debounceMs: delayMs,
@@ -652,6 +660,7 @@ export function useLauncherSession({
           if (abortController.signal.aborted) return
           if (hostQueryRef.current !== q) return
           if (update.kind !== 'host') return
+          if (update.failed) reportHostFailure()
           const applyStartedAt = launcherPerfNow()
           setHostDynamicItemsNextFrame(filterDynamicForSurface(update.items, normalizedHostId), inputIdentity, () => !abortController.signal.aborted)
           logLauncherPerfDuration('session:host-dynamic-partial-apply', applyStartedAt, {
@@ -667,14 +676,14 @@ export function useLauncherSession({
         })
         if (hostQueryRef.current !== q) return
         setHostDynamicItems(filterDynamicForSurface(items, normalizedHostId), inputIdentity)
-      }).catch(() => { /* aborted or failed — ignore */ })
+      }).catch(() => { if (!abortController.signal.aborted) reportHostFailure() })
     }, delayMs)
 
     return () => {
       window.clearTimeout(timer)
       hostAbortRef.current?.abort()
     }
-  }, [allowDynamicItems, appSearchAliases, collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open, query, pluginRegistryVersion, pluginPermissions, desktopTargetsVersion, appIndexVersion])
+  }, [allowDynamicItems, appSearchAliases, collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open, query, pluginRegistryVersion, pluginPermissions, desktopTargetsVersion, appIndexVersion, searchRetry])
 
   // When offline window-title enrich finishes, re-collect host items so titles/icons update.
   useEffect(() => {
@@ -695,7 +704,7 @@ export function useLauncherSession({
         if (abortController.signal.aborted) return
         if (hostQueryRef.current !== q) return
         setHostDynamicItems(filterDynamicForSurface(items, normalizedHostId), inputIdentity)
-      }).catch(() => { /* ignore */ })
+      }).catch(() => { if (!abortController.signal.aborted) reportHostFailure() })
     })
   }, [allowDynamicItems, collectDynamicWhenEmpty, locale, normalizedHostId, objectBlockText, open])
 

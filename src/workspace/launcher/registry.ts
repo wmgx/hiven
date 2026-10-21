@@ -328,9 +328,12 @@ function collectDynamicProviders(): DynamicProviderEntry[] {
   return [...entries.values()]
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+function withTimeout<T>(promise: Promise<T>, ms: number, onTimeout?: () => void): Promise<T> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('dynamic provider timeout')), ms)
+    const timer = setTimeout(() => {
+      onTimeout?.()
+      reject(new Error('dynamic provider timeout'))
+    }, ms)
     promise.then(
       (value) => {
         clearTimeout(timer)
@@ -415,7 +418,7 @@ export async function collectDynamicItems(
     }).catch((error) => {
       console.warn('[launcher] host dynamic provider failed:', error)
       const remaining = signal?.aborted ? [] : settingsFieldItems.filter((item) => item.pluginLifetime?.active !== false)
-      if (!signal?.aborted) onPartial?.({ kind: 'host', items: remaining })
+      if (!signal?.aborted) onPartial?.({ kind: 'host', items: remaining, failed: true })
       return remaining
     })
     : Promise.resolve(settingsFieldItems)
@@ -436,6 +439,10 @@ export async function collectDynamicItems(
     providers.map(async ({ provider, pluginId, source, lifetime }) => {
       if (signal?.aborted || !lifetime.active) return [] as LauncherItem[]
       const startedAt = launcherPerfNow()
+      // Per-provider controller: a timeout cancels only this provider's work.
+      const providerAbort = new AbortController()
+      const forwardAbort = () => providerAbort.abort()
+      signal?.addEventListener('abort', forwardAbort, { once: true })
       try {
         const settings = getSettings(pluginId, source)
         const settingsSource = resolvePluginSettingsSource(pluginId, source)
@@ -448,7 +455,7 @@ export async function collectDynamicItems(
             settings,
             source: settingsSource,
             pluginId,
-            signal,
+            signal: providerAbort.signal,
             api: bindPluginLauncherApi(
               createPluginLauncherApi({ pluginId, source: settingsSource, requestedPermissions }),
               lifetime,
@@ -465,6 +472,7 @@ export async function collectDynamicItems(
             t: makePluginT(pluginId, locale),
           })),
           DYNAMIC_PROVIDER_TIMEOUT_MS,
+          () => providerAbort.abort(),
         )
         if (signal?.aborted || !lifetime.active) return []
         if (!Array.isArray(raw)) {
@@ -492,6 +500,8 @@ export async function collectDynamicItems(
         console.warn(`[launcher] dynamic provider "${pluginId}" failed:`, error)
         if (!signal?.aborted && lifetime.active) onPartial?.({ kind: 'plugin', pluginId, items: [], failed: true })
         return []
+      } finally {
+        signal?.removeEventListener('abort', forwardAbort)
       }
     }),
   )
