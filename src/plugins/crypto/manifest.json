@@ -1,7 +1,12 @@
 {
   "pluginId": "crypto",
-  "displayName": "Crypto",
-  "displayNameI18n": { "zh": "加密" },
-  "version": "2.0.3",
-  "capabilities": ["command"]
+  "displayName": "Hash",
+  "displayNameI18n": {
+    "zh": "哈希",
+    "en": "Hash"
+  },
+  "version": "2.0.4",
+  "capabilities": [
+    "command"
+  ]
 }
