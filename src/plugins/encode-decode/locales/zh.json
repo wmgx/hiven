@@ -36,7 +36,6 @@
   "toast.pasteFailed": "粘贴失败",
   "toast.returnFailed": "返回搜索失败",
   "error.invalid": "无法处理此输入",
-  "error.convert": "转换失败：{message}",
   "image.title": "图片 ⇄ Base64",
   "image.readClipboard": "读取剪贴板图片",
   "image.chooseFile": "选择图片文件",
@@ -92,5 +91,8 @@
   "resize.invalid": "宽度需为不超过原图的整数",
   "resize.failed": "图片载入或导出失败",
   "resize.replace": "放弃当前宽度并替换图片？",
-  "resize.previous": "新图片未载入"
+  "resize.previous": "新图片未载入",
+  "error.base64": "不是有效的 Base64（标准或 URL-safe）文本",
+  "error.url": "输入含有无效的百分号编码",
+  "error.jwt": "不是有效的 JWT（应为 header.payload.signature）"
 }

@@ -36,7 +36,6 @@
   "toast.pasteFailed": "Paste failed",
   "toast.returnFailed": "Couldn't return to search",
   "error.invalid": "Unable to process this input",
-  "error.convert": "Conversion failed: {message}",
   "image.title": "Image ⇄ Base64",
   "image.readClipboard": "Read clipboard image",
   "image.chooseFile": "Choose image file",
@@ -92,5 +91,8 @@
   "resize.invalid": "Width must be a whole number up to the original",
   "resize.failed": "Couldn't load or export the image",
   "resize.replace": "Discard the width and replace the image?",
-  "resize.previous": "New image didn't load"
+  "resize.previous": "New image didn't load",
+  "error.base64": "Not valid Base64 (standard or URL-safe) text",
+  "error.url": "Invalid percent-encoding in the input",
+  "error.jwt": "Not a valid JWT (expected header.payload.signature)"
 }

@@ -11,6 +11,7 @@ import { saveClipboardImageAsPng } from './saveClipboardImage'
 import {
   base64Decode,
   base64Encode,
+  conversionErrorKey,
   decodeJwt,
   escapeSlashes,
   hasEscapeSequences,
@@ -58,7 +59,7 @@ const OPERATION_ROUTES = [
 
 function decodeBase64Text(ctx: PluginToolExplicitTextPreviewContext): PluginToolTextPreviewResult {
   try { return { ok: true, text: base64Decode(ctx.input.text) } }
-  catch (error) { return { ok: false, message: ctx.t('error.convert', { message: error instanceof Error ? error.message : String(error) }) } }
+  catch (error) { return { ok: false, message: ctx.t(conversionErrorKey(error)) } }
 }
 
 // ─── Plugin Definition ────────────────────────────────────────────────────────
@@ -130,7 +131,7 @@ export const encodeDecodePlugin = definePlugin({
       textMatch: (text) => !isBase64(text), // text is NOT base64 → offer to encode
       run(ctx) {
         try { return ctx.output.text(base64Encode(ctx.input.text)) }
-        catch (e: any) { return ctx.output.error(ctx.t('error.convert', { message: e.message })) }
+        catch (e) { return ctx.output.error(ctx.t(conversionErrorKey(e))) }
       },
       surfaces: EDITOR_TOOL_SURFACES,
     },
@@ -158,7 +159,7 @@ export const encodeDecodePlugin = definePlugin({
       inputPolicy: { mode: 'auto' },
       run(ctx) {
         try { return ctx.output.text(urlEncode(ctx.input.text)) }
-        catch (e: any) { return ctx.output.error(ctx.t('error.convert', { message: e.message })) }
+        catch (e) { return ctx.output.error(ctx.t(conversionErrorKey(e))) }
       },
       surfaces: EDITOR_TOOL_SURFACES,
     },
@@ -172,7 +173,7 @@ export const encodeDecodePlugin = definePlugin({
       textMatch: isUrlEncoded,
       run(ctx) {
         try { return ctx.output.text(urlDecode(ctx.input.text)) }
-        catch (e: any) { return ctx.output.error(ctx.t('error.convert', { message: e.message })) }
+        catch (e) { return ctx.output.error(ctx.t(conversionErrorKey(e))) }
       },
       surfaces: EDITOR_TOOL_SURFACES,
     },
@@ -224,7 +225,7 @@ export const encodeDecodePlugin = definePlugin({
       textMatch: isJwt,
       run(ctx) {
         try { return ctx.output.text(decodeJwt(ctx.input.text)) }
-        catch (e: any) { return ctx.output.error(ctx.t('error.convert', { message: e.message })) }
+        catch (e) { return ctx.output.error(ctx.t(conversionErrorKey(e))) }
       },
       surfaces: EDITOR_TOOL_SURFACES,
     },

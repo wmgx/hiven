@@ -8,6 +8,7 @@ import { Button, IconButton, useToolDeliveryFeedback } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
 import { ClipboardPaste, CornerDownLeft } from 'lucide-react'
 import {
+  conversionErrorKey,
   hasEscapeSequences,
   hasHtmlEntities,
   isBase64,
@@ -50,11 +51,11 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
   const [busy, setBusy] = useState<'copy' | 'paste' | 'return' | null>(null)
   const pendingRef = useRef<{ action: 'copy' | 'paste' | 'return'; controller: AbortController } | null>(null)
   const result = useMemo(() => {
-    if (!inputText) return { ok: true as const, output: '' }
+    if (!inputText) return { ok: true as const, output: '', errorKey: '' }
     try {
-      return { ok: true as const, output: transformText(format, direction, inputText) }
-    } catch {
-      return { ok: false as const, output: '' }
+      return { ok: true as const, output: transformText(format, direction, inputText), errorKey: '' }
+    } catch (error) {
+      return { ok: false as const, output: '', errorKey: conversionErrorKey(error) }
     }
   }, [direction, format, inputText])
   const hasOutput = result.ok && inputText.length > 0
@@ -234,7 +235,7 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
               readOnly
               spellCheck={false}
             />
-            {!result.ok ? <div className="encode-error" role="alert">{t('error.invalid')}</div> : null}
+            {!result.ok ? <div className="encode-error" role="alert">{t(result.errorKey)}</div> : null}
           </div>
         </section>
       </main>

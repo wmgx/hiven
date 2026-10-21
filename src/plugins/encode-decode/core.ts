@@ -1,6 +1,24 @@
 import { getPluginHostSdk } from '@hiven/plugin'
 
-export const { urlEncode, urlDecode } = getPluginHostSdk().kits.textTransforms
+export const { urlEncode } = getPluginHostSdk().kits.textTransforms
+
+/** Form-style decoding: `+` is a space; a literal plus travels as %2B. */
+export function urlDecode(text: string): string {
+  return decodeURIComponent(text.trim().replace(/\+/g, ' '))
+}
+
+/** Coded failures so surfaces can show localized text instead of engine messages. */
+export class EncodeDecodeError extends Error {
+  readonly code: 'jwt' | 'base64' | 'url'
+  constructor(code: 'jwt' | 'base64' | 'url') { super(code); this.code = code }
+}
+
+/** Maps any conversion failure onto an i18n key (`error.<code>`), falling back to the generic one. */
+export function conversionErrorKey(error: unknown): string {
+  if (error instanceof EncodeDecodeError) return `error.${error.code}`
+  if (error instanceof URIError) return 'error.url'
+  return 'error.invalid'
+}
 
 export type EncodeDecodeFormat = 'base64' | 'url' | 'html' | 'slashes' | 'jwt'
 export type EncodeDecodeDirection = 'encode' | 'decode'
@@ -9,8 +27,15 @@ export function base64Encode(text: string): string {
   return btoa(unescape(encodeURIComponent(text)))
 }
 
+/** Accepts standard and URL-safe alphabets, with or without padding and line breaks. */
 export function base64Decode(text: string): string {
-  return decodeURIComponent(escape(atob(text.trim())))
+  const compact = text.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/').replace(/=+$/, '')
+  if (!compact || compact.length % 4 === 1 || !/^[A-Za-z0-9+/]+$/.test(compact)) throw new EncodeDecodeError('base64')
+  try {
+    return decodeURIComponent(escape(atob(compact + '='.repeat((4 - compact.length % 4) % 4))))
+  } catch {
+    throw new EncodeDecodeError('base64')
+  }
 }
 
 export function htmlEncode(text: string): string {
@@ -22,13 +47,16 @@ export function htmlEncode(text: string): string {
     .replace(/'/g, '&#39;')
 }
 
+const NAMED_ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: '\u00a0' }
+
+/** One pass, so `&amp;lt;` becomes `&lt;` and is never decoded twice. */
 export function htmlDecode(text: string): string {
-  return text
-    .replace(/&#39;/g, "'")
-    .replace(/&quot;/g, '"')
-    .replace(/&gt;/g, '>')
-    .replace(/&lt;/g, '<')
-    .replace(/&amp;/g, '&')
+  return text.replace(/&(?:#(\d+)|#[xX]([0-9a-fA-F]+)|(amp|lt|gt|quot|apos|nbsp));/g, (entity, dec?: string, hex?: string, name?: string) => {
+    if (name) return NAMED_ENTITIES[name]
+    const code = dec !== undefined ? Number(dec) : parseInt(hex!, 16)
+    const valid = Number.isInteger(code) && code > 0 && code <= 0x10ffff && !(code >= 0xd800 && code <= 0xdfff)
+    return valid ? String.fromCodePoint(code) : entity
+  })
 }
 
 export function escapeSlashes(text: string): string {
@@ -43,15 +71,23 @@ export function escapeSlashes(text: string): string {
 
 export function unescapeSlashes(text: string): string {
   const escapes: Record<string, string> = { n: '\n', r: '\r', t: '\t' }
-  return text.replace(/\\([nrt"'\\])/g, (_, character: string) => escapes[character] ?? character)
+  return text.replace(/\\(?:u\{([0-9a-fA-F]{1,6})\}|u([0-9a-fA-F]{4})|([nrt"'\\]))/g, (match, braced?: string, fixed?: string, character?: string) => {
+    if (character) return escapes[character] ?? character
+    const code = parseInt((braced ?? fixed)!, 16)
+    return code <= 0x10ffff ? String.fromCodePoint(code) : match
+  })
 }
 
 export function decodeJwt(text: string): string {
   const parts = text.trim().split('.')
-  if (parts.length !== 3) throw new Error('Invalid JWT (expected 3 parts)')
+  if (parts.length !== 3) throw new EncodeDecodeError('jwt')
   const decode = (segment: string) => {
     const padded = segment + '='.repeat((4 - segment.length % 4) % 4)
-    return JSON.parse(decodeURIComponent(escape(atob(padded.replace(/-/g, '+').replace(/_/g, '/')))))
+    try {
+      return JSON.parse(decodeURIComponent(escape(atob(padded.replace(/-/g, '+').replace(/_/g, '/')))))
+    } catch {
+      throw new EncodeDecodeError('jwt')
+    }
   }
   return `// Header\n${JSON.stringify(decode(parts[0]), null, 2)}\n\n// Payload\n${JSON.stringify(decode(parts[1]), null, 2)}`
 }
@@ -65,8 +101,15 @@ export function transformText(format: EncodeDecodeFormat, direction: EncodeDecod
 }
 
 export function isBase64(text: string): boolean {
-  const value = text.trim()
-  return value.length >= 4 && /^[A-Za-z0-9+/\n\r]+=*$/.test(value) && value.length % 4 <= 1
+  const value = text.replace(/\s+/g, '')
+  if (value.length < 4 || !/^[A-Za-z0-9+/_-]+={0,2}$/.test(value)) return false
+  if (value.replace(/=+$/, '').length % 4 === 1) return false
+  try {
+    // Plain words such as `password` have a valid length but are not UTF-8 text once decoded.
+    return !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffd]/.test(base64Decode(value))
+  } catch {
+    return false
+  }
 }
 
 export function isUrlEncoded(text: string): boolean {
@@ -74,11 +117,11 @@ export function isUrlEncoded(text: string): boolean {
 }
 
 export function hasHtmlEntities(text: string): boolean {
-  return /&(?:amp|lt|gt|quot|#39|#\d+|#x[0-9a-f]+);/i.test(text)
+  return /&(?:amp|lt|gt|quot|apos|nbsp|#\d+|#x[0-9a-f]+);/i.test(text)
 }
 
 export function hasEscapeSequences(text: string): boolean {
-  return /\\[nrt"'\\]/.test(text)
+  return /\\(?:[nrt"'\\]|u[0-9a-fA-F]{4}|u\{[0-9a-fA-F]{1,6}\})/.test(text)
 }
 
 export function isJwt(text: string): boolean {
