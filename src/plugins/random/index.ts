@@ -38,25 +38,40 @@ function randomBytes(length: number): Uint8Array {
   return bytes
 }
 
-/** Inclusive integer in [min, max]. */
+function randomUint32(): number {
+  const buf = randomBytes(4)
+  return ((buf[0]! << 24) | (buf[1]! << 16) | (buf[2]! << 8) | buf[3]!) >>> 0
+}
+
+/** Inclusive integer in [min, max]. Spans up to 2^53 are supported. */
 export function randomInt(min: number, max: number): number {
-  if (!Number.isFinite(min) || !Number.isFinite(max)) throw new Error('Invalid range')
+  if (!Number.isFinite(min) || !Number.isFinite(max)) throw new Error('RANGE')
   const lo = Math.ceil(Math.min(min, max))
   const hi = Math.floor(Math.max(min, max))
-  if (hi < lo) throw new Error('Invalid range')
+  if (hi < lo) throw new Error('RANGE')
   const span = hi - lo + 1
-  // Rejection sampling to avoid modulo bias for large spans
-  const maxUnbiased = Math.floor(0x100000000 / span) * span
-  let x = 0
+  if (!Number.isSafeInteger(span)) throw new Error('RANGE')
+  if (span <= 0x100000000) {
+    // Rejection sampling to avoid modulo bias
+    const maxUnbiased = Math.floor(0x100000000 / span) * span
+    let x = 0
+    do {
+      x = randomUint32()
+    } while (x >= maxUnbiased)
+    return lo + (x % span)
+  }
+  // Wide spans: 64-bit rejection sampling with BigInt
+  const bigSpan = BigInt(span)
+  const limit = (1n << 64n) - ((1n << 64n) % bigSpan)
+  let r = 0n
   do {
-    const buf = randomBytes(4)
-    x = ((buf[0]! << 24) | (buf[1]! << 16) | (buf[2]! << 8) | buf[3]!) >>> 0
-  } while (x >= maxUnbiased)
-  return lo + (x % span)
+    r = (BigInt(randomUint32()) << 32n) | BigInt(randomUint32())
+  } while (r >= limit)
+  return lo + Number(r % bigSpan)
 }
 
 export function randomFloat(min: number, max: number, decimals: number): string {
-  if (!Number.isFinite(min) || !Number.isFinite(max)) throw new Error('Invalid range')
+  if (!Number.isFinite(min) || !Number.isFinite(max)) throw new Error('RANGE')
   const lo = Math.min(min, max)
   const hi = Math.max(min, max)
   const buf = randomBytes(4)
@@ -79,11 +94,10 @@ const CHARSETS: Record<string, string> = {
 
 export function randomString(length: number, charsetKey: string): string {
   const charset = CHARSETS[charsetKey] ?? CHARSETS.alphanumeric!
-  if (length < 1 || length > 1024) throw new Error('Invalid length')
-  const bytes = randomBytes(length)
+  if (length < 1 || length > 1024) throw new Error('LENGTH')
   let out = ''
   for (let i = 0; i < length; i++) {
-    out += charset[bytes[i]! % charset.length]
+    out += charset[randomInt(0, charset.length - 1)]
   }
   return out
 }
@@ -107,7 +121,7 @@ export function randomPassword(length: number): string {
   const digits = '0123456789'
   const symbols = '!@#$%^&*_-+=?'
   const all = lower + upper + digits + symbols
-  if (length < 1 || length > 1024) throw new Error('Invalid length')
+  if (length < 1 || length > 1024) throw new Error('LENGTH')
 
   const picks: string[] = []
   if (length >= 4) {
@@ -128,7 +142,7 @@ export function randomPassword(length: number): string {
 }
 
 export function randomHex(byteCount: number): string {
-  if (byteCount < 1 || byteCount > 1024) throw new Error('Invalid bytes')
+  if (byteCount < 1 || byteCount > 1024) throw new Error('BYTES')
   return Array.from(randomBytes(byteCount), (b) => b.toString(16).padStart(2, '0')).join('')
 }
 
@@ -161,6 +175,15 @@ function parseCount(value: unknown): number {
   return n
 }
 
+function toolErrorMessage(t: (key: string, params?: Record<string, string | number>) => string, e: unknown): string {
+  const code = e instanceof Error ? e.message : ''
+  if (code === 'COUNT') return t('error.count')
+  if (code === 'RANGE') return t('error.range')
+  if (code === 'LENGTH') return t('error.length')
+  if (code === 'BYTES') return t('error.bytes')
+  return t('error.generate', { message: code })
+}
+
 function multi(count: number, gen: () => string): string {
   if (count === 1) return gen()
   const lines: string[] = []
@@ -179,7 +202,7 @@ function normalizeSurfaceParameters(mode: RandomSurfaceMode, config: RandomSurfa
     }
     case 'float':
       if (config.max < config.min) throw new Error('RANGE')
-      if (!Number.isFinite(config.min) || !Number.isFinite(config.max)) throw new Error('Invalid range')
+      if (!Number.isFinite(config.min) || !Number.isFinite(config.max)) throw new Error('RANGE')
       return {
         mode, count, min: config.min, max: config.max,
         decimals: Math.max(0, Math.min(12, Math.floor(config.decimals))) || 0,
@@ -308,8 +331,7 @@ export const randomPlugin = definePlugin({
           const count = parseCount(ctx.params.count)
           return ctx.output.text(multi(count, () => String(randomInt(min, max))))
         } catch (e: any) {
-          if (e?.message === 'COUNT') return ctx.output.error(ctx.t('error.count'))
-          return ctx.output.error(ctx.t('error.generate', { message: e.message }))
+          return ctx.output.error(toolErrorMessage(ctx.t, e))
         }
       },
       surfaces: { launcher: { surfaces: ['editor-command-bar', 'quick-editor-command'] }, panel: true },
@@ -335,8 +357,7 @@ export const randomPlugin = definePlugin({
           const count = parseCount(ctx.params.count)
           return ctx.output.text(multi(count, () => randomFloat(min, max, decimals)))
         } catch (e: any) {
-          if (e?.message === 'COUNT') return ctx.output.error(ctx.t('error.count'))
-          return ctx.output.error(ctx.t('error.generate', { message: e.message }))
+          return ctx.output.error(toolErrorMessage(ctx.t, e))
         }
       },
       surfaces: { launcher: { surfaces: ['editor-command-bar', 'quick-editor-command'] }, panel: true },
@@ -375,8 +396,7 @@ export const randomPlugin = definePlugin({
           const count = parseCount(ctx.params.count)
           return ctx.output.text(multi(count, () => randomString(length, charset)))
         } catch (e: any) {
-          if (e?.message === 'COUNT') return ctx.output.error(ctx.t('error.count'))
-          return ctx.output.error(ctx.t('error.generate', { message: e.message }))
+          return ctx.output.error(toolErrorMessage(ctx.t, e))
         }
       },
       surfaces: { launcher: { surfaces: ['editor-command-bar', 'quick-editor-command'] }, panel: true },
@@ -395,8 +415,7 @@ export const randomPlugin = definePlugin({
           const count = parseCount(ctx.params.count)
           return ctx.output.text(multi(count, () => randomUuid()))
         } catch (e: any) {
-          if (e?.message === 'COUNT') return ctx.output.error(ctx.t('error.count'))
-          return ctx.output.error(ctx.t('error.generate', { message: e.message }))
+          return ctx.output.error(toolErrorMessage(ctx.t, e))
         }
       },
       surfaces: { launcher: { surfaces: ['editor-command-bar', 'quick-editor-command'] }, panel: true },
@@ -418,8 +437,7 @@ export const randomPlugin = definePlugin({
           const count = parseCount(ctx.params.count)
           return ctx.output.text(multi(count, () => randomPassword(length)))
         } catch (e: any) {
-          if (e?.message === 'COUNT') return ctx.output.error(ctx.t('error.count'))
-          return ctx.output.error(ctx.t('error.generate', { message: e.message }))
+          return ctx.output.error(toolErrorMessage(ctx.t, e))
         }
       },
       surfaces: { launcher: { surfaces: ['editor-command-bar', 'quick-editor-command'] }, panel: true },
@@ -441,8 +459,7 @@ export const randomPlugin = definePlugin({
           const count = parseCount(ctx.params.count)
           return ctx.output.text(multi(count, () => randomHex(bytes)))
         } catch (e: any) {
-          if (e?.message === 'COUNT') return ctx.output.error(ctx.t('error.count'))
-          return ctx.output.error(ctx.t('error.generate', { message: e.message }))
+          return ctx.output.error(toolErrorMessage(ctx.t, e))
         }
       },
       surfaces: { launcher: { surfaces: ['editor-command-bar', 'quick-editor-command'] }, panel: true },
@@ -461,8 +478,7 @@ export const randomPlugin = definePlugin({
           const count = parseCount(ctx.params.count)
           return ctx.output.text(multi(count, () => randomColor()))
         } catch (e: any) {
-          if (e?.message === 'COUNT') return ctx.output.error(ctx.t('error.count'))
-          return ctx.output.error(ctx.t('error.generate', { message: e.message }))
+          return ctx.output.error(toolErrorMessage(ctx.t, e))
         }
       },
       surfaces: { launcher: { surfaces: ['editor-command-bar', 'quick-editor-command'] }, panel: true },
@@ -481,8 +497,7 @@ export const randomPlugin = definePlugin({
           const count = parseCount(ctx.params.count)
           return ctx.output.text(multi(count, () => randomBoolean()))
         } catch (e: any) {
-          if (e?.message === 'COUNT') return ctx.output.error(ctx.t('error.count'))
-          return ctx.output.error(ctx.t('error.generate', { message: e.message }))
+          return ctx.output.error(toolErrorMessage(ctx.t, e))
         }
       },
       surfaces: { launcher: { surfaces: ['editor-command-bar', 'quick-editor-command'] }, panel: true },
