@@ -5993,6 +5993,13 @@ fn plugin_kv_db_path() -> Result<PathBuf, String> {
 
 fn open_plugin_kv_db(path: PathBuf) -> Result<PluginKvDb, String> {
     let connection = Connection::open(&path).map_err(|e| e.to_string())?;
+    // One shared connection serves kv, usage journal and ai usage: WAL + NORMAL avoids an fsync
+    // per write, and busy_timeout rides out a second process (or a checkpoint) holding the file.
+    connection
+        .execute_batch(
+            "PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;",
+        )
+        .map_err(|e| e.to_string())?;
     connection
         .execute_batch(
             r#"
@@ -6257,32 +6264,33 @@ fn plugin_kv_list(
         }
     }
     let connection = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
-    let mut statement = connection.connection
-        .prepare(
-            "SELECT key, updated_at FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2 ORDER BY updated_at DESC, key ASC",
-        )
-        .map_err(|e| e.to_string())?;
-    let rows = statement
-        .query_map(params![source, plugin_id], |row| {
-            Ok(PluginKvListEntry {
-                key: row.get(0)?,
-                updated_at: row.get(1)?,
-            })
+    // Prefix filtering is a key range, so SQLite uses the primary key instead of reading every row.
+    let prefix = prefix.filter(|prefix| !prefix.is_empty());
+    let upper = prefix.as_deref().and_then(plugin_kv_paging::prefix_upper);
+    let range_clause = match (&prefix, &upper) {
+        (Some(_), Some(_)) => " AND key >= ?3 AND key < ?4",
+        (Some(_), None) => " AND key >= ?3",
+        _ => "",
+    };
+    let sql = format!(
+        "SELECT key, updated_at FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2{range_clause} ORDER BY updated_at DESC, key ASC"
+    );
+    let mut statement = connection.connection.prepare(&sql).map_err(|e| e.to_string())?;
+    let map_row = |row: &rusqlite::Row| {
+        Ok(PluginKvListEntry {
+            key: row.get(0)?,
+            updated_at: row.get(1)?,
         })
-        .map_err(|e| e.to_string())?;
-
-    let mut entries = Vec::new();
-    for row in rows {
-        let entry = row.map_err(|e| e.to_string())?;
-        if prefix
-            .as_ref()
-            .is_some_and(|prefix| !entry.key.starts_with(prefix))
-        {
-            continue;
+    };
+    let rows = match (&prefix, &upper) {
+        (Some(prefix), Some(upper)) => {
+            statement.query_map(params![source, plugin_id, prefix, upper], map_row)
         }
-        entries.push(entry);
+        (Some(prefix), None) => statement.query_map(params![source, plugin_id, prefix], map_row),
+        _ => statement.query_map(params![source, plugin_id], map_row),
     }
-    Ok(entries)
+    .map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
 }
 
 #[tauri::command(async)]
