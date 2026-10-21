@@ -5,7 +5,7 @@ type BrowserEventPayload = Omit<DesktopBridgeEventDto, 'sourceId' | 'type'>
 export type HivenEvent<TType extends string, TPayload> = {
   type: TType
   publisher: { kind: 'host'; id: 'browser-bridge' }
-  source: { kind: 'plugin'; id: 'web-open'; channel: string }
+  source: { kind: 'bridge'; channel: string }
   payload: TPayload
 }
 
@@ -41,7 +41,7 @@ function publishBrowserEvent(
   const event = {
     type,
     publisher: { kind: 'host', id: 'browser-bridge' },
-    source: { kind: 'plugin', id: 'web-open', channel: sourceId },
+    source: { kind: 'bridge', channel: sourceId },
     payload,
   } as HivenHostEvents[typeof type]
   for (const listener of listeners.get(type) ?? []) listener(event as never)
