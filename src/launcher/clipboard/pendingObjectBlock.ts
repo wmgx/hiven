@@ -23,6 +23,22 @@ function isFresh(record: PendingRecord, ttlMs: number): boolean {
   return Date.now() - record.createdAt <= ttlMs
 }
 
+/** Drop a persisted block left behind by a crash once its TTL has passed. */
+function pruneExpiredPersistedBlock(ttlMs: number = DEFAULT_TTL_MS): void {
+  try {
+    const raw = localStorage.getItem(PENDING_KEY)
+    if (!raw) return
+    const parsed = JSON.parse(raw) as PendingRecord
+    if (!parsed?.block || typeof parsed.createdAt !== 'number' || !isFresh(parsed, ttlMs)) {
+      localStorage.removeItem(PENDING_KEY)
+    }
+  } catch {
+    // ignore
+  }
+}
+
+pruneExpiredPersistedBlock()
+
 /** Live subscribers (already-open launcher) receive the block immediately. */
 export function subscribePendingObjectBlock(listener: PendingListener): () => void {
   listeners.add(listener)
@@ -42,7 +58,8 @@ export function setPendingObjectBlock(
 ): boolean {
   const record: PendingRecord = { block, createdAt: Date.now() }
   memoryPending = record
-  if (options?.persist) {
+  // Sensitive material stays in memory only; a crash must not leave plaintext in localStorage.
+  if (options?.persist && !block.secretMasked) {
     try {
       localStorage.setItem(PENDING_KEY, JSON.stringify(record))
     } catch (error) {
