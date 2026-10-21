@@ -1883,6 +1883,7 @@ async fn show_plugin_surface_window(
     destroy_timeout_ms: Option<u64>,
     paste_target: Option<PluginSurfacePasteTarget>,
 ) -> Result<(), String> {
+    let started_at = Instant::now();
     paste_recovery::invalidate_all();
     #[cfg(not(target_os = "linux"))]
     let _ = (&caller, paste_target);
@@ -1942,6 +1943,7 @@ async fn show_plugin_surface_window(
             .map(|(window_label, _)| window_label);
         remember_previous_key_window_label(previous_key_window_label);
     }
+    let created = existing_window.is_none();
     let window = if let Some(window) = existing_window {
         // Reopening/replacing the surface starts a new host ownership lifetime.
         host_text_export::invalidate_window(&window);
@@ -1977,7 +1979,17 @@ async fn show_plugin_surface_window(
         window
     };
 
-    show_and_focus_plugin_surface_window(&app, &window)?;
+    let shown = show_and_focus_plugin_surface_window(&app, &window);
+    log_launcher_perf(
+        "native:plugin-surface.show",
+        started_at,
+        format!(
+            "existing={} wasVisible={was_visible} ok={}",
+            !created,
+            shown.is_ok()
+        ),
+    );
+    shown?;
     let surface =
         plugin_surface_registry_record(label, source, plugin_id, surface_id, title, "visible");
     surface_registry_upsert_record(surface.clone())?;
@@ -7762,6 +7774,23 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .on_page_load(|webview, payload| {
+            // All JS shortcut registrars live in the launcher page. A reload the page
+            // did not control (Vite full reload, WebContent crash recovery) skips their
+            // cleanup, leaving keys registered to a dead channel that every new
+            // registrar then reports as a conflict until the app restarts.
+            if webview.label() == "launcher"
+                && payload.event() == tauri::webview::PageLoadEvent::Started
+            {
+                use tauri_plugin_global_shortcut::GlobalShortcutExt;
+                let released = webview.app_handle().global_shortcut().unregister_all().is_ok();
+                log_launcher_perf(
+                    "native:launcher-page-load.release-shortcuts",
+                    Instant::now(),
+                    format!("ok={released}"),
+                );
+            }
+        })
         .setup(|app| {
             for window in app.webview_windows().into_values() {
                 attach_paste_window_events(&window);

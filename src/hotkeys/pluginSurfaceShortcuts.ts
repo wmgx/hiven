@@ -10,6 +10,7 @@ import {
 } from '../workspace/pluginSurfaceShortcuts'
 import type { PluginSurfaceOpenTarget } from '../store'
 import { resolvePluginSettingsSource } from '../workspace/launcher/pluginSource'
+import { launcherPerfNow, logLauncherPerf, logLauncherPerfDuration } from '../workspace/launcher/perf'
 
 type GlobalShortcutApi = typeof import('@tauri-apps/plugin-global-shortcut')
 
@@ -21,6 +22,12 @@ const currentAccelerators = new Map<string, string>()
 const currentRegistrations = new Map<string, { generation: number }>()
 let syncGeneration = 0
 let syncQueue: Promise<void> = Promise.resolve()
+// A previous instance of this registrar (Fast Refresh, remount) may still be
+// releasing the same key asynchronously. Re-check a few times instead of
+// leaving the shortcut dead until some unrelated store change resyncs.
+const CONFLICT_RETRY_MS = 1_000
+const MAX_CONFLICT_RETRIES = 5
+let conflictRetries = 0
 // Host-owned, bounded lifetime interception of an already registered surface.
 // The host authorizes the plugin/permission before acquiring one.
 const shortcutInterceptors = new Map<string, { accelerator: string; registered: boolean; handle: () => Promise<boolean>; pressed: boolean; release?: () => Promise<void> }>()
@@ -28,6 +35,7 @@ const shortcutInterceptors = new Map<string, { accelerator: string; registered: 
 export function installPluginSurfaceShortcutHotkeys(): () => void {
   if (installed) return () => {}
   installed = true
+  conflictRetries = 0
 
   void enqueueSync()
   unsubscribeShortcutStore = usePluginSurfaceShortcutStore.subscribe((state, previous) => {
@@ -145,19 +153,26 @@ async function registerShortcut(
     const occupied = await isRegistered(accelerator)
     if (generation !== syncGeneration) return
     if (occupied) {
+      logLauncherPerf('shortcut:surface.register', { kind: 'perf', pluginId: shortcut.target.pluginId, status: 'conflict' })
       // Occupancy alone never authorizes taking over another registrar's key.
       usePluginSurfaceShortcutStore.getState().updateRegistration(key, {
         registrationStatus: 'conflict',
         registrationError: 'Shortcut is already registered',
       })
+      if (conflictRetries < MAX_CONFLICT_RETRIES) {
+        conflictRetries += 1
+        window.setTimeout(() => { if (installed) void enqueueSync() }, CONFLICT_RETRY_MS)
+      }
       return
     }
     const registration = { generation }
     await register(accelerator, (event) => {
-      if (!installed || currentRegistrations.get(key) !== registration || registration.generation !== syncGeneration) return
+      const stale = !installed ? 'uninstalled' : currentRegistrations.get(key) !== registration ? 'replaced' : registration.generation !== syncGeneration ? 'generation' : null
       const latest = usePluginSurfaceShortcutStore.getState().shortcuts[key]
-      if (!latest || !latest.enabled || normalizeAccelerator(latest.accelerator) !== accelerator) return
+      const dropped = stale ?? (!latest || !latest.enabled || normalizeAccelerator(latest.accelerator) !== accelerator ? 'changed' : null)
       const interceptor = shortcutInterceptors.get(key)
+      logLauncherPerf('shortcut:surface.event', { kind: 'perf', pluginId: shortcut.target.pluginId, surfaceId: shortcut.target.surfaceId, phase: event.state, reason: dropped ?? undefined, intercepted: Boolean(interceptor) })
+      if (dropped) return
       if (interceptor && (interceptor.registered || sameAccelerator(interceptor.accelerator, accelerator))) {
         if (event.state === 'Released') { interceptor.pressed = false; return }
         if (event.state !== 'Pressed' || interceptor.pressed || interceptor.release) return
@@ -171,12 +186,15 @@ async function registerShortcut(
       await unregisterKey(key)
       return
     }
+    logLauncherPerf('shortcut:surface.register', { kind: 'perf', pluginId: shortcut.target.pluginId, status: 'registered' })
+    conflictRetries = 0
     usePluginSurfaceShortcutStore.getState().updateRegistration(key, {
       registrationStatus: 'registered',
       registrationError: undefined,
     })
   } catch (error) {
     if (generation !== syncGeneration) return
+    logLauncherPerf('shortcut:surface.register', { kind: 'perf', pluginId: shortcut.target.pluginId, status: 'failed' })
     usePluginSurfaceShortcutStore.getState().updateRegistration(key, {
       registrationStatus: 'failed',
       registrationError: formatError(error),
@@ -185,11 +203,17 @@ async function registerShortcut(
 }
 
 async function openSurfaceForShortcut(target: PluginSurfaceOpenTarget): Promise<void> {
-  if (getPluginSurfaceShortcutPresentation(target) === 'window') {
-    await showPluginSurfaceWindow(target)
-    return
+  const startedAt = launcherPerfNow()
+  const presentation = getPluginSurfaceShortcutPresentation(target)
+  const details = { kind: 'latency', pluginId: target.pluginId, surfaceId: target.surfaceId, via: presentation }
+  try {
+    if (presentation === 'window') await showPluginSurfaceWindow(target)
+    else await requestOpenPluginSurfaceTool(target)
+    logLauncherPerfDuration('shortcut:surface.open', startedAt, details)
+  } catch (error) {
+    logLauncherPerfDuration('shortcut:surface.open', startedAt, { ...details, status: 'failed' })
+    throw error
   }
-  await requestOpenPluginSurfaceTool(target)
 }
 
 async function unregisterRemovedOrChanged(shortcuts: Record<string, PluginSurfaceShortcut>): Promise<void> {
