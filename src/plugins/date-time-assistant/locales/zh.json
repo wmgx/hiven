@@ -53,5 +53,8 @@
   "relative.error.unit": "不支持月和年，请用天或小时",
   "relative.error.zone": "无法读取本地时区",
   "relative.error.gap": "该时刻不存在，请改用小时",
-  "relative.error.fold": "该时刻重复，请改用小时"
+  "relative.error.fold": "该时刻重复，请改用小时",
+  "kind.timestamp": "时间戳",
+  "kind.date": "日期",
+  "kind.datetime": "日期时间"
 }

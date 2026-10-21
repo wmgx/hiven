@@ -1,4 +1,4 @@
-import { definePlugin, getPluginHostSdk, textError, textOutput, type TextInput, type LauncherDynamicContext, type LauncherItemContribution, type PluginSurfaceProps, type PluginToolSurfaces } from '@hiven/plugin'
+import { definePlugin, getPluginHostSdk, type LauncherDynamicContext, type LauncherItemContribution, type PluginSurfaceProps, type PluginToolSurfaces } from '@hiven/plugin'
 import { parseRelativeTimeAnswer } from './relativeTimeAnswer'
 import { parseCronAnswer } from './cronAnswer'
 import { parseTimeZoneAnswer } from './timeZoneAnswer'
@@ -74,11 +74,27 @@ function parseOffsetCalendar(body: string, offsetMinutes: number): Date {
   return new Date(wall.getTime() - offsetMinutes * 60_000)
 }
 
+const CALENDAR_PATTERN = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[Tt ](\d{1,2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?)?$/
+
+/** Date-only and date-time text without an offset are both host-local wall-clock time. */
+function parseLocalCalendar(body: string): Date {
+  const match = body.match(CALENDAR_PATTERN)
+  if (!match) return new Date(body)
+  const [, y, mo, d, h = '0', mi = '0', sec = '0', fraction = ''] = match
+  const [year, month, day, hour, minute, second] = [y, mo, d, h, mi, sec].map(Number)
+  const date = new Date(0)
+  date.setFullYear(year, month - 1, day)
+  date.setHours(hour, minute, second, Number(fraction.padEnd(3, '0')))
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day
+    || date.getMinutes() !== minute || date.getSeconds() !== second) return new Date(NaN)
+  return date
+}
+
 function parseCalendarInput(input: string, selectedOffset?: number): Date {
   const { body, offsetMinutes } = parseTzSuffix(input)
   if (body !== input && offsetMinutes === undefined) return new Date(NaN)
   const offset = offsetMinutes ?? selectedOffset
-  return offset === undefined ? new Date(input) : parseOffsetCalendar(body, offset)
+  return offset === undefined ? parseLocalCalendar(body) : parseOffsetCalendar(body, offset)
 }
 
 function tryParseTimestamp(value: string): number {
@@ -128,6 +144,9 @@ function parseNowOffset(value: string): { amount: number; unit: 'day' | 'hour' }
   return { amount, unit }
 }
 
+const MIN_YEAR = 1970
+const MAX_YEAR = 2100
+
 type ParsedResult = {
   kind: 'datetime' | 'date' | 'timestamp'
   display: string
@@ -144,11 +163,8 @@ class TimestampConversionError extends Error {
   }
 }
 
-function resultKindLabel(kind: ParsedResult['kind'], locale: LauncherDynamicContext['locale']): string {
-  const isZh = locale.toLowerCase().startsWith('zh')
-  if (kind === 'timestamp') return isZh ? '时间戳' : 'Timestamp'
-  if (kind === 'date') return isZh ? '日期' : 'Date'
-  return isZh ? '日期时间' : 'DateTime'
+function resultKindLabel(kind: ParsedResult['kind'], t: LauncherDynamicContext['t']): string {
+  return t(`kind.${kind}`)
 }
 
 function nowResult(date: Date, offsetMinutes?: number): ParsedResult {
@@ -265,7 +281,7 @@ function parseDateForTimestampSuggestions(value: string): ParsedResult[] {
   if (Number.isNaN(date.getTime())) return []
 
   const year = parseTzSuffix(trimmed).offsetMinutes === undefined ? date.getFullYear() : date.getUTCFullYear()
-  if (year < 2000 || year > 2100) return []
+  if (year < MIN_YEAR || year > MAX_YEAR) return []
 
   return [
     {
@@ -291,7 +307,7 @@ function parseTimestampForSuggestion(value: string): ParsedResult | null {
       : null
   if (!date || Number.isNaN(date.getTime())) return null
   const year = date.getFullYear()
-  if (year < 2000 || year > 2100) return null
+  if (year < MIN_YEAR || year > MAX_YEAR) return null
   // Offset belongs to this instant, including its local daylight-saving rule.
   // Keep millisecond input reversible instead of dropping invisible precision.
   const formatted = formatOffsetDateTime(date)
@@ -513,30 +529,6 @@ export const dateTimeAssistantPlugin = definePlugin({
       surfaces: EDITOR_TOOL_SURFACES,
     },
   ],
-  commands: [
-    {
-      id: 'timestamp.run',
-      title: 'command.timestamp.title',
-      icon: 'Clock',
-      aliases: ['ts', '时间戳', 'unix-time', 'epoch', 'date-convert'],
-      live: { live: { enabled: true, trigger: 'on-input', sideEffects: 'none', debounceMs: 250 } },
-      params: TIMESTAMP_PARAMS,
-      inputs: [
-        { key: 'input', label: 'input.text.label', kind: 'text', required: true },
-      ],
-      inputResolution: { strategy: 'use-active', fallback: 'fail' },
-      run(ctx) {
-        const input = ctx.inputs.input as TextInput
-        const text = input?.kind === 'text' ? input.text : ''
-        const inPlace = !!input?.paneId
-        try {
-          return textOutput(convertTimestampText(text, ctx.params, inPlace))
-        } catch (error) {
-          return textError(error instanceof Error ? error.message : String(error))
-        }
-      },
-    },
-  ],
   launcher: {
     items: [...WORKSPACE_ROUTES.map((route): LauncherItemContribution => ({
       id: `open-${route.id}`,
@@ -640,7 +632,7 @@ export const dateTimeAssistantPlugin = definePlugin({
           return [
             {
               id: 'dt-now-timestamp',
-              display: { title: `${trimmed} -> ${timestampValue}`, subtitle: resultKindLabel('timestamp', ctx.locale), icon: 'Clock' },
+              display: { title: `${trimmed} -> ${timestampValue}`, subtitle: resultKindLabel('timestamp', ctx.t), icon: 'Clock' },
               behavior: { type: 'perform' },
               surfaces: ['global-launcher'],
               directAnswer: true,
@@ -651,7 +643,7 @@ export const dateTimeAssistantPlugin = definePlugin({
             },
             {
               id: 'dt-now-datetime',
-              display: { title: `${trimmed} -> ${dateTimeValue}`, subtitle: resultKindLabel('datetime', ctx.locale), icon: 'Clock' },
+              display: { title: `${trimmed} -> ${dateTimeValue}`, subtitle: resultKindLabel('datetime', ctx.t), icon: 'Clock' },
               behavior: { type: 'perform' },
               surfaces: ['global-launcher'],
               directAnswer: true,
@@ -668,7 +660,7 @@ export const dateTimeAssistantPlugin = definePlugin({
         const trimmed = input.trim()
         return dateTimestampResults.map((result, index) => ({
           id: `dt-date-timestamp-${index}`,
-          display: { title: `${trimmed} -> ${result.display}`, subtitle: resultKindLabel(result.kind, ctx.locale), icon: 'Clock' },
+          display: { title: `${trimmed} -> ${result.display}`, subtitle: resultKindLabel(result.kind, ctx.t), icon: 'Clock' },
           behavior: { type: 'perform' },
           surfaces: ['global-launcher'],
           directAnswer: true,
@@ -684,7 +676,7 @@ export const dateTimeAssistantPlugin = definePlugin({
       const trimmed = input.trim()
       return [{
         id: 'dt-result',
-        display: { title: `${trimmed} -> ${parsed.display}`, subtitle: resultKindLabel(parsed.kind, ctx.locale), icon: 'Clock' },
+        display: { title: `${trimmed} -> ${parsed.display}`, subtitle: resultKindLabel(parsed.kind, ctx.t), icon: 'Clock' },
         behavior: { type: 'perform' },
         surfaces: ['global-launcher'],
         directAnswer: true,

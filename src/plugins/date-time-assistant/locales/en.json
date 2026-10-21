@@ -53,5 +53,8 @@
   "relative.error.unit": "Months and years aren't supported. Use days or hours.",
   "relative.error.zone": "The local time zone is unavailable",
   "relative.error.gap": "This time doesn't exist. Use hours.",
-  "relative.error.fold": "This time is ambiguous. Use hours."
+  "relative.error.fold": "This time is ambiguous. Use hours.",
+  "kind.timestamp": "Timestamp",
+  "kind.date": "Date",
+  "kind.datetime": "DateTime"
 }
