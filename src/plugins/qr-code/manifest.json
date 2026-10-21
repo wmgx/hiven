@@ -2,7 +2,7 @@
   "pluginId": "qr-code",
   "displayName": "QR Code",
   "displayNameI18n": { "zh": "二维码" },
-  "version": "1.0.15",
+  "version": "1.0.16",
   "capabilities": ["surface"],
   "permissions": [
     "clipboard.read",

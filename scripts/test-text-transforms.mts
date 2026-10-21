@@ -19,7 +19,6 @@ assert.equal(jsonPrettify('{"a":0.1}'), formatJson('{"a":0.1}'))
 assert.equal(jsonCompact('{"a":0.1}'), compactJson('{"a":0.1}'))
 assert.equal(pluginSortKeys, sortKeys)
 assert.equal(pluginUrlEncode, urlEncode)
-assert.equal(pluginUrlDecode, urlDecode)
 
 const json = ' \r\n {"b":2,"a":" 空格 "} \t '
 assert.equal(formatJson(json), '{\n  "b": 2,\n  "a": " 空格 "\n}')
@@ -48,10 +47,11 @@ assert.deepEqual(processJson('[]', { operation: 'json-to-query' }), {
 const text = ' \r\n中文🙂 & a+b /?\t '
 assert.equal(urlEncode(text), '%20%0D%0A%E4%B8%AD%E6%96%87%F0%9F%99%82%20%26%20a%2Bb%20%2F%3F%09%20')
 assert.equal(urlDecode(urlEncode(text)), text, 'encoding preserves leading and trailing input whitespace')
-assert.equal(urlDecode(' \t a+b%20c \r\n'), 'a+b c', 'decoding trims raw edges but keeps plus signs literal')
+assert.equal(urlDecode(' \t a+b%20c \r\n'), 'a+b c', 'kit decoding trims raw edges but keeps plus signs literal')
+assert.equal(pluginUrlDecode(' \t a+b%20c%2B \r\n'), 'a b c+', 'plugin decoding treats + as a space')
 assert.equal(urlDecode('%20x%20'), ' x ', 'decoding never trims decoded whitespace')
 assert.equal(transformText('url', 'encode', text), urlEncode(text))
-assert.equal(transformText('url', 'decode', '  a%20b  '), urlDecode('  a%20b  '))
+assert.equal(transformText('url', 'decode', '  a%20b  '), 'a b')
 assert.throws(() => urlDecode('%E0%A4%A'), URIError)
 assert.throws(() => urlEncode('\uD800'), URIError)
 

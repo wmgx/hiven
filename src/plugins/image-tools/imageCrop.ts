@@ -1,4 +1,4 @@
-import { MAX_IMAGE_BYTES } from './imageBase64'
+import { MAX_IMAGE_BYTES } from './raster'
 import { redactionRect, type Point, type RedactionRect } from './imageRedaction'
 export type CropRect = RedactionRect
 export const cropFromDrag = (a: Point, b: Point, width: number, height: number) => redactionRect(a, b, width, height)

@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import { Button, useLocalEscapeLayer } from '@hiven/plugin-ui'
-import { MAX_IMAGE_BYTES } from './imageBase64'
+import { MAX_IMAGE_BYTES } from './raster'
 import { loadRedactionImage, type Point } from './imageRedaction'
 import { cropFromDrag, exportCrop, parseCrop, type CropRect } from './imageCrop'
 import './imageCrop.css'

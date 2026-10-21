@@ -57,3 +57,16 @@ export const textToolRoutes = [
   ...caseOperationRoutes,
   statsRoute,
 ]
+
+/**
+ * Routes that get their own launcher entry. The rest (reverse, affix, wrap, SQL numbers, the other
+ * naming styles, ...) stay selectable inside the workbench and keep their editor tools.
+ */
+const LAUNCHER_ROUTE_IDS = new Set([
+  'line-sort', 'line-dedup', 'line-remove-blank', 'line-trim', 'line-join', 'sql-in-string',
+  'clean-invisible-characters', 'markdown-plain-text', 'clean-agent-text', 'regex-escape', 'find-duplicates',
+  'case-upper', 'case-lower', 'case-camel', 'case-snake',
+  'text-statistics',
+])
+
+export const launcherTextToolRoutes = textToolRoutes.filter((route) => LAUNCHER_ROUTE_IDS.has(route.surfaceId))

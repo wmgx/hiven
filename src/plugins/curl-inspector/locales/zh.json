@@ -18,13 +18,13 @@
   "error.quote": "引号未闭合或末尾反斜杠不完整。",
   "error.shell": "不支持 Shell 展开、运算符或多条命令；URL 含特殊符号时请加引号。",
   "error.command": "命令须以 curl 开头。",
-  "error.option": "含不支持的选项，仅支持 -X、-H、-d、--data-raw、--url、-I。",
-  "error.value": "选项缺少值。",
-  "error.file": "不支持 @file；字面 @ 请用 --data-raw。",
-  "error.url": "需要有效的 HTTP(S) URL。",
+  "error.option": "含不支持的选项：{token}。",
+  "error.value": "选项 {token} 缺少参数值。",
+  "error.file": "不支持读取文件（{token}），请直接写入内容。",
+  "error.url": "需要有效的 HTTP(S) URL：{token}",
   "error.multiple": "不支持多个 URL，请拆开解析。",
-  "error.header": "请求头须为 Name: value 格式。",
-  "error.method": "方法只能是字母。",
+  "error.header": "请求头必须是 名称: 值 的格式（{token}）。",
+  "error.method": "请求方法只能包含字母（{token}）。",
   "error.conflict": "方法重复，或 --head 与数据、方法冲突。",
-  "error.glob": "URL 不能含花括号或方括号展开。"
+  "error.glob": "URL 不能含花括号或方括号展开：{token}"
 }

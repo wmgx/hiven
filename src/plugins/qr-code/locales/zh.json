@@ -46,5 +46,6 @@
   "hud.error": "未识别到二维码",
   "hud.errorStatus": "未识别",
   "hud.error.unavailable": "无法读取剪贴板",
-  "hud.errorStatus.unavailable": "不可用"
+  "hud.errorStatus.unavailable": "不可用",
+  "error.tooLong": "内容太长，无法生成二维码。请缩短内容或降低纠错等级。"
 }

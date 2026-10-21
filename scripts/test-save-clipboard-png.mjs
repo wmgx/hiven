@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import ts from 'typescript'
-const code = ts.transpileModule(await readFile(new URL('../src/plugins/encode-decode/saveClipboardPng.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
+const code = ts.transpileModule(await readFile(new URL('../src/plugins/image-tools/saveClipboardPng.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
 const { saveClipboardPng } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`)
 const png = new Uint8Array([137,80,78,71])
 for (const outcome of [{ status: 'saved', pathCopied: true }, { status: 'saved', pathCopied: false }, { status: 'cancelled' }, new Error('write failed')]) {

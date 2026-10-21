@@ -213,7 +213,7 @@ try {
     {
       pluginId: 'line-tools', toolId: 'line-tools.remove-blank-lines', route: 'open-line-remove-blank',
       title: 'Remove Blank Lines', titleZh: '删除空行', alias: 'remove blank lines',
-      cases: [['\n  中文 🙂  \n \t\nnext \n\n', '  中文 🙂  \nnext '], [' \t\n\r\n  ', '']],
+      cases: [['\n  中文 🙂  \n \t\nnext \n\n', '  中文 🙂  \nnext \n'], [' \t\n\r\n  ', '']],
     },
   ]
   const exactDecoded = '  中文 🙂\t \n\n'

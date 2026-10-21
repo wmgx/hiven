@@ -113,6 +113,7 @@ assert.equal(packed.version, manifest.version)
 const { saveQrImage } = loadTs('src/plugins/qr-code/saveQrImage.ts', { './qrCore': core })
 const payload = 'Hiven QA123'
 const generated = await core.generateQrDataUrl(payload)
+await assert.rejects(core.generateQrDataUrl('x'.repeat(8000), { errorCorrection: 'H' }), (error) => error.message === 'too-long', 'oversized payload reports too-long')
 const { PNG } = nodeRequire('pngjs')
 const exactPayload = '  合成 QR%20text\nsecond line\n  '
 const exactPng = PNG.sync.read(await nodeRequire('qrcode').toBuffer(exactPayload, { width: 320 }))

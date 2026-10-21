@@ -41,8 +41,9 @@ export function parseTimeZoneAnswer(query: string, now = new Date()): ZoneParseR
       if (hours > 14 || minutes > 59 || (hours === 14 && minutes !== 0)) return { ok: false, error: 'zone' }
       fixedOffset = (offset[1] === '+' ? 1 : -1) * (hours * 60 + minutes)
     } else {
-      // No abbreviations such as CST, IST, or EDT: require an explicit IANA zone.
-      if (!token.includes('/')) return { ok: false, error: 'zone' }
+      // `7 days`, `9am PST` ...: anything that is not UTC/GMT/EST/UTC±n or an IANA name is not clearly a
+      // zone conversion, so stay silent instead of pinning an error.
+      if (!token.includes('/')) return null
       try { format = formatter(token); zone = format.resolvedOptions().timeZone } catch { return { ok: false, error: 'zone' } }
     }
   }

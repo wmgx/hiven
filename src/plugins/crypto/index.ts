@@ -1,69 +1,46 @@
 /**
  * First-party Hash plugin.
  *
- * Exposes three independent tools (SHA-256, SHA-1, SHA-512) — no sub-selection needed.
+ * One independent tool per algorithm (MD5, SHA-1, SHA-256, SHA-384, SHA-512), no sub-selection needed.
  */
 
 import { definePlugin } from '@hiven/plugin'
+import { md5Hex } from './md5'
 
-async function computeHash(text: string, algorithm: string): Promise<string> {
+type Algorithm = { key: string; webCrypto?: string; aliases: string[] }
+
+const ALGORITHMS: Algorithm[] = [
+  { key: 'md5', aliases: ['md5'] },
+  { key: 'sha1', webCrypto: 'SHA-1', aliases: ['sha1', 'sha-1'] },
+  { key: 'sha256', webCrypto: 'SHA-256', aliases: ['sha256', 'sha-256'] },
+  { key: 'sha384', webCrypto: 'SHA-384', aliases: ['sha384', 'sha-384'] },
+  { key: 'sha512', webCrypto: 'SHA-512', aliases: ['sha512', 'sha-512'] },
+]
+
+async function computeHash(text: string, algorithm: Algorithm): Promise<string> {
   const data = new TextEncoder().encode(text)
-  const hashBuffer = await crypto.subtle.digest(algorithm, data)
-  const hashArray = Array.from(new Uint8Array(hashBuffer))
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+  if (!algorithm.webCrypto) return md5Hex(data)
+  const hashBuffer = await crypto.subtle.digest(algorithm.webCrypto, data)
+  return Array.from(new Uint8Array(hashBuffer), (b) => b.toString(16).padStart(2, '0')).join('')
 }
 
 export const hashPlugin = definePlugin({
-  tools: [
-    {
-      id: 'hash.sha256',
-      title: 'command.sha256.title',
-      subtitle: 'command.sha256.description',
-      icon: 'Hash',
-      aliases: ['sha256', 'sha-256'],
-      inputPolicy: { mode: 'auto' },
-      async run(ctx) {
-        try {
-          return ctx.output.text(await computeHash(ctx.input.text, 'SHA-256'))
-        } catch (e: any) {
-          return ctx.output.error(ctx.t('error.hash', { message: e.message }))
-        }
-      },
-      surfaces: { launcher: { surfaces: ['global-launcher', 'editor-command-bar', 'quick-editor-command'] }, panel: true },
+  tools: ALGORITHMS.map((algorithm) => ({
+    id: `hash.${algorithm.key}`,
+    title: `command.${algorithm.key}.title`,
+    subtitle: `command.${algorithm.key}.description`,
+    icon: 'Hash',
+    aliases: algorithm.aliases,
+    inputPolicy: { mode: 'auto' as const },
+    async run(ctx) {
+      try {
+        return ctx.output.text(await computeHash(ctx.input.text, algorithm))
+      } catch (e) {
+        return ctx.output.error(ctx.t('error.hash', { message: e instanceof Error ? e.message : String(e) }))
+      }
     },
-    {
-      id: 'hash.sha1',
-      title: 'command.sha1.title',
-      subtitle: 'command.sha1.description',
-      icon: 'Hash',
-      aliases: ['sha1', 'sha-1'],
-      inputPolicy: { mode: 'auto' },
-      async run(ctx) {
-        try {
-          return ctx.output.text(await computeHash(ctx.input.text, 'SHA-1'))
-        } catch (e: any) {
-          return ctx.output.error(ctx.t('error.hash', { message: e.message }))
-        }
-      },
-      surfaces: { launcher: { surfaces: ['global-launcher', 'editor-command-bar', 'quick-editor-command'] }, panel: true },
-    },
-    {
-      id: 'hash.sha512',
-      title: 'command.sha512.title',
-      subtitle: 'command.sha512.description',
-      icon: 'Hash',
-      aliases: ['sha512', 'sha-512'],
-      inputPolicy: { mode: 'auto' },
-      async run(ctx) {
-        try {
-          return ctx.output.text(await computeHash(ctx.input.text, 'SHA-512'))
-        } catch (e: any) {
-          return ctx.output.error(ctx.t('error.hash', { message: e.message }))
-        }
-      },
-      surfaces: { launcher: { surfaces: ['global-launcher', 'editor-command-bar', 'quick-editor-command'] }, panel: true },
-    },
-  ],
+    surfaces: { launcher: { surfaces: ['global-launcher', 'editor-command-bar', 'quick-editor-command'] as Array<'global-launcher' | 'editor-command-bar' | 'quick-editor-command'> }, panel: true },
+  })),
 })
 
 export default hashPlugin

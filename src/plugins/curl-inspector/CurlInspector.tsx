@@ -4,14 +4,13 @@ import { Button, IconButton, TextArea } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
 import { CurlParseError, curlHeaderDisplayLabels, parseCurl } from './core'
 
-export function CurlInspector({ host, t }: PluginSurfaceProps) {
-  // Deliberately ignore initialText: a curl command belongs here, never in a launcher query.
-  const [source, setSource] = useState('')
+export function CurlInspector({ host, initialText, t }: PluginSurfaceProps) {
+  const [source, setSource] = useState(initialText ?? '')
   const [status, setStatus] = useState('')
   const result = useMemo(() => {
     if (!source.trim()) return null
     try { return { request: parseCurl(source) } }
-    catch (error) { return { error: error instanceof CurlParseError ? error.code : 'option' } }
+    catch (error) { return error instanceof CurlParseError ? { error: error.code, detail: error.detail ?? '' } : { error: 'option', detail: '' } }
   }, [source])
   const headerLabels = useMemo(() => result?.request ? curlHeaderDisplayLabels(result.request.headers) : [], [result])
   const copy = async (text: string) => {
@@ -47,7 +46,7 @@ export function CurlInspector({ host, t }: PluginSurfaceProps) {
         </div>
       </div>
       <TextArea id="curl-source" value={source} spellCheck={false} autoComplete="off" autoCorrect="off" autoCapitalize="off" rows={4} onChange={(event) => { setSource(event.target.value); setStatus('') }} />
-      {result?.error && <p className="curl-error" role="alert">{t(`error.${result.error}`)}</p>}
+      {result?.error && <p className="curl-error" role="alert">{t(`error.${result.error}`, { token: result.detail ?? '' })}</p>}
       {result?.request && <section className="curl-parsed" aria-label={t('parsed')}>
         {field('method', t('method'), result.request.method)}
         {field('url', t('url'), result.request.url)}

@@ -46,5 +46,6 @@
   "hud.error": "No QR code found",
   "hud.errorStatus": "Not found",
   "hud.error.unavailable": "Can't read the clipboard",
-  "hud.errorStatus.unavailable": "Unavailable"
+  "hud.errorStatus.unavailable": "Unavailable",
+  "error.tooLong": "Too much content for a QR code. Shorten it or lower the error correction level."
 }

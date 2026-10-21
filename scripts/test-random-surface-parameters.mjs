@@ -55,7 +55,7 @@ for (const mode of ['uuid', 'color', 'boolean']) {
 for (const [mode, config, error] of [
   ['integer', { min: 1.9, max: 1.1 }, /RANGE/],
   ['integer', { count: 0.9 }, /COUNT/],
-  ['float', { max: Infinity }, /Invalid range/],
+  ['float', { max: Infinity }, /RANGE/],
   ['string', { length: 1024.9 }, /LENGTH/],
   ['password', { length: 0 }, /LENGTH/],
   ['hex', { bytes: 1024.9 }, /BYTES/],
@@ -71,3 +71,10 @@ assert.equal(rnd.generateSurfaceValues('string', { ...surfaceConfig, length: 16.
 assert.equal(rnd.generateSurfaceValues('hex', { ...surfaceConfig, bytes: 16.9, count: 1 })[0].length, 32)
 
 console.log('random surface parameter snapshot checks passed')
+
+// Wide spans (> 2^32) must terminate and stay within range.
+for (let i = 0; i < 20; i++) {
+  const n = rnd.randomInt(0, 5e9)
+  assert.ok(Number.isInteger(n) && n >= 0 && n <= 5e9)
+}
+assert.throws(() => rnd.randomInt(-Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER), /RANGE/)

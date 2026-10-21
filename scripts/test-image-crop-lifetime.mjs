@@ -4,18 +4,18 @@ import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import ts from 'typescript'
 import { createJiti } from 'jiti'
-const core=await createJiti(import.meta.url).import('../src/plugins/encode-decode/imageCrop.ts')
+const core=await createJiti(import.meta.url).import('../src/plugins/image-tools/imageCrop.ts')
 const jsx=(type,props)=>({type,props}),slots=[];let cursor=0,effects=[],tree,leave
 const same=(a,b)=>a&&b&&a.length===b.length&&a.every((v,i)=>Object.is(v,b[i]))
 const react={useState(initial){const i=cursor++;slots[i]??={value:initial};return[slots[i].value,v=>{slots[i].value=typeof v==='function'?v(slots[i].value):v}]},useRef(value){const i=cursor++;slots[i]??={current:value};return slots[i]},useLayoutEffect(fn,deps){const i=cursor++;if(!same(slots[i]?.deps,deps))effects.push(()=>{slots[i]?.cleanup?.();slots[i]={deps,cleanup:fn()}})}}
 let read=async()=>({bytes:new Uint8Array([1])}),put=async()=>({blobId:'crop'}),save=async()=>({status:'saved'}),writes=0,deletes=0,puts=0,current=true,source
 const props={t:k=>k,onDirtyChange(){},invalidateRef:{current:null},host:{deliveryFeedbackOwner:{isCurrent:()=>current,subscribeInvalidation(){return()=>{}}},subscribeLeaveIntent(fn){leave=fn;return()=>{}},clipboard:{readImage:(...a)=>read(...a),writeImage:async()=>{writes++}},storage:{blob:{put:(...a)=>{puts++;return put(...a)},delete:async()=>{deletes++},savePng:(...a)=>save(...a)}}}}
 const exports={}
-vm.runInNewContext(ts.transpileModule(readFileSync('src/plugins/encode-decode/ImageCropPanel.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,AbortController,Uint8Array,require(name){
+vm.runInNewContext(ts.transpileModule(readFileSync('src/plugins/image-tools/ImageCropPanel.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,AbortController,Uint8Array,require(name){
  if(name==='react')return react
  if(name==='react/jsx-runtime')return{jsx,jsxs:jsx}
  if(name==='@hiven/plugin-ui')return{Button:'Button',useLocalEscapeLayer(){}}
- if(name==='./imageBase64')return{MAX_IMAGE_BYTES:100}
+ if(name==='./raster')return{MAX_IMAGE_BYTES:100}
  if(name==='./imageRedaction')return{loadRedactionImage:async()=>source={width:20,height:10}}
  if(name==='./imageCrop')return{...core,exportCrop:async()=>new Uint8Array([1])}
  if(name.endsWith('.css'))return{}

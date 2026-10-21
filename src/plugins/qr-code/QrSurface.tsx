@@ -18,6 +18,7 @@ import {
   isImageDataUrl,
   normalizeQrErrorCorrection,
   normalizeQrSize,
+  QR_TOO_LONG,
   type QrDecodeResult,
   type QrErrorCorrection,
 } from './qrCore'
@@ -105,10 +106,10 @@ export function QrSurface(props: PluginSurfaceProps) {
         setDataUrl(url)
         setGenError('')
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (cancelled) return
         setDataUrl('')
-        setGenError(t('error.generate'))
+        setGenError(t(error instanceof Error && error.message === QR_TOO_LONG ? 'error.tooLong' : 'error.generate'))
       })
     return () => {
       cancelled = true

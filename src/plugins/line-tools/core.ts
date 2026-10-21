@@ -48,8 +48,27 @@ export type TextStats = {
   charactersNoSpace: number
 }
 
+/** Raised for input a line operation cannot represent safely (surfaced as an i18n message by callers). */
+export class LineToolsError extends Error {
+  readonly code: 'sqlNumber'
+  readonly value: string
+  constructor(code: 'sqlNumber', value: string) { super(code); this.code = code; this.value = value }
+}
+
+/**
+ * Line operations act on lines, not on the final line terminator: strip one trailing newline,
+ * split on LF or CRLF, then restore the trailing newline and join with the text's own separator.
+ */
+function mapLines(text: string, transform: (lines: string[]) => string[]): string {
+  const eol = /\r?\n/.exec(text)?.[0] ?? '\n'
+  const tail = /\r?\n$/.exec(text)?.[0] ?? ''
+  const lines = (tail ? text.slice(0, -tail.length) : text).split(/\r?\n/)
+  const result = transform(lines)
+  return result.length === 0 ? '' : result.join(eol) + tail
+}
+
 export function reverseLines(text: string): string {
-  return text.split('\n').reverse().join('\n')
+  return mapLines(text, (lines) => [...lines].reverse())
 }
 
 export function reverseText(text: string): string {
@@ -57,21 +76,21 @@ export function reverseText(text: string): string {
 }
 
 export function sortLines(text: string, direction: 'asc' | 'desc', ignoreCase: boolean): string {
-  return text.split('\n').sort((a, b) => {
+  return mapLines(text, (lines) => [...lines].sort((a, b) => {
     const x = ignoreCase ? a.toLowerCase() : a
     const y = ignoreCase ? b.toLowerCase() : b
     return direction === 'desc' ? y.localeCompare(x) : x.localeCompare(y)
-  }).join('\n')
+  }))
 }
 
 export function dedupLines(text: string, ignoreCase: boolean): string {
   const seen = new Set<string>()
-  return text.split('\n').filter((line) => {
+  return mapLines(text, (lines) => lines.filter((line) => {
     const key = ignoreCase ? line.toLowerCase() : line
     if (seen.has(key)) return false
     seen.add(key)
     return true
-  }).join('\n')
+  }))
 }
 
 export type SourceLineRange = { line: number; start: number; end: number }
@@ -110,11 +129,11 @@ export function duplicateLineReport(groups: DuplicateLineGroup[]): string {
 }
 
 export function removeBlankLines(text: string): string {
-  return text.split('\n').filter((line) => line.trim() !== '').join('\n')
+  return mapLines(text, (lines) => lines.filter((line) => line.trim() !== ''))
 }
 
 export function trimLineWhitespace(text: string): string {
-  return text.split('\n').map((line) => line.trim()).join('\n')
+  return mapLines(text, (lines) => lines.map((line) => line.trim()))
 }
 
 export type LineListCleanupOptions = {
@@ -163,29 +182,40 @@ export function cleanLineList(text: string, options: Partial<LineListCleanupOpti
 }
 
 export function joinLines(text: string, separator: string): string {
-  return text.split('\n').join(separator.replace(/\\n/g, '\n').replace(/\\t/g, '\t'))
+  const glue = separator.replace(/\\n/g, '\n').replace(/\\t/g, '\t')
+  const tail = /\r?\n$/.exec(text)?.[0] ?? ''
+  const lines = (tail ? text.slice(0, -tail.length) : text).split(/\r?\n/)
+  return lines.join(glue) + tail
 }
 
 export function prependLines(text: string, prefix: string): string {
-  return text.split('\n').map((line) => prefix + line).join('\n')
+  return mapLines(text, (lines) => lines.map((line) => prefix + line))
 }
 
 export function appendLines(text: string, suffix: string): string {
-  return text.split('\n').map((line) => line + suffix).join('\n')
+  return mapLines(text, (lines) => lines.map((line) => line + suffix))
 }
 
 export function wrapLines(text: string, left: string, right: string): string {
-  return text.split('\n').map((line) => left + line + right).join('\n')
+  return mapLines(text, (lines) => lines.map((line) => left + line + right))
 }
 
-export function sqlInString(text: string): string {
-  const lines = text.split('\n').filter((line) => line.trim() !== '')
-  return '(' + lines.map((line) => `'${line.trim().replace(/'/g, "''")}'`).join(',') + ')'
+function nonBlankLines(text: string): string[] {
+  return text.split(/\r?\n/).filter((line) => line.trim() !== '')
 }
+
+/** Backslashes are doubled so MySQL's default escaping cannot end the literal early. */
+export function sqlInString(text: string): string {
+  return '(' + nonBlankLines(text).map((line) => `'${line.trim().replace(/\\/g, '\\\\').replace(/'/g, "''")}'`).join(',') + ')'
+}
+
+const SQL_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/
 
 export function sqlInNumber(text: string): string {
-  const lines = text.split('\n').filter((line) => line.trim() !== '')
-  return '(' + lines.map((line) => line.trim()).join(',') + ')'
+  const values = nonBlankLines(text).map((line) => line.trim())
+  const invalid = values.find((value) => !SQL_NUMBER.test(value))
+  if (invalid !== undefined) throw new LineToolsError('sqlNumber', invalid)
+  return '(' + values.join(',') + ')'
 }
 
 export function processLines(operation: LineOperation, text: string, options: LineOptions): string {
@@ -249,16 +279,25 @@ export function convertIdentifier(text: string, style: CaseStyle): string {
 export function convertText(text: string, operation: CaseOperation): string {
   if (operation === 'plain-upper') return text.toUpperCase()
   if (operation === 'plain-lower') return text.toLowerCase()
-  if (operation === 'plain-title') return text.replace(/\b\w/g, (character) => character.toUpperCase())
+  if (operation === 'plain-title') return text.replace(/(^|\s)(\p{L})/gu, (_, space: string, letter: string) => space + letter.toUpperCase())
   if (!text) return text
   return text.split('\n').map((line) => line.trim() ? convertIdentifier(line, operation) : line).join('\n')
 }
 
+function countWords(text: string): number {
+  if (typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function') {
+    let count = 0
+    for (const part of new Intl.Segmenter(undefined, { granularity: 'word' }).segment(text)) if (part.isWordLike) count++
+    return count
+  }
+  return text.split(/\s+/).filter(Boolean).length
+}
+
 export function getTextStats(text: string): TextStats {
   return {
-    lines: text.split('\n').length,
-    words: text.split(/\s+/).filter(Boolean).length,
-    characters: text.length,
-    charactersNoSpace: text.replace(/\s/g, '').length,
+    lines: text === '' ? 0 : text.split(/\r?\n/).length,
+    words: countWords(text),
+    characters: Array.from(text).length,
+    charactersNoSpace: Array.from(text.replace(/\s/g, '')).length,
   }
 }

@@ -4,11 +4,12 @@ import { Button, IconButton, Select } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon, SettingsIcon } from '@hiven/plugin-ui/icons'
 import { AlertTriangle, ArrowRight, LoaderCircle } from 'lucide-react'
 import type { SourceLanguageCode, TargetLanguageCode, TranslateProfile, TranslateSettings } from '../settings/model'
-import { currentUsageMonth } from '../settings/model'
+import { currentUsageMonth, isProfileUsable, profileDisplayName } from '../settings/model'
 import { profileExecutionKey } from '../settings/executionKey'
 import { AiGlossaryValidationError, validateAiGlossary } from '../ai/glossary'
 import { useAiTranslationReadiness } from '../ai/useReadiness'
 import { AiReadinessNotice } from '../ai/AiReadinessNotice'
+import { TranslateError } from '../providers/errors'
 import { AiTranslationError, estimateBilledChars, isAutoTranslateReady, resolveSmartTargetLang, translateText } from '../providers/adapters'
 import { isCurrentTranslationOutput, type TranslationOutput } from './outputEligibility'
 
@@ -16,13 +17,13 @@ const AUTO_TRANSLATE_DEBOUNCE_MS = 800
 
 type TranslateStatus =
   | { kind: 'idle' }
-  | { kind: 'unconfigured' }
+  | { kind: 'unconfigured'; reason: 'profile' | 'credentials' }
   | { kind: 'waiting'; dueAt: number }
   | { kind: 'translating'; requestId: number }
   | { kind: 'success'; translatedAt: number }
   | { kind: 'stopped' }
   | { kind: 'settings-paused' }
-  | { kind: 'error'; message: string; messageKey?: string }
+  | { kind: 'error'; message: string; messageKey?: string; detail?: string }
   | { kind: 'quota-exceeded'; usedChars: number; limitChars: number }
 
 type TranslationView = {
@@ -85,7 +86,10 @@ function enabledProfiles(settings: TranslateSettings): TranslateProfile[] {
 }
 
 function selectInitialProfile(settings: TranslateSettings): TranslateProfile | undefined {
-  return enabledProfiles(settings).find((profile) => profile.id === settings.defaultProfileId) ?? enabledProfiles(settings)[0]
+  const enabled = enabledProfiles(settings)
+  const usable = enabled.filter(isProfileUsable)
+  return usable.find((profile) => profile.id === settings.defaultProfileId) ?? usable[0]
+    ?? enabled.find((profile) => profile.id === settings.defaultProfileId) ?? enabled[0]
 }
 
 function resetUsageMonth(profile: TranslateProfile, month: string): TranslateProfile {
@@ -102,14 +106,14 @@ function stateName(status: TranslateStatus): 'idle' | 'waiting' | 'translating' 
 }
 
 function statusLabel(status: TranslateStatus, t: (key: string) => string): string {
-  if (status.kind === 'unconfigured') return t('status.noProfile')
+  if (status.kind === 'unconfigured') return t(status.reason === 'credentials' ? 'status.noCredentials' : 'status.noProfile')
   if (status.kind === 'waiting') return t('status.waiting')
   if (status.kind === 'translating') return t('status.translating')
   if (status.kind === 'success') return localizedText(t, 'status.success', 'Translated')
   if (status.kind === 'stopped') return t('status.stopped')
   if (status.kind === 'settings-paused') return t('status.settingsPaused')
   if (status.kind === 'error') {
-    return t('status.error').replace('{message}', status.messageKey ? t(status.messageKey) : status.message)
+    return t('status.error').replace('{message}', status.messageKey ? t(status.messageKey).replace('{detail}', status.detail ?? '') : status.message)
   }
   if (status.kind === 'quota-exceeded') return localizedText(t, 'status.quota', 'Monthly quota reached')
   return localizedText(t, 'status.idle', 'Idle')
@@ -217,8 +221,8 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
   const sourceOptions = useMemo(() => localizedOptions(t, SOURCE_LANGUAGE_OPTIONS), [t])
   const targetOptions = useMemo(() => localizedOptions(t, TARGET_LANGUAGE_OPTIONS), [t])
   const profileOptions = useMemo<Array<SelectOption<string>>>(
-    () => profiles.map((profile) => ({ label: profile.name, value: profile.id, sub: profile.provider })),
-    [profiles],
+    () => profiles.map((profile) => ({ label: profileDisplayName(profile, t), value: profile.id, sub: profile.provider })),
+    [profiles, t],
   )
   const activeProfile = useMemo(
     () => profiles.find((profile) => profile.id === profileId) ?? initialProfile,
@@ -238,7 +242,9 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
     : autoTranslatePausedRef.current
       ? { kind: 'settings-paused' }
       : !activeProfile
-        ? { kind: 'unconfigured' }
+        ? { kind: 'unconfigured', reason: 'profile' }
+        : !isProfileUsable(activeProfile)
+          ? { kind: 'unconfigured', reason: 'credentials' }
         : activeProfile.provider === 'ai' && !readinessController.execution(host.ai, activeProfile)
           ? { kind: 'idle' }
           : isAutoTranslateReady(inputText)
@@ -334,7 +340,15 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
       if (!isCurrent()) return
       const nextStatus: TranslateStatus = error instanceof Error && error.name === 'AbortError'
         ? { kind: 'stopped' }
-        : { kind: 'error', message: error instanceof Error ? error.message : '', messageKey: error instanceof AiGlossaryValidationError ? 'ai.glossary.invalidSaved' : error instanceof AiTranslationError ? `error.ai.${error.code}` : error instanceof Error ? undefined : 'error.unknown' }
+        : {
+          kind: 'error',
+          message: error instanceof Error ? error.message : '',
+          detail: error instanceof TranslateError ? error.detail : undefined,
+          messageKey: error instanceof AiGlossaryValidationError ? 'ai.glossary.invalidSaved'
+            : error instanceof AiTranslationError ? `error.ai.${error.code}`
+              : error instanceof TranslateError ? `error.translate.${error.code}`
+                : error instanceof Error ? undefined : 'error.unknown',
+        }
       setView({ identity: run.identity, outputText: preview, status: nextStatus })
     } finally {
       if (runRef.current === run) runRef.current = null
@@ -352,7 +366,12 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
     }
 
     if (!profile || !isAutoTranslateReady(trimmed)) {
-      setView({ identity: requestIdentity, outputText: '', status: { kind: profile ? 'idle' : 'unconfigured' } })
+      setView({ identity: requestIdentity, outputText: '', status: profile ? { kind: 'idle' } : { kind: 'unconfigured', reason: 'profile' } })
+      return
+    }
+
+    if (!isProfileUsable(profile)) {
+      setView({ identity: requestIdentity, outputText: '', status: { kind: 'unconfigured', reason: 'credentials' } })
       return
     }
 
@@ -379,7 +398,7 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
     if (settingsVisitRef.current || identityRef.current !== requestIdentity) return
     if (activeProfile?.provider === 'ai' && readinessController.getSnapshot().revision !== readiness.revision) return
     cancelCurrentRun()
-    if (!activeProfile || !isAutoTranslateReady(inputText)) return
+    if (!activeProfile || !isProfileUsable(activeProfile) || !isAutoTranslateReady(inputText)) return
     if (activeProfile.provider === 'ai' && !readinessController.execution(hostRef.current.ai, activeProfile)) return
     autoTranslatePausedRef.current = false
     const run: TranslationRun = { id: ++requestIdRef.current, identity: requestIdentity, controller: new AbortController(), aiRevision: readiness.revision }

@@ -28,7 +28,9 @@ try {
     assert.deepEqual(parse(`chmod ${value.octal}`).value, value)
   }
   for (const query of ['chmod 888', 'chmod 9999', 'chmod 10000', 'chmod 07555', 'chmod 77']) assert.equal(parse(query).error, 'octal')
-  for (const query of ['chmod 755 /tmp/file', 'chmod -R 755', 'chmod u+x', 'chmod 755; touch x', 'chmod $(whoami)', 'chmod', 'permissions', 'chmod 0o755', 'chmod +755', 'chmod -1']) assert.equal(parse(query).ok, false)
+  for (const query of ['chmod', 'permissions']) assert.equal(parse(query).ok, false)
+for (const query of ['chmod 755 /tmp/file', 'chmod -R 755', 'chmod u+x', 'chmod +x', 'chmod 755; touch x', 'chmod $(whoami)', 'chmod 0o755', 'chmod +755', 'chmod -1']) assert.equal(parse(query), null, query)
+assert.equal(parse('-rwxr-xr-x').value.octal, '0755')
   for (const query of ['rwtr-xr-x', 'rwxr-xr-s', 'rSxr-xr-x']) assert.equal(parse(query).error, 'symbolic')
   for (const query of ['755', '123', 'permissionless', 'chmodish 755', 'hello']) assert.equal(parse(query), null)
   for (const mode of [-1, 4096, 1.5, NaN]) assert.throws(() => decodePermissions(mode), RangeError)

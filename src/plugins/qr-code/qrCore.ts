@@ -48,18 +48,29 @@ export function createQrModules(text: string, errorCorrection: QrErrorCorrection
   return { size: qr.modules.size }
 }
 
+/** Thrown when the payload exceeds the largest QR version at the chosen error-correction level. */
+export const QR_TOO_LONG = 'too-long'
+
+function asQrError(error: unknown): Error {
+  return error instanceof Error && /too big/i.test(error.message) ? new Error(QR_TOO_LONG) : error instanceof Error ? error : new Error(String(error))
+}
+
 export async function generateQrDataUrl(
   text: string,
   options?: { errorCorrection?: QrErrorCorrection; size?: number },
 ): Promise<string> {
   const payload = text.trim()
   if (!payload) throw new Error('empty')
-  return qrToDataUrl(payload, {
-    errorCorrectionLevel: options?.errorCorrection ?? DEFAULT_QR_ERROR_LEVEL,
-    width: normalizeQrSize(options?.size),
-    margin: 1,
-    color: { dark: '#111111', light: '#ffffff' },
-  })
+  try {
+    return await qrToDataUrl(payload, {
+      errorCorrectionLevel: options?.errorCorrection ?? DEFAULT_QR_ERROR_LEVEL,
+      width: normalizeQrSize(options?.size),
+      margin: 1,
+      color: { dark: '#111111', light: '#ffffff' },
+    })
+  } catch (error) {
+    throw asQrError(error)
+  }
 }
 
 export function dataUrlToBase64(dataUrl: string): string {

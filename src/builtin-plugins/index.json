@@ -1,15 +1,20 @@
 {
-  "version": 161,
+  "version": 162,
   "packages": [
     {
       "pluginId": "encode-decode",
       "dir": "encode-decode",
-      "version": "2.10.4"
+      "version": "2.10.6"
+    },
+    {
+      "pluginId": "image-tools",
+      "dir": "image-tools",
+      "version": "1.0.0"
     },
     {
       "pluginId": "formatter",
       "dir": "formatter",
-      "version": "2.1.12"
+      "version": "2.1.13"
     },
     {
       "pluginId": "json-tools",
@@ -19,12 +24,12 @@
     {
       "pluginId": "line-tools",
       "dir": "line-tools",
-      "version": "3.7.4"
+      "version": "3.7.5"
     },
     {
       "pluginId": "crypto",
       "dir": "crypto",
-      "version": "2.0.3"
+      "version": "2.0.4"
     },
     {
       "pluginId": "csv",
@@ -34,27 +39,27 @@
     {
       "pluginId": "calculator",
       "dir": "calculator",
-      "version": "1.9.1"
+      "version": "1.9.2"
     },
     {
       "pluginId": "date-time-assistant",
       "dir": "date-time-assistant",
-      "version": "1.12.1"
+      "version": "1.12.2"
     },
     {
       "pluginId": "translate",
       "dir": "translate",
-      "version": "1.0.27"
+      "version": "1.0.28"
     },
     {
       "pluginId": "ai-writing",
       "dir": "ai-writing",
-      "version": "1.0.3"
+      "version": "1.0.4"
     },
     {
       "pluginId": "regex-tester",
       "dir": "regex-tester",
-      "version": "1.4.3"
+      "version": "1.4.4"
     },
     {
       "pluginId": "text-diff",
@@ -74,17 +79,17 @@
     {
       "pluginId": "qr-code",
       "dir": "qr-code",
-      "version": "1.0.15"
+      "version": "1.0.16"
     },
     {
       "pluginId": "random",
       "dir": "random",
-      "version": "1.2.4"
+      "version": "1.2.5"
     },
     {
       "pluginId": "text-explode",
       "dir": "text-explode",
-      "version": "1.0.11"
+      "version": "1.0.12"
     },
     {
       "pluginId": "user-commands",
@@ -94,7 +99,7 @@
     {
       "pluginId": "color-tools",
       "dir": "color-tools",
-      "version": "1.0.1"
+      "version": "1.0.2"
     },
     {
       "pluginId": "file-paths",
@@ -104,12 +109,12 @@
     {
       "pluginId": "curl-inspector",
       "dir": "curl-inspector",
-      "version": "1.0.5"
+      "version": "1.1.0"
     },
     {
       "pluginId": "unix-permissions",
       "dir": "unix-permissions",
-      "version": "1.0.2"
+      "version": "1.0.3"
     }
   ]
 }

@@ -1,6 +1,6 @@
 import { useMarkdownPlainText } from './useMarkdownPlainText'
 import { useLayoutEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
-import { getPluginHostSdk, type PluginSurfaceProps } from '@hiven/plugin'
+import type { PluginSurfaceProps } from '@hiven/plugin'
 import { Button, Checkbox, IconButton, SegmentedControl, Select, TextArea, TextInput, useToolDeliveryFeedback } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
 import { Check, ClipboardPaste, Copy, CornerDownLeft, TriangleAlert } from 'lucide-react'
@@ -66,7 +66,6 @@ type TextWorkbenchProps = PluginSurfaceProps & {
 
 export function TextWorkbenchSurface(props: TextWorkbenchProps) {
   const { host, t } = props
-  const { compactJson, formatJson, urlDecode, urlEncode } = getPluginHostSdk().kits.textTransforms
   const [localInputText, setLocalInputText] = useState(props.initialText ?? '')
   const inputText = props.embedded?.inputText ?? localInputText
   const setInputText = props.embedded?.onInputChange ?? setLocalInputText
@@ -92,14 +91,14 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
   const [continuation, setContinuation] = useState<ContinuationSnapshot | null>(null)
   const continuationRef = useRef<ContinuationSnapshot | null>(null)
   const [confirmUndo, setConfirmUndo] = useState(false)
+
   const selected = WORKBENCH_OPERATIONS.find((item) => item.value === operation)!
-  const category = selected.category
 
   const markdownResult = useMarkdownPlainText(inputText, operation === 'markdown-plain-text', revision, t('markdownPlain.image'))
   const syncResult = useMemo<WorkbenchResult>(() => {
-    return evaluateWorkbench(inputText, operation, options, { compactJson, formatJson, urlDecode, urlEncode })
+    return evaluateWorkbench(inputText, operation, options)
     // A revision gives identical-looking results a fresh identity after any edit or exit.
-  }, [inputText, operation, options, revision, compactJson, formatJson, urlDecode, urlEncode])
+  }, [inputText, operation, options, revision])
   const result = operation === 'markdown-plain-text' ? markdownResult : syncResult
   const delivery = useToolDeliveryFeedback(result, host.deliveryFeedbackOwner)
 
@@ -283,21 +282,12 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
       </header> : null}
 
       <div className="text-workbench-controls">
-        <SegmentedControl
-          aria-label={t('workbench.category')}
-          value={category}
-          options={(['text', 'json', 'url'] as const).map((value) => ({ value, label: t(`workbench.category.${value}`) }))}
-          onChange={(value) => {
-            if (value !== category) changeOperation(WORKBENCH_OPERATIONS.find((item) => item.category === value)!.value)
-          }}
-        />
         <label className="text-workbench-operation">
           <span>{t('workbench.operation')}</span>
           <Select
-            key={category}
             aria-label={t('workbench.operation')}
             value={operation}
-            options={WORKBENCH_OPERATIONS.filter((item) => item.category === category).map((item) => ({ value: item.value, label: t(item.label) }))}
+            options={WORKBENCH_OPERATIONS.map((item) => ({ value: item.value, label: t(item.label) }))}
             onChange={(event) => {
               const next = event.currentTarget.value as WorkbenchOperation
               changeOperation(next)
@@ -305,14 +295,6 @@ export function TextWorkbenchSurface(props: TextWorkbenchProps) {
           />
         </label>
         <div className={`text-workbench-options${operation === 'clean-list' ? ' text-workbench-options--cleanup' : ''}`}>
-          {operation === 'json-format' ? (
-            <SegmentedControl
-              aria-label={t('workbench.indent')}
-              value={String(options.indent)}
-              options={[2, 4].map((count) => ({ value: String(count), label: t('workbench.spaces', { count }) }))}
-              onChange={(value) => changeOption('indent', Number(value))}
-            />
-          ) : null}
           {operation === 'sort' ? (
             <SegmentedControl
               aria-label={t('param.direction.label')}

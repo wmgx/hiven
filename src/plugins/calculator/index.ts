@@ -1,5 +1,5 @@
 import BigNumber from 'bignumber.js'
-import { getPluginHostSdk, textOutput, textError, type PanelPropsV2, type PluginDefinition, type PluginSurfaceProps, type TextInput, type LauncherDynamicContext, type LauncherItemContribution } from '@hiven/plugin'
+import { getPluginHostSdk, type PanelPropsV2, type PluginDefinition, type PluginSurfaceProps, type LauncherDynamicContext, type LauncherItemContribution } from '@hiven/plugin'
 import { CalculatorSurface } from './CalculatorSurface'
 import { convertUnitQuery } from './unitConversion'
 import { parseChineseNumeralQuery } from './chineseNumeral'
@@ -227,8 +227,9 @@ function parse(tokens: Token[], variables: ReadonlyMap<string, string>): BigNumb
 
 function formatBigNumber(value: BigNumber): string {
   if (value.isZero()) return '0'
-  return value
-    .decimalPlaces(10)
+  // Tiny non-zero results keep significant digits instead of rounding up to 1e-10 or down to 0.
+  const rounded = value.abs().lt('1e-10') ? value.precision(10) : value.decimalPlaces(10)
+  return rounded
     .toFixed()
     .replace(/(\.\d*?)0+$/, '$1')
     .replace(/\.$/, '')
@@ -256,10 +257,18 @@ function calculateExpression(expr: string, variables: ReadonlyMap<string, string
   return result === null ? null : formatBigNumber(result)
 }
 
+/** Dates, phone numbers and ids: digits joined by `-` with no spaces (1-2-3, 2024-01-15, 010-1234). */
+function looksLikeDashedNumber(text: string): boolean {
+  if (!/^\d+(?:-\d+)+$/.test(text)) return false
+  const groups = text.split('-')
+  return groups.length > 2 || groups.some((group) => group.length > 1 && group.startsWith('0'))
+}
+
 function safeCalculate(expr: string): string | null {
   const trimmed = expr.trim()
   // Launcher suggestions only activate for formulas and avoid timestamp-like text.
   if (!/[+\-*/%^()]/.test(trimmed) || /^\d{10,13}$/.test(trimmed)) return null
+  if (looksLikeDashedNumber(trimmed)) return null
   return calculateExpression(trimmed)
 }
 
@@ -533,72 +542,6 @@ const definition: PluginDefinition = {
         }
       },
       surfaces: { launcher: { surfaces: ['editor-command-bar', 'quick-editor-command'] }, panel: true },
-    },
-  ],
-  commands: [
-    {
-      id: 'calculator.run',
-      title: 'command.run.title',
-      icon: 'Calculator',
-      aliases: ['calc', 'formula'],
-      live: { live: { enabled: true, trigger: 'on-input', sideEffects: 'none', debounceMs: 250 } },
-      inputs: [
-        { key: 'input', label: 'input.text.label', kind: 'text', required: true },
-      ],
-      inputResolution: { strategy: 'use-active', fallback: 'fail' },
-      run(ctx) {
-        const input = ctx.inputs.input as TextInput
-        const text = input?.kind === 'text' ? input.text : ''
-        return textOutput(calculateFormulaLines(text))
-      },
-    },
-    {
-      id: 'calculator.sum',
-      title: 'command.sum.title',
-      icon: 'Sigma',
-      aliases: ['sum', 'add', 'total'],
-      inputs: [
-        { key: 'input', label: 'input.text.label', kind: 'text', required: true },
-      ],
-      inputResolution: { strategy: 'use-active', fallback: 'fail' },
-      run(ctx) {
-        const input = ctx.inputs.input as TextInput
-        const text = input?.kind === 'text' ? input.text : ''
-        return textOutput(sumNumericTokens(text))
-      },
-    },
-    {
-      id: 'calculator.base',
-      title: 'command.base.title',
-      icon: 'Binary',
-      aliases: ['decimal', 'binary', 'hex', 'hex-convert'],
-      params: [
-        {
-          key: 'mode',
-          label: 'param.base.mode.label',
-          type: 'single-select',
-          options: [
-            { label: 'param.base.mode.option.dec2hex.label', value: 'dec2hex' },
-            { label: 'param.base.mode.option.hex2dec.label', value: 'hex2dec' },
-            { label: 'param.base.mode.option.dec2bin.label', value: 'dec2bin' },
-            { label: 'param.base.mode.option.bin2dec.label', value: 'bin2dec' },
-          ],
-          default: 'dec2hex',
-        },
-      ],
-      inputs: [
-        { key: 'input', label: 'input.text.label', kind: 'text', required: true },
-      ],
-      inputResolution: { strategy: 'use-active', fallback: 'fail' },
-      run(ctx) {
-        const input = ctx.inputs.input as TextInput
-        const text = input?.kind === 'text' ? input.text : ''
-        try {
-          return textOutput(convertBaseLines(text, (ctx.params.mode ?? 'dec2hex') as BaseConversionMode))
-        } catch (error: any) {
-          return textError(`Error: ${error.message}`)
-        }
-      },
     },
   ],
   panels: [

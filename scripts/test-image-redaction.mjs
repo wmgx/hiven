@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { createJiti } from 'jiti'
-const { redactionRect } = await createJiti(import.meta.url).import('../src/plugins/encode-decode/imageRedaction.ts')
+const { redactionRect } = await createJiti(import.meta.url).import('../src/plugins/image-tools/imageRedaction.ts')
 assert.deepEqual(redactionRect({x: 2.9,y: 3.9},{x: 7.01,y: 8.01},10,10),{x:2,y:3,width:6,height:6})
 assert.deepEqual(redactionRect({x: 11,y: 12},{x: -1,y: -2},10,10),{x:0,y:0,width:10,height:10})
 assert.deepEqual(redactionRect({x: 100.1,y: 70.8},{x: 1.2,y: 2.3},200,100),{x:1,y:2,width:100,height:69})

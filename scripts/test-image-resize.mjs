@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { createJiti } from 'jiti'
-const { resizeDimensions: size, exportResizedImage: encode } = await createJiti(import.meta.url).import('../src/plugins/encode-decode/imageResize.ts')
+const { resizeDimensions: size, exportResizedImage: encode } = await createJiti(import.meta.url).import('../src/plugins/image-tools/imageResize.ts')
 assert.deepEqual(size('800',2400,1500),{width:800,height:500})
 assert.deepEqual(size('2',3,2),{width:2,height:1})
 assert.deepEqual(size('320',320,200),{width:320,height:200})

@@ -5,5 +5,9 @@
   "command.sha1.description": "SHA-1 哈希",
   "command.sha512.title": "SHA-512",
   "command.sha512.description": "SHA-512 哈希",
-  "error.hash": "哈希失败：{message}"
+  "error.hash": "哈希失败：{message}",
+  "command.md5.title": "MD5",
+  "command.md5.description": "MD5 哈希（仅用于校验，不安全）",
+  "command.sha384.title": "SHA-384",
+  "command.sha384.description": "SHA-384 哈希"
 }

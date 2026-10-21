@@ -1,6 +1,3 @@
-import { ImageResizePanel } from './ImageResizePanel'
-import { ImageCropPanel } from './ImageCropPanel'
-import { ImageRedactionPanel } from './ImageRedactionPanel'
 import { ImageBase64Panel } from './ImageBase64Panel'
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
@@ -8,6 +5,7 @@ import { Button, IconButton, useToolDeliveryFeedback } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
 import { ClipboardPaste, CornerDownLeft } from 'lucide-react'
 import {
+  conversionErrorKey,
   hasEscapeSequences,
   hasHtmlEntities,
   isBase64,
@@ -40,21 +38,17 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
   const [inputText, setInputText] = useState(initialText)
   const [, setImageDirty] = useState(false)
   const imageInvalidation = useRef<(() => void) | null>(null)
-  const resizeMode = props.surfaceId === 'image-resize'
-  const cropMode = props.surfaceId === 'image-crop'
-  const [redactMode, setRedactMode] = useState(props.surfaceId === 'image-redact')
-  const [saveFocused, setSaveFocused] = useState(props.surfaceId === 'image-save')
-  const [imageMode, setImageMode] = useState(props.surfaceId === 'image-base64' || props.surfaceId === 'image-save')
+  const [imageMode, setImageMode] = useState(props.surfaceId === 'image-base64')
   const [format, setFormat] = useState<EncodeDecodeFormat>(initial.format)
   const [direction, setDirection] = useState<EncodeDecodeDirection>(initial.direction)
   const [busy, setBusy] = useState<'copy' | 'paste' | 'return' | null>(null)
   const pendingRef = useRef<{ action: 'copy' | 'paste' | 'return'; controller: AbortController } | null>(null)
   const result = useMemo(() => {
-    if (!inputText) return { ok: true as const, output: '' }
+    if (!inputText) return { ok: true as const, output: '', errorKey: '' }
     try {
-      return { ok: true as const, output: transformText(format, direction, inputText) }
-    } catch {
-      return { ok: false as const, output: '' }
+      return { ok: true as const, output: transformText(format, direction, inputText), errorKey: '' }
+    } catch (error) {
+      return { ok: false as const, output: '', errorKey: conversionErrorKey(error) }
     }
   }, [direction, format, inputText])
   const hasOutput = result.ok && inputText.length > 0
@@ -146,13 +140,13 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
         <IconButton type="button" label={t('action.back')} onClick={() => update(() => host.requestBack())}>
           <BackIcon size={14} strokeWidth={2} />
         </IconButton>
-        <strong>{t(resizeMode ? 'resize.title' : cropMode ? 'crop.title' : redactMode ? 'redact.title' : saveFocused ? 'image.saveRouteTitle' : 'surface.title')}</strong>
+        <strong>{t('surface.title')}</strong>
         <IconButton type="button" label={t('action.close')} onClick={() => update(() => host.close())}>
           <CloseIcon size={14} strokeWidth={2} />
         </IconButton>
       </header>
 
-      {!resizeMode && !cropMode && !saveFocused && !redactMode && <nav className="encode-formats" aria-label={t('format.label')}>
+      <nav className="encode-formats" aria-label={t('format.label')}>
         {FORMATS.map((item) => (
           <button
             key={item}
@@ -165,11 +159,10 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
           </button>
         ))}
         <button type="button" className={imageMode ? 'is-active' : ''} aria-pressed={imageMode} onClick={() => update(() => setImageMode(true))}>{t('image.title')}</button>
-        <button type="button" onClick={() => update(() => setRedactMode(true))}>{t('redact.title')}</button>
-      </nav>}
+      </nav>
 
-      {resizeMode ? <ImageResizePanel {...props} onDirtyChange={setImageDirty} invalidateRef={imageInvalidation} /> : cropMode ? <ImageCropPanel {...props} onDirtyChange={setImageDirty} invalidateRef={imageInvalidation} /> : redactMode ? <ImageRedactionPanel {...props} onDirtyChange={setImageDirty} invalidateRef={imageInvalidation} /> : <ImageBase64Panel {...props} active={imageMode} saveFocused={saveFocused} onShowWorkbench={() => setSaveFocused(false)} onDirtyChange={setImageDirty} invalidateRef={imageInvalidation} />}
-      {!resizeMode && !cropMode && !imageMode && !redactMode && <>
+      <ImageBase64Panel {...props} active={imageMode} onDirtyChange={setImageDirty} invalidateRef={imageInvalidation} />
+      {!imageMode && <>
       <nav className="encode-directions" aria-label={t('direction.label')}>
         {(format === 'jwt' ? ['decode'] : ['encode', 'decode']).map((item) => (
           <button
@@ -234,7 +227,7 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
               readOnly
               spellCheck={false}
             />
-            {!result.ok ? <div className="encode-error" role="alert">{t('error.invalid')}</div> : null}
+            {!result.ok ? <div className="encode-error" role="alert">{t(result.errorKey)}</div> : null}
           </div>
         </section>
       </main>

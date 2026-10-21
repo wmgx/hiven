@@ -16,8 +16,8 @@ const transpiled = ts.transpileModule(source, {
 
 let fixedEpochMs = Date.UTC(2026, 5, 10, 4, 5, 6)
 class FixedDate extends Date {
-  constructor(value) {
-    super(value === undefined ? fixedEpochMs : value)
+  constructor(...args) {
+    super(...(args.length === 0 ? [fixedEpochMs] : args))
   }
   static now() {
     return fixedEpochMs
@@ -69,8 +69,9 @@ const plugin = module.exports.default
 const convertForSurface = module.exports.convertForSurface
 const provider = plugin.launcher?.dynamicItems
 assert.ok(provider, 'date-time assistant should expose the launcher dynamic item provider')
-const timestampCommand = plugin.commands?.find((item) => item.id === 'timestamp.run')
-assert.ok(timestampCommand, 'date-time assistant should expose the timestamp conversion command')
+assert.equal(plugin.commands, undefined, 'legacy commands adapter is gone')
+const timestampTool = plugin.tools?.find((item) => item.id === 'timestamp.run')
+assert.ok(timestampTool, 'date-time assistant should expose the timestamp conversion tool')
 assert.equal(typeof convertForSurface, 'function', 'date-time assistant should expose the surface converter')
 
 async function values(query) {
@@ -131,20 +132,22 @@ assert.equal(
   JSON.stringify(['1781064306000', '1781064306']),
   'bare +8 datetime query should match UTC+8',
 )
-function runTimestampCommand(text) {
-  const result = timestampCommand.run({
-    inputs: { input: { kind: 'text', text, paneId: 'pane-test' } },
+function runTool(text) {
+  return timestampTool.run({
+    input: { text, source: 'all' },
     params: { unit: 'ms', overwrite: 'yes' },
+    t: (key, args) => `${key} ${JSON.stringify(args ?? {})}`,
+    output: {
+      replaceActiveText: (value) => ({ kind: 'text', text: value }),
+      error: (value) => ({ kind: 'error', text: value }),
+    },
   })
-  if (result.output) return result.output.text
-  return result.effects?.[0]?.text
 }
-
+function runTimestampCommand(text) {
+  return runTool(text).text
+}
 function runTimestampCommandOutput(text) {
-  return timestampCommand.run({
-    inputs: { input: { kind: 'text', text, paneId: 'pane-test' } },
-    params: { unit: 'ms', overwrite: 'yes' },
-  }).output
+  return runTool(text)
 }
 
 assert.equal(
@@ -216,8 +219,11 @@ assert.equal(zone('1991-07-01 15:00 UTC').targets[0].time, '00:00', 'Beijing fol
 assert.equal(zone('1991-07-01 15:00 UTC').targets[0].dayDelta, 1)
 assert.equal(zone('1950-07-01 15:00 UTC').targets[1].time, '01:00', 'Tokyo follows historical daylight saving')
 assert.equal(zone('1900-01-01 15:00 Asia/Shanghai').targets[2].time, '06:54:17', 'historical second offsets retain precision')
-for (const text of ['3pm CST', '3pm IST', '3pm EDT', '3pm Not/A_Zone', '3pm UTC+14:01']) {
+for (const text of ['3pm Not/A_Zone', '3pm UTC+14:01']) {
   assert.equal(parseZone(text)?.error, 'zone', text)
+}
+for (const text of ['7 days', '9am PST', '3pm CST', '3pm IST', '3 body', '1 password', '10 minutes']) {
+  assert.equal(parseZone(text), null, `${text} is not a zone conversion`)
 }
 for (const text of ['2026-02-30 3pm EST', '2026-01-01 24:00 UTC', '0am UTC', '13pm EST', '15:60 UTC']) {
   assert.equal(parseZone(text)?.error, 'date', text)
@@ -232,7 +238,7 @@ const zoneCopies = await values('3pm EST')
 assert.equal(zoneCopies.length, 1)
 assert.ok(zoneCopies[0].includes('2026-06-09 15:00 EST (UTC-05:00)'))
 assert.ok(zoneCopies[0].includes('2026-06-10 04:00'))
-const badItems = await provider({ query: '3pm CST', locale: 'en', settings: {}, t: (key) => key })
+const badItems = await provider({ query: '3pm Not/A_Zone', locale: 'en', settings: {}, t: (key) => key })
 assert.equal(badItems.length, 1)
 const badResult = await badItems[0].execute({ api: { copyText() { assert.fail('invalid zone must not copy') } } })
 assert.equal(badResult.ok, false)
@@ -350,8 +356,11 @@ try {
       assert.equal(runTimestampCommandOutput(input)?.kind, 'error', `${zone}: invalid command ${input}`)
       assert.equal(convertForSurface(input, 'UTC+8').ok, false, `${zone}: invalid surface ${input}`)
     }
-    for (const input of ['2026-03-08 02:30:00', '2026-03-08']) {
-      const expected = String(new Date(input).getTime())
+    for (const input of ['2026-03-08 02:30:00', '2026-03-08', '2026-3-8']) {
+      const [d, t = '00:00:00'] = input.split(' ')
+      const [yy, mm, dd] = d.split('-').map(Number)
+      const [hh, mi, ss] = t.split(':').map(Number)
+      const expected = String(new Date(yy, mm - 1, dd, hh, mi, ss).getTime())
       assert.ok((await values(input)).includes(expected), 'unqualified instant dates retain existing local Date semantics')
       assert.equal(runTimestampCommand(input), expected, 'unqualified command dates retain existing local Date semantics')
     }
@@ -363,3 +372,16 @@ try {
   else process.env.TZ = calendarOriginalTZ
 }
 console.log('Explicit calendar offsets are host-independent; invalid fields/offsets rejected and unqualified local semantics preserved')
+
+// Date-only and date-time inputs without an offset are both local time (no 8h gap).
+const localOriginalTZ = process.env.TZ
+try {
+  process.env.TZ = 'Asia/Shanghai'
+  const dateOnly = (await values('2024-01-15'))[0]
+  assert.equal(dateOnly, '1705248000000')
+  assert.deepEqual(await values('2024-1-15'), await values('2024-01-15 00:00:00'))
+  assert.ok((await values('1990-05-20')).length > 0, 'years from 1970 are accepted')
+} finally {
+  if (localOriginalTZ === undefined) delete process.env.TZ
+  else process.env.TZ = localOriginalTZ
+}

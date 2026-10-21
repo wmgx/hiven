@@ -40,9 +40,19 @@ try {
     const serializedAlpha = text.includes('/') ? Number(text.split('/')[1].slice(0, -1).trim()) : 1
     assert.equal(Math.round(serializedAlpha * 255), alpha, 'all alpha bytes survive formatting')
   }
-  for (const input of ['', 'red', 'color', 'FF6B35', '#12', '#12345', '#1234567', '#123456789', '#ggg', 'find #fff', '#fff extra', '#fff\n#000', 'rgb(255 0 0)', 'var(--red)', 'url(https://example.com)', '#fff; background:url(x)', ' '.repeat(100000)]) {
+  for (const input of ['', 'color', 'decade', '123456', 'bad', 'rgb(256 0 0)', 'rgb(1 2)', 'hsl(10 50 50)', 'rgb(0 0 0) extra', '#12', '#12345', '#1234567', '#123456789', '#ggg', 'find #fff', '#fff extra', '#fff\n#000', 'var(--red)', 'url(https://example.com)', '#fff; background:url(x)', ' '.repeat(100000)]) {
     assert.equal(colorAnswer(input), null, `reject ${input.slice(0, 30)}`)
   }
+  // rgb()/hsl()/bare hex/CSS names reverse to a normalized hex and the other formats.
+  const texts = (input) => colorAnswer(input).formats.map((entry) => entry.text)
+  assert.deepEqual(texts('rgb(255, 107, 53)'), ['#FF6B35', 'hsl(16.0396 100% 60.3922%)', colorAnswer('#FF6B35').formats[2].text])
+  assert.equal(colorAnswer('rgb(255 107 53 / 0.5)').hex, '#FF6B3580')
+  assert.equal(colorAnswer('hsl(0, 100%, 50%)').hex, '#FF0000')
+  assert.equal(colorAnswer('FF6B35').hex, '#FF6B35')
+  assert.equal(colorAnswer('ffffff').hex, '#FFFFFF')
+  assert.equal(colorAnswer('Red').hex, '#FF0000')
+  assert.equal(colorAnswer('red').direct, false)
+  assert.equal(colorAnswer('#f00').direct, true)
   const icon = decodeURIComponent(colorAnswer('#12345680').icon.split(',')[1])
   assert.ok(icon.includes('fill="#123456"'))
   assert.ok(icon.includes('fill-opacity="0.501961"'))

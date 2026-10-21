@@ -24,7 +24,9 @@ export function decodePermissions(mode: number): PermissionValue {
 }
 
 export function parsePermissionQuery(query: string): PermissionAnswer | null {
-  const trimmed = query.trim()
+  let trimmed = query.trim()
+  // `ls -l` style: a leading file-type character before the nine permission characters.
+  if (/^[-dlcbps][rwxstST-]{9}$/.test(trimmed)) trimmed = trimmed.slice(1)
   const prefix = /^(?:chmod\b|(?:unix\s+)?permissions?(?:\s+(?:parser|parse|explain))?(?=\s|\d|$)|(?:unix\s*)?权限(?:解析)?(?=\s|\d|$))\s*/i.exec(trimmed)
   if (!prefix && !/^[rwxstST-]{9}$/.test(trimmed)) return null
   const input = prefix ? trimmed.slice(prefix[0].length) : trimmed
@@ -43,5 +45,7 @@ export function parsePermissionQuery(query: string): PermissionAnswer | null {
     }
     return { ok: true, value: decodePermissions(mode) }
   }
+  // `chmod +x`, `chmod -R 755 dir`, `chmod 0o755` are real chmod usage, not a mode to explain: stay silent.
+  if (input && /^chmod\b/i.test(trimmed)) return null
   return { ok: false, error: 'syntax' }
 }

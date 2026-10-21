@@ -7,6 +7,7 @@
 import { definePlugin, getPluginHostSdk, type PluginToolSurfaces } from '@hiven/plugin'
 import { FormatterSurface } from './FormatterSurface'
 import { formatterErrorMessage, formatterRoutes, formatText } from './core'
+import { CssFormatterError } from './lexical'
 import { XmlFormatterError } from './xml'
 import './style.css'
 
@@ -83,7 +84,10 @@ export const formatterPlugin = definePlugin({
       inputPolicy: { mode: 'auto' },
       accepts: { kinds: ['css'] },
       textMatch: (text) => matchesContentKind(text, 'css'),
-      run(ctx) { return ctx.output.text(formatText('css', 'format', ctx.input.text)) },
+      run(ctx) {
+        try { return ctx.output.text(formatText('css', 'format', ctx.input.text)) }
+        catch (error) { return ctx.output.error(ctx.t(error instanceof CssFormatterError ? 'error.invalidCss' : 'error.format', { message: formatterErrorMessage(error) })) }
+      },
       surfaces: EDITOR_TOOL_SURFACES,
     },
     {
@@ -95,7 +99,10 @@ export const formatterPlugin = definePlugin({
       inputPolicy: { mode: 'auto' },
       accepts: { kinds: ['css'] },
       textMatch: (text) => matchesContentKind(text, 'css'),
-      run(ctx) { return ctx.output.text(formatText('css', 'compact', ctx.input.text)) },
+      run(ctx) {
+        try { return ctx.output.text(formatText('css', 'compact', ctx.input.text)) }
+        catch (error) { return ctx.output.error(ctx.t(error instanceof CssFormatterError ? 'error.invalidCss' : 'error.format', { message: formatterErrorMessage(error) })) }
+      },
       surfaces: EDITOR_TOOL_SURFACES,
     },
     {

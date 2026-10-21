@@ -41,5 +41,6 @@
   "toast.copied": "Copied",
   "toast.copyFailed": "Copy failed. Retry.",
   "toast.pasteFailed": "Paste failed. Retry.",
-  "toast.returnFailed": "Couldn't return to Search. Retry."
+  "toast.returnFailed": "Couldn't return to Search. Retry.",
+  "error.invalidCss": "Can't format this CSS: check for an unclosed string, comment or bracket."
 }

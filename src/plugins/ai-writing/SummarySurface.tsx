@@ -25,6 +25,23 @@ export function SummarySurface({ host, initialText, t }: PluginSurfaceProps) {
   }, [session, host.ai])
   useLayoutEffect(() => { session.setInitialText(initialText) }, [session, initialText])
 
+  // Remember the last explicit provider/model so the next summary starts ready. Storage failures only skip this.
+  const restored = useRef(false)
+  useLayoutEffect(() => {
+    let cancelled = false
+    void host.storage.kv.get<{ providerId?: string; agentId?: string }>('lastSelection').then((saved) => {
+      if (cancelled) return
+      restored.current = true
+      const current = session.getSnapshot()
+      if (saved?.providerId && saved.agentId && !current.providerId && !current.agentId) session.setSelection(saved.providerId, saved.agentId)
+    }).catch(() => { restored.current = true })
+    return () => { cancelled = true }
+  }, [session, host.storage])
+  useLayoutEffect(() => {
+    if (!restored.current || !snapshot.providerId || !snapshot.agentId) return
+    void host.storage.kv.set('lastSelection', { providerId: snapshot.providerId, agentId: snapshot.agentId }).catch(() => {})
+  }, [host.storage, snapshot.providerId, snapshot.agentId])
+
   const bound = session.matches(host.ai) && session.matchesInitialText(initialText)
   const provider = snapshot.providers.find((item) => item.id === snapshot.providerId)
   const model = provider?.agents.find((item) => item.id === snapshot.agentId)

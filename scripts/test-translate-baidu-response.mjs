@@ -130,4 +130,11 @@ assert.equal((await terminalResult).text, 'complete')
 assert.deepEqual(terminalPreviews, ['complete'])
 assert.deepEqual(ordered, ['next', 'next', 'cleanup-start', 'cleanup-end'])
 
+// Provider failures carry codes for localized messages.
+const baiduProfile = { provider: 'baidu', appId: 'id', secret: 'key' }
+const providerRequest = { text: 'hi', sourceLang: 'auto', targetLang: 'zh' }
+await assert.rejects(adapters.translateText(providerRequest, { provider: 'baidu' }, {}, {}), (error) => error.code === 'credentials')
+await assert.rejects(adapters.translateText(providerRequest, baiduProfile, { request: async () => ({ status: 502, body: '<html>bad gateway</html>' }) }, {}), (error) => error.code === 'response')
+await assert.rejects(adapters.translateText(providerRequest, baiduProfile, { request: async () => ({ status: 200, body: JSON.stringify({ error_code: '54001', error_msg: 'Invalid Sign' }) }) }, {}), (error) => error.code === 'http' && /Invalid Sign/.test(error.detail))
+
 console.log('translate Baidu response and AI stream lifecycle checks passed')
