@@ -1,3 +1,4 @@
+import { Plus } from 'lucide-react'
 import { useState, type ChangeEvent, type KeyboardEvent } from 'react'
 import {
   CalendarDays,
@@ -233,6 +234,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
     localize(text, textI18n, locale, translateText)
   const record = getSettingsRecord(value)
   const [openObjectListCards, setOpenObjectListCards] = useState<Record<string, string>>({})
+  const [pendingDeleteKey, setPendingDeleteKey] = useState<string | null>(null)
   const [numberDrafts, setNumberDrafts] = useState<Record<string, string>>({})
   const [visibleSensitiveKeys, setVisibleSensitiveKeys] = useState<Set<string>>(new Set())
   const [touchedKeys, setTouchedKeys] = useState<Set<string>>(() => new Set())
@@ -693,13 +695,17 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
         || translate(locale, 'scripts', 'settingsEmptyList')
       const emptyHint = translate(locale, 'scripts', 'settingsEmptyListHint')
       const deleteLabel = translate(locale, 'scripts', 'settingsDelete')
-      const urlTemplate = activeItem ? String(activeItem.urlTemplate ?? '') : ''
+      const deleteConfirmLabel = translate(locale, 'scripts', 'settingsDeleteConfirm')
+      const previewSpec = field.preview
+      const previewTemplate = previewSpec && activeItem ? String(activeItem[previewSpec.templateKey] ?? '') : ''
       const previewSampleKey = `${field.key}:preview-sample`
       const previewSample = numberDrafts[previewSampleKey] ?? 'sample'
-      const encodeQuery = activeItem?.encodeQuery !== false
-      const previewUrl = urlTemplate
-        ? urlTemplate.replaceAll('{query}', encodeQuery ? encodeURIComponent(previewSample) : previewSample)
+      const previewEncode = previewSpec?.encodeFlagKey ? activeItem?.[previewSpec.encodeFlagKey] !== false : false
+      const previewUrl = previewSpec && previewTemplate
+        ? previewTemplate.replaceAll(previewSpec.placeholder, previewEncode ? encodeURIComponent(previewSample) : previewSample)
         : ''
+      const deleteArmedKey = `${field.key}:${activeCardId}`
+      const deleteArmed = pendingDeleteKey === deleteArmedKey
 
       return (
         <div className={`schema-object-list d-rules ${disabled ? 'is-disabled' : ''}`}>
@@ -751,7 +757,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
                 disabled={disabled}
                 onClick={addItem}
               >
-                <span>＋</span>{addLabel}
+                <Plus size={12} aria-hidden="true" />{addLabel}
               </button>
             </div>
             <div className="schema-object-list-detail">
@@ -765,7 +771,10 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
                       type="button"
                       className="schema-object-list-delete"
                       disabled={disabled}
+                      onBlur={() => setPendingDeleteKey(null)}
                       onClick={() => {
+                        if (!deleteArmed) { setPendingDeleteKey(deleteArmedKey); return }
+                        setPendingDeleteKey(null)
                         const nextItems = items.filter((_, index) => index !== activeIndex)
                         setFieldValue(field.key, nextItems)
                         if (nextItems.length > 0) {
@@ -780,7 +789,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
                         }
                       }}
                     >
-                      {deleteLabel}
+                      {deleteArmed ? deleteConfirmLabel : deleteLabel}
                     </button>
                   </div>
                   <div className="schema-object-list-grid wr-body">
@@ -791,7 +800,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
                       const groups: { group: string | undefined; fields: typeof renderableFields; advanced: boolean }[] = []
                       for (const itemField of renderableFields) {
                         const g = itemField.group
-                        const advanced = Boolean(g && /advanced|高级/i.test(g))
+                        const advanced = Boolean(g && itemField.groupCollapsed)
                         const last = groups[groups.length - 1]
                         if (last && last.group === g) last.fields.push(itemField)
                         else groups.push({ group: g, fields: [itemField], advanced })
@@ -812,7 +821,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
                         if (grp.advanced) {
                           return (
                             <details key={gi} className="schema-object-list-advanced">
-                              <summary className="schema-object-list-advanced-summary">{groupTitle || 'Advanced'}</summary>
+                              <summary className="schema-object-list-advanced-summary">{groupTitle}</summary>
                               <div className="schema-object-list-advanced-body">{body}</div>
                             </details>
                           )
@@ -827,7 +836,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
                         )
                       })
                     })()}
-                    {urlTemplate.includes('{query}') && (
+                    {previewSpec && previewTemplate.includes(previewSpec.placeholder) && (
                       <div className="schema-object-list-preview">
                         <div className="schema-object-list-preview-row">
                           <span>{translate(locale, 'scripts', 'settingsPreview')}</span>
@@ -859,7 +868,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
                     disabled={disabled}
                     onClick={addItem}
                   >
-                    ＋ {addLabel}
+                    <Plus size={12} aria-hidden="true" /> {addLabel}
                   </button>
                 </div>
               )}
