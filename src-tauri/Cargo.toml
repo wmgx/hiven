@@ -22,7 +22,7 @@ log = "0.4"
 tauri = { version = "2.11.1", features = ["protocol-asset", "macos-private-api", "image-png", "tray-icon", "devtools"] }
 tauri-plugin-log = "2"
 tauri-plugin-clipboard-manager = "2"
-tauri-plugin-fs = "2"
+tauri-plugin-fs = { version = "2", features = ["watch"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-shell = "2"
 tauri-plugin-updater = "2"
