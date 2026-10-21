@@ -3,6 +3,7 @@ import type { LanguageCode, SourceLanguageCode, TranslateProfile } from '../sett
 import { translateWithTencent } from './tencent'
 import type { AiTranslationSelection } from '../ai/readiness'
 import { buildAiTranslationPrompt } from '../ai/prompt'
+import { parseProviderJson, TranslateError } from './errors'
 
 export type TranslateRequest = {
   text: string
@@ -189,7 +190,7 @@ function md5(value: string): string {
 
 async function translateWithBaidu(req: TranslateRequest, profile: TranslateProfile, network: PluginNetworkApi): Promise<TranslateResult> {
   if (!profile.appId || !profile.secret) {
-    throw new Error('Baidu profile requires appId and secret')
+    throw new TranslateError('credentials')
   }
   const salt = String(Date.now())
   const sign = md5(`${profile.appId}${req.text}${salt}${profile.secret}`)
@@ -207,17 +208,17 @@ async function translateWithBaidu(req: TranslateRequest, profile: TranslateProfi
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: body.toString(),
   })
-  const data = JSON.parse(response.body) as BaiduResponse
+  const data = parseProviderJson<BaiduResponse>(response.body, response.status)
   const failure = baiduFailureMessage(response.status, data)
-  if (failure) throw new Error(failure)
+  if (failure) throw new TranslateError('http', failure)
   const text = data.trans_result?.map((item) => item.dst).join('\n') ?? ''
-  if (!text) throw new Error('Baidu returned an empty translation')
+  if (!text) throw new TranslateError('empty')
   return { text, billedChars: estimateBilledChars(req.text), providerRequestId: salt }
 }
 
 async function translateWithDeepL(req: TranslateRequest, profile: TranslateProfile, network: PluginNetworkApi): Promise<TranslateResult> {
   if (!profile.authKey) {
-    throw new Error('DeepL profile requires authKey')
+    throw new TranslateError('credentials')
   }
   const body = new URLSearchParams({
     text: req.text,
@@ -234,12 +235,12 @@ async function translateWithDeepL(req: TranslateRequest, profile: TranslateProfi
     },
     body: body.toString(),
   })
-  const data = JSON.parse(response.body) as DeepLResponse
+  const data = parseProviderJson<DeepLResponse>(response.body, response.status)
   if (response.status < 200 || response.status >= 300) {
-    throw new Error(data.message || `DeepL translate failed (${response.status})`)
+    throw new TranslateError('http', data.message || `DeepL translate failed (${response.status})`)
   }
   const text = data.translations?.map((item) => item.text).join('\n') ?? ''
-  if (!text) throw new Error('DeepL returned an empty translation')
+  if (!text) throw new TranslateError('empty')
   return { text, billedChars: estimateBilledChars(req.text) }
 }
 

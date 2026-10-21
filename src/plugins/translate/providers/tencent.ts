@@ -1,6 +1,7 @@
 import type { PluginNetworkApi } from '@hiven/plugin'
 import type { LanguageCode, SourceLanguageCode, TranslateProfile } from '../settings/model'
 import type { TranslateRequest, TranslateResult } from './adapters'
+import { TranslateError } from './errors'
 
 export const DEFAULT_TENCENT_ENDPOINT = 'https://tmt.tencentcloudapi.com'
 export const DEFAULT_TENCENT_REGION = 'ap-guangzhou'
@@ -39,15 +40,15 @@ export function parseTencentTranslateResponse(status: number, body: string): { t
   try {
     data = JSON.parse(body) as TencentTranslateResponse
   } catch {
-    throw new Error(`Tencent translate failed (${status})`)
+    throw new TranslateError('response', String(status))
   }
   const error = data.Response?.Error
   if (status < 200 || status >= 300 || error?.Code || error?.Message) {
     const code = error?.Code ? ` (${error.Code})` : ''
-    throw new Error((error?.Message || `Tencent translate failed (${status})`) + code)
+    throw new TranslateError('http', (error?.Message || `Tencent translate failed (${status})`) + code)
   }
   const text = data.Response?.TargetText ?? ''
-  if (!text) throw new Error('Tencent returned an empty translation')
+  if (!text) throw new TranslateError('empty')
   return { text, requestId: data.Response?.RequestId }
 }
 
@@ -66,7 +67,7 @@ export async function buildTencentTranslateRequest(
   now = new Date(),
 ): Promise<{ url: string; headers: Record<string, string>; body: string }> {
   if (!profile.secretId || !profile.secretKey) {
-    throw new Error('Tencent profile requires secretId and secretKey')
+    throw new TranslateError('credentials')
   }
   const url = profile.endpoint || DEFAULT_TENCENT_ENDPOINT
   const host = new URL(url).host

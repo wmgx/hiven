@@ -12,6 +12,7 @@ function loadModule(path, extras = {}) {
   const src = readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')
     .replace(/import\s+type\s*\{[\s\S]*?\}\s*from\s*'[^']*'\s*;?\s*\n?/g, '')
     .replace(/import\s+\{[^}]*\}\s*from\s*'\.\/tencent'\s*;?\s*\n?/g, '')
+    .replace(/import\s+\{[^}]*\}\s*from\s*'\.\/errors'\s*;?\s*\n?/g, '')
   const out = ts.transpileModule(src, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2023 },
   }).outputText
@@ -57,7 +58,8 @@ function signTc3WithNode({ secretId, secretKey, service, host, action, contentTy
   return `TC3-HMAC-SHA256 Credential=${secretId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`
 }
 
-const tencent = loadModule('src/plugins/translate/providers/tencent.ts')
+const providerErrors = loadModule('src/plugins/translate/providers/errors.ts')
+const tencent = loadModule('src/plugins/translate/providers/tencent.ts', { TranslateError: providerErrors.TranslateError })
 const model = loadModule('src/plugins/translate/settings/model.ts')
 
 assert.equal(tencent.tencentLang('ja'), 'ja')
@@ -75,6 +77,9 @@ assert.throws(
   })),
   /secret id not found \(AuthFailure\.SecretIdNotFound\)/,
 )
+
+assert.throws(() => tencent.parseTencentTranslateResponse(502, '<html>bad gateway</html>'), (error) => error.code === 'response')
+assert.throws(() => tencent.parseTencentTranslateResponse(200, JSON.stringify({ Response: {} })), (error) => error.code === 'empty')
 
 const now = new Date('2026-08-21T04:00:00.000Z')
 const timestamp = Math.floor(now.getTime() / 1000)

@@ -42,7 +42,7 @@ export type TranslateSettings = {
 
 export const TENCENT_DEFAULT_PROFILE: TranslateProfile = {
   id: 'tencent-default',
-  name: '腾讯云翻译',
+  name: 'Tencent Cloud',
   provider: 'tencent',
   enabled: false,
   endpoint: 'https://tmt.tencentcloudapi.com',
@@ -77,7 +77,7 @@ export const DEFAULT_TRANSLATE_SETTINGS: TranslateSettings = {
   profiles: [
     {
       id: 'baidu-default',
-      name: '百度中文',
+      name: 'Baidu',
       provider: 'baidu',
       enabled: true,
       endpoint: 'https://fanyi-api.baidu.com/api/trans/vip/translate',
@@ -117,6 +117,29 @@ export function migrateTranslateSettings(stored: unknown, _fromVersion: number):
     defaultProfileId: value.defaultProfileId || DEFAULT_TRANSLATE_SETTINGS.defaultProfileId,
     defaultTargetLang: value.defaultTargetLang || DEFAULT_TRANSLATE_SETTINGS.defaultTargetLang,
     profiles: nextProfiles,
+  }
+}
+
+/** Names written into settings before they were locale-neutral; shown through the locale like the new defaults. */
+const LEGACY_DEFAULT_PROFILE_NAMES: Record<string, string[]> = {
+  'baidu-default': ['Baidu', '百度中文'],
+  'tencent-default': ['Tencent Cloud', '腾讯云翻译'],
+}
+
+/** Unmodified seeded profiles take their name from the active locale; user-chosen names win. */
+export function profileDisplayName(profile: Pick<TranslateProfile, 'id' | 'name'>, t: (key: string) => string): string {
+  if (!LEGACY_DEFAULT_PROFILE_NAMES[profile.id]?.includes(profile.name)) return profile.name
+  const localized = t(`profile.name.${profile.id}`)
+  return localized === `profile.name.${profile.id}` ? profile.name : localized
+}
+
+/** A profile can only translate once the provider's credentials are filled in (AI is checked separately). */
+export function isProfileUsable(profile: TranslateProfile): boolean {
+  switch (profile.provider) {
+    case 'baidu': return Boolean(profile.appId && profile.secret)
+    case 'deepl': return Boolean(profile.authKey)
+    case 'tencent': return Boolean(profile.secretId && profile.secretKey)
+    default: return true
   }
 }
 

@@ -111,5 +111,12 @@
   "hud.error": "翻译未完成",
   "hud.errorStatus": "翻译未完成",
   "hud.error.unavailable": "翻译不可用，请检查 AI 服务",
-  "hud.errorStatus.unavailable": "不可用"
+  "hud.errorStatus.unavailable": "不可用",
+  "error.translate.credentials": "该配置组还没有填写密钥，请到翻译设置中补全。",
+  "error.translate.http": "翻译服务返回错误：{detail}",
+  "error.translate.response": "翻译服务返回了无法解析的内容（HTTP {detail}）。",
+  "error.translate.empty": "翻译服务没有返回译文。",
+  "status.noCredentials": "该配置组还没有填写密钥，请到翻译设置中补全。",
+  "profile.name.baidu-default": "百度翻译",
+  "profile.name.tencent-default": "腾讯云翻译"
 }
