@@ -282,8 +282,9 @@ export function createPluginClipboard(
       if (options?.signal?.aborted) return
       requirePermissions(['clipboard.write'])
       if (options?.recordInHistory === false) {
-        if (!['clipboard-history', 'curl-inspector'].includes(pluginId) || options.sensitive) {
-          throw new Error('History-preserving copy is restricted to approved text tools')
+        // Capability is declared in the plugin manifest (clipboard.history); sensitive text never qualifies.
+        if (permissions?.['clipboard.history']?.granted !== true || options.sensitive) {
+          throw new Error('History-preserving copy is restricted to plugins granted clipboard.history')
         }
         const { writeTextWithoutHistory } = await import('./nativeClipboard')
         await writeTextWithoutHistory(text, options?.signal)
@@ -334,7 +335,7 @@ export function createPluginClipboard(
           })
       }
 
-      const readWatchedText = pluginId === 'clipboard-history' ? readHistoryClipboardText : readClipboardText
+      const readWatchedText = permissions?.['clipboard.history']?.granted === true ? readHistoryClipboardText : readClipboardText
 
       const initialChangeCount = await readClipboardChangeCount()
       // Initialize with current clipboard content

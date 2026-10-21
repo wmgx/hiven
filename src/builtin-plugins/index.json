@@ -1,5 +1,5 @@
 {
-  "version": 162,
+  "version": 163,
   "packages": [
     {
       "pluginId": "encode-decode",
@@ -69,7 +69,7 @@
     {
       "pluginId": "clipboard-history",
       "dir": "clipboard-history",
-      "version": "2.1.0"
+      "version": "2.1.1"
     },
     {
       "pluginId": "web-open",
@@ -109,7 +109,7 @@
     {
       "pluginId": "curl-inspector",
       "dir": "curl-inspector",
-      "version": "1.1.0"
+      "version": "1.1.1"
     },
     {
       "pluginId": "unix-permissions",

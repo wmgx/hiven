@@ -1094,6 +1094,7 @@ export function GlobalLauncherHost() {
       'clipboard.write',
       'clipboard.image',
       'clipboard.files',
+      'clipboard.history',
       'storage.private',
       'storage.blob',
       'accessibility.paste',

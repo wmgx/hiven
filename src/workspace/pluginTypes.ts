@@ -502,6 +502,8 @@ export type PluginPermission =
   | 'clipboard.watch'
   | 'clipboard.image'
   | 'clipboard.files'
+  /** Copy without recording in clipboard history, and read the clipboard with history-aware copy tracking. */
+  | 'clipboard.history'
   | 'storage.private'
   | 'storage.blob'
   | 'app.discover'
@@ -645,7 +647,7 @@ export type PluginClipboardApi = {
    * DataError (image limits/shape), or NotReadableError (read/encoding failure).
    */
   readImage?: (options?: { signal?: AbortSignal }) => Promise<PluginClipboardImage>
-  /** recordInHistory:false is restricted to History assembly and curl inspection on native desktop. */
+  /** recordInHistory:false requires the clipboard.history permission (granted plugins only) on native desktop. */
   writeText(text: string, options?: { sensitive?: boolean; recordInHistory?: boolean; signal?: AbortSignal }): Promise<void>
   writeImage(blobId: string, options?: { signal?: AbortSignal }): Promise<void>
   writeFiles(paths: string[], options?: { signal?: AbortSignal }): Promise<void>

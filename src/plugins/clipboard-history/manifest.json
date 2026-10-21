@@ -4,7 +4,7 @@
   "displayNameI18n": {
     "zh": "剪贴板历史"
   },
-  "version": "2.1.0",
+  "version": "2.1.1",
   "capabilities": ["settings", "ui", "background"],
   "permissions": [
     "clipboard.read",
@@ -12,6 +12,7 @@
     "clipboard.watch",
     "clipboard.image",
     "clipboard.files",
+    "clipboard.history",
     "storage.private",
     "storage.blob",
     "globalShortcut.register",
