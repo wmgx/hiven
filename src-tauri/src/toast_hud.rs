@@ -123,6 +123,7 @@ fn take_target(owner: &str, receipt: Option<&Receipt>) -> Option<PlacementTarget
     let ticket = tickets.remove(token)?;
     (ticket.target.until > Instant::now()).then_some(ticket.target)
 }
+#[cfg(any(target_os = "linux", test))]
 fn intersection_area(a: (i32, i32, u32, u32), b: (i32, i32, u32, u32)) -> i64 {
     let width = (i64::from(a.0) + i64::from(a.2)).min(i64::from(b.0) + i64::from(b.2)) - i64::from(a.0.max(b.0));
     let height = (i64::from(a.1) + i64::from(a.3)).min(i64::from(b.1) + i64::from(b.3)) - i64::from(a.1.max(b.1));
