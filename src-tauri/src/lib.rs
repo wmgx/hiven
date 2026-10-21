@@ -2514,6 +2514,12 @@ fn read_clipboard_change_count(_app: &tauri::AppHandle) -> Option<i64> {
     None
 }
 
+/// Cheap "did the pasteboard change" probe so JS polling can skip image and text reads.
+#[tauri::command]
+async fn clipboard_change_count(app: tauri::AppHandle) -> Option<i64> {
+    read_clipboard_change_count(&app)
+}
+
 /// Read local file paths from the system clipboard (Finder / file manager copy).
 /// Prefer this over plain text: macOS often puts only the bare filename in the text flavor.
 #[tauri::command]
@@ -7977,6 +7983,7 @@ pub fn run() {
             clipboard_privacy::clipboard_write_sensitive_text,
             clipboard_privacy::clipboard_write_login_link,
             clipboard_privacy::clipboard_write_text,
+            clipboard_change_count,
             clipboard_privacy::clipboard_read_image,
             clipboard_privacy::clipboard_write_image,
             list_plugin_dirs,
