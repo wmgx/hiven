@@ -51,6 +51,51 @@ type NativeKvUsage = {
   itemCount: number
 }
 
+function useJsonBlobIpc(): boolean {
+  // The browser validation relay can only forward JSON, so it keeps the number-array twins.
+  return !!(window as unknown as { __HIVEN_WEB_NATIVE_BRIDGE__?: boolean }).__HIVEN_WEB_NATIVE_BRIDGE__
+}
+
+/** Decodes `[u32 BE header length][header JSON][bytes]`; an empty buffer means "no such blob". */
+function parseFramedBlob(buffer: ArrayBuffer): NativeBlobReadResult | null {
+  if (buffer.byteLength < 4) return null
+  const view = new DataView(buffer)
+  const headerLength = view.getUint32(0)
+  if (4 + headerLength > buffer.byteLength) return null
+  const header = JSON.parse(new TextDecoder().decode(new Uint8Array(buffer, 4, headerLength))) as { contentType?: string }
+  return { bytes: new Uint8Array(buffer, 4 + headerLength), contentType: header.contentType ?? 'application/octet-stream' }
+}
+
+async function readNativeBlob(source: string, pluginId: string, blobId: string): Promise<NativeBlobReadResult | null> {
+  if (useJsonBlobIpc()) return invoke<NativeBlobReadResult | null>('plugin_blob_read_json', { source, pluginId, blobId })
+  const { invoke: tauriInvoke } = await import('@tauri-apps/api/core')
+  return parseFramedBlob(await tauriInvoke<ArrayBuffer>('plugin_blob_read', { source, pluginId, blobId }))
+}
+
+async function saveNativeBlob(
+  source: string,
+  pluginId: string,
+  blobId: string,
+  input: { bytes: Uint8Array; contentType: string; extension?: string },
+): Promise<void> {
+  if (useJsonBlobIpc()) {
+    await invoke('plugin_blob_save_json', {
+      source, pluginId, blobId, bytes: Array.from(input.bytes), contentType: input.contentType, extension: input.extension,
+    })
+    return
+  }
+  const { invoke: tauriInvoke } = await import('@tauri-apps/api/core')
+  await tauriInvoke('plugin_blob_save', input.bytes, {
+    headers: {
+      'x-hiven-source': source,
+      'x-hiven-plugin': pluginId,
+      'x-hiven-blob': blobId,
+      'x-hiven-content-type': input.contentType,
+      'x-hiven-extension': input.extension ?? '',
+    },
+  })
+}
+
 const blobUrlCache = new Map<string, string>()
 let blobCounter = 0
 
@@ -246,21 +291,14 @@ export function createPluginPrivateStorage(
           throw new Error('Plugin blob storage requires the desktop app')
         }
         const blobId = `blob-${source}-${pluginId}-${++blobCounter}-${Date.now().toString(36)}`
-        await invoke('plugin_blob_save', {
-          source,
-          pluginId,
-          blobId,
-          bytes: Array.from(input.bytes),
-          contentType: input.contentType,
-          extension: input.extension,
-        })
+        await saveNativeBlob(source, pluginId, blobId, input)
         return { blobId, byteSize: input.bytes.length, contentType: input.contentType }
       },
 
       async get(blobId: string): Promise<Uint8Array | undefined> {
         requireBlob()
         if (!isTauri()) return undefined
-        const result = await invoke<NativeBlobReadResult | null>('plugin_blob_read', { source, pluginId, blobId })
+        const result = await readNativeBlob(source, pluginId, blobId)
         if (!result) return undefined
         return result.bytes instanceof Uint8Array ? result.bytes : new Uint8Array(result.bytes)
       },
@@ -279,7 +317,7 @@ export function createPluginPrivateStorage(
         if (cached) return cached
         if (!isTauri()) return ''
         if (window.__HIVEN_WEB_NATIVE_BRIDGE__) {
-          const result = await invoke<NativeBlobReadResult | null>('plugin_blob_read', { source, pluginId, blobId })
+          const result = await readNativeBlob(source, pluginId, blobId)
           if (!result) return ''
           const bytes = result.bytes instanceof Uint8Array ? result.bytes : new Uint8Array(result.bytes)
           const url = URL.createObjectURL(new Blob([bytes.slice().buffer], { type: result.contentType }))

@@ -6101,6 +6101,10 @@ fn sanitize_blob_extension(extension: Option<String>) -> Result<String, String> 
     {
         return Err("Plugin blob extension must be alphanumeric".to_string());
     }
+    // `.meta` is the metadata sidecar; `.json` was the legacy sidecar name.
+    if matches!(trimmed.as_str(), "json" | "meta") {
+        return Err("Plugin blob extension is reserved".to_string());
+    }
     Ok(trimmed)
 }
 
@@ -6115,6 +6119,20 @@ fn plugin_blob_dir(source: &str, plugin_id: &str) -> Result<PathBuf, String> {
     })?;
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     dir.canonicalize().map_err(|e| e.to_string())
+}
+
+/// Sidecar metadata is `<id>.meta`; blobs written before the rename used `<id>.json`.
+fn plugin_blob_metadata_path(dir: &Path, blob_id: &str) -> PathBuf {
+    let current = dir.join(format!("{}.meta", blob_id));
+    if current.exists() {
+        return current;
+    }
+    let legacy = dir.join(format!("{}.json", blob_id));
+    if legacy.exists() {
+        legacy
+    } else {
+        current
+    }
 }
 
 fn plugin_blob_paths(
@@ -6133,7 +6151,7 @@ fn plugin_blob_paths_with_metadata_limit(
 ) -> Result<(PathBuf, PluginBlobMetadata), String> {
     validate_storage_segment(blob_id, "Plugin blob id")?;
     let dir = plugin_blob_dir(source, plugin_id)?;
-    let meta_path = dir.join(format!("{}.json", blob_id));
+    let meta_path = plugin_blob_metadata_path(&dir, blob_id);
     let raw = match metadata_limit {
         Some(limit) => {
             let mut raw = String::new();
@@ -6887,20 +6905,49 @@ fn last_saveable_run_get() -> Result<Option<serde_json::Value>, String> {
     Ok(slot.clone())
 }
 
-#[tauri::command]
-fn plugin_blob_save(
-    source: String,
-    plugin_id: String,
+/// One blob and the whole per-plugin blob directory are bounded so a plugin cannot fill the disk.
+const PLUGIN_BLOB_MAX_BYTES: usize = 64 * 1024 * 1024;
+const PLUGIN_BLOB_TOTAL_MAX_BYTES: u64 = 1024 * 1024 * 1024;
+
+fn plugin_blob_dir_bytes(dir: &Path) -> u64 {
+    fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .flatten()
+                .filter_map(|entry| entry.metadata().ok())
+                .filter(|metadata| metadata.is_file())
+                .map(|metadata| metadata.len())
+                .sum()
+        })
+        .unwrap_or(0)
+}
+
+fn plugin_blob_save_bytes(
+    source: &str,
+    plugin_id: &str,
     blob_id: String,
-    bytes: Vec<u8>,
+    bytes: &[u8],
     content_type: String,
     extension: Option<String>,
 ) -> Result<PluginBlobWriteResult, String> {
     validate_storage_segment(&blob_id, "Plugin blob id")?;
     let extension = sanitize_blob_extension(extension)?;
-    let dir = plugin_blob_dir(&source, &plugin_id)?;
+    if bytes.len() > PLUGIN_BLOB_MAX_BYTES {
+        return Err(format!("Plugin blob exceeds {} bytes", PLUGIN_BLOB_MAX_BYTES));
+    }
+    if content_type.len() > 200 || !content_type.bytes().all(|b| (0x20..0x7f).contains(&b)) {
+        return Err("Plugin blob content type must be short printable ASCII".to_string());
+    }
+    let dir = plugin_blob_dir(source, plugin_id)?;
     let data_path = dir.join(format!("{}.{}", blob_id, extension));
-    let metadata_path = dir.join(format!("{}.json", blob_id));
+    let metadata_path = dir.join(format!("{}.meta", blob_id));
+    // Overwriting an id replaces its bytes, so only count what is not already stored under it.
+    let replaced = fs::metadata(&data_path).map(|m| m.len()).unwrap_or(0);
+    if plugin_blob_dir_bytes(&dir).saturating_sub(replaced) + bytes.len() as u64
+        > PLUGIN_BLOB_TOTAL_MAX_BYTES
+    {
+        return Err("Plugin blob storage quota exceeded".to_string());
+    }
     let metadata = PluginBlobMetadata {
         content_type: content_type.clone(),
         extension,
@@ -6910,7 +6957,7 @@ fn plugin_blob_save(
             .map_err(|e| e.to_string())?
             .as_millis(),
     };
-    fs::write(&data_path, &bytes).map_err(|e| e.to_string())?;
+    fs::write(&data_path, bytes).map_err(|e| e.to_string())?;
     let metadata_raw = serde_json::to_string(&metadata).map_err(|e| e.to_string())?;
     fs::write(&metadata_path, metadata_raw).map_err(|e| e.to_string())?;
     Ok(PluginBlobWriteResult {
@@ -6920,23 +6967,92 @@ fn plugin_blob_save(
     })
 }
 
-#[tauri::command]
-fn plugin_blob_read(
-    source: String,
-    plugin_id: String,
-    blob_id: String,
-) -> Result<Option<PluginBlobReadResult>, String> {
-    match plugin_blob_paths(&source, &plugin_id, &blob_id) {
+fn plugin_blob_read_bytes(
+    source: &str,
+    plugin_id: &str,
+    blob_id: &str,
+) -> Result<Option<(Vec<u8>, String)>, String> {
+    match plugin_blob_paths(source, plugin_id, blob_id) {
         Ok((data_path, metadata)) => {
+            let length = fs::metadata(&data_path).map_err(|e| e.to_string())?.len();
+            if length > PLUGIN_BLOB_MAX_BYTES as u64 {
+                return Err("Plugin blob is too large to read".to_string());
+            }
             let bytes = fs::read(data_path).map_err(|e| e.to_string())?;
-            Ok(Some(PluginBlobReadResult {
-                bytes,
-                content_type: metadata.content_type,
-            }))
+            Ok(Some((bytes, metadata.content_type)))
         }
         Err(error) if error.contains("No such file") || error.contains("os error 2") => Ok(None),
         Err(error) => Err(error),
     }
+}
+
+fn blob_header(request: &tauri::ipc::Request<'_>, name: &str) -> Result<String, String> {
+    request
+        .headers()
+        .get(name)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_string)
+        .ok_or_else(|| format!("Missing {name} header"))
+}
+
+/// Raw-bytes IPC: the body is the blob itself, so nothing is inflated into a JSON number array.
+/// Identity travels in headers (`x-hiven-source`, `-plugin`, `-blob`, `-content-type`, `-extension`).
+#[tauri::command(async)]
+fn plugin_blob_save(request: tauri::ipc::Request<'_>) -> Result<PluginBlobWriteResult, String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("Plugin blob body must be raw bytes".to_string());
+    };
+    let extension = blob_header(&request, "x-hiven-extension").ok().filter(|v| !v.is_empty());
+    plugin_blob_save_bytes(
+        &blob_header(&request, "x-hiven-source")?,
+        &blob_header(&request, "x-hiven-plugin")?,
+        blob_header(&request, "x-hiven-blob")?,
+        bytes,
+        blob_header(&request, "x-hiven-content-type")?,
+        extension,
+    )
+}
+
+/// Response layout: `[u32 BE header length][header JSON {"contentType"}][blob bytes]`;
+/// an empty body means the blob does not exist.
+#[tauri::command(async)]
+fn plugin_blob_read(
+    source: String,
+    plugin_id: String,
+    blob_id: String,
+) -> Result<tauri::ipc::Response, String> {
+    let Some((bytes, content_type)) = plugin_blob_read_bytes(&source, &plugin_id, &blob_id)? else {
+        return Ok(tauri::ipc::Response::new(Vec::<u8>::new()));
+    };
+    let header = serde_json::json!({ "contentType": content_type }).to_string();
+    let mut framed = Vec::with_capacity(4 + header.len() + bytes.len());
+    framed.extend_from_slice(&(header.len() as u32).to_be_bytes());
+    framed.extend_from_slice(header.as_bytes());
+    framed.extend_from_slice(&bytes);
+    Ok(tauri::ipc::Response::new(framed))
+}
+
+/// JSON twin of the raw commands for the browser validation relay, which can only carry JSON.
+#[tauri::command(async)]
+fn plugin_blob_save_json(
+    source: String,
+    plugin_id: String,
+    blob_id: String,
+    bytes: Vec<u8>,
+    content_type: String,
+    extension: Option<String>,
+) -> Result<PluginBlobWriteResult, String> {
+    plugin_blob_save_bytes(&source, &plugin_id, blob_id, &bytes, content_type, extension)
+}
+
+#[tauri::command(async)]
+fn plugin_blob_read_json(
+    source: String,
+    plugin_id: String,
+    blob_id: String,
+) -> Result<Option<PluginBlobReadResult>, String> {
+    Ok(plugin_blob_read_bytes(&source, &plugin_id, &blob_id)?
+        .map(|(bytes, content_type)| PluginBlobReadResult { bytes, content_type }))
 }
 
 #[tauri::command(async)]
@@ -6956,7 +7072,7 @@ fn plugin_blob_path(
 fn plugin_blob_delete(source: String, plugin_id: String, blob_id: String) -> Result<(), String> {
     validate_storage_segment(&blob_id, "Plugin blob id")?;
     let dir = plugin_blob_dir(&source, &plugin_id)?;
-    let metadata_path = dir.join(format!("{}.json", blob_id));
+    let metadata_path = plugin_blob_metadata_path(&dir, &blob_id);
     if let Ok(raw) = fs::read_to_string(&metadata_path) {
         if let Ok(metadata) = serde_json::from_str::<PluginBlobMetadata>(&raw) {
             let data_path = dir.join(format!("{}.{}", blob_id, metadata.extension));
@@ -8033,6 +8149,8 @@ pub fn run() {
             last_saveable_run_get,
             plugin_blob_save,
             plugin_blob_read,
+            plugin_blob_save_json,
+            plugin_blob_read_json,
             plugin_blob_delete,
             plugin_blob_path,
             plugin_blob_clear,
@@ -8699,6 +8817,36 @@ HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\App Paths\Example.e
         run["sourceSavedAction"]["snapshot"] = serde_json::json!(snapshot.to_string());
         run["inputBinding"] = serde_json::json!("selection");
         assert!(validate_last_saveable_run(&run).is_err());
+    }
+
+    #[test]
+    fn plugin_blob_round_trips_with_meta_sidecar_and_rejects_reserved_extensions() {
+        with_isolated_home("plugin-blob-round-trip", |_home| {
+            let saved = plugin_blob_save_bytes(
+                "builtin", "demo", "b1".into(), &[1, 2, 3], "image/png".into(), Some("png".into()),
+            )
+            .expect("blob save");
+            assert_eq!(saved.byte_size, 3);
+            let (bytes, content_type) = plugin_blob_read_bytes("builtin", "demo", "b1")
+                .expect("blob read")
+                .expect("blob exists");
+            assert_eq!((bytes, content_type.as_str()), (vec![1, 2, 3], "image/png"));
+            let dir = plugin_blob_dir("builtin", "demo").expect("blob dir");
+            assert!(dir.join("b1.meta").is_file());
+            for reserved in ["json", "meta"] {
+                assert!(plugin_blob_save_bytes(
+                    "builtin", "demo", "b2".into(), &[0], "x/y".into(), Some(reserved.into())
+                )
+                .is_err());
+            }
+            let oversized = vec![0u8; PLUGIN_BLOB_MAX_BYTES + 1];
+            assert!(plugin_blob_save_bytes(
+                "builtin", "demo", "b3".into(), &oversized, "x/y".into(), None
+            )
+            .is_err());
+            plugin_blob_delete("builtin".into(), "demo".into(), "b1".into()).unwrap();
+            assert!(plugin_blob_read_bytes("builtin", "demo", "b1").unwrap().is_none());
+        });
     }
 
     #[test]
