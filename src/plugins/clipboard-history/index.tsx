@@ -23,34 +23,6 @@ const FILTER_ROUTES = [
     titleKey: 'route.favorite',
     aliases: ['clipboard favorites', 'clipboard favorite', 'favorite clipboard', '剪贴板收藏', '收藏剪贴板'],
   },
-  {
-    id: 'frequent',
-    title: 'Frequently Used Clipboard',
-    titleZh: '常用剪贴板',
-    titleKey: 'route.frequent',
-    aliases: ['clipboard frequent', 'frequent clipboard', 'frequently used clipboard', '常用剪贴板', '剪贴板常用'],
-  },
-  {
-    id: 'text',
-    title: 'Clipboard Text',
-    titleZh: '剪贴板文本',
-    titleKey: 'route.text',
-    aliases: ['clipboard text', 'text clipboard', '剪贴板文本', '文本剪贴板'],
-  },
-  {
-    id: 'image',
-    title: 'Clipboard Images',
-    titleZh: '剪贴板图片',
-    titleKey: 'route.image',
-    aliases: ['clipboard images', 'clipboard image', 'image clipboard', '剪贴板图片', '图片剪贴板'],
-  },
-  {
-    id: 'files',
-    title: 'Clipboard Files',
-    titleZh: '剪贴板文件',
-    titleKey: 'route.files',
-    aliases: ['clipboard files', 'clipboard file', 'file clipboard', '剪贴板文件', '文件剪贴板'],
-  },
 ] as const
 
 const CLIPBOARD_HISTORY_SHELL = {

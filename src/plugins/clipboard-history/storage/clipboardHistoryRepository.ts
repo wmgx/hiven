@@ -21,8 +21,11 @@ export type ClipboardHistoryRepository = {
   enableLegacyRetention(months: number): Promise<void>
   restoreItem(id: string): Promise<ClipboardHistoryItem | undefined>
   purgeExpiredTrash(options?: { signal?: AbortSignal }): Promise<PruneResult>
+  /** Permanently delete one trash record now, ignoring its 30-day window. */
+  purgeTrashItem(id: string): Promise<boolean>
+  /** Permanently delete every trash record now. */
+  emptyTrash(options?: { signal?: AbortSignal }): Promise<PruneResult>
   deleteItem(id: string): Promise<void>
-  clearAll(): Promise<void>
   pruneItems(policy: ClipboardHistoryPrunePolicy, options?: { signal?: AbortSignal }): Promise<PruneResult>
   findByHash(hash: string): Promise<ClipboardHistoryItem | undefined>
   recordPaste(id: string): Promise<ClipboardHistoryItem | undefined>
@@ -318,6 +321,16 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
     }
     return removed
   }
+  /** Remove one trash record and its body; `force` ignores the retention window. */
+  function purgeTrashRecord(key: string, force: boolean, signal?: AbortSignal) {
+    return store.mutate(async (state) => {
+      requireCurrent(signal)
+      const trash = await storage.kv.get<TrashRecord>(key)
+      if (!trash || (!force && trash.purgeAfter > Date.now())) return { result: undefined, operations: [] }
+      const ops = await store.adjustBlobs([{ meta: trash.metadata, delta: -1 }])
+      return { result: trash.metadata, next: { ...state, trash: state.trash - 1 }, operations: [...ops, { type: 'delete', key }, { type: 'delete', key: TRASH_ID + trash.metadata.id }, { type: 'delete', key: ITEM + trash.metadata.id }] }
+    }, () => requireCurrent(signal))
+  }
   async function purgeExpiredTrash(options: { signal?: AbortSignal } = {}): Promise<PruneResult> {
     await store.ready()
     const result = emptyPrune()
@@ -325,16 +338,39 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
     for (const row of page.entries) {
       requireCurrent(options.signal)
       if (row.value.purgeAfter > Date.now()) break
-      const removed = await store.mutate(async (state) => {
-        requireCurrent(options.signal)
-        const trash = await storage.kv.get<TrashRecord>(row.key)
-        if (!trash || trash.purgeAfter > Date.now()) return { result: undefined, operations: [] }
-        const ops = await store.adjustBlobs([{ meta: trash.metadata, delta: -1 }])
-        return { result: trash.metadata, next: { ...state, trash: state.trash - 1 }, operations: [...ops, { type: 'delete', key: row.key }, { type: 'delete', key: TRASH_ID + trash.metadata.id }, { type: 'delete', key: ITEM + trash.metadata.id }] }
-      }, () => requireCurrent(options.signal))
+      const removed = await purgeTrashRecord(row.key, false, options.signal)
       if (removed) { result.removedCount++; result.removedBytes += removed.byteSize }
     }
     result.removedBlobIds = await collectBlobGarbage(options.signal)
+    if (result.removedCount) notify()
+    return result
+  }
+  async function purgeTrashItem(id: string): Promise<boolean> {
+    await store.ready()
+    const key = await storage.kv.get<string>(TRASH_ID + id)
+    if (!key) return false
+    const removed = await purgeTrashRecord(key, true)
+    await collectBlobGarbage()
+    if (removed) notify()
+    return Boolean(removed)
+  }
+  async function emptyTrash(options: { signal?: AbortSignal } = {}): Promise<PruneResult> {
+    await store.ready()
+    const result = emptyPrune()
+    let after: string | undefined
+    do {
+      const page = await storage.kv.page<TrashRecord>({ prefix: TRASH, after, limit: 32 })
+      for (const row of page.entries) {
+        requireCurrent(options.signal)
+        const removed = await purgeTrashRecord(row.key, true, options.signal)
+        if (removed) { result.removedCount++; result.removedBytes += removed.byteSize }
+      }
+      after = page.nextCursor
+    } while (after)
+    // Blob tombstones are collected in small batches; drain them all.
+    for (let batch = await collectBlobGarbage(options.signal); batch.length; batch = await collectBlobGarbage(options.signal)) {
+      result.removedBlobIds.push(...batch)
+    }
     if (result.removedCount) notify()
     return result
   }
@@ -359,25 +395,16 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
     result.hasMore = Boolean(page.nextCursor)
     return result
   }
-  async function clearAll() {
-    // Explicit clear traverses bounded pages and remains recoverable for 30 days.
-    let cursor: string | undefined
-    do {
-      const page = await getPage({ limit: 100, cursor })
-      for (const item of page.items) await deleteItem(item.id)
-      cursor = page.nextCursor
-    } while (cursor)
-  }
   async function setFavorite(id: string, favorite: boolean, title?: string) {
     return update(id, (item) => ({ ...item, isFavorite: favorite, favoriteTitle: favorite ? title?.trim() || item.favoriteTitle : undefined, favoritedAt: favorite ? item.favoritedAt ?? Date.now() : undefined }))
   }
   return {
-    addItem, getItem, getTrashItem, getPage, getRetentionStatus, enableLegacyRetention, restoreItem, purgeExpiredTrash,
+    addItem, getItem, getTrashItem, getPage, getRetentionStatus, enableLegacyRetention, restoreItem, purgeExpiredTrash, purgeTrashItem, emptyTrash,
     // Compatibility methods are bounded to one page. Cross-search snapshots pass
     // their explicit selected IDs, never rely on a global list membership read.
     getAllItems: () => getFreshListItems(), getListItems: () => getFreshListItems(), getFreshListItems,
     getListItemsSync: () => { const cached = getCachedIndex(); return cached ? indexToListItems(cached) : null },
-    deleteItem, clearAll, pruneItems, findByHash,
+    deleteItem, pruneItems, findByHash,
     recordPaste: (id) => update(id, (item) => ({ ...item, pasteCount: (item.pasteCount ?? 0) + 1, lastPastedAt: Date.now() })),
     setFavorite,
     toggleFavorite: (id) => update(id, (item) => ({ ...item, isFavorite: !item.isFavorite, favoritedAt: !item.isFavorite ? Date.now() : undefined, favoriteTitle: !item.isFavorite ? item.favoriteTitle : undefined })),
