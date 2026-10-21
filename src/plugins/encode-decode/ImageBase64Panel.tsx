@@ -1,18 +1,15 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import { Button } from '@hiven/plugin-ui'
-import { saveClipboardPng } from './saveClipboardPng'
 import { decodeRaster, imageDataUri, inspectRaster, MAX_IMAGE_BYTES, parseImageBase64 } from './imageBase64'
 
 type Result = { uri: string; preview: string; png: Uint8Array; width: number; height: number }
 type ImagePanelProps = PluginSurfaceProps & {
   active: boolean
-  saveFocused: boolean
-  onShowWorkbench(): void
   onDirtyChange(dirty: boolean): void
   invalidateRef: { current: (() => void) | null }
 }
-export function ImageBase64Panel({ host, t, initialText, active, saveFocused, onShowWorkbench, onDirtyChange, invalidateRef }: ImagePanelProps) {
+export function ImageBase64Panel({ host, t, initialText, active, onDirtyChange, invalidateRef }: ImagePanelProps) {
   const [text, setText] = useState(initialText ?? '')
   const [result, setResult] = useState<Result | null>(null)
   const [deliveryReady, setDeliveryReady] = useState(false)
@@ -80,21 +77,10 @@ export function ImageBase64Panel({ host, t, initialText, active, saveFocused, on
   }
   return <main className="image-base64-panel" hidden={!active} data-launcher-scrollable>
     <div className="image-base64-actions">
-      {!saveFocused && <Button disabled={busy || !host.clipboard.readImage} onClick={() => void run(async (signal, current) => {
+      <Button disabled={busy || !host.clipboard.readImage} onClick={() => void run(async (signal, current) => {
         const image = await host.clipboard.readImage!({ signal }); return load(image.bytes, signal, current, image.contentType)
-      }, true)}>{t('image.readClipboard')}</Button>}
-      <Button variant={saveFocused ? 'primary' : undefined} autoFocus={saveFocused} disabled={busy || !host.clipboard.readImage} onClick={() => void run(async (signal, current) => {
-        const image = await host.clipboard.readImage!({ signal })
-        const info = inspectRaster(image.bytes, image.contentType)
-        const decoded = await decodeRaster(image.bytes, info, signal)
-        if (!current()) return ''
-        try {
-          const saved = await saveClipboardPng(host.storage, decoded.png, current)
-          if (saved.status === 'cancelled') return ''
-          return saved.pathCopied ? 'image.savedPathCopied' : 'image.savedPathCopyFailed'
-        } catch { return 'image.saveClipboardFailed' }
-      })}>{t('image.saveClipboard')}</Button>
-      {!saveFocused && <Button disabled={busy} onClick={() => file.current?.click()}>{t('image.chooseFile')}</Button>}
+      }, true)}>{t('image.readClipboard')}</Button>
+      <Button disabled={busy} onClick={() => file.current?.click()}>{t('image.chooseFile')}</Button>
       <input ref={file} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(event) => {
         const selected = event.currentTarget.files?.[0]; event.currentTarget.value = ''
         if (selected) void run(async (signal, current) => {
@@ -103,7 +89,7 @@ export function ImageBase64Panel({ host, t, initialText, active, saveFocused, on
         }, true)
       }} />
     </div>
-    {!saveFocused && <><label className="image-base64-input">{t('image.input')}<textarea data-launcher-scrollable value={text} spellCheck={false} onChange={(event) => {
+    <><label className="image-base64-input">{t('image.input')}<textarea data-launcher-scrollable value={text} spellCheck={false} onChange={(event) => {
       invalidate(); deliverableRef.current = null; setDeliveryReady(false); setText(event.currentTarget.value); setResult(null); setBusy(false); setStatus('')
     }} /></label>
     <div className="image-base64-actions">
@@ -121,9 +107,7 @@ export function ImageBase64Panel({ host, t, initialText, active, saveFocused, on
         <Button disabled={busy || !deliveryReady} onClick={() => void deliver('save')}>{t('image.save')}</Button>
       </div>
     </>}
-    </>}
-    {saveFocused && busy && <Button onClick={() => { invalidate(); setBusy(false); setStatus('') }}>{t('image.cancel')}</Button>}
-    {(status || (result && !deliveryReady)) && <p role="status" aria-live="polite">{status && t(status)}{!saveFocused && result && !deliveryReady ? ` ${t('image.previousNotUpdated')}` : ''}</p>}
-    {saveFocused && <Button variant="ghost" onClick={onShowWorkbench}>{t('image.openWorkbench')}</Button>}
+    </>
+    {(status || (result && !deliveryReady)) && <p role="status" aria-live="polite">{status && t(status)}{result && !deliveryReady ? ` ${t('image.previousNotUpdated')}` : ''}</p>}
   </main>
 }

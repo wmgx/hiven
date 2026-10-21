@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import { Button, useLocalEscapeLayer } from '@hiven/plugin-ui'
-import { MAX_IMAGE_BYTES } from './imageBase64'
+import { MAX_IMAGE_BYTES } from './raster'
 import { exportRedactions, loadRedactionImage, paintRedactions, redactionRect, type Point, type RedactionRect } from './imageRedaction'
 import './imageRedaction.css'
 

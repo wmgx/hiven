@@ -1,0 +1,17 @@
+{
+  "pluginId": "image-tools",
+  "displayName": "Image Tools",
+  "displayNameI18n": {
+    "zh": "图片工具"
+  },
+  "version": "1.0.0",
+  "capabilities": [
+    "surface"
+  ],
+  "permissions": [
+    "clipboard.write",
+    "clipboard.read",
+    "clipboard.image",
+    "storage.blob"
+  ]
+}

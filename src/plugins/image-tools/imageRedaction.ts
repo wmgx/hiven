@@ -1,4 +1,4 @@
-import { decodeRaster, inspectRaster, MAX_IMAGE_BYTES } from './imageBase64'
+import { decodeRaster, inspectRaster, MAX_IMAGE_BYTES } from './raster'
 
 export type Point = { x: number; y: number }
 export type RedactionRect = { x: number; y: number; width: number; height: number }

@@ -7,7 +7,6 @@
 
 import { definePlugin, type PluginToolExplicitTextPreviewContext, type PluginToolTextPreviewResult, type PluginToolSurfaces } from '@hiven/plugin'
 import { EncodeDecodeSurface } from './EncodeDecodeSurface'
-import { saveClipboardImageAsPng } from './saveClipboardImage'
 import {
   base64Decode,
   base64Encode,
@@ -41,10 +40,6 @@ const WORKSPACE_SHELL = {
   resizable: true,
 }
 const OPERATION_ROUTES = [
-  { id: 'image-resize', title: 'resize.title', aliases: ['resize image', 'shrink image', 'image width', '图片缩小', '调整图片尺寸', '图片宽度', '图片等比缩小'] },
-  { id: 'image-crop', title: 'crop.title', aliases: ['crop image', 'crop screenshot', '图片裁剪', '裁剪图片', '裁剪截图'] },
-  { id: 'image-redact', title: 'redact.title', aliases: ['redact screenshot', 'redact image', 'hide image text', '截图遮挡', '图片遮挡', '图片打码'] },
-  { id: 'image-save', title: 'image.saveRouteTitle', aliases: ['save screenshot', 'save clipboard image', 'screenshot png', '截图保存文件', '截图存为文件', '保存截图', '保存剪贴板图片'] },
   { id: 'image-base64', title: 'image.title', aliases: ['image base64', 'data uri', '图片base64', '图片编码'] },
   { id: 'base64-encode', title: 'base64.encode.title', aliases: ['base64 encode', 'encode base64', 'b64 encode', 'base64编码', 'base64 编码'] },
   { id: 'base64-decode', title: 'base64.decode.title', aliases: ['base64 decode', 'decode base64', 'b64 decode', 'base64解码', 'base64 解码'] },
@@ -85,17 +80,10 @@ export const encodeDecodePlugin = definePlugin({
       ...OPERATION_ROUTES.map((route) => ({
         id: route.id,
         kind: 'custom-view' as const,
-        title: route.id === 'image-save' ? 'Save screenshot to file' : 'Encode / Decode',
-        titleI18n: { zh: route.id === 'image-save' ? '截图存为文件' : '编解码' },
+        title: 'Encode / Decode',
+        titleI18n: { zh: '编解码' },
         component: EncodeDecodeSurface,
-        entry: { launcher: false, shortcutBindable: route.id === 'image-save' },
-        clipboardImageSave: route.id === 'image-save'
-          ? {
-              launcherItemId: 'open-image-save',
-              permissions: ['clipboard.read', 'clipboard.image', 'storage.blob', 'clipboard.write'] as const,
-              run: saveClipboardImageAsPng,
-            }
-          : undefined,
+        entry: { launcher: false },
         shell: WORKSPACE_SHELL,
       })),
     ],
@@ -111,10 +99,6 @@ export const encodeDecodePlugin = definePlugin({
       behavior: { type: 'perform' as const },
       surfaces: ['global-launcher' as const],
       async execute(execution) {
-        if (route.id === 'image-save' && execution.api.saveClipboardImageAsPng) {
-          await execution.api.saveClipboardImageAsPng()
-          return { ok: true as const, keepOpen: true }
-        }
         execution.api.openSurface(route.id, { initialText: execution.input?.text })
         return { ok: true as const, keepOpen: true }
       },

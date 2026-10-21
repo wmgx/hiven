@@ -1,0 +1,35 @@
+.image-tools-surface {
+  --image-tools-border: var(--color-border-tertiary, var(--hiven-color-border));
+  --image-tools-panel: var(--color-background-primary, var(--hiven-color-bg-primary));
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--color-text-primary, var(--hiven-color-text-primary));
+  background: var(--image-tools-panel);
+  font-family: var(--font, var(--hiven-font-ui));
+}
+
+.image-tools-header {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--image-tools-border);
+}
+
+.image-tools-header strong {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.image-tools-save { flex: 1; min-height: 0; overflow: auto; padding: 12px 18px; font-size: 12px; }
+.image-tools-save p { line-height: 1.5; color: var(--color-text-secondary); }
+.image-tools-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+
+@media (max-width: 720px) {
+  .image-tools-header { gap: 6px; padding: 0 8px; }
+}

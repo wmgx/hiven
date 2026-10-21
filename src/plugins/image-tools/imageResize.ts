@@ -1,4 +1,4 @@
-import { MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from './imageBase64'
+import { MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from './raster'
 
 export function resizeDimensions(value: string, sourceWidth: number, sourceHeight: number) {
   if (!/^[1-9]\d*$/.test(value) || ![sourceWidth, sourceHeight].every(Number.isSafeInteger)

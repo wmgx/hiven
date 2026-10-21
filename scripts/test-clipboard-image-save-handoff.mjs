@@ -11,7 +11,7 @@ function fixture() {
   const subscribe = fn => { listeners.add(fn); return () => listeners.delete(fn) }
   h.invalidate = () => { state.globalLauncherSessionId++; for (const fn of listeners) fn() }
   h.revoke = () => { h.allowed = false; for (const fn of listeners) fn(); h.allowed = true }
-  const task = { pluginId: 'encode-decode', surfaceId: 'image-save', definition: {}, contribution: {
+  const task = { pluginId: 'image-tools', surfaceId: 'image-save', definition: {}, contribution: {
     launcherItemId: 'open-image-save', permissions: ['clipboard.read'],
     run: async ({ isCurrent }) => {
       h.saves++
@@ -40,7 +40,7 @@ function fixture() {
   }
   const module = { exports: {} }; let id = 0
   vm.runInNewContext(code, { module, exports: module.exports, require: key => { if (!modules[key]) throw Error(key); return modules[key] }, AbortController, crypto: { randomUUID: () => `operation-${++id}` } })
-  const item = { pluginId: 'encode-decode', source: 'builtin', systemKey: 'plugin:encode-decode:launcher:open-image-save', pluginLifetime: { active: true } }
+  const item = { pluginId: 'image-tools', source: 'builtin', systemKey: 'plugin:image-tools:launcher:open-image-save', pluginLifetime: { active: true } }
   const bind = (overrides = {}) => module.exports.withClipboardImageSave(
     {},
     { ...item, ...overrides },

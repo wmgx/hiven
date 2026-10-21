@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { createJiti } from 'jiti'
-const { cropFromDrag, parseCrop, validCrop, exportCrop } = await createJiti(import.meta.url).import('../src/plugins/encode-decode/imageCrop.ts')
+const { cropFromDrag, parseCrop, validCrop, exportCrop } = await createJiti(import.meta.url).import('../src/plugins/image-tools/imageCrop.ts')
 assert.deepEqual(cropFromDrag({x:9.8,y:8.4},{x:-1,y:2.2},10,10),{x:0,y:2,width:10,height:7})
 assert.equal(cropFromDrag({x:2,y:2},{x:2,y:8},10,10),null)
 assert.equal(parseCrop({x:'0',y:'0',width:'',height:'2'},10,10),null)

@@ -1,5 +1,5 @@
 import type { PluginBlobSaveResult, PluginClipboardImageSaveContext } from '@hiven/plugin'
-import { decodeRaster, inspectRaster } from './imageBase64'
+import { decodeRaster, inspectRaster } from './raster'
 import { saveClipboardPng } from './saveClipboardPng'
 
 /** Convert the explicit clipboard image to PNG and hand it to the native save chooser. */
