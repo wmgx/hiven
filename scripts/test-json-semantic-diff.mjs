@@ -199,4 +199,11 @@ function kinds(changes) {
   console.log(`large json highlight ok in ${ms.toFixed(0)}ms (${left.split('\n').length} lines)`)
 }
 
+{
+  // Prototype-chain names are ordinary keys, and "__proto__" survives normalisation.
+  const added = changesOf(JSON.parse('{}'), JSON.parse('{"constructor":1}'))
+  assert.deepEqual(kinds(added), ['added'], 'constructor key is added, not changed')
+  assert.deepEqual(changesOf(JSON.parse('{"__proto__":1}'), JSON.parse('{"__proto__":2}')).map((c) => c.kind), ['changed'])
+}
+
 console.log('json semantic diff checks passed')
