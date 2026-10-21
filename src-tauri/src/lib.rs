@@ -160,8 +160,20 @@ fn log_launcher_perf(label: &str, started_at: Instant, detail: impl AsRef<str>) 
     }
 }
 
+/// Runs blocking work off the main thread and the async workers. Sync `#[tauri::command] fn`s
+/// execute on the main thread and starve IPC, so anything that does I/O or spawns goes through here.
+async fn run_blocking<T, F>(work: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(work)
+        .await
+        .map_err(|error| format!("background task failed: {error}"))?
+}
+
 /// Frontend perf lines → always-on log file; stderr only when HIVEN_LAUNCHER_PERF=1.
-#[tauri::command]
+#[tauri::command(async)]
 fn log_launcher_perf_frontend(line: String) {
     let trimmed = line.trim();
     if trimmed.is_empty() {
@@ -4005,7 +4017,11 @@ fn dedupe_installed_apps(apps: Vec<InstalledAppEntry>) -> Vec<InstalledAppEntry>
 }
 
 #[tauri::command]
-fn discover_installed_apps() -> Result<Vec<DiscoveredApp>, String> {
+async fn discover_installed_apps() -> Result<Vec<DiscoveredApp>, String> {
+    run_blocking(discover_installed_apps_blocking).await
+}
+
+fn discover_installed_apps_blocking() -> Result<Vec<DiscoveredApp>, String> {
     let apps = discover_platform_apps();
     if let Ok(mut targets) = installed_app_targets().lock() {
         targets.clear();
@@ -4757,7 +4773,7 @@ async fn list_desktop_windows(
 }
 
 #[cfg(not(target_os = "linux"))]
-#[tauri::command]
+#[tauri::command(async)]
 fn list_desktop_windows(query: Option<String>) -> Result<Vec<DesktopWindow>, String> {
     let q = query
         .as_deref()
@@ -4773,7 +4789,11 @@ fn list_desktop_windows(query: Option<String>) -> Result<Vec<DesktopWindow>, Str
 
 /// Offline / open-path enrich: CG + batched Accessibility titles. Do not call per keystroke.
 #[tauri::command]
-fn list_desktop_windows_enriched() -> Result<Vec<DesktopWindow>, String> {
+async fn list_desktop_windows_enriched() -> Result<Vec<DesktopWindow>, String> {
+    run_blocking(list_desktop_windows_enriched_blocking).await
+}
+
+fn list_desktop_windows_enriched_blocking() -> Result<Vec<DesktopWindow>, String> {
     #[cfg(target_os = "linux")]
     { return Err("x11-window-unsupported".into()); }
     #[cfg(not(target_os = "linux"))]
@@ -5198,7 +5218,11 @@ fn list_macos_desktop_processes(_query: Option<&str>) -> Result<Vec<DesktopProce
 }
 
 #[tauri::command]
-fn list_desktop_processes(query: Option<String>) -> Result<Vec<DesktopProcess>, String> {
+async fn list_desktop_processes(query: Option<String>) -> Result<Vec<DesktopProcess>, String> {
+    run_blocking(move || list_desktop_processes_blocking(query)).await
+}
+
+fn list_desktop_processes_blocking(query: Option<String>) -> Result<Vec<DesktopProcess>, String> {
     let raw = query.as_deref().map(str::trim).filter(|s| !s.is_empty());
     // Empty query: return nothing (normal launcher search must not list processes).
     // Special token "*" = process-mode bare "kill": list all non-denied (frontend only).
@@ -5215,7 +5239,11 @@ fn list_desktop_processes(query: Option<String>) -> Result<Vec<DesktopProcess>, 
 }
 
 #[tauri::command]
-fn terminate_desktop_process(pid: u32, force: bool) -> Result<(), String> {
+async fn terminate_desktop_process(pid: u32, force: bool) -> Result<(), String> {
+    run_blocking(move || terminate_desktop_process_blocking(pid, force)).await
+}
+
+fn terminate_desktop_process_blocking(pid: u32, force: bool) -> Result<(), String> {
     if pid == 0 {
         return Err("Invalid process id".to_string());
     }
@@ -6046,7 +6074,7 @@ fn plugin_blob_paths_with_metadata_limit(
     Ok((canonical_data, metadata))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn plugin_kv_get(source: String, plugin_id: String, key: String) -> Result<Option<String>, String> {
     validate_plugin_kv_namespace(&source, &plugin_id)?;
     validate_plugin_kv_key(&key)?;
@@ -6068,7 +6096,7 @@ struct PluginKvGetManyEntry {
     value_json: String,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn plugin_kv_get_many(source: String, plugin_id: String, keys: Vec<String>) -> Result<Vec<PluginKvGetManyEntry>, String> {
     validate_plugin_kv_namespace(&source, &plugin_id)?;
     if keys.len() > 128 {
@@ -6095,7 +6123,7 @@ fn plugin_kv_get_many(source: String, plugin_id: String, keys: Vec<String>) -> R
     Ok(entries)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn plugin_kv_set(
     source: String,
     plugin_id: String,
@@ -6124,7 +6152,7 @@ fn plugin_kv_set(
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn plugin_kv_delete(source: String, plugin_id: String, key: String) -> Result<(), String> {
     validate_plugin_kv_namespace(&source, &plugin_id)?;
     validate_plugin_kv_key(&key)?;
@@ -6138,7 +6166,7 @@ fn plugin_kv_delete(source: String, plugin_id: String, key: String) -> Result<()
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn plugin_kv_list(
     source: String,
     plugin_id: String,
@@ -6179,14 +6207,14 @@ fn plugin_kv_list(
     Ok(entries)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn plugin_kv_page(source: String, plugin_id: String, options: plugin_kv_paging::PageOptions) -> Result<plugin_kv_paging::Page, String> {
     validate_plugin_kv_namespace(&source, &plugin_id)?;
     let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
     plugin_kv_paging::page(&db.connection, &source, &plugin_id, options)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn plugin_kv_array_page(source: String, plugin_id: String, options: plugin_kv_paging::ArrayPageOptions) -> Result<plugin_kv_paging::ArrayPage, String> {
     validate_plugin_kv_namespace(&source, &plugin_id)?;
     let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
@@ -6210,14 +6238,14 @@ async fn plugin_kv_related_search(
     .map_err(|e| format!("Plugin KV related search task failed: {e}"))?
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn plugin_kv_batch(source: String, plugin_id: String, input: plugin_kv_paging::Batch) -> Result<plugin_kv_paging::BatchResult, String> {
     validate_plugin_kv_namespace(&source, &plugin_id)?;
     let mut db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
     plugin_kv_paging::batch(&mut db.connection, &source, &plugin_id, input, current_millis_i64()?)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn plugin_kv_usage(source: String, plugin_id: String) -> Result<PluginKvUsage, String> {
     validate_plugin_kv_namespace(&source, &plugin_id)?;
     let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
@@ -6231,7 +6259,7 @@ fn plugin_kv_usage(source: String, plugin_id: String) -> Result<PluginKvUsage, S
     Ok(PluginKvUsage { bytes, item_count })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn plugin_kv_prune(
     source: String,
     plugin_id: String,
@@ -6331,7 +6359,7 @@ fn plugin_kv_prune(
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn plugin_kv_clear(source: String, plugin_id: String) -> Result<(), String> {
     validate_plugin_kv_namespace(&source, &plugin_id)?;
     let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
@@ -6345,7 +6373,7 @@ fn plugin_kv_clear(source: String, plugin_id: String) -> Result<(), String> {
 }
 
 /// Append a single launcher usage journal row (metadata only; no content body).
-#[tauri::command]
+#[tauri::command(async)]
 fn usage_journal_append(
     command_id: String,
     surface_id: String,
@@ -6380,7 +6408,7 @@ fn usage_journal_append(
 }
 
 /// Prune usage journal rows older than `max_age_days` and/or beyond `max_rows` (keep newest).
-#[tauri::command]
+#[tauri::command(async)]
 fn usage_journal_prune(
     max_age_days: Option<i64>,
     max_rows: Option<i64>,
@@ -6436,7 +6464,7 @@ struct AiUsageRecord {
     metrics: Vec<serde_json::Value>,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn ai_usage_record_upsert(record: AiUsageRecord) -> Result<(), String> {
     validate_plugin_kv_namespace(&record.plugin_source, &record.plugin_id)?;
     validate_experience_identifier(&record.run_id, "run_id")?;
@@ -6481,7 +6509,7 @@ fn ai_usage_record_upsert(record: AiUsageRecord) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn ai_usage_record_list(
     plugin_id: String,
     plugin_source: String,
@@ -6746,7 +6774,7 @@ fn validate_last_saveable_run(run: &serde_json::Value) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn last_saveable_run_set(run: serde_json::Value) -> Result<(), String> {
     validate_last_saveable_run(&run)?;
     *LAST_SAVEABLE_RUN
@@ -6756,7 +6784,7 @@ fn last_saveable_run_set(run: serde_json::Value) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn last_saveable_run_get() -> Result<Option<serde_json::Value>, String> {
     let now = current_millis_i64()?;
     let mut slot = LAST_SAVEABLE_RUN
@@ -6825,7 +6853,7 @@ fn plugin_blob_read(
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn plugin_blob_path(
     source: String,
     plugin_id: String,
@@ -6838,7 +6866,7 @@ fn plugin_blob_path(
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn plugin_blob_delete(source: String, plugin_id: String, blob_id: String) -> Result<(), String> {
     validate_storage_segment(&blob_id, "Plugin blob id")?;
     let dir = plugin_blob_dir(&source, &plugin_id)?;
@@ -6853,7 +6881,7 @@ fn plugin_blob_delete(source: String, plugin_id: String, blob_id: String) -> Res
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn plugin_blob_clear(source: String, plugin_id: String) -> Result<(), String> {
     let dir = plugin_blob_dir(&source, &plugin_id)?;
     if dir.exists() {
@@ -6862,7 +6890,7 @@ fn plugin_blob_clear(source: String, plugin_id: String) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn list_plugin_dirs(path: String) -> Result<Vec<PluginDirSummary>, String> {
     let root = expand_path(&path);
     ensure_plugin_path_for_write(&root)?;
@@ -6902,7 +6930,7 @@ fn list_plugin_dirs(path: String) -> Result<Vec<PluginDirSummary>, String> {
     Ok(plugins)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn remove_plugin_dir(root_path: String, plugin_id: String) -> Result<(), String> {
     validate_plugin_id(&plugin_id)?;
     let root = ensure_existing_plugin_path(&expand_path(&root_path))?;
@@ -6923,7 +6951,7 @@ fn remove_plugin_dir(root_path: String, plugin_id: String) -> Result<(), String>
     fs::remove_dir_all(target).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn replace_plugin_dir(
     source_path: String,
     root_path: String,
@@ -6991,7 +7019,7 @@ fn replace_plugin_dir(
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn list_plugin_files(path: String) -> Result<Vec<PluginFileNode>, String> {
     let root = ensure_existing_plugin_path(&expand_path(&path))?;
     if !root.is_dir() {
@@ -7179,14 +7207,14 @@ fn copy_dir_recursive(src: &Path, dest: &Path) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn read_plugin_file(path: String) -> Result<String, String> {
     let file_path = ensure_existing_plugin_path(&expand_path(&path))?;
     ensure_plugin_text_file(&file_path)?;
     fs::read_to_string(&file_path).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_plugin_file(path: String, content: String) -> Result<(), String> {
     let file_path = expand_path(&path);
     ensure_plugin_path_for_write(&file_path)?;
@@ -7197,7 +7225,7 @@ fn save_plugin_file(path: String, content: String) -> Result<(), String> {
     fs::write(&file_path, content).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn install_plugin_zip(zip_path: String, destination_root: String) -> Result<String, String> {
     let zip_path = expand_path(&zip_path);
     let destination_root = expand_path(&destination_root);
@@ -7234,7 +7262,7 @@ async fn install_plugin_zip_url(url: String, destination_root: String) -> Result
     result
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn install_plugin_dir(source_path: String, destination_root: String) -> Result<String, String> {
     let source_path = expand_path(&source_path);
     if !source_path.is_dir() {
@@ -8962,9 +8990,9 @@ mod desktop_process_deny_tests {
 
     #[test]
     fn list_desktop_processes_empty_query_returns_empty() {
-        let result = list_desktop_processes(None).expect("empty query should succeed");
+        let result = list_desktop_processes_blocking(None).expect("empty query should succeed");
         assert!(result.is_empty());
-        let result = list_desktop_processes(Some("   ".to_string())).expect("blank query should succeed");
+        let result = list_desktop_processes_blocking(Some("   ".to_string())).expect("blank query should succeed");
         assert!(result.is_empty());
     }
 }
