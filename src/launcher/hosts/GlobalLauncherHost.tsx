@@ -100,10 +100,18 @@ export function GlobalLauncherHost() {
     launcherHostSurfaceTarget: s.launcherHostSurfaceTarget,
   })))
   const suggestionSettings = useSuggestionSettings()
-  if (open && !getSuggestionSession()) beginSuggestionSession()
-  const suggestionSession = open ? getSuggestionSession() : null
+  // The session is created in a layout effect (not during render) so renders stay pure;
+  // the state update re-renders before paint.
+  const [openedSuggestionSession, setOpenedSuggestionSession] = useState<ReturnType<typeof getSuggestionSession>>(null)
+  const suggestionSession = open ? openedSuggestionSession : null
   const [suggestionDismissed, setSuggestionDismissed] = useState<string | null>(null)
-  useLayoutEffect(() => { if (!open) endSuggestionSession() }, [open])
+  useLayoutEffect(() => {
+    if (open) setOpenedSuggestionSession(getSuggestionSession() ?? beginSuggestionSession())
+    else {
+      endSuggestionSession()
+      setOpenedSuggestionSession(null)
+    }
+  }, [open])
   useEffect(() => {
     const dismiss = () => { const session = getSuggestionSession(); if (session) setSuggestionDismissed(session.id) }
     document.addEventListener('compositionstart', dismiss, true)
@@ -341,8 +349,13 @@ export function GlobalLauncherHost() {
     }
   }, [open])
 
+  // Only look up the foreground app when some candidate can actually use it.
+  const anyCandidateAcceptsApps = useMemo(
+    () => availableLauncherItems.some((item) => (item.accepts?.apps?.length ?? 0) > 0),
+    [availableLauncherItems],
+  )
   useEffect(() => {
-    if (!open) {
+    if (!open || !anyCandidateAcceptsApps) {
       setForegroundApp(undefined)
       return
     }
@@ -369,7 +382,7 @@ export function GlobalLauncherHost() {
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [open])
+  }, [anyCandidateAcceptsApps, open])
 
   useEffect(() => {
     // Native show_launcher already switches to English IME before show.
@@ -694,17 +707,17 @@ export function GlobalLauncherHost() {
     !controllerState?.busy && !controllerState?.error && (controllerState?.frames.length ?? 1) <= 1 &&
     !surfaceFrame && !hostSurfaceTarget && !launcherSettingsTarget)
   const snapshot = frozenSuggestions.current
-  const { visibleFiltered, currentSuggestionKeys } = useMemo(() => {
+  const { visibleFiltered, currentSuggestionKeys, appendedSuggestionKeys } = useMemo(() => {
     const keys = new Set<string>()
-    if (!suggestionsIdle || !snapshot) return { visibleFiltered: ordinaryVisible, currentSuggestionKeys: keys }
+    if (!suggestionsIdle || !snapshot) return { visibleFiltered: ordinaryVisible, currentSuggestionKeys: keys, appendedSuggestionKeys: [] as string[] }
     const eligible = new Set(filterAvailableLauncherItems(availableLauncherItems, 'global-launcher').map(item => item.systemKey))
     const byKey = new Map(availableItems.map(item => [item.id, item]))
     const reasons = new Map(snapshot.suggestions.map(item => [item.actionKey, item.reason]))
     // Async ordinary candidates may arrive after the first paint. Append them
     // without moving existing rows or changing their numeric shortcuts.
     const frozenKeys = new Set(snapshot.keys)
-    snapshot.keys.push(...ordinaryVisible.filter(item => !frozenKeys.has(item.id)).map(item => item.id))
-    const items = snapshot.keys.flatMap(key => {
+    const appendedKeys = ordinaryVisible.filter(item => !frozenKeys.has(item.id)).map(item => item.id)
+    const items = [...snapshot.keys, ...appendedKeys].flatMap(key => {
       const item = byKey.get(key)
       if (!item) return []
       const reason = reasons.get(key)
@@ -714,8 +727,14 @@ export function GlobalLauncherHost() {
       return [{ ...item, subtitle: `${t(locale, 'settings.contextSuggestions')} · ${t(locale,
         reason === 'app' ? 'settings.contextSuggestionApp' : 'settings.contextSuggestionRecent')}` }]
     })
-    return { visibleFiltered: items, currentSuggestionKeys: keys }
+    return { visibleFiltered: items, currentSuggestionKeys: keys, appendedSuggestionKeys: appendedKeys }
   }, [suggestionsIdle, snapshot, ordinaryVisible, availableLauncherItems, availableItems, locale, pluginRegistryVersion])
+  // Persist late arrivals after commit so later renders keep their position.
+  useLayoutEffect(() => {
+    if (!snapshot || appendedSuggestionKeys.length === 0) return
+    const known = new Set(snapshot.keys)
+    for (const key of appendedSuggestionKeys) if (!known.has(key)) snapshot.keys.push(key)
+  }, [snapshot, appendedSuggestionKeys])
   const showingSuggestions = suggestionsIdle && currentSuggestionKeys.size > 0
   const visibleSelectionItems = useMemo(
     () => visibleFiltered.map((item) => item.domainItem),
