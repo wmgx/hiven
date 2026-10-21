@@ -84,7 +84,8 @@ export function filterQueryHistory(items: QueryHistoryItem[], query: string, now
 const TEMPLATE_SLOT_RE = /\{(?:query|clipboard)\}/g
 const TEMPLATE_SLOT_MARKER = '__hiven_slot__'
 
-function captureTemplateValue(templatePart: string, actual: string, wildcard: string): string[] | null {
+/** `decode` is for raw pathname text only; searchParams values arrive already decoded. */
+function captureTemplateValue(templatePart: string, actual: string, wildcard: string, decode: boolean): string[] | null {
   const slots = templatePart.match(TEMPLATE_SLOT_RE)?.length ?? 0
   if (slots === 0) return templatePart === actual ? [] : null
   const pattern = templatePart
@@ -92,7 +93,7 @@ function captureTemplateValue(templatePart: string, actual: string, wildcard: st
     .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
     .join(`(${wildcard})`)
   const match = actual.match(new RegExp(`^${pattern}$`))
-  return match ? match.slice(1).map(decodeURIComponent) : null
+  return match ? match.slice(1).map((value) => (decode ? decodeURIComponent(value) : value)) : null
 }
 
 /** Match only template-declared URL parts; unrelated browser query params are ignored. */
@@ -106,6 +107,7 @@ export function queryFromBrowserUrl(template: string, browserUrl: string): strin
       expected.pathname.split(TEMPLATE_SLOT_MARKER).join('{query}'),
       actual.pathname,
       '[^/]+',
+      true,
     )
     if (!captures) return null
     for (const [key, value] of expected.searchParams) {
@@ -113,6 +115,7 @@ export function queryFromBrowserUrl(template: string, browserUrl: string): strin
         value.split(TEMPLATE_SLOT_MARKER).join('{query}'),
         actual.searchParams.get(key) ?? '',
         '.+',
+        false,
       )
       if (!matched) return null
       captures.push(...matched)

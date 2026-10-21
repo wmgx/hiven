@@ -29,7 +29,7 @@ const stripTypeImports = [
   /import\s*\{[\s\S]*?\}\s*from\s*'@hiven\/plugin'\s*;?\s*\n?/g,
 ]
 
-const history = loadModule('src/plugins/web-open/queryHistory.ts', { stripImports: stripTypeImports })
+const history = loadModule('src/plugins/web-open/queryHistory.ts', { stripImports: stripTypeImports, globals: { URL } })
 
 // upsert: empty no-op
 assert.deepEqual(history.upsertQueryHistory([], '  ', 20), [])
@@ -83,6 +83,11 @@ assert.deepEqual(history.upsertQueryHistory([], '  ', 20), [])
     ['b'],
   )
 }
+
+// searchParams values are already decoded: no second decode of literal percent text
+assert.equal(history.queryFromBrowserUrl('https://x.test/s?q={query}', 'https://x.test/s?q=a%2520b'), 'a%20b')
+assert.equal(history.queryFromBrowserUrl('https://x.test/s?q={query}', 'https://x.test/s?q=100%25'), '100%')
+assert.equal(history.queryFromBrowserUrl('https://x.test/s/{query}', 'https://x.test/s/a%20b'), 'a b')
 
 // model fields
 const model = loadModule('src/plugins/web-open/settings/model.ts', { stripImports: stripTypeImports })

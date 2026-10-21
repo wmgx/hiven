@@ -1,7 +1,9 @@
 /**
  * Favicon cache module for web-open plugin.
  *
- * Prefer the site's own icons (many internal hosts don't work with Google s2).
+ * Only the site's own icons are fetched, and only for domains the plugin already
+ * knows (rules, open tabs, browser history). Text still being typed never triggers
+ * a request, and no third-party favicon service is contacted.
  * Fetch via plugin network (Tauri reqwest — no CORS) with responseType binary,
  * then store in plugin blob. Host only ever sees plugin-blob:* or Globe.
  */
@@ -9,6 +11,9 @@
 import type { PluginNetworkApi, PluginPrivateStorageApi } from '@hiven/plugin'
 
 const FAVICON_KV_PREFIX = 'favicon-map/'
+const FAVICON_MISS_KV_PREFIX = 'favicon-miss/'
+/** A domain without a usable icon is not requested again before this elapses. */
+const FAVICON_MISS_TTL_MS = 24 * 60 * 60 * 1000
 const FAVICON_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
 const FAVICON_FETCH_TIMEOUT_MS = 4000
 const FALLBACK_ICON = 'Globe'
@@ -27,6 +32,10 @@ export type FaviconCacheListEntry = {
 
 // In-memory cache to avoid repeated kv lookups within a session
 const memoryCache = new Map<string, { iconRef: string; fetchedAt: number }>()
+/** Domains the plugin has real evidence for; only these may be fetched. */
+const knownDomains = new Set<string>()
+/** Negative cache: domain -> time of the last failed fetch. */
+const missCache = new Map<string, number>()
 /** Domains currently warming via network so we do not stampede. */
 const warmingDomains = new Set<string>()
 
@@ -40,11 +49,34 @@ export function extractDomain(urlOrTemplate: string): string | undefined {
   }
 }
 
+/** Remember domains taken from rules, open tabs or history (not from text being typed). */
+export function registerKnownFaviconDomains(domains: Iterable<string | undefined>): void {
+  for (const domain of domains) {
+    const host = domain?.trim().toLowerCase()
+    if (host) knownDomains.add(host)
+  }
+}
+
+/** Same as above for full URLs (tabs / history). */
+export function registerKnownFaviconUrls(urls: Iterable<string | null | undefined>): void {
+  registerKnownFaviconDomains((function* () {
+    for (const url of urls) if (url) yield extractDomain(url)
+  })())
+}
+
+function isKnownDomain(domain: string): boolean {
+  return knownDomains.has(domain.trim().toLowerCase())
+}
+
+function isRecentMiss(at: number | undefined): boolean {
+  return at !== undefined && Date.now() - at < FAVICON_MISS_TTL_MS
+}
+
 /**
- * Candidate image URLs for a domain, origin-first then public CDN.
- * cloud.bytedance.net uses /logo.png (favicon.ico returns HTML).
+ * Candidate image URLs for the site itself. cloud.bytedance.net uses /logo.png
+ * (favicon.ico returns HTML).
  */
-export function domainFaviconCandidates(domain: string, size = 64): string[] {
+export function domainFaviconCandidates(domain: string): string[] {
   const host = domain.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '')
   if (!host) return []
   return [
@@ -53,7 +85,6 @@ export function domainFaviconCandidates(domain: string, size = 64): string[] {
     `https://${host}/apple-touch-icon.png`,
     `https://${host}/apple-touch-icon-precomposed.png`,
     `https://${host}/favicon.ico`,
-    `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=${size}`,
   ]
 }
 
@@ -109,7 +140,7 @@ export function resolveFaviconIconForLauncher(
     return memoryCached.iconRef
   }
 
-  if (storage && network) {
+  if (storage && network && isKnownDomain(domain)) {
     warmFaviconCache(domain, storage, source, pluginId, network)
   }
   return FALLBACK_ICON
@@ -124,8 +155,9 @@ export function warmFaviconCache(
   network: PluginNetworkApi,
 ): void {
   const host = domain.trim()
-  if (!host) return
+  if (!host || !isKnownDomain(host)) return
   if (warmingDomains.has(host)) return
+  if (isRecentMiss(missCache.get(host))) return
   warmingDomains.add(host)
   void getFaviconIcon(host, storage, source, pluginId, network)
     .catch((error) => {
@@ -155,6 +187,7 @@ export function warmFaviconDomains(
     const host = raw.trim()
     if (!host || seen.has(host)) continue
     seen.add(host)
+    registerKnownFaviconDomains([host])
     warmFaviconCache(host, storage, source, pluginId, network)
   }
 }
@@ -214,8 +247,23 @@ export async function getFaviconIcon(
       return iconRef
     }
 
+    if (!isKnownDomain(domain)) return FALLBACK_ICON
+    const missKey = `${FAVICON_MISS_KV_PREFIX}${domain}`
+    const memoryMiss = missCache.get(domain)
+    if (isRecentMiss(memoryMiss)) return FALLBACK_ICON
+    const storedMiss = await storage.kv.get<{ at: number }>(missKey).catch(() => undefined)
+    if (storedMiss && isRecentMiss(storedMiss.at)) {
+      missCache.set(domain, storedMiss.at)
+      return FALLBACK_ICON
+    }
+
     const image = await fetchFaviconImage(domain, network)
-    if (!image) return FALLBACK_ICON
+    if (!image) {
+      const at = Date.now()
+      missCache.set(domain, at)
+      await storage.kv.set(missKey, { at }).catch(() => {})
+      return FALLBACK_ICON
+    }
 
     const extension = image.contentType.includes('svg')
       ? 'svg'
@@ -343,10 +391,12 @@ export async function removeFaviconCacheEntry(
       await storage.blob.delete(cached.blobId).catch(() => {})
     }
     await storage.kv.delete(kvKey)
+    await storage.kv.delete(`${FAVICON_MISS_KV_PREFIX}${domain}`).catch(() => {})
   } catch {
     // best effort
   }
   memoryCache.delete(domain)
+  missCache.delete(domain)
 }
 
 /** Clear all plugin-internal favicon cache entries. */
@@ -365,6 +415,10 @@ export async function clearFaviconCache(storage: PluginPrivateStorageApi): Promi
       memoryCache.delete(domain)
       removed += 1
     }
+    for (const { key } of await storage.kv.list(FAVICON_MISS_KV_PREFIX)) {
+      if (key.startsWith(FAVICON_MISS_KV_PREFIX)) await storage.kv.delete(key).catch(() => {})
+    }
+    missCache.clear()
   } catch {
     // best effort
   }

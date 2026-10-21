@@ -14,14 +14,14 @@ import {
 import type { WebQuickOpenSettings } from './model'
 
 function formatAge(fetchedAt: number, locale: string): string {
+  const formatter = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' })
   const ageMs = Math.max(0, Date.now() - fetchedAt)
   const minutes = Math.floor(ageMs / 60_000)
-  if (minutes < 1) return locale.startsWith('zh') ? '刚刚' : 'just now'
-  if (minutes < 60) return locale.startsWith('zh') ? `${minutes} 分钟前` : `${minutes}m ago`
+  if (minutes < 1) return formatter.format(0, 'second')
+  if (minutes < 60) return formatter.format(-minutes, 'minute')
   const hours = Math.floor(minutes / 60)
-  if (hours < 48) return locale.startsWith('zh') ? `${hours} 小时前` : `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  return locale.startsWith('zh') ? `${days} 天前` : `${days}d ago`
+  if (hours < 48) return formatter.format(-hours, 'hour')
+  return formatter.format(-Math.floor(hours / 24), 'day')
 }
 
 export function FaviconCacheModal({

@@ -51,9 +51,9 @@ export const DEFAULT_WEB_QUICK_OPEN_SETTINGS: WebQuickOpenSettings = {
   entries: [
     {
       id: 'google',
-      title: 'Google 搜索',
+      title: 'Google Search',
       aliases: ['g', 'google'],
-      placeholder: '输入搜索关键词',
+      placeholder: 'Enter search keywords',
       urlTemplate: 'https://www.google.com/search?q={query}',
       encodeQuery: true,
       emptyQueryBehavior: 'block',
@@ -62,9 +62,9 @@ export const DEFAULT_WEB_QUICK_OPEN_SETTINGS: WebQuickOpenSettings = {
     },
     {
       id: 'github',
-      title: 'GitHub 仓库',
+      title: 'GitHub Repositories',
       aliases: ['gh', 'github'],
-      placeholder: 'owner/repo 或关键词',
+      placeholder: 'owner/repo or keywords',
       urlTemplate: 'https://github.com/search?q={query}',
       encodeQuery: true,
       emptyQueryBehavior: 'block',
@@ -73,9 +73,9 @@ export const DEFAULT_WEB_QUICK_OPEN_SETTINGS: WebQuickOpenSettings = {
     },
     {
       id: 'mdn',
-      title: 'MDN 文档',
+      title: 'MDN Documentation',
       aliases: ['mdn'],
-      placeholder: '输入 Web API 或 CSS 关键词',
+      placeholder: 'Enter Web API or CSS keywords',
       urlTemplate: 'https://developer.mozilla.org/search?q={query}',
       encodeQuery: true,
       emptyQueryBehavior: 'block',
@@ -83,6 +83,16 @@ export const DEFAULT_WEB_QUICK_OPEN_SETTINGS: WebQuickOpenSettings = {
       maxQueryHistory: DEFAULT_MAX_QUERY_HISTORY,
     },
   ],
+}
+
+/**
+ * Chinese texts stored by earlier versions as the built-in rules' title/placeholder.
+ * Migration swaps them for the English defaults so runtime locale keys apply.
+ */
+export const LEGACY_DEFAULT_ENTRY_TEXT: Record<string, { title: string; placeholder: string }> = {
+  google: { title: 'Google 搜索', placeholder: '输入搜索关键词' },
+  github: { title: 'GitHub 仓库', placeholder: 'owner/repo 或关键词' },
+  mdn: { title: 'MDN 文档', placeholder: '输入 Web API 或 CSS 关键词' },
 }
 
 /**
