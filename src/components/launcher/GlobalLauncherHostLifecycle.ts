@@ -175,7 +175,7 @@ export function useGlobalLauncherCollectInputPreview({
   useEffect(() => {
     if (!open || !controllerState || controllerState.frames.length <= 1) return
     const topFrame = controllerState.frames[controllerState.frames.length - 1]
-    if (topFrame.kind !== 'collect-input' || controllerState.inputDraftLeave) return
+    if (topFrame.kind !== 'collect-input') return
     requestAnimationFrame(() => inputRef.current?.focus())
   }, [controllerState, inputRef, open])
 
@@ -183,7 +183,7 @@ export function useGlobalLauncherCollectInputPreview({
     if (!open || !controllerState || controllerState.frames.length <= 1) return
     if (controllerState.busy) return
     const topFrame = controllerState.frames[controllerState.frames.length - 1]
-    if (topFrame.kind !== 'collect-input' || controllerState.inputDraftLeave) return
+    if (topFrame.kind !== 'collect-input') return
     if (topFrame.item.behavior.type !== 'perform' || topFrame.item.inputPolicy == null) return
     if (topFrame.previewInputText === topFrame.inputText) return
     const timer = window.setTimeout(() => {
