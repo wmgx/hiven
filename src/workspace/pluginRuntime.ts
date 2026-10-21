@@ -933,7 +933,11 @@ function parseGithubDirectoryUrl(sourceUrl: string): {
     throw new Error('Remote plugin import expects a GitHub repository or /tree/{branch}/{path} directory URL.')
   }
   if (ref) {
-    return { owner, repo, branch: ref, path: [branch, ...rest].filter(Boolean).join('/') }
+    // `/tree/feature/x/dir?ref=feature/x`: the ref names a slashed branch, so drop it from the path.
+    const remainder = [branch, ...rest].filter(Boolean).join('/')
+    if (remainder === ref) return { owner, repo, branch: ref, path: '' }
+    const prefix = `${ref}/`
+    return { owner, repo, branch: ref, path: remainder.startsWith(prefix) ? remainder.slice(prefix.length) : remainder }
   }
   return { owner, repo, branch: branch || 'main', path: rest.join('/') }
 }
