@@ -24,7 +24,7 @@
     {
       "pluginId": "line-tools",
       "dir": "line-tools",
-      "version": "3.7.4"
+      "version": "3.7.5"
     },
     {
       "pluginId": "crypto",

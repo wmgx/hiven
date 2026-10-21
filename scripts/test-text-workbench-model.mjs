@@ -19,8 +19,7 @@ globalThis.sessionStorage = storage
 const vite = await createServer({ server: { middlewareMode: true }, appType: 'custom', logLevel: 'silent' })
 try {
   const { DEFAULT_WORKBENCH_OPTIONS: defaults, WORKBENCH_OPERATIONS: operations, evaluateWorkbench, getWorkbenchOperation } = await vite.ssrLoadModule('/src/plugins/line-tools/workbenchModel.ts')
-  const transforms = await vite.ssrLoadModule('/src/kits/textTransforms/index.ts')
-  const { lineOperationRoutes, caseOperationRoutes, statsRoute } = await vite.ssrLoadModule('/src/plugins/line-tools/routes.ts')
+  const { lineOperationRoutes, caseOperationRoutes, statsRoute, launcherTextToolRoutes } = await vite.ssrLoadModule('/src/plugins/line-tools/routes.ts')
   const { TextWorkbenchSurface } = await vite.ssrLoadModule('/src/plugins/line-tools/TextWorkbenchSurface.tsx')
   const { TextToolsSurface } = await vite.ssrLoadModule('/src/plugins/line-tools/TextToolsSurface.tsx')
   const { registerBundledPluginPackages } = await vite.ssrLoadModule('/src/workspace/bundledPluginLoader.ts')
@@ -28,7 +27,7 @@ try {
   registerBundledPluginPackages()
   const plugin = pluginRegistry.getPluginDefinition('line-tools', 'production')
   assert.ok(plugin)
-  const result = (text, operation, options = {}) => evaluateWorkbench(text, operation, { ...defaults, ...options }, transforms)
+  const result = (text, operation, options = {}) => evaluateWorkbench(text, operation, { ...defaults, ...options })
   const ready = (text, operation, options = {}) => {
     const output = result(text, operation, options)
     assert.equal(output.status, 'ready')
@@ -50,7 +49,8 @@ try {
     ['sql-in-number', 'sql-number', 'sqlin.number', {}],
   ]
   assert.deepEqual(lineOperationRoutes.map((route) => route.surfaceId), routes.map(([id]) => id))
-  assert.equal(new Set(operations.map(({ value }) => value)).size, 23)
+  assert.equal(new Set(operations.map(({ value }) => value)).size, 19)
+  assert.ok(!operations.some(({ value }) => /^(json|url)-/.test(value)), 'JSON and URL encoding belong to json-tools / encode-decode')
   assert.equal(getWorkbenchOperation('clean-invisible-characters'), 'clean-invisible-characters')
   const invisibleRoute = plugin.launcher.items.find(({ id }) => id === 'open-clean-invisible-characters')
   assert.ok(invisibleRoute, 'explicit invisible-character cleanup has a searchable workbench entry')
@@ -84,31 +84,37 @@ try {
     assert.equal(getWorkbenchOperation(surfaceId), operation)
     const route = lineOperationRoutes.find((item) => item.surfaceId === surfaceId)
     const entry = plugin.launcher.items.find(({ id }) => id === `open-${surfaceId}`)
-    assert.ok(entry, `${surfaceId}: existing launcher entry remains registered`)
-    assert.deepEqual(entry.display.aliases, route.aliases)
-    assert.equal(plugin.ui.surfaces.find(({ id }) => id === surfaceId).component, TextWorkbenchSurface)
-    const opened = []
-    await entry.execute({ input: { text: sample }, api: { openSurface: (...args) => opened.push(args) } })
-    assert.deepEqual(opened, [[surfaceId, { initialText: sample }]], 'route identity and exact source material survive entry')
+    if (launcherTextToolRoutes.some((item) => item.surfaceId === surfaceId)) {
+      assert.ok(entry, `${surfaceId}: common route keeps its launcher entry`)
+      assert.deepEqual(entry.display.aliases, route.aliases)
+      assert.equal(plugin.ui.surfaces.find(({ id }) => id === surfaceId).component, TextWorkbenchSurface)
+      const opened = []
+      await entry.execute({ input: { text: sample }, api: { openSurface: (...args) => opened.push(args) } })
+      assert.deepEqual(opened, [[surfaceId, { initialText: sample }]], 'route identity and exact source material survive entry')
+    } else {
+      assert.equal(entry, undefined, `${surfaceId}: merged into the workbench operation list, no separate launcher entry`)
+    }
     const tool = plugin.tools.find(({ id }) => id === toolId)
     assert.ok(tool, `${toolId}: existing command remains registered`)
     const params = Object.fromEntries((tool.params ?? []).map(({ key, default: value }) => [key, value]))
     assert.deepEqual(params, expectedDefaults, `${toolId}: existing command defaults are unchanged`)
     for (const [key, value] of Object.entries(params)) assert.equal(defaults[key], value)
+    const material = operation === 'sql-number' ? '1\n-2.5\n' : sample
     for (const custom of variants) {
-      const executed = await tool.run({ input: { text: sample }, params: { ...params, ...custom }, output: { text: (text) => text } })
-      assert.equal(ready(sample, operation, custom), executed, `${surfaceId}: preview agrees with command/Saved Action parameters`)
+      const executed = await tool.run({ input: { text: material }, params: { ...params, ...custom }, output: { text: (text) => text } })
+      assert.equal(ready(material, operation, custom), executed, `${surfaceId}: preview agrees with command/Saved Action parameters`)
     }
   }
-  for (const route of [...caseOperationRoutes, statsRoute]) {
+  assert.ok(plugin.launcher.items.length < 20, 'launcher shows a curated set of workbench entries, not one per operation')
+  for (const route of [...caseOperationRoutes, statsRoute].filter((item) => launcherTextToolRoutes.includes(item))) {
     assert.equal(plugin.ui.surfaces.find(({ id }) => id === route.surfaceId).component, TextToolsSurface, 'naming comparison and statistics keep their separate surface')
   }
 
   // Existing single steps retain their historical newline semantics. Combined
   // cleanup uses the existing delimiter-preserving algorithm and exact defaults.
-  assert.equal(ready(' A \r\n\r\nA\n', 'remove-blank'), ' A \r\nA')
-  assert.equal(ready(' A \r\n A \n', 'trim'), 'A\nA\n')
-  assert.equal(ready('A\r\nA\nA', 'dedup'), 'A\r\nA')
+  assert.equal(ready(' A \r\n\r\nA\n', 'remove-blank'), ' A \r\nA\n')
+  assert.equal(ready(' A \r\n A \n', 'trim'), 'A\r\nA\n')
+  assert.equal(ready('A\r\nA\nA', 'dedup'), 'A')
   assert.equal(ready(' A \r\n\r\nA\n', 'clean-list'), ' A \r\nA\n')
   assert.equal(ready(sample, 'clean-list', { trim: false, removeBlank: false, dedup: false }), sample)
   assert.equal(ready(' \t\r\n\u00a0\n', 'clean-list'), '', 'a result that removes all rows remains deliverable')
@@ -126,24 +132,7 @@ try {
     assert.equal(material, expected, 'using each result as the next input preserves the whole chain')
   }
 
-  material = '%20%20beta%20%20%0A%0A%20alpha%20%0Aalpha%0A%20beta'
-  for (const [operation, options, expected] of [
-    ['url-decode', {}, '  beta  \n\n alpha \nalpha\n beta'],
-    ['clean-list', { trim: true, removeBlank: true, dedup: true }, 'beta\nalpha'],
-    ['sort', {}, 'alpha\nbeta'],
-    ['sql-string', {}, "('alpha','beta')"],
-  ]) {
-    material = ready(material, operation, options)
-    assert.equal(material, expected, 'URL input can be cleaned, sorted, and turned into an SQL list without losing intermediate results')
-  }
-
   for (const { value } of operations) assert.deepEqual(result('', value), { status: 'idle' })
-  assert.deepEqual(result(' \n\t', 'json-format'), { status: 'ready', text: '' })
-  assert.equal(ready('{"value":1}', 'json-format', { indent: 4 }), '{\n    "value": 1\n}')
-  assert.equal(ready('{\n  "value": 1\n}', 'json-compact'), '{"value":1}')
-  const encoded = ready('a & b/中文', 'url-encode')
-  assert.equal(encoded, 'a%20%26%20b%2F%E4%B8%AD%E6%96%87')
-  assert.equal(ready(encoded, 'url-decode'), 'a & b/中文')
   assert.equal(ready('a.b\\c\n中文', 'regex-escape'), 'a\\.b\\\\c\\n中文')
   const urlSource = '[https://label.example](https://target.example "https://title.example")\nhttps://target.example'
   assert.equal(ready(urlSource, 'extract-urls'), 'https://target.example\nhttps://target.example')
@@ -155,10 +144,20 @@ try {
   const regexTool = plugin.tools.find(({ id }) => id === 'line-tools.regex-escape')
   assert.equal(regexTool.run({ input: { text: 'a.b' }, output: { text: (text) => text } }), 'a\\.b')
   assert.equal(regexTool.run({ input: { text: '' }, output: { error: (error) => error }, t: (key) => key }), 'regexEscape.empty')
-  assert.deepEqual(result('{', 'json-format'), { status: 'error', messageKey: 'workbench.error.json' })
-  assert.deepEqual(result('%E0%A4%A', 'url-decode'), { status: 'error', messageKey: 'workbench.error.url' })
-  assert.equal(ready('{"fixed":true}', 'json-format'), '{\n  "fixed": true\n}', 'valid edits recover from an invalid result')
-  console.log('text-workbench-model: 12 registered routes, command defaults/parameters, cleanup chain, empty results, JSON and URL passed')
+  const core = await vite.ssrLoadModule('/src/plugins/line-tools/core.ts')
+  assert.equal(core.convertText("don't stop élan", 'plain-title'), "Don't Stop Élan")
+  assert.deepEqual(core.getTextStats(''), { lines: 0, words: 0, characters: 0, charactersNoSpace: 0 })
+  assert.equal(core.getTextStats('👍').characters, 1)
+  assert.ok(core.getTextStats('你好世界，今天天气不错').words > 1, 'CJK text is segmented into words')
+  // Line operations keep the trailing newline and understand CRLF.
+  assert.equal(ready('b\na\n', 'sort'), 'a\nb\n')
+  assert.equal(ready('a\nb\n', 'reverse'), 'b\na\n')
+  assert.equal(ready('a\nb\n', 'prepend', { prefix: '- ' }), '- a\n- b\n')
+  assert.equal(ready('a\r\nb\r\na', 'dedup'), 'a\r\nb')
+  assert.equal(ready("a\\\n it's", 'sql-string'), "('a\\\\','it''s')")
+  assert.deepEqual(result('1\nabc', 'sql-number'), { status: 'error', messageKey: 'workbench.error.sqlNumber' })
+  assert.equal(ready('1\r\n-2.5\r\n', 'sql-number'), '(1,-2.5)')
+  console.log('text-workbench-model: 12 registered routes, command defaults/parameters, cleanup chain, empty results, trailing newline and CRLF passed')
 } finally {
   await vite.close()
 }

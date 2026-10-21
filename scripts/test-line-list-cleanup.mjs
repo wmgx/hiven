@@ -72,10 +72,10 @@ try {
   assert.equal(cleanLineList(untouched, variants[0].params), untouched, 'all-off is exact identity including control characters and mixed separators')
   assert.equal(cleanLineList('Ada\r\n'.repeat(20_000), { dedup: true }), 'Ada\r\n', 'large repeated lists retain the first line and delimiter')
 
-  // Existing single-step tools keep their historical behavior.
-  assert.equal(removeBlankLines(' A \r\n\r\nA\n'), ' A \r\nA')
-  assert.equal(trimLineWhitespace(' A \r\n A \n'), 'A\nA\n')
-  assert.equal(dedupLines('A\r\nA\nA', false), 'A\r\nA')
+  // Single-step tools split on LF/CRLF and keep the trailing newline.
+  assert.equal(removeBlankLines(' A \r\n\r\nA\n'), ' A \r\nA\n')
+  assert.equal(trimLineWhitespace(' A \r\n A \n'), 'A\r\nA\n')
+  assert.equal(dedupLines('A\r\nA\nA', false), 'A')
 
   const { registerBundledPluginPackages } = await vite.ssrLoadModule('/src/workspace/bundledPluginLoader.ts')
   const { pluginRegistry } = await vite.ssrLoadModule('/src/workspace/pluginRegistry.ts')

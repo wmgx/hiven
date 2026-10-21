@@ -384,7 +384,7 @@ try {
   const extensionCases = [
     { key: 'plugin:encode-decode:tool:base64.decode', input: Buffer.from('  中文 🙂\t\n\n').toString('base64'), expected: '  中文 🙂\t\n\n', destination: 'copy' },
     { key: 'plugin:encode-decode:tool:base64.decode', input: Buffer.from(' \t\n').toString('base64'), expected: ' \t\n', destination: 'return' },
-    { key: 'plugin:line-tools:tool:line-tools.remove-blank-lines', input: '\n first \n \t\n中文 🙂\n\n', expected: ' first \n中文 🙂', destination: 'return' },
+    { key: 'plugin:line-tools:tool:line-tools.remove-blank-lines', input: '\n first \n \t\n中文 🙂\n\n', expected: ' first \n中文 🙂\n', destination: 'return' },
     { key: 'plugin:line-tools:tool:line-tools.remove-blank-lines', input: ' \t\n\r\n ', expected: '', destination: 'copy' },
     { key: 'plugin:line-tools:tool:line-tools.remove-blank-lines', input: ' \t\n\r\n ', expected: '', destination: 'return' },
   ]

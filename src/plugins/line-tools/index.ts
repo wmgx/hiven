@@ -10,6 +10,7 @@ import {
   dedupLines,
   getTextStats,
   joinLines,
+  LineToolsError,
   prependLines,
   removeBlankLines,
   reverseLines,
@@ -21,7 +22,7 @@ import {
   wrapLines,
   type CaseOperation,
 } from './core'
-import { textToolRoutes } from './routes'
+import { launcherTextToolRoutes } from './routes'
 import { extractTextList } from './extractTextList'
 import { escapeRegexPattern } from './escapeRegexPattern'
 import './style.css'
@@ -126,7 +127,7 @@ export const lineToolsPlugin = definePlugin({
         },
         shell: WORKSPACE_SHELL,
       },
-      ...textToolRoutes.map((route) => ({
+      ...launcherTextToolRoutes.map((route) => ({
         id: route.surfaceId,
         kind: 'custom-view' as const,
         title: 'Text Tools',
@@ -138,7 +139,7 @@ export const lineToolsPlugin = definePlugin({
     ],
   },
   launcher: {
-    items: textToolRoutes.map((route) => ({
+    items: launcherTextToolRoutes.map((route) => ({
       id: `open-${route.surfaceId}`,
       display: {
         title: route.surfaceId === 'line-remove-blank' ? 'route.removeBlankLinesWorkbench' : route.titleKey,
@@ -262,7 +263,14 @@ export const lineToolsPlugin = definePlugin({
     {
       id: 'sqlin.number', title: 'sqlin.number.title', icon: 'Database',
       aliases: ['sql in number', 'sql-in-num', '生成IN数字'], inputPolicy: { mode: 'auto' }, policy: LEARNABLE_PURE,
-      run(ctx) { return ctx.output.text(sqlInNumber(ctx.input.text)) }, surfaces: EDITOR_TOOL_SURFACES,
+      run(ctx) {
+        try { return ctx.output.text(sqlInNumber(ctx.input.text)) }
+        catch (error) {
+          if (error instanceof LineToolsError) return ctx.output.error(ctx.t('error.sqlNumber', { value: error.value }))
+          throw error
+        }
+      },
+      surfaces: EDITOR_TOOL_SURFACES,
     },
     {
       id: 'case.upper', title: 'case.upper.title', icon: 'CaseSensitive', aliases: ['uppercase', 'upper case', '转大写', '大写'],
