@@ -66,7 +66,11 @@ const statistics = load('src/plugins/csv/columnStatistics.ts', { 'bignumber.js':
 const fileInput = load('src/plugins/csv/csvFileInput.ts', {})
 const sql = load('src/plugins/csv/csvSqlFilter.ts', {})
 const markdownCell = load('src/plugins/csv/markdownCell.ts', {})
-const core = load('src/plugins/csv/csvCore.ts', { './csvSqlFilter': sql, './markdownCell': markdownCell })
+const jsonLossless = load('src/kits/jsonLossless.ts', {})
+const lossless = load('src/plugins/csv/losslessJson.ts', {
+  '@hiven/plugin': { getPluginHostSdk: () => ({ kits: { textTransforms: jsonLossless } }) },
+})
+const core = load('src/plugins/csv/csvCore.ts', { './csvSqlFilter': sql, './markdownCell': markdownCell, './losslessJson': lossless })
 const deferred = () => {
   let resolve, reject
   const promise = new Promise((yes, no) => { resolve = yes; reject = no })
@@ -211,8 +215,8 @@ await check('SQL projection and limit become the returned final result', async (
 await check('duplicate header positions keep independent statistics and projection changes clear old selection', async () => {
   const h = harness({ input: 'amount,amount\n1,10\n2,20', operation: 'to-markdown' })
   assert.deepEqual(plain(h.view.visibleColumns.map(({ key, label }) => ({ key, label }))), [
-    { key: 'csv-column-0', label: 'amount (1)' },
-    { key: 'csv-column-1', label: 'amount (2)' },
+    { key: 'csv-column-0', label: 'amount' },
+    { key: 'csv-column-1', label: 'amount_2' },
   ])
   h.view.setSelectedColumns(new Set(['csv-column-0'])); h.render()
   await new Promise((resolve) => setTimeout(resolve, 0)); h.render()

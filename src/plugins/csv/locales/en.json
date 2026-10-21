@@ -17,6 +17,7 @@
   "param.header": "Header",
   "param.output": "Output",
   "param.minify": "Minify",
+  "param.inferTypes": "Infer numbers/booleans",
   "param.indent": "Indent",
   "param.tableName": "Table name",
   "delimiter.auto": "Auto",

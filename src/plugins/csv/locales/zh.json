@@ -17,6 +17,7 @@
   "param.header": "表头",
   "param.output": "输出",
   "param.minify": "压缩",
+  "param.inferTypes": "推断数字/布尔",
   "param.indent": "缩进",
   "param.tableName": "表名",
   "delimiter.auto": "自动",

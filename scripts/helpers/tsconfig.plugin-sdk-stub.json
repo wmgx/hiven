@@ -1,0 +1,6 @@
+{
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "paths": { "@hiven/plugin": ["./plugin-sdk-stub.ts"] }
+  }
+}

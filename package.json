@@ -130,7 +130,7 @@
     "test:object-block-expanded-model": "node scripts/test-object-block-expanded-model.mjs",
     "test:csv-result-return": "node scripts/test-csv-result-return.mjs",
     "test:surface-text-save": "node scripts/test-surface-text-save.mjs",
-    "test:csv-core": "npx tsx scripts/test-csv-core.mts",
+    "test:csv-core": "npx tsx --tsconfig scripts/helpers/tsconfig.plugin-sdk-stub.json scripts/test-csv-core.mts",
     "test:csv-entry": "node scripts/test-csv-entry.mjs",
     "test:launcher-perf-report": "node scripts/test-launcher-perf-report.mjs",
     "test:saved-action-contract": "node --experimental-strip-types scripts/test-saved-action-contract.mjs",
