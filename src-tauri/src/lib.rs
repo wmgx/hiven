@@ -5706,6 +5706,92 @@ async fn plugin_shell_run(request: PluginShellRunRequest) -> Result<PluginShellR
         .map_err(|e| format!("Shell task join failed: {}", e))?
 }
 
+const HTTP_DEFAULT_TIMEOUT_MS: u64 = 30_000;
+const HTTP_MAX_TIMEOUT_MS: u64 = 120_000;
+const HTTP_MAX_REDIRECTS: usize = 5;
+/// Response caps: plugin text/binary replies, plain text fetches, and package archives.
+const HTTP_MAX_TEXT_BYTES: usize = 8 * 1024 * 1024;
+const HTTP_MAX_BINARY_BYTES: usize = 32 * 1024 * 1024;
+const HTTP_MAX_ARCHIVE_BYTES: usize = 64 * 1024 * 1024;
+
+/// True for hosts that only resolve inside this machine or LAN. Redirects must never lead there.
+fn is_local_network_host(url: &reqwest::Url) -> bool {
+    use std::net::{Ipv4Addr, Ipv6Addr};
+    fn v4_local(ip: Ipv4Addr) -> bool {
+        ip.is_loopback() || ip.is_private() || ip.is_link_local() || ip.is_unspecified()
+    }
+    fn v6_local(ip: Ipv6Addr) -> bool {
+        if let Some(v4) = ip.to_ipv4_mapped() {
+            return v4_local(v4);
+        }
+        ip.is_loopback() || ip.is_unspecified() || (ip.segments()[0] & 0xfe00) == 0xfc00
+            || (ip.segments()[0] & 0xffc0) == 0xfe80
+    }
+    let Some(host) = url.host_str() else {
+        return true;
+    };
+    let host = host.trim_start_matches('[').trim_end_matches(']');
+    if let Ok(ip) = host.parse::<Ipv4Addr>() {
+        return v4_local(ip);
+    }
+    if let Ok(ip) = host.parse::<Ipv6Addr>() {
+        return v6_local(ip);
+    }
+    let domain = host.trim_end_matches('.').to_ascii_lowercase();
+    domain == "localhost" || domain.ends_with(".localhost") || domain.ends_with(".local")
+}
+
+/// Client with a mandatory timeout and a bounded redirect policy that refuses local targets.
+fn bounded_http_client(timeout_ms: Option<u64>) -> Result<reqwest::Client, String> {
+    let timeout = timeout_ms
+        .unwrap_or(HTTP_DEFAULT_TIMEOUT_MS)
+        .clamp(100, HTTP_MAX_TIMEOUT_MS);
+    reqwest::Client::builder()
+        .timeout(Duration::from_millis(timeout))
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            if attempt.previous().len() >= HTTP_MAX_REDIRECTS {
+                attempt.error("too many redirects")
+            } else if is_local_network_host(attempt.url()) {
+                attempt.error("redirect to a local network address is not allowed")
+            } else {
+                attempt.follow()
+            }
+        }))
+        .build()
+        .map_err(|e| e.to_string())
+}
+
+/// Reads at most `max_bytes`; fails instead of buffering an oversized body.
+async fn read_body_capped(mut resp: reqwest::Response, max_bytes: usize) -> Result<Vec<u8>, String> {
+    if resp.content_length().is_some_and(|len| len > max_bytes as u64) {
+        return Err(format!("Response exceeds {} bytes", max_bytes));
+    }
+    let mut out = Vec::new();
+    while let Some(chunk) = resp
+        .chunk()
+        .await
+        .map_err(|e| format!("Failed to read response: {}", e))?
+    {
+        if out.len() + chunk.len() > max_bytes {
+            return Err(format!("Response exceeds {} bytes", max_bytes));
+        }
+        out.extend_from_slice(&chunk);
+    }
+    Ok(out)
+}
+
+async fn http_get_capped(url: reqwest::Url, max_bytes: usize, timeout_ms: u64) -> Result<Vec<u8>, String> {
+    let resp = bounded_http_client(Some(timeout_ms))?
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
+    if !resp.status().is_success() {
+        return Err(format!("HTTP {}", resp.status()));
+    }
+    read_body_capped(resp, max_bytes).await
+}
+
 #[tauri::command]
 async fn plugin_http_request(request: ProxyHttpRequest) -> Result<ProxyHttpResponse, String> {
     let parsed = reqwest::Url::parse(&request.url).map_err(|e| e.to_string())?;
@@ -5716,13 +5802,7 @@ async fn plugin_http_request(request: ProxyHttpRequest) -> Result<ProxyHttpRespo
     let method_text = request.method.unwrap_or_else(|| "GET".to_string());
     let method = reqwest::Method::from_bytes(method_text.as_bytes())
         .map_err(|e| format!("Invalid HTTP method: {}", e))?;
-    let mut client_builder = reqwest::Client::builder();
-    if let Some(timeout_ms) = request.timeout_ms {
-        client_builder = client_builder
-            .timeout(std::time::Duration::from_millis(timeout_ms.clamp(100, 30_000)))
-            .redirect(reqwest::redirect::Policy::none());
-    }
-    let client = client_builder.build().map_err(|e| e.to_string())?;
+    let client = bounded_http_client(request.timeout_ms)?;
     let mut builder = client.request(method, parsed);
 
     if let Some(headers) = request.headers {
@@ -5757,21 +5837,16 @@ async fn plugin_http_request(request: ProxyHttpRequest) -> Result<ProxyHttpRespo
         .unwrap_or(false);
 
     if want_binary {
-        let bytes = resp
-            .bytes()
-            .await
-            .map_err(|e| format!("Failed to read response bytes: {}", e))?;
+        let bytes = read_body_capped(resp, HTTP_MAX_BINARY_BYTES).await?;
         Ok(ProxyHttpResponse {
             status,
             headers,
             body: String::new(),
-            body_bytes: Some(bytes.to_vec()),
+            body_bytes: Some(bytes),
         })
     } else {
-        let body = resp
-            .text()
-            .await
-            .map_err(|e| format!("Failed to read response: {}", e))?;
+        let bytes = read_body_capped(resp, HTTP_MAX_TEXT_BYTES).await?;
+        let body = String::from_utf8_lossy(&bytes).into_owned();
         Ok(ProxyHttpResponse {
             status,
             headers,
@@ -5783,15 +5858,12 @@ async fn plugin_http_request(request: ProxyHttpRequest) -> Result<ProxyHttpRespo
 
 #[tauri::command]
 async fn fetch_url(url: String) -> Result<String, String> {
-    let resp = reqwest::get(&url)
-        .await
-        .map_err(|e| format!("Request failed: {}", e))?;
-    if !resp.status().is_success() {
-        return Err(format!("HTTP {}", resp.status()));
+    let parsed = reqwest::Url::parse(&url).map_err(|e| e.to_string())?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err("URL must use http or https".to_string());
     }
-    resp.text()
-        .await
-        .map_err(|e| format!("Failed to read response: {}", e))
+    let bytes = http_get_capped(parsed, HTTP_MAX_TEXT_BYTES, HTTP_DEFAULT_TIMEOUT_MS).await?;
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
 #[derive(serde::Serialize)]
@@ -7249,14 +7321,11 @@ async fn install_plugin_zip_url(url: String, destination_root: String) -> Result
     ensure_plugin_path_for_write(&destination_root)?;
     fs::create_dir_all(&destination_root).map_err(|e| e.to_string())?;
     let destination_root = ensure_existing_plugin_path(&destination_root)?;
-    let bytes = reqwest::get(parsed)
+    let bytes = http_get_capped(parsed, HTTP_MAX_ARCHIVE_BYTES, 120_000)
         .await
-        .map_err(|e| format!("Plugin zip download failed: {}", e))?
-        .bytes()
-        .await
-        .map_err(|e| format!("Failed to read plugin zip response: {}", e))?;
+        .map_err(|e| format!("Plugin zip download failed: {}", e))?;
     let temp_dir = make_temp_dir(&destination_root)?;
-    let result = extract_zip_bytes_to_dir(bytes.as_ref(), &temp_dir)
+    let result = extract_zip_bytes_to_dir(bytes.as_slice(), &temp_dir)
         .and_then(|_| install_package_from_extracted_dir(&temp_dir, &destination_root));
     let _ = fs::remove_dir_all(&temp_dir);
     result
@@ -7287,6 +7356,22 @@ fn install_plugin_dir(source_path: String, destination_root: String) -> Result<S
     Ok(destination.to_string_lossy().to_string())
 }
 
+/// GitHub names are interpolated into a URL, so only plain characters are accepted.
+/// Branches may contain `/` (e.g. `feature/x`) but never `..` or empty segments.
+fn validate_github_segment(value: &str, label: &str, allow_slash: bool) -> Result<(), String> {
+    let plain = |c: char| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-');
+    let valid = !value.is_empty()
+        && value.len() <= 200
+        && value.chars().all(|c| plain(c) || (allow_slash && c == '/'))
+        && !value.contains("..")
+        && value.split('/').all(|part| !part.is_empty());
+    if valid {
+        Ok(())
+    } else {
+        Err(format!("Invalid GitHub {label}"))
+    }
+}
+
 #[tauri::command]
 async fn fetch_github_directory(
     owner: String,
@@ -7299,19 +7384,20 @@ async fn fetch_github_directory(
     ensure_plugin_path_for_write(&destination_root)?;
     fs::create_dir_all(&destination_root).map_err(|e| e.to_string())?;
     let destination_root = ensure_existing_plugin_path(&destination_root)?;
+    validate_github_segment(&owner, "owner", false)?;
+    validate_github_segment(&repo, "repository", false)?;
+    validate_github_segment(&branch, "branch", true)?;
     let archive_url = format!(
         "https://codeload.github.com/{}/{}/zip/refs/heads/{}",
         owner, repo, branch
     );
-    let bytes = reqwest::get(&archive_url)
+    let archive_url = reqwest::Url::parse(&archive_url).map_err(|e| e.to_string())?;
+    let bytes = http_get_capped(archive_url, HTTP_MAX_ARCHIVE_BYTES, 120_000)
         .await
-        .map_err(|e| format!("GitHub download failed: {}", e))?
-        .bytes()
-        .await
-        .map_err(|e| format!("Failed to read GitHub archive: {}", e))?;
+        .map_err(|e| format!("GitHub download failed: {}", e))?;
 
     let temp_dir = make_temp_dir(&destination_root)?;
-    let result = extract_zip_bytes_to_dir(bytes.as_ref(), &temp_dir).and_then(|_| {
+    let result = extract_zip_bytes_to_dir(bytes.as_slice(), &temp_dir).and_then(|_| {
         let package_root = if path.trim().is_empty() {
             find_manifest_root(&temp_dir)?
         } else {
@@ -8070,6 +8156,38 @@ mod paste_availability_tests {
             (PasteAvailability::CanAttempt, "can-attempt"),
         ] {
             assert_eq!(serde_json::to_value(availability).unwrap(), expected);
+        }
+    }
+}
+
+#[cfg(test)]
+mod bounded_http_tests {
+    use super::*;
+
+    #[test]
+    fn redirect_targets_on_local_networks_are_flagged() {
+        for url in [
+            "http://127.0.0.1/x",
+            "http://localhost:8080/",
+            "http://[::1]/",
+            "http://192.168.1.2/",
+            "http://10.0.0.1/",
+            "http://169.254.169.254/",
+            "http://printer.local/",
+        ] {
+            assert!(is_local_network_host(&reqwest::Url::parse(url).unwrap()), "{url}");
+        }
+        for url in ["https://example.com/", "https://8.8.8.8/"] {
+            assert!(!is_local_network_host(&reqwest::Url::parse(url).unwrap()), "{url}");
+        }
+    }
+
+    #[test]
+    fn github_segments_reject_path_tricks_but_allow_slashed_branches() {
+        assert!(validate_github_segment("feature/new-ui", "branch", true).is_ok());
+        assert!(validate_github_segment("feature/new-ui", "repository", false).is_err());
+        for bad in ["a/../b", "", "/lead", "trail/", "a b", "a?x=1", "a#b"] {
+            assert!(validate_github_segment(bad, "branch", true).is_err(), "{bad}");
         }
     }
 }
