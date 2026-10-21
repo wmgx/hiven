@@ -45,7 +45,7 @@ const native={invoke:async(command,args)=>{
   throw new Error('Forbidden native command: '+command);
 },convertFileSrc:fail('asset import')};
 const runtime=load('src/workspace/pluginRuntime.ts',{
-  './editorBridge':editor,'./pluginRegistry':registry,'./pluginStore':pluginStore,'./toast':{showToast:no},
+  './editorBridge':editor,'./pluginRegistry':registry,'./pluginStore':pluginStore,'./toast':{showToast:no},'../i18n':{t:key=>key},'../store':{useAppStore:{getState:()=>({locale:'en'})}},
   './pluginScaffold.ts':{createPluginScaffoldFiles:fail('scaffold')},'./pluginDebugRunner.ts':{parsePluginDefinitionSource:fail('dev loader')},
   '../pluginHostSdk.ts':{createPluginHostSdk:fail('sdk')},'../i18n/pluginI18nRegistry.ts':pluginI18n,
   './pluginBackgroundManager.ts':{stopPluginBackground:async(...args)=>state.stops.push(args)},'./pluginStorage.ts':pluginStorage,

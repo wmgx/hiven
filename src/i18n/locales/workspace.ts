@@ -1,6 +1,11 @@
 export default {
   en: {
     'close': 'Close',
+    'plugin.capabilitiesChanged': 'capabilities changed',
+    'plugin.capabilitiesAdded': 'added',
+    'plugin.capabilitiesRemoved': 'removed',
+    'plugin.disabled': 'disabled',
+    'plugin.devWatching': 'is being watched for changes',
     'status.active': 'Active',
     'status.renderer': 'Renderer',
     'status.code': 'Code',
@@ -56,6 +61,11 @@ export default {
   },
   zh: {
     'close': '关闭',
+    'plugin.capabilitiesChanged': '能力已变更',
+    'plugin.capabilitiesAdded': '新增',
+    'plugin.capabilitiesRemoved': '移除',
+    'plugin.disabled': '已停用',
+    'plugin.devWatching': '正在监听文件变更',
     'status.active': '当前',
     'status.renderer': '渲染器',
     'status.code': '代码',
