@@ -466,12 +466,17 @@ enum SystemPowerAction {
     LockScreen,
 }
 
+/// Spawns a fire-and-forget child and reaps it on a helper thread so it never lingers as a zombie.
+fn spawn_and_reap(command: &mut Command) -> std::io::Result<()> {
+    let mut child = command.spawn()?;
+    thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(())
+}
+
 fn spawn_system_command(program: &str, args: &[&str]) -> Result<(), String> {
-    Command::new(program)
-        .args(args)
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    spawn_and_reap(Command::new(program).args(args)).map_err(|e| e.to_string())
 }
 
 #[cfg(target_os = "macos")]
@@ -3775,11 +3780,7 @@ fn system_open_app_target(target: &str) -> Result<(), String> {
 
 #[cfg(target_os = "windows")]
 fn system_open_app_target(target: &str) -> Result<(), String> {
-    std::process::Command::new("explorer")
-        .arg(target)
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    spawn_and_reap(Command::new("explorer").arg(target)).map_err(|e| e.to_string())
 }
 
 #[cfg(target_os = "macos")]
@@ -7197,11 +7198,7 @@ fn open_plugin_dir(path: String) -> Result<(), String> {
     } else {
         "code"
     };
-    if std::process::Command::new(code_command)
-        .arg(&dir_str)
-        .spawn()
-        .is_ok()
-    {
+    if spawn_and_reap(Command::new(code_command).arg(&dir_str)).is_ok() {
         return Ok(());
     }
 
@@ -7217,22 +7214,26 @@ fn reveal_path_in_file_manager(path: String) -> Result<(), String> {
     if !expanded.exists() {
         return Err(format!("Path does not exist: {}", expanded.display()));
     }
-    reveal_path_in_file_manager_impl(&expanded.to_string_lossy())
+    // Only Hiven's own config tree (extension folder, plugin directories) may be revealed:
+    // opening arbitrary paths would let any plugin launch apps or installers.
+    let root = config_dir()?.canonicalize().map_err(|e| e.to_string())?;
+    let target = expanded.canonicalize().map_err(|e| e.to_string())?;
+    if !target.starts_with(&root) {
+        return Err("Path is outside the Hiven config directory".to_string());
+    }
+    reveal_path_in_file_manager_impl(&target.to_string_lossy())
 }
 
 fn reveal_path_in_file_manager_impl(path: &str) -> Result<(), String> {
     let (program, args): (&str, Vec<&str>) = if cfg!(target_os = "macos") {
-        ("open", vec![path])
+        // -R reveals in Finder instead of opening, so a bundle is never launched.
+        ("open", vec!["-R", path])
     } else if cfg!(target_os = "windows") {
         ("explorer", vec![path])
     } else {
         ("xdg-open", vec![path])
     };
-    std::process::Command::new(program)
-        .args(&args)
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    spawn_and_reap(Command::new(program).args(&args)).map_err(|e| e.to_string())
 }
 
 /// Chromium extension is part of the first-party `web-open` (Browser) plugin
