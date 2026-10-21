@@ -885,15 +885,14 @@ export function PluginSurfacePermissionGate({
         {permissions.map((permission) => (
           <div key={permission}>
             {describePluginPermission(permission, locale)}
-            <span style={{ color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-mono)' }}> {permission}</span>
           </div>
         ))}
       </div>
       <div className="flex gap-2 pt-1">
-        <button className="text-[12px] px-3 py-1.5 rounded" style={{ background: 'var(--color-accent)', color: '#fff', border: 'none', cursor: 'pointer' }} onClick={onGrant}>
+        <button type="button" className="scripts-btn scripts-btn-primary text-[12px] px-3 py-1.5" onClick={onGrant}>
           {t(locale, 'palette.pluginPermissionAllow')}
         </button>
-        <button className="text-[12px] px-3 py-1.5 rounded" style={{ background: 'var(--color-background-tertiary)', color: 'var(--color-text-primary)', border: 'none', cursor: 'pointer' }} onClick={onBack}>
+        <button type="button" className="scripts-btn text-[12px] px-3 py-1.5" onClick={onBack}>
           {t(locale, 'palette.pluginPermissionBack')}
         </button>
       </div>

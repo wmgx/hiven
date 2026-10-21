@@ -5,6 +5,7 @@ import type { PluginSettingsSource } from '../workspace/pluginSettingsStore'
 import { markSurfaceInstanceState, upsertSurfaceInstance } from '../surfaces/registry'
 import { pluginSurfaceInstanceId, pluginSurfaceWindowLabel } from '../workspace/pluginSurfaceWindows'
 import { hideCurrentPluginSurfaceWindow, hidePluginSurfaceWindow } from '../workspace/windowManager/pluginSurfaceWindows'
+import { X } from 'lucide-react'
 import { useT, t as translate } from '../i18n'
 import { ConfirmDialog } from '../plugin-ui'
 import { invoke } from '@tauri-apps/api/core'
@@ -230,7 +231,7 @@ export function PluginSurfaceWindow() {
         {!usesPluginTitlebar && (
           <div className="plugin-surface-window-titlebar" data-tauri-drag-region>
             <div className="plugin-surface-window-title" data-tauri-drag-region>{title || t('pluginSurface')}</div>
-            <button className="plugin-surface-window-close" type="button" onClick={() => { void hide() }}>×</button>
+            <button className="plugin-surface-window-close" type="button" aria-label={t('close')} title={t('close')} onClick={() => { void hide() }}><X size={14} /></button>
           </div>
         )}
         <div ref={bodyRef} className="plugin-surface-window-body">
@@ -312,12 +313,13 @@ async function hideCurrentWindow(target?: PluginSurfaceOpenTarget | null): Promi
 }
 
 function WindowMessage({ title, message }: { title: string; message?: string }) {
+  const t = useT('workspace')
   return (
     <div className="flux-spatial-shell plugin-surface-window-shell">
       <div className="plugin-surface-window-frame">
         <div className="plugin-surface-window-titlebar" data-tauri-drag-region>
           <div className="plugin-surface-window-title" data-tauri-drag-region>{title}</div>
-          <button className="plugin-surface-window-close" type="button" onClick={() => { void hideCurrentWindow() }}>×</button>
+          <button className="plugin-surface-window-close" type="button" aria-label={t('close')} title={t('close')} onClick={() => { void hideCurrentWindow() }}><X size={14} /></button>
         </div>
         <div className="plugin-surface-window-message">
           <div>{title}</div>
