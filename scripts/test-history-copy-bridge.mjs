@@ -74,5 +74,5 @@ await assert.rejects(() => history.writeText('browser', { recordInHistory: false
 
 const ordinary = fixture()
 await ordinary.create('unrelated-plugin').watch({ text: true }, () => {})
-assert.equal(ordinary.calls[0].command, 'clipboard_read_public_text')
+assert.equal(ordinary.calls.find(c => c.command !== 'clipboard_change_count').command, 'clipboard_read_public_text')
 console.log('History copy bridge behavior passed')

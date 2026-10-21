@@ -26,6 +26,9 @@ const COMMAND_MIN_INTERVAL_MS = 1_000
 const VISITS_DETAIL_MAX_URLS = 60
 /** Timestamps kept per page — enough to establish span without bloating the POST. */
 const VISITS_PER_URL_MAX = 80
+const TOKEN_FILE = 'bridge-token.json'
+/** Tab events arrive in bursts; one snapshot per window is enough. */
+const SNAPSHOT_DEBOUNCE_MS = 400
 const CONFIG_KEY = 'hivenBridgeConfig'
 /** Reported with every snapshot so Hiven can tell when the loaded copy is outdated. */
 const EXTENSION_VERSION = chrome.runtime.getManifest().version
@@ -57,7 +60,7 @@ function isProtectedUrl(url) {
   return /^(chrome|edge|brave|opera|about|chrome-extension|devtools):/i.test(url)
 }
 
-/** Prefer real page favicon; fall back to public favicon service by domain. */
+/** Only the favicon the page itself declared; never a third-party lookup by domain. */
 function faviconForTab(tab) {
   const raw = typeof tab.favIconUrl === 'string' ? tab.favIconUrl : ''
   if (
@@ -67,28 +70,35 @@ function faviconForTab(tab) {
   ) {
     return raw
   }
-  try {
-    if (tab.url && /^https?:/i.test(tab.url)) {
-      const host = new URL(tab.url).hostname
-      if (host) {
-        return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=32`
-      }
-    }
-  } catch {
-    // ignore
-  }
   return undefined
 }
 
-function faviconForUrl(url) {
+let bridgeToken = null
+
+/**
+ * Per-machine token written by Hiven next to this file ("Open extension folder" in
+ * the Browser plugin settings). Not web-accessible, so web pages cannot read it.
+ */
+async function loadBridgeToken() {
+  if (bridgeToken) return bridgeToken
   try {
-    if (!isHttpUrl(url)) return undefined
-    const host = new URL(url).hostname
-    if (!host) return undefined
-    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=32`
+    const res = await fetch(chrome.runtime.getURL(TOKEN_FILE))
+    const data = await res.json()
+    if (typeof data.token === 'string' && data.token) bridgeToken = data.token
   } catch {
-    return undefined
+    // Not provisioned yet: requests go out unauthenticated and are rejected.
   }
+  return bridgeToken
+}
+
+async function bridgeFetch(path, init = {}) {
+  const token = await loadBridgeToken()
+  const headers = { ...(init.headers || {}) }
+  if (token) headers.Authorization = `Bearer ${token}`
+  const res = await fetch(`${BRIDGE}${path}`, { ...init, headers })
+  // Hiven rotated or re-provisioned the token: re-read the file on the next request.
+  if (res.status === 401) bridgeToken = null
+  return res
 }
 
 function rememberTab(tabId, patch) {
@@ -137,11 +147,22 @@ async function markOutdated(outdated) {
   }
 }
 
-async function pushSnapshot() {
+let snapshotTimer = 0
+
+/** Coalesces bursts of tab events into one snapshot; the command loop restarts right away. */
+function pushSnapshot() {
   void commandLoop()
+  if (snapshotTimer) return
+  snapshotTimer = setTimeout(() => {
+    snapshotTimer = 0
+    void pushSnapshotNow()
+  }, SNAPSHOT_DEBOUNCE_MS)
+}
+
+async function pushSnapshotNow() {
   try {
     const tabs = await collectTabs()
-    const res = await fetch(`${BRIDGE}/v1/sources/${SOURCE_ID}/snapshot`, {
+    const res = await bridgeFetch(`/v1/sources/${SOURCE_ID}/snapshot`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ appName: browserLabel(), extensionVersion: EXTENSION_VERSION, tabs }),
@@ -215,7 +236,6 @@ async function collectHistory({ maxResults = HISTORY_MAX, startTime = Date.now()
     visitCount: item.visitCount,
     typedCount: item.typedCount,
     visits: visitsByUrl.get(item.url),
-    faviconUrl: faviconForUrl(item.url),
     appName: browserLabel(),
   }))
 }
@@ -224,7 +244,7 @@ async function pushHistory() {
   if (!config.historyEnabled) return
   try {
     const items = await collectHistory()
-    await fetch(`${BRIDGE}/v1/sources/${SOURCE_ID}/history`, {
+    await bridgeFetch(`/v1/sources/${SOURCE_ID}/history`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ appName: browserLabel(), items }),
@@ -248,7 +268,7 @@ async function pushHistoryImport(cmd) {
     })
     received += items.length
     const done = items.length < batchSize || received >= maxResults
-    await fetch(`${BRIDGE}/v1/sources/${SOURCE_ID}/history`, {
+    await bridgeFetch(`/v1/sources/${SOURCE_ID}/history`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ appName: browserLabel(), requestId: cmd.requestId, items, done }),
@@ -263,7 +283,7 @@ async function pushEvents(events) {
   const batch = events.filter((event) => event && event.type)
   if (batch.length === 0) return
   try {
-    await fetch(`${BRIDGE}/v1/sources/${SOURCE_ID}/events`, {
+    await bridgeFetch(`/v1/sources/${SOURCE_ID}/events`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ appName: browserLabel(), events: batch }),
@@ -424,7 +444,7 @@ async function fetchCommands() {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), COMMAND_FETCH_TIMEOUT_MS)
   try {
-    const res = await fetch(`${BRIDGE}/v1/sources/${SOURCE_ID}/commands?wait=${COMMAND_WAIT_MS}`, {
+    const res = await bridgeFetch(`/v1/sources/${SOURCE_ID}/commands?wait=${COMMAND_WAIT_MS}`, {
       signal: controller.signal,
     })
     if (!res.ok) return null

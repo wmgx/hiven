@@ -94,43 +94,72 @@ fn launcher_perf_log_path() -> Result<PathBuf, String> {
 /// Background writer so perf logging never does file I/O on the main thread.
 /// Each synchronous append was ~90–190ms during launcher show and, with ~7 native
 /// marks per open, gated first paint. Hand lines to a dedicated writer thread.
-fn perf_log_sender() -> &'static std::sync::mpsc::Sender<String> {
-    static SENDER: OnceLock<std::sync::mpsc::Sender<String>> = OnceLock::new();
+fn perf_log_sender() -> &'static std::sync::mpsc::SyncSender<String> {
+    static SENDER: OnceLock<std::sync::mpsc::SyncSender<String>> = OnceLock::new();
     SENDER.get_or_init(|| {
-        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        // Bounded: a stuck disk drops telemetry lines instead of growing memory without limit.
+        let (tx, rx) = std::sync::mpsc::sync_channel::<String>(2048);
         let _ = thread::Builder::new()
             .name("hiven-perf-log".into())
             .spawn(move || {
+                let mut writer = PerfLogWriter::default();
                 for line in rx {
-                    write_launcher_perf_line(&line);
+                    writer.write_line(&line);
                 }
             });
         tx
     })
 }
 
-/// Actual NDJSON append (rotation + write). Runs only on the perf-log writer thread.
-fn write_launcher_perf_line(line: &str) {
-    let Ok(path) = launcher_perf_log_path() else {
-        return;
-    };
-    // Soft rotate ~5MB so agents can always read a bounded file.
-    if let Ok(meta) = fs::metadata(&path) {
-        if meta.len() > 5 * 1024 * 1024 {
-            let bak = path.with_extension("ndjson.1");
-            let _ = fs::rename(&path, &bak);
+const PERF_LOG_ROTATE_BYTES: u64 = 5 * 1024 * 1024;
+
+/// Keeps the NDJSON file open between lines and counts bytes itself, instead of
+/// create_dir_all + metadata + open + close on every line.
+#[derive(Default)]
+struct PerfLogWriter {
+    file: Option<fs::File>,
+    written: u64,
+}
+
+impl PerfLogWriter {
+    fn open(&mut self) -> Option<&mut fs::File> {
+        if self.file.is_none() {
+            let path = launcher_perf_log_path().ok()?;
+            let file = fs::OpenOptions::new().create(true).append(true).open(&path).ok()?;
+            self.written = file.metadata().map(|meta| meta.len()).unwrap_or(0);
+            self.file = Some(file);
         }
+        self.file.as_mut()
     }
-    if let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(&path) {
+
+    fn rotate(&mut self) {
+        self.file = None;
+        if let Ok(path) = launcher_perf_log_path() {
+            // Soft rotate ~5MB so agents can always read a bounded file.
+            let _ = fs::rename(&path, path.with_extension("ndjson.1"));
+        }
+        self.written = 0;
+    }
+
+    fn write_line(&mut self, line: &str) {
         use std::io::Write;
-        let _ = writeln!(file, "{}", line);
+        if self.written > PERF_LOG_ROTATE_BYTES {
+            self.rotate();
+        }
+        let Some(file) = self.open() else { return };
+        if writeln!(file, "{}", line).is_ok() {
+            self.written += line.len() as u64 + 1;
+        } else {
+            self.file = None; // reopen on the next line (e.g. log dir was removed)
+        }
     }
 }
 
 /// Non-blocking: hand the line to the background writer thread (never blocks the
 /// main thread on disk I/O).
 fn append_launcher_perf_file(line: &str) {
-    let _ = perf_log_sender().send(line.to_string());
+    // try_send: never block the caller; a full queue drops the line.
+    let _ = perf_log_sender().try_send(line.to_string());
 }
 
 fn now_unix_ms() -> u128 {
@@ -160,8 +189,20 @@ fn log_launcher_perf(label: &str, started_at: Instant, detail: impl AsRef<str>) 
     }
 }
 
+/// Runs blocking work off the main thread and the async workers. Sync `#[tauri::command] fn`s
+/// execute on the main thread and starve IPC, so anything that does I/O or spawns goes through here.
+async fn run_blocking<T, F>(work: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(work)
+        .await
+        .map_err(|error| format!("background task failed: {error}"))?
+}
+
 /// Frontend perf lines → always-on log file; stderr only when HIVEN_LAUNCHER_PERF=1.
-#[tauri::command]
+#[tauri::command(async)]
 fn log_launcher_perf_frontend(line: String) {
     let trimmed = line.trim();
     if trimmed.is_empty() {
@@ -454,12 +495,17 @@ enum SystemPowerAction {
     LockScreen,
 }
 
+/// Spawns a fire-and-forget child and reaps it on a helper thread so it never lingers as a zombie.
+fn spawn_and_reap(command: &mut Command) -> std::io::Result<()> {
+    let mut child = command.spawn()?;
+    thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(())
+}
+
 fn spawn_system_command(program: &str, args: &[&str]) -> Result<(), String> {
-    Command::new(program)
-        .args(args)
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    spawn_and_reap(Command::new(program).args(args)).map_err(|e| e.to_string())
 }
 
 #[cfg(target_os = "macos")]
@@ -2502,6 +2548,12 @@ fn read_clipboard_change_count(_app: &tauri::AppHandle) -> Option<i64> {
     None
 }
 
+/// Cheap "did the pasteboard change" probe so JS polling can skip image and text reads.
+#[tauri::command]
+async fn clipboard_change_count(app: tauri::AppHandle) -> Option<i64> {
+    read_clipboard_change_count(&app)
+}
+
 /// Read local file paths from the system clipboard (Finder / file manager copy).
 /// Prefer this over plain text: macOS often puts only the bare filename in the text flavor.
 #[tauri::command]
@@ -3757,11 +3809,7 @@ fn system_open_app_target(target: &str) -> Result<(), String> {
 
 #[cfg(target_os = "windows")]
 fn system_open_app_target(target: &str) -> Result<(), String> {
-    std::process::Command::new("explorer")
-        .arg(target)
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    spawn_and_reap(Command::new("explorer").arg(target)).map_err(|e| e.to_string())
 }
 
 #[cfg(target_os = "macos")]
@@ -4005,7 +4053,11 @@ fn dedupe_installed_apps(apps: Vec<InstalledAppEntry>) -> Vec<InstalledAppEntry>
 }
 
 #[tauri::command]
-fn discover_installed_apps() -> Result<Vec<DiscoveredApp>, String> {
+async fn discover_installed_apps() -> Result<Vec<DiscoveredApp>, String> {
+    run_blocking(discover_installed_apps_blocking).await
+}
+
+fn discover_installed_apps_blocking() -> Result<Vec<DiscoveredApp>, String> {
     let apps = discover_platform_apps();
     if let Ok(mut targets) = installed_app_targets().lock() {
         targets.clear();
@@ -4020,7 +4072,12 @@ fn installed_app_target(app_id: &str) -> Result<String, String> {
     let cached_target = installed_app_targets()
         .lock()
         .ok()
-        .and_then(|targets| targets.get(app_id).cloned());
+        .and_then(|targets| targets.get(app_id).cloned())
+        // An uninstalled or moved app leaves a stale path behind: rediscover instead of failing.
+        .filter(|target| {
+            let path = Path::new(target);
+            !path.is_absolute() || path.exists()
+        });
     let target = if let Some(target) = cached_target {
         target
     } else {
@@ -4261,29 +4318,6 @@ fn is_denied_desktop_process_name(name: &str) -> bool {
     DESKTOP_PROCESS_DENY_NAMES
         .iter()
         .any(|denied| *denied == base.as_str())
-}
-
-fn applescript_escape(value: &str) -> String {
-    value.replace('\\', "\\\\").replace('"', "\\\"")
-}
-
-fn run_osascript(source: &str) -> Result<(), String> {
-    let output = Command::new("osascript")
-        .args(["-e", source])
-        .output()
-        .map_err(|e| format!("Failed to run osascript: {e}"))?;
-    if output.status.success() {
-        return Ok(());
-    }
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if !stderr.is_empty() {
-        Err(stderr)
-    } else if !stdout.is_empty() {
-        Err(stdout)
-    } else {
-        Err("osascript failed".to_string())
-    }
 }
 
 /// Cap AX enrich batch size. One osascript for many PIDs; keep offline path bounded.
@@ -4757,7 +4791,7 @@ async fn list_desktop_windows(
 }
 
 #[cfg(not(target_os = "linux"))]
-#[tauri::command]
+#[tauri::command(async)]
 fn list_desktop_windows(query: Option<String>) -> Result<Vec<DesktopWindow>, String> {
     let q = query
         .as_deref()
@@ -4773,7 +4807,11 @@ fn list_desktop_windows(query: Option<String>) -> Result<Vec<DesktopWindow>, Str
 
 /// Offline / open-path enrich: CG + batched Accessibility titles. Do not call per keystroke.
 #[tauri::command]
-fn list_desktop_windows_enriched() -> Result<Vec<DesktopWindow>, String> {
+async fn list_desktop_windows_enriched() -> Result<Vec<DesktopWindow>, String> {
+    run_blocking(list_desktop_windows_enriched_blocking).await
+}
+
+fn list_desktop_windows_enriched_blocking() -> Result<Vec<DesktopWindow>, String> {
     #[cfg(target_os = "linux")]
     { return Err("x11-window-unsupported".into()); }
     #[cfg(not(target_os = "linux"))]
@@ -4803,6 +4841,26 @@ fn ax_raise_window(
     pid: u32,
     target_cg_id: u32,
     cg_bounds: Option<(f64, f64, f64, f64)>,
+) -> Result<&'static str, String> {
+    ax_window_action(pid, target_cg_id, cg_bounds, false)
+}
+
+/// Presses the close button of the exact CG window (never matched by title).
+#[cfg(target_os = "macos")]
+fn ax_close_window(
+    pid: u32,
+    target_cg_id: u32,
+    cg_bounds: Option<(f64, f64, f64, f64)>,
+) -> Result<&'static str, String> {
+    ax_window_action(pid, target_cg_id, cg_bounds, true)
+}
+
+#[cfg(target_os = "macos")]
+fn ax_window_action(
+    pid: u32,
+    target_cg_id: u32,
+    cg_bounds: Option<(f64, f64, f64, f64)>,
+    close: bool,
 ) -> Result<&'static str, String> {
     use core_foundation::array::{CFArray, CFArrayRef};
     use core_foundation::base::{CFType, CFTypeRef, TCFType};
@@ -4947,6 +5005,20 @@ fn ax_raise_window(
             ));
         };
 
+        if close {
+            let button = copy_attribute(target, "AXCloseButton")
+                .map_err(|err| format!("window has no close button (AXError {err})"))?;
+            let press = CFString::new("AXPress");
+            let press_err = AXUIElementPerformAction(
+                button.as_CFTypeRef() as AXUIElementRef,
+                press.as_concrete_TypeRef(),
+            );
+            if press_err != AX_SUCCESS {
+                return Err(format!("AXPress on close button failed (AXError {press_err})"));
+            }
+            return Ok(method);
+        }
+
         // Make it main/focused first so the follow-up app activation lands on
         // this window, then raise it above its siblings. Main/focused writes are
         // best-effort — AXRaise is the one that must succeed.
@@ -5061,45 +5133,25 @@ fn close_desktop_window(id: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         let window = find_desktop_window(&id)?;
-        let pid = window.pid;
-        let title = applescript_escape(&window.title);
-        let app_name = applescript_escape(&window.app_name);
-        let script = if !window.title.trim().is_empty() {
-            format!(
-                r#"tell application "System Events"
-  tell (first process whose unix id is {pid})
-    set frontmost to true
-    try
-      perform action "AXPress" of (first button whose subrole is "AXCloseButton") of (first window whose name is "{title}")
-    on error
-      try
-        click (first button whose subrole is "AXCloseButton") of (first window whose name is "{title}")
-      on error errMsg
-        error "Failed to close window: " & errMsg
-      end try
-    end try
-  end tell
-end tell"#
-            )
-        } else {
-            format!(
-                r#"tell application "System Events"
-  tell (first process whose unix id is {pid})
-    set frontmost to true
-    try
-      perform action "AXPress" of (first button whose subrole is "AXCloseButton") of window 1
-    on error
-      try
-        click (first button whose subrole is "AXCloseButton") of window 1
-      on error errMsg
-        error "Failed to close window of {app_name}: " & errMsg
-      end try
-    end try
-  end tell
-end tell"#
-            )
+        let cg_id = window
+            .id
+            .parse::<u32>()
+            .map_err(|_| format!("invalid CG window id: {}", window.id))?;
+        if !ax_is_trusted(false) {
+            return Err(
+                "Accessibility permission is not granted (System Settings → Privacy & Security → Accessibility)"
+                    .to_string(),
+            );
+        }
+        let bounds = match (window.x, window.y, window.width, window.height) {
+            (Some(x), Some(y), Some(w), Some(h)) if w >= 2.0 && h >= 2.0 => Some((x, y, w, h)),
+            _ => None,
         };
-        run_osascript(&script)
+        // Same AX lookup as focus: the window is identified by CGWindowNumber, so two windows
+        // with the same title can no longer be confused.
+        ax_close_window(window.pid, cg_id, bounds)
+            .map(|_| ())
+            .map_err(|reason| format!("Failed to close \"{}\" window {}: {reason}", window.app_name, window.id))
     }
 }
 
@@ -5198,7 +5250,11 @@ fn list_macos_desktop_processes(_query: Option<&str>) -> Result<Vec<DesktopProce
 }
 
 #[tauri::command]
-fn list_desktop_processes(query: Option<String>) -> Result<Vec<DesktopProcess>, String> {
+async fn list_desktop_processes(query: Option<String>) -> Result<Vec<DesktopProcess>, String> {
+    run_blocking(move || list_desktop_processes_blocking(query)).await
+}
+
+fn list_desktop_processes_blocking(query: Option<String>) -> Result<Vec<DesktopProcess>, String> {
     let raw = query.as_deref().map(str::trim).filter(|s| !s.is_empty());
     // Empty query: return nothing (normal launcher search must not list processes).
     // Special token "*" = process-mode bare "kill": list all non-denied (frontend only).
@@ -5215,7 +5271,11 @@ fn list_desktop_processes(query: Option<String>) -> Result<Vec<DesktopProcess>, 
 }
 
 #[tauri::command]
-fn terminate_desktop_process(pid: u32, force: bool) -> Result<(), String> {
+async fn terminate_desktop_process(pid: u32, force: bool) -> Result<(), String> {
+    run_blocking(move || terminate_desktop_process_blocking(pid, force)).await
+}
+
+fn terminate_desktop_process_blocking(pid: u32, force: bool) -> Result<(), String> {
     if pid == 0 {
         return Err("Invalid process id".to_string());
     }
@@ -5339,53 +5399,6 @@ fn init_config_dir() -> Result<String, String> {
     fs::create_dir_all(&plugin_dev_dir).map_err(|e| e.to_string())?;
     fs::create_dir_all(&app_icon_cache_dir).map_err(|e| e.to_string())?;
     Ok(base.to_string_lossy().to_string())
-}
-
-#[tauri::command]
-fn read_scripts_dir(path: String) -> Result<Vec<ScriptFile>, String> {
-    let dir = expand_path(&path);
-    if !dir.exists() {
-        fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    }
-    let mut scripts = Vec::new();
-    // 递归读取目录（含 builtin 子目录）
-    collect_scripts(&dir, &mut scripts)?;
-    Ok(scripts)
-}
-
-fn collect_scripts(dir: &PathBuf, scripts: &mut Vec<ScriptFile>) -> Result<(), String> {
-    let entries = fs::read_dir(dir).map_err(|e| e.to_string())?;
-    for entry in entries {
-        let entry = entry.map_err(|e| e.to_string())?;
-        let path = entry.path();
-        if path.is_dir() {
-            collect_scripts(&path, scripts)?;
-        } else if let Some(ext) = path.extension() {
-            if ext == "ts" || ext == "js" {
-                let name = path
-                    .file_name()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .to_string();
-                let content = fs::read_to_string(&path).unwrap_or_default();
-                // 判断是否在 builtin 子目录下
-                let is_builtin = path.components().any(|c| c.as_os_str() == "builtin");
-                scripts.push(ScriptFile {
-                    name,
-                    path: path.to_string_lossy().to_string(),
-                    content,
-                    builtin: is_builtin,
-                });
-            }
-        }
-    }
-    Ok(())
-}
-
-#[tauri::command]
-fn read_file(path: String) -> Result<String, String> {
-    let file_path = expand_path(&path);
-    fs::read_to_string(&file_path).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -5678,6 +5691,92 @@ async fn plugin_shell_run(request: PluginShellRunRequest) -> Result<PluginShellR
         .map_err(|e| format!("Shell task join failed: {}", e))?
 }
 
+const HTTP_DEFAULT_TIMEOUT_MS: u64 = 30_000;
+const HTTP_MAX_TIMEOUT_MS: u64 = 120_000;
+const HTTP_MAX_REDIRECTS: usize = 5;
+/// Response caps: plugin text/binary replies, plain text fetches, and package archives.
+const HTTP_MAX_TEXT_BYTES: usize = 8 * 1024 * 1024;
+const HTTP_MAX_BINARY_BYTES: usize = 32 * 1024 * 1024;
+const HTTP_MAX_ARCHIVE_BYTES: usize = 64 * 1024 * 1024;
+
+/// True for hosts that only resolve inside this machine or LAN. Redirects must never lead there.
+fn is_local_network_host(url: &reqwest::Url) -> bool {
+    use std::net::{Ipv4Addr, Ipv6Addr};
+    fn v4_local(ip: Ipv4Addr) -> bool {
+        ip.is_loopback() || ip.is_private() || ip.is_link_local() || ip.is_unspecified()
+    }
+    fn v6_local(ip: Ipv6Addr) -> bool {
+        if let Some(v4) = ip.to_ipv4_mapped() {
+            return v4_local(v4);
+        }
+        ip.is_loopback() || ip.is_unspecified() || (ip.segments()[0] & 0xfe00) == 0xfc00
+            || (ip.segments()[0] & 0xffc0) == 0xfe80
+    }
+    let Some(host) = url.host_str() else {
+        return true;
+    };
+    let host = host.trim_start_matches('[').trim_end_matches(']');
+    if let Ok(ip) = host.parse::<Ipv4Addr>() {
+        return v4_local(ip);
+    }
+    if let Ok(ip) = host.parse::<Ipv6Addr>() {
+        return v6_local(ip);
+    }
+    let domain = host.trim_end_matches('.').to_ascii_lowercase();
+    domain == "localhost" || domain.ends_with(".localhost") || domain.ends_with(".local")
+}
+
+/// Client with a mandatory timeout and a bounded redirect policy that refuses local targets.
+fn bounded_http_client(timeout_ms: Option<u64>) -> Result<reqwest::Client, String> {
+    let timeout = timeout_ms
+        .unwrap_or(HTTP_DEFAULT_TIMEOUT_MS)
+        .clamp(100, HTTP_MAX_TIMEOUT_MS);
+    reqwest::Client::builder()
+        .timeout(Duration::from_millis(timeout))
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            if attempt.previous().len() >= HTTP_MAX_REDIRECTS {
+                attempt.error("too many redirects")
+            } else if is_local_network_host(attempt.url()) {
+                attempt.error("redirect to a local network address is not allowed")
+            } else {
+                attempt.follow()
+            }
+        }))
+        .build()
+        .map_err(|e| e.to_string())
+}
+
+/// Reads at most `max_bytes`; fails instead of buffering an oversized body.
+async fn read_body_capped(mut resp: reqwest::Response, max_bytes: usize) -> Result<Vec<u8>, String> {
+    if resp.content_length().is_some_and(|len| len > max_bytes as u64) {
+        return Err(format!("Response exceeds {} bytes", max_bytes));
+    }
+    let mut out = Vec::new();
+    while let Some(chunk) = resp
+        .chunk()
+        .await
+        .map_err(|e| format!("Failed to read response: {}", e))?
+    {
+        if out.len() + chunk.len() > max_bytes {
+            return Err(format!("Response exceeds {} bytes", max_bytes));
+        }
+        out.extend_from_slice(&chunk);
+    }
+    Ok(out)
+}
+
+async fn http_get_capped(url: reqwest::Url, max_bytes: usize, timeout_ms: u64) -> Result<Vec<u8>, String> {
+    let resp = bounded_http_client(Some(timeout_ms))?
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
+    if !resp.status().is_success() {
+        return Err(format!("HTTP {}", resp.status()));
+    }
+    read_body_capped(resp, max_bytes).await
+}
+
 #[tauri::command]
 async fn plugin_http_request(request: ProxyHttpRequest) -> Result<ProxyHttpResponse, String> {
     let parsed = reqwest::Url::parse(&request.url).map_err(|e| e.to_string())?;
@@ -5688,13 +5787,7 @@ async fn plugin_http_request(request: ProxyHttpRequest) -> Result<ProxyHttpRespo
     let method_text = request.method.unwrap_or_else(|| "GET".to_string());
     let method = reqwest::Method::from_bytes(method_text.as_bytes())
         .map_err(|e| format!("Invalid HTTP method: {}", e))?;
-    let mut client_builder = reqwest::Client::builder();
-    if let Some(timeout_ms) = request.timeout_ms {
-        client_builder = client_builder
-            .timeout(std::time::Duration::from_millis(timeout_ms.clamp(100, 30_000)))
-            .redirect(reqwest::redirect::Policy::none());
-    }
-    let client = client_builder.build().map_err(|e| e.to_string())?;
+    let client = bounded_http_client(request.timeout_ms)?;
     let mut builder = client.request(method, parsed);
 
     if let Some(headers) = request.headers {
@@ -5729,21 +5822,16 @@ async fn plugin_http_request(request: ProxyHttpRequest) -> Result<ProxyHttpRespo
         .unwrap_or(false);
 
     if want_binary {
-        let bytes = resp
-            .bytes()
-            .await
-            .map_err(|e| format!("Failed to read response bytes: {}", e))?;
+        let bytes = read_body_capped(resp, HTTP_MAX_BINARY_BYTES).await?;
         Ok(ProxyHttpResponse {
             status,
             headers,
             body: String::new(),
-            body_bytes: Some(bytes.to_vec()),
+            body_bytes: Some(bytes),
         })
     } else {
-        let body = resp
-            .text()
-            .await
-            .map_err(|e| format!("Failed to read response: {}", e))?;
+        let bytes = read_body_capped(resp, HTTP_MAX_TEXT_BYTES).await?;
+        let body = String::from_utf8_lossy(&bytes).into_owned();
         Ok(ProxyHttpResponse {
             status,
             headers,
@@ -5755,15 +5843,12 @@ async fn plugin_http_request(request: ProxyHttpRequest) -> Result<ProxyHttpRespo
 
 #[tauri::command]
 async fn fetch_url(url: String) -> Result<String, String> {
-    let resp = reqwest::get(&url)
-        .await
-        .map_err(|e| format!("Request failed: {}", e))?;
-    if !resp.status().is_success() {
-        return Err(format!("HTTP {}", resp.status()));
+    let parsed = reqwest::Url::parse(&url).map_err(|e| e.to_string())?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err("URL must use http or https".to_string());
     }
-    resp.text()
-        .await
-        .map_err(|e| format!("Failed to read response: {}", e))
+    let bytes = http_get_capped(parsed, HTTP_MAX_TEXT_BYTES, HTTP_DEFAULT_TIMEOUT_MS).await?;
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
 #[derive(serde::Serialize)]
@@ -5887,6 +5972,13 @@ fn plugin_kv_db_path() -> Result<PathBuf, String> {
 
 fn open_plugin_kv_db(path: PathBuf) -> Result<PluginKvDb, String> {
     let connection = Connection::open(&path).map_err(|e| e.to_string())?;
+    // One shared connection serves kv, usage journal and ai usage: WAL + NORMAL avoids an fsync
+    // per write, and busy_timeout rides out a second process (or a checkpoint) holding the file.
+    connection
+        .execute_batch(
+            "PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;",
+        )
+        .map_err(|e| e.to_string())?;
     connection
         .execute_batch(
             r#"
@@ -5988,6 +6080,10 @@ fn sanitize_blob_extension(extension: Option<String>) -> Result<String, String> 
     {
         return Err("Plugin blob extension must be alphanumeric".to_string());
     }
+    // `.meta` is the metadata sidecar; `.json` was the legacy sidecar name.
+    if matches!(trimmed.as_str(), "json" | "meta") {
+        return Err("Plugin blob extension is reserved".to_string());
+    }
     Ok(trimmed)
 }
 
@@ -6002,6 +6098,20 @@ fn plugin_blob_dir(source: &str, plugin_id: &str) -> Result<PathBuf, String> {
     })?;
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     dir.canonicalize().map_err(|e| e.to_string())
+}
+
+/// Sidecar metadata is `<id>.meta`; blobs written before the rename used `<id>.json`.
+fn plugin_blob_metadata_path(dir: &Path, blob_id: &str) -> PathBuf {
+    let current = dir.join(format!("{}.meta", blob_id));
+    if current.exists() {
+        return current;
+    }
+    let legacy = dir.join(format!("{}.json", blob_id));
+    if legacy.exists() {
+        legacy
+    } else {
+        current
+    }
 }
 
 fn plugin_blob_paths(
@@ -6020,7 +6130,7 @@ fn plugin_blob_paths_with_metadata_limit(
 ) -> Result<(PathBuf, PluginBlobMetadata), String> {
     validate_storage_segment(blob_id, "Plugin blob id")?;
     let dir = plugin_blob_dir(source, plugin_id)?;
-    let meta_path = dir.join(format!("{}.json", blob_id));
+    let meta_path = plugin_blob_metadata_path(&dir, blob_id);
     let raw = match metadata_limit {
         Some(limit) => {
             let mut raw = String::new();
@@ -6046,7 +6156,7 @@ fn plugin_blob_paths_with_metadata_limit(
     Ok((canonical_data, metadata))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn plugin_kv_get(source: String, plugin_id: String, key: String) -> Result<Option<String>, String> {
     validate_plugin_kv_namespace(&source, &plugin_id)?;
     validate_plugin_kv_key(&key)?;
@@ -6068,7 +6178,7 @@ struct PluginKvGetManyEntry {
     value_json: String,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn plugin_kv_get_many(source: String, plugin_id: String, keys: Vec<String>) -> Result<Vec<PluginKvGetManyEntry>, String> {
     validate_plugin_kv_namespace(&source, &plugin_id)?;
     if keys.len() > 128 {
@@ -6095,7 +6205,7 @@ fn plugin_kv_get_many(source: String, plugin_id: String, keys: Vec<String>) -> R
     Ok(entries)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn plugin_kv_set(
     source: String,
     plugin_id: String,
@@ -6124,7 +6234,7 @@ fn plugin_kv_set(
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn plugin_kv_delete(source: String, plugin_id: String, key: String) -> Result<(), String> {
     validate_plugin_kv_namespace(&source, &plugin_id)?;
     validate_plugin_kv_key(&key)?;
@@ -6138,7 +6248,7 @@ fn plugin_kv_delete(source: String, plugin_id: String, key: String) -> Result<()
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn plugin_kv_list(
     source: String,
     plugin_id: String,
@@ -6151,42 +6261,43 @@ fn plugin_kv_list(
         }
     }
     let connection = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
-    let mut statement = connection.connection
-        .prepare(
-            "SELECT key, updated_at FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2 ORDER BY updated_at DESC, key ASC",
-        )
-        .map_err(|e| e.to_string())?;
-    let rows = statement
-        .query_map(params![source, plugin_id], |row| {
-            Ok(PluginKvListEntry {
-                key: row.get(0)?,
-                updated_at: row.get(1)?,
-            })
+    // Prefix filtering is a key range, so SQLite uses the primary key instead of reading every row.
+    let prefix = prefix.filter(|prefix| !prefix.is_empty());
+    let upper = prefix.as_deref().and_then(plugin_kv_paging::prefix_upper);
+    let range_clause = match (&prefix, &upper) {
+        (Some(_), Some(_)) => " AND key >= ?3 AND key < ?4",
+        (Some(_), None) => " AND key >= ?3",
+        _ => "",
+    };
+    let sql = format!(
+        "SELECT key, updated_at FROM plugin_kv WHERE source = ?1 AND plugin_id = ?2{range_clause} ORDER BY updated_at DESC, key ASC"
+    );
+    let mut statement = connection.connection.prepare(&sql).map_err(|e| e.to_string())?;
+    let map_row = |row: &rusqlite::Row| {
+        Ok(PluginKvListEntry {
+            key: row.get(0)?,
+            updated_at: row.get(1)?,
         })
-        .map_err(|e| e.to_string())?;
-
-    let mut entries = Vec::new();
-    for row in rows {
-        let entry = row.map_err(|e| e.to_string())?;
-        if prefix
-            .as_ref()
-            .is_some_and(|prefix| !entry.key.starts_with(prefix))
-        {
-            continue;
+    };
+    let rows = match (&prefix, &upper) {
+        (Some(prefix), Some(upper)) => {
+            statement.query_map(params![source, plugin_id, prefix, upper], map_row)
         }
-        entries.push(entry);
+        (Some(prefix), None) => statement.query_map(params![source, plugin_id, prefix], map_row),
+        _ => statement.query_map(params![source, plugin_id], map_row),
     }
-    Ok(entries)
+    .map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn plugin_kv_page(source: String, plugin_id: String, options: plugin_kv_paging::PageOptions) -> Result<plugin_kv_paging::Page, String> {
     validate_plugin_kv_namespace(&source, &plugin_id)?;
     let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
     plugin_kv_paging::page(&db.connection, &source, &plugin_id, options)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn plugin_kv_array_page(source: String, plugin_id: String, options: plugin_kv_paging::ArrayPageOptions) -> Result<plugin_kv_paging::ArrayPage, String> {
     validate_plugin_kv_namespace(&source, &plugin_id)?;
     let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
@@ -6210,14 +6321,14 @@ async fn plugin_kv_related_search(
     .map_err(|e| format!("Plugin KV related search task failed: {e}"))?
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn plugin_kv_batch(source: String, plugin_id: String, input: plugin_kv_paging::Batch) -> Result<plugin_kv_paging::BatchResult, String> {
     validate_plugin_kv_namespace(&source, &plugin_id)?;
     let mut db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
     plugin_kv_paging::batch(&mut db.connection, &source, &plugin_id, input, current_millis_i64()?)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn plugin_kv_usage(source: String, plugin_id: String) -> Result<PluginKvUsage, String> {
     validate_plugin_kv_namespace(&source, &plugin_id)?;
     let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
@@ -6231,7 +6342,7 @@ fn plugin_kv_usage(source: String, plugin_id: String) -> Result<PluginKvUsage, S
     Ok(PluginKvUsage { bytes, item_count })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn plugin_kv_prune(
     source: String,
     plugin_id: String,
@@ -6331,7 +6442,7 @@ fn plugin_kv_prune(
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn plugin_kv_clear(source: String, plugin_id: String) -> Result<(), String> {
     validate_plugin_kv_namespace(&source, &plugin_id)?;
     let db = get_plugin_kv_db()?.lock().map_err(|e| e.to_string())?;
@@ -6345,7 +6456,7 @@ fn plugin_kv_clear(source: String, plugin_id: String) -> Result<(), String> {
 }
 
 /// Append a single launcher usage journal row (metadata only; no content body).
-#[tauri::command]
+#[tauri::command(async)]
 fn usage_journal_append(
     command_id: String,
     surface_id: String,
@@ -6380,7 +6491,7 @@ fn usage_journal_append(
 }
 
 /// Prune usage journal rows older than `max_age_days` and/or beyond `max_rows` (keep newest).
-#[tauri::command]
+#[tauri::command(async)]
 fn usage_journal_prune(
     max_age_days: Option<i64>,
     max_rows: Option<i64>,
@@ -6436,7 +6547,7 @@ struct AiUsageRecord {
     metrics: Vec<serde_json::Value>,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn ai_usage_record_upsert(record: AiUsageRecord) -> Result<(), String> {
     validate_plugin_kv_namespace(&record.plugin_source, &record.plugin_id)?;
     validate_experience_identifier(&record.run_id, "run_id")?;
@@ -6481,7 +6592,7 @@ fn ai_usage_record_upsert(record: AiUsageRecord) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn ai_usage_record_list(
     plugin_id: String,
     plugin_source: String,
@@ -6746,7 +6857,7 @@ fn validate_last_saveable_run(run: &serde_json::Value) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn last_saveable_run_set(run: serde_json::Value) -> Result<(), String> {
     validate_last_saveable_run(&run)?;
     *LAST_SAVEABLE_RUN
@@ -6756,7 +6867,7 @@ fn last_saveable_run_set(run: serde_json::Value) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn last_saveable_run_get() -> Result<Option<serde_json::Value>, String> {
     let now = current_millis_i64()?;
     let mut slot = LAST_SAVEABLE_RUN
@@ -6773,20 +6884,49 @@ fn last_saveable_run_get() -> Result<Option<serde_json::Value>, String> {
     Ok(slot.clone())
 }
 
-#[tauri::command]
-fn plugin_blob_save(
-    source: String,
-    plugin_id: String,
+/// One blob and the whole per-plugin blob directory are bounded so a plugin cannot fill the disk.
+const PLUGIN_BLOB_MAX_BYTES: usize = 64 * 1024 * 1024;
+const PLUGIN_BLOB_TOTAL_MAX_BYTES: u64 = 1024 * 1024 * 1024;
+
+fn plugin_blob_dir_bytes(dir: &Path) -> u64 {
+    fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .flatten()
+                .filter_map(|entry| entry.metadata().ok())
+                .filter(|metadata| metadata.is_file())
+                .map(|metadata| metadata.len())
+                .sum()
+        })
+        .unwrap_or(0)
+}
+
+fn plugin_blob_save_bytes(
+    source: &str,
+    plugin_id: &str,
     blob_id: String,
-    bytes: Vec<u8>,
+    bytes: &[u8],
     content_type: String,
     extension: Option<String>,
 ) -> Result<PluginBlobWriteResult, String> {
     validate_storage_segment(&blob_id, "Plugin blob id")?;
     let extension = sanitize_blob_extension(extension)?;
-    let dir = plugin_blob_dir(&source, &plugin_id)?;
+    if bytes.len() > PLUGIN_BLOB_MAX_BYTES {
+        return Err(format!("Plugin blob exceeds {} bytes", PLUGIN_BLOB_MAX_BYTES));
+    }
+    if content_type.len() > 200 || !content_type.bytes().all(|b| (0x20..0x7f).contains(&b)) {
+        return Err("Plugin blob content type must be short printable ASCII".to_string());
+    }
+    let dir = plugin_blob_dir(source, plugin_id)?;
     let data_path = dir.join(format!("{}.{}", blob_id, extension));
-    let metadata_path = dir.join(format!("{}.json", blob_id));
+    let metadata_path = dir.join(format!("{}.meta", blob_id));
+    // Overwriting an id replaces its bytes, so only count what is not already stored under it.
+    let replaced = fs::metadata(&data_path).map(|m| m.len()).unwrap_or(0);
+    if plugin_blob_dir_bytes(&dir).saturating_sub(replaced) + bytes.len() as u64
+        > PLUGIN_BLOB_TOTAL_MAX_BYTES
+    {
+        return Err("Plugin blob storage quota exceeded".to_string());
+    }
     let metadata = PluginBlobMetadata {
         content_type: content_type.clone(),
         extension,
@@ -6796,7 +6936,7 @@ fn plugin_blob_save(
             .map_err(|e| e.to_string())?
             .as_millis(),
     };
-    fs::write(&data_path, &bytes).map_err(|e| e.to_string())?;
+    fs::write(&data_path, bytes).map_err(|e| e.to_string())?;
     let metadata_raw = serde_json::to_string(&metadata).map_err(|e| e.to_string())?;
     fs::write(&metadata_path, metadata_raw).map_err(|e| e.to_string())?;
     Ok(PluginBlobWriteResult {
@@ -6806,26 +6946,95 @@ fn plugin_blob_save(
     })
 }
 
-#[tauri::command]
-fn plugin_blob_read(
-    source: String,
-    plugin_id: String,
-    blob_id: String,
-) -> Result<Option<PluginBlobReadResult>, String> {
-    match plugin_blob_paths(&source, &plugin_id, &blob_id) {
+fn plugin_blob_read_bytes(
+    source: &str,
+    plugin_id: &str,
+    blob_id: &str,
+) -> Result<Option<(Vec<u8>, String)>, String> {
+    match plugin_blob_paths(source, plugin_id, blob_id) {
         Ok((data_path, metadata)) => {
+            let length = fs::metadata(&data_path).map_err(|e| e.to_string())?.len();
+            if length > PLUGIN_BLOB_MAX_BYTES as u64 {
+                return Err("Plugin blob is too large to read".to_string());
+            }
             let bytes = fs::read(data_path).map_err(|e| e.to_string())?;
-            Ok(Some(PluginBlobReadResult {
-                bytes,
-                content_type: metadata.content_type,
-            }))
+            Ok(Some((bytes, metadata.content_type)))
         }
         Err(error) if error.contains("No such file") || error.contains("os error 2") => Ok(None),
         Err(error) => Err(error),
     }
 }
 
-#[tauri::command]
+fn blob_header(request: &tauri::ipc::Request<'_>, name: &str) -> Result<String, String> {
+    request
+        .headers()
+        .get(name)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_string)
+        .ok_or_else(|| format!("Missing {name} header"))
+}
+
+/// Raw-bytes IPC: the body is the blob itself, so nothing is inflated into a JSON number array.
+/// Identity travels in headers (`x-hiven-source`, `-plugin`, `-blob`, `-content-type`, `-extension`).
+#[tauri::command(async)]
+fn plugin_blob_save(request: tauri::ipc::Request<'_>) -> Result<PluginBlobWriteResult, String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("Plugin blob body must be raw bytes".to_string());
+    };
+    let extension = blob_header(&request, "x-hiven-extension").ok().filter(|v| !v.is_empty());
+    plugin_blob_save_bytes(
+        &blob_header(&request, "x-hiven-source")?,
+        &blob_header(&request, "x-hiven-plugin")?,
+        blob_header(&request, "x-hiven-blob")?,
+        bytes,
+        blob_header(&request, "x-hiven-content-type")?,
+        extension,
+    )
+}
+
+/// Response layout: `[u32 BE header length][header JSON {"contentType"}][blob bytes]`;
+/// an empty body means the blob does not exist.
+#[tauri::command(async)]
+fn plugin_blob_read(
+    source: String,
+    plugin_id: String,
+    blob_id: String,
+) -> Result<tauri::ipc::Response, String> {
+    let Some((bytes, content_type)) = plugin_blob_read_bytes(&source, &plugin_id, &blob_id)? else {
+        return Ok(tauri::ipc::Response::new(Vec::<u8>::new()));
+    };
+    let header = serde_json::json!({ "contentType": content_type }).to_string();
+    let mut framed = Vec::with_capacity(4 + header.len() + bytes.len());
+    framed.extend_from_slice(&(header.len() as u32).to_be_bytes());
+    framed.extend_from_slice(header.as_bytes());
+    framed.extend_from_slice(&bytes);
+    Ok(tauri::ipc::Response::new(framed))
+}
+
+/// JSON twin of the raw commands for the browser validation relay, which can only carry JSON.
+#[tauri::command(async)]
+fn plugin_blob_save_json(
+    source: String,
+    plugin_id: String,
+    blob_id: String,
+    bytes: Vec<u8>,
+    content_type: String,
+    extension: Option<String>,
+) -> Result<PluginBlobWriteResult, String> {
+    plugin_blob_save_bytes(&source, &plugin_id, blob_id, &bytes, content_type, extension)
+}
+
+#[tauri::command(async)]
+fn plugin_blob_read_json(
+    source: String,
+    plugin_id: String,
+    blob_id: String,
+) -> Result<Option<PluginBlobReadResult>, String> {
+    Ok(plugin_blob_read_bytes(&source, &plugin_id, &blob_id)?
+        .map(|(bytes, content_type)| PluginBlobReadResult { bytes, content_type }))
+}
+
+#[tauri::command(async)]
 fn plugin_blob_path(
     source: String,
     plugin_id: String,
@@ -6838,11 +7047,11 @@ fn plugin_blob_path(
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn plugin_blob_delete(source: String, plugin_id: String, blob_id: String) -> Result<(), String> {
     validate_storage_segment(&blob_id, "Plugin blob id")?;
     let dir = plugin_blob_dir(&source, &plugin_id)?;
-    let metadata_path = dir.join(format!("{}.json", blob_id));
+    let metadata_path = plugin_blob_metadata_path(&dir, &blob_id);
     if let Ok(raw) = fs::read_to_string(&metadata_path) {
         if let Ok(metadata) = serde_json::from_str::<PluginBlobMetadata>(&raw) {
             let data_path = dir.join(format!("{}.{}", blob_id, metadata.extension));
@@ -6853,7 +7062,7 @@ fn plugin_blob_delete(source: String, plugin_id: String, blob_id: String) -> Res
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn plugin_blob_clear(source: String, plugin_id: String) -> Result<(), String> {
     let dir = plugin_blob_dir(&source, &plugin_id)?;
     if dir.exists() {
@@ -6862,7 +7071,7 @@ fn plugin_blob_clear(source: String, plugin_id: String) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn list_plugin_dirs(path: String) -> Result<Vec<PluginDirSummary>, String> {
     let root = expand_path(&path);
     ensure_plugin_path_for_write(&root)?;
@@ -6875,6 +7084,10 @@ fn list_plugin_dirs(path: String) -> Result<Vec<PluginDirSummary>, String> {
     for entry in fs::read_dir(&root).map_err(|e| e.to_string())? {
         let entry = entry.map_err(|e| e.to_string())?;
         let folder = entry.path();
+        // `.plugin-tmp-*` / `.plugin-backup-*` are install scratch dirs, never plugins.
+        if entry.file_name().to_string_lossy().starts_with('.') {
+            continue;
+        }
         if folder.is_dir() && folder.join("manifest.json").exists() {
             match read_plugin_manifest_summary(&folder) {
                 Ok(summary) => plugins.push(summary),
@@ -6902,7 +7115,7 @@ fn list_plugin_dirs(path: String) -> Result<Vec<PluginDirSummary>, String> {
     Ok(plugins)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn remove_plugin_dir(root_path: String, plugin_id: String) -> Result<(), String> {
     validate_plugin_id(&plugin_id)?;
     let root = ensure_existing_plugin_path(&expand_path(&root_path))?;
@@ -6923,7 +7136,7 @@ fn remove_plugin_dir(root_path: String, plugin_id: String) -> Result<(), String>
     fs::remove_dir_all(target).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn replace_plugin_dir(
     source_path: String,
     root_path: String,
@@ -6991,7 +7204,7 @@ fn replace_plugin_dir(
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn list_plugin_files(path: String) -> Result<Vec<PluginFileNode>, String> {
     let root = ensure_existing_plugin_path(&expand_path(&path))?;
     if !root.is_dir() {
@@ -7014,11 +7227,7 @@ fn open_plugin_dir(path: String) -> Result<(), String> {
     } else {
         "code"
     };
-    if std::process::Command::new(code_command)
-        .arg(&dir_str)
-        .spawn()
-        .is_ok()
-    {
+    if spawn_and_reap(Command::new(code_command).arg(&dir_str)).is_ok() {
         return Ok(());
     }
 
@@ -7034,22 +7243,26 @@ fn reveal_path_in_file_manager(path: String) -> Result<(), String> {
     if !expanded.exists() {
         return Err(format!("Path does not exist: {}", expanded.display()));
     }
-    reveal_path_in_file_manager_impl(&expanded.to_string_lossy())
+    // Only Hiven's own config tree (extension folder, plugin directories) may be revealed:
+    // opening arbitrary paths would let any plugin launch apps or installers.
+    let root = config_dir()?.canonicalize().map_err(|e| e.to_string())?;
+    let target = expanded.canonicalize().map_err(|e| e.to_string())?;
+    if !target.starts_with(&root) {
+        return Err("Path is outside the Hiven config directory".to_string());
+    }
+    reveal_path_in_file_manager_impl(&target.to_string_lossy())
 }
 
 fn reveal_path_in_file_manager_impl(path: &str) -> Result<(), String> {
     let (program, args): (&str, Vec<&str>) = if cfg!(target_os = "macos") {
-        ("open", vec![path])
+        // -R reveals in Finder instead of opening, so a bundle is never launched.
+        ("open", vec!["-R", path])
     } else if cfg!(target_os = "windows") {
         ("explorer", vec![path])
     } else {
         ("xdg-open", vec![path])
     };
-    std::process::Command::new(program)
-        .args(&args)
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    spawn_and_reap(Command::new(program).args(&args)).map_err(|e| e.to_string())
 }
 
 /// Chromium extension is part of the first-party `web-open` (Browser) plugin
@@ -7095,6 +7308,9 @@ fn prepare_chromium_extension_package() -> Result<String, String> {
         fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
         fs::write(dir.join("messages.json"), messages).map_err(|e| e.to_string())?;
     }
+
+    // Per-machine bridge token: the extension must send it with every request.
+    desktop_bridge::write_extension_token(&dest)?;
 
     // Best-effort: also copy any extra files from an on-disk plugin package.
     if let Ok(source) = resolve_chromium_extension_source_dir() {
@@ -7176,14 +7392,14 @@ fn copy_dir_recursive(src: &Path, dest: &Path) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn read_plugin_file(path: String) -> Result<String, String> {
     let file_path = ensure_existing_plugin_path(&expand_path(&path))?;
     ensure_plugin_text_file(&file_path)?;
     fs::read_to_string(&file_path).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_plugin_file(path: String, content: String) -> Result<(), String> {
     let file_path = expand_path(&path);
     ensure_plugin_path_for_write(&file_path)?;
@@ -7194,7 +7410,7 @@ fn save_plugin_file(path: String, content: String) -> Result<(), String> {
     fs::write(&file_path, content).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn install_plugin_zip(zip_path: String, destination_root: String) -> Result<String, String> {
     let zip_path = expand_path(&zip_path);
     let destination_root = expand_path(&destination_root);
@@ -7218,20 +7434,17 @@ async fn install_plugin_zip_url(url: String, destination_root: String) -> Result
     ensure_plugin_path_for_write(&destination_root)?;
     fs::create_dir_all(&destination_root).map_err(|e| e.to_string())?;
     let destination_root = ensure_existing_plugin_path(&destination_root)?;
-    let bytes = reqwest::get(parsed)
+    let bytes = http_get_capped(parsed, HTTP_MAX_ARCHIVE_BYTES, 120_000)
         .await
-        .map_err(|e| format!("Plugin zip download failed: {}", e))?
-        .bytes()
-        .await
-        .map_err(|e| format!("Failed to read plugin zip response: {}", e))?;
+        .map_err(|e| format!("Plugin zip download failed: {}", e))?;
     let temp_dir = make_temp_dir(&destination_root)?;
-    let result = extract_zip_bytes_to_dir(bytes.as_ref(), &temp_dir)
+    let result = extract_zip_bytes_to_dir(bytes.as_slice(), &temp_dir)
         .and_then(|_| install_package_from_extracted_dir(&temp_dir, &destination_root));
     let _ = fs::remove_dir_all(&temp_dir);
     result
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn install_plugin_dir(source_path: String, destination_root: String) -> Result<String, String> {
     let source_path = expand_path(&source_path);
     if !source_path.is_dir() {
@@ -7256,6 +7469,22 @@ fn install_plugin_dir(source_path: String, destination_root: String) -> Result<S
     Ok(destination.to_string_lossy().to_string())
 }
 
+/// GitHub names are interpolated into a URL, so only plain characters are accepted.
+/// Branches may contain `/` (e.g. `feature/x`) but never `..` or empty segments.
+fn validate_github_segment(value: &str, label: &str, allow_slash: bool) -> Result<(), String> {
+    let plain = |c: char| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-');
+    let valid = !value.is_empty()
+        && value.len() <= 200
+        && value.chars().all(|c| plain(c) || (allow_slash && c == '/'))
+        && !value.contains("..")
+        && value.split('/').all(|part| !part.is_empty());
+    if valid {
+        Ok(())
+    } else {
+        Err(format!("Invalid GitHub {label}"))
+    }
+}
+
 #[tauri::command]
 async fn fetch_github_directory(
     owner: String,
@@ -7268,19 +7497,20 @@ async fn fetch_github_directory(
     ensure_plugin_path_for_write(&destination_root)?;
     fs::create_dir_all(&destination_root).map_err(|e| e.to_string())?;
     let destination_root = ensure_existing_plugin_path(&destination_root)?;
+    validate_github_segment(&owner, "owner", false)?;
+    validate_github_segment(&repo, "repository", false)?;
+    validate_github_segment(&branch, "branch", true)?;
     let archive_url = format!(
         "https://codeload.github.com/{}/{}/zip/refs/heads/{}",
         owner, repo, branch
     );
-    let bytes = reqwest::get(&archive_url)
+    let archive_url = reqwest::Url::parse(&archive_url).map_err(|e| e.to_string())?;
+    let bytes = http_get_capped(archive_url, HTTP_MAX_ARCHIVE_BYTES, 120_000)
         .await
-        .map_err(|e| format!("GitHub download failed: {}", e))?
-        .bytes()
-        .await
-        .map_err(|e| format!("Failed to read GitHub archive: {}", e))?;
+        .map_err(|e| format!("GitHub download failed: {}", e))?;
 
     let temp_dir = make_temp_dir(&destination_root)?;
-    let result = extract_zip_bytes_to_dir(bytes.as_ref(), &temp_dir).and_then(|_| {
+    let result = extract_zip_bytes_to_dir(bytes.as_slice(), &temp_dir).and_then(|_| {
         let package_root = if path.trim().is_empty() {
             find_manifest_root(&temp_dir)?
         } else {
@@ -7303,15 +7533,6 @@ async fn fetch_github_directory(
     });
     let _ = fs::remove_dir_all(&temp_dir);
     result
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-struct ScriptFile {
-    name: String,
-    path: String,
-    content: String,
-    #[serde(default)]
-    builtin: bool,
 }
 
 fn read_plugin_manifest_summary(folder: &Path) -> Result<PluginDirSummary, String> {
@@ -7538,13 +7759,12 @@ fn ensure_plugin_path_for_write(path: &Path) -> Result<(), String> {
 }
 
 fn make_temp_dir(parent: &Path) -> Result<PathBuf, String> {
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|e| e.to_string())?
-        .as_millis();
-    let dir = parent.join(format!(".plugin-tmp-{}", millis));
-    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    Ok(dir)
+    // Random suffix: two installs in the same millisecond (or a stale crash leftover) must not collide.
+    tempfile::Builder::new()
+        .prefix(".plugin-tmp-")
+        .tempdir_in(parent)
+        .map(|dir| dir.keep())
+        .map_err(|e| e.to_string())
 }
 
 fn extract_zip_to_dir(zip_path: &Path, target: &Path) -> Result<(), String> {
@@ -7559,12 +7779,25 @@ fn extract_zip_bytes_to_dir(bytes: &[u8], target: &Path) -> Result<(), String> {
     extract_zip_archive(&mut archive, target)
 }
 
+const ZIP_MAX_ENTRIES: usize = 5_000;
+const ZIP_MAX_TOTAL_BYTES: u64 = 256 * 1024 * 1024;
+
 fn extract_zip_archive<R: Read + std::io::Seek>(
     archive: &mut ZipArchive<R>,
     target: &Path,
 ) -> Result<(), String> {
+    if archive.len() > ZIP_MAX_ENTRIES {
+        return Err(format!("Zip archive has more than {ZIP_MAX_ENTRIES} entries"));
+    }
+    let mut total_bytes: u64 = 0;
+    let mut written_bytes: u64 = 0;
     for i in 0..archive.len() {
         let mut file = archive.by_index(i).map_err(|e| e.to_string())?;
+        // Declared sizes can lie, so the copy below is capped by the remaining budget as well.
+        total_bytes = total_bytes.saturating_add(file.size());
+        if total_bytes > ZIP_MAX_TOTAL_BYTES {
+            return Err("Zip archive expands beyond the allowed size".to_string());
+        }
         let enclosed = file
             .enclosed_name()
             .ok_or_else(|| "Zip archive contains an unsafe path".to_string())?
@@ -7578,7 +7811,13 @@ fn extract_zip_archive<R: Read + std::io::Seek>(
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
         let mut out = fs::File::create(&out_path).map_err(|e| e.to_string())?;
-        std::io::copy(&mut file, &mut out).map_err(|e| e.to_string())?;
+        let budget = ZIP_MAX_TOTAL_BYTES.saturating_sub(written_bytes);
+        let copied = std::io::copy(&mut (&mut file).take(budget + 1), &mut out)
+            .map_err(|e| e.to_string())?;
+        written_bytes += copied;
+        if written_bytes > ZIP_MAX_TOTAL_BYTES {
+            return Err("Zip archive expands beyond the allowed size".to_string());
+        }
     }
     Ok(())
 }
@@ -7848,8 +8087,6 @@ pub fn run() {
             text_result_hud::text_result_hud_paste,
             get_config_dir,
             init_config_dir,
-            read_scripts_dir,
-            read_file,
             read_text_material_file,
             read_clipboard_file_paths,
             fetch_url,
@@ -7860,6 +8097,7 @@ pub fn run() {
             clipboard_privacy::clipboard_write_sensitive_text,
             clipboard_privacy::clipboard_write_login_link,
             clipboard_privacy::clipboard_write_text,
+            clipboard_change_count,
             clipboard_privacy::clipboard_read_image,
             clipboard_privacy::clipboard_write_image,
             list_plugin_dirs,
@@ -7901,6 +8139,8 @@ pub fn run() {
             last_saveable_run_get,
             plugin_blob_save,
             plugin_blob_read,
+            plugin_blob_save_json,
+            plugin_blob_read_json,
             plugin_blob_delete,
             plugin_blob_path,
             plugin_blob_clear,
@@ -8039,6 +8279,38 @@ mod paste_availability_tests {
             (PasteAvailability::CanAttempt, "can-attempt"),
         ] {
             assert_eq!(serde_json::to_value(availability).unwrap(), expected);
+        }
+    }
+}
+
+#[cfg(test)]
+mod bounded_http_tests {
+    use super::*;
+
+    #[test]
+    fn redirect_targets_on_local_networks_are_flagged() {
+        for url in [
+            "http://127.0.0.1/x",
+            "http://localhost:8080/",
+            "http://[::1]/",
+            "http://192.168.1.2/",
+            "http://10.0.0.1/",
+            "http://169.254.169.254/",
+            "http://printer.local/",
+        ] {
+            assert!(is_local_network_host(&reqwest::Url::parse(url).unwrap()), "{url}");
+        }
+        for url in ["https://example.com/", "https://8.8.8.8/"] {
+            assert!(!is_local_network_host(&reqwest::Url::parse(url).unwrap()), "{url}");
+        }
+    }
+
+    #[test]
+    fn github_segments_reject_path_tricks_but_allow_slashed_branches() {
+        assert!(validate_github_segment("feature/new-ui", "branch", true).is_ok());
+        assert!(validate_github_segment("feature/new-ui", "repository", false).is_err());
+        for bad in ["a/../b", "", "/lead", "trail/", "a b", "a?x=1", "a#b"] {
+            assert!(validate_github_segment(bad, "branch", true).is_err(), "{bad}");
         }
     }
 }
@@ -8538,6 +8810,57 @@ HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\App Paths\Example.e
     }
 
     #[test]
+    fn zip_extraction_rejects_too_many_entries_and_temp_dirs_are_unique() {
+        use std::io::Write;
+        let mut buffer = Cursor::new(Vec::new());
+        {
+            let mut writer = zip::ZipWriter::new(&mut buffer);
+            let options = zip::write::SimpleFileOptions::default();
+            for i in 0..=ZIP_MAX_ENTRIES {
+                writer.start_file(format!("f{i}.txt"), options).unwrap();
+                writer.write_all(b"x").unwrap();
+            }
+            writer.finish().unwrap();
+        }
+        let parent = tempfile::tempdir().unwrap();
+        let target = make_temp_dir(parent.path()).unwrap();
+        let other = make_temp_dir(parent.path()).unwrap();
+        assert_ne!(target, other);
+        let error = extract_zip_bytes_to_dir(buffer.get_ref(), &target).unwrap_err();
+        assert!(error.contains("entries"), "{error}");
+    }
+
+    #[test]
+    fn plugin_blob_round_trips_with_meta_sidecar_and_rejects_reserved_extensions() {
+        with_isolated_home("plugin-blob-round-trip", |_home| {
+            let saved = plugin_blob_save_bytes(
+                "builtin", "demo", "b1".into(), &[1, 2, 3], "image/png".into(), Some("png".into()),
+            )
+            .expect("blob save");
+            assert_eq!(saved.byte_size, 3);
+            let (bytes, content_type) = plugin_blob_read_bytes("builtin", "demo", "b1")
+                .expect("blob read")
+                .expect("blob exists");
+            assert_eq!((bytes, content_type.as_str()), (vec![1, 2, 3], "image/png"));
+            let dir = plugin_blob_dir("builtin", "demo").expect("blob dir");
+            assert!(dir.join("b1.meta").is_file());
+            for reserved in ["json", "meta"] {
+                assert!(plugin_blob_save_bytes(
+                    "builtin", "demo", "b2".into(), &[0], "x/y".into(), Some(reserved.into())
+                )
+                .is_err());
+            }
+            let oversized = vec![0u8; PLUGIN_BLOB_MAX_BYTES + 1];
+            assert!(plugin_blob_save_bytes(
+                "builtin", "demo", "b3".into(), &oversized, "x/y".into(), None
+            )
+            .is_err());
+            plugin_blob_delete("builtin".into(), "demo".into(), "b1".into()).unwrap();
+            assert!(plugin_blob_read_bytes("builtin", "demo", "b1").unwrap().is_none());
+        });
+    }
+
+    #[test]
     fn plugin_kv_round_trips_lists_usage_and_deletes() {
         with_isolated_home("plugin-kv-round-trip", |home| {
             plugin_kv_set(
@@ -8959,9 +9282,9 @@ mod desktop_process_deny_tests {
 
     #[test]
     fn list_desktop_processes_empty_query_returns_empty() {
-        let result = list_desktop_processes(None).expect("empty query should succeed");
+        let result = list_desktop_processes_blocking(None).expect("empty query should succeed");
         assert!(result.is_empty());
-        let result = list_desktop_processes(Some("   ".to_string())).expect("blank query should succeed");
+        let result = list_desktop_processes_blocking(Some("   ".to_string())).expect("blank query should succeed");
         assert!(result.is_empty());
     }
 }

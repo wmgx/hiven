@@ -121,7 +121,7 @@ fn key(value: &str) -> Result<(), String> {
     }
     Ok(())
 }
-fn prefix_upper(prefix: &str) -> Option<String> {
+pub(crate) fn prefix_upper(prefix: &str) -> Option<String> {
     let mut chars: Vec<char> = prefix.chars().collect();
     while let Some(last) = chars.pop() {
         let mut next = last as u32 + 1;

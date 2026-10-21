@@ -51,7 +51,7 @@ export async function resolveSurfaceInitialText(raw: string | undefined, already
   if (!filePath) return text
   try {
     const { invoke } = await import('@tauri-apps/api/core')
-    return await invoke<string>('read_file', { path: filePath.path })
+    return await invoke<string>('read_text_material_file', { path: filePath.path })
   } catch (error) {
     console.warn('[hiven] Failed to read clipboard file path for plugin surface:', filePath.path, error)
     // Fall back to path string so surface can still show / allow manual open

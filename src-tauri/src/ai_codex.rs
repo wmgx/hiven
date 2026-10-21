@@ -199,6 +199,30 @@ fn rpc_message(method: String, id: Option<u64>, params: Option<Value>) -> Value 
     Value::Object(message)
 }
 
+/// The read-only sandbox must not depend on what the webview sent: thread and turn
+/// parameters are overwritten here so a compromised caller cannot grant write access
+/// or switch off approvals.
+fn enforce_read_only(method: &str, params: Option<Value>) -> Option<Value> {
+    if !matches!(method, "thread/start" | "turn/start") {
+        return params;
+    }
+    let mut object = match params {
+        Some(Value::Object(object)) => object,
+        _ => serde_json::Map::new(),
+    };
+    object.insert("approvalPolicy".into(), Value::String("never".into()));
+    if method == "thread/start" {
+        object.insert("permissions".into(), Value::String(":read-only".into()));
+    } else {
+        // A turn may carry its own override; only the thread-level read-only profile may apply.
+        object.remove("sandboxPolicy");
+        if object.contains_key("permissions") {
+            object.insert("permissions".into(), Value::String(":read-only".into()));
+        }
+    }
+    Some(Value::Object(object))
+}
+
 #[tauri::command]
 pub async fn ai_codex_rpc(
     app: AppHandle,
@@ -210,13 +234,20 @@ pub async fn ai_codex_rpc(
         return Err(format!("Codex RPC method is not allowed: {}", method));
     }
     let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
-    let receiver = write_message(&app, &rpc_message(method, Some(id), params), expected_connection_id.as_deref())?
-        .ok_or("Codex RPC response channel is unavailable")?;
+    let params = enforce_read_only(&method, params);
+    let message = rpc_message(method, Some(id), params);
+    // Spawning the process and writing stdin can block; keep it off the async workers.
+    let receiver = tauri::async_runtime::spawn_blocking(move || {
+        write_message(&app, &message, expected_connection_id.as_deref())
+    })
+    .await
+    .map_err(|error| error.to_string())??
+    .ok_or("Codex RPC response channel is unavailable")?;
     receiver.wait(RPC_TIMEOUT).await
 }
 
 #[tauri::command]
-pub fn ai_codex_notify(
+pub async fn ai_codex_notify(
     app: AppHandle,
     method: String,
     params: Option<Value>,
@@ -225,7 +256,12 @@ pub fn ai_codex_notify(
     if method != "initialized" {
         return Err("Codex notification is not allowed".to_string());
     }
-    write_message(&app, &rpc_message(method, None, params), expected_connection_id.as_deref())?;
+    let message = rpc_message(method, None, params);
+    tauri::async_runtime::spawn_blocking(move || {
+        write_message(&app, &message, expected_connection_id.as_deref())
+    })
+    .await
+    .map_err(|error| error.to_string())??;
     Ok(())
 }
 
@@ -239,6 +275,29 @@ mod tests {
         assert!(allowed_method("account/login/start"));
         assert!(!allowed_method("command/exec"));
         assert!(!allowed_method("config/value/write"));
+    }
+
+    #[test]
+    fn thread_and_turn_params_are_forced_read_only() {
+        let thread = enforce_read_only(
+            "thread/start",
+            Some(serde_json::json!({ "permissions": ":danger-full-access", "approvalPolicy": "on-request", "model": "m" })),
+        )
+        .unwrap();
+        assert_eq!(thread["permissions"], ":read-only");
+        assert_eq!(thread["approvalPolicy"], "never");
+        assert_eq!(thread["model"], "m");
+        let missing = enforce_read_only("thread/start", None).unwrap();
+        assert_eq!(missing["permissions"], ":read-only");
+        let turn = enforce_read_only(
+            "turn/start",
+            Some(serde_json::json!({ "sandboxPolicy": { "type": "dangerFullAccess" }, "permissions": ":workspace-write", "approvalPolicy": "untrusted" })),
+        )
+        .unwrap();
+        assert_eq!(turn["approvalPolicy"], "never");
+        assert_eq!(turn["permissions"], ":read-only");
+        assert!(turn.get("sandboxPolicy").is_none());
+        assert_eq!(enforce_read_only("model/list", None), None);
     }
 
     #[test]

@@ -1,0 +1,24 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "launcher-host",
+  "description": "Update/relaunch and dev-plugin folder watching, available only to the launcher window that hosts settings and the plugins page.",
+  "windows": [
+    "launcher"
+  ],
+  "permissions": [
+    "updater:default",
+    "process:allow-restart",
+    {
+      "identifier": "fs:allow-watch",
+      "allow": [
+        {
+          "path": "$HOME/.local/hiven/plugins/dev"
+        },
+        {
+          "path": "$HOME/.local/hiven/plugins/dev/**"
+        }
+      ]
+    },
+    "fs:allow-unwatch"
+  ]
+}

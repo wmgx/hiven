@@ -1137,7 +1137,7 @@ export function GlobalLauncherHost() {
       getPluginSurfaceInitialTextMode: (pluginId) => getPluginSurfaceDefinition({ source: 'builtin', pluginId, surfaceId: 'main' })?.surface.initialTextMode,
       readLocalFileText: async (path) => {
         const { invoke } = await import('@tauri-apps/api/core')
-        return invoke<string>('read_file', { path })
+        return invoke<string>('read_text_material_file', { path })
       },
       pasteText: async (text) => {
         requirePasteDelivery(await historyPaste.pasteText(text))

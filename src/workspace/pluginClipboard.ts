@@ -119,6 +119,18 @@ export async function writeClipboardImageBytes(bytes: Uint8Array, signal?: Abort
   await writeClipboardImageViaClipboardItem(bytes)
 }
 
+/** NSPasteboard changeCount; null when the platform cannot report one. */
+async function readClipboardChangeCount(): Promise<number | null> {
+  if (!isTauriClipboardRuntime()) return null
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    const count = await invoke<number | null>('clipboard_change_count')
+    return typeof count === 'number' ? count : null
+  } catch {
+    return null
+  }
+}
+
 async function readClipboardSourceApp(): Promise<string | undefined> {
   try {
     const { invoke } = await import('@tauri-apps/api/core')
@@ -324,6 +336,7 @@ export function createPluginClipboard(
 
       const readWatchedText = pluginId === 'clipboard-history' ? readHistoryClipboardText : readClipboardText
 
+      const initialChangeCount = await readClipboardChangeCount()
       // Initialize with current clipboard content
       try {
         const lastText = await readWatchedText()
@@ -340,78 +353,101 @@ export function createPluginClipboard(
         }
       }
 
+      // Pasteboard changeCount gates both reads: unchanged means nothing new to fetch.
+      // `null` (unsupported platform / read failure) falls back to polling every tick.
+      let imageCheckedCount: number | null = initialChangeCount
+      let textCheckedCount: number | null = initialChangeCount
+
+      const pollImage = async (count: number | null) => {
+        const image = await readClipboardImageSnapshot()
+        if (image) {
+          const imageHash = hashBytes(image.hashBytes)
+          if (imageHash !== lastImageHash) {
+            const storedImage = await image.toStoredImage()
+            // Remember the hash even when over the limit so the same image is not re-encoded every poll.
+            lastImageHash = imageHash
+            if (!options.maxImageBytes || storedImage.bytes.length <= options.maxImageBytes) {
+              const blobRef = await storage!.blob.put({ bytes: storedImage.bytes, contentType: storedImage.contentType })
+              const sourceApp = await readClipboardSourceApp()
+              emitChange({
+                kind: 'image',
+                blobId: blobRef.blobId,
+                previewBlobId: blobRef.blobId,
+                contentType: blobRef.contentType,
+                byteSize: blobRef.byteSize,
+                width: storedImage.width,
+                height: storedImage.height,
+                hash: imageHash,
+                changedAt: Date.now(),
+                sourceApp,
+              })
+            }
+          }
+        }
+        imageCheckedCount = count
+      }
+
+      const pollText = async (count: number | null) => {
+        const currentText = await readWatchedText()
+        textCheckedCount = count
+        if (!currentText) {
+          // Copying A, then an image, then A again must register as a change.
+          lastTextHash = ''
+          return
+        }
+
+        const filePaths = options.files ? extractFilePaths(currentText) : []
+        const currentHash = hashString(`${filePaths.length > 0 ? 'files' : 'text'}:${currentText}`)
+        if (currentHash === lastTextHash) return
+
+        const byteSize = new TextEncoder().encode(currentText).length
+        lastTextHash = currentHash
+        if (options.maxTextBytes && byteSize > options.maxTextBytes) return
+
+        if (filePaths.length > 0) {
+          const sourceApp = await readClipboardSourceApp()
+          emitChange({
+            kind: 'files',
+            paths: filePaths,
+            fileNames: filePaths.map(fileNameForPath),
+            hash: currentHash,
+            changedAt: Date.now(),
+            sourceApp,
+          })
+          return
+        }
+
+        if (options.text === false) return
+
+        emitChange({
+          kind: 'text',
+          text: currentText,
+          byteSize,
+          hash: currentHash,
+          changedAt: Date.now(),
+          sourceApp: await readClipboardSourceApp(),
+        })
+      }
+
       const intervalId = setInterval(async () => {
         if (stopped || polling) return
         polling = true
 
         try {
+          const count = await readClipboardChangeCount()
           const now = Date.now()
-          if (options.images && storage && now - lastImagePollAt >= imagePollInterval) {
+          if (
+            options.images &&
+            storage &&
+            now - lastImagePollAt >= imagePollInterval &&
+            (count === null || count !== imageCheckedCount)
+          ) {
             lastImagePollAt = now
-            const image = await readClipboardImageSnapshot()
-            if (image) {
-              const imageHash = hashBytes(image.hashBytes)
-              if (imageHash !== lastImageHash) {
-                const storedImage = await image.toStoredImage()
-                if (!options.maxImageBytes || storedImage.bytes.length <= options.maxImageBytes) {
-                  const blobRef = await storage.blob.put({ bytes: storedImage.bytes, contentType: storedImage.contentType })
-                  const sourceApp = await readClipboardSourceApp()
-                  lastImageHash = imageHash
-                  emitChange({
-                    kind: 'image',
-                    blobId: blobRef.blobId,
-                    previewBlobId: blobRef.blobId,
-                    contentType: blobRef.contentType,
-                    byteSize: blobRef.byteSize,
-                    width: storedImage.width,
-                    height: storedImage.height,
-                    hash: imageHash,
-                    changedAt: Date.now(),
-                    sourceApp,
-                  })
-                }
-              }
-            }
+            await pollImage(count)
           }
 
-          if (options.text !== false || options.files) {
-            const currentText = await readWatchedText()
-            if (!currentText) return
-
-            const filePaths = options.files ? extractFilePaths(currentText) : []
-            const currentHash = hashString(`${filePaths.length > 0 ? 'files' : 'text'}:${currentText}`)
-            if (currentHash === lastTextHash) return
-
-            // Check size limits
-            const byteSize = new TextEncoder().encode(currentText).length
-            if (options.maxTextBytes && byteSize > options.maxTextBytes) return
-
-            lastTextHash = currentHash
-
-            if (filePaths.length > 0) {
-              const sourceApp = await readClipboardSourceApp()
-              emitChange({
-                kind: 'files',
-                paths: filePaths,
-                fileNames: filePaths.map(fileNameForPath),
-                hash: currentHash,
-                changedAt: Date.now(),
-                sourceApp,
-              })
-              return
-            }
-
-            if (options.text === false) return
-
-            const change: ClipboardChange = {
-              kind: 'text',
-              text: currentText,
-              byteSize,
-              hash: currentHash,
-              changedAt: Date.now(),
-              sourceApp: await readClipboardSourceApp(),
-            }
-            emitChange(change)
+          if ((options.text !== false || options.files) && (count === null || count !== textCheckedCount)) {
+            await pollText(count)
           }
         } catch (error) {
           console.warn('[plugin-clipboard] watch poll error:', error)
