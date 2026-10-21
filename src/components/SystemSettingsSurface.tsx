@@ -10,6 +10,8 @@ type TabId = 'settings' | 'ai' | 'plugins'
 
 export function SystemSettingsSurface({ initialTab = 'settings' }: { initialTab?: TabId }) {
   const [activeTab, setActiveTab] = useState<TabId>(initialTab)
+  // Tabs stay mounted once visited so unsaved drafts survive switching tabs.
+  const [visitedTabs, setVisitedTabs] = useState<ReadonlySet<TabId>>(() => new Set([initialTab]))
   const t = useT('systemSettings')
 
   const tabs: { id: TabId; icon: React.ReactNode; label: string }[] = [
@@ -20,6 +22,7 @@ export function SystemSettingsSurface({ initialTab = 'settings' }: { initialTab?
 
   const selectTab = (tabId: TabId) => {
     if (tabId === activeTab) return
+    setVisitedTabs((current) => (current.has(tabId) ? current : new Set(current).add(tabId)))
     const startViewTransition = (document as Document & {
       startViewTransition?: (update: () => void) => void
     }).startViewTransition
@@ -48,11 +51,15 @@ export function SystemSettingsSurface({ initialTab = 'settings' }: { initialTab?
         ))}
       </div>
       <div className="system-settings-content" data-launcher-scrollable>
-        <div key={activeTab} className="system-settings-page">
-          {activeTab === 'settings' && <SettingsContent />}
-          {activeTab === 'ai' && <AiSubscriptionsContent />}
-          {activeTab === 'plugins' && <PluginsContent />}
-        </div>
+        {visitedTabs.has('settings') && (
+          <div className="system-settings-page" hidden={activeTab !== 'settings'}><SettingsContent /></div>
+        )}
+        {visitedTabs.has('ai') && (
+          <div className="system-settings-page" hidden={activeTab !== 'ai'}><AiSubscriptionsContent /></div>
+        )}
+        {visitedTabs.has('plugins') && (
+          <div className="system-settings-page" hidden={activeTab !== 'plugins'}><PluginsContent /></div>
+        )}
       </div>
     </div>
   )

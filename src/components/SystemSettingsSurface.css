@@ -133,6 +133,10 @@ body[data-theme='dark'] .system-settings-content,
   animation: system-settings-page-in 140ms ease-out both;
 }
 
+.system-settings-page[hidden] {
+  display: none;
+}
+
 .supports-view-transitions .system-settings-page {
   animation: none;
 }

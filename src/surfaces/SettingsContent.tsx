@@ -615,7 +615,7 @@ function JevCommandSettings() {
         />
       </SettingsListRow>
       <SettingsListRow icon={<BrainCircuit size={15} />} name={t('jevEndpoint')}>
-        <input className="hiven-ui-input" style={inputStyle} value={draft.endpoint} disabled={testing} onChange={(event) => editDraft({ ...draft, enabled: false, apiKey: '', endpoint: event.target.value })} aria-label={t('jevEndpoint')} spellCheck={false} />
+        <input className="hiven-ui-input" style={inputStyle} value={draft.endpoint} disabled={testing} onChange={(event) => editDraft({ ...draft, enabled: false, endpoint: event.target.value })} aria-label={t('jevEndpoint')} spellCheck={false} />
       </SettingsListRow>
       <SettingsListRow icon={<BrainCircuit size={15} />} name={t('jevApiKey')}>
         <input className="hiven-ui-input" style={inputStyle} type="password" autoComplete="off" value={draft.apiKey} disabled={testing} onChange={(event) => editDraft({ ...draft, enabled: false, apiKey: event.target.value })} aria-label={t('jevApiKey')} />
