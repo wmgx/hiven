@@ -5376,53 +5376,6 @@ fn init_config_dir() -> Result<String, String> {
 }
 
 #[tauri::command]
-fn read_scripts_dir(path: String) -> Result<Vec<ScriptFile>, String> {
-    let dir = expand_path(&path);
-    if !dir.exists() {
-        fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    }
-    let mut scripts = Vec::new();
-    // 递归读取目录（含 builtin 子目录）
-    collect_scripts(&dir, &mut scripts)?;
-    Ok(scripts)
-}
-
-fn collect_scripts(dir: &PathBuf, scripts: &mut Vec<ScriptFile>) -> Result<(), String> {
-    let entries = fs::read_dir(dir).map_err(|e| e.to_string())?;
-    for entry in entries {
-        let entry = entry.map_err(|e| e.to_string())?;
-        let path = entry.path();
-        if path.is_dir() {
-            collect_scripts(&path, scripts)?;
-        } else if let Some(ext) = path.extension() {
-            if ext == "ts" || ext == "js" {
-                let name = path
-                    .file_name()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .to_string();
-                let content = fs::read_to_string(&path).unwrap_or_default();
-                // 判断是否在 builtin 子目录下
-                let is_builtin = path.components().any(|c| c.as_os_str() == "builtin");
-                scripts.push(ScriptFile {
-                    name,
-                    path: path.to_string_lossy().to_string(),
-                    content,
-                    builtin: is_builtin,
-                });
-            }
-        }
-    }
-    Ok(())
-}
-
-#[tauri::command]
-fn read_file(path: String) -> Result<String, String> {
-    let file_path = expand_path(&path);
-    fs::read_to_string(&file_path).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
 async fn read_text_material_file(path: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
         text_material::read_text_file(std::path::Path::new(&path))
@@ -7552,15 +7505,6 @@ async fn fetch_github_directory(
     result
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
-struct ScriptFile {
-    name: String,
-    path: String,
-    content: String,
-    #[serde(default)]
-    builtin: bool,
-}
-
 fn read_plugin_manifest_summary(folder: &Path) -> Result<PluginDirSummary, String> {
     let raw = fs::read_to_string(folder.join("manifest.json")).map_err(|e| e.to_string())?;
     let value: serde_json::Value = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
@@ -8095,8 +8039,6 @@ pub fn run() {
             text_result_hud::text_result_hud_paste,
             get_config_dir,
             init_config_dir,
-            read_scripts_dir,
-            read_file,
             read_text_material_file,
             read_clipboard_file_paths,
             fetch_url,
