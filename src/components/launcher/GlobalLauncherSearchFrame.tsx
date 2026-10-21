@@ -405,7 +405,7 @@ export function GlobalLauncherSearchFrame({
           {showListHints && showWorkflowObjectHint && (
             <LauncherHintKey keys="tab" label={t(locale, 'palette.select')} />
           )}
-          <LauncherHintKey keys="esc" label={t(locale, 'palette.back')} />
+          <LauncherHintKey keys="esc" label={t(locale, browsingActions ? 'palette.back' : 'palette.close')} />
           {focusedControl && focusedControl.action !== 'primary' &&
             focusedActionLabel && !(focusedControl.action === 'file' && fileTextBusy) && (
             <span className="launcher-focused-action grp" title={focusedActionLabel}>

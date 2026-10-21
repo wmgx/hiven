@@ -976,13 +976,25 @@ export function GlobalLauncherHost() {
     return true
   }, [browsingActions, focusSearchInputAfterBack, setSelectedIndex])
 
+  // Root list: the first Esc clears typed input / the attached block; only an empty root closes.
+  const clearRootInput = useCallback(() => {
+    const hasQuery = (inputRef.current?.value ?? liveQueryRef.current).length > 0
+    const hasBlock = Boolean(clipboardBlock.block)
+    if (!hasQuery && !hasBlock) return false
+    if (hasBlock) clipboardBlock.markBlockConsumed()
+    setQuery('')
+    setSelectedIndex(0, { pin: false })
+    focusSearchInputAfterBack()
+    return true
+  }, [clipboardBlock.block, clipboardBlock.markBlockConsumed, focusSearchInputAfterBack, setQuery, setSelectedIndex])
+
   useGlobalLauncherHostEscape({
     open,
     isImeComposingRef,
     controllerRef,
     closeLauncher,
     focusSearchInputAfterBack,
-    onRootBack: leaveActionBrowser,
+    onRootBack: () => leaveActionBrowser() || clearRootInput(),
   })
 
 

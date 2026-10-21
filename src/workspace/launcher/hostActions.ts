@@ -498,6 +498,44 @@ export function getHostPaneControlItems(): LauncherItem[] {
         return { ok: true, keepOpen: true }
       },
     },
+    ...getDevtoolsHostItems(),
+    // Pane split / new-pane live only on editor-command-bar & quick-editor-command
+    // (see hostEditorActions). Global launcher should not expose panel controls.
+    ...getHostEditorActionItems(),
+    {
+      systemKey: 'host:view:quick-editor',
+      kind: 'host',
+      display: {
+        title: 'Quick Editor',
+        titleI18n: { zh: '快捷编辑器' },
+        subtitle: 'Open inline editor',
+        subtitleI18n: { zh: '打开内嵌编辑器' },
+        icon: 'SquarePen',
+        aliases: ['quick editor', 'editor', 'scratch', 'scratchpad', 'notepad', '编辑器', '快捷编辑', '记事本', '草稿'],
+      },
+      behavior: { type: 'perform' },
+      surfaces: ['global-launcher'],
+      requiredCapabilities: ['pane-actions'],
+      execute: async () => {
+        // Single-instance rule: if the editor lives in the detached window,
+        // focus it instead of opening the surface.
+        if (await isQuickEditorWindowOpen({ throwOnError: true })) {
+          await showQuickEditorWindow()
+          return { ok: true }
+        }
+        // A closed detached window may have a newer durable draft than this webview.
+        await useQuickEditorStore.persist.rehydrate()
+        useAppStore.getState().openLauncherHostSurface('quick-editor')
+        return { ok: true, keepOpen: true }
+      },
+    },
+  ]
+}
+
+/** The developer console is exposed only in debug builds. */
+function getDevtoolsHostItems(): LauncherItem[] {
+  if (!import.meta.env.DEV) return []
+  return [
     {
       systemKey: 'host:view:devtools',
       kind: 'host',
@@ -539,36 +577,6 @@ export function getHostPaneControlItems(): LauncherItem[] {
           const message = error instanceof Error ? error.message : String(error)
           return { ok: false, message }
         }
-      },
-    },
-    // Pane split / new-pane live only on editor-command-bar & quick-editor-command
-    // (see hostEditorActions). Global launcher should not expose panel controls.
-    ...getHostEditorActionItems(),
-    {
-      systemKey: 'host:view:quick-editor',
-      kind: 'host',
-      display: {
-        title: 'Quick Editor',
-        titleI18n: { zh: '快捷编辑器' },
-        subtitle: 'Open inline editor',
-        subtitleI18n: { zh: '打开内嵌编辑器' },
-        icon: 'SquarePen',
-        aliases: ['quick editor', 'editor', 'scratch', 'scratchpad', 'notepad', '编辑器', '快捷编辑', '记事本', '草稿'],
-      },
-      behavior: { type: 'perform' },
-      surfaces: ['global-launcher'],
-      requiredCapabilities: ['pane-actions'],
-      execute: async () => {
-        // Single-instance rule: if the editor lives in the detached window,
-        // focus it instead of opening the surface.
-        if (await isQuickEditorWindowOpen({ throwOnError: true })) {
-          await showQuickEditorWindow()
-          return { ok: true }
-        }
-        // A closed detached window may have a newer durable draft than this webview.
-        await useQuickEditorStore.persist.rehydrate()
-        useAppStore.getState().openLauncherHostSurface('quick-editor')
-        return { ok: true, keepOpen: true }
       },
     },
   ]
