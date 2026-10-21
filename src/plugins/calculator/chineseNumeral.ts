@@ -73,8 +73,9 @@ export function parseChineseNumeralQuery(query: string): ChineseNumeralResult | 
   const input = query.trim()
   const money = input.match(/^(?:金额大写|人民币大写|人民币|RMB|CNY|¥|￥)\s*(.+?)(?:\s*元)?(?:\s*大写)?$/i)
     ?? input.match(/^(.+?)\s*元\s*大写$/)
-  if (money) return formatChineseNumeral(money[1].trim(), 'money')
+  // Only claim the query when an amount is present (RMB to USD, 文本转大写 are someone else's).
+  if (money) return /\d/.test(money[1]) ? formatChineseNumeral(money[1].trim(), 'money') : null
   const integer = input.match(/^(?:数字大写|中文大写|大写)\s*(.+)$/)
     ?? input.match(/^(.+?)\s*(?:数字大写|中文大写|大写)$/)
-  return integer ? formatChineseNumeral(integer[1].trim(), 'integer') : null
+  return integer && /\d/.test(integer[1]) ? formatChineseNumeral(integer[1].trim(), 'integer') : null
 }

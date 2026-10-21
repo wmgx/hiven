@@ -37,6 +37,20 @@ for (const [prefix, power] of [['K', 1], ['M', 2], ['G', 3], ['T', 4]] as const)
   add('data', `${prefix}ib`, iec.toFixed())
 }
 
+/**
+ * Exact symbols win (B ≠ b). Otherwise match case-insensitively; when several data units differ only by
+ * case (mb: Mb / MB), the byte form is used since that is how people type it.
+ */
+function findUnit(token: string): Unit | undefined {
+  const exact = units.get(token)
+  if (exact) return exact
+  const lower = token.toLowerCase()
+  const matches = new Set<Unit>()
+  for (const [key, unit] of units) if (key.toLowerCase() === lower) matches.add(unit)
+  if (matches.size <= 1) return [...matches][0]
+  return [...matches].find((unit) => unit.symbol.endsWith('B'))
+}
+
 export type UnitConversion =
   | { ok: true; value: string; unit: string; text: string; approximate: boolean; dimension: Dimension }
   | { ok: false; error: 'dimension' | 'unit' | 'range' }
@@ -46,8 +60,8 @@ export function convertUnitQuery(query: string): UnitConversion | null {
   if (query.length > 180) return null
   const match = query.trim().match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)\s*([A-Za-z\u4e00-\u9fff]+?)\s*(?:\s+(?:to|in)\s+|->|→|换算为|转为|转|到)\s*([A-Za-z\u4e00-\u9fff]+)$/)
   if (!match) return null
-  const source = units.get(match[2])
-  const target = units.get(match[3])
+  const source = findUnit(match[2])
+  const target = findUnit(match[3])
   // Do not claim unrelated natural-language or currency queries.
   if (!source && !target) return null
   if (!source || !target) return { ok: false, error: 'unit' }

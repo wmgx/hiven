@@ -33,7 +33,11 @@ check('1米转厘米', '100 cm')
 check('2 公斤换算为磅', '4.4092452437 lb', true)
 assert.deepEqual(convertUnitQuery('1 m to kg'), { ok: false, error: 'dimension' })
 assert.deepEqual(convertUnitQuery('1 KB to kb'), { ok: true, value: '8', unit: 'Kb', text: '8 Kb', approximate: false, dimension: 'data' })
-for (const query of ['1 mb to MB', '1 KIB to B', '1 B to bytesx', '1 M to cm']) {
+check('1 mb to MB', '1 MB')
+check('1 KIB to B', '1024 B')
+check('10 KM to m', '10000 m')
+check('10 Kg to g', '10000 g')
+for (const query of ['1 B to bytesx']) {
   assert.deepEqual(convertUnitQuery(query), { ok: false, error: 'unit' }, query)
 }
 for (const query of ['1e31 m to cm', '1e-31 kg to g', '1e9999 B to b']) {

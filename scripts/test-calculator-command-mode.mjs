@@ -53,38 +53,31 @@ const calculateExpression = vm.runInContext('calculateExpression', context)
 const calculateValue = vm.runInContext('calculateValue', context)
 
 const plugin = module.exports.default
-const command = plugin.commands?.find((item) => item.id === 'calculator.run')
-const sumCommand = plugin.commands?.find((item) => item.id === 'calculator.sum')
-assert.ok(command, 'calculator should expose calculator.run command mode')
-assert.ok(sumCommand, 'calculator should expose calculator.sum command mode')
-assert.equal(
-  command.inputs?.some((input) => input.key === 'input' && input.kind === 'text' && input.required),
-  true,
-  'calculator command should accept the active editor text as input',
-)
-assert.equal(command.inputResolution?.strategy, 'use-active', 'calculator command should use the active editor by default')
-assert.equal(command.inputResolution?.fallback, 'fail', 'calculator command should fail when active editor input is unavailable')
+assert.equal(plugin.commands, undefined, 'legacy commands adapter is gone')
+const command = plugin.tools?.find((item) => item.id === 'calculator.run')
+const sumCommand = plugin.tools?.find((item) => item.id === 'calculator.sum')
+assert.ok(command, 'calculator should expose calculator.run tool')
+assert.ok(sumCommand, 'calculator should expose calculator.sum tool')
 
-async function runCalculatorCommand(text) {
-  const result = await command.run({
-    inputs: { input: { kind: 'text', text, paneId: 'pane-test' } },
+function toolContext(text) {
+  return {
+    input: { text, source: 'all' },
     params: {},
-  })
-  if (result.output) return result.output.text
-  const replace = result.effects?.find((effect) => effect.type === 'text.replace')
-  assert.ok(replace, 'calculator command should return text output or legacy text.replace')
-  return replace.text
+    t: (key) => key,
+    // No panel host in this harness: the tool falls back to plain text output.
+    api: { dispatchEffects: () => ({ errors: ['no panel host'] }) },
+    output: {
+      text: (value) => ({ kind: 'text', text: value }),
+      replaceActiveText: (value) => ({ kind: 'text', text: value }),
+      error: (value) => ({ kind: 'error', text: value }),
+    },
+  }
 }
-
+async function runCalculatorCommand(text) {
+  return (await command.run(toolContext(text))).text
+}
 async function runSumCommand(text) {
-  const result = await sumCommand.run({
-    inputs: { input: { kind: 'text', text, paneId: 'pane-test' } },
-    params: {},
-  })
-  if (result.output) return result.output.text
-  const replace = result.effects?.find((effect) => effect.type === 'text.replace')
-  assert.ok(replace, 'calculator sum command should return text output or legacy text.replace')
-  return replace.text
+  return (await sumCommand.run(toolContext(text))).text
 }
 
 assert.equal(
@@ -182,5 +175,14 @@ for (const query of ['金额大写 1.001', '0b102', 'thousands 1,234', '千分�
 }
 assert.equal(plugin.launcher.dynamicItems({ ...unitContext, query: '12345' }).length, 0, 'plain numbers are not claimed')
 assert.equal(plugin.launcher.dynamicItems({ ...unitContext, query: '12+4' })[0].id, 'calc-result', 'ordinary calculation unchanged')
+
+// Unclear intent must not pin an error; dates / phones are not formulas; tiny results keep their digits.
+for (const query of ['RMB to USD', '文本转大写', 'cnyx', '2024-01-15', '010-12345678', '1-2-3']) {
+  assert.equal(plugin.launcher.dynamicItems({ ...unitContext, query }).length, 0, `${query} is not a calculator answer`)
+}
+assert.equal(plugin.launcher.dynamicItems({ ...unitContext, query: '5-3' })[0].display.title, '5-3 = 2')
+assert.equal(calculateExpression('0.00000000005*1'), '0.00000000005')
+assert.equal(plugin.launcher.dynamicItems({ ...unitContext, query: '10 KM to m' })[0].display.title, '10 KM to m = 10000 m')
+assert.equal(plugin.launcher.dynamicItems({ ...unitContext, query: '5 mb to KB' })[0].display.title, '5 mb to KB = 5000 KB')
 
 console.log('calculator command mode checks passed')
