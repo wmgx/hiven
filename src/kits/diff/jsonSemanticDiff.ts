@@ -117,11 +117,8 @@ export function normalizeJson(value: JsonValue, _options: JsonDiffOptions = {}):
   }
 
   const sortedKeys = Object.keys(value).sort()
-  const result: Record<string, JsonValue> = {}
-  for (const key of sortedKeys) {
-    result[key] = normalizeJson(value[key], _options)
-  }
-  return result
+  // fromEntries defines own properties, so a "__proto__" key is kept instead of hitting the setter.
+  return Object.fromEntries(sortedKeys.map((key) => [key, normalizeJson(value[key], _options)]))
 }
 
 export function stableStringify(value: JsonValue, options: JsonDiffOptions = {}): string {
@@ -153,11 +150,7 @@ function normalizeJsonForDisplay(value: JsonValue): JsonValue {
     return value.map((item) => normalizeJsonForDisplay(item))
   }
   const valueObj = value as Record<string, JsonValue>
-  const result: Record<string, JsonValue> = {}
-  for (const key of Object.keys(valueObj)) {
-    result[key] = normalizeJsonForDisplay(valueObj[key])
-  }
-  return result
+  return Object.fromEntries(Object.keys(valueObj).map((key) => [key, normalizeJsonForDisplay(valueObj[key])]))
 }
 
 // ─── Diff (object: by key; array: by index) ─────────────────────────────────
@@ -220,8 +213,8 @@ export function computeJsonDiff(
 
     for (const key of [...allKeys].sort()) {
       const childPath = path ? `${path}.${key}` : `$.${key}`
-      const inOrig = key in origObj
-      const inMod = key in modObj
+      const inOrig = Object.hasOwn(origObj, key)
+      const inMod = Object.hasOwn(modObj, key)
 
       if (inOrig && !inMod) {
         changes.push({ kind: 'removed', path: childPath, oldValue: origObj[key] })
@@ -333,8 +326,8 @@ export function buildDiffTree(
     let hasChanges = false
 
     for (const key of allKeys) {
-      const inOrig = key in orig
-      const inMod = key in mod
+      const inOrig = Object.hasOwn(orig, key)
+      const inMod = Object.hasOwn(mod, key)
       let node: DiffTreeNode
 
       if (inOrig && !inMod) {
@@ -350,10 +343,10 @@ export function buildDiffTree(
       nodeMap.set(key, node)
     }
 
-    const origOnlyInMod = modKeys.filter((k) => !(k in orig))
+    const origOnlyInMod = modKeys.filter((k) => !Object.hasOwn(orig, k))
     const entries = [...origKeys, ...origOnlyInMod].map((k) => ({ key: k, node: nodeMap.get(k)! }))
 
-    const modOnlyInOrig = origKeys.filter((k) => !(k in mod))
+    const modOnlyInOrig = origKeys.filter((k) => !Object.hasOwn(mod, k))
     const modEntries = [...modKeys, ...modOnlyInOrig].map((k) => ({ key: k, node: nodeMap.get(k)! }))
 
     return { type: 'object', entries, modEntries, hasChanges }

@@ -18,6 +18,7 @@ import {
   buildWebQuickOpenUrl,
   DEFAULT_MAX_QUERY_HISTORY,
   DEFAULT_WEB_QUICK_OPEN_SETTINGS,
+  LEGACY_DEFAULT_ENTRY_TEXT,
   type WebQuickOpenEntry,
   type WebQuickOpenSettings,
 } from './settings/model'
@@ -26,6 +27,7 @@ import { FaviconCacheModal } from './settings/FaviconCacheModal'
 import {
   extractDomain,
   getFaviconIconSync,
+  registerKnownFaviconDomains,
   resolveFaviconIconForLauncher,
   warmFaviconDomains,
   FALLBACK_ICON,
@@ -65,7 +67,7 @@ type RuleContext = Pick<LauncherExecutionContext<WebQuickOpenSettings>, 'setting
 
 function currentRule(ctx: RuleContext, selected: WebQuickOpenEntry): WebQuickOpenEntry | null {
   if (ctx.settings?.enabled === false) return null
-  const current = configuredEntries(ctx.settings).find((entry) => entry.id === selected.id)
+  const current = configuredEntries(ctx.settings).find((entry) => entry.id === selected.id && !isAutoLearnedEntry(entry))
   // A retained button must never silently switch targets after a settings edit.
   return current && current.urlTemplate === selected.urlTemplate && current.encodeQuery === selected.encodeQuery
     ? current
@@ -165,6 +167,7 @@ function domainsFromSettings(settings: WebQuickOpenSettings): string[] {
     const domain = extractDomain(entry.urlTemplate)
     if (domain) domains.push(domain)
   }
+  registerKnownFaviconDomains(domains)
   return domains
 }
 
@@ -252,9 +255,10 @@ function resolveLauncherIcon(
 async function buildDynamicLauncherItems(ctx: LauncherDynamicContext): Promise<LauncherItemContribution[]> {
   const settings = ctx.settings as WebQuickOpenSettings | undefined
   if (settings?.enabled === false) return []
-  const entries = configuredEntries(settings)
+  const entries = configuredEntries(settings).filter((entry) => !isAutoLearnedEntry(entry))
   const query = ctx.query.trim()
   if (!query) return []
+  registerKnownFaviconDomains(entries.map((entry) => extractDomain(entry.urlTemplate)))
 
   // Replace compiled matchPattern cache with current settings (supports pattern replacement).
   replaceMatchPatternCache(
@@ -269,7 +273,7 @@ async function buildDynamicLauncherItems(ctx: LauncherDynamicContext): Promise<L
   // Favicon uses plugin-internal memory/kv cache; network warm is non-blocking.
   for (const configuredEntry of entries) {
     const entry = { ...configuredEntry }
-    if (!entry.matchPattern) continue
+    if (isAutoLearnedEntry(entry) || !entry.matchPattern) continue
     if (!testMatchPattern(entry.matchPattern, query)) continue
 
     const url = buildWebQuickOpenUrl(entry.urlTemplate, query, entry.encodeQuery)
@@ -331,17 +335,25 @@ function migrateWebQuickOpenSettings(stored: unknown): WebQuickOpenSettings {
     : {}
   const entries = Array.isArray(value.entries) ? value.entries : DEFAULT_WEB_QUICK_OPEN_SETTINGS.entries
   const migrated: WebQuickOpenSettings = {
+    // Keep unrelated fields (notably `browser` connection settings) across versions.
+    ...value,
     enabled: typeof value.enabled === 'boolean' ? value.enabled : DEFAULT_WEB_QUICK_OPEN_SETTINGS.enabled,
     entries: entries
       .map((entry, index): WebQuickOpenEntry => {
         const source = entry && typeof entry === 'object' && !Array.isArray(entry)
           ? entry as Partial<WebQuickOpenSettings['entries'][number]>
           : {}
+        const id = String(source.id || 'web-' + (index + 1))
+        const legacy = LEGACY_DEFAULT_ENTRY_TEXT[id]
+        const defaults = DEFAULT_WEB_QUICK_OPEN_SETTINGS.entries.find((candidate) => candidate.id === id)
+        const title = String(source.title || '')
+        const placeholder = String(source.placeholder || '')
         return {
-          id: String(source.id || 'web-' + (index + 1)),
-          title: String(source.title || ''),
+          id,
+          // Built-in rules saved with the old Chinese texts follow the locale keys again.
+          title: legacy && defaults && title === legacy.title ? defaults.title : title,
           aliases: Array.isArray(source.aliases) ? source.aliases.map(String) : [],
-          placeholder: String(source.placeholder || ''),
+          placeholder: legacy && defaults && placeholder === legacy.placeholder ? defaults.placeholder : placeholder,
           urlTemplate: String(source.urlTemplate || 'https://example.com/search?q={query}'),
           encodeQuery: typeof source.encodeQuery === 'boolean' ? source.encodeQuery : true,
           emptyQueryBehavior: source.emptyQueryBehavior === 'open' ? 'open' : 'block',
@@ -426,7 +438,7 @@ export default definePlugin<WebQuickOpenSettings>({
     // Matches the plugin's displayName (manifest.json) — one identity, one name.
     title: 'Browser',
     titleI18n: { zh: '浏览器' },
-    version: 9,
+    version: 10,
     defaultValue: DEFAULT_WEB_QUICK_OPEN_SETTINGS,
     migrate: migrateWebQuickOpenSettings,
     // Settings write-through: re-warm domains when rules / URL templates change.
@@ -536,8 +548,8 @@ export default definePlugin<WebQuickOpenSettings>({
                   key: 'urlTemplate',
                   label: 'Address template',
                   labelI18n: { zh: '地址模板' },
-                  description: 'Use {query}, {clipboard}',
-                  descriptionI18n: { zh: '可用 {query}、{clipboard}' },
+                  description: 'Use {query}',
+                  descriptionI18n: { zh: '可用 {query}' },
                   placeholder: 'https://www.google.com/search?q={query}',
                   placeholderI18n: { zh: 'https://www.google.com/search?q={query}' },
                   mono: true,

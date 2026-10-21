@@ -80,6 +80,7 @@ const webOpen = loadModule('src/plugins/web-open/index.tsx', {
       }
     },
     resolveFaviconIconForLauncher: () => 'Globe',
+    registerKnownFaviconDomains: () => {},
     getFaviconIconSync: () => 'Globe',
     FALLBACK_ICON: 'Globe',
     replaceMatchPatternCache: matchPatternCache.replaceMatchPatternCache,
@@ -249,6 +250,10 @@ const disabledItems = definition.launcher.dynamicItems({
   settings: { ...settings, enabled: false },
 })
 assert.equal((await disabledItems).length, 0, 'disabled web-open settings should suppress dynamic quick-open items')
+
+// Migration keeps unrelated fields such as the browser connection settings
+const migrated = definition.settings.migrate({ enabled: true, entries: [], browser: { enabled: true, historySearchDays: 3 } })
+assert.deepEqual(migrated.browser, { enabled: true, historySearchDays: 3 }, 'migrate must keep the browser field')
 
 // Settings exposes favicon cache modal
 assert.ok(definition.settings?.modals?.some((m) => m.id === 'favicon-cache'), 'settings should declare favicon-cache modal')

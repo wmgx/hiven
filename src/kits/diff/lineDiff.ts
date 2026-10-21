@@ -14,7 +14,7 @@ export type TextLineDiffHunk = {
   rightLines: number[]
 }
 
-const MAX_LINES = 4000 // skip detailed diff for very large files
+const MAX_LINES = 2000 // changed region above this falls back to positional comparison
 
 function lcsOps(orig: string[], mod: string[]): Op[] {
   const n = orig.length
@@ -49,6 +49,35 @@ function lcsOps(orig: string[], mod: string[]): Op[] {
   return ops.reverse()
 }
 
+/** Trim the common prefix/suffix first so the quadratic table only covers the changed region. */
+function diffOps(orig: string[], mod: string[]): Op[] {
+  let start = 0
+  const minLength = Math.min(orig.length, mod.length)
+  while (start < minLength && orig[start] === mod[start]) start++
+  let end = 0
+  while (end < minLength - start && orig[orig.length - 1 - end] === mod[mod.length - 1 - end]) end++
+
+  const midOrig = orig.slice(start, orig.length - end)
+  const midMod = mod.slice(start, mod.length - end)
+  const mid = midOrig.length > MAX_LINES || midMod.length > MAX_LINES
+    ? positionalOps(midOrig, midMod)
+    : lcsOps(midOrig, midMod)
+  return [...Array<Op>(start).fill('equal'), ...mid, ...Array<Op>(end).fill('equal')]
+}
+
+/** Coarse fallback for huge changed regions: compare line by line at the same index. */
+function positionalOps(orig: string[], mod: string[]): Op[] {
+  const ops: Op[] = []
+  const shared = Math.min(orig.length, mod.length)
+  for (let k = 0; k < shared; k++) {
+    if (orig[k] === mod[k]) ops.push('equal')
+    else ops.push('delete', 'insert')
+  }
+  for (let k = shared; k < orig.length; k++) ops.push('delete')
+  for (let k = shared; k < mod.length; k++) ops.push('insert')
+  return ops
+}
+
 export function computeTextLineDiff(
   origText: string,
   modText: string,
@@ -61,37 +90,7 @@ export function computeTextLineDiff(
   const hunks: TextLineDiffHunk[] = []
   const validLine = (line: number, count: number) => Math.max(1, Math.min(line, count))
 
-  // For huge files, highlight everything that differs at a coarse level
-  if (orig.length > MAX_LINES || mod.length > MAX_LINES) {
-    const limit = Math.max(orig.length, mod.length)
-    let active: TextLineDiffHunk | null = null
-    for (let k = 1; k <= limit; k++) {
-      if (orig[k - 1] !== mod[k - 1]) {
-        if (!active) {
-          active = {
-            leftLine: validLine(k, orig.length),
-            rightLine: validLine(k, mod.length),
-            leftLines: [],
-            rightLines: [],
-          }
-          hunks.push(active)
-        }
-        if (k <= orig.length) {
-          leftHighlights.push(k)
-          active.leftLines.push(k)
-        }
-        if (k <= mod.length) {
-          rightHighlights.push(k)
-          active.rightLines.push(k)
-        }
-      } else {
-        active = null
-      }
-    }
-    return { leftHighlights, rightHighlights, hunks }
-  }
-
-  const ops = lcsOps(orig, mod)
+  const ops = diffOps(orig, mod)
   let l = 1, r = 1
   let active: TextLineDiffHunk | null = null
 

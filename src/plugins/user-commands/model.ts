@@ -9,8 +9,6 @@ export type UserCommandEntry = {
   timeoutMs?: number
   aliases?: string[]
   enabled?: boolean
-  /** Always true for safety in v1 UI; kept for future “trusted” opt-in. */
-  requireConfirm?: boolean
 }
 
 export type UserCommandsSettings = {
@@ -20,18 +18,11 @@ export type UserCommandsSettings = {
 
 export const DEFAULT_USER_COMMANDS_SETTINGS: UserCommandsSettings = {
   enabled: true,
-  commands: [
-    {
-      id: 'echo-hello',
-      title: 'Echo hello',
-      command: 'echo "hello from hiven"',
-      aliases: ['echo', 'hello'],
-      enabled: true,
-      requireConfirm: true,
-      timeoutMs: 10_000,
-    },
-  ],
+  commands: [],
 }
+
+/** The demo command older versions shipped to everyone; dropped only while unmodified. */
+const LEGACY_DEMO_COMMAND = 'echo "hello from hiven"'
 
 export function normalizeUserCommandsSettings(raw: unknown): UserCommandsSettings {
   if (!raw || typeof raw !== 'object') return DEFAULT_USER_COMMANDS_SETTINGS
@@ -47,12 +38,20 @@ export function normalizeUserCommandsSettings(raw: unknown): UserCommandsSetting
           timeoutMs: typeof c.timeoutMs === 'number' && c.timeoutMs > 0 ? c.timeoutMs : 15_000,
           aliases: Array.isArray(c.aliases) ? c.aliases.map(String) : [],
           enabled: c.enabled !== false,
-          requireConfirm: c.requireConfirm !== false,
         }))
     : DEFAULT_USER_COMMANDS_SETTINGS.commands
   return {
     enabled: r.enabled !== false,
     commands,
+  }
+}
+
+/** Settings migration: normalize, then remove the unmodified legacy demo command. */
+export function migrateUserCommandsSettings(raw: unknown): UserCommandsSettings {
+  const settings = normalizeUserCommandsSettings(raw)
+  return {
+    ...settings,
+    commands: settings.commands.filter((c) => !(c.id === 'echo-hello' && c.command === LEGACY_DEMO_COMMAND)),
   }
 }
 

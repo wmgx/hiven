@@ -1,7 +1,9 @@
 /**
  * CSV Tools pure core: parse → table → transforms → output.
- * No React / host dependencies. No external packages (safe for disk-released plugins).
+ * No React dependency. Lossless JSON comes from the host SDK (see losslessJson.ts).
  */
+
+import { isLosslessMarker, markerText, parseJsonLossless, stringifyJsonLossless } from './losslessJson'
 
 import { filterRowsBySql, filterRowsByText } from './csvSqlFilter'
 import { escapeMarkdownCell } from './markdownCell'
@@ -19,7 +21,7 @@ export type OutputMode =
   | 'markdown'
   | 'sql'
 
-export type JsonStyle = { minify: boolean; indent: 2 | 4 }
+export type JsonStyle = { minify: boolean; indent: 2 | 4; inferTypes?: boolean }
 export type SqlStyle = { tableName: string }
 export type TableTransforms = { dropEmpty: boolean; dedupe: boolean; transpose: boolean }
 
@@ -62,11 +64,27 @@ export function detectInputKind(text: string): 'json' | 'csv' {
   if (!(t.startsWith('[') || t.startsWith('{'))) return 'csv'
   try {
     const value = JSON.parse(t)
-    if (value !== null && typeof value === 'object') return 'json'
-    return 'csv'
+    return value !== null && typeof value === 'object' ? 'json' : 'csv'
   } catch {
-    return 'csv'
+    return parseNdjson(t) ? 'json' : 'csv'
   }
+}
+
+/** Newline-delimited JSON objects (this plugin's own ndjson output). */
+function parseNdjson(text: string): unknown[] | null {
+  const lines = text.split(/\r?\n/).filter((line) => line.trim() !== '')
+  if (lines.length < 2) return null
+  const values: unknown[] = []
+  for (const line of lines) {
+    try {
+      const value = parseJsonLossless(line)
+      if (value === null || typeof value !== 'object' || Array.isArray(value)) return null
+      values.push(value)
+    } catch {
+      return null
+    }
+  }
+  return values
 }
 
 export function resolveDelimiter(mode: DelimiterMode, text: string): string {
@@ -260,6 +278,32 @@ function normalizeHeader(name: string, index: number): string {
   return trimmed || `column_${index + 1}`
 }
 
+/** Repeated names become name_2, name_3 … so no column overwrites another. */
+function uniqueHeaders(headers: string[]): string[] {
+  const taken = new Set(headers)
+  const counts = new Map<string, number>()
+  const seen = new Set<string>()
+  return headers.map((name) => {
+    if (!seen.has(name)) {
+      seen.add(name)
+      return name
+    }
+    let n = counts.get(name) ?? 1
+    let candidate: string
+    do {
+      n += 1
+      candidate = `${name}_${n}`
+    } while (taken.has(candidate) || seen.has(candidate))
+    counts.set(name, n)
+    seen.add(candidate)
+    return candidate
+  })
+}
+
+function normalizeHeaders(row: string[]): string[] {
+  return uniqueHeaders(row.map((h, i) => normalizeHeader(h, i)))
+}
+
 function parseCsvText(
   text: string,
   delimiterMode: DelimiterMode,
@@ -289,7 +333,7 @@ function parseCsvText(
     headerMode === 'first-row' || (headerMode === 'auto' && matrix.length > 1)
 
   if (useHeader) {
-    const headers = (matrix[0] ?? []).map((h, i) => normalizeHeader(h, i))
+    const headers = normalizeHeaders(matrix[0] ?? [])
     const width = matrix.reduce((max, row) => Math.max(max, row.length), headers.length)
     while (headers.length < width) {
       let name = `column_${headers.length + 1}`
@@ -314,48 +358,88 @@ function parseCsvText(
   return { ok: true, kind: 'csv', delimiter, table: { headers, rows } }
 }
 
-function parseJsonArray(text: string, limits?: ParseLimits): ParseResult {
-  let value: unknown
-  try {
-    value = JSON.parse(text)
-  } catch (error) {
-    return { ok: false, message: error instanceof Error ? error.message : String(error) }
-  }
+const JSON_SHAPE_ERROR = 'JSON input must be an array of objects, an array of arrays, or an object'
 
-  if (!Array.isArray(value)) {
-    return { ok: false, message: 'JSON input must be an array of objects' }
-  }
-  if (value.length === 0) {
-    return { ok: true, kind: 'json', table: emptyTable() }
-  }
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
 
-  if (!value.every((item) => item !== null && typeof item === 'object' && !Array.isArray(item))) {
-    return { ok: false, message: 'JSON input must be an array of objects' }
-  }
+function jsonCellText(value: unknown): string {
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'string') return isLosslessMarker(value) ? markerText(value) : value
+  return stringifyJsonLossless(value)
+}
 
-  let objects = value as Array<Record<string, unknown>>
-  if (limits?.maxRows !== undefined && objects.length > limits.maxRows) {
-    objects = objects.slice(0, limits.maxRows)
-  }
-  const headerSet: string[] = []
+function objectsToTable(objects: Array<Record<string, unknown>>): Table {
+  const headers: string[] = []
   const seen = new Set<string>()
   for (const obj of objects) {
     for (const key of Object.keys(obj)) {
       if (!seen.has(key)) {
         seen.add(key)
-        headerSet.push(key)
+        headers.push(key)
       }
     }
   }
   // JSON property names are exact data, including whitespace and empty keys.
-  const headers = headerSet
   const rows = objects.map((obj) => headers.map((h) => {
     const v = Object.prototype.hasOwnProperty.call(obj, h) ? obj[h] : undefined
-    if (v === null || v === undefined) return ''
-    if (typeof v === 'string') return v
-    return JSON.stringify(v)
+    return jsonCellText(v)
   }))
-  return { ok: true, kind: 'json', table: { headers, rows } }
+  return { headers, rows }
+}
+
+/**
+ * Accepts every shape this plugin writes: array of objects (objects), array of
+ * arrays (array), object of arrays (columns), object of objects (keyed),
+ * newline-delimited objects (ndjson) and a single object (one row).
+ */
+function parseJsonArray(text: string, headerMode: HeaderMode = 'auto', limits?: ParseLimits): ParseResult {
+  let value: unknown
+  try {
+    value = parseJsonLossless(text)
+  } catch (error) {
+    const lines = parseNdjson(text)
+    if (!lines) return { ok: false, message: error instanceof Error ? error.message : String(error) }
+    value = lines
+  }
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) return { ok: true, kind: 'json', table: emptyTable() }
+    if (value.every(isPlainObject)) {
+      const objects = limits?.maxRows !== undefined && value.length > limits.maxRows
+        ? value.slice(0, limits.maxRows)
+        : value
+      return { ok: true, kind: 'json', table: objectsToTable(objects) }
+    }
+    if (value.every(Array.isArray)) {
+      const cap = limits?.maxRows === undefined ? undefined : headerMode === 'no-header' ? limits.maxRows : limits.maxRows + 1
+      const matrix = (cap === undefined ? value : value.slice(0, cap))
+        .map((row) => (row as unknown[]).map(jsonCellText))
+      const result = matrixToCsvTable(matrix, ',', headerMode)
+      return result.ok ? { ok: true, kind: 'json', table: result.table } : result
+    }
+    return { ok: false, message: JSON_SHAPE_ERROR }
+  }
+
+  if (!isPlainObject(value)) return { ok: false, message: JSON_SHAPE_ERROR }
+  const entries = Object.entries(value)
+  if (entries.length > 0 && entries.every(([, v]) => Array.isArray(v))) {
+    // columns: { name: [...] }
+    const length = entries.reduce((max, [, v]) => Math.max(max, (v as unknown[]).length), 0)
+    const count = limits?.maxRows === undefined ? length : Math.min(length, limits.maxRows)
+    const rows = Array.from({ length: count }, (_, i) => entries.map(([, v]) => jsonCellText((v as unknown[])[i])))
+    return { ok: true, kind: 'json', table: { headers: entries.map(([k]) => k), rows } }
+  }
+  if (entries.length > 0 && entries.every(([, v]) => isPlainObject(v))) {
+    // keyed: { key: { column: value } }
+    const kept = limits?.maxRows === undefined ? entries : entries.slice(0, limits.maxRows)
+    const inner = objectsToTable(kept.map(([, v]) => v as Record<string, unknown>))
+    const headers = uniqueHeaders(['key', ...inner.headers])
+    const rows = kept.map(([key], i) => [key, ...inner.rows[i]])
+    return { ok: true, kind: 'json', table: { headers, rows } }
+  }
+  return { ok: true, kind: 'json', table: objectsToTable([value]) }
 }
 
 export function parseSource(
@@ -368,7 +452,7 @@ export function parseSource(
     return { ok: true, kind: 'csv', delimiter: ',', table: emptyTable() }
   }
   if (detectInputKind(text) === 'json') {
-    return parseJsonArray(text.trim(), limits)
+    return parseJsonArray(text.trim(), headerMode, limits)
   }
   return parseCsvText(text, delimiterMode, headerMode, limits)
 }
@@ -408,7 +492,7 @@ export function transposeTable(table: Table): Table {
   }
 
   if (transposed.length === 0) return emptyTable()
-  const headers = transposed[0].map((h, i) => normalizeHeader(h, i))
+  const headers = normalizeHeaders(transposed[0])
   const rows = transposed.slice(1).map((row) => {
     const next = row.slice(0, headers.length)
     while (next.length < headers.length) next.push('')
@@ -482,23 +566,36 @@ export function applyTableQuery(table: Table, query: TableQuery = {}): TableQuer
   return { ok: true, table: { headers: columns ?? table.headers, rows }, rowIndexes }
 }
 
-function tableObjects(table: Table): Array<Record<string, string>> {
+const JSON_NUMBER = /^-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?$/
+
+/** Optional type inference for JSON output; numbers keep their exact digits. */
+function typedCell(cell: string, infer: boolean): unknown {
+  if (!infer) return cell
+  if (cell === 'true') return true
+  if (cell === 'false') return false
+  return JSON_NUMBER.test(cell) ? parseJsonLossless(cell) : cell
+}
+
+function tableObjects(table: Table, infer: boolean): Array<Record<string, unknown>> {
   return table.rows.map((row) => {
-    const obj: Record<string, string> = {}
+    const obj: Record<string, unknown> = {}
     table.headers.forEach((header, index) => {
-      obj[header] = row[index] ?? ''
+      obj[header] = typedCell(row[index] ?? '', infer)
     })
     return obj
   })
 }
 
 function jsonStringify(value: unknown, style: JsonStyle): string {
-  if (style.minify) return JSON.stringify(value)
-  return JSON.stringify(value, null, style.indent)
+  if (style.minify) return stringifyJsonLossless(value)
+  return stringifyJsonLossless(value, style.indent)
+}
+
+function typedRows(table: Table, infer: boolean): unknown[][] {
+  return infer ? table.rows.map((row) => row.map((cell) => typedCell(cell, true))) : table.rows
 }
 
 function quoteSqlIdent(name: string): string {
-  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) return name
   return `\`${name.replace(/`/g, '``')}\``
 }
 
@@ -555,17 +652,18 @@ export function toOutput(
   if (mode === 'markdown') return toMarkdown(table)
   if (mode === 'sql') return toSqlInsert(table, sql)
 
-  const objects = tableObjects(table)
+  const infer = style.inferTypes === true
+  const objects = tableObjects(table, infer)
 
   if (mode === 'objects') return jsonStringify(objects, style)
-  if (mode === 'ndjson') return objects.map((obj) => JSON.stringify(obj)).join('\n')
-  if (mode === 'array') return jsonStringify([table.headers, ...table.rows], style)
+  if (mode === 'ndjson') return objects.map((obj) => stringifyJsonLossless(obj)).join('\n')
+  if (mode === 'array') return jsonStringify([table.headers, ...typedRows(table, infer)], style)
   if (mode === 'columns') {
-    const cols: Record<string, string[]> = {}
+    const cols: Record<string, unknown[]> = {}
     for (const header of table.headers) cols[header] = []
     for (const row of table.rows) {
       table.headers.forEach((header, index) => {
-        cols[header].push(row[index] ?? '')
+        cols[header].push(typedCell(row[index] ?? '', infer))
       })
     }
     return jsonStringify(cols, style)
@@ -573,12 +671,12 @@ export function toOutput(
   if (mode === 'keyed') {
     if (table.headers.length === 0) return jsonStringify({}, style)
     const rest = table.headers.slice(1)
-    const result: Record<string, Record<string, string>> = {}
+    const result: Record<string, Record<string, unknown>> = {}
     for (const row of table.rows) {
       const key = row[0] ?? ''
-      const value: Record<string, string> = {}
+      const value: Record<string, unknown> = {}
       rest.forEach((header, index) => {
-        value[header] = row[index + 1] ?? ''
+        value[header] = typedCell(row[index + 1] ?? '', infer)
       })
       result[key] = value
     }
@@ -739,7 +837,7 @@ function matrixToCsvTable(matrix: string[][], delimiter: string, headerMode: Hea
   }
   const useHeader = headerMode === 'first-row' || (headerMode === 'auto' && matrix.length > 1)
   if (useHeader) {
-    const headers = (matrix[0] ?? []).map((h, i) => normalizeHeader(h, i))
+    const headers = normalizeHeaders(matrix[0] ?? [])
     const width = matrix.reduce((max, row) => Math.max(max, row.length), headers.length)
     while (headers.length < width) {
       let name = `column_${headers.length + 1}`
@@ -777,7 +875,7 @@ export async function parseSourceAsync(
     hooks?.onProgress?.({ phase: 'parse', ratio: 0.2 })
     await yieldToMain()
     throwIfAborted(hooks?.signal)
-    const result = parseJsonArray(text.trim())
+    const result = parseJsonArray(text.trim(), headerMode)
     hooks?.onProgress?.({ phase: 'parse', ratio: 0.55 })
     return result
   }
@@ -878,6 +976,7 @@ export async function toOutputAsync(
   hooks?: JobHooks,
 ): Promise<string> {
   throwIfAborted(hooks?.signal)
+  const infer = style.inferTypes === true
   const total = Math.max(table.rows.length, 1)
   const report = async (done: number) => {
     hooks?.onProgress?.({
@@ -941,11 +1040,11 @@ export async function toOutputAsync(
     const parts: string[] = []
     for (let i = 0; i < table.rows.length; i++) {
       const row = table.rows[i]
-      const obj: Record<string, string> = {}
+      const obj: Record<string, unknown> = {}
       table.headers.forEach((h, j) => {
-        obj[h] = row[j] ?? ''
+        obj[h] = typedCell(row[j] ?? '', infer)
       })
-      parts.push((i === 0 ? '' : '\n') + JSON.stringify(obj))
+      parts.push((i === 0 ? '' : '\n') + stringifyJsonLossless(obj))
       await report(i + 1)
     }
     return joinChunks(parts, hooks)
@@ -953,12 +1052,12 @@ export async function toOutputAsync(
 
   // Structured JSON modes — build object/array then stringify with periodic yields while mapping
   if (mode === 'objects') {
-    const objects: Array<Record<string, string>> = []
+    const objects: Array<Record<string, unknown>> = []
     for (let i = 0; i < table.rows.length; i++) {
       const row = table.rows[i]
-      const obj: Record<string, string> = {}
+      const obj: Record<string, unknown> = {}
       table.headers.forEach((h, j) => {
-        obj[h] = row[j] ?? ''
+        obj[h] = typedCell(row[j] ?? '', infer)
       })
       objects.push(obj)
       await report(i + 1)
@@ -973,16 +1072,16 @@ export async function toOutputAsync(
     throwIfAborted(hooks?.signal)
     hooks?.onProgress?.({ phase: 'output', ratio: 0.9 })
     await yieldToMain()
-    return jsonStringify([table.headers, ...table.rows], style)
+    return jsonStringify([table.headers, ...typedRows(table, infer)], style)
   }
 
   if (mode === 'columns') {
-    const cols: Record<string, string[]> = {}
+    const cols: Record<string, unknown[]> = {}
     for (const header of table.headers) cols[header] = []
     for (let i = 0; i < table.rows.length; i++) {
       const row = table.rows[i]
       table.headers.forEach((header, index) => {
-        cols[header].push(row[index] ?? '')
+        cols[header].push(typedCell(row[index] ?? '', infer))
       })
       await report(i + 1)
     }
@@ -993,13 +1092,13 @@ export async function toOutputAsync(
   if (mode === 'keyed') {
     if (table.headers.length === 0) return jsonStringify({}, style)
     const rest = table.headers.slice(1)
-    const result: Record<string, Record<string, string>> = {}
+    const result: Record<string, Record<string, unknown>> = {}
     for (let i = 0; i < table.rows.length; i++) {
       const row = table.rows[i]
       const key = row[0] ?? ''
-      const value: Record<string, string> = {}
+      const value: Record<string, unknown> = {}
       rest.forEach((header, index) => {
-        value[header] = row[index + 1] ?? ''
+        value[header] = typedCell(row[index + 1] ?? '', infer)
       })
       result[key] = value
       await report(i + 1)

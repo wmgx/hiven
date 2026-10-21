@@ -196,5 +196,17 @@ try {
   unicodeMemory.stats.getMany.length = 0
   assert.equal((await unicodeRepo.getPage({ filter: 'trash', query: '中文检索' })).items.some(({ id }) => id === unicode.id), true)
   assert.ok(unicodeMemory.stats.getMany.length > 0, 'trash full-text fallback uses a bounded batch read')
+  // Explicit permanent delete works inside the 30-day window; empty trash clears the rest.
+  const purgeMemory = syntheticHistoryStorage(); const purgeRepo = create(purgeMemory.storage)
+  const purgeA = await purgeRepo.addItem({ kind: 'text', text: 'purge-a', hash: 'purge-a', byteSize: 7 })
+  const purgeB = await purgeRepo.addItem({ kind: 'text', text: 'purge-b', hash: 'purge-b', byteSize: 7 })
+  await purgeRepo.deleteItem(purgeA.id); await purgeRepo.deleteItem(purgeB.id)
+  assert.equal((await purgeRepo.getRetentionStatus()).trashCount, 2)
+  assert.equal(await purgeRepo.purgeTrashItem(purgeA.id), true)
+  assert.equal(await purgeRepo.restoreItem(purgeA.id), undefined, 'purged record cannot be restored')
+  assert.equal(await purgeRepo.purgeTrashItem(purgeA.id), false)
+  assert.equal((await purgeRepo.emptyTrash()).removedCount, 1)
+  assert.equal((await purgeRepo.getRetentionStatus()).trashCount, 0)
+  assert.equal((await purgeRepo.getPage({ filter: 'trash' })).items.length, 0)
   console.log('History v2: bounded migration/pages/search, legacy protection, UTC calendar retention, recovery, CAS faults/concurrency, and shared image cleanup passed (synthetic only)')
 } finally { Date.now = realNow }

@@ -524,7 +524,13 @@ function cmpValues(cell: string, op: string, value: string | number | null): boo
   return false
 }
 
-function likeMatch(cell: string, pattern: string): boolean {
+const likeRegexCache = new Map<string, RegExp>()
+
+/** Compile each LIKE pattern once; `s` lets % and _ cross line breaks in multi-line cells. */
+function compileLike(pattern: string): RegExp {
+  const cached = likeRegexCache.get(pattern)
+  if (cached) return cached
+  if (likeRegexCache.size > 64) likeRegexCache.clear()
   let re = ''
   for (let i = 0; i < pattern.length; i++) {
     const c = pattern[i]
@@ -532,7 +538,13 @@ function likeMatch(cell: string, pattern: string): boolean {
     else if (c === '_') re += '.'
     else re += c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   }
-  return new RegExp(`^${re}$`, 'i').test(cell)
+  const compiled = new RegExp(`^${re}$`, 'is')
+  likeRegexCache.set(pattern, compiled)
+  return compiled
+}
+
+function likeMatch(cell: string, pattern: string): boolean {
+  return compileLike(pattern).test(cell)
 }
 
 function evalExpr(expr: Expr, row: Row, headers: string[]): boolean {

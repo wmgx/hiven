@@ -1,50 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { getPluginDiffHost, type DiffSource } from '@hiven/plugin-diff'
+import { useCallback, useEffect, useState } from 'react'
+import type { DiffSource } from '@hiven/plugin-diff'
 
 /**
- * Bidirectional Diff source text (text-diff plugin only).
- * - editor-pane (+ paneId): local display + write-through via plugin-diff host
- * - clipboard / empty: local-only snapshot
+ * Local Diff source text (text-diff plugin only). Every source is an imported
+ * snapshot; edits never write back to an editor pane.
  */
 export function useDiffSourceText(source: DiffSource): [string, (text: string) => void] {
-  const { hooks } = getPluginDiffHost()
-  const isBound = source.kind === 'editor-pane' && Boolean(source.paneId)
-  const boundText = hooks.useBoundSourceText(source)
-  const [localText, setLocalText] = useState(boundText)
-  const writeControllerRef = useRef<AbortController | undefined>(undefined)
-  const writeGenerationRef = useRef(0)
-
+  const [text, setText] = useState(source.text ?? '')
   useEffect(() => {
-    setLocalText(boundText)
-  }, [source, boundText])
-
-  useEffect(() => () => {
-    writeGenerationRef.current += 1
-    writeControllerRef.current?.abort()
-    writeControllerRef.current = undefined
-  }, [source.kind, source.paneId, source.origin])
-
-  const setText = useCallback((newText: string) => {
-    setLocalText(newText)
-    if (!isBound) return
-    writeControllerRef.current?.abort()
-    const controller = new AbortController()
-    const generation = ++writeGenerationRef.current
-    writeControllerRef.current = controller
-    hooks.setBoundSourceText(
-      {
-        kind: source.kind,
-        paneId: source.paneId,
-        origin: source.origin,
-        text: source.text,
-      },
-      newText,
-      {
-        signal: controller.signal,
-        isCurrent: () => writeControllerRef.current === controller && writeGenerationRef.current === generation,
-      },
-    )
-  }, [isBound, hooks, source.kind, source.paneId, source.origin, source.text])
-
-  return [localText, setText]
+    setText(source.text ?? '')
+  }, [source])
+  const write = useCallback((next: string) => setText(next), [])
+  return [text, write]
 }

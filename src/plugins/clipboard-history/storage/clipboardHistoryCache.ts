@@ -24,7 +24,7 @@ export function setCachedIndex(index: ClipboardHistoryIndex): void {
   }
 }
 
-/** Clear the cache (e.g. on clearAll). */
+/** Clear the cache. */
 export function clearCachedIndex(): void {
   cachedIndex = null
   for (const listener of listeners) {

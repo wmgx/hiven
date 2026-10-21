@@ -94,3 +94,13 @@ assert.deepEqual(
 )
 
 console.log('text diff navigation logic passed')
+
+{
+  // Changes in the middle of a large file still diff precisely (common prefix/suffix trimmed).
+  const original = Array.from({ length: 3000 }, (_, index) => `Line ${index + 1}`)
+  const modified = [...original]
+  modified[1500] += ' changed'
+  const result = computeTextLineDiff(original.join('\n'), modified.join('\n'))
+  assert.deepEqual(result.leftHighlights, [1501])
+  assert.deepEqual(result.rightHighlights, [1501])
+}

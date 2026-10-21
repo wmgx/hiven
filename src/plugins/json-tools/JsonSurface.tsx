@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import { Button, Checkbox, IconButton, Menu, SegmentedControl, TextEditor, TextInput, getEditorTheme, useImeKeyboard, useToolDeliveryFeedback } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
@@ -19,7 +19,10 @@ type OperationOption = {
   group: string
 }
 
-type ExpressionRun = {
+/** Above this many characters the result is computed on demand instead of on every keystroke. */
+const LIVE_RESULT_LIMIT = 200_000
+
+type ManualRun = {
   signature: string
   result: JsonProcessResult
 }
@@ -42,7 +45,7 @@ export function JsonSurface(props: PluginSurfaceProps) {
   const [indent, setIndent] = useState(2)
   const [shouldSort, setShouldSort] = useState(false)
   const [expression, setExpression] = useState('')
-  const [expressionRun, setExpressionRun] = useState<ExpressionRun | null>(null)
+  const [manualRun, setManualRun] = useState<ManualRun | null>(null)
   const [returning, setReturning] = useState(false)
   const [copying, setCopying] = useState(false)
   const pendingCopiesRef = useRef(0)
@@ -74,7 +77,6 @@ export function JsonSurface(props: PluginSurfaceProps) {
   const operations = useMemo<OperationOption[]>(() => [
     { value: 'format', title: t('operation.format'), group: 'json' },
     { value: 'compact', title: t('operation.compact'), group: 'json' },
-    { value: 'sort', title: t('operation.sort'), group: 'json' },
     { value: 'typescript', title: t('operation.typescript'), group: 'json' },
     { value: 'expression', title: t('operation.expression'), group: 'json' },
     { value: 'yaml-to-json', title: t('operation.yamlToJson'), group: 'yaml' },
@@ -86,12 +88,14 @@ export function JsonSurface(props: PluginSurfaceProps) {
     { value: 'unescape', title: t('operation.unescape'), group: 'string' },
   ], [t])
   const activeGroup = operations.find((item) => item.value === operation)!.group
-  const expressionSignature = `${inputText}\u0000${expression}`
-  const liveResult = useMemo(() => operation === 'expression'
+  const deferredInput = useDeferredValue(inputText)
+  const manualMode = operation === 'expression' || inputText.length > LIVE_RESULT_LIMIT
+  const runSignature = `${operation}\u0000${indent}\u0000${shouldSort}\u0000${operation === 'expression' ? expression : ''}\u0000${inputText}`
+  const liveResult = useMemo(() => manualMode
     ? null
-    : processJson(inputText, { operation, indent, sortKeys: shouldSort }), [indent, inputText, operation, shouldSort])
-  const result = operation === 'expression'
-    ? expressionRun?.signature === expressionSignature ? expressionRun.result : null
+    : processJson(deferredInput, { operation, indent, sortKeys: shouldSort }), [deferredInput, indent, manualMode, operation, shouldSort])
+  const result = manualMode
+    ? manualRun?.signature === runSignature ? manualRun.result : null
     : liveResult
   const delivery = useToolDeliveryFeedback(result, host.deliveryFeedbackOwner)
   const outputText = result?.ok ? result.output : ''
@@ -123,11 +127,12 @@ export function JsonSurface(props: PluginSurfaceProps) {
     })
   }
 
-  const runExpression = () => {
-    if (!inputText.trim() || !expression.trim()) return
-    updateResult(() => setExpressionRun({
-      signature: expressionSignature,
-      result: processJson(inputText, { operation: 'expression', expression }),
+  const runManual = () => {
+    if (!inputText.trim()) return
+    if (operation === 'expression' && !expression.trim()) return
+    updateResult(() => setManualRun({
+      signature: runSignature,
+      result: processJson(inputText, { operation, indent, sortKeys: shouldSort, expression }),
     }))
   }
 
@@ -232,14 +237,14 @@ export function JsonSurface(props: PluginSurfaceProps) {
               onChange={(event) => updateResult(() => setExpression(event.currentTarget.value))}
               onKeyDown={(event) => {
                 if (expressionIme.shouldIgnoreKeyDown(event)) return
-                if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) runExpression()
+                if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) runManual()
               }}
             />
             <Button
               type="button"
               variant="primary"
               disabled={!inputText.trim() || !expression.trim()}
-              onClick={runExpression}
+              onClick={runManual}
             >
               {t('action.run')}
             </Button>
@@ -294,6 +299,14 @@ export function JsonSurface(props: PluginSurfaceProps) {
             <div className="jt-pane-header">
               <strong>{t('pane.output')}</strong>
               <div className="jt-pane-actions">
+                {manualMode && operation !== 'expression' ? (
+                  <>
+                    {!result ? <span className="jt-status-count">{t('surface.manualHint')}</span> : null}
+                    <Button type="button" variant="primary" disabled={!inputText.trim()} onClick={runManual}>
+                      {t('action.run')}
+                    </Button>
+                  </>
+                ) : null}
                 <Button type="button" onClick={() => void deliverOutput('copy')} disabled={!hasOutput || returning || copying}>
                   {t('action.copy')}
                 </Button>

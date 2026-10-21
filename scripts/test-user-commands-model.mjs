@@ -36,7 +36,13 @@ const settings = model.normalizeUserCommandsSettings({
 const enabled = model.enabledUserCommands(settings)
 assert.equal(enabled.length, 1)
 assert.equal(enabled[0].id, '1')
-assert.equal(enabled[0].requireConfirm, true)
+assert.equal('requireConfirm' in enabled[0], false)
+assert.equal(model.DEFAULT_USER_COMMANDS_SETTINGS.commands.length, 0)
+const migrated = model.migrateUserCommandsSettings({ enabled: true, commands: [
+  { id: 'echo-hello', title: 'Echo hello', command: 'echo "hello from hiven"' },
+  { id: 'echo-hello-2', title: 'Mine', command: 'echo mine' },
+] })
+assert.equal(migrated.commands.map((c) => c.id).join(), 'echo-hello-2')
 
 const manifest = JSON.parse(readFileSync('src/plugins/user-commands/manifest.json', 'utf8'))
 assert.ok(manifest.permissions.includes('shell.run'))

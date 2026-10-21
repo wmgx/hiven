@@ -181,7 +181,7 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
     invalidateSourceReads()
   }, [invalidateCopy, invalidateSourceReads])
   useLayoutEffect(() => host.subscribeLeaveIntent?.(leaveSurface), [host.subscribeLeaveIntent, leaveSurface])
-  const [diffMode, setDiffMode] = useState<DiffMode>(payload.mode ?? (surfaceId === 'json' ? 'json' : 'text'))
+  const [diffMode, setDiffMode] = useState<DiffMode>(payload.mode ?? 'text')
 
   const sourceOptions = payload.sources?.length ? payload.sources : [
     asDiffSource({ sourceId: 'clipboard', kind: 'clipboard', title: t('choice.clipboard') }, 'clipboard'),
@@ -208,7 +208,6 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [originalText, modifiedText])
 
-  const liveJson = useMemo(() => [parseJson(originalText), parseJson(modifiedText)], [originalText, modifiedText, parseJson])
   const jsonPair = useMemo(() => [parseJson(debouncedOriginal), parseJson(debouncedModified)], [debouncedOriginal, debouncedModified, parseJson])
   const jsonAvailable = jsonPair.every(side => side.ok)
 
@@ -264,8 +263,8 @@ export function TextDiffSurface({ t, appearance, host, initialText, surfaceId }:
 
   const canFormat = useMemo(() => {
     if (diffMode !== 'json') return false
-    return liveJson.some(side => side.ok)
-  }, [liveJson, diffMode])
+    return jsonPair.some(side => side.ok)
+  }, [jsonPair, diffMode])
 
   const handleDetach = useCallback(() => {
     leaveSurface()

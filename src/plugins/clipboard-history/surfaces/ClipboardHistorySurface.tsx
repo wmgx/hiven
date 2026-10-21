@@ -82,6 +82,15 @@ import {
   type ClipboardHistoryShortcutFocus,
 } from './clipboardHistoryShortcuts'
 
+const HISTORY_PAGE_SIZE = 100
+const LOAD_MORE_THRESHOLD_ROWS = 12
+
+function appendNewItems(existing: ClipboardHistoryItem[], incoming: ClipboardHistoryItem[]): ClipboardHistoryItem[] {
+  if (existing.length === 0) return incoming
+  const seen = new Set(existing.map((item) => item.id))
+  return [...existing, ...incoming.filter((item) => !seen.has(item.id))]
+}
+
 type FilterKind = 'all' | 'text' | 'image' | 'files' | 'frequent' | 'favorite' | 'trash'
 type SurfaceStorage = PluginSurfaceProps<ClipboardHistorySettings>['host']['storage']
 
@@ -117,7 +126,6 @@ type AppliedHistorySearch = {
   query: string
   matchMode: ClipboardHistorySearchMatchMode
   filter: FilterKind
-  pageIndex: number
 }
 
 type ClipboardHistoryMatchNavigator = {
@@ -600,24 +608,23 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }, [queueApi, queueCancelling, host, t])
 
   const [refreshEpoch, setRefreshEpoch] = useState(0)
-  const [pagePath, setPagePath] = useState<{ key: string; cursors: (string | undefined)[] }>({ key: '', cursors: [undefined] })
   const [nextCursor, setNextCursor] = useState<string | undefined>()
+  /** Pages already appended to the list; a refresh re-reads this many so scrolling is not lost. */
+  const pagesLoadedRef = useRef(1)
+  const loadMoreAbortRef = useRef<AbortController | null>(null)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [loadMoreFailed, setLoadMoreFailed] = useState(false)
   const [scannedCount, setScannedCount] = useState(0)
   const [retentionStatus, setRetentionStatus] = useState<{ legacyProtectedCount: number; trashCount: number; migrationComplete: boolean } | null>(null)
   const [legacyDialog, setLegacyDialog] = useState(false)
+  const [emptyTrashDialog, setEmptyTrashDialog] = useState(false)
   const [retentionBusy, setRetentionBusy] = useState(false)
   const desiredQuery = query.trim()
   const desiredFilter: FilterKind = combining ? 'text' : filter
   const criteriaKey = JSON.stringify([
     desiredQuery, searchMatchMode, desiredFilter, frequentThreshold, copiedSince ?? null,
   ])
-  const cursors = useMemo(
-    () => pagePath.key === criteriaKey ? pagePath.cursors : [undefined],
-    [criteriaKey, pagePath],
-  )
-  const pageCursor = cursors.at(-1)
-  const pageIndex = cursors.length - 1
-  const requestKey = JSON.stringify([criteriaKey, pageCursor ?? null, pageIndex])
+  const requestKey = JSON.stringify([criteriaKey])
   const searchPresentation = getClipboardHistorySearchPresentation({
     desiredKey: requestKey,
     appliedKey: appliedSearch?.key,
@@ -629,7 +636,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const appliedQuery = appliedSearch?.query ?? ''
   const appliedSearchMatchMode = appliedSearch?.matchMode ?? 'literal'
   const appliedFilter = appliedSearch?.filter ?? desiredFilter
-  const appliedPageIndex = appliedSearch?.pageIndex ?? 0
   const pageGeneration = useRef(0)
   const lastSettledCriteriaKeyRef = useRef<string | undefined>(undefined)
   const lastRequestedCriteriaKeyRef = useRef<string | undefined>(undefined)
@@ -638,15 +644,17 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     quickEditorLifecycle.cancel()
   }, [requestKey, refreshEpoch, copyLifecycle, quickEditorLifecycle])
   const refreshPage = useCallback(() => {
+    setLoadMoreFailed(false)
     setFullTextSearchState('loading')
     setScannedCount(0)
     setRefreshEpoch((value) => value + 1)
   }, [])
   const clearPage = useCallback(() => {
     pageGeneration.current += 1
+    pagesLoadedRef.current = 1
+    setLoadMoreFailed(false)
     setFullTextSearchState('loading')
     setScannedCount(0)
-    setPagePath({ key: '', cursors: [undefined] })
     setRefreshEpoch((value) => value + 1)
   }, [])
   const syncLocalDay = useCallback(() => {
@@ -680,21 +688,12 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     resetPage()
     setTimeRange(value as ClipboardHistoryTimeRange)
   }, [filter, resetPage])
-  const changePage = useCallback((direction: 'previous' | 'next') => {
-    if (resultsActionBlocked) return
-    if (syncLocalDay()) {
-      clearPage()
-      return
-    }
-    setFullTextSearchState('loading')
-    setScannedCount(0)
-    if (direction === 'previous') setPagePath({ key: criteriaKey, cursors: cursors.slice(0, -1) })
-    else if (nextCursor) setPagePath({ key: criteriaKey, cursors: [...cursors, nextCursor] })
-  }, [clearPage, criteriaKey, cursors, nextCursor, resultsActionBlocked, syncLocalDay])
-
   useLayoutEffect(() => {
     const generation = ++pageGeneration.current
     suspendPointerHover()
+    loadMoreAbortRef.current?.abort()
+    loadMoreAbortRef.current = null
+    setLoadingMore(false)
     const controller = new AbortController()
     const owner = host.deliveryFeedbackOwner
     const current = () => generation === pageGeneration.current && !controller.signal.aborted && owner?.isCurrent() !== false
@@ -703,8 +702,9 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     const requestedQuery = desiredQuery
     const requestedMatchMode = searchMatchMode
     const requestedFilter = desiredFilter
-    const requestedPageIndex = pageIndex
     const requestedKey = requestKey
+    // A refresh re-reads every page already on screen; new criteria start from the first page.
+    const depth = pagesLoadedRef.current
     const debounceMs = getClipboardHistorySearchDebounceMs(
       lastSettledCriteriaKeyRef.current,
       lastRequestedCriteriaKeyRef.current,
@@ -712,13 +712,27 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     )
     lastRequestedCriteriaKeyRef.current = criteriaKey
     const timer = window.setTimeout(() => {
-      void readMatchingHistoryPage((cursor) => repository.getPage({
-        query: requestedQuery, matchMode: requestedMatchMode,
-        filter: requestedFilter === 'favorite' ? 'favorites' : requestedFilter,
-        frequentThreshold, copiedSince, cursor, limit: 100, signal: controller.signal,
-      }), pageCursor, controller.signal, (count) => { if (current()) setScannedCount(count) })
+      void (async () => {
+        let cursor: string | undefined
+        let loaded: ClipboardHistoryItem[] = []
+        let pages = 0
+        let scanned = 0
+        do {
+          const page = await readMatchingHistoryPage((next) => repository.getPage({
+            query: requestedQuery, matchMode: requestedMatchMode,
+            filter: requestedFilter === 'favorite' ? 'favorites' : requestedFilter,
+            frequentThreshold, copiedSince, cursor: next, limit: HISTORY_PAGE_SIZE, signal: controller.signal,
+          }), cursor, controller.signal, (count) => { if (current()) setScannedCount(scanned + count) })
+          scanned += page.scanned
+          loaded = appendNewItems(loaded, page.items)
+          cursor = page.nextCursor
+          pages += 1
+        } while (cursor && pages < depth)
+        return { items: loaded, nextCursor: cursor, pages }
+      })()
         .then((page) => {
           if (!current()) return
+          pagesLoadedRef.current = page.pages
           setItems(page.items)
           setNextCursor(page.nextCursor)
           lastSettledCriteriaKeyRef.current = criteriaKey
@@ -727,7 +741,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
             query: requestedQuery,
             matchMode: requestedMatchMode,
             filter: requestedFilter,
-            pageIndex: requestedPageIndex,
           })
           setSelectedId((selected) => page.items.some((item) => item.id === selected) ? selected : page.items[0]?.id ?? null)
           setFullTextSearchState('idle')
@@ -738,7 +751,35 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     }, debounceMs)
     const unsubscribe = owner?.subscribeInvalidation(() => controller.abort())
     return () => { controller.abort(); window.clearTimeout(timer); unsubscribe?.() }
-  }, [repository, requestKey, pageCursor, pageIndex, refreshEpoch, settings.enabled, host.deliveryFeedbackOwner, suspendPointerHover, desiredQuery, searchMatchMode, desiredFilter, frequentThreshold, copiedSince])
+  }, [repository, requestKey, criteriaKey, refreshEpoch, settings.enabled, host.deliveryFeedbackOwner, suspendPointerHover, desiredQuery, searchMatchMode, desiredFilter, frequentThreshold, copiedSince])
+
+  const loadMore = useCallback(() => {
+    if (!nextCursor || loadMoreAbortRef.current || fullTextSearchState !== 'idle' || resultsActionBlocked) return
+    const generation = pageGeneration.current
+    const owner = host.deliveryFeedbackOwner
+    const controller = new AbortController()
+    loadMoreAbortRef.current = controller
+    setLoadingMore(true)
+    setLoadMoreFailed(false)
+    const current = () => generation === pageGeneration.current && !controller.signal.aborted && owner?.isCurrent() !== false
+    void readMatchingHistoryPage((cursor) => repository.getPage({
+      query: appliedQuery, matchMode: appliedSearchMatchMode,
+      filter: appliedFilter === 'favorite' ? 'favorites' : appliedFilter,
+      frequentThreshold, copiedSince, cursor, limit: HISTORY_PAGE_SIZE, signal: controller.signal,
+    }), nextCursor, controller.signal, () => {})
+      .then((page) => {
+        if (!current()) return
+        pagesLoadedRef.current += 1
+        setItems((previous) => appendNewItems(previous, page.items))
+        setNextCursor(page.nextCursor)
+      })
+      .catch(() => { if (current()) setLoadMoreFailed(true) })
+      .finally(() => {
+        if (loadMoreAbortRef.current !== controller) return
+        loadMoreAbortRef.current = null
+        setLoadingMore(false)
+      })
+  }, [appliedFilter, appliedQuery, appliedSearchMatchMode, copiedSince, frequentThreshold, fullTextSearchState, host.deliveryFeedbackOwner, nextCursor, repository, resultsActionBlocked])
 
   useEffect(() => {
     let active = true
@@ -770,6 +811,31 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       const restored = await repository.restoreItem(selectedId)
       if (owner?.isCurrent() === false) return
       if (!restored) throw new Error('unavailable')
+      refreshPage()
+    } catch { if (owner?.isCurrent() !== false) setPasteNotice(t('retention.failed')) }
+    finally { setRetentionBusy(false) }
+  }
+
+  const purgeSelected = async () => {
+    const owner = host.deliveryFeedbackOwner
+    if (!selectedId || retentionBusy || filter !== 'trash' || owner?.isCurrent() === false) return
+    setRetentionBusy(true)
+    try {
+      if (!(await repository.purgeTrashItem(selectedId))) throw new Error('unavailable')
+      if (owner?.isCurrent() === false) return
+      refreshPage()
+    } catch { if (owner?.isCurrent() !== false) setPasteNotice(t('retention.failed')) }
+    finally { setRetentionBusy(false) }
+  }
+
+  const emptyTrash = async () => {
+    const owner = host.deliveryFeedbackOwner
+    if (retentionBusy || !emptyTrashDialog || filter !== 'trash' || owner?.isCurrent() === false) return
+    setRetentionBusy(true)
+    try {
+      await repository.emptyTrash()
+      if (owner?.isCurrent() === false) return
+      setEmptyTrashDialog(false)
       refreshPage()
     } catch { if (owner?.isCurrent() !== false) setPasteNotice(t('retention.failed')) }
     finally { setRetentionBusy(false) }
@@ -897,7 +963,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         invalidatePasteNotice: () => { pasteNoticeGenerationRef.current += 1 },
         clearPasteNotice: () => setPasteNotice(null),
         clearSelection: () => setSelectedId(null),
-        resetPage: () => setPagePath({ key: '', cursors: [undefined] }),
+        resetPage: () => { pagesLoadedRef.current = 1 },
         clearNextCursor: () => setNextCursor(undefined),
         resetScroll: () => listRef.current?.scrollTo({ top: 0 }),
         clearDomSelection: () => window.getSelection()?.removeAllRanges(),
@@ -935,6 +1001,12 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     estimateSize: (index) => flatRows[index].type === 'group-header' ? 28 : 44,
     overscan: 8,
   })
+
+  // Scroll loading: ask for the next page once the viewport nears the end of the list.
+  const lastVisibleRow = virtualizer.getVirtualItems().at(-1)?.index ?? -1
+  useEffect(() => {
+    if (lastVisibleRow >= 0 && lastVisibleRow >= flatRows.length - LOAD_MORE_THRESHOLD_ROWS) loadMore()
+  }, [flatRows.length, lastVisibleRow, loadMore])
 
   const handlePaste = useCallback(async (item: ClipboardHistoryItem, plainTextOnly = false) => {
     if (!resultsActionableRef.current || combining || textEdit || (plainTextOnly && item.kind !== 'text')) return
@@ -1321,7 +1393,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }, [host, repository, t])
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.defaultPrevented || titleDialog || legacyDialog ) return
+    if (e.defaultPrevented || titleDialog || legacyDialog || emptyTrashDialog) return
     if (textEdit) { e.stopPropagation(); return }
     if (combining) {
       if (imeKeyDown.shouldIgnoreKeyDown(e)) return
@@ -1605,11 +1677,11 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
               </SurfaceList>
             </div>
             <SurfaceFooterHints className="clipboard-history-footer">
-              <span role="status">{t('paging.page', { page: appliedPageIndex + 1, count: items.length })}</span>
-              <Button type="button" disabled={resultsActionBlocked || appliedPageIndex === 0 || Boolean(textEdit)} onClick={() => changePage('previous')}>{t('paging.previous')}</Button>
-              <Button type="button" disabled={resultsActionBlocked || !nextCursor || Boolean(textEdit)} onClick={() => changePage('next')}>
-                {t(appliedQuery && nextCursor ? 'paging.searchOlder' : 'paging.next')}
-              </Button>
+              <span role="status">{t(loadingMore ? 'paging.loadingMore' : 'paging.loaded', { count: items.length })}</span>
+              {loadMoreFailed && <>
+                <span role="alert">{t('error.loadFailed')}</span>
+                <Button type="button" onClick={loadMore}>{t('paging.retry')}</Button>
+              </>}
               {fullTextSearchState === 'error' && <>
                 <span role="alert">{t('error.loadFailed')}</span>
                 <Button type="button" onClick={refreshPage}>{t('paging.retry')}</Button>
@@ -1755,6 +1827,14 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
             {t('merge.start')}
           </Button>
         )}
+        {!combining && filter === 'trash' && <>
+          <Button type="button" disabled={!selectedItem || resultsActionBlocked || Boolean(textEdit) || retentionBusy} onClick={() => void purgeSelected()}>
+            {t('retention.purge')}
+          </Button>
+          <Button type="button" disabled={(retentionStatus?.trashCount ?? 0) === 0 || resultsActionBlocked || Boolean(textEdit) || retentionBusy} onClick={() => setEmptyTrashDialog(true)}>
+            {t('retention.emptyTrash')}
+          </Button>
+        </>}
         {!combining && <Button
           type="button"
           variant="primary"
@@ -1828,6 +1908,18 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
           </div>
         </SurfaceFooterHints>
       )}
+
+      <Dialog
+        open={emptyTrashDialog}
+        onOpenChange={(open) => { if (!retentionBusy) setEmptyTrashDialog(open) }}
+        title={t('retention.emptyTrashConfirmTitle')}
+      >
+        <p>{t('retention.emptyTrashConfirm', { count: retentionStatus?.trashCount ?? 0 })}</p>
+        <div className="clipboard-history-title-dialog-actions">
+          <Button type="button" disabled={retentionBusy} onClick={() => void emptyTrash()}>{t('retention.emptyTrash')}</Button>
+          <Button type="button" disabled={retentionBusy} onClick={() => setEmptyTrashDialog(false)}>{t('action.cancel')}</Button>
+        </div>
+      </Dialog>
 
       <Dialog
         open={legacyDialog}

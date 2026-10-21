@@ -7,6 +7,7 @@ import { definePlugin, type PluginToolContribution } from '@hiven/plugin'
 import {
   DEFAULT_USER_COMMANDS_SETTINGS,
   enabledUserCommands,
+  migrateUserCommandsSettings,
   normalizeUserCommandsSettings,
   type UserCommandEntry,
   type UserCommandsSettings,
@@ -63,19 +64,26 @@ function buildCommandTools(settings: UserCommandsSettings): PluginToolContributi
                 })
                 return { ok: false as const, message: msg }
               }
-              const msg = ctx.t('result.ok', {
-                stdout: stdout || ctx.t('result.noOutput'),
-              })
-              // Show output as a copyable result by writing via secondary path:
-              // return ok and let host toast; also copy stdout when non-empty.
-              if (stdout) {
-                try {
-                  await ctx.api.copyText(stdout)
-                } catch {
-                  // ignore copy failures
-                }
+              if (!stdout) return { ok: true as const, message: ctx.t('result.noOutput') }
+              // The clipboard is only written when the user chooses to copy the output.
+              const copyLabel = ctx.t('result.copyOutput')
+              return {
+                ok: true as const,
+                output: {
+                  choices: [{
+                    id: 'copy-output-' + entry.id,
+                    title: copyLabel,
+                    titleI18n: { en: copyLabel, zh: copyLabel },
+                    subtitle: stdout.length > 200 ? stdout.slice(0, 199) + '…' : stdout,
+                    preview: stdout,
+                    icon: 'Copy',
+                    primaryAction: async () => {
+                      await ctx.api.copyText(stdout)
+                      return { ok: true as const }
+                    },
+                  }],
+                },
               }
-              return { ok: true as const, message: msg }
             } catch (error) {
               const message = error instanceof Error ? error.message : String(error)
               if (/permission|shell\.run|not granted/i.test(message)) {
@@ -106,9 +114,9 @@ export default definePlugin<UserCommandsSettings>({
   settings: {
     title: 'settings.title',
     titleI18n: { zh: '自定义命令' },
-    version: 1,
+    version: 2,
     defaultValue: DEFAULT_USER_COMMANDS_SETTINGS,
-    migrate: (raw) => normalizeUserCommandsSettings(raw),
+    migrate: migrateUserCommandsSettings,
     schema: {
       sections: [
         {
@@ -150,7 +158,6 @@ export default definePlugin<UserCommandsSettings>({
                 timeoutMs: 15000,
                 aliases: [],
                 enabled: true,
-                requireConfirm: true,
               },
               fields: [
                 {
@@ -205,5 +212,6 @@ export default definePlugin<UserCommandsSettings>({
 export {
   DEFAULT_USER_COMMANDS_SETTINGS,
   normalizeUserCommandsSettings,
+  migrateUserCommandsSettings,
   enabledUserCommands,
 } from './model'

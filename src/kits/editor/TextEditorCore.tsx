@@ -8,6 +8,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import Editor from '@monaco-editor/react'
 import type { editor as MonacoEditor } from 'monaco-editor'
+import { useT } from '../../i18n'
 import { createMonacoDisposableBucket } from '../../utils/monacoDisposables'
 import { registerFluxMonacoThemes } from '../../utils/monacoTheme'
 import { installMonacoHoverOverlay } from '../../utils/monacoHoverOverlay'
@@ -39,6 +40,9 @@ export const TextEditorCore = forwardRef<TextEditorCoreHandle, TextEditorCorePro
       rangeDecorations,
     } = props
 
+    const t = useT('editor')
+    const tRef = useRef(t)
+    tRef.current = t
     const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
     const disposablesRef = useRef<ReturnType<typeof createMonacoDisposableBucket> | null>(null)
     const onReadyCleanupRef = useRef<(() => void) | null>(null)
@@ -210,7 +214,7 @@ export const TextEditorCore = forwardRef<TextEditorCoreHandle, TextEditorCorePro
           }))
           disposables.add(editor.addAction({
             id: 'find-and-replace',
-            label: 'Find and Replace',
+            label: tRef.current('findReplace'),
             keybindings: [
               monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF,
               monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.KeyF,

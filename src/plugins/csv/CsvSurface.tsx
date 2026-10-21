@@ -250,6 +250,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
   const [header, setHeader] = useState<HeaderMode>('auto')
   const [output, setOutput] = useState<OutputMode>(() => initialOutput(props.surfaceId))
   const [minify, setMinify] = useState(false)
+  const [inferTypes, setInferTypes] = useState(false)
   const [indent, setIndent] = useState<2 | 4>(2)
   const [tableName, setTableName] = useState('table')
   const [dropEmpty, setDropEmpty] = useState(false)
@@ -353,7 +354,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
 
   // Retain the exact source separately from the old preview fingerprint: same-length
   // middle edits must never make an earlier full result eligible for a new handoff.
-  const resultParameters = JSON.stringify([delimiter, header, output, minify, indent, tableName, dropEmpty, dedupe, transpose, filterMode, globalFilter, sqlFilter, sortColumns])
+  const resultParameters = JSON.stringify([delimiter, header, output, minify, inferTypes, indent, tableName, dropEmpty, dedupe, transpose, filterMode, globalFilter, sqlFilter, sortColumns])
   const fullReturnSnapshotRef = useRef<{ sourceText: string; parameters: string } | null>(null)
   // Host Back/Escape revokes pending delivery and in-flight reads before leaving.
   useLayoutEffect(() => host.subscribeLeaveIntent?.(() => {
@@ -526,17 +527,17 @@ export function CsvSurface(props: PluginSurfaceProps) {
   const outputText = useMemo(() => {
     if (!outputPreviewTable || mainView !== 'output') return ''
     try {
-      return toOutput(outputPreviewTable, output, { minify, indent }, { tableName })
+      return toOutput(outputPreviewTable, output, { minify, indent, inferTypes }, { tableName })
     } catch {
       return ''
     }
-  }, [indent, mainView, minify, output, outputPreviewTable, tableName])
+  }, [indent, inferTypes, mainView, minify, output, outputPreviewTable, tableName])
   const canReturnOutput = Boolean(sourceText.trim() && finalTable) && currentInputReady
   const getCompleteOutput = useCallback((): string | null => {
     if (!canReturnOutput || resultRevision !== resultRevisionRef.current || fileReadRef.current) return null
     if (fullJobReady) return fullOutputRef.current
-    return toOutput(finalTable!, output, { minify, indent }, { tableName })
-  }, [canReturnOutput, finalTable, fullJobReady, indent, minify, output, resultRevision, tableName])
+    return toOutput(finalTable!, output, { minify, indent, inferTypes }, { tableName })
+  }, [canReturnOutput, finalTable, fullJobReady, indent, inferTypes, minify, output, resultRevision, tableName])
 
   const returnOutput = async () => {
     const lifetime = surfaceLifetimeRef.current
@@ -597,7 +598,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
           header,
           output,
           transforms: { dropEmpty, dedupe, transpose },
-          jsonStyle: { minify, indent },
+          jsonStyle: { minify, indent, inferTypes },
           sqlStyle: { tableName },
           query: tableQuery,
         },
@@ -643,6 +644,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
     header,
     host,
     indent,
+    inferTypes,
     jobFingerprint,
     minify,
     output,
@@ -1373,6 +1375,14 @@ export function CsvSurface(props: PluginSurfaceProps) {
                 onChange={(event) => updateResult(() => setMinify((event.target as HTMLInputElement).checked))}
               >
                 {localizedText(t, 'param.minify', 'Minify')}
+              </Checkbox>
+            )}
+            {showJsonStyle && mainView === 'output' && (
+              <Checkbox
+                checked={inferTypes}
+                onChange={(event) => updateResult(() => setInferTypes((event.target as HTMLInputElement).checked))}
+              >
+                {localizedText(t, 'param.inferTypes', 'Infer numbers/booleans')}
               </Checkbox>
             )}
             {showJsonStyle && mainView === 'output' && !minify && (

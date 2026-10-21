@@ -148,7 +148,7 @@ function table(headers: string[], rows: string[][]): Table {
   assert.match(md, /---/)
 
   const sql = toOutput(t, 'sql', undefined, { tableName: 'users' })
-  assert.match(sql, /INSERT INTO users/)
+  assert.match(sql, /INSERT INTO `users` \(`id`, `name`\)/)
   assert.match(sql, /O''Brien/)
   assert.match(sql, /NULL/)
   assert.match(sql, /\('2', NULL\)/)
@@ -455,7 +455,7 @@ function table(headers: string[], rows: string[][]): Table {
     assert.ok(full.output.includes('&lt;tag&gt;'))
     assert.equal(full.output.split('\n').length, 5)
   }
-  for (const invalid of ['[1,2]', '[null]', '[["a"]]', '{"a":1}']) {
+  for (const invalid of ['[1,2]', '[null]', '[{"a":1},[2]]']) {
     assert.equal(parseSource(invalid).ok, false, invalid)
   }
   // Explicit fixture uses RFC4180 doubled quotes and a quoted embedded newline.
@@ -479,9 +479,9 @@ function table(headers: string[], rows: string[][]): Table {
   const duplicates = parseSource('amount,amount\n2,10\n1,20', 'comma', 'first-row')
   assert.equal(duplicates.ok, true)
   if (duplicates.ok) {
-    assert.equal(toOutput(duplicates.table, 'markdown'), '| amount | amount |\n| --- | --- |\n| 2 | 10 |\n| 1 | 20 |')
+    assert.equal(toOutput(duplicates.table, 'markdown'), '| amount | amount&#95;2 |\n| --- | --- |\n| 2 | 10 |\n| 1 | 20 |')
     const firstSorted = applyTableQuery(duplicates.table, { sortColumns: [{ columnKey: 'amount', columnIndex: 0, direction: 'ASC' }] })
-    const secondSorted = applyTableQuery(duplicates.table, { sortColumns: [{ columnKey: 'amount', columnIndex: 1, direction: 'DESC' }] })
+    const secondSorted = applyTableQuery(duplicates.table, { sortColumns: [{ columnKey: 'amount_2', columnIndex: 1, direction: 'DESC' }] })
     assert.equal(firstSorted.ok && firstSorted.table.rows[0][0], '1')
     assert.equal(secondSorted.ok && secondSorted.table.rows[0][1], '20')
   }
@@ -492,3 +492,40 @@ function table(headers: string[], rows: string[][]): Table {
   assert.ok(widerFull.output.endsWith('| 1 | tail |'))
 }
 console.log('csv-core tests passed')
+
+// ─── Identifiers, duplicate columns, lossless JSON, round trips, inference ───
+{
+  const sqlOut = toOutput({ headers: ['id', 'order'], rows: [['1', 'a']] }, 'sql', undefined, { tableName: 'table' })
+  assert.match(sqlOut, /^INSERT INTO `table` \(`id`, `order`\)/)
+
+  const dup = parseSource('id,name,name\n1,a,b\n', 'comma', 'first-row')
+  assert.equal(dup.ok, true)
+  if (dup.ok) assert.deepEqual(dup.table.headers, ['id', 'name', 'name_2'])
+
+  const big = parseSource('[{"id":9007199254740993,"n":1.5}]')
+  assert.equal(big.ok, true)
+  if (big.ok) assert.deepEqual(big.table.rows[0], ['9007199254740993', '1.5'])
+
+  // Own outputs paste back as input.
+  const source = parseSource('id,name\n1,Ada\n2,Bob\n', 'comma', 'first-row')
+  assert.equal(source.ok, true)
+  if (source.ok) {
+    for (const mode of ['objects', 'array', 'columns', 'keyed', 'ndjson'] as const) {
+      const back = parseSource(toOutput(source.table, mode))
+      assert.equal(back.ok, true, mode)
+      if (back.ok) {
+        assert.deepEqual(back.table.rows.map((row) => row.slice(-1)[0]), ['Ada', 'Bob'], mode)
+      }
+    }
+  }
+  const single = parseSource('{"a":1,"b":"x"}')
+  assert.equal(single.ok, true)
+  if (single.ok) assert.deepEqual(single.table.rows, [['1', 'x']])
+
+  const typed = { headers: ['id', 'ok', 'zip', 'big'], rows: [['1', 'true', '007', '9007199254740993']] }
+  assert.deepEqual(JSON.parse(toOutput(typed, 'objects')), [{ id: '1', ok: 'true', zip: '007', big: '9007199254740993' }])
+  assert.equal(
+    toOutput(typed, 'ndjson', { minify: true, indent: 2, inferTypes: true }),
+    '{"id":1,"ok":true,"zip":"007","big":9007199254740993}',
+  )
+}

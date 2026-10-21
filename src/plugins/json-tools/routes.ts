@@ -2,9 +2,8 @@ import type { JsonOperation } from './jsonCore'
 
 export const operationRoutes: { id: JsonOperation; titleKey: string; descriptionKey: string; aliases: string[] }[] = [
   { id: 'typescript', titleKey: 'route.typescript', descriptionKey: 'route.typescript.description', aliases: ['json to typescript', 'json types', 'json to ts', 'json转类型', 'json 转 TypeScript'] },
-  { id: 'format', titleKey: 'json.prettify.title', descriptionKey: 'json.prettify.description', aliases: ['json format', 'format json', '格式化 JSON', 'json pretty', 'pretty json', 'pretty-json', 'json-format', 'json格式化', 'json 格式化', '格式化', 'fmt'] },
+  { id: 'format', titleKey: 'json.prettify.title', descriptionKey: 'json.prettify.description', aliases: ['json format', 'format json', 'json格式化', '格式化', 'fmt'] },
   { id: 'compact', titleKey: 'json.compact.title', descriptionKey: 'json.compact.description', aliases: ['json compact', 'json minify', 'json compress', 'json压缩', 'json 压缩', '压缩'] },
-  { id: 'sort', titleKey: 'sortJson.title', descriptionKey: 'sortJson.description', aliases: ['json sort', 'sort json keys', 'json排序', 'json 排序', '排序'] },
   { id: 'expression', titleKey: 'route.expression', descriptionKey: 'route.expression.description', aliases: ['json expression', 'json filter', 'js filter', 'jq', 'expression', '表达式', 'json表达式', 'json 表达式'] },
   { id: 'yaml-to-json', titleKey: 'yaml.toJson.title', descriptionKey: 'yaml.toJson.description', aliases: ['yaml', 'yml', 'yaml to json', 'yml to json', 'yaml2json', 'yaml转json', 'yaml 转 json'] },
   { id: 'json-to-yaml', titleKey: 'yaml.fromJson.title', descriptionKey: 'yaml.fromJson.description', aliases: ['json to yaml', 'json to yml', 'json2yaml', 'json转yaml', 'json 转 yaml'] },

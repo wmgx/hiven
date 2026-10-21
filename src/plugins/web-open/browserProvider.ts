@@ -22,6 +22,7 @@ import {
   normalizeBrowserTabsSettings,
   type BrowserTabsSettings,
 } from './browserTabsModel'
+import { registerKnownFaviconUrls } from './faviconCache'
 import { findOpenTabForUrl, normalizeUrlForMatch } from './urlTabMatch'
 
 export const CHROMIUM_SOURCE_ID = 'browser.chromium' as const
@@ -380,6 +381,8 @@ export function registerChromiumTabsProvider() {
     return { targets, history, healthy: Boolean(status?.running && (source?.fresh || (source?.historyCount ?? 0) > 0)) }
   }, (next) => {
     if (!index.active) return
+    // Open tabs and visited pages are known sites; typed-but-unvisited domains are not.
+    registerKnownFaviconUrls([...next.targets.map((target) => target.url), ...next.history.map((item) => item.url)])
     const changed = index.healthy !== next.healthy ||
       JSON.stringify(index.targets) !== JSON.stringify(next.targets) ||
       JSON.stringify(index.history) !== JSON.stringify(next.history)

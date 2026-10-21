@@ -83,7 +83,7 @@ const definition=load('src/plugins/web-open/index.tsx',{
   './matchPatternCache':matchPatternCache,
   './settings/FaviconCacheModal':{FaviconCacheModal:fail('modal')},
   './settings/BrowserTabsConnectionModal':{BrowserTabsConnectionModal:fail('modal')},
-  './faviconCache':{extractDomain:url=>new URL(url).hostname,getFaviconIconSync:()=> 'Globe',resolveFaviconIconForLauncher:()=> 'Globe',FALLBACK_ICON:'Globe'},
+  './faviconCache':{extractDomain:url=>new URL(url).hostname,getFaviconIconSync:()=> 'Globe',resolveFaviconIconForLauncher:()=> 'Globe',registerKnownFaviconDomains:()=>{},FALLBACK_ICON:'Globe'},
   './browserProvider':{},'./browserTabsModel':{},
 }).default;
 function getLauncherItemSettings(item) {

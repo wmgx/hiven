@@ -19,7 +19,7 @@
     {
       "pluginId": "json-tools",
       "dir": "json-tools",
-      "version": "2.7.4"
+      "version": "2.8.0"
     },
     {
       "pluginId": "line-tools",
@@ -34,7 +34,7 @@
     {
       "pluginId": "csv",
       "dir": "csv",
-      "version": "1.11.11"
+      "version": "1.12.0"
     },
     {
       "pluginId": "calculator",
@@ -64,17 +64,17 @@
     {
       "pluginId": "text-diff",
       "dir": "textDiff",
-      "version": "3.4.8"
+      "version": "3.5.0"
     },
     {
       "pluginId": "clipboard-history",
       "dir": "clipboard-history",
-      "version": "2.0.17"
+      "version": "2.1.0"
     },
     {
       "pluginId": "web-open",
       "dir": "web-open",
-      "version": "1.12.18"
+      "version": "1.13.1"
     },
     {
       "pluginId": "qr-code",
@@ -94,7 +94,7 @@
     {
       "pluginId": "user-commands",
       "dir": "user-commands",
-      "version": "1.0.4"
+      "version": "1.1.0"
     },
     {
       "pluginId": "color-tools",

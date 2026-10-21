@@ -10,12 +10,11 @@ const {
   jsonToQueryString,
   processJson,
   queryStringToJson,
-  sortJsonKeys,
   unescapeJsonString,
   yamlToJson,
 } = jsonCore
 
-assert.equal(sortJsonKeys('{"z":1,"a":{"d":2,"b":1},"__proto__":3}'), '{\n  "__proto__": 3,\n  "a": {\n    "b": 1,\n    "d": 2\n  },\n  "z": 1\n}')
+assert.equal(jsonCore.jsonPrettify('{"z":1,"a":{"d":2,"b":1},"__proto__":3}', 2, true), '{\n  "__proto__": 3,\n  "a": {\n    "b": 1,\n    "d": 2\n  },\n  "z": 1\n}')
 assert.deepEqual(JSON.parse(queryStringToJson('?name=Ada&active=true')), { name: 'Ada', active: 'true' })
 assert.deepEqual(JSON.parse(queryStringToJson('?empty=&name=%E4%BD%A0%E5%A5%BD')), { empty: '', name: '你好' })
 for (const query of [
@@ -60,17 +59,24 @@ assert.equal(invalidUrl.ok, false)
 if (!invalidUrl.ok) assert.equal(invalidUrl.code, 'urlRequired')
 console.log('json-tools core tests passed')
 
-// int64 and high-precision decimals survive format / compact / sort verbatim.
+// int64 and high-precision decimals survive format / compact / sorted-format verbatim.
 for (const source of ['9007199254740993', '12345678901234567890', '0.12345678901234567891', '1e400', '-0']) {
   const input = `{"value":${source},"label":"x"}`
   assert.equal(jsonCore.jsonPrettify(input), `{\n  "value": ${source},\n  "label": "x"\n}`, source)
   assert.equal(jsonCore.jsonCompact(input), input, source)
-  assert.equal(sortJsonKeys(input), `{\n  "label": "x",\n  "value": ${source}\n}`, source)
+  assert.equal(jsonCore.jsonPrettify(input, 2, true), `{\n  "label": "x",\n  "value": ${source}\n}`, source)
 }
 assert.equal(jsonCore.jsonCompact('[9007199254740993,"9007199254740993"]'), '[9007199254740993,"9007199254740993"]')
-for (const operation of ['format', 'compact', 'sort'] as const) {
+for (const operation of ['format', 'compact'] as const) {
   const input = '{"z":0.1,"n":1e3,"id":"9007199254740993","escaped":"\\\"-0"}'
   const result = processJson(input, { operation, sortKeys: true })
   assert.equal(result.ok, true)
   if (result.ok) assert.deepEqual(JSON.parse(result.output), JSON.parse(input))
 }
+
+// yaml / query / expression keep int64 digits; nested query values are JSON text.
+assert.equal(JSON.parse(yamlToJson('a: 1')).a, 1)
+assert.match(yamlToJson('a: 9007199254740993'), /9007199254740993/)
+assert.match(jsonToYaml('{"a":9007199254740993}'), /^a: 9007199254740993$/m)
+assert.equal(evaluateJsonExpression('{"a":{"id":9007199254740993}}', '.a.id'), '9007199254740993')
+assert.equal(jsonToQueryString('{"a":9007199254740993,"b":{"x":1},"c":null}'), 'a=9007199254740993&b=%7B%22x%22%3A1%7D&c=null')

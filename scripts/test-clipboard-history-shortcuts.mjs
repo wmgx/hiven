@@ -146,7 +146,7 @@ function dispatch(key, target, options = {}) {
   const selectedItem = { id: 'selected', kind: 'text' }
   const context = {
     ...policy, Element, HTMLElement: Element, document,
-    titleDialog: null, legacyDialog: null, quickEditorOpen: null, textEdit: null, combining: false, filter: 'all', resultsActionBlocked: false, settings: { enabled: true },
+    titleDialog: null, legacyDialog: null, emptyTrashDialog: false, quickEditorOpen: null, textEdit: null, combining: false, filter: 'all', resultsActionBlocked: false, settings: { enabled: true },
     selectedItem, selectedId: 'selected', filteredItems: [selectedItem], flatRows: [],
     imeKeyDown: { shouldIgnoreKeyDown: () => false },
     handlePaste: (_item, plain) => calls.push(plain ? 'plainPaste' : 'paste'), toggleQuickFavorite: () => calls.push('favorite'), handleReturnToLauncher: () => calls.push('return'),
