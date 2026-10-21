@@ -10,7 +10,6 @@ export type JsonOperation =
   | 'typescript'
   | 'format'
   | 'compact'
-  | 'sort'
   | 'url-query-edit'
   | 'query-to-json'
   | 'json-to-query'
@@ -42,16 +41,16 @@ export class JsonCoreError extends Error {
   }
 }
 
+function isMarker(value: string): boolean {
+  return value.startsWith('\u0001N')
+}
+
 export function jsonPrettify(text: string, indent = 2, shouldSort = false): string {
   return formatJson(text, indent, shouldSort)
 }
 
 export function jsonCompact(text: string): string {
   return compactJson(text)
-}
-
-export function sortJsonKeys(text: string): string {
-  return stringifyJsonLossless(sortKeys(parseJsonLossless(text)), 2)
 }
 
 export function queryStringToJson(text: string): string {
@@ -66,12 +65,15 @@ export function queryStringToJson(text: string): string {
 }
 
 export function jsonToQueryString(text: string): string {
-  const value = JSON.parse(text)
+  const value = parseJsonLossless(text)
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new JsonCoreError('objectRequired')
   }
   const params = new URLSearchParams()
-  for (const [key, entry] of Object.entries(value)) params.set(key, String(entry))
+  for (const [key, entry] of Object.entries(value)) {
+    // Scalars keep their plain text; nested values and lossless numbers are written as JSON text.
+    params.set(key, typeof entry === 'string' && !isMarker(entry) ? entry : stringifyJsonLossless(entry))
+  }
   return params.toString()
 }
 
@@ -85,27 +87,45 @@ export function unescapeJsonString(text: string): string {
   return value
 }
 
+// Integers beyond 2^53 become lossless markers so the original digits reach the JSON output.
+const DEFAULT_INT = (jsYaml as unknown as { types: { int: { resolve: (data: string) => boolean; construct: (data: string) => number } } }).types.int
+const LOSSLESS_INT = new jsYaml.Type('tag:yaml.org,2002:int', {
+  kind: 'scalar',
+  resolve: DEFAULT_INT.resolve,
+  construct(data: string) {
+    const value = DEFAULT_INT.construct(data) as number
+    const plain = data.replace(/_/g, '').replace(/^\+/, '')
+    return !Number.isSafeInteger(value) && /^-?\d+$/.test(plain) ? parseJsonLossless(plain) : value
+  },
+})
+const YAML_SCHEMA = jsYaml.JSON_SCHEMA.extend({ implicit: [LOSSLESS_INT] })
+
 export function yamlToJson(text: string, indent = 2): string {
-  const value = jsYaml.load(text, { schema: jsYaml.JSON_SCHEMA })
-  return JSON.stringify(value ?? null, (_key, item) => {
-    if (typeof item === 'number' && !Number.isFinite(item)) throw new JsonCoreError('finiteNumberRequired')
-    return item
-  }, indent)
+  const value = jsYaml.load(text, { schema: YAML_SCHEMA })
+  assertFinite(value)
+  return stringifyJsonLossless(value ?? null, indent)
+}
+
+function assertFinite(value: unknown): void {
+  if (typeof value === 'number' && !Number.isFinite(value)) throw new JsonCoreError('finiteNumberRequired')
+  if (value && typeof value === 'object') Object.values(value).forEach(assertFinite)
 }
 
 export function jsonToYaml(text: string, indent = 2): string {
-  return jsYaml.dump(JSON.parse(text), { schema: jsYaml.JSON_SCHEMA, indent })
+  const dumped = jsYaml.dump(parseJsonLossless(text), { schema: jsYaml.JSON_SCHEMA, indent })
+  // Lossless markers are dumped as quoted strings; write them back as plain numbers.
+  return dumped.replace(/(["'])\\?(?:x01|u0001|\u0001)N([^"'\n]*)\1/g, '$2')
 }
 
 /** Evaluate the existing JSON Tools expression syntax against parsed JSON. User-triggered only. */
 export function evaluateJsonExpression(text: string, expression: string): string {
-  const data = JSON.parse(text)
+  const data = parseJsonLossless(text)
   const expr = expression.trim()
   if (!expr) throw new JsonCoreError('expressionRequired')
   const fn = new Function(`"use strict"; return (this)${expr}`)
   const value = fn.call(data)
-  if (typeof value === 'string') return value
-  return JSON.stringify(value, null, 2) ?? String(value)
+  if (typeof value === 'string' && !isMarker(value)) return value
+  return stringifyJsonLossless(value, 2) || String(value)
 }
 
 export function processJson(text: string, options: JsonProcessOptions): JsonProcessResult {
@@ -119,8 +139,6 @@ export function processJson(text: string, options: JsonProcessOptions): JsonProc
         return { ok: true, output: jsonPrettify(text, options.indent ?? 2, options.sortKeys === true) }
       case 'compact':
         return { ok: true, output: jsonCompact(text) }
-      case 'sort':
-        return { ok: true, output: sortJsonKeys(text) }
       case 'url-query-edit':
         parseUrlQuery(text)
         return { ok: true, output: text }

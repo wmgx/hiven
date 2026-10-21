@@ -18,7 +18,6 @@ import {
   jsonToYaml,
   JsonCoreError,
   queryStringToJson,
-  sortJsonKeys,
   unescapeJsonString,
   yamlToJson,
 } from './jsonCore'
@@ -138,7 +137,7 @@ export const jsonToolsPlugin = definePlugin({
       title: 'json.prettify.title',
       subtitle: 'json.prettify.description',
       icon: 'Braces',
-      aliases: ['fmt', '格式化', 'pretty', 'json format', 'json格式化', 'json 格式化', 'pretty json', 'json pretty', 'pretty-json', 'json-format', 'json beautify', 'format json', '格式化 JSON'],
+      aliases: ['fmt', '格式化', 'pretty', 'json format', 'json格式化', 'format json'],
       inputPolicy: { mode: 'auto' },
       policy: LEARNABLE_PURE,
       explicitTextPreview: { run: prettifyText },
@@ -166,22 +165,6 @@ export const jsonToolsPlugin = definePlugin({
       textMatch: isJson,
       run(ctx) {
         try { return ctx.output.text(jsonCompact(ctx.input.text)) }
-        catch (error) { return ctx.output.error(toolError(error, ctx.t)) }
-      },
-      surfaces: EDITOR_TOOL_SURFACES,
-    },
-    {
-      id: 'sort-json.run',
-      title: 'sortJson.title',
-      subtitle: 'sortJson.description',
-      icon: 'ArrowUpNarrowWide',
-      aliases: ['json sort', 'sort json keys', 'json key排序', 'json排序', '排序'],
-      inputPolicy: { mode: 'auto' },
-      policy: LEARNABLE_PURE,
-      accepts: { kinds: ['json'] },
-      textMatch: isJson,
-      run(ctx) {
-        try { return ctx.output.text(sortJsonKeys(ctx.input.text)) }
         catch (error) { return ctx.output.error(toolError(error, ctx.t)) }
       },
       surfaces: EDITOR_TOOL_SURFACES,
@@ -223,6 +206,7 @@ export const jsonToolsPlugin = definePlugin({
       subtitle: 'json.escape.description',
       icon: 'Quote',
       aliases: ['json escape', 'escape string', '字符串转义', '转义'],
+      accepts: { aliases: ['json escape', 'escape string', '字符串转义', '转义'] },
       inputPolicy: { mode: 'auto' },
       policy: LEARNABLE_PURE,
       run(ctx) {
@@ -237,6 +221,7 @@ export const jsonToolsPlugin = definePlugin({
       subtitle: 'json.unescape.description',
       icon: 'Quote',
       aliases: ['json unescape', 'unescape string', '字符串反转义', '反转义'],
+      accepts: { regex: '^\\s*".*"\\s*$', aliases: ['json unescape', 'unescape string', '字符串反转义', '反转义'] },
       inputPolicy: { mode: 'auto' },
       policy: LEARNABLE_PURE,
       run(ctx) {
