@@ -42,6 +42,26 @@ function emptyPermissionStore(): PluginPermissionStore {
   }
 }
 
+const PLUGIN_PERMISSIONS_KEY = 'hiven-plugin-permissions'
+
+/** Read at write time so a stale window cannot overwrite grants or revocations made elsewhere. */
+function latestPermissions(current: PluginPermissionStore): PluginPermissionStore {
+  if (typeof window === 'undefined' || !window.localStorage) return current
+  try {
+    const raw = window.localStorage.getItem(PLUGIN_PERMISSIONS_KEY)
+    const persisted = raw === null ? undefined : (JSON.parse(raw)?.state?.permissions as Partial<PluginPermissionStore> | undefined)
+    if (!persisted || typeof persisted !== 'object') return current
+    const merged = emptyPermissionStore()
+    for (const source of Object.keys(merged) as PluginSettingsSource[]) {
+      const records = persisted[source]
+      merged[source] = records && typeof records === 'object' && !Array.isArray(records) ? records : current[source]
+    }
+    return merged
+  } catch {
+    return current
+  }
+}
+
 export const usePluginPermissionStore = create<PluginPermissionStoreState>()(
   persist(
     (set) => ({
@@ -49,7 +69,8 @@ export const usePluginPermissionStore = create<PluginPermissionStoreState>()(
       version: 0,
       grantPermissions: (source, pluginId, permissions) =>
         set((state) => {
-          const current = state.permissions[source][pluginId] ?? {}
+          const base = latestPermissions(state.permissions)
+          const current = base[source][pluginId] ?? {}
           const now = Date.now()
           const nextPluginPermissions = { ...current }
           for (const permission of permissions) {
@@ -57,9 +78,9 @@ export const usePluginPermissionStore = create<PluginPermissionStoreState>()(
           }
           return {
             permissions: {
-              ...state.permissions,
+              ...base,
               [source]: {
-                ...state.permissions[source],
+                ...base[source],
                 [pluginId]: nextPluginPermissions,
               },
             },
@@ -68,7 +89,8 @@ export const usePluginPermissionStore = create<PluginPermissionStoreState>()(
         }),
       revokePermissions: (source, pluginId, permissions) =>
         set((state) => {
-          const current = state.permissions[source][pluginId] ?? {}
+          const base = latestPermissions(state.permissions)
+          const current = base[source][pluginId] ?? {}
           const now = Date.now()
           const nextPluginPermissions = { ...current }
           for (const permission of permissions) {
@@ -76,9 +98,9 @@ export const usePluginPermissionStore = create<PluginPermissionStoreState>()(
           }
           return {
             permissions: {
-              ...state.permissions,
+              ...base,
               [source]: {
-                ...state.permissions[source],
+                ...base[source],
                 [pluginId]: nextPluginPermissions,
               },
             },
@@ -87,12 +109,13 @@ export const usePluginPermissionStore = create<PluginPermissionStoreState>()(
         }),
       clearPluginPermissions: (source, pluginId) =>
         set((state) => {
-          if (!state.permissions[source][pluginId]) return state
-          const nextSourcePermissions = { ...state.permissions[source] }
+          const base = latestPermissions(state.permissions)
+          if (!base[source][pluginId]) return base === state.permissions ? state : { permissions: base }
+          const nextSourcePermissions = { ...base[source] }
           delete nextSourcePermissions[pluginId]
           return {
             permissions: {
-              ...state.permissions,
+              ...base,
               [source]: nextSourcePermissions,
             },
             version: state.version + 1,
@@ -100,11 +123,22 @@ export const usePluginPermissionStore = create<PluginPermissionStoreState>()(
         }),
     }),
     {
-      name: 'hiven-plugin-permissions',
+      name: PLUGIN_PERMISSIONS_KEY,
       partialize: (state) => ({ permissions: state.permissions }),
     },
   ),
 )
+
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  window.addEventListener('storage', (event) => {
+    if (event.key !== PLUGIN_PERMISSIONS_KEY && event.key !== null) return
+    if (event.storageArea !== window.localStorage) return
+    // Always re-read durable state; the version bump wakes permission subscribers.
+    void Promise.resolve(usePluginPermissionStore.persist?.rehydrate()).then(() => {
+      usePluginPermissionStore.setState((state) => ({ version: state.version + 1 }))
+    })
+  })
+}
 
 /**
  * Permissions that first-party / builtin plugins still must not auto-receive.

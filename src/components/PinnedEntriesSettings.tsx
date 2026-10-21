@@ -57,7 +57,7 @@ export function PinnedEntriesSettings() {
           {t(locale, 'settings.pinnedEntriesRefresh')}
         </button>
         {(scan.status === 'loading' || scan.status === 'error') && <p role="status" className="app-hotkeys-empty">{t(locale, scan.status === 'loading' ? 'settings.pinnedEntriesLoading' : 'settings.pinnedEntriesScanFailed')}</p>}
-        {keys.length === 0 && <p>{t(locale, 'settings.pinnedEntriesEmpty')}</p>}
+        {keys.length === 0 && <p className="app-hotkeys-empty">{t(locale, 'settings.pinnedEntriesEmpty')}</p>}
         <ul style={{ listStyle: 'none', margin: 0, padding: 0, maxHeight: 280, overflowY: 'auto' }}>
           {keys.map((key, index) => {
             const entry = describeFavoriteApp(key, scan)

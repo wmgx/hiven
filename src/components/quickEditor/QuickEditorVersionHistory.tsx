@@ -9,19 +9,20 @@ import type {
   QuickEditorVersionRestoreResult,
 } from '../../workspace/quickEditor/quickEditorTypes'
 import { useAppStore } from '../../store'
-import { useT, pickLocale } from '../../i18n'
+import { useT, pickLocale, translate } from '../../i18n'
 import { Button } from '../../plugin-ui'
 import { quickEditorImperative } from './quickEditorImperative'
 
 function formatRelativeTime(at: number, locale: 'en' | 'zh', now = Date.now()): string {
+  const tr = (key: string, vars?: Record<string, string | number>) => translate(locale, 'quickEditor', key, vars)
   const sec = Math.max(0, Math.floor((now - at) / 1000))
-  if (sec < 45) return pickLocale(locale, '刚刚', 'Just now')
+  if (sec < 45) return tr('timeJustNow')
   const min = Math.floor(sec / 60)
-  if (min < 60) return pickLocale(locale, `${min} 分钟前`, `${min}m ago`)
+  if (min < 60) return tr('timeMinutesAgo', { count: min })
   const hr = Math.floor(min / 60)
-  if (hr < 24) return pickLocale(locale, `${hr} 小时前`, `${hr}h ago`)
+  if (hr < 24) return tr('timeHoursAgo', { count: hr })
   const day = Math.floor(hr / 24)
-  if (day < 7) return pickLocale(locale, `${day} 天前`, `${day}d ago`)
+  if (day < 7) return tr('timeDaysAgo', { count: day })
   try {
     return new Intl.DateTimeFormat(pickLocale(locale, 'zh-CN', 'en-US'), {
       month: 'short',
@@ -34,17 +35,18 @@ function formatRelativeTime(at: number, locale: 'en' | 'zh', now = Date.now()): 
   }
 }
 
+const SOURCE_LABEL_KEYS: Record<string, string> = {
+  clipboard: 'sourceClipboard',
+  'history-item': 'sourceHistoryItem',
+  'tool-result': 'sourceToolResult',
+  'replace-active': 'sourceReplaceActive',
+  'history-restore': 'sourceHistoryRestore',
+}
+
 function sourceLabel(source: string | undefined, locale: 'en' | 'zh'): string {
-  if (!source) return pickLocale(locale, '覆盖', 'Overwrite')
-  const map: Record<string, { en: string; zh: string }> = {
-    clipboard: { en: 'Clipboard', zh: '剪贴板' },
-    'history-item': { en: 'History', zh: '历史' },
-    'tool-result': { en: 'Result', zh: '结果' },
-    'replace-active': { en: 'Replace', zh: '替换' },
-    'history-restore': { en: 'Restore', zh: '恢复' },
-    workflow: { en: 'Workflow', zh: '工作流' },
-  }
-  return map[source]?.[locale] ?? source
+  if (!source) return translate(locale, 'quickEditor', 'sourceOverwrite')
+  const key = SOURCE_LABEL_KEYS[source]
+  return key ? translate(locale, 'quickEditor', key) : source
 }
 
 function displayPreview(text: string, emptyLabel: string): string {

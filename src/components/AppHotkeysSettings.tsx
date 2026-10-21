@@ -12,6 +12,7 @@ import { Combobox } from '../plugin-ui'
 import { saveAppHotkey } from '../hotkeys/appHotkeys'
 import { showToast } from '../workspace/toast'
 import { AppSearchAliasConflictError, findAppSearchAliasConflicts, getAppSearchAliases, parseAppSearchAliasInput, type AppSearchAliasConflict } from '../workspace/appLauncher/appSearchAliases'
+import { formatPluginShortcutLabel } from '../utils/formatPluginShortcutLabel'
 import { searchableFieldsMatch } from '../workspace/searchRanking'
 
 type AliasDraft = { text: string; savedText: string; edited: boolean }
@@ -172,7 +173,8 @@ export function AppHotkeysSettings() {
         setLoadError('')
       } catch (error) {
         if (!cancelled) {
-          setLoadError(error instanceof Error ? error.message : String(error))
+          console.warn('[hiven] Failed to load installed apps:', error)
+          setLoadError('failed')
         }
       }
     })()
@@ -244,7 +246,7 @@ export function AppHotkeysSettings() {
             <li key={b.appId} className="app-hotkeys-row">
               <AppWindow size={14} strokeWidth={2} aria-hidden />
               <span className="app-hotkeys-name">{b.name}</span>
-              <kbd className="app-hotkeys-acc">{b.accelerator}</kbd>
+              <kbd className="app-hotkeys-acc">{formatPluginShortcutLabel(b.accelerator)}</kbd>
               <button
                 type="button"
                 className="app-hotkeys-remove"
@@ -319,7 +321,7 @@ export function AppHotkeysSettings() {
         {aliasApp ? <AppSearchAliasEditor key={aliasApp.appId} app={aliasApp} apps={apps} /> : null}
       </div>
 
-      {loadError ? <p className="app-hotkeys-error">{loadError}</p> : null}
+      {loadError ? <p className="app-hotkeys-error" role="alert">{t(locale, 'settings.appHotkeysLoadFailed')}</p> : null}
     </div>
   )
 }

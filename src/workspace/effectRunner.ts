@@ -45,6 +45,8 @@ export interface EffectRunnerResult {
   pendingConfirmations?: ConflictInfo[]
 }
 
+let commandOwnerSeq = 0
+
 /**
  * Apply a list of effects to the workspace.
  * Processing order:
@@ -76,7 +78,7 @@ export function applyEffects(
 
   if (surfaceEffects.length > 0) {
     const claims = extractSurfaceClaims(surfaceEffects)
-    const ownerId = `command:${Date.now()}`
+    const ownerId = `command:${++commandOwnerSeq}`
     const conflicts = detectConflicts(claims, ownerId)
 
     if (conflicts.length > 0) {
@@ -328,7 +330,7 @@ export async function openExternalUrl(url: string, signal?: AbortSignal, options
   if (signal?.aborted) return
   const route = routeHostOpenUrl(target)
   const scheme = extractUrlScheme(target)
-  console.info('[hiven:openExternalUrl] route', { url: target, scheme, route })
+  console.info('[hiven:openExternalUrl] route', { scheme, route })
 
   if (route === 'deny') {
     throw new Error(
@@ -339,16 +341,16 @@ export async function openExternalUrl(url: string, signal?: AbortSignal, options
   // Built-in schemes → plugin-shell open (Tauri default http/mailto/tel scope).
   if (route === 'shell-open') {
     try {
-      console.info('[hiven:openExternalUrl] try shell.open', { url: target })
+      console.info('[hiven:openExternalUrl] try shell.open', { scheme })
       const { open } = await import('@tauri-apps/plugin-shell')
       if (signal?.aborted) return
       await open(target)
-      console.info('[hiven:openExternalUrl] shell.open ok', { url: target })
+      console.info('[hiven:openExternalUrl] shell.open ok', { scheme })
       return
     } catch (error) {
       if (signal?.aborted) return
       console.warn('[hiven:openExternalUrl] shell.open failed, try open_system_url', {
-        url: target,
+        scheme,
         message: error instanceof Error ? error.message : String(error),
       })
     }
@@ -360,16 +362,16 @@ export async function openExternalUrl(url: string, signal?: AbortSignal, options
       throw new Error(`URL scheme not registered: ${scheme}`)
     }
     try {
-      console.info('[hiven:openExternalUrl] try open_system_url', { url: target })
+      console.info('[hiven:openExternalUrl] try open_system_url', { scheme })
       const { invoke } = await import('@tauri-apps/api/core')
       if (signal?.aborted) return
       await invoke('open_system_url', { url: target })
-      console.info('[hiven:openExternalUrl] open_system_url ok', { url: target })
+      console.info('[hiven:openExternalUrl] open_system_url ok', { scheme })
       return
     } catch (error) {
       if (signal?.aborted) return
       console.warn('[hiven:openExternalUrl] open_system_url failed', {
-        url: target,
+        scheme,
         message: error instanceof Error ? error.message : String(error),
       })
       if (route === 'system-url') throw error
@@ -377,7 +379,7 @@ export async function openExternalUrl(url: string, signal?: AbortSignal, options
   }
 
   // Non-Tauri / last resort (custom schemes usually no-op in webview).
-  console.warn('[hiven:openExternalUrl] falling back to window.open', { url: target })
+  console.warn('[hiven:openExternalUrl] falling back to window.open', { scheme })
   if (signal?.aborted) return
   window.open(target, '_blank')
 }

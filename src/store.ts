@@ -162,17 +162,12 @@ interface AppState {
   recordPersistableLauncherSelection: (payload: PersistableLauncherPayload) => void
   clearPersistableLauncherRecents: () => void
 
-  // Saved params per action (for persistParams feature)
-  savedActionParams: Record<string, Record<string, any>>
-  saveActionParams: (actionName: string, params: Record<string, any>) => void
-
   // Settings
   settings: {
     watchDirectory: string
     fontSize: number
     wordWrap: boolean
     lineNumbers: boolean
-    persistParams: boolean
     theme: 'dark' | 'light'
     locale: Locale
     disabledBuiltins: string[]
@@ -384,19 +379,12 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
   })),
   clearPersistableLauncherRecents: () => set({ launcherPersistableRecents: emptyPersistableRecents() }),
 
-  // Saved params per action
-  savedActionParams: {},
-  saveActionParams: (actionName, params) => set((state) => ({
-    savedActionParams: { ...state.savedActionParams, [actionName]: params }
-  })),
-
   // Settings
   settings: {
     watchDirectory: '~/.local/hiven/plugins/installed',
     fontSize: 13,
     wordWrap: false,
     lineNumbers: true,
-    persistParams: true,
     theme: 'dark',
     locale: 'en' as Locale,
     disabledBuiltins: [],
@@ -514,7 +502,6 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
       quickEditorShortcut: stripShortcutRuntimeStatus(state.settings.quickEditorShortcut),
     },
     locale: state.locale,
-    savedActionParams: state.savedActionParams,
     launcherUsageBySurface: state.launcherUsageBySurface,
     ...(launcherFavoritesWrite
       ? { launcherFavoriteKeys: state.launcherFavoriteKeys, launcherFavoriteLabels: state.launcherFavoriteLabels }
@@ -549,6 +536,9 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
     merged.settings = { ...current.settings, ...persistedState.settings }
     // Retired experiment configuration is ignored without touching stored learning records.
     delete (merged.settings as unknown as Record<string, unknown>).automaticLearningEnabled
+    // Retired "persist params" preference and its saved values are dropped on load.
+    delete (merged.settings as unknown as Record<string, unknown>).persistParams
+    delete (merged as unknown as Record<string, unknown>).savedActionParams
     merged.settings.globalPinnedLauncherShortcut = mergeShortcutRuntimeStatus(
       merged.settings.globalPinnedLauncherShortcut ?? current.settings.globalPinnedLauncherShortcut,
       current.settings.globalPinnedLauncherShortcut,

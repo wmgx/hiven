@@ -1,7 +1,7 @@
 import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { localized, useAppStore, type PluginSurfaceOpenTarget } from '../../store'
-import { t, pickLocale, type Locale } from '../../i18n'
+import { t, type Locale } from '../../i18n'
 import { makePluginT } from '../../i18n/pluginI18nRegistry'
 import { pluginRegistry, usePluginRegistryVersion } from '../../workspace/pluginRegistry'
 import { resolvePluginSettings, usePluginSettingsStore, type PluginSettingsDialogTarget } from '../../workspace/pluginSettingsStore'
@@ -785,7 +785,7 @@ export function PluginSurfaceRenderer({
                     if (!stillOwned()) return false
                     hiddenRef.current = false
                     deliveredHandoffRef.current = { owner: surfaceState, input: inputKey, block }
-                    showToast(pickLocale(locale, '材料已带回，但无法显示 Launcher，请重试', 'Material delivered, but Launcher could not be shown. Please retry.'), 'error')
+                    showToast(t(locale, 'palette.surfaceDeliveredLauncherHidden'), 'error')
                     return false
                   }
                   if (!stillOwned()) return false
@@ -802,7 +802,7 @@ export function PluginSurfaceRenderer({
                 if (handoffRef.current === handoff) {
                   handoffRef.current = null
                   if (!accepted && isCurrentSurface() && !controller.signal.aborted) {
-                    showToast(pickLocale(locale, '无法带回 Launcher，请重试', 'Could not return to Launcher. Please retry.'), 'error')
+                    showToast(t(locale, 'palette.surfaceReturnLauncherFailed'), 'error')
                   }
                 }
                 return accepted
@@ -885,15 +885,14 @@ export function PluginSurfacePermissionGate({
         {permissions.map((permission) => (
           <div key={permission}>
             {describePluginPermission(permission, locale)}
-            <span style={{ color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-mono)' }}> {permission}</span>
           </div>
         ))}
       </div>
       <div className="flex gap-2 pt-1">
-        <button className="text-[12px] px-3 py-1.5 rounded" style={{ background: 'var(--color-accent)', color: '#fff', border: 'none', cursor: 'pointer' }} onClick={onGrant}>
+        <button type="button" className="scripts-btn scripts-btn-primary text-[12px] px-3 py-1.5" onClick={onGrant}>
           {t(locale, 'palette.pluginPermissionAllow')}
         </button>
-        <button className="text-[12px] px-3 py-1.5 rounded" style={{ background: 'var(--color-background-tertiary)', color: 'var(--color-text-primary)', border: 'none', cursor: 'pointer' }} onClick={onBack}>
+        <button type="button" className="scripts-btn text-[12px] px-3 py-1.5" onClick={onBack}>
           {t(locale, 'palette.pluginPermissionBack')}
         </button>
       </div>

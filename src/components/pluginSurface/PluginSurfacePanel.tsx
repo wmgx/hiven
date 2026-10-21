@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { translate } from '../../i18n'
 import { useAppStore, type PluginSurfaceOpenTarget } from '../../store'
 import type { PanelPropsV2 } from '../../workspace/pluginTypes'
 import { PluginSettingsDialog } from '../PluginSettingsDialog'
@@ -19,7 +20,7 @@ export function PluginSurfacePanel({ inputs, host }: PanelPropsV2<PluginSurfaceP
   if (!target) {
     return (
       <div className="plugin-surface-panel-message">
-        <div>Plugin surface target missing</div>
+        <div>{translate(locale, 'workspace', 'invalidTarget')}</div>
       </div>
     )
   }

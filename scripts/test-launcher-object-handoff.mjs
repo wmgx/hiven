@@ -267,7 +267,7 @@ function hostSession({ local = false, accept = async () => true, publish = true 
     requestAnimationFrame: (callback) => { callback(); return 1 },
     useAppStore: { getState: () => ({ openGlobalLauncherOverlay() {}, clearPluginSurfaceTool() {} }), setState() {} },
     onBack: () => back++, refreshPasteOwner: () => {},
-    showToast: (message) => messages.push(message), pickLocale: (_locale, _zh, en) => en,
+    showToast: (message) => messages.push(message), pickLocale: (_locale, _zh, en) => en, t: (_locale, key) => key,
     locale: 'en', presentation: 'plugin-surface-window',
   }
   vm.runInNewContext(hostCode, globals)

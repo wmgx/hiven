@@ -176,7 +176,7 @@ export function ShortcutRecorder({
         onClick={startRecording}
         onKeyDown={handleKeyDown}
         onBlur={handleBlur}
-        title="点击录入快捷键"
+        title={translate(locale, 'settings', 'hotkeyRecordHint')}
       >
         {displayValue}
       </button>

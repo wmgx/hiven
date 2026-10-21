@@ -2,14 +2,23 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import {
   AlertTriangle,
+  ChevronDown,
+  FolderTree,
+  Image,
+  Palette,
+  Plus,
+  QrCode,
+  Scissors,
+  ShieldCheck,
+  Sparkles,
+  SquareTerminal,
+  Terminal,
   Binary,
   Braces,
   Calculator,
   Calendar,
   Clipboard,
-  Code2,
   Dices,
-  FileCode2,
   FileDiff,
   Globe,
   Languages,
@@ -22,13 +31,12 @@ import {
   Search,
   Settings,
   Table2,
-  Type,
   X,
   AlignLeft,
-  CaseSensitive,
 } from 'lucide-react'
 import { Dialog } from '@base-ui/react/dialog'
 import { t } from '../i18n'
+import { formatPluginShortcutLabel } from '../utils/formatPluginShortcutLabel'
 import type { Locale } from '../i18n'
 import { makePluginT } from '../i18n/pluginI18nRegistry'
 import { localized, useAppStore } from '../store'
@@ -89,6 +97,7 @@ type PluginDetailRow = {
   version: string
   source: string
   status: string
+  rawStatus: string
   folderPath: string
   sourceUrl?: string
   capabilities: string[]
@@ -98,15 +107,7 @@ type PluginDetailRow = {
   plugin: InstalledPlugin | DevPlugin | PluginPackageSummary
 }
 
-/** Brand blue + cool gray palette — no purple/pink (V3). */
-const ICON_BG_PALETTE = [
-  { bg: '#eff6ff', fg: '#1d4ed8' },
-  { bg: '#e0f2fe', fg: '#0369a1' },
-  { bg: '#f1f5f9', fg: '#475569' },
-  { bg: '#ecfeff', fg: '#0e7490' },
-  { bg: '#f8fafc', fg: '#334155' },
-  { bg: '#dbeafe', fg: '#1e40af' },
-]
+const ICON_TONE_COUNT = 6
 
 const PLUGIN_ICON_MAP: Record<string, LucideIcon> = {
   translate: Languages,
@@ -120,18 +121,22 @@ const PLUGIN_ICON_MAP: Record<string, LucideIcon> = {
   'date-time-assistant': Calendar,
   'encode-decode': Binary,
   formatter: AlignLeft,
-  'js-filter': Code2,
   'line-tools': List,
   'regex-tester': Regex,
-  'text-utils': Type,
-  yaml: FileCode2,
   random: Dices,
-  'variable-case': CaseSensitive,
+  'ai-writing': Sparkles,
+  'color-tools': Palette,
+  'curl-inspector': Terminal,
+  'file-paths': FolderTree,
+  'qr-code': QrCode,
+  'text-explode': Scissors,
+  'unix-permissions': ShieldCheck,
+  'user-commands': SquareTerminal,
+  'image-tools': Image,
 }
 
 function pluginIconTone(pluginId: string) {
-  const hash = pluginId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % ICON_BG_PALETTE.length
-  return ICON_BG_PALETTE[hash]
+  return pluginId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % ICON_TONE_COUNT
 }
 
 function pluginIconText(title: string): string {
@@ -145,7 +150,7 @@ function PluginRowIcon({ pluginId, title, loading }: { pluginId: string; title: 
   const tone = pluginIconTone(pluginId)
   const Icon = PLUGIN_ICON_MAP[pluginId]
   return (
-    <div className="plugins-row-icon" style={{ backgroundColor: tone.bg, color: tone.fg }}>
+    <div className={`plugins-row-icon plugins-row-icon--tone-${tone}`}>
       {loading
         ? <Loader2 size={17} className="animate-spin" />
         : Icon
@@ -208,23 +213,10 @@ function statusLabel(status: string, locale: 'zh' | 'en') {
   return t(locale, 'scripts.status.available')
 }
 
-function formatPluginShortcutLabel(accelerator: string) {
-  return accelerator
-    .replace(/\bCmdOrCtrl\b/g, '⌘')
-    .replace(/\bCommandOrControl\b/g, '⌘')
-    .replace(/\bCommand\b/g, '⌘')
-    .replace(/\bCmd\b/g, '⌘')
-    .replace(/\bCtrl\b/g, 'Ctrl')
-    .replace(/\bShift\b/g, '⇧')
-    .replace(/\bAlt\b/g, '⌥')
-    .replace(/\bOption\b/g, '⌥')
-    .replace(/\+/g, '')
-}
-
 function pluginDetailStatusKey(row: PluginDetailRow) {
-  if (row.status.includes('禁用') || row.status.toLowerCase().includes('disabled')) return 'is-disabled'
-  if (row.status.includes('阻塞') || row.status.toLowerCase().includes('blocked')) return 'is-blocked'
-  if (row.status.includes('错误') || row.status.toLowerCase().includes('error')) return 'is-error'
+  if (row.rawStatus === 'disabled') return 'is-disabled'
+  if (row.rawStatus === 'blocked') return 'is-blocked'
+  if (row.rawStatus === 'error') return 'is-error'
   return 'is-loaded'
 }
 
@@ -436,6 +428,7 @@ export function PluginsContent({}: PluginsContentProps) {
       version: plugin.version || '0.0.0',
       source: t(locale, 'scripts.source.builtin'),
       status: statusLabel(isPluginBlocked(plugin.pluginId, 'builtin') ? 'blocked' : 'available', locale),
+      rawStatus: isPluginBlocked(plugin.pluginId, 'builtin') ? 'blocked' : 'available',
       folderPath: plugin.folderPath || '',
       capabilities: capabilitiesOf(plugin),
       error: plugin.error,
@@ -452,6 +445,7 @@ export function PluginsContent({}: PluginsContentProps) {
       version: plugin.version || '0.0.0',
       source: sourceLabel(plugin, locale),
       status: statusLabel(isPluginBlocked(plugin.pluginId, 'installed') ? 'blocked' : plugin.status, locale),
+      rawStatus: isPluginBlocked(plugin.pluginId, 'installed') ? 'blocked' : plugin.status,
       folderPath: packagePath(plugin),
       sourceUrl: plugin.sourceUrl,
       capabilities: capabilitiesOf(plugin),
@@ -472,6 +466,7 @@ export function PluginsContent({}: PluginsContentProps) {
         version: plugin.version || '0.0.0',
         source: sourceLabel(plugin, locale),
         status: statusLabel(isPluginBlocked(plugin.pluginId, 'dev') ? 'blocked' : plugin.status, locale),
+        rawStatus: isPluginBlocked(plugin.pluginId, 'dev') ? 'blocked' : plugin.status,
         folderPath: packagePath(plugin),
         sourceUrl: plugin.sourceUrl,
         capabilities: capabilitiesOf(plugin),
@@ -919,6 +914,7 @@ export function PluginsContent({}: PluginsContentProps) {
           aria-expanded={isExpanded}
           onClick={() => setExpandedKey((prev) => (prev === row.key ? null : row.key))}
           onKeyDown={(event) => {
+            if (event.target !== event.currentTarget) return
             if (event.key === 'Enter' || event.key === ' ') {
               event.preventDefault()
               setExpandedKey((prev) => (prev === row.key ? null : row.key))
@@ -957,6 +953,7 @@ export function PluginsContent({}: PluginsContentProps) {
                 type="button"
                 className="plugins-icon-btn"
                 title={t(locale, 'scripts.settings')}
+                aria-label={t(locale, 'scripts.settings')}
                 onClick={() => openPluginsSurfaceSettings(row.pluginId, row.settingsSource)}
               >
                 <Settings size={14} />
@@ -967,7 +964,7 @@ export function PluginsContent({}: PluginsContentProps) {
                 align="end"
                 onOpenChange={(open) => { if (!open) setPendingDangerKey(null) }}
                 trigger={
-                  <button type="button" className="plugins-icon-btn" title={t(locale, 'scripts.moreActions')}>
+                  <button type="button" className="plugins-icon-btn" title={t(locale, 'scripts.moreActions')} aria-label={t(locale, 'scripts.moreActions')}>
                     <MoreHorizontal size={14} />
                   </button>
                 }
@@ -998,8 +995,8 @@ export function PluginsContent({}: PluginsContentProps) {
         <Menu
           align="end"
           trigger={
-            <button data-testid="plugin-new-button" type="button" className="btn primary split">
-              <span className="bi">＋</span>{t(locale, 'scripts.addPlugin')}<span className="chev">▾</span>
+            <button data-testid="plugin-new-button" type="button" className="btn primary split" aria-label={t(locale, 'scripts.addPlugin')}>
+              <Plus className="bi" size={13} aria-hidden="true" />{t(locale, 'scripts.addPlugin')}<ChevronDown className="chev" size={12} aria-hidden="true" />
             </button>
           }
           items={[

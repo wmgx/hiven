@@ -359,6 +359,8 @@ export type PluginSettingsObjectListItemField = {
   mono?: boolean
   group?: string
   groupI18n?: Partial<Record<Locale, string>>
+  /** Render this field's group as a collapsed disclosure section. */
+  groupCollapsed?: boolean
   sensitive?: boolean
   /** When set, field is shown only if sibling field matches. */
   visibleWhen?: { key: string; equals: string | number | boolean }
@@ -394,6 +396,19 @@ export type PluginSettingsObjectListField<TSettings = unknown> = PluginSettingsF
   emptyText?: string
   emptyTextI18n?: Partial<Record<Locale, string>>
   itemDefaults?: Record<string, unknown>
+  /**
+   * Optional live preview of a template string held by each item. The host
+   * only substitutes `placeholder` with a user-typed sample; it has no
+   * knowledge of what the template means.
+   */
+  preview?: {
+    /** Item key holding the template string. */
+    templateKey: string
+    /** Token inside the template to substitute, e.g. `{query}`. */
+    placeholder: string
+    /** Item key of a boolean; the sample is URI-encoded unless it is `false`. */
+    encodeFlagKey?: string
+  }
   fields: PluginSettingsObjectListItemField[]
 }
 

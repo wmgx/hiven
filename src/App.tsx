@@ -36,7 +36,6 @@ import { readNativeClipboardText } from './workspace/nativeClipboard'
 import { startNativeValidationRelay } from './workspace/webNativeBridge'
 
 // Register built-in panels
-import './panels/register'
 
 /** Lightweight text-only read for age tracking (avoid file-path IPC every tick). */
 function readClipboardTextForAgeTracker(): Promise<string> {
@@ -169,13 +168,27 @@ function LauncherRuntimeApp() {
     return () => { stop(); if (lastNotice) dismissToast(lastNotice) }
   }, [])
 
-  // Background clipboard age clock: first see = unknown baseline; real changes get known changedAt.
+  // Clipboard age clock (only while visible+focused): first see = unknown baseline; real changes get known changedAt.
   // Prevents Global Launcher open from treating long-sitting clipboard as "just copied".
   useEffect(() => {
     if (window.__HIVEN_WEB_NATIVE_BRIDGE__) return
-    const stopTracker = startClipboardAgeTracker(readClipboardTextForAgeTracker)
+    // Poll only while this window is visible and focused (the launcher is open);
+    // a hidden webview must not keep issuing clipboard IPC every second.
+    let stopTracker: (() => void) | null = null
+    const sync = () => {
+      const active = document.visibilityState === 'visible' && document.hasFocus()
+      if (active && !stopTracker) stopTracker = startClipboardAgeTracker(readClipboardTextForAgeTracker)
+      else if (!active && stopTracker) { stopTracker(); stopTracker = null }
+    }
+    sync()
+    document.addEventListener('visibilitychange', sync)
+    window.addEventListener('focus', sync)
+    window.addEventListener('blur', sync)
     return () => {
-      stopTracker()
+      document.removeEventListener('visibilitychange', sync)
+      window.removeEventListener('focus', sync)
+      window.removeEventListener('blur', sync)
+      stopTracker?.()
     }
   }, [])
 

@@ -476,6 +476,7 @@ export default definePlugin<WebQuickOpenSettings>({
               labelI18n: { zh: '快开规则' },
               itemTitleKey: 'title',
               itemTagsKey: 'tags',
+              preview: { templateKey: 'urlTemplate', placeholder: '{query}', encodeFlagKey: 'encodeQuery' },
               // Localized at render time; the stored value stays 'auto'.
               itemTagLabelsI18n: {
                 [AUTO_CREATED_TAG]: { en: 'Auto', zh: '自动创建' },
@@ -594,6 +595,7 @@ export default definePlugin<WebQuickOpenSettings>({
                   mono: true,
                   group: 'Advanced',
                   groupI18n: { zh: '高级' },
+                  groupCollapsed: true,
                 },
               ],
             },

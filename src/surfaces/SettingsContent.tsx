@@ -5,7 +5,7 @@ import { check } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { getVersion } from '@tauri-apps/api/app'
 import { invoke } from '@tauri-apps/api/core'
-import { BrainCircuit, Check, Command, Copy, Download, ExternalLink, Hash, Languages, LogIn, LogOut, Moon, RefreshCw, Save, Type, WrapText } from 'lucide-react'
+import { BrainCircuit, Check, Command, Copy, Download, ExternalLink, Hash, Languages, LogIn, LogOut, Moon, RefreshCw, Type, WrapText } from 'lucide-react'
 import { useAppStore } from '../store'
 import { changeApplicationLocale } from '../changeApplicationLocale'
 import { useT } from '../i18n'
@@ -82,9 +82,6 @@ export function SettingsContent() {
         <SettingsListRow icon={<Moon size={15} strokeWidth={2} />} name={t('darkTheme')}>
           <Switch checked={settings.theme === 'dark'} onCheckedChange={(value) => updateSetting('theme', value ? 'dark' : 'light')} aria-label={t('darkTheme')} />
         </SettingsListRow>
-        <SettingsListRow icon={<Save size={15} strokeWidth={2} />} name={t('persistParams')}>
-          <Switch checked={settings.persistParams} onCheckedChange={(value) => updateSetting('persistParams', value)} aria-label={t('persistParams')} />
-        </SettingsListRow>
       </SettingGroup>
 
       <SettingGroup title={t('contextSuggestions')}>
@@ -92,10 +89,14 @@ export function SettingsContent() {
           <Switch checked={suggestions.enabled} onCheckedChange={suggestionStore.enable} aria-label={t('contextSuggestions')} />
         </SettingsListRow>
         <SettingsListRow icon={<Hash size={15} />} name={t('contextSuggestionsMetrics')}
-          desc={`N ${suggestions.metrics.length} · S ${suggestions.metrics.filter(m => m.selected).length} · E ${suggestions.metrics.filter(m => m.executed).length}`}>
-          <button type="button" onClick={suggestionStore.clear}>{t('contextSuggestionsClear')}</button>
+          desc={t('contextSuggestionsMetricsSummary', {
+            shown: suggestions.metrics.length,
+            selected: suggestions.metrics.filter(m => m.selected).length,
+            executed: suggestions.metrics.filter(m => m.executed).length,
+          })}>
+          <button type="button" className="scripts-btn" onClick={suggestionStore.clear}>{t('contextSuggestionsClear')}</button>
         </SettingsListRow>
-        {suggestions.storageError && <p role="alert">{t('contextSuggestionsStorageError')}</p>}
+        {suggestions.storageError && <p role="alert" className="app-hotkeys-error">{t('contextSuggestionsStorageError')}</p>}
       </SettingGroup>
 
       <SettingGroup title={t('hotkeys')}>
@@ -156,7 +157,7 @@ export function SettingsContent() {
           </div>
         </div>
         <div className="settings-about-right">
-          <UpdateChecker compact />
+          <UpdateChecker />
         </div>
       </div>
     </div>
@@ -614,7 +615,7 @@ function JevCommandSettings() {
         />
       </SettingsListRow>
       <SettingsListRow icon={<BrainCircuit size={15} />} name={t('jevEndpoint')}>
-        <input className="hiven-ui-input" style={inputStyle} value={draft.endpoint} disabled={testing} onChange={(event) => editDraft({ ...draft, enabled: false, apiKey: '', endpoint: event.target.value })} aria-label={t('jevEndpoint')} spellCheck={false} />
+        <input className="hiven-ui-input" style={inputStyle} value={draft.endpoint} disabled={testing} onChange={(event) => editDraft({ ...draft, enabled: false, endpoint: event.target.value })} aria-label={t('jevEndpoint')} spellCheck={false} />
       </SettingsListRow>
       <SettingsListRow icon={<BrainCircuit size={15} />} name={t('jevApiKey')}>
         <input className="hiven-ui-input" style={inputStyle} type="password" autoComplete="off" value={draft.apiKey} disabled={testing} onChange={(event) => editDraft({ ...draft, enabled: false, apiKey: event.target.value })} aria-label={t('jevApiKey')} />
@@ -830,7 +831,7 @@ function formatHotkeyRegistrationStatus(
 
 type UpdateStatus = 'idle' | 'checking' | 'available' | 'no-update' | 'downloading' | 'ready' | 'error'
 
-function UpdateChecker({ compact = false }: { compact?: boolean }) {
+function UpdateChecker() {
   const t = useT('update')
   const [status, setStatus] = useState<UpdateStatus>('idle')
   const [version, setVersion] = useState('')
@@ -900,7 +901,7 @@ function UpdateChecker({ compact = false }: { compact?: boolean }) {
   }
 
   const updateResult = status !== 'idle' && status !== 'checking' && status !== 'downloading' && (
-    <span role="status" style={{ fontSize: 'var(--text-sm)', overflowWrap: 'anywhere', textAlign: compact ? 'right' : undefined, color: status === 'error' ? 'var(--color-error-text)' : status === 'no-update' ? 'var(--text-3)' : 'var(--accent)' }}>
+    <span role="status" style={{ fontSize: 'var(--text-sm)', overflowWrap: 'anywhere', textAlign: 'right', color: status === 'error' ? 'var(--color-error-text)' : status === 'no-update' ? 'var(--text-3)' : 'var(--accent)' }}>
       {statusText()}
       {status === 'error' && errorFull && (
         <button
@@ -915,11 +916,10 @@ function UpdateChecker({ compact = false }: { compact?: boolean }) {
     </span>
   )
 
-  if (compact) {
-    return (
+  return (
       <div className="flex flex-col items-end gap-1" style={{ maxWidth: 'min(320px, 55vw)' }}>
         <div className="flex items-center gap-2">
-          {status === 'available' && <button className="scripts-btn" onClick={handleDownloadAndInstall}><Download size={11} /> {version}</button>}
+          {status === 'available' && <button className="scripts-btn" onClick={handleDownloadAndInstall}><Download size={11} /> {t('updateTo', { version })}</button>}
           {status === 'ready' && <button className="scripts-btn scripts-btn-primary" onClick={() => relaunch()}>{t('restart')}</button>}
           {(status === 'idle' || status === 'no-update' || status === 'error') && (
             <button className="scripts-btn" onClick={handleCheck}><RefreshCw size={11} /> {t('checkUpdate')}</button>
@@ -936,29 +936,4 @@ function UpdateChecker({ compact = false }: { compact?: boolean }) {
         </span>
       </div>
     )
-  }
-
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between">
-        <span style={{ fontSize: 'var(--text-base)', color: 'var(--color-text-secondary)' }}>{t('checkUpdate')}</span>
-        <div className="flex items-center gap-2">
-          {status === 'available' && <button className="scripts-btn" onClick={handleDownloadAndInstall}><Download size={11} /> {version}</button>}
-          {status === 'ready' && <button className="scripts-btn scripts-btn-primary" onClick={() => relaunch()}>{t('restart')}</button>}
-          {(status === 'idle' || status === 'no-update' || status === 'error') && (
-            <button className="scripts-btn" onClick={handleCheck}><RefreshCw size={11} /> {t('checkUpdate')}</button>
-          )}
-          {(status === 'checking' || status === 'downloading') && (
-            <span className="flex items-center gap-1 px-2.5 py-1" style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-tertiary)' }}>
-              <RefreshCw size={11} className="animate-spin" /> {statusText()}
-            </span>
-          )}
-        </div>
-      </div>
-      {updateResult}
-      <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-tertiary)' }}>
-        {t('builtinManagedByApp')}
-      </span>
-    </div>
-  )
 }

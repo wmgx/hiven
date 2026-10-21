@@ -50,6 +50,8 @@ const state = globalThis.__hivenLifecycle = {
 const mocks = {
   './editorBridge': `export function cleanupEditorPluginContributions(value) { const s = globalThis.__hivenLifecycle; s.cleanups.push(value); if (s.cleanupError) throw s.cleanupError; return Promise.resolve() }`,
   './toast': 'export function showToast() {}',
+  '../i18n': 'export const t = (_locale, key) => key',
+  '../store': 'export const useAppStore = { getState: () => ({ locale: "en" }) }',
   './pluginScaffold.ts': 'export function createPluginScaffoldFiles() { throw new Error("Unused scaffold") }',
   './pluginDebugRunner.ts': 'export function parsePluginDefinitionSource() { throw new Error("Unused dev loader") }',
   '../pluginHostSdk.ts': 'export function createPluginHostSdk() { return {} }',

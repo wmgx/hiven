@@ -23,7 +23,6 @@ import { quickEditorImperative } from '../components/quickEditor/quickEditorImpe
 import { suppressStandaloneLauncherBlur } from '../workspace/launcherBlurGuard'
 import { useT } from '../i18n'
 type ResizeDirection = 'East' | 'North' | 'NorthEast' | 'NorthWest' | 'South' | 'SouthEast' | 'SouthWest' | 'West'
-import '../panels/register'
 
 registerHostLauncherProviders()
 registerBundledPluginPackages()
@@ -117,11 +116,7 @@ export function QuickEditorDetachedView() {
     const excluded = event.target instanceof HTMLElement
       ? event.target.closest('button, input, textarea, select, a, [role="button"], [data-no-drag], .monaco-editor')
       : null
-    if (excluded) {
-      console.info('[hiven][drag] pointerdown ignored, target is inside excluded element:', excluded)
-      return
-    }
-    console.info('[hiven][drag] pointerdown on topbar, starting drag. target:', event.target)
+    if (excluded) return
     event.preventDefault()
     event.stopPropagation()
     void startQuickEditorWindowDrag().catch((error) => {

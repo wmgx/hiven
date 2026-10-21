@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { Copy } from 'lucide-react'
+import { Copy, X } from 'lucide-react'
 import { useAppStore } from '../../store'
 import { translate } from '../../i18n'
 import { writeClipboardText } from '../../workspace/pluginClipboard'
@@ -18,7 +18,10 @@ const levelStyles: Record<ToastLevel, { bg: string; color: string }> = {
     bg: 'color-mix(in srgb, var(--color-error) 12%, var(--bg-surface, #fff))',
     color: 'var(--color-error)',
   },
-  warning: { bg: 'color-mix(in srgb, #d97706 12%, #fff)', color: '#d97706' },
+  warning: {
+    bg: 'color-mix(in srgb, var(--color-warning) 12%, var(--bg-surface, #fff))',
+    color: 'var(--color-warning)',
+  },
 }
 
 const EXIT_MS = 150
@@ -117,7 +120,7 @@ export function ToastContainer() {
           <div
             key={toast.id}
             className={`hiven-toast pointer-events-auto px-3 py-2 rounded-md shadow-lg text-[12px] max-w-[320px] flex items-start gap-2${phaseClass}`}
-            style={{ background: style.bg, color: style.color, border: '1px solid currentColor', borderColor: `${style.color}33` }}
+            style={{ background: style.bg, color: style.color, border: '1px solid color-mix(in srgb, currentColor 20%, transparent)' }}
           >
             <span className="flex-1">{toast.message}</span>
             {toast.action && (
@@ -143,9 +146,11 @@ export function ToastContainer() {
             </button>
             <button
               className="opacity-50 hover:opacity-100 shrink-0"
+              title={translate(locale, 'workspace', 'close')}
+              aria-label={translate(locale, 'workspace', 'close')}
               onClick={() => requestRemove(toast.id)}
             >
-              ✕
+              <X size={13} strokeWidth={1.8} />
             </button>
           </div>
         )

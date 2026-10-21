@@ -176,6 +176,7 @@ function QuickEditorPaneSurface({
   const paneOrder = useQuickEditorStore((s) => s.paneOrder)
   const closePane = useQuickEditorStore((s) => s.closePane)
   const tEditor = useT('editor')
+  const tQuickEditor = useT('quickEditor')
   const initialCursorRef = useRef(pane.cursorPosition)
   const initialScrollRef = useRef(pane.scrollPosition)
   const panelInstancesV2 = useQuickEditorStore((s) => s.panelInstancesV2)
@@ -236,7 +237,7 @@ function QuickEditorPaneSurface({
       })}
       actions={[{
         id: 'quick-editor-command',
-        label: 'Quick Editor Command',
+        label: tQuickEditor('actionCommand'),
         keybindings: [2048 | 41],
         run: () => {
           suppressStandaloneLauncherBlur()
@@ -244,35 +245,35 @@ function QuickEditorPaneSurface({
         },
       }, {
         id: 'quick-editor-close-pane',
-        label: 'Close Quick Editor Pane',
+        label: tQuickEditor('actionClosePane'),
         keybindings: [2048 | 53],
         run: () => {
           useQuickEditorStore.getState().closeActivePane()
         },
       }, {
         id: 'quick-editor-split-right',
-        label: 'Split Right',
+        label: tQuickEditor('actionSplitRight'),
         keybindings: [2048 | 93],
         run: () => {
           useQuickEditorStore.getState().createPane({ direction: 'right' })
         },
       }, {
         id: 'quick-editor-split-down',
-        label: 'Split Down',
+        label: tQuickEditor('actionSplitDown'),
         keybindings: [2048 | 1024 | 93],
         run: () => {
           useQuickEditorStore.getState().createPane({ direction: 'bottom' })
         },
       }, {
         id: 'quick-editor-focus-next-pane',
-        label: 'Focus Next Pane',
+        label: tQuickEditor('actionFocusNext'),
         keybindings: [2048 | 512 | 17],
         run: () => {
           useQuickEditorStore.getState().focusNextPane()
         },
       }, {
         id: 'quick-editor-focus-previous-pane',
-        label: 'Focus Previous Pane',
+        label: tQuickEditor('actionFocusPrevious'),
         keybindings: [2048 | 512 | 15],
         run: () => {
           useQuickEditorStore.getState().focusPreviousPane()

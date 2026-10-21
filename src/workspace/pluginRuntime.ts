@@ -17,6 +17,8 @@ import { cleanupEditorPluginContributions } from './editorBridge'
 import { pluginRegistry } from './pluginRegistry'
 import { usePluginStore } from './pluginStore'
 import { showToast } from './toast'
+import { t as translateHost } from '../i18n'
+import { useAppStore } from '../store'
 import { createPluginScaffoldFiles } from './pluginScaffold.ts'
 import { parsePluginDefinitionSource } from './pluginDebugRunner.ts'
 import { createPluginHostSdk, type PluginHostSdk } from '../pluginHostSdk.ts'
@@ -107,6 +109,10 @@ async function toAssetUrl(filePath: string, cacheBust = false): Promise<string> 
 /** Read a file as text using Tauri FS plugin */
 async function readFileText(path: string): Promise<string> {
   return invokeCommand<string>('read_plugin_file', { path })
+}
+
+function hostText(key: string): string {
+  return translateHost(useAppStore.getState().locale, `workspace.${key}`)
 }
 
 /**
@@ -532,11 +538,10 @@ function activateInstalledPlugin(pluginId: string, reload: boolean): Promise<voi
       const removed = oldCapabilities.filter((c) => !manifest.capabilities.includes(c))
       if (added.length > 0 || removed.length > 0) {
         const parts: string[] = []
-        if (added.length > 0) parts.push(`added: ${added.join(', ')}`)
-        if (removed.length > 0) parts.push(`removed: ${removed.join(', ')}`)
-        showToast(`"${record.displayName}" capabilities changed — ${parts.join(' | ')}`, 'info')
+        if (added.length > 0) parts.push(`${hostText('plugin.capabilitiesAdded')}: ${added.join(', ')}`)
+        if (removed.length > 0) parts.push(`${hostText('plugin.capabilitiesRemoved')}: ${removed.join(', ')}`)
+        showToast(`"${record.displayName}" ${hostText('plugin.capabilitiesChanged')} — ${parts.join(' | ')}`, 'info')
       }
-      showToast(`Plugin "${record.displayName}" reloaded`, 'success')
     }
   }).catch((error: unknown) => {
     if (!isCurrent()) return
@@ -577,7 +582,7 @@ export function disablePlugin(pluginId: string): void {
   void stopPluginBackground(pluginId, pluginSettingsSourceForRecord(record))
   cleanupPluginEditorContributions(pluginId, panelIds)
   updatePluginStatus(pluginId, 'disabled')
-  if (record.status === 'enabled') showToast(`Plugin "${record.displayName}" disabled`, 'info')
+  if (record.status === 'enabled') showToast(`"${record.displayName}" ${hostText('plugin.disabled')}`, 'info')
 }
 
 /** Reload with a fresh activation, invalidating any preceding load. */
@@ -672,7 +677,6 @@ export async function sideloadDevPlugin(folderPath: string): Promise<DevPlugin> 
     )
 
     addDevPlugin(devRecord)
-    showToast(`[DEV] Plugin "${packageMeta.displayName}" loaded`, 'success')
     return devRecord
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err)
@@ -716,7 +720,6 @@ export async function reloadDevPlugin(pluginId: string): Promise<void> {
     )
 
     updateDevPluginStatus(pluginId, 'active')
-    showToast(`[DEV] Plugin "${record.displayName}" reloaded`, 'success')
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err)
     updateDevPluginStatus(pluginId, 'error', errMsg)
@@ -763,7 +766,7 @@ export async function watchDevPlugin(pluginId: string): Promise<void> {
   })
 
   usePluginStore.getState().updateDevPluginWatching(pluginId, true)
-  showToast(`[DEV] Watching "${record.displayName}" for changes`, 'info')
+  showToast(`"${record.displayName}" ${hostText('plugin.devWatching')}`, 'info')
 }
 
 /**
@@ -1078,7 +1081,6 @@ export async function updateInstalledPlugin(pluginId: string): Promise<Installed
       update: { status: 'up-to-date', latestVersion: nextSummary.version, checkedAt: Date.now() },
     })
     if (wasEnabled) await enablePlugin(pluginId)
-    showToast(`Plugin "${nextSummary.displayName}" updated`, 'success')
     return usePluginStore.getState().plugins[pluginId]
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
