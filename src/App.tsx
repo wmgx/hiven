@@ -38,8 +38,22 @@ import { startNativeValidationRelay } from './workspace/webNativeBridge'
 // Register built-in panels
 
 /** Lightweight text-only read for age tracking (avoid file-path IPC every tick). */
-function readClipboardTextForAgeTracker(): Promise<string> {
-  return readNativeClipboardText()
+// The pasteboard changeCount is a cheap probe; only re-read the text when it moved.
+let ageTrackerChangeCount: number | null = null
+let ageTrackerLastText = ''
+async function readClipboardTextForAgeTracker(): Promise<string> {
+  let count: number | null = null
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    const value = await invoke<number | null>('clipboard_change_count')
+    count = typeof value === 'number' ? value : null
+  } catch {
+    count = null
+  }
+  if (count !== null && count === ageTrackerChangeCount) return ageTrackerLastText
+  ageTrackerLastText = await readNativeClipboardText()
+  ageTrackerChangeCount = count
+  return ageTrackerLastText
 }
 
 // Register first-party product plugin packages
@@ -168,27 +182,14 @@ function LauncherRuntimeApp() {
     return () => { stop(); if (lastNotice) dismissToast(lastNotice) }
   }, [])
 
-  // Clipboard age clock (only while visible+focused): first see = unknown baseline; real changes get known changedAt.
+  // Background clipboard age clock: first see = unknown baseline; real changes get known changedAt.
   // Prevents Global Launcher open from treating long-sitting clipboard as "just copied".
+  // Must keep running while the launcher is hidden — that is when copies happen.
   useEffect(() => {
     if (window.__HIVEN_WEB_NATIVE_BRIDGE__) return
-    // Poll only while this window is visible and focused (the launcher is open);
-    // a hidden webview must not keep issuing clipboard IPC every second.
-    let stopTracker: (() => void) | null = null
-    const sync = () => {
-      const active = document.visibilityState === 'visible' && document.hasFocus()
-      if (active && !stopTracker) stopTracker = startClipboardAgeTracker(readClipboardTextForAgeTracker)
-      else if (!active && stopTracker) { stopTracker(); stopTracker = null }
-    }
-    sync()
-    document.addEventListener('visibilitychange', sync)
-    window.addEventListener('focus', sync)
-    window.addEventListener('blur', sync)
+    const stopTracker = startClipboardAgeTracker(readClipboardTextForAgeTracker)
     return () => {
-      document.removeEventListener('visibilitychange', sync)
-      window.removeEventListener('focus', sync)
-      window.removeEventListener('blur', sync)
-      stopTracker?.()
+      stopTracker()
     }
   }, [])
 
