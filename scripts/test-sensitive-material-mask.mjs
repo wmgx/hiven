@@ -46,6 +46,9 @@ const content = load('src/kits/content/index.ts')
 const snapshot = load('src/launcher/clipboard/clipboardSnapshot.ts')
 const attach = load('src/launcher/clipboard/attachPolicy.ts')
 const blocks = load('src/launcher/clipboard/objectBlock.ts')
+
+// Kinds as first-party plugins declare them in `accepts.kinds` (attach follows declarations).
+const ACCEPTED = { acceptedKinds: new Set(['json', 'url', 'jwt', 'csv', 'tsv', 'yaml', 'xml', 'sql', 'css', 'timestamp', 'base64', 'url-encoded']) }
 const fileText = load('src/launcher/clipboard/fileTextMaterial.ts')
 const delivery = load('src/launcher/clipboard/currentTextDelivery.ts')
 const executor = load('src/launcher/clipboard/actionExecutor.ts')
@@ -64,7 +67,7 @@ function clipboard(text) {
   return blocks.createClipboardObjectBlock({
     text, hash: 'synthetic-hash', detectedType: snapshot.detectClipboardType(text),
     firstSeenAt: now, lastSeenAt: now, changedAt: now, ageConfidence: 'known',
-  }, now)
+  }, now, { forceAttach: true })
 }
 const factories = [
   ['clipboard', clipboard],
@@ -127,7 +130,7 @@ for (const [text, kind] of [
   assert.equal(block.payloadText, text)
 }
 for (const text of ['ordinary synthetic text', '42', '']) {
-  assert.equal(attach.isStrongClipboardAttachEligible(text), false)
+  assert.equal(attach.isStrongClipboardAttachEligible(text, ACCEPTED), false)
 }
 
 // Explicit local opening retains full payload; masking is not encryption or an execution ban.

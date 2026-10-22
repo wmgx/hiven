@@ -153,6 +153,8 @@ export const csvPlugin = definePlugin({
         icon: 'Table',
         aliases: [...route.aliases],
       },
+      // Tabular input routes take copied CSV/TSV; JSON → CSV does not.
+      ...(route.id === 'to-csv' ? {} : { accepts: { kinds: ['csv' as const, 'tsv' as const] } }),
       behavior: { type: 'perform' as const },
       surfaces: ['global-launcher' as const],
       execute(execution) {

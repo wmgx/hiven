@@ -35,6 +35,7 @@ import {
   updateClipboardSnapshot,
   type ClipboardSnapshot,
 } from './clipboardSnapshot'
+import type { ObjectAcceptance } from './attachPolicy'
 import { launcherPerfNow, logLauncherPerfDuration } from '../../workspace/launcher/perf'
 import { TelemetryEvents, trackBehavior } from '../../workspace/telemetry'
 import {
@@ -48,6 +49,8 @@ import {
   type CurrentMaterial,
 } from './currentMaterial'
 import { getAttachedTextFilePath, readAttachedTextFile, startFileTextMaterialRead, startPickedTextMaterialRead, type FileTextErrorCode } from './fileTextMaterial'
+
+const NO_ACCEPTANCE: ObjectAcceptance = { acceptedKinds: new Set() }
 
 /** Keep token mounted for compositor-only exit (opacity + transform). */
 export const OBJECT_BLOCK_EXIT_MS = 130
@@ -102,8 +105,8 @@ export function useClipboardObjectBlock(params: {
    * Lets open decide on the first frame; the native read still runs and corrects it.
    */
   peekClipboard?: () => string | null
-  /** A plugin has a one-step action for this exact text (e.g. a quick-open rule). */
-  isClaimedByPlugin?: (text: string) => boolean
+  /** What active plugins accept (kinds) or claim (text); read at decision time. */
+  getAcceptance?: () => ObjectAcceptance
   /**
    * When true at open-read time, skip auto Object Block while input is in progress.
    * forceAttach / history pending still work.
@@ -119,11 +122,11 @@ export function useClipboardObjectBlock(params: {
     onComplete?: () => void
   }
 }): ClipboardObjectBlockState {
-  const { open, readClipboard, peekClipboard, isClaimedByPlugin, suppressAutoAttach, filePicker, onQueryBlockRemoved } = params
+  const { open, readClipboard, peekClipboard, getAcceptance, suppressAutoAttach, filePicker, onQueryBlockRemoved } = params
   const peekClipboardRef = useRef(peekClipboard)
   peekClipboardRef.current = peekClipboard
-  const isClaimedByPluginRef = useRef(isClaimedByPlugin)
-  isClaimedByPluginRef.current = isClaimedByPlugin
+  const getAcceptanceRef = useRef(getAcceptance)
+  getAcceptanceRef.current = getAcceptance
   const onQueryBlockRemovedRef = useRef(onQueryBlockRemoved)
   onQueryBlockRemovedRef.current = onQueryBlockRemoved
   const [material, setMaterial] = useState(() => replaceCurrentMaterial(null))
@@ -274,14 +277,15 @@ export function useClipboardObjectBlock(params: {
 
       const suppress = suppressAutoAttachRef.current?.() === true
       const now = Date.now()
-      const options = { suppressAutoAttach: suppress, isClaimedByPlugin: isClaimedByPluginRef.current }
+      const acceptance = getAcceptanceRef.current?.() ?? NO_ACCEPTANCE
+      const options = { suppressAutoAttach: suppress, acceptance }
       const dismissed = isClipboardDismissed(snapshot)
       const newBlock = dismissed ? null : createClipboardObjectBlock(snapshot, now, options)
       clearExitTimer()
       setIsExiting(false)
       publishMaterial(replaceCurrentMaterial(newBlock))
       // Hint only when not suppressed and content would qualify (policy inside builder).
-      setHint(newBlock || suppress ? null : buildRecentClipboardHint(snapshot))
+      setHint(newBlock || suppress ? null : buildRecentClipboardHint(snapshot, acceptance))
       trackBehavior(TelemetryEvents.clipboardBlockAttach, newBlock
         ? { kind: newBlock.kind, source: newBlock.source, auto: true, suppressed: false, readSource: source }
         : {

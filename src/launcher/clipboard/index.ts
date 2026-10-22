@@ -25,9 +25,10 @@ export {
 
 export {
   STRONG_ATTACH_MIN_CONFIDENCE,
-  STRONG_ATTACH_CONTENT_KINDS,
+  STRONG_QUERY_ATTACH_CONTENT_KINDS,
   findStrongClipboardAttachHits,
   isStrongClipboardAttachEligible,
+  type ObjectAcceptance,
   type StrongAttachHit,
 } from './attachPolicy'
 

@@ -75,8 +75,8 @@ function loadPluginDefinition(pluginDir) {
           textError: (text) => ({ output: { kind: 'error', text } }),
         }
       }
-      // Local relative imports (e.g. ./CsvSurface) — stub only; accepts live on the definition.
-      if (specifier.startsWith('.')) {
+      // Local relative imports (e.g. ./CsvSurface) and UI runtime — stub only; accepts live on the definition.
+      if (specifier.startsWith('.') || specifier === 'react') {
         return new Proxy(
           { __esModule: true, default: function Stub() {} },
           {

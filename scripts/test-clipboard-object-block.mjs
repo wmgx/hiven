@@ -58,6 +58,9 @@ const objectBlock = transpileAndRun('src/launcher/clipboard/objectBlock.ts', {
   fileNameFromPath: snapshot.fileNameFromPath,
   detectClipboardType: snapshot.detectClipboardType,
 })
+
+// Kinds as first-party plugins declare them in `accepts.kinds` (attach follows declarations).
+const ACCEPTED = { acceptedKinds: new Set(['json', 'url', 'jwt', 'csv', 'tsv', 'yaml', 'xml', 'sql', 'css', 'timestamp', 'base64', 'url-encoded']) }
 const materialText = transpileAndRun('src/launcher/clipboard/currentMaterial.ts')
 const currentTextSupport = transpileAndRun('src/launcher/clipboard/currentTextDelivery.ts', materialText)
 const paletteMessages = transpileAndRun('src/i18n/locales/palette.ts').default
@@ -127,20 +130,22 @@ assert.equal(snapshot.shouldAutoAttachClipboard(observedChange), true, 'fresh ch
 
 // ─── Strong attach policy ─────────────────────────────────────────────────────
 
-assert.equal(attachPolicy.isStrongClipboardAttachEligible('{"a":1}'), true, 'json is strong')
-assert.equal(attachPolicy.isStrongClipboardAttachEligible('https://example.com'), true, 'url is strong')
-assert.equal(attachPolicy.isStrongClipboardAttachEligible('1710000000'), true, 'timestamp is strong')
-assert.equal(attachPolicy.isStrongClipboardAttachEligible('hello world plain text'), false, 'plain text is not strong')
-assert.equal(attachPolicy.isStrongClipboardAttachEligible('42'), false, 'short number not strong')
-assert.equal(attachPolicy.isStrongClipboardAttachEligible('/Users/me/export.csv'), true, 'file path strong via ext')
+assert.equal(attachPolicy.isStrongClipboardAttachEligible('{"a":1}', ACCEPTED), true, 'json is strong')
+assert.equal(attachPolicy.isStrongClipboardAttachEligible('https://example.com', ACCEPTED), true, 'url is strong')
+assert.equal(attachPolicy.isStrongClipboardAttachEligible('1710000000', ACCEPTED), true, 'timestamp is strong')
+assert.equal(attachPolicy.isStrongClipboardAttachEligible('hello world plain text', ACCEPTED), false, 'plain text is not strong')
+// No plugin declares the kind → detected objects stay detached; the host keeps no kind list.
+assert.equal(attachPolicy.isStrongClipboardAttachEligible('{"a":1}', { acceptedKinds: new Set(['url']) }), false, 'json without an accepting plugin does not attach')
+assert.equal(attachPolicy.isStrongClipboardAttachEligible('42', ACCEPTED), false, 'short number not strong')
+assert.equal(attachPolicy.isStrongClipboardAttachEligible('/Users/me/export.csv', ACCEPTED), true, 'file path strong via ext')
 
 // Typed/pasted query routing: a strong-type query becomes a content block, plain search text does not.
 {
-  const routed = objectBlock.createStrongQueryObjectBlock('{"a":1,"b":[1,2]}')
+  const routed = objectBlock.createStrongQueryObjectBlock('{"a":1,"b":[1,2]}', ACCEPTED)
   assert.equal(routed?.source, 'query')
   assert.equal(routed?.kind, 'json')
   assert.equal(routed?.payloadText, '{"a":1,"b":[1,2]}')
-  assert.equal(objectBlock.createStrongQueryObjectBlock('chrome'), null)
+  assert.equal(objectBlock.createStrongQueryObjectBlock('chrome', ACCEPTED), null)
 }
 
 // Soft operands
@@ -188,7 +193,7 @@ const numberSnap = {
 }
 assert.equal(snapshot.shouldAutoAttachClipboard(numberSnap), true, 'fresh number still age-eligible')
 assert.equal(
-  objectBlock.createClipboardObjectBlock(numberSnap),
+  objectBlock.createClipboardObjectBlock(numberSnap, Date.now(), { acceptance: ACCEPTED }),
   null,
   'fresh short number must not hard-attach as object block',
 )
@@ -205,10 +210,10 @@ const plainSnap = {
   changedAt: Date.now() - 3_000,
   ageConfidence: 'known',
 }
-assert.equal(objectBlock.createClipboardObjectBlock(plainSnap), null, 'plain text must not hard-attach')
-assert.equal(objectBlock.getClipboardAutoAttachSkipReason(plainSnap), 'plain-text')
+assert.equal(objectBlock.createClipboardObjectBlock(plainSnap, Date.now(), { acceptance: ACCEPTED }), null, 'plain text must not hard-attach')
+assert.equal(objectBlock.getClipboardAutoAttachSkipReason(plainSnap, Date.now(), { acceptance: ACCEPTED }), 'plain-text')
 // A plugin claim (e.g. a quick-open rule) makes fresh plain text an object; it never bypasses freshness.
-const claimAll = { isClaimedByPlugin: () => true }
+const claimAll = { acceptance: { acceptedKinds: new Set(), isClaimedByPlugin: () => true } }
 assert.ok(objectBlock.createClipboardObjectBlock(plainSnap, Date.now(), claimAll), 'plugin-claimed fresh text attaches')
 assert.equal(
   objectBlock.getClipboardAutoAttachSkipReason({ ...plainSnap, changedAt: Date.now() - 60_000 }, Date.now(), claimAll),
@@ -237,7 +242,7 @@ const freshSnap = {
   changedAt: Date.now() - 5_000,
   ageConfidence: 'known',
 }
-const block = objectBlock.createClipboardObjectBlock(freshSnap)
+const block = objectBlock.createClipboardObjectBlock(freshSnap, Date.now(), { acceptance: ACCEPTED })
 assert.ok(block, 'fresh strong clipboard should create block')
 assert.equal(block.source, 'clipboard')
 assert.equal(block.kind, 'json')
@@ -246,12 +251,12 @@ assert.equal(block.selectedForDelete, false)
 
 // Stale clipboard should not create block
 const staleSnap = { ...freshSnap, changedAt: Date.now() - 3 * 60_000, ageConfidence: 'known', detectedType: 'json' }
-const noBlock = objectBlock.createClipboardObjectBlock(staleSnap)
+const noBlock = objectBlock.createClipboardObjectBlock(staleSnap, Date.now(), { acceptance: ACCEPTED })
 assert.equal(noBlock, null, 'stale clipboard should not create block')
 
 // Unknown age should not create block
 const unknownSnap = { ...freshSnap, changedAt: undefined, ageConfidence: 'unknown', detectedType: 'json' }
-const noBlock2 = objectBlock.createClipboardObjectBlock(unknownSnap)
+const noBlock2 = objectBlock.createClipboardObjectBlock(unknownSnap, Date.now(), { acceptance: ACCEPTED })
 assert.equal(noBlock2, null, 'unknown age should not create block')
 
 // Secret block should mask preview
@@ -290,7 +295,7 @@ const recentJson = {
   changedAt: Date.now() - 90_000,
   ageConfidence: 'known',
 }
-const hint = objectBlock.buildRecentClipboardHint(recentJson)
+const hint = objectBlock.buildRecentClipboardHint(recentJson, ACCEPTED)
 assert.ok(hint, 'recent strong clipboard should show hint')
 
 const recentPlain = {
@@ -302,11 +307,11 @@ const recentPlain = {
   changedAt: Date.now() - 90_000,
   ageConfidence: 'known',
 }
-assert.equal(objectBlock.buildRecentClipboardHint(recentPlain), null, 'recent plain text should not hint')
+assert.equal(objectBlock.buildRecentClipboardHint(recentPlain, ACCEPTED), null, 'recent plain text should not hint')
 
 // Expired clipboard hint (>2 min)
 const expiredSnap = { ...recentJson, changedAt: Date.now() - 3 * 60_000 }
-const noHint = objectBlock.buildRecentClipboardHint(expiredSnap)
+const noHint = objectBlock.buildRecentClipboardHint(expiredSnap, ACCEPTED)
 assert.equal(noHint, null, 'expired clipboard should not show hint')
 
 // Age labels

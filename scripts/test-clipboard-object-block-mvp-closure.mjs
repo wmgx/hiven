@@ -55,6 +55,9 @@ const objectBlock = transpileAndRun('src/launcher/clipboard/objectBlock.ts', {
   detectClipboardType: snapshot.detectClipboardType,
   fileNameFromPath: snapshot.fileNameFromPath,
 })
+
+// Kinds as first-party plugins declare them in `accepts.kinds` (attach follows declarations).
+const ACCEPTED = { acceptedKinds: new Set(['json', 'url', 'jwt', 'csv', 'tsv', 'yaml', 'xml', 'sql', 'css', 'timestamp', 'base64', 'url-encoded']) }
 const materialText = transpileAndRun('src/launcher/clipboard/currentMaterial.ts')
 const currentTextSupport = transpileAndRun('src/launcher/clipboard/currentTextDelivery.ts', materialText)
 const paletteMessages = transpileAndRun('src/i18n/locales/palette.ts').default
@@ -78,7 +81,7 @@ console.log('Scenario 2: Executor uses full payloadText, not preview')
   // Create a block with long text and verify payloadText preserved
   const longJson = JSON.stringify({ key: 'x'.repeat(500), nested: { a: 1, b: 2 } })
   const snap = { ...snapshot.updateClipboardSnapshot(longJson), changedAt: Date.now() - 10_000, ageConfidence: 'known' }
-  const block = objectBlock.createClipboardObjectBlock(snap)
+  const block = objectBlock.createClipboardObjectBlock(snap, Date.now(), { acceptance: ACCEPTED })
   assert.ok(block, 'Block should be created')
   assert.ok(block.preview.length <= 120, `preview should be truncated (got ${block.preview.length})`)
   assert.equal(block.payloadText, longJson, 'payloadText should contain full text')
@@ -130,7 +133,9 @@ console.log('Scenario 8: Secret block does not show preview AND does not recomme
   // Create a secret-like block
   const secretText = 'sk-proj-1234567890abcdef_secret_token_value'
   const secretSnap = { ...snapshot.updateClipboardSnapshot(secretText), changedAt: Date.now() - 5000, ageConfidence: 'known' }
-  const secretBlock = objectBlock.createClipboardObjectBlock(secretSnap)
+  // No plugin accepts a bare secret, so it never auto-attaches; an explicit attach still masks it.
+  assert.equal(objectBlock.createClipboardObjectBlock(secretSnap, Date.now(), { acceptance: ACCEPTED }), null, 'Bare secret does not auto-attach')
+  const secretBlock = objectBlock.createClipboardObjectBlock(secretSnap, Date.now(), { forceAttach: true })
   assert.ok(secretBlock, 'Secret block should be created')
   assert.equal(secretBlock.secretMasked, true, 'Secret block must be masked')
   assert.equal(secretBlock.preview, undefined, 'Secret block preview must be undefined (masked)')

@@ -26,6 +26,7 @@ import { getPluginSurfaceDefinition, isWorkflowObjectLauncherItem } from '../../
 import { useGlobalLauncherSurfaceFrame } from '../../components/launcher/GlobalLauncherSurfaceFrame'
 import { readLauncherClipboard } from '../clipboard/readLauncherClipboard'
 import { peekTrackedClipboardText } from '../clipboard/clipboardTextCache'
+import type { ObjectAcceptance } from '../clipboard/attachPolicy'
 import { GlobalLauncherPanel } from '../../components/launcher/GlobalLauncherPanel'
 import { useLauncherSurfaceBackgroundIdle } from '../../components/launcher/useLauncherSurfaceBackgroundIdle'
 import { WindowResizeHandles } from '../../components/WindowResizeHandles'
@@ -173,12 +174,14 @@ export function GlobalLauncherHost() {
   }, [])
   // Text the user pulled back out of an auto-attached query block must not be re-attached.
   const rejectedQueryBlockTextRef = useRef<string | null>(null)
+  // Filled from the session's available items below; the clipboard hook reads it at decision time.
+  const objectAcceptanceRef = useRef<ObjectAcceptance>({ acceptedKinds: new Set() })
   const clipboardBlock = useClipboardObjectBlock({
     open,
     readClipboard: readLauncherClipboard,
     // The tracker polls every second; older copies may miss a copy made right before open.
     peekClipboard: () => peekTrackedClipboardText(1500),
-    isClaimedByPlugin: (text) => isObjectTextClaimedByPlugin(text, getPluginSettings),
+    getAcceptance: () => objectAcceptanceRef.current,
     onQueryBlockRemoved: (text) => {
       rejectedQueryBlockTextRef.current = text
       setQuery(text)
@@ -353,6 +356,14 @@ export function GlobalLauncherHost() {
     }
   }, [open])
 
+  // Auto-attach follows plugin declarations: a detected kind must be in some item's
+  // `accepts.kinds`, or a plugin must claim the exact text.
+  const objectAcceptance = useMemo<ObjectAcceptance>(() => ({
+    acceptedKinds: new Set(availableLauncherItems.flatMap((item) => item.accepts?.kinds ?? [])),
+    isClaimedByPlugin: (text) => isObjectTextClaimedByPlugin(text, getPluginSettings),
+  }), [availableLauncherItems])
+  objectAcceptanceRef.current = objectAcceptance
+
   // Only look up the foreground app when some candidate can actually use it.
   const anyCandidateAcceptsApps = useMemo(
     () => availableLauncherItems.some((item) => (item.accepts?.apps?.length ?? 0) > 0),
@@ -435,13 +446,13 @@ export function GlobalLauncherHost() {
     if (!open) rejectedQueryBlockTextRef.current = null
     if (!open || !rootListActive || clipboardBlock.block || browsingActions || !query.trim()) return
     if (rejectedQueryBlockTextRef.current === query) return
-    if (!createStrongQueryObjectBlock(query)) return
+    if (!createStrongQueryObjectBlock(query, objectAcceptance)) return
     const timer = window.setTimeout(() => {
       if (isImeComposingRef.current) return
       clipboardBlock.attachQueryAsBlock(query)
     }, QUERY_BLOCK_ATTACH_DELAY_MS)
     return () => window.clearTimeout(timer)
-  }, [open, rootListActive, clipboardBlock.block, clipboardBlock.attachQueryAsBlock, browsingActions, query, isImeComposingRef])
+  }, [open, rootListActive, clipboardBlock.block, clipboardBlock.attachQueryAsBlock, browsingActions, query, isImeComposingRef, objectAcceptance])
 
   useEffect(() => {
     if (!standaloneLauncher || !isNativeDesktopRuntime()) return

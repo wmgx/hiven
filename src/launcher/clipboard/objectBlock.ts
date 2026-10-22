@@ -15,7 +15,7 @@ import {
   shouldAutoAttachClipboard,
   shouldShowRecentClipboardHint,
 } from './clipboardSnapshot'
-import { isStrongClipboardAttachEligible } from './attachPolicy'
+import { isStrongClipboardAttachEligible, type ObjectAcceptance } from './attachPolicy'
 import { objectBlockText } from './objectBlockText'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -177,9 +177,11 @@ export type ClipboardObjectBlockOptions = {
   forceAttach?: boolean
   /** Sticky / non-empty query: never auto-steal focus from typing. */
   suppressAutoAttach?: boolean
-  /** A plugin has a one-step action for this exact text (e.g. a quick-open rule). */
-  isClaimedByPlugin?: (text: string) => boolean
+  /** What active plugins accept; without it nothing auto-attaches by content. */
+  acceptance?: ObjectAcceptance
 }
+
+const NO_ACCEPTANCE: ObjectAcceptance = { acceptedKinds: new Set() }
 
 export type ClipboardAutoAttachSkipReason = 'suppressed' | 'unknown-age' | 'stale' | 'plain-text'
 
@@ -192,8 +194,8 @@ export function getClipboardAutoAttachSkipReason(
   if (options?.forceAttach) return null
   if (options?.suppressAutoAttach) return 'suppressed'
   if (!shouldAutoAttachClipboard(snapshot, now)) return snapshot.ageConfidence === 'known' ? 'stale' : 'unknown-age'
-  // Strong structured content (json/url/jwt/timestamp/…) or a plugin-claimed object, not plain text.
-  if (!isStrongClipboardAttachEligible(snapshot.text) && options?.isClaimedByPlugin?.(snapshot.text) !== true) return 'plain-text'
+  // An object some active plugin accepts or claims, not plain text.
+  if (!isStrongClipboardAttachEligible(snapshot.text, options?.acceptance ?? NO_ACCEPTANCE)) return 'plain-text'
   return null
 }
 
@@ -395,8 +397,8 @@ export function createQueryObjectBlock(params: {
  * Typed or pasted launcher query that is clearly a structured object (JSON, JWT,
  * timestamp, URL, ...) becomes a content block; ordinary search text stays null.
  */
-export function createStrongQueryObjectBlock(query: string): LauncherObjectBlock | null {
-  return isStrongClipboardAttachEligible(query, 'query') ? createQueryObjectBlock({ query }) : null
+export function createStrongQueryObjectBlock(query: string, acceptance: ObjectAcceptance): LauncherObjectBlock | null {
+  return isStrongClipboardAttachEligible(query, acceptance, 'query') ? createQueryObjectBlock({ query }) : null
 }
 
 export function createToolResultObjectBlock(text: string): LauncherObjectBlock {
@@ -421,10 +423,14 @@ export type RecentClipboardHint = {
   kind: ObjectBlockKind
 }
 
-export function buildRecentClipboardHint(snapshot: ClipboardSnapshot, now: number = Date.now()): RecentClipboardHint | null {
+export function buildRecentClipboardHint(
+  snapshot: ClipboardSnapshot,
+  acceptance: ObjectAcceptance,
+  now: number = Date.now(),
+): RecentClipboardHint | null {
   if (!shouldShowRecentClipboardHint(snapshot, now)) return null
   // Hint only for content that would have hard-attached when fresher.
-  if (!isStrongClipboardAttachEligible(snapshot.text)) return null
+  if (!isStrongClipboardAttachEligible(snapshot.text, acceptance)) return null
   const ageMs = snapshot.changedAt !== undefined ? now - snapshot.changedAt : 0
   return {
     snapshot,

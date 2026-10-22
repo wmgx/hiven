@@ -56,6 +56,9 @@ const objectBlock = transpileAndRun('src/launcher/clipboard/objectBlock.ts', {
   detectClipboardFilePath: snapshot.detectClipboardFilePath,
   fileNameFromPath: snapshot.fileNameFromPath,
 })
+
+// Kinds as first-party plugins declare them in `accepts.kinds` (attach follows declarations).
+const ACCEPTED = { acceptedKinds: new Set(['json', 'url', 'jwt', 'csv', 'tsv', 'yaml', 'xml', 'sql', 'css', 'timestamp', 'base64', 'url-encoded']) }
 const materialText = transpileAndRun('src/launcher/clipboard/currentMaterial.ts')
 const currentTextSupport = transpileAndRun('src/launcher/clipboard/currentTextDelivery.ts', materialText)
 const paletteMessages = transpileAndRun('src/i18n/locales/palette.ts').default
@@ -84,7 +87,7 @@ const strongBase = {
 }
 const fresh = { ...strongBase, changedAt: Date.now() - 5_000, ageConfidence: 'known' }
 assert.equal(snapshot.shouldAutoAttachClipboard(fresh), true, '#3: fresh <= 12s is age-eligible')
-const block = objectBlock.createClipboardObjectBlock(fresh)
+const block = objectBlock.createClipboardObjectBlock(fresh, Date.now(), { acceptance: ACCEPTED })
 assert.ok(block, '#3: fresh strong content creates block')
 
 const stale15s = { ...strongBase, changedAt: Date.now() - 15_000, ageConfidence: 'known' }
@@ -97,15 +100,15 @@ assert.equal(snapshot.shouldAutoAttachClipboard(unknownAge), false, '#3: unknown
 assert.equal(snapshot.RECENT_CLIPBOARD_HINT_TTL_MS, 2 * 60_000, '#4: hint TTL is 2 min')
 const recent60s = { ...strongBase, changedAt: Date.now() - 60_000, ageConfidence: 'known' }
 assert.equal(snapshot.shouldShowRecentClipboardHint(recent60s), true, '#4: 60s shows age-hint window')
-assert.equal(objectBlock.createClipboardObjectBlock(recent60s), null, '#4: 60s does not create block')
-const hint = objectBlock.buildRecentClipboardHint(recent60s)
+assert.equal(objectBlock.createClipboardObjectBlock(recent60s, Date.now(), { acceptance: ACCEPTED }), null, '#4: 60s does not create block')
+const hint = objectBlock.buildRecentClipboardHint(recent60s, ACCEPTED)
 assert.ok(hint, '#4: hint created for recent strong clipboard')
 
 // ─── #5: >2 min or unknown: nothing ───────────────────────────────────────────
 const old3min = { ...s1, changedAt: Date.now() - 3 * 60_000, ageConfidence: 'known' }
 assert.equal(snapshot.shouldAutoAttachClipboard(old3min), false, '#5: 3 min no attach')
 assert.equal(snapshot.shouldShowRecentClipboardHint(old3min), false, '#5: 3 min no hint')
-assert.equal(objectBlock.buildRecentClipboardHint(old3min), null, '#5: no hint for old')
+assert.equal(objectBlock.buildRecentClipboardHint(old3min, ACCEPTED), null, '#5: no hint for old')
 const unknownSnap = snapshot.createClipboardSnapshotFromUnknownAge('whatever')
 assert.equal(snapshot.shouldAutoAttachClipboard(unknownSnap), false, '#5: unknown no attach')
 assert.equal(snapshot.shouldShowRecentClipboardHint(unknownSnap), false, '#5: unknown no hint')
@@ -119,7 +122,7 @@ for (const action of jsonActions) {
 }
 // ─── #11: Secret mask ──────────────────────────────────────────────────────────
 const secretSnap = { ...s1, changedAt: Date.now() - 5_000, ageConfidence: 'known', detectedType: 'secret', text: 'sk-abc123abc123abc123abc' }
-const secretBlock = objectBlock.createClipboardObjectBlock(secretSnap)
+const secretBlock = objectBlock.createClipboardObjectBlock(secretSnap, Date.now(), { forceAttach: true })
 assert.ok(secretBlock, '#11: secret block created')
 assert.equal(secretBlock.secretMasked, true, '#11: secret block masked')
 assert.equal(secretBlock.preview, undefined, '#11: secret preview hidden')
