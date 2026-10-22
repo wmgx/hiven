@@ -299,6 +299,15 @@ function parseDateForTimestampSuggestions(value: string): ParsedResult[] {
   ]
 }
 
+// Whole-text calendar date, optional time and zone: "2026-10-22", "2026-10-22 10:28:00", "2026-10-22T10:28:00Z".
+const CLAIMED_DATE_RE = /^\d{4}-\d{1,2}-\d{1,2}(?:[ T]\d{1,2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?)?(?:\s?(?:Z|[+-]\d{2}:?\d{2}))?$/
+
+/** A copied date string is a timestamp object: the launcher attaches it so conversions show at once. */
+function claimsDateText({ text }: { text: string }): boolean {
+  const trimmed = text.trim()
+  return CLAIMED_DATE_RE.test(trimmed) && parseDateForTimestampSuggestions(trimmed).length > 0
+}
+
 function parseTimestampForSuggestion(value: string): ParsedResult | null {
   const date = value.length === 10
     ? new Date(parseInt(value, 10) * 1000)
@@ -544,6 +553,7 @@ export const dateTimeAssistantPlugin = definePlugin({
         return { ok: true as const, keepOpen: true }
       },
     }))],
+    claimsObjectText: claimsDateText,
     dynamicItems(ctx: LauncherDynamicContext): LauncherItemContribution[] {
       const input = ctx.query
       if (!input) return []

@@ -32,29 +32,10 @@ import {
   logLauncherPerfDuration,
 } from './workspace/launcher/perf'
 import { startClipboardAgeTracker } from './launcher/clipboard/clipboardSnapshot'
-import { readNativeClipboardText } from './workspace/nativeClipboard'
+import { readClipboardTextForAgeTracker } from './launcher/clipboard/clipboardTextCache'
 import { startNativeValidationRelay } from './workspace/webNativeBridge'
 
 // Register built-in panels
-
-/** Lightweight text-only read for age tracking (avoid file-path IPC every tick). */
-// The pasteboard changeCount is a cheap probe; only re-read the text when it moved.
-let ageTrackerChangeCount: number | null = null
-let ageTrackerLastText = ''
-async function readClipboardTextForAgeTracker(): Promise<string> {
-  let count: number | null = null
-  try {
-    const { invoke } = await import('@tauri-apps/api/core')
-    const value = await invoke<number | null>('clipboard_change_count')
-    count = typeof value === 'number' ? value : null
-  } catch {
-    count = null
-  }
-  if (count !== null && count === ageTrackerChangeCount) return ageTrackerLastText
-  ageTrackerLastText = await readNativeClipboardText()
-  ageTrackerChangeCount = count
-  return ageTrackerLastText
-}
 
 // Register first-party product plugin packages
 registerHostLauncherProviders()

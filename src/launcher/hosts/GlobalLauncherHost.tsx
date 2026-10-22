@@ -4,7 +4,7 @@ import { ensurePluginRuntimeReady } from '../../workspace/pluginRuntimeBootstrap
 import { openLauncherHostedPluginSurface } from '../../workspace/pluginSurfaceOpenRequest'
 import { selectContextSuggestions, type Suggestion } from '../../workspace/launcher/contextSuggestions'
 import { beginSuggestionSession, endSuggestionSession, getSuggestionSession, recordSuggestionSelected, recordSuggestionShown, useSuggestionSettings } from '../../workspace/launcher/contextSuggestionsStore'
-import { filterAvailableLauncherItems } from '../../workspace/launcher/registry'
+import { filterAvailableLauncherItems, isObjectTextClaimedByPlugin } from '../../workspace/launcher/registry'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '../../store'
 import { useShallow } from 'zustand/react/shallow'
@@ -15,7 +15,7 @@ import { useGlobalLauncherResultFrame } from '../../components/launcher/GlobalLa
 import { buildGlobalLauncherItems, type GlobalLauncherItem } from '../../components/launcher/GlobalLauncherItems'
 import { buildGlobalLauncherPanelStyle } from '../../components/launcher/GlobalLauncherLayout'
 import { usePluginPermissionStore } from '../../workspace/pluginPermissions'
-import { useLauncherSession } from '../../workspace/launcher/useLauncherSession'
+import { getPluginSettings, useLauncherSession } from '../../workspace/launcher/useLauncherSession'
 import { releaseDesktopWindowSearch, setDesktopWindowSearchVisibilityGuard } from '../../workspace/desktopControl/windows'
 import type { SelectableExtraRow } from '../../workspace/launcher/selectionPreserve'
 import { useGlobalLauncherSurfaceRegistry } from '../../components/launcher/GlobalLauncherSurfaceRegistry'
@@ -25,6 +25,7 @@ import { closeGlobalLauncherWindow } from '../../components/launcher/GlobalLaunc
 import { getPluginSurfaceDefinition, isWorkflowObjectLauncherItem } from '../../components/launcher/GlobalLauncherSelection'
 import { useGlobalLauncherSurfaceFrame } from '../../components/launcher/GlobalLauncherSurfaceFrame'
 import { readLauncherClipboard } from '../clipboard/readLauncherClipboard'
+import { peekTrackedClipboardText } from '../clipboard/clipboardTextCache'
 import { GlobalLauncherPanel } from '../../components/launcher/GlobalLauncherPanel'
 import { useLauncherSurfaceBackgroundIdle } from '../../components/launcher/useLauncherSurfaceBackgroundIdle'
 import { WindowResizeHandles } from '../../components/WindowResizeHandles'
@@ -175,6 +176,9 @@ export function GlobalLauncherHost() {
   const clipboardBlock = useClipboardObjectBlock({
     open,
     readClipboard: readLauncherClipboard,
+    // The tracker polls every second; older copies may miss a copy made right before open.
+    peekClipboard: () => peekTrackedClipboardText(1500),
+    isClaimedByPlugin: (text) => isObjectTextClaimedByPlugin(text, getPluginSettings),
     onQueryBlockRemoved: (text) => {
       rejectedQueryBlockTextRef.current = text
       setQuery(text)

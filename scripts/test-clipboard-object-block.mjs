@@ -206,6 +206,15 @@ const plainSnap = {
   ageConfidence: 'known',
 }
 assert.equal(objectBlock.createClipboardObjectBlock(plainSnap), null, 'plain text must not hard-attach')
+assert.equal(objectBlock.getClipboardAutoAttachSkipReason(plainSnap), 'plain-text')
+// A plugin claim (e.g. a quick-open rule) makes fresh plain text an object; it never bypasses freshness.
+const claimAll = { isClaimedByPlugin: () => true }
+assert.ok(objectBlock.createClipboardObjectBlock(plainSnap, Date.now(), claimAll), 'plugin-claimed fresh text attaches')
+assert.equal(
+  objectBlock.getClipboardAutoAttachSkipReason({ ...plainSnap, changedAt: Date.now() - 60_000 }, Date.now(), claimAll),
+  'stale',
+  'plugin-claimed stale text stays detached',
+)
 
 // suppressAutoAttach (sticky / typing)
 assert.equal(

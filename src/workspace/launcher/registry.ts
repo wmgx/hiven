@@ -318,6 +318,28 @@ type DynamicProviderEntry = {
   lifetime: NonNullable<LauncherItem['pluginLifetime']>
 }
 
+/** Whether any active plugin claims `text` as an object it can act on in one step. */
+export function isObjectTextClaimedByPlugin(
+  text: string,
+  getSettings: (pluginId: string, source: ContributionSource) => unknown,
+): boolean {
+  const claimers = new Map<string, { claims: NonNullable<NonNullable<PluginDefinition<unknown>['launcher']>['claimsObjectText']>; source: ContributionSource }>()
+  for (const { definition, pluginId, source } of pluginRegistry.getAllPluginDefinitions()) {
+    const claims = definition.launcher?.claimsObjectText
+    // Later definitions (dev) replace production for the same plugin id.
+    if (claims) claimers.set(pluginId, { claims, source })
+  }
+  for (const [pluginId, { claims, source }] of claimers) {
+    if (!pluginRegistry.getPluginLifetime(pluginId, source).active) continue
+    try {
+      if (claims({ text, settings: getSettings(pluginId, source) })) return true
+    } catch {
+      // A failing plugin must not block the clipboard Object Block.
+    }
+  }
+  return false
+}
+
 function collectDynamicProviders(): DynamicProviderEntry[] {
   const entries = new Map<string, DynamicProviderEntry>()
   for (const { definition, pluginId, source } of pluginRegistry.getAllPluginDefinitions()) {

@@ -44,7 +44,7 @@
     {
       "pluginId": "date-time-assistant",
       "dir": "date-time-assistant",
-      "version": "1.12.2"
+      "version": "1.12.3"
     },
     {
       "pluginId": "translate",
@@ -74,7 +74,7 @@
     {
       "pluginId": "web-open",
       "dir": "web-open",
-      "version": "1.13.3"
+      "version": "1.13.4"
     },
     {
       "pluginId": "qr-code",

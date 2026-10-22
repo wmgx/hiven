@@ -879,7 +879,7 @@ export function useLauncherSession({
   }
 }
 
-function getPluginSettings(pluginId: string, source: ContributionSource): unknown {
+export function getPluginSettings(pluginId: string, source: ContributionSource): unknown {
   const def = pluginRegistry.getPluginDefinition(pluginId, source)
   const settingsContribution = def?.settings
   if (!settingsContribution) return undefined

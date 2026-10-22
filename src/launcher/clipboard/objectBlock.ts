@@ -173,21 +173,36 @@ export function createGenericObjectBlock(params: {
   }
 }
 
+export type ClipboardObjectBlockOptions = {
+  forceAttach?: boolean
+  /** Sticky / non-empty query: never auto-steal focus from typing. */
+  suppressAutoAttach?: boolean
+  /** A plugin has a one-step action for this exact text (e.g. a quick-open rule). */
+  isClaimedByPlugin?: (text: string) => boolean
+}
+
+export type ClipboardAutoAttachSkipReason = 'suppressed' | 'unknown-age' | 'stale' | 'plain-text'
+
+/** Why fresh-clipboard auto-attach does not apply, or null when it does. Content-free. */
+export function getClipboardAutoAttachSkipReason(
+  snapshot: ClipboardSnapshot,
+  now: number = Date.now(),
+  options?: ClipboardObjectBlockOptions,
+): ClipboardAutoAttachSkipReason | null {
+  if (options?.forceAttach) return null
+  if (options?.suppressAutoAttach) return 'suppressed'
+  if (!shouldAutoAttachClipboard(snapshot, now)) return snapshot.ageConfidence === 'known' ? 'stale' : 'unknown-age'
+  // Strong structured content (json/url/jwt/timestamp/…) or a plugin-claimed object, not plain text.
+  if (!isStrongClipboardAttachEligible(snapshot.text) && options?.isClaimedByPlugin?.(snapshot.text) !== true) return 'plain-text'
+  return null
+}
+
 export function createClipboardObjectBlock(
   snapshot: ClipboardSnapshot,
   now: number = Date.now(),
-  options?: {
-    forceAttach?: boolean
-    /** Sticky / non-empty query: never auto-steal focus from typing. */
-    suppressAutoAttach?: boolean
-  },
+  options?: ClipboardObjectBlockOptions,
 ): LauncherObjectBlock | null {
-  if (!options?.forceAttach) {
-    if (options?.suppressAutoAttach) return null
-    if (!shouldAutoAttachClipboard(snapshot, now)) return null
-    // Strong structured content only (json/url/jwt/base64/…), not plain text.
-    if (!isStrongClipboardAttachEligible(snapshot.text)) return null
-  }
+  if (getClipboardAutoAttachSkipReason(snapshot, now, options)) return null
   const ageMs = snapshot.changedAt !== undefined ? now - snapshot.changedAt : 0
   const kind = normalizeSecretKind(snapshot.detectedType)
   const filePath = detectClipboardFilePath(snapshot.text)

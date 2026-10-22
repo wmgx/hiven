@@ -252,6 +252,17 @@ function resolveLauncherIcon(
   return resolveFaviconIconForLauncher(domain, ctx.storage, ctx.source, ctx.pluginId, ctx.network)
 }
 
+/** Fresh clipboard text that a quick-open rule matches becomes an Object Block (one-step open). */
+function claimsQuickOpenText({ text, settings }: { text: string; settings: unknown }): boolean {
+  const quickOpenSettings = settings as WebQuickOpenSettings | undefined
+  if (quickOpenSettings?.enabled === false) return false
+  const candidate = text.trim()
+  // Quick-open targets short tokens (ticket ids, codes), not documents.
+  if (!candidate || candidate.length > 256 || /[\r\n]/.test(candidate)) return false
+  return configuredEntries(quickOpenSettings).some((entry) =>
+    !isAutoLearnedEntry(entry) && Boolean(entry.matchPattern) && testMatchPattern(entry.matchPattern!, candidate))
+}
+
 async function buildDynamicLauncherItems(ctx: LauncherDynamicContext): Promise<LauncherItemContribution[]> {
   const settings = ctx.settings as WebQuickOpenSettings | undefined
   if (settings?.enabled === false) return []
@@ -698,5 +709,6 @@ export default definePlugin<WebQuickOpenSettings>({
   launcher: {
     itemsFor: buildLauncherItems,
     dynamicItems: buildDynamicLauncherItems,
+    claimsObjectText: claimsQuickOpenText,
   },
 })
