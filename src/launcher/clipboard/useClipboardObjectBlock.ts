@@ -16,6 +16,7 @@ import {
   buildRecentClipboardHint,
   createClipboardObjectBlock,
   getClipboardAutoAttachSkipReason,
+  getStrongestObjectKind,
   createQueryObjectBlock,
 } from './objectBlock'
 import {
@@ -288,13 +289,17 @@ export function useClipboardObjectBlock(params: {
       publishMaterial(replaceCurrentMaterial(newBlock))
       // Hint only when not suppressed and content would qualify (policy inside builder).
       setHint(newBlock || suppress ? null : buildRecentClipboardHint(snapshot, acceptance))
+      const skipReason = dismissed ? 'dismissed' : getClipboardAutoAttachSkipReason(snapshot, now, options) ?? 'unknown'
       trackBehavior(TelemetryEvents.clipboardBlockAttach, newBlock
-        ? { kind: newBlock.kind, source: newBlock.source, auto: true, suppressed: false, readSource: source }
+        ? { kind: newBlock.kind, source: newBlock.source, auto: true, suppressed: false, phase: source }
         : {
           auto: false,
           suppressed: suppress,
-          reason: dismissed ? 'dismissed' : getClipboardAutoAttachSkipReason(snapshot, now, options) ?? 'unknown',
-          readSource: source,
+          // Kit kind enum only (e.g. "plain-text:timestamp" = detected but no plugin accepts it).
+          reason: skipReason === 'plain-text'
+            ? `plain-text:${getStrongestObjectKind(text) ?? 'none'}`
+            : skipReason,
+          phase: source,
         })
     }
     const readAfterFirstPaint = async () => {

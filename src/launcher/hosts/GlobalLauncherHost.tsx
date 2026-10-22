@@ -4,7 +4,7 @@ import { ensurePluginRuntimeReady } from '../../workspace/pluginRuntimeBootstrap
 import { openLauncherHostedPluginSurface } from '../../workspace/pluginSurfaceOpenRequest'
 import { selectContextSuggestions, type Suggestion } from '../../workspace/launcher/contextSuggestions'
 import { beginSuggestionSession, endSuggestionSession, getSuggestionSession, recordSuggestionSelected, recordSuggestionShown, useSuggestionSettings } from '../../workspace/launcher/contextSuggestionsStore'
-import { filterAvailableLauncherItems, isObjectTextClaimedByPlugin } from '../../workspace/launcher/registry'
+import { collectAcceptedContentKinds, filterAvailableLauncherItems, isObjectTextClaimedByPlugin } from '../../workspace/launcher/registry'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '../../store'
 import { useShallow } from 'zustand/react/shallow'
@@ -356,10 +356,11 @@ export function GlobalLauncherHost() {
     }
   }, [open])
 
-  // Auto-attach follows plugin declarations: a detected kind must be in some item's
-  // `accepts.kinds`, or a plugin must claim the exact text.
+  // Auto-attach follows plugin declarations: a detected kind must be in some active
+  // plugin's `accepts.kinds` (any surface), or a plugin must claim the exact text.
+  // Recomputed with the item list, which changes on plugin/settings/registry updates.
   const objectAcceptance = useMemo<ObjectAcceptance>(() => ({
-    acceptedKinds: new Set(availableLauncherItems.flatMap((item) => item.accepts?.kinds ?? [])),
+    acceptedKinds: collectAcceptedContentKinds(getPluginSettings),
     isClaimedByPlugin: (text) => isObjectTextClaimedByPlugin(text, getPluginSettings),
   }), [availableLauncherItems])
   objectAcceptanceRef.current = objectAcceptance

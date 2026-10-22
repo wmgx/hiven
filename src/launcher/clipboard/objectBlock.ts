@@ -15,7 +15,7 @@ import {
   shouldAutoAttachClipboard,
   shouldShowRecentClipboardHint,
 } from './clipboardSnapshot'
-import { isStrongClipboardAttachEligible, type ObjectAcceptance } from './attachPolicy'
+import { findStrongClipboardAttachHits, isStrongClipboardAttachEligible, type ObjectAcceptance } from './attachPolicy'
 import { objectBlockText } from './objectBlockText'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -197,6 +197,11 @@ export function getClipboardAutoAttachSkipReason(
   // An object some active plugin accepts or claims, not plain text.
   if (!isStrongClipboardAttachEligible(snapshot.text, options?.acceptance ?? NO_ACCEPTANCE)) return 'plain-text'
   return null
+}
+
+/** Highest-confidence object kind the content kit sees in `text` (a kit enum value, never content). */
+export function getStrongestObjectKind(text: string): string | null {
+  return findStrongClipboardAttachHits(text)[0]?.kind ?? null
 }
 
 export function createClipboardObjectBlock(
