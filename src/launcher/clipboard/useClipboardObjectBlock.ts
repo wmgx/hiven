@@ -51,6 +51,8 @@ import {
 import { getAttachedTextFilePath, readAttachedTextFile, startFileTextMaterialRead, startPickedTextMaterialRead, type FileTextErrorCode } from './fileTextMaterial'
 
 const NO_ACCEPTANCE: ObjectAcceptance = { acceptedKinds: new Set() }
+/** How long open waits for the native clipboard read before using the tracker's copy. */
+const NATIVE_READ_GRACE_MS = 80
 
 /** Keep token mounted for compositor-only exit (opacity + transform). */
 export const OBJECT_BLOCK_EXIT_MS = 130
@@ -68,7 +70,7 @@ export type ClipboardObjectBlockState = {
   handleBackspace: (queryEmpty: boolean) => boolean
   attachHintAsBlock: () => void
   attachQueryAsBlock: (text: string) => void
-  markBlockConsumed: (options?: { preservePending?: boolean }) => void
+  markBlockConsumed: (options?: { preservePending?: boolean; dismissClipboard?: boolean }) => void
   canRestorePreviousMaterial: boolean
   restorePreviousMaterial: () => void
   /** Only the host can capture both full texts from this material generation. */
@@ -297,12 +299,25 @@ export function useClipboardObjectBlock(params: {
     }
     const readAfterFirstPaint = async () => {
       if (!isReadCurrent() || userDismissedRef.current) return
-      // Decide from the tracker's copy first; the native read below corrects a stale copy.
-      const cached = peekClipboardRef.current?.() ?? null
-      if (cached && !isHandoffBlock(materialRef.current.block)) decide(cached, 'cache')
       const startedAt = launcherPerfNow()
+      const nativeRead = readClipboard()
+      // The native read is usually a few ms; only when it queues behind the main thread
+      // decide from the tracker's copy first (it may predate a copy made just before open).
+      let cached: string | null = null
+      const fallback = peekClipboardRef.current?.() ?? null
+      if (fallback !== null) {
+        const settledFast = await Promise.race([
+          nativeRead.then(() => true, () => true),
+          new Promise<false>((resolve) => { window.setTimeout(() => resolve(false), NATIVE_READ_GRACE_MS) }),
+        ])
+        if (!isReadCurrent() || userDismissedRef.current) return
+        if (!settledFast && !isHandoffBlock(materialRef.current.block)) {
+          cached = fallback
+          decide(cached, 'cache')
+        }
+      }
       try {
-        const text = await readClipboard()
+        const text = await nativeRead
         if (!isReadCurrent() || userDismissedRef.current) return
         // Never clobber a history handoff that landed while we were reading.
         if (isHandoffBlock(materialRef.current.block)) return
@@ -386,7 +401,7 @@ export function useClipboardObjectBlock(params: {
     })
     clearPendingObjectBlock()
     if (block.source === 'query' && block.payloadText) onQueryBlockRemovedRef.current?.(block.payloadText)
-    const snapshot = getLastClipboardSnapshot()
+    const snapshot = block.source === 'clipboard' ? getLastClipboardSnapshot() : null
     if (snapshot) dismissClipboardBlock(snapshot)
     setIsExiting(true)
     clearExitTimer()
@@ -421,7 +436,10 @@ export function useClipboardObjectBlock(params: {
    * action doesn't clear it), so the very next open would silently re-attach
    * the same block — reproducing the "still has my old input" complaint.
    */
-  const markBlockConsumed = useCallback((options?: { preservePending?: boolean }) => {
+  const markBlockConsumed = useCallback((options?: { preservePending?: boolean; dismissClipboard?: boolean }) => {
+    // Cool down only clipboard content that was actually shown and then acted on or rejected;
+    // a new session, a plain close or a tool's own copy must not hide the next fresh copy.
+    const dismissClipboard = options?.dismissClipboard !== false && materialRef.current.block?.source === 'clipboard'
     // A fresh native open can arrive while React still considers a paste-hidden
     // host open. Keep a waiting handoff's original envelope, TTL and persistence.
     const pending = options?.preservePending ? peekPendingObjectBlock() : null
@@ -434,7 +452,7 @@ export function useClipboardObjectBlock(params: {
     clearExitTimer()
     setHint(null)
     setIsExiting(false)
-    const snapshot = getLastClipboardSnapshot()
+    const snapshot = dismissClipboard ? getLastClipboardSnapshot() : null
     if (snapshot) dismissClipboardBlock(snapshot)
     if (pending) {
       userDismissedRef.current = false

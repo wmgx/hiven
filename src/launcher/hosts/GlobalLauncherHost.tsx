@@ -788,9 +788,10 @@ export function GlobalLauncherHost() {
 
   // Guard duplicate dismissals while the native window is hiding.
   const closingRef = useRef(false)
-  const resetLauncherSession = useCallback((options?: { preservePendingMaterial?: boolean }) => {
+  const resetLauncherSession = useCallback((options?: { preservePendingMaterial?: boolean; consumed?: boolean }) => {
     textExportLifetimeRef.current += 1
-    clipboardBlock.markBlockConsumed({ preservePending: options?.preservePendingMaterial })
+    // Only a completed action consumed the attached clipboard content.
+    clipboardBlock.markBlockConsumed({ preservePending: options?.preservePendingMaterial, dismissClipboard: options?.consumed === true })
     clearPluginSurfaceTool()
     clearLauncherHostSurface()
     // Drop any suspended host (e.g. quick-editor under Diff) when fully closing.
@@ -828,7 +829,7 @@ export function GlobalLauncherHost() {
       reason,
       ...queryTelemetryProps(inputRef.current?.value ?? query),
     })
-    resetLauncherSession()
+    resetLauncherSession({ consumed: completed })
     return closeGlobalLauncherWindow({
       standaloneLauncher,
       overlay,
