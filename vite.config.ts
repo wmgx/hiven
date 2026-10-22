@@ -2,9 +2,26 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { fileURLToPath, URL } from 'node:url'
+import type { Plugin } from 'vite'
+
+// Host launcher providers live in this module's state and are installed once at
+// startup (App.tsx); a hot-swapped copy starts without them and silently drops apps
+// and host actions from search. Reload the page instead of hot-swapping it.
+const FULL_RELOAD_MODULES = ['/src/workspace/launcher/registry.ts']
+
+function fullReloadStatefulModules(): Plugin {
+  return {
+    name: 'hiven-full-reload-stateful-modules',
+    handleHotUpdate({ file, server }) {
+      if (!FULL_RELOAD_MODULES.some((suffix) => file.endsWith(suffix))) return
+      server.ws.send({ type: 'full-reload' })
+      return []
+    },
+  }
+}
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), fullReloadStatefulModules()],
   resolve: {
     alias: {
       '@hiven/plugin': fileURLToPath(new URL('./src/plugin-sdk.ts', import.meta.url)),
