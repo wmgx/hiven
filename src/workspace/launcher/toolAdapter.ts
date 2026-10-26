@@ -251,7 +251,10 @@ export function adaptToolToLauncherItem(
     source: options.source,
     display: toolDisplay(tool),
     behavior: { type: 'perform' },
-    surfaces: launcherOptions?.surfaces,
+    // Global Launcher only lists preview tools whose trusted bundled runner resolved.
+    surfaces: hasPreviewDeclaration && !previewRunner
+      ? launcherOptions?.surfaces?.filter((surface) => surface !== 'global-launcher')
+      : launcherOptions?.surfaces,
     inputPolicy: tool.inputPolicy,
     executionMode,
     isExplicitTextPreviewAvailable: previewRunner ? isExplicitTextPreviewAvailable : undefined,

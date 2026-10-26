@@ -25,6 +25,7 @@ try {
   const { collectStaticCandidates } = await vite.ssrLoadModule('/src/workspace/launcher/registry.ts')
   const { LauncherController } = await vite.ssrLoadModule('/src/workspace/launcher/controller.ts')
   const { makePluginT } = await vite.ssrLoadModule('/src/i18n/pluginI18nRegistry.ts')
+  const { getHostOutputIntent } = await vite.ssrLoadModule('/src/workspace/launcher/output.ts')
   registerBundledPluginPackages()
   const items = collectStaticCandidates('global-launcher')
   const json = items.find((item) => item.systemKey === 'plugin:json-tools:tool:json.prettify')
