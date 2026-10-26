@@ -13,11 +13,11 @@
  * Each await is timed under `clipboard-read:<step>` so a single repro pinpoints cost.
  */
 
-import { detectClipboardFilePath } from './clipboardSnapshot'
+import { detectClipboardFilePath, detectClipboardType, hashClipboardText, type ClipboardSnapshot } from './clipboardSnapshot'
 import { launcherPerfNow, logLauncherPerfDuration } from '../../workspace/launcher/perf'
 import { readNativeClipboardText } from '../../workspace/nativeClipboard'
 
-async function readClipboardFilePath(): Promise<string | null> {
+async function readClipboardFilePath(): Promise<string[] | null> {
   try {
     const t0 = launcherPerfNow()
     const { invoke } = await import('@tauri-apps/api/core')
@@ -27,8 +27,7 @@ async function readClipboardFilePath(): Promise<string | null> {
       count: Array.isArray(paths) ? paths.length : 0,
     })
     if (Array.isArray(paths) && paths.length > 0) {
-      const first = paths[0]?.trim()
-      if (first) return first
+      return paths
     }
   } catch {
     // Not in Tauri, or command unavailable.
@@ -36,7 +35,7 @@ async function readClipboardFilePath(): Promise<string | null> {
   return null
 }
 
-export async function readLauncherClipboard(): Promise<string> {
+export async function readLauncherClipboard(): Promise<ClipboardSnapshot> {
   // 1) Plain text — the common case, single main-thread IPC.
   // Never fall back to navigator.clipboard.readText() here: in WKWebView that
   // pops a native English "Paste" chip on the focused search field.
@@ -47,9 +46,31 @@ export async function readLauncherClipboard(): Promise<string> {
   // 2) Only resolve the real Finder file path when the text is empty or looks like
   //    a bare filename / path. Skips the 2–4s file-path IPC for ordinary text/URLs.
   if (!text || detectClipboardFilePath(text)) {
-    const filePath = await readClipboardFilePath()
-    if (filePath) return filePath
+    const files = await readClipboardFilePath()
+    if (files) return { text: '', files, detectedType: 'files', hash: hashClipboardText(JSON.stringify(files)) }
   }
 
-  return text
+  if (text) return { text, hash: hashClipboardText(text), detectedType: detectClipboardType(text) }
+  try {
+    const { readImage } = await import('../../workspace/nativeClipboard')
+    const { withImageHandle } = await import('../../workspace/nativeImageHandle')
+    const image = await withImageHandle(await readImage(), async (handle) => {
+      const { width, height } = await handle.size()
+      if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width <= 0 || height <= 0 ||
+        width > 8192 || height > 8192 || width * height > 16 * 1024 * 1024) return null
+      const rgba = await handle.rgba()
+      if (rgba.byteLength !== width * height * 4) return null
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+      try {
+        const context = canvas.getContext('2d')
+        if (!context) return null
+        context.putImageData(new ImageData(new Uint8ClampedArray(rgba), width, height), 0, 0)
+        return { dataUrl: canvas.toDataURL('image/png'), width, height }
+      } finally { canvas.width = 0; canvas.height = 0 }
+    })
+    if (image) return { text: '', image, detectedType: 'image', hash: hashClipboardText(image.dataUrl) }
+  } catch { /* Empty or non-image clipboard; no browser permission fallback. */ }
+  return { text: '', hash: hashClipboardText(''), detectedType: 'unknown' }
 }

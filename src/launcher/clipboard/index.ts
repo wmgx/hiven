@@ -4,40 +4,25 @@
 export {
   type ClipboardDetectedType,
   type ClipboardSnapshot,
-  FRESH_CLIPBOARD_TTL_MS,
-  RECENT_CLIPBOARD_HINT_TTL_MS,
-  UNKNOWN_AGE_AUTO_ATTACH,
   CLIPBOARD_AGE_TRACKER_INTERVAL_MS,
   hashClipboardText,
   detectClipboardType,
   getLastClipboardSnapshot,
   updateClipboardSnapshot,
-  createClipboardSnapshotFromUnknownAge,
   observeClipboardText,
   clearClipboardSnapshot,
-  shouldAutoAttachClipboard,
-  shouldShowRecentClipboardHint,
   isSoftClipboardOperand,
-  isClipboardExpired,
   startClipboardAgeTracker,
   stopClipboardAgeTracker,
 } from './clipboardSnapshot'
 
-export {
-  STRONG_ATTACH_MIN_CONFIDENCE,
-  STRONG_QUERY_ATTACH_CONTENT_KINDS,
-  findStrongClipboardAttachHits,
-  isStrongClipboardAttachEligible,
-  type ObjectAcceptance,
-  type StrongAttachHit,
-} from './attachPolicy'
+
 
 export {
   type ObjectBlockSource,
   type ObjectBlockKind,
   type LauncherObjectBlock,
   type RecentClipboardHint,
-  formatAgeLabel,
   getKindLabel,
   getSourceLabel,
   createClipboardObjectBlock,

@@ -35,9 +35,6 @@ const attachPolicy = transpileAndRun('src/launcher/clipboard/attachPolicy.ts', {
 const objectBlock = transpileAndRun('src/launcher/clipboard/objectBlock.ts', {
   objectBlockText,
   detectContent: detect.detectContent,
-  shouldAutoAttachClipboard: snapshot.shouldAutoAttachClipboard,
-  shouldShowRecentClipboardHint: snapshot.shouldShowRecentClipboardHint,
-  isStrongClipboardAttachEligible: attachPolicy.isStrongClipboardAttachEligible,
   isSoftClipboardOperand: snapshot.isSoftClipboardOperand,
   detectClipboardType: snapshot.detectClipboardType,
   detectClipboardFilePath: snapshot.detectClipboardFilePath,

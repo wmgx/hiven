@@ -58,8 +58,6 @@ const snapshot = loadTs('src/launcher/clipboard/clipboardSnapshot.ts', { detectC
 const objectBlock = loadTs('src/launcher/clipboard/objectBlock.ts', {
   detectContent: content.detectContent,
   objectBlockText,
-  shouldAutoAttachClipboard: snapshot.shouldAutoAttachClipboard,
-  shouldShowRecentClipboardHint: snapshot.shouldShowRecentClipboardHint,
   detectClipboardFilePath: snapshot.detectClipboardFilePath,
   detectClipboardType: snapshot.detectClipboardType,
   fileNameFromPath: snapshot.fileNameFromPath,

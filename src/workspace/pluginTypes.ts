@@ -1074,13 +1074,6 @@ export type PluginDefinition<TSettings = unknown> = {
      */
     itemsFor?: (settings: TSettings) => LauncherItemContribution<TSettings>[]
     dynamicItems?: LauncherDynamicItemProvider
-    /**
-     * True when this plugin has a one-step action for exactly this text (e.g. a
-     * user-configured pattern). Lets the host auto-attach fresh clipboard text it
-     * would otherwise treat as plain text. Must be synchronous, cheap and
-     * side-effect free; it is only called with clipboard text, never typed queries.
-     */
-    claimsObjectText?: (ctx: { text: string; settings: TSettings }) => boolean
   }
   /** Panel-only actions (separate surface from launcher). */
   panel?: {

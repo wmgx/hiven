@@ -18,7 +18,7 @@ assert.equal(pair.previous, before.payloadText); assert.equal(pair.current, afte
 for (const patch of [{ secretMasked: true }, { kind: 'secret-like' }, { kind: 'secret' }, { kind: 'image' }, { kind: 'files' }, { payloadImage: {} }, { payloadFiles: {} }, { payloadText: undefined, preview: 'not full text' }, { payloadText: 'nul\0text' }]) {
   for (const side of ['block', 'previousBlock']) assert.equal(material.getMaterialTextPair({ ...state, [side]: { ...state[side], ...patch } }), null)
 }
-for (const cleared of [material.replaceCurrentMaterial(after), material.discardCurrentMaterial(state), material.forgetPreviousMaterial(state), material.restorePreviousMaterial(state), material.acceptMaterialHandoff(material.replaceCurrentMaterial(null), after, true)]) assert.equal(material.getMaterialTextPair(cleared), null)
+for (const cleared of [material.replaceCurrentMaterial(after), material.discardCurrentMaterial(state), material.forgetPreviousMaterial(state), material.acceptMaterialHandoff(material.replaceCurrentMaterial(null), after, true)]) assert.equal(material.getMaterialTextPair(cleared), null)
 const third = block('third result')
 const changed = material.getMaterialTextPair(material.acceptMaterialHandoff(state, third, true))
 assert.equal(changed.previous, after.payloadText);assert.equal(changed.current, third.payloadText)

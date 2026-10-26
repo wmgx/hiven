@@ -1,5 +1,5 @@
 {
-  "version": 170,
+  "version": 171,
   "packages": [
     {
       "pluginId": "encode-decode",
@@ -44,7 +44,7 @@
     {
       "pluginId": "date-time-assistant",
       "dir": "date-time-assistant",
-      "version": "1.12.4"
+      "version": "1.12.5"
     },
     {
       "pluginId": "translate",
@@ -74,7 +74,7 @@
     {
       "pluginId": "web-open",
       "dir": "web-open",
-      "version": "1.13.4"
+      "version": "1.13.5"
     },
     {
       "pluginId": "qr-code",

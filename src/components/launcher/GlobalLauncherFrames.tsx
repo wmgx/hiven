@@ -85,7 +85,6 @@ export function GlobalLauncherFrameSwitch({
   onSearchMouseMove,
   isKeyboardNavRef,
   clipboardBlock,
-  onEditMaterial,
   clipboardHintSelected,
 }: {
   hostSurfaceTarget: LauncherHostSurfaceTarget | null
@@ -154,7 +153,6 @@ export function GlobalLauncherFrameSwitch({
   onSearchMouseMove: (event: ReactMouseEvent) => void
   isKeyboardNavRef?: MutableRefObject<boolean>
   clipboardBlock?: ClipboardObjectBlockState
-  onEditMaterial?: () => void
   /** Recent-clipboard hint is the focused row (selectedIndex === -1). */
   clipboardHintSelected?: boolean
 }) {
@@ -268,13 +266,13 @@ export function GlobalLauncherFrameSwitch({
           error={controllerState?.error ?? null}
           locale={locale}
           paramChips={paramChips}
-          onInputChange={(value) => onCollectInputChange(value, frame.item.materialTextEdit ? frame : undefined)}
-          onBack={() => onFrameBack(frame.item.materialTextEdit ? frame : undefined)}
-          onExitCommand={onExitCommand ? () => onExitCommand(frame.item.materialTextEdit ? frame : undefined) : undefined}
+          onInputChange={(value) => onCollectInputChange(value, frame)}
+          onBack={() => onFrameBack(frame)}
+          onExitCommand={onExitCommand ? () => onExitCommand(frame) : undefined}
           onActivateChoice={onActivateResultChoice}
           onSecondaryAction={onSecondaryAction}
           onPastePreviewText={onPastePreviewText}
-          onSubmitPrimary={() => onSubmitCollectInput?.(frame.item.materialTextEdit ? frame : undefined)}
+          onSubmitPrimary={() => onSubmitCollectInput?.(frame)}
           onCaptureSelection={onCaptureSelection}
         />
       </LauncherFlowFrame>
@@ -318,7 +316,6 @@ export function GlobalLauncherFrameSwitch({
       placeholder={searchPlaceholder}
       searchContext={searchContext}
       clipboardBlock={clipboardBlock}
-      onEditMaterial={onEditMaterial}
       clipboardHintSelected={clipboardHintSelected}
       error={controllerState?.error ?? null}
       items={visibleFiltered}

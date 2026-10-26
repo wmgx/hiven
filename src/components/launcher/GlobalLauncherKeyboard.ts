@@ -29,6 +29,7 @@ export function handleGlobalLauncherKeyDown({
   handleClipboardBackspace,
   hasClipboardHint,
   attachHintAsBlock,
+  activateHint,
   /** When true, Enter attaches the recent-clipboard hint (must be the focused row). */
   isClipboardHintSelected,
   selectedIndex,
@@ -65,6 +66,7 @@ export function handleGlobalLauncherKeyDown({
   handleClipboardBackspace?: (queryEmpty: boolean) => boolean
   hasClipboardHint?: boolean
   attachHintAsBlock?: () => void
+  activateHint?: (paste?: boolean) => void
   isClipboardHintSelected?: boolean
   /** Current list selection index; -1 means recent-clipboard hint is focused. */
   selectedIndex?: number
@@ -85,7 +87,7 @@ export function handleGlobalLauncherKeyDown({
 
     if (topFrame.kind === 'collect-input') {
       const inputFrame = topFrame as CollectInputFrame
-      if (inputFrame.item.materialTextEdit || inputFrame.item.executionMode === 'explicit-text-preview') {
+      if (inputFrame.item.executionMode === 'explicit-text-preview') {
         // Multiline drafts own caret movement, line breaks and empty Backspace.
         if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey) {
           event.preventDefault()
@@ -239,15 +241,20 @@ export function handleGlobalLauncherKeyDown({
       return
     }
   }
-  // Only attach the timeout clipboard hint when it is the focused row — never steal Enter from list selection.
+  if (event.key === 'Tab' && !event.shiftKey && !event.metaKey && !event.ctrlKey && hasClipboardHint) {
+    event.preventDefault()
+    attachHintAsBlock?.()
+    return
+  }
+  // Only activate the clipboard hint when it is the focused row — never steal Enter from list selection.
   if (
     event.key === 'Enter'
     && hasClipboardHint
     && (isClipboardHintSelected || selectedIndex === -1)
-    && attachHintAsBlock
+    && activateHint
   ) {
     event.preventDefault()
-    attachHintAsBlock()
+    activateHint(event.shiftKey)
     return
   }
   if (event.key === 'Enter') {

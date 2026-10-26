@@ -1,9 +1,9 @@
 /**
- * Clipboard Snapshot — Freshness detection for system clipboard content.
+ * Clipboard content identity, classification and change observation.
  *
  * Design: hiven_clipboard_object_block_recommendation_ai_task.md §5.1
  *
- * Phase R0: track clipboard text hash and change time to determine freshness.
+ * The existing poll also notices changes while the launcher is hidden.
  */
 
 // Import the file entry (…/index), not the directory, so pure-TS test harnesses
@@ -30,29 +30,19 @@ export type ClipboardDetectedType =
   | 'yaml'
   | 'query-string'
   | 'markdown'
+  | 'base64'
+  | 'color'
+  | 'image'
+  | 'files'
 
 export type ClipboardSnapshot = {
   text: string
   hash: string
   detectedType: ClipboardDetectedType
-  firstSeenAt: number
-  lastSeenAt: number
-  changedAt?: number
-  ageConfidence: 'known' | 'unknown'
+  image?: { dataUrl: string; width: number; height: number }
+  files?: string[]
 }
 
-// ─── Configuration ─────────────────────────────────────────────────────────────
-
-/** Clipboard copied within this window is "fresh" and may hard-attach (if content-eligible). */
-export const FRESH_CLIPBOARD_TTL_MS = 12 * 1000
-
-/** Clipboard older than fresh but within this window shows a weak hint. */
-export const RECENT_CLIPBOARD_HINT_TTL_MS = 2 * 60 * 1000
-
-/** Unknown-age clipboard is never auto-attached. */
-export const UNKNOWN_AGE_AUTO_ATTACH = false
-
-/** Background age tracker poll interval (ms). Keeps changedAt near real copy time. */
 export const CLIPBOARD_AGE_TRACKER_INTERVAL_MS = 1000
 
 // ─── Hash ──────────────────────────────────────────────────────────────────────
@@ -168,8 +158,9 @@ function mapContentKindToClipboard(kind: ContentKind): ClipboardDetectedType | n
     case 'tsv':
       return 'csv'
     case 'base64':
-    case 'url-encoded':
     case 'color':
+      return kind
+    case 'url-encoded':
       return 'text'
     default:
       return null
@@ -200,61 +191,22 @@ export function getLastClipboardSnapshot(): ClipboardSnapshot | null {
   return lastSnapshot
 }
 
-export function updateClipboardSnapshot(text: string): ClipboardSnapshot {
-  const now = Date.now()
-  const hash = hashClipboardText(text)
-
-  if (lastSnapshot && lastSnapshot.hash === hash) {
-    // Same content — just update lastSeenAt, keep changedAt.
-    lastSnapshot = { ...lastSnapshot, lastSeenAt: now }
-    return lastSnapshot
-  }
-
-  // New content
-  lastSnapshot = {
-    text,
-    hash,
-    detectedType: detectClipboardType(text),
-    firstSeenAt: now,
-    lastSeenAt: now,
-    changedAt: now,
-    ageConfidence: 'known',
-  }
-  return lastSnapshot
+export function updateClipboardSnapshot(value: string | ClipboardSnapshot): ClipboardSnapshot {
+  const next = typeof value === 'string'
+    ? { text: value, hash: hashClipboardText(value), detectedType: detectClipboardType(value) }
+    : value
+  if (lastSnapshot?.hash === next.hash) return lastSnapshot
+  if (lastSnapshot) clearDismissState()
+  lastSnapshot = next
+  return next
 }
 
-export function createClipboardSnapshotFromUnknownAge(text: string): ClipboardSnapshot {
-  const now = Date.now()
-  const hash = hashClipboardText(text)
-  lastSnapshot = {
-    text,
-    hash,
-    detectedType: detectClipboardType(text),
-    firstSeenAt: now,
-    lastSeenAt: now,
-    changedAt: undefined,
-    ageConfidence: 'unknown',
-  }
-  return lastSnapshot
-}
-
-/**
- * Observe clipboard text without treating first discovery as a copy event.
- *
- * - No prior snapshot → baseline with unknown age (never auto-attach).
- * - Same content → leave age fields untouched (no thrash).
- * - Content change → known age with changedAt = now (real observation clock).
- */
+let lastObservedText: string | null = null
 export function observeClipboardText(text: string): ClipboardSnapshot | null {
-  if (!text) return lastSnapshot
-  const hash = hashClipboardText(text)
-  if (!lastSnapshot) {
-    return createClipboardSnapshotFromUnknownAge(text)
-  }
-  if (lastSnapshot.hash === hash) {
-    return lastSnapshot
-  }
-  return updateClipboardSnapshot(text)
+  if (text === lastObservedText) return null
+  if (lastObservedText !== null) clearDismissState()
+  lastObservedText = text
+  return { text, hash: hashClipboardText(text), detectedType: detectClipboardType(text) }
 }
 
 export function clearClipboardSnapshot(): void {
@@ -273,8 +225,8 @@ type ClipboardChangeListener = (text: string, snapshot: ClipboardSnapshot) => vo
 const clipboardChangeListeners = new Set<ClipboardChangeListener>()
 
 /**
- * Subscribe to distinct clipboard content changes seen by the background age
- * tracker. Fires only when the observed content actually changed (not on every
+ * Subscribe to distinct clipboard text changes seen by the background
+ * observer. Fires only when the observed content actually changed (not on every
  * poll). Reuses the existing poll — no extra timer.
  */
 export function subscribeClipboardChange(listener: ClipboardChangeListener): () => void {
@@ -292,13 +244,7 @@ function emitClipboardChange(text: string, snapshot: ClipboardSnapshot): void {
   }
 }
 
-/**
- * Poll clipboard in the background so changedAt reflects when content actually
- * changed while the app is running — not when Global Launcher happens to open.
- *
- * First observation is always unknown-age baseline; only subsequent changes are
- * marked known/fresh. Safe to call multiple times (idempotent).
- */
+/** Existing background poll; retained to notice changes between launcher sessions. */
 export function startClipboardAgeTracker(
   readClipboard: ClipboardAgeReadFn,
   intervalMs: number = CLIPBOARD_AGE_TRACKER_INTERVAL_MS,
@@ -314,10 +260,9 @@ export function startClipboardAgeTracker(
     try {
       const text = await readClipboard()
       if (stopped) return
-      if (text) {
-        const prevHash = getLastClipboardSnapshot()?.hash
+      {
         const snapshot = observeClipboardText(text)
-        if (snapshot && snapshot.hash !== prevHash) emitClipboardChange(text, snapshot)
+        if (snapshot) emitClipboardChange(text, snapshot)
       }
     } catch {
       // Ignore transient clipboard / permission errors.
@@ -373,53 +318,20 @@ export function isSoftClipboardOperand(text: string): boolean {
   return false
 }
 
-// ─── Freshness rules ───────────────────────────────────────────────────────────
+// Store identity only, never clipboard content. No expiry: another copy resets it.
+const DISMISSED_HINT_KEY = 'hiven-clipboard-hint-dismissed'
+let dismissedHash: string | null = null
 
-export function shouldAutoAttachClipboard(snapshot: ClipboardSnapshot, now: number = Date.now()): boolean {
-  return (
-    snapshot.ageConfidence === 'known' &&
-    snapshot.changedAt !== undefined &&
-    now - snapshot.changedAt <= FRESH_CLIPBOARD_TTL_MS
-  )
+export function dismissClipboardHint(snapshot: ClipboardSnapshot): void {
+  dismissedHash = snapshot.hash
+  try { localStorage.setItem(DISMISSED_HINT_KEY, snapshot.hash) } catch { /* memory still suppresses it */ }
 }
 
-export function shouldShowRecentClipboardHint(snapshot: ClipboardSnapshot, now: number = Date.now()): boolean {
-  return (
-    snapshot.ageConfidence === 'known' &&
-    snapshot.changedAt !== undefined &&
-    now - snapshot.changedAt > FRESH_CLIPBOARD_TTL_MS &&
-    now - snapshot.changedAt <= RECENT_CLIPBOARD_HINT_TTL_MS
-  )
+export function getDismissedClipboardHintHash(): string | null {
+  try { return localStorage.getItem(DISMISSED_HINT_KEY) ?? dismissedHash } catch { return dismissedHash }
 }
 
-export function isClipboardExpired(snapshot: ClipboardSnapshot, now: number = Date.now()): boolean {
-  if (snapshot.ageConfidence === 'unknown') return true
-  if (snapshot.changedAt === undefined) return true
-  return now - snapshot.changedAt > RECENT_CLIPBOARD_HINT_TTL_MS
-}
-
-// ─── Dismiss cooldown ─────────────────────────────────────────────────────────
-
-/** How long after dismissing a clipboard block it won't auto-attach again. */
-export const DISMISS_COOLDOWN_MS = 2 * 60 * 1000
-
-type DismissRecord = { hash: string; dismissedAt: number }
-
-let lastDismiss: DismissRecord | null = null
-
-/** Record that user dismissed a clipboard block (clicked ×). */
-export function dismissClipboardBlock(snapshot: ClipboardSnapshot): void {
-  lastDismiss = { hash: snapshot.hash, dismissedAt: Date.now() }
-}
-
-/** Check if a snapshot was recently dismissed and still in cooldown. */
-export function isClipboardDismissed(snapshot: ClipboardSnapshot, now: number = Date.now()): boolean {
-  if (!lastDismiss) return false
-  if (lastDismiss.hash !== snapshot.hash) return false
-  return now - lastDismiss.dismissedAt <= DISMISS_COOLDOWN_MS
-}
-
-/** Clear dismiss state (e.g. for testing). */
 export function clearDismissState(): void {
-  lastDismiss = null
+  dismissedHash = null
+  try { localStorage.removeItem(DISMISSED_HINT_KEY) } catch { /* memory is cleared */ }
 }

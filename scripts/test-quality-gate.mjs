@@ -12,6 +12,7 @@
 import { spawnSync } from 'node:child_process'
 
 const commands = [
+  ['npm', ['run', 'test:clipboard-hint-policy']],
   ['npm', ['run', 'test:lockfile-registry']],
   ['npm', ['run', 'test:baseline-runtime-fallbacks']],
   ['npm', ['run', 'test:tauri-debug-runner']],
@@ -51,7 +52,6 @@ const commands = [
   ['npm', ['run', 'test:launcher-output-recovery']],
   ['npm', ['run', 'test:plugin-paste-behavior']],
   ['npm', ['run', 'test:launcher-current-material']],
-  ['npm', ['run', 'test:launcher-material-edit']],
   ['npm', ['run', 'test:file-text-material']],
   ['npm', ['run', 'test:launcher-native-dialog-focus']],
   ['npm', ['run', 'test:plugin-surface-object-origin']],

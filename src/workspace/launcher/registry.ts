@@ -310,54 +310,6 @@ type DynamicProviderEntry = {
   lifetime: NonNullable<LauncherItem['pluginLifetime']>
 }
 
-/**
- * Content kinds some active plugin declares in `accepts.kinds`, on any surface.
- * An attached Object Block reaches tools everywhere (direct answers, workspaces,
- * editor commands), so declarations are not limited to the current launcher.
- */
-export function collectAcceptedContentKinds(
-  getSettings: (pluginId: string, source: ContributionSource) => unknown,
-): Set<string> {
-  const definitions = new Map<string, { definition: PluginDefinition<unknown>; source: ContributionSource }>()
-  // Later definitions (dev) replace production for the same plugin id.
-  for (const { definition, pluginId, source } of pluginRegistry.getAllPluginDefinitions()) definitions.set(pluginId, { definition, source })
-  const kinds = new Set<string>()
-  for (const [pluginId, { definition, source }] of definitions) {
-    if (!pluginRegistry.getPluginLifetime(pluginId, source).active) continue
-    try {
-      const settings = getSettings(pluginId, source)
-      const tools = definition.toolsFor ? definition.toolsFor(settings) : definition.tools ?? []
-      const items = definition.launcher?.itemsFor ? definition.launcher.itemsFor(settings) : definition.launcher?.items ?? []
-      for (const contribution of [...tools, ...items]) for (const kind of contribution.accepts?.kinds ?? []) kinds.add(kind)
-    } catch {
-      // A failing settings-aware provider contributes no declarations.
-    }
-  }
-  return kinds
-}
-
-/** Whether any active plugin claims `text` as an object it can act on in one step. */
-export function isObjectTextClaimedByPlugin(
-  text: string,
-  getSettings: (pluginId: string, source: ContributionSource) => unknown,
-): boolean {
-  const claimers = new Map<string, { claims: NonNullable<NonNullable<PluginDefinition<unknown>['launcher']>['claimsObjectText']>; source: ContributionSource }>()
-  for (const { definition, pluginId, source } of pluginRegistry.getAllPluginDefinitions()) {
-    const claims = definition.launcher?.claimsObjectText
-    // Later definitions (dev) replace production for the same plugin id.
-    if (claims) claimers.set(pluginId, { claims, source })
-  }
-  for (const [pluginId, { claims, source }] of claimers) {
-    if (!pluginRegistry.getPluginLifetime(pluginId, source).active) continue
-    try {
-      if (claims({ text, settings: getSettings(pluginId, source) })) return true
-    } catch {
-      // A failing plugin must not block the clipboard Object Block.
-    }
-  }
-  return false
-}
-
 function collectDynamicProviders(): DynamicProviderEntry[] {
   const entries = new Map<string, DynamicProviderEntry>()
   for (const { definition, pluginId, source } of pluginRegistry.getAllPluginDefinitions()) {

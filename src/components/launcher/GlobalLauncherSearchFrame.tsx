@@ -1,6 +1,6 @@
 import type { LauncherSearchRecovery } from '../../workspace/launcher/searchRecovery'
 import { useLayoutEffect, useState, type FocusEvent as ReactFocusEvent, type MouseEvent as ReactMouseEvent, type MutableRefObject, type RefObject } from 'react'
-import { ArrowLeft, FilePlus2, Search, X } from 'lucide-react'
+import { ArrowLeft, Search, X } from 'lucide-react'
 import type { Locale } from '../../i18n'
 import { t } from '../../i18n'
 import { LauncherHintKey } from './LauncherFooterHints'
@@ -11,6 +11,7 @@ import { RecentClipboardHint } from './RecentClipboardHint'
 import { LauncherEmptyWell } from './LauncherEmptyWell'
 import { getPlatformShortcutMeta } from './launcherParamShortcuts'
 import { FILE_TEXT_ERROR_KEYS } from '../../launcher/clipboard/fileTextMaterial'
+import { shouldPasteAsBlock } from '../../launcher/clipboard/attachPolicy'
 import type { LauncherBrowseCategory } from '../../workspace/launcher/browseItems'
 
 const BROWSE_CATEGORIES = [
@@ -48,7 +49,6 @@ export function GlobalLauncherSearchFrame({
   showCustomizeHint,
   customizeShortcutLabel,
   clipboardBlock,
-  onEditMaterial,
   clipboardHintSelected,
   isFavoriteSelected,
   browsingActions = false,
@@ -80,7 +80,6 @@ export function GlobalLauncherSearchFrame({
   showCustomizeHint: boolean
   customizeShortcutLabel: string
   clipboardBlock?: ClipboardObjectBlockState
-  onEditMaterial?: () => void
   clipboardHintSelected?: boolean
   /** Whether the focused row is currently pinned. */
   isFavoriteSelected?: boolean
@@ -102,8 +101,7 @@ export function GlobalLauncherSearchFrame({
   const block = clipboardBlock?.block ?? null
   const blockExiting = Boolean(clipboardBlock?.isExiting)
   const hint = clipboardBlock?.hint ?? null
-  const fileTextBusy = Boolean(clipboardBlock?.isPickingTextFile || clipboardBlock?.isReadingFileText)
-  const fileActionLabel = t(locale, block ? 'palette.fileTextReplace' : 'palette.fileTextPick')
+  const fileTextBusy = Boolean(clipboardBlock?.isReadingFileText)
   const [focusedControl, setFocusedControl] = useState<{
     element: HTMLButtonElement
     label: string
@@ -132,9 +130,7 @@ export function GlobalLauncherSearchFrame({
     // firing blur. Restore the query before leaving a stale Enter hint behind.
     if (focusedControl && !focusedControl.element.isConnected) inputRef.current?.focus()
   })
-  const focusedActionLabel = focusedControl?.action === 'file'
-    ? fileActionLabel
-    : focusedControl?.action === 'browse'
+  const focusedActionLabel = focusedControl?.action === 'browse'
       ? t(locale, browsingActions ? 'palette.backToSearch' : 'palette.browseAllActions')
       : focusedControl?.action === 'favorite'
         ? t(locale, focusedControl.itemId && favoriteKeys?.includes(focusedControl.itemId) ? 'palette.actionUnpin' : 'palette.actionPin')
@@ -165,13 +161,6 @@ export function GlobalLauncherSearchFrame({
               clipboardBlock?.removeBlock()
               inputRef.current?.focus()
             }}
-            onRestore={clipboardBlock?.canRestorePreviousMaterial ? () => {
-              clipboardBlock.restorePreviousMaterial()
-              inputRef.current?.focus()
-            } : undefined}
-            restoreDisabled={busy}
-            onEdit={clipboardBlock?.canEditText ? onEditMaterial : undefined}
-            editDisabled={busy}
           />
         )}
         <input
@@ -189,9 +178,20 @@ export function GlobalLauncherSearchFrame({
           onPaste={(event) => {
             if (block || !clipboardBlock) return
             const pasted = event.clipboardData.getData('text/plain')
-            if (!/[\r\n]/.test(pasted)) return
-            event.preventDefault()
             const input = event.currentTarget
+            const style = getComputedStyle(input)
+            const measure = document.createElement('div')
+            const width = input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
+            const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.2
+            Object.assign(measure.style, { position: 'absolute', visibility: 'hidden', font: style.font,
+              letterSpacing: style.letterSpacing, width: `${width}px`, lineHeight: `${lineHeight}px`,
+              whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' })
+            measure.textContent = pasted
+            document.body.append(measure)
+            const lines = Math.round(measure.getBoundingClientRect().height / lineHeight)
+            measure.remove()
+            if (!shouldPasteAsBlock(pasted, lines)) return
+            event.preventDefault()
             clipboardBlock.attachQueryAsBlock(
               query.slice(0, input.selectionStart ?? query.length) + pasted +
               query.slice(input.selectionEnd ?? query.length),
@@ -215,22 +215,6 @@ export function GlobalLauncherSearchFrame({
             <X size={15} aria-hidden />
           </button>
         )}
-        {clipboardBlock?.canPickTextFile && (
-          <button
-            type="button"
-            className="launcher-query-clear launcher-file-material-action"
-            data-launcher-focus-action="file"
-            aria-label={fileActionLabel}
-            title={fileActionLabel}
-            disabled={busy || fileTextBusy}
-            onMouseDown={(event) => event.preventDefault()}
-            onKeyDown={(event) => event.stopPropagation()}
-            onKeyUp={(event) => event.stopPropagation()}
-            onClick={clipboardBlock.pickTextFile}
-          >
-            <FilePlus2 size={16} aria-hidden />
-          </button>
-        )}
       </div>
       <div
         className="global-launcher-body l-list"
@@ -241,6 +225,16 @@ export function GlobalLauncherSearchFrame({
         onBlurCapture={handleBlur}
         onMouseMove={onMouseMove}
       >
+        {hint && !block && (
+          <RecentClipboardHint
+            hint={hint}
+            selected={Boolean(clipboardHintSelected)}
+            locale={locale}
+            onActivate={() => clipboardBlock?.activateHint()}
+            onDismiss={() => clipboardBlock?.dismissHint()}
+            onSelect={() => onHoverIndex(-1)}
+          />
+        )}
         {clipboardBlock && (clipboardBlock.canReadFileText || fileTextBusy) && (
           <div
             className="launcher-file-material-status"
@@ -248,7 +242,7 @@ export function GlobalLauncherSearchFrame({
           >
             {fileTextBusy && (
               <span role="status">
-                {t(locale, clipboardBlock.isPickingTextFile ? 'palette.fileTextPicking' : 'palette.fileTextReading')}
+                {t(locale, 'palette.fileTextReading')}
               </span>
             )}
             {clipboardBlock.canReadFileText && !clipboardBlock.isReadingFileText && (
@@ -259,7 +253,7 @@ export function GlobalLauncherSearchFrame({
                 onMouseDown={(event) => event.preventDefault()}
                 onKeyDown={(event) => event.stopPropagation()}
                 onKeyUp={(event) => event.stopPropagation()}
-                onClick={clipboardBlock.readFileText}
+                onClick={() => clipboardBlock.readFileText()}
               >
                 {t(locale, 'palette.fileTextRead')}
               </button>
@@ -329,14 +323,6 @@ export function GlobalLauncherSearchFrame({
               </div>
             )}
           </div>
-        )}
-        {hint && !block && (
-          <RecentClipboardHint
-            hint={hint}
-            selected={Boolean(clipboardHintSelected)}
-            locale={locale}
-            onAttach={() => clipboardBlock?.attachHintAsBlock()}
-          />
         )}
         {items.length === 0 && (query || browsingActions) ? (
           <LauncherEmptyWell

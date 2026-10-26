@@ -78,7 +78,6 @@ type GlobalLauncherPanelProps = {
   handleCompositionStart: () => void
   handleCompositionEnd: () => void
   clipboardBlock: ClipboardObjectBlockState
-  onEditMaterial?: () => void
 }
 
 
@@ -135,7 +134,6 @@ export function GlobalLauncherPanel({
   handleCompositionStart,
   handleCompositionEnd,
   clipboardBlock,
-  onEditMaterial,
 }: GlobalLauncherPanelProps) {
   const activatePreviewPaste = pastePreviewText
     ? (choice: LauncherResultChoice) => controllerRef.current?.activatePreviewPaste(choice, pastePreviewText)
@@ -276,6 +274,7 @@ export function GlobalLauncherPanel({
         handleClipboardBackspace: clipboardBlock?.handleBackspace,
         hasClipboardHint: Boolean(clipboardBlock?.hint && !clipboardBlock?.block),
         attachHintAsBlock: clipboardBlock?.attachHintAsBlock,
+        activateHint: clipboardBlock?.activateHint,
         isClipboardHintSelected: selectedIndex < 0,
         selectedIndex,
         onToggleFavorite: handleToggleFavorite,
@@ -354,7 +353,6 @@ export function GlobalLauncherPanel({
         onSearchMouseMove={handleSearchMouseMove}
         isKeyboardNavRef={isKeyboardNavRef}
         clipboardBlock={clipboardBlock}
-        onEditMaterial={onEditMaterial}
         clipboardHintSelected={selectedIndex < 0}
       />
     </LauncherView>

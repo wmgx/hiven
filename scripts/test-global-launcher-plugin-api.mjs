@@ -62,13 +62,10 @@ const objectBlock = loadModule('src/launcher/clipboard/objectBlock.ts', {
   ],
   globals: {
     objectBlockText,
-    isStrongClipboardAttachEligible: attachPolicy.isStrongClipboardAttachEligible,
     detectContent: detectContentModule.detectContent,
     detectClipboardFilePath: clipboardSnapshot.detectClipboardFilePath,
     detectClipboardType: clipboardSnapshot.detectClipboardType,
     fileNameFromPath: clipboardSnapshot.fileNameFromPath,
-    shouldAutoAttachClipboard: clipboardSnapshot.shouldAutoAttachClipboard,
-    shouldShowRecentClipboardHint: clipboardSnapshot.shouldShowRecentClipboardHint,
   },
 })
 assert.equal(typeof objectBlock.createToolResultObjectBlock, 'function', 'Task 2 must land first: createToolResultObjectBlock missing')

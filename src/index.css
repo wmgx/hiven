@@ -4983,7 +4983,7 @@ body[data-theme='dark'] .launcher-preview-well {
   background: var(--panel);
 }
 
-/* ─── Recent clipboard hint card ─────────────────────────────────────────────── */
+/* ─── Clipboard hint row ─────────────────────────────────────────────── */
 
 .recent-clipboard-hint {
   display: flex;
@@ -5014,6 +5014,7 @@ body[data-theme='dark'] .launcher-preview-well {
 }
 
 .recent-clipboard-hint .hint-icon {
+  object-fit: contain;
   flex: none;
   width: 28px;
   height: 28px;
@@ -5027,8 +5028,13 @@ body[data-theme='dark'] .launcher-preview-well {
   flex: 1;
   min-width: 0;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  flex-direction: row;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  gap: 8px;
 }
 
 .recent-clipboard-hint .hint-title {
@@ -5042,6 +5048,8 @@ body[data-theme='dark'] .launcher-preview-well {
 }
 
 .recent-clipboard-hint .hint-subtitle {
+  flex: none;
+  white-space: nowrap;
   font-size: 12px;
   color: var(--text-2);
   line-height: 1.3;
@@ -5050,7 +5058,7 @@ body[data-theme='dark'] .launcher-preview-well {
 .recent-clipboard-hint .hint-enter {
   flex: none;
   color: var(--text-3);
-  font-size: 16px;
+  font-size: 12px;
   font-weight: 500;
   transition: color 0.14s;
 }
@@ -5184,17 +5192,6 @@ body[data-theme='dark'] .launcher-preview-well {
 .launcher-discovery-category[aria-pressed='true'] {
   background: var(--accent-soft);
   color: var(--accent);
-}
-
-.launcher-file-material-action {
-  -webkit-app-region: no-drag;
-  app-region: no-drag;
-}
-
-.launcher-file-material-action:disabled {
-  color: var(--text-3);
-  background: transparent;
-  cursor: default;
 }
 
 .launcher-file-material-status {
@@ -7847,13 +7844,6 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
   padding: 0 8px 0 10px;
 }
 
-.object-block-token.selected-for-delete,
-.object-block-token[data-state='selected-for-deletion'] {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
-}
-
 .object-block-content {
   min-width: 0;
   overflow: hidden;
@@ -7861,18 +7851,6 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
   white-space: nowrap;
   font-size: 11px;
   font-weight: 500;
-}
-
-.object-block-masked,
-.object-block-delete-hint,
-.object-block-badge {
-  color: var(--text-3);
-  font-size: 10.5px;
-  font-weight: 500;
-}
-
-.object-block-token[data-state='secret-masked'] .object-block-masked {
-  color: var(--color-warning);
 }
 
 .object-block-remove {

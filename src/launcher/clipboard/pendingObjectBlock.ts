@@ -7,7 +7,7 @@ import type { LauncherObjectBlock } from './objectBlock'
 
 const PENDING_KEY = 'hiven-pending-object-block'
 /** Long enough for hide-history → show-launcher across separate webviews. */
-const DEFAULT_TTL_MS = 60_000
+const DEFAULT_TTL_MS = 120_000
 
 type PendingRecord = {
   block: LauncherObjectBlock

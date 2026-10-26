@@ -154,16 +154,15 @@ export function GlobalLauncherCollectInputFrame({
 }) {
   const placeholder = frame.input.placeholderI18n?.[locale] ?? frame.input.placeholder ?? ''
   const explicitPreview = frame.item.executionMode === 'explicit-text-preview'
-  const materialTextEdit = frame.item.materialTextEdit === true
   const showCaptureSelection = Boolean(!explicitPreview && !frame.item.metadataInput && onCaptureSelection && !frame.inputText && frame.item.behavior.type === 'perform' && frame.item.inputPolicy && frame.item.inputPolicy.mode !== 'all')
   const captureAvailability = useSelectionCaptureAvailability(showCaptureSelection)
-  const multilineInput = materialTextEdit || explicitPreview
+  const multilineInput = explicitPreview
   const previewChoices = frame.previewOutput?.choices ?? []
   const selectedIndex = frame.selectedSuggestionIndex ?? -1
   const hasSuggestions = previewChoices.length > 0
   const isSuggestMode = Boolean(frame.item.suggest)
   const livePreviewText = !isSuggestMode ? extractLivePreviewText(frame.previewOutput) : null
-  const showLivePreview = !isSuggestMode && !explicitPreview && !frame.item.metadataInput && !materialTextEdit
+  const showLivePreview = !isSuggestMode && !explicitPreview && !frame.item.metadataInput
   const filterText = frame.inputText.trim()
   // Local latch: never blank the well while typing — only replace when a new text arrives.
   const lastPreviewRef = useRef<string | null>(null)
@@ -186,7 +185,7 @@ export function GlobalLauncherCollectInputFrame({
   const commandTitle = resolveDisplayTitle(frame.item.display, locale)
   const previewChoice = livePreviewText ? previewChoices[0] : undefined
   const hasReturn = Boolean(previewChoice?.secondaryActions?.some((a) => a.id === 'return-to-launcher'))
-  const hasPaste = !explicitPreview && !frame.item.metadataInput && !materialTextEdit && Boolean(onPastePreviewText)
+  const hasPaste = !explicitPreview && !frame.item.metadataInput && Boolean(onPastePreviewText)
   const {
     destinations,
     activeDest,
@@ -435,7 +434,7 @@ export function GlobalLauncherCollectInputFrame({
         ))}
         {multilineInput ? (
           <>
-            <LauncherHintKey keys="↵" label={t(locale, 'palette.objectBlockEditNewline')} />
+            <LauncherHintKey keys="↵" label={t(locale, 'palette.inputNewline')} />
             <button
               type="button"
               className="launcher-footer-back-btn"
@@ -448,7 +447,7 @@ export function GlobalLauncherCollectInputFrame({
               }}
               onClick={() => { if (!busy) onSubmitPrimary?.() }}
             >
-              <LauncherHintKey keys={`${getPlatformShortcutMeta().label}↵`} label={t(locale, materialTextEdit ? 'palette.objectBlockEditConfirm' : 'palette.preview')} />
+              <LauncherHintKey keys={`${getPlatformShortcutMeta().label}↵`} label={t(locale, 'palette.preview')} />
             </button>
           </>
         ) : showLivePreview && displayPreviewText && !showLiveEmpty ? (
@@ -474,9 +473,9 @@ export function GlobalLauncherCollectInputFrame({
             if (event.key !== 'Escape') event.stopPropagation()
           }}
           onClick={() => onBack()}
-          aria-label={t(locale, materialTextEdit ? 'palette.objectBlockEditCancel' : 'palette.back')}
+          aria-label={t(locale, 'palette.back')}
         >
-          <LauncherHintKey keys="esc" label={t(locale, materialTextEdit ? 'palette.objectBlockEditCancel' : 'palette.back')} />
+          <LauncherHintKey keys="esc" label={t(locale, 'palette.back')} />
         </button>
       </div>
     </>

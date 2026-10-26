@@ -7,7 +7,7 @@ import ts from 'typescript'
 const compiled = ts.transpileModule(readFileSync('src/launcher/clipboard/currentMaterial.ts', 'utf8'), {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
 }).outputText
-const { acceptMaterialHandoff, replaceCurrentMaterial, forgetPreviousMaterial, discardCurrentMaterial, restorePreviousMaterial, canEditMaterialText, reconcileMaterialTextInput } =
+const { acceptMaterialHandoff, replaceCurrentMaterial, forgetPreviousMaterial, discardCurrentMaterial, canEditMaterialText, reconcileMaterialTextInput } =
   await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
 
 let serial = 0
@@ -19,22 +19,6 @@ const block = (source, extras = {}) => ({
 let passed = 0
 function check(name, run) {
   try { run(); passed++ } catch (error) { error.message = `${name}: ${error.message}`; throw error }
-}
-
-for (const source of ['clipboard', 'history-item', 'query', 'tool-result', 'editor-selection']) {
-  check(`${source} material restores its full original object once`, () => {
-    const original = block(source, { meta: { paneId: 'pane', charCount: 111 }, secretMasked: true })
-    const result = block('tool-result')
-    const processed = acceptMaterialHandoff(replaceCurrentMaterial(original), result, true)
-    assert.equal(processed.block, result)
-    assert.equal(processed.previousBlock, original)
-    const restored = restorePreviousMaterial(processed)
-    assert.equal(restored.block, original)
-    assert.equal(restored.previousBlock, null)
-    assert.equal(restorePreviousMaterial(restored), restored, 'restoration is consumed; no redo')
-    assert.equal(acceptMaterialHandoff(restored, { ...result }, true), restored,
-      'a duplicate delivered after restore cannot put the result back')
-  })
 }
 
 check('repeated handoff does not replace original with processed material', () => {
@@ -51,7 +35,6 @@ check('independent tool output keeps literal safety without borrowing an old fil
   assert.equal(state.block.meta.textOrigin, 'file-content', 'path-shaped output stays literal')
   assert.equal(state.block.meta.fileName, undefined, 'an unrelated result must not claim the previous file')
   assert.equal(state.block.meta.charCount, 23)
-  assert.equal(restorePreviousMaterial(state).block, original, 'restore retains the actual file identity')
   const named = block('tool-result', { meta: { textOrigin: 'file-content', fileName: 'explicit.txt' } })
   assert.equal(acceptMaterialHandoff(state, named, true).block, named, 'explicit new provenance is unchanged')
 })
@@ -60,9 +43,6 @@ check('sequential processing retains only the immediately preceding material', (
   const original = block('query'), first = block('tool-result'), second = block('tool-result')
   const state = acceptMaterialHandoff(acceptMaterialHandoff(replaceCurrentMaterial(original), first, true), second, true)
   assert.equal(state.previousBlock, first)
-  const restored = restorePreviousMaterial(state)
-  assert.equal(restored.block, first)
-  assert.equal(restored.previousBlock, null)
 })
 
 for (const source of ['query', 'history-item', 'clipboard']) {
@@ -72,7 +52,6 @@ for (const source of ['query', 'history-item', 'clipboard']) {
     const state = acceptMaterialHandoff(before, replacement, true)
     assert.equal(state.block, replacement)
     assert.equal(state.previousBlock, null)
-    assert.equal(restorePreviousMaterial(state), state)
   })
 }
 

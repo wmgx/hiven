@@ -4,7 +4,7 @@ import { ensurePluginRuntimeReady } from '../../workspace/pluginRuntimeBootstrap
 import { openLauncherHostedPluginSurface } from '../../workspace/pluginSurfaceOpenRequest'
 import { selectContextSuggestions, type Suggestion } from '../../workspace/launcher/contextSuggestions'
 import { beginSuggestionSession, endSuggestionSession, getSuggestionSession, recordSuggestionSelected, recordSuggestionShown, useSuggestionSettings } from '../../workspace/launcher/contextSuggestionsStore'
-import { collectAcceptedContentKinds, filterAvailableLauncherItems, isObjectTextClaimedByPlugin } from '../../workspace/launcher/registry'
+import { collectDynamicItems, filterAvailableLauncherItems } from '../../workspace/launcher/registry'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '../../store'
 import { useShallow } from 'zustand/react/shallow'
@@ -25,17 +25,13 @@ import { closeGlobalLauncherWindow } from '../../components/launcher/GlobalLaunc
 import { getPluginSurfaceDefinition } from '../../components/launcher/GlobalLauncherSelection'
 import { useGlobalLauncherSurfaceFrame } from '../../components/launcher/GlobalLauncherSurfaceFrame'
 import { readLauncherClipboard } from '../clipboard/readLauncherClipboard'
-import { peekTrackedClipboardText } from '../clipboard/clipboardTextCache'
-import type { ObjectAcceptance } from '../clipboard/attachPolicy'
 import { GlobalLauncherPanel } from '../../components/launcher/GlobalLauncherPanel'
 import { useLauncherSurfaceBackgroundIdle } from '../../components/launcher/useLauncherSurfaceBackgroundIdle'
 import { WindowResizeHandles } from '../../components/WindowResizeHandles'
 import { useGlobalLauncherSelectionController } from '../../components/launcher/useGlobalLauncherSelectionController'
 import { useClipboardObjectBlock } from '../clipboard/useClipboardObjectBlock'
-import { chooseTextMaterialFile } from '../clipboard/fileTextMaterial'
-import { captureRootFileTextSession } from '../clipboard/fileTextInputSession'
 import { acquireLauncherNativeDialogFocus } from '../../workspace/launcherBlurGuard'
-import { createStrongQueryObjectBlock, getObjectBlockRecommendationText, type LauncherObjectBlock } from '../clipboard/objectBlock'
+import { getObjectBlockRecommendationText, type LauncherObjectBlock } from '../clipboard/objectBlock'
 import { captureCurrentTextDeliveryScope, createCurrentTextDelivery, isCurrentTextDeliveryAction, type CurrentTextDeliveryAction } from '../clipboard/currentTextDelivery'
 import { canExportCurrentText, captureCurrentTextExportScope, createCurrentTextExport, CURRENT_TEXT_EXPORT_ACTION, CURRENT_TEXT_EXPORT_ERROR_KEYS } from '../clipboard/currentTextExport'
 import { setPendingObjectBlock, subscribePendingObjectBlock } from '../clipboard/pendingObjectBlock'
@@ -82,9 +78,6 @@ const CONTENT_UNRELATED_HOST_KEYS: ReadonlySet<string> = new Set([
   'host:view:quick-editor',
   'host:app-launcher:refresh',
 ])
-
-/** Idle time before strong-typed query text turns into an Object Block. */
-const QUERY_BLOCK_ATTACH_DELAY_MS = 250
 
 export function GlobalLauncherHost() {
   const {
@@ -171,45 +164,20 @@ export function GlobalLauncherHost() {
       void releaseDesktopWindowSearch()
     }
   }, [])
-  // Text the user pulled back out of an auto-attached query block must not be re-attached.
-  const rejectedQueryBlockTextRef = useRef<string | null>(null)
-  // Filled from the session's available items below; the clipboard hook reads it at decision time.
-  const objectAcceptanceRef = useRef<ObjectAcceptance>({ acceptedKinds: new Set() })
+  const findClipboardAnswer = useCallback(async (text: string, signal: AbortSignal) => {
+    const items = await collectDynamicItems(text, 'global-launcher', locale, getPluginSettings, undefined, { includeHost: false, signal })
+    return filterAvailableLauncherItems(items, 'global-launcher').find(item => item.directAnswer && !item.disabledReason)
+  }, [locale, pluginRegistryVersion])
   const clipboardBlock = useClipboardObjectBlock({
-    open,
-    readClipboard: readLauncherClipboard,
-    // The tracker polls every second; older copies may miss a copy made right before open.
-    peekClipboard: () => peekTrackedClipboardText(1500),
-    getAcceptance: () => objectAcceptanceRef.current,
-    onQueryBlockRemoved: (text) => {
-      rejectedQueryBlockTextRef.current = text
-      setQuery(text)
+    open, readClipboard: readLauncherClipboard, findAnswer: findClipboardAnswer,
+    onAnswer: (item, paste) => {
+      const active = controllerRef.current
+      if (!active || active.getState().busy) return
+      void active.selectItem({ ...item, execute: context => item.execute({ ...context, api: {
+        ...context.api,
+        copyText: paste ? text => context.api.pasteToForegroundApp(text) : context.api.copyText,
+      } }) })
     },
-    // Do not replace an in-progress query with clipboard suggestions.
-    suppressAutoAttach: () => (
-      Boolean(liveQueryRef.current.trim())
-      || Boolean(inputRef.current?.value?.trim())
-    ),
-    filePicker: isNativeDesktopRuntime() ? {
-      choose: () => chooseTextMaterialFile({
-        title: t(locale, 'palette.fileTextPickerTitle'),
-        filterName: t(locale, 'palette.fileTextPickerFilter'),
-      }),
-      acquireFocusLease: acquireLauncherNativeDialogFocus,
-      onComplete: () => {
-        try { inputRef.current?.focus({ preventScroll: true }) } catch { /* best-effort caret restore */ }
-      },
-      beginSession: () => captureRootFileTextSession({
-        getController: () => controllerRef.current,
-        isRootVisible: () => {
-          const state = useAppStore.getState()
-          const settings = usePluginSettingsStore.getState().settingsDialogTarget
-          return state.globalLauncherOpen && fileTextRootVisibleRef.current &&
-            !state.pluginSurfaceToolTarget && !state.launcherHostSurfaceTarget &&
-            settings?.presentation !== 'global-launcher'
-        },
-      }),
-    } : undefined,
   })
   // Recommendations while block is mounted (exit keeps mode stable to avoid ranking jank).
   const objectBlockText = getObjectBlockRecommendationText(clipboardBlock.block)
@@ -267,29 +235,6 @@ export function GlobalLauncherHost() {
     deliveryGenerationRef.current += 1
     setDeliveryFailure(null)
   }, [open, query, clipboardBlock.block, controllerState, pluginSurfaceToolTarget, launcherHostSurfaceTarget, settingsDialogTarget])
-  const editMaterial = () => {
-    const active = controllerRef.current
-    if (!useAppStore.getState().globalLauncherOpen || !active || active.getState().busy || active.getState().frames.length > 1) return
-    const draft = clipboardBlock.beginTextEdit()
-    if (!draft) return
-    const item: LauncherItem = {
-      systemKey: 'host:object-block:edit-text',
-      kind: 'host',
-      display: { title: t(locale, 'palette.objectBlockEdit') },
-      behavior: { type: 'collect-input', input: { allowEmptyInput: true } },
-      initialInputText: draft.text,
-      materialTextEdit: true,
-      experienceRecord: false,
-      recordUsage: false,
-      execute: ({ input }) => {
-        if (!useAppStore.getState().globalLauncherOpen || !draft.commit(input?.text ?? '')) {
-          return { ok: false, message: t(locale, 'palette.objectBlockEditExpired') }
-        }
-        return { ok: true, keepOpen: true }
-      },
-    }
-    void active.selectItem(item, { recordUsage: false })
-  }
   // An explicit content handoff starts a new command search; ordinary Back keeps it.
   useEffect(() => subscribePendingObjectBlock(() => {
     setQuery('')
@@ -350,15 +295,6 @@ export function GlobalLauncherHost() {
       window.clearTimeout(paintTimer)
     }
   }, [open])
-
-  // Auto-attach follows plugin declarations: a detected kind must be in some active
-  // plugin's `accepts.kinds` (any surface), or a plugin must claim the exact text.
-  // Recomputed with the item list, which changes on plugin/settings/registry updates.
-  const objectAcceptance = useMemo<ObjectAcceptance>(() => ({
-    acceptedKinds: collectAcceptedContentKinds(getPluginSettings),
-    isClaimedByPlugin: (text) => isObjectTextClaimedByPlugin(text, getPluginSettings),
-  }), [availableLauncherItems])
-  objectAcceptanceRef.current = objectAcceptance
 
   // Only look up the foreground app when some candidate can actually use it.
   const anyCandidateAcceptsApps = useMemo(
@@ -432,23 +368,6 @@ export function GlobalLauncherHost() {
   const surfaceBackgroundIdle = useLauncherSurfaceBackgroundIdle(
     open && surfaceKey !== null ? surfaceFrame : null,
   )
-
-  // Typed or pasted text that is clearly a structured object (JSON, JWT, timestamp, URL, ...)
-  // becomes an Object Block, exactly like clipboard content. Debounced so that typing a
-  // longer query is never hijacked half-way.
-  const rootListActive = !surfaceFrame && !hostSurfaceTarget && !launcherSettingsTarget &&
-    (controllerState?.frames.length ?? 1) <= 1
-  useEffect(() => {
-    if (!open) rejectedQueryBlockTextRef.current = null
-    if (!open || !rootListActive || clipboardBlock.block || browsingActions || !query.trim()) return
-    if (rejectedQueryBlockTextRef.current === query) return
-    if (!createStrongQueryObjectBlock(query, objectAcceptance)) return
-    const timer = window.setTimeout(() => {
-      if (isImeComposingRef.current) return
-      clipboardBlock.attachQueryAsBlock(query)
-    }, QUERY_BLOCK_ATTACH_DELAY_MS)
-    return () => window.clearTimeout(timer)
-  }, [open, rootListActive, clipboardBlock.block, clipboardBlock.attachQueryAsBlock, browsingActions, query, isImeComposingRef, objectAcceptance])
 
   useEffect(() => {
     if (!standaloneLauncher || !isNativeDesktopRuntime()) return
@@ -714,7 +633,7 @@ export function GlobalLauncherHost() {
     (frozenSuggestions.current?.suggestions.length ?? 0) > 0 &&
     frozenSuggestions.current?.epoch === suggestionSettings.epoch && suggestionDismissed !== suggestionSession.id &&
     query === '' && !isImeComposingRef.current && !browsingActions && !clipboardBlock.block && !clipboardBlock.hint &&
-    !clipboardBlock.isPickingTextFile && !clipboardBlock.isReadingFileText && !clipboardBlock.fileTextError &&
+    !clipboardBlock.isReadingFileText && !clipboardBlock.fileTextError &&
     !controllerState?.busy && !controllerState?.error && (controllerState?.frames.length ?? 1) <= 1 &&
     !surfaceFrame && !hostSurfaceTarget && !launcherSettingsTarget)
   const snapshot = frozenSuggestions.current
@@ -751,9 +670,8 @@ export function GlobalLauncherHost() {
     () => visibleFiltered.map((item) => item.domainItem),
     [visibleFiltered],
   )
-  // Presentation age / tracker lastSeenAt can change without changing this material.
   const clipboardHintKey = clipboardBlock.hint && !clipboardBlock.block
-    ? `clipboard-hint:${clipboardBlock.hint.snapshot.hash}:${clipboardBlock.hint.snapshot.changedAt}`
+    ? `clipboard-hint:${clipboardBlock.hint.snapshot.hash}`
     : null
   const extraSelectionRows = useMemo<readonly SelectableExtraRow[]>(
     () => clipboardHintKey ? [{ index: -1, systemKey: clipboardHintKey }] : [],
@@ -777,17 +695,16 @@ export function GlobalLauncherHost() {
     const top = controllerState.frames[controllerState.frames.length - 1]
     const topKind = top?.kind ?? 'none'
     const previewSignal = top?.kind === 'collect-input'
-      ? `:${top.item.materialTextEdit || top.item.executionMode === 'explicit-text-preview' ? 'multi' : 'single'}:${top.inputText.trim() ? 1 : 0}:${top.previewOutput?.choices?.length ? 1 : 0}`
+      ? `:${top.item.executionMode === 'explicit-text-preview' ? 'multi' : 'single'}:${top.inputText.trim() ? 1 : 0}:${top.previewOutput?.choices?.length ? 1 : 0}`
       : ''
     return `${controllerState.busy ? 1 : 0}:${controllerState.frames.length}:${topKind}:${visibleDeliveryError ?? ''}${previewSignal}`
   }, [controllerState, visibleDeliveryError])
 
   // Guard duplicate dismissals while the native window is hiding.
   const closingRef = useRef(false)
-  const resetLauncherSession = useCallback((options?: { preservePendingMaterial?: boolean; consumed?: boolean }) => {
+  const resetLauncherSession = useCallback((options?: { preservePendingMaterial?: boolean }) => {
     textExportLifetimeRef.current += 1
-    // Only a completed action consumed the attached clipboard content.
-    clipboardBlock.markBlockConsumed({ preservePending: options?.preservePendingMaterial, dismissClipboard: options?.consumed === true })
+    clipboardBlock.clearMaterial({ preservePending: options?.preservePendingMaterial })
     clearPluginSurfaceTool()
     clearLauncherHostSurface()
     // Drop any suspended host (e.g. quick-editor under Diff) when fully closing.
@@ -802,7 +719,7 @@ export function GlobalLauncherHost() {
     setBrowseCategory('all')
     isImeComposingRef.current = false
     resetSession()
-  }, [clipboardBlock.markBlockConsumed, clearLauncherHostSurface, clearPluginSurfaceTool, closeSettingsDialog, isImeComposingRef, resetSession])
+  }, [clipboardBlock.clearMaterial, clearLauncherHostSurface, clearPluginSurfaceTool, closeSettingsDialog, isImeComposingRef, resetSession])
 
   useLayoutEffect(() => {
     if (!standaloneLauncher) return
@@ -825,7 +742,7 @@ export function GlobalLauncherHost() {
       reason,
       ...queryTelemetryProps(inputRef.current?.value ?? query),
     })
-    resetLauncherSession({ consumed: completed })
+    resetLauncherSession({ preservePendingMaterial: !completed })
     return closeGlobalLauncherWindow({
       standaloneLauncher,
       overlay,
@@ -873,7 +790,7 @@ export function GlobalLauncherHost() {
     restartVersion: surfaceBackgroundIdle.restartVersion,
   })
 
-  // -1 focuses the recent-clipboard hint row (30s–2 min) above the command list.
+  // -1 focuses the clipboard hint above the command list.
   const hasClipboardHint = Boolean(clipboardBlock.hint && !clipboardBlock.block)
   const minSelectedIndex = hasClipboardHint ? -1 : 0
   const maxSelectedIndex = Math.max(0, visibleFiltered.length - 1)
@@ -920,7 +837,7 @@ export function GlobalLauncherHost() {
     surfaceShell: activeSurfaceFrame?.surface.shell,
     surfaceKey,
     visibleFilteredLength: visibleFiltered.length,
-    controllerResizeKey: `${controllerResizeKey}:${locale}:${clipboardBlock.canPickTextFile}:${clipboardBlock.isPickingTextFile}:${clipboardBlock.canReadFileText}:${clipboardBlock.isReadingFileText}:${clipboardBlock.fileTextError ?? ''}`,
+    controllerResizeKey: `${controllerResizeKey}:${locale}:${clipboardBlock.canReadFileText}:${clipboardBlock.isReadingFileText}:${clipboardBlock.fileTextError ?? ''}`,
   })
 
   const {
@@ -993,12 +910,12 @@ export function GlobalLauncherHost() {
     const hasQuery = (inputRef.current?.value ?? liveQueryRef.current).length > 0
     const hasBlock = Boolean(clipboardBlock.block)
     if (!hasQuery && !hasBlock) return false
-    if (hasBlock) clipboardBlock.markBlockConsumed()
+    if (hasBlock) clipboardBlock.clearMaterial()
     setQuery('')
     setSelectedIndex(0, { pin: false })
     focusSearchInputAfterBack()
     return true
-  }, [clipboardBlock.block, clipboardBlock.markBlockConsumed, focusSearchInputAfterBack, setQuery, setSelectedIndex])
+  }, [clipboardBlock.block, clipboardBlock.clearMaterial, focusSearchInputAfterBack, setQuery, setSelectedIndex])
 
   useGlobalLauncherHostEscape({
     open,
@@ -1188,13 +1105,13 @@ export function GlobalLauncherHost() {
     if (result.ok) {
       // Navigation into another Launcher surface is continuation, not completion.
       if (target === 'open-plugin-surface' || useAppStore.getState().launcherHostSurfaceTarget) {
-        clipboardBlock.markBlockConsumed()
+        clipboardBlock.clearMaterial()
         setQuery('')
       } else {
         closeLauncherAfterAction()
       }
     }
-  }, [clipboardBlock.block, clipboardBlock.getMaterialGeneration, clipboardBlock.hasMaterial, clipboardBlock.markBlockConsumed, closeLauncherAfterAction, locale, openPluginSurface, setQuery])
+  }, [clipboardBlock.block, clipboardBlock.getMaterialGeneration, clipboardBlock.hasMaterial, clipboardBlock.clearMaterial, closeLauncherAfterAction, locale, openPluginSurface, setQuery])
 
   const selectItemWithObjectActions = useCallback((item: GlobalLauncherItem | undefined, customizeParams = false) => {
     if (!item) return
@@ -1385,7 +1302,6 @@ export function GlobalLauncherHost() {
         handleCompositionStart={handleCompositionStart}
         handleCompositionEnd={handleCompositionEnd}
         clipboardBlock={clipboardBlock}
-        onEditMaterial={editMaterial}
       />
       {open && resizableSurface && <WindowResizeHandles inset={8} onResizeStart={beginResize} />}
     </div>

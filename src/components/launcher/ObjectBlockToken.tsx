@@ -1,128 +1,38 @@
-/**
- * ObjectBlockToken — Visual token in the launcher input bar representing
- * the attached clipboard/editor-selection object.
- *
- * Design: hiven_clipboard_object_block_recommendation_ai_task.md §2.4 / §10
- *
- * UI:
- *   [ 剪贴板 · JSON · 12 秒前  × ]
- *   Empty-query Backspace removes in one press with a short exit transition.
- *   When secretMasked: masked label
- */
-
-import { Pencil, Undo2, X } from 'lucide-react'
-import { t, type Locale } from '../../i18n'
+import { X } from 'lucide-react'
+import { t, translate, type Locale } from '../../i18n'
 import { useAppStore } from '../../store'
 import type { LauncherObjectBlock } from '../../launcher/clipboard/objectBlock'
 
-function truncatePreview(text: string, maxLen: number): string {
-  const singleLine = text.replace(/[\r\n]+/g, ' ').trim()
-  if (singleLine.length <= maxLen) return singleLine
-  return singleLine.slice(0, maxLen) + '…'
-}
-
-export function ObjectBlockToken({
-  block,
-  onRemove,
-  onRestore,
-  restoreDisabled = false,
-  onEdit,
-  editDisabled = false,
-  locale: localeProp,
-  exiting = false,
-}: {
+export function ObjectBlockToken({ block, onRemove, locale: localeProp, exiting = false }: {
   block: LauncherObjectBlock
   onRemove: () => void
-  onRestore?: () => void
-  restoreDisabled?: boolean
-  onEdit?: () => void
-  editDisabled?: boolean
   locale?: Locale
-  /** Play remove transition while parent keeps this mounted. */
   exiting?: boolean
 }) {
   const storeLocale = useAppStore((s) => s.locale)
   const locale = localeProp ?? storeLocale
-  const selected = block.selectedForDelete
-  const lineCount = block.meta?.lineCount ?? 1
+  const image = block.payloadImage
+  const size = image?.width && image.height ? `${image.width}×${image.height}`
+    : block.payloadFiles ? translate(locale, 'objectBlock', 'detail.fileCount', { n: block.payloadFiles.paths.length })
+      : translate(locale, 'objectBlock', 'detail.chars', { n: block.payloadText?.length ?? block.meta?.charCount ?? 0 })
   return (
     <span
-      className={[
-        'object-block-token',
-        selected ? 'selected-for-delete' : '',
-        exiting ? 'is-exiting' : '',
-      ].filter(Boolean).join(' ')}
+      className={`object-block-token${exiting ? ' is-exiting' : ''}`}
       data-testid="object-block-token"
       data-source={block.source}
       data-kind={block.kind}
-      data-selected={selected ? 'true' : undefined}
       data-exiting={exiting ? 'true' : undefined}
-      data-state={selected ? 'selected-for-deletion' : block.state}
       aria-hidden={exiting ? true : undefined}
     >
-      {!block.secretMasked && block.meta?.textOrigin === 'file-content' && block.meta.fileName ? (
-        <span className="object-block-content" title={block.meta.fileName}>
-          {t(locale, 'palette.fileTextMaterial', { name: truncatePreview(block.meta.fileName ?? '', 24) })}
-        </span>
-      ) : !block.secretMasked && block.source === 'query' ? (
-        <span className="object-block-content">{t(locale,
-          lineCount > 1 ? 'palette.inputContentLines' : 'palette.inputContentChars',
-          { count: lineCount > 1 ? lineCount : block.meta?.charCount ?? 0 },
-        )}</span>
-      ) : !block.secretMasked && block.preview ? (
-        <span className="object-block-content">{truncatePreview(block.preview, 30)}</span>
-      ) : block.secretMasked ? (
-        <span className="object-block-masked">{t(locale, 'palette.objectBlockMasked')}</span>
-      ) : (
-        <span className="object-block-content">{block.title}</span>
-      )}
-      {block.state === 'snapshot' && (
-        <span className="object-block-badge">{t(locale, 'palette.objectBlockSnapshot')}</span>
-      )}
-      {block.validity === 'invalid' && (
-        <span className="object-block-badge">{t(locale, 'palette.objectBlockInvalid')}</span>
-      )}
-      {selected && (
-        <span className="object-block-delete-hint">{t(locale, 'palette.objectBlockDeleteHint')}</span>
-      )}
-      {onEdit && !exiting && (
-        <button
-          type="button"
-          className="object-block-remove"
-          disabled={editDisabled}
-          onMouseDown={(event) => event.preventDefault()}
-          onKeyDown={(event) => event.stopPropagation()}
-          onKeyUp={(event) => event.stopPropagation()}
-          onClick={(event) => { event.stopPropagation(); onEdit() }}
-          aria-label={t(locale, 'palette.objectBlockEdit')}
-          title={t(locale, 'palette.objectBlockEdit')}
-        >
-          <Pencil size={12} strokeWidth={2.2} aria-hidden="true" />
-        </button>
-      )}
-      {onRestore && !exiting && (
-        <button
-          type="button"
-          className="object-block-remove"
-          disabled={restoreDisabled}
-          onMouseDown={(event) => event.preventDefault()}
-          onKeyDown={(event) => event.stopPropagation()}
-          onKeyUp={(event) => event.stopPropagation()}
-          onClick={(event) => { event.stopPropagation(); onRestore() }}
-          aria-label={t(locale, 'palette.objectBlockRestore')}
-          title={t(locale, 'palette.objectBlockRestoreHint')}
-        >
-          <Undo2 size={12} strokeWidth={2.2} aria-hidden="true" />
-        </button>
-      )}
-      <button
-        type="button"
-        className="object-block-remove"
-        onKeyDown={(event) => event.stopPropagation()}
-        onKeyUp={(event) => event.stopPropagation()}
-        onClick={(e) => { e.stopPropagation(); onRemove() }}
-        aria-label={t(locale, 'palette.objectBlockRemove')}
-      >
+      <span className="object-block-content">
+        {block.secretMasked ? t(locale, 'palette.objectBlockMasked')
+          : `${translate(locale, 'objectBlock', `kind.${block.kind}`)} · ${size}`}
+      </span>
+      <button type="button" className="object-block-remove"
+        onMouseDown={event => event.preventDefault()}
+        onKeyDown={event => event.stopPropagation()} onKeyUp={event => event.stopPropagation()}
+        onClick={event => { event.stopPropagation(); onRemove() }}
+        aria-label={t(locale, 'palette.objectBlockRemove')}>
         <X size={12} strokeWidth={2.2} aria-hidden="true" />
       </button>
     </span>

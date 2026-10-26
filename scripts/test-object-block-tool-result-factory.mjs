@@ -79,13 +79,10 @@ const objectBlock = loadModule('src/launcher/clipboard/objectBlock.ts', {
   ],
   globals: {
     objectBlockText,
-    isStrongClipboardAttachEligible: attachPolicy.isStrongClipboardAttachEligible,
     detectContent: detectContentModule.detectContent,
     detectClipboardFilePath: clipboardSnapshot.detectClipboardFilePath,
     detectClipboardType: clipboardSnapshot.detectClipboardType,
     fileNameFromPath: clipboardSnapshot.fileNameFromPath,
-    shouldAutoAttachClipboard: clipboardSnapshot.shouldAutoAttachClipboard,
-    shouldShowRecentClipboardHint: clipboardSnapshot.shouldShowRecentClipboardHint,
   },
 })
 

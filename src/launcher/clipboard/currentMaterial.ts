@@ -44,11 +44,6 @@ export function discardCurrentMaterial(current: CurrentMaterial): CurrentMateria
   return { block: null, previousBlock: null, lastHandoffKey: current.lastHandoffKey }
 }
 
-export function restorePreviousMaterial(current: CurrentMaterial): CurrentMaterial {
-  if (!current.previousBlock) return current
-  return { ...current, block: current.previousBlock, previousBlock: null }
-}
-
 /** Only text payloads may enter the editor; media paths and masked secrets are not text material. */
 export function canEditMaterialText(block: LauncherObjectBlock | null): boolean {
   return Boolean(block && typeof block.payloadText === 'string' &&

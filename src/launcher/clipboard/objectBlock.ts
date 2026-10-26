@@ -6,16 +6,14 @@
  * product objects rather than plugin parameters.
  */
 
+import type { LauncherItem } from '../../workspace/launcher/types'
 import { detectContent } from '../../kits/content/index'
 import type { ClipboardDetectedType, ClipboardSnapshot } from './clipboardSnapshot'
 import {
-  detectClipboardFilePath,
   detectClipboardType,
   fileNameFromPath,
-  shouldAutoAttachClipboard,
-  shouldShowRecentClipboardHint,
 } from './clipboardSnapshot'
-import { findStrongClipboardAttachHits, isStrongClipboardAttachEligible, type ObjectAcceptance } from './attachPolicy'
+import { shouldShowClipboardHint } from './attachPolicy'
 import { objectBlockText } from './objectBlockText'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -39,9 +37,6 @@ export type ObjectBlockKind =
 export type ObjectBlockValidity = 'valid' | 'invalid' | 'partial' | 'unknown'
 
 export type ObjectBlockState =
-  | 'fresh'
-  | 'stale'
-  | 'unknown-age'
   | 'secret-masked'
   | 'selected-for-deletion'
   | 'invalid'
@@ -62,7 +57,8 @@ export type ObjectBlockMeta = {
 }
 
 export type ObjectBlockImagePayload = {
-  blobId: string
+  blobId?: string
+  dataUrl?: string
   contentType: string
   width?: number
   height?: number
@@ -104,17 +100,6 @@ export function getObjectBlockRecommendationText(
   return !block || block.secretMasked || isSecretKind(block.kind)
     ? undefined
     : block.payloadText
-}
-
-// ─── Age label ─────────────────────────────────────────────────────────────────
-
-export function formatAgeLabel(ageMs: number): string {
-  if (ageMs < 1000) return objectBlockText('age.justNow')
-  const seconds = Math.floor(ageMs / 1000)
-  if (seconds < 60) return objectBlockText('age.seconds', { n: seconds })
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return objectBlockText('age.minutes', { n: minutes })
-  return objectBlockText('age.hours', { n: Math.floor(minutes / 60) })
 }
 
 // ─── Kind label ────────────────────────────────────────────────────────────────
@@ -173,61 +158,19 @@ export function createGenericObjectBlock(params: {
   }
 }
 
-export type ClipboardObjectBlockOptions = {
-  forceAttach?: boolean
-  /** Sticky / non-empty query: never auto-steal focus from typing. */
-  suppressAutoAttach?: boolean
-  /** What active plugins accept; without it nothing auto-attaches by content. */
-  acceptance?: ObjectAcceptance
-}
-
-const NO_ACCEPTANCE: ObjectAcceptance = { acceptedKinds: new Set() }
-
-export type ClipboardAutoAttachSkipReason = 'suppressed' | 'unknown-age' | 'stale' | 'plain-text'
-
-/** Why fresh-clipboard auto-attach does not apply, or null when it does. Content-free. */
-export function getClipboardAutoAttachSkipReason(
-  snapshot: ClipboardSnapshot,
-  now: number = Date.now(),
-  options?: ClipboardObjectBlockOptions,
-): ClipboardAutoAttachSkipReason | null {
-  if (options?.forceAttach) return null
-  if (options?.suppressAutoAttach) return 'suppressed'
-  if (!shouldAutoAttachClipboard(snapshot, now)) return snapshot.ageConfidence === 'known' ? 'stale' : 'unknown-age'
-  // An object some active plugin accepts or claims, not plain text.
-  if (!isStrongClipboardAttachEligible(snapshot.text, options?.acceptance ?? NO_ACCEPTANCE)) return 'plain-text'
-  return null
-}
-
-/** Highest-confidence object kind the content kit sees in `text` (a kit enum value, never content). */
-export function getStrongestObjectKind(text: string): string | null {
-  return findStrongClipboardAttachHits(text)[0]?.kind ?? null
-}
-
-export function createClipboardObjectBlock(
-  snapshot: ClipboardSnapshot,
-  now: number = Date.now(),
-  options?: ClipboardObjectBlockOptions,
-): LauncherObjectBlock | null {
-  if (getClipboardAutoAttachSkipReason(snapshot, now, options)) return null
-  const ageMs = snapshot.changedAt !== undefined ? now - snapshot.changedAt : 0
+/** Only an explicit hint action calls this factory. */
+export function createClipboardObjectBlock(snapshot: ClipboardSnapshot): LauncherObjectBlock {
   const kind = normalizeSecretKind(snapshot.detectedType)
-  const filePath = detectClipboardFilePath(snapshot.text)
-  const subtitle = filePath
-    ? `${getKindLabel(kind)} · ${fileNameFromPath(filePath.path)}`
-    : getKindLabel(kind)
-  return createGenericObjectBlock({
-    source: 'clipboard',
-    kind,
-    title: getSourceLabel('clipboard'),
-    subtitle,
-    text: snapshot.text,
-    ageLabel: formatAgeLabel(ageMs),
+  const block = createGenericObjectBlock({
+    source: 'clipboard', kind, title: getSourceLabel('clipboard'),
+    text: snapshot.image || snapshot.files ? undefined : snapshot.text,
     masked: isSecretKind(kind),
     validity: kind === 'json' ? 'valid' : 'unknown',
-    state: isSecretKind(kind) ? 'secret-masked' : 'fresh',
-    meta: { age: formatAgeLabel(ageMs), size: formatSize(snapshot.text.length) },
+    meta: { charCount: snapshot.text.length },
   })
+  if (snapshot.image) block.payloadImage = { ...snapshot.image, contentType: 'image/png' }
+  if (snapshot.files) block.payloadFiles = { paths: snapshot.files, fileNames: snapshot.files.map(fileNameFromPath) }
+  return block
 }
 
 export function createEditorSelectionObjectBlock(params: {
@@ -398,14 +341,6 @@ export function createQueryObjectBlock(params: {
   })
 }
 
-/**
- * Typed or pasted launcher query that is clearly a structured object (JSON, JWT,
- * timestamp, URL, ...) becomes a content block; ordinary search text stays null.
- */
-export function createStrongQueryObjectBlock(query: string, acceptance: ObjectAcceptance): LauncherObjectBlock | null {
-  return isStrongClipboardAttachEligible(query, acceptance, 'query') ? createQueryObjectBlock({ query }) : null
-}
-
 export function createToolResultObjectBlock(text: string): LauncherObjectBlock {
   const kind = normalizeSecretKind(detectClipboardType(text))
   return createGenericObjectBlock({
@@ -420,27 +355,19 @@ export function createToolResultObjectBlock(text: string): LauncherObjectBlock {
   })
 }
 
-// ─── Hint for recent clipboard (30s–2 min) ─────────────────────────────────────
-
 export type RecentClipboardHint = {
   snapshot: ClipboardSnapshot
-  ageLabel: string
   kind: ObjectBlockKind
+  masked: boolean
+  answer?: LauncherItem
 }
 
-export function buildRecentClipboardHint(
-  snapshot: ClipboardSnapshot,
-  acceptance: ObjectAcceptance,
-  now: number = Date.now(),
-): RecentClipboardHint | null {
-  if (!shouldShowRecentClipboardHint(snapshot, now)) return null
-  // Hint only for content that would have hard-attached when fresher.
-  if (!isStrongClipboardAttachEligible(snapshot.text, acceptance)) return null
-  const ageMs = snapshot.changedAt !== undefined ? now - snapshot.changedAt : 0
+export function buildRecentClipboardHint(snapshot: ClipboardSnapshot, dismissedHash: string | null = null): RecentClipboardHint | null {
+  if (!shouldShowClipboardHint(snapshot, dismissedHash)) return null
   return {
     snapshot,
-    ageLabel: formatAgeLabel(ageMs),
     kind: normalizeSecretKind(snapshot.detectedType),
+    masked: detectContent(snapshot.text).some(({ kind }) => isSecretKind(kind)),
   }
 }
 
@@ -450,10 +377,4 @@ function normalizeSecretKind(kind: ObjectBlockKind): ObjectBlockKind {
 
 function isSecretKind(kind: string): boolean {
   return kind === 'secret' || kind === 'secret-like'
-}
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }

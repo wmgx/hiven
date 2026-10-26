@@ -44,7 +44,6 @@ function load(relative) {
 
 const content = load('src/kits/content/index.ts')
 const snapshot = load('src/launcher/clipboard/clipboardSnapshot.ts')
-const attach = load('src/launcher/clipboard/attachPolicy.ts')
 const blocks = load('src/launcher/clipboard/objectBlock.ts')
 
 // Kinds as first-party plugins declare them in `accepts.kinds` (attach follows declarations).
@@ -97,41 +96,10 @@ for (const [name, create] of factories) {
     cases++
   }
 }
-assert.equal(clipboard(sensitiveJson).state, 'fresh', 'masking preserves clipboard freshness state')
+assert.equal(clipboard(sensitiveJson).state, 'secret-masked')
 const snapshotBlock = factories.find(([name]) => name === 'snapshot')[1](sensitiveJson)
 assert.equal(snapshotBlock.state, 'snapshot', 'masking preserves snapshot state')
 assert.equal(snapshotBlock.meta.contentProvider, 'snapshot')
-
-for (const text of [sensitiveText, sensitiveJson, 'https://example.test/?password=synthetic-demo-not-a-secret.json']) {
-  const hits = attach.findStrongClipboardAttachHits(text)
-  assert.ok(hits.length > 0)
-  assert.ok(hits.some((hit) => hit.kind === 'secret' || hit.kind === 'secret-like'), 'sensitive attach signal is kept alongside format hits')
-}
-assert.equal(attach.findStrongClipboardAttachHits(ordinaryJson)[0].kind, 'json')
-
-// Mainline path labels and attach confidence remain exactly as before.
-for (const [text, kind] of [
-  ['/synthetic/result.json', 'json'],
-  ['result.json', 'json'],
-  ['../synthetic/result.csv', 'csv'],
-  ['file:///synthetic/result.csv', 'csv'],
-  ['C:\\synthetic\\result.sql', 'sql'],
-  ['https://example.test/input.json', 'json'],
-]) {
-  assert.equal(snapshot.detectClipboardType(text), kind)
-  const hits = attach.findStrongClipboardAttachHits(text)
-  assert.equal(hits.length, 1)
-  assert.equal(hits[0].kind, kind)
-  assert.equal(hits[0].confidence, 0.95)
-  const block = clipboard(text)
-  assert.equal(block.kind, kind)
-  assert.equal(block.secretMasked, false)
-  assert.equal(blocks.getObjectBlockRecommendationText(block), text)
-  assert.equal(block.payloadText, text)
-}
-for (const text of ['ordinary synthetic text', '42', '']) {
-  assert.equal(attach.isStrongClipboardAttachEligible(text, ACCEPTED), false)
-}
 
 // Explicit local opening retains full payload; masking is not encryption or an execution ban.
 const block = blocks.createToolResultObjectBlock(sensitiveJson)
