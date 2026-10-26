@@ -56,7 +56,6 @@ function loadPluginPaste({
   const appStore = loadModule('src/store.ts', {
     zustand: { create: () => (initialize) => createStore(initialize) },
     'zustand/middleware': { persist: (initialize) => initialize },
-    './workspace/ai/jev': { JEV_PRESETS: { tencent: {} } },
     './utils/persistMigration': { migrateLocalStorageKey() {} },
     './workspace/launcher/persistableRecents': { emptyPersistableRecents: () => [] },
     './workspace/launcher/usage': { emptyUsageBySurface: () => ({}) },

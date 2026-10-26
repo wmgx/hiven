@@ -28,7 +28,6 @@ function appStoreHarness(storage) {
     globalThis.window = { localStorage: storage }
     store = load('src/store.ts', {
       zustand, 'zustand/middleware': middleware,
-      './workspace/ai/jev': load('src/workspace/ai/jev.ts', { '@tauri-apps/api/core': {} }),
       './utils/persistMigration': load('src/utils/persistMigration.ts', {}),
       './workspace/launcher/persistableRecents': load('src/workspace/launcher/persistableRecents.ts', {
         '../../i18n': {}, '../effectRunner': {},

@@ -214,7 +214,6 @@
     "test:image-redaction": "node scripts/test-image-redaction.mjs",
     "test:image-resize-lifetime": "node scripts/test-image-resize-lifetime.mjs",
     "test:image-resize": "node scripts/test-image-resize.mjs",
-    "test:jev-command-choice": "node scripts/test-jev-command-choice.mjs",
     "test:json-cursor-path": "node scripts/test-json-cursor-path.mjs",
     "test:json-result-return": "node scripts/test-json-result-return.mjs",
     "test:json-tools-core": "node --experimental-strip-types scripts/test-json-tools-core.mts",

@@ -3,7 +3,6 @@ import { getSuggestionSession, recordSuggestionSuccess } from './contextSuggesti
 import { captureLauncherPasteOwner, checkPendingPasteRecovery } from '../pasteRecovery'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type MutableRefObject } from 'react'
 import { makePluginT } from '../../i18n/pluginI18nRegistry'
-import { translate } from '../../i18n'
 import { detectContent } from '../../kits/content'
 import { refreshHostApplicationIndexIfStale, subscribeHostAppIndexUpdated } from '../appLauncher/hostAppLauncher'
 import { useAppStore } from '../../store'
@@ -15,8 +14,6 @@ import { LauncherController, type LauncherControllerState } from './controller'
 import { createPluginLauncherApi, createPluginLauncherStorage } from './pluginApi'
 import { createPluginNetwork } from '../pluginNetwork'
 import { createPluginAi } from '../ai/runtime'
-import { chooseJevCandidate, validJevSettings } from '../ai/jev'
-import { resolveDisplaySubtitle, resolveDisplayTitle } from './display'
 import { createPluginShell } from '../pluginShell'
 import { getPluginPermissionSnapshot, usePluginPermissionStore } from '../pluginPermissions'
 import { resolvePluginSettingsSource } from './pluginSource'
@@ -191,7 +188,6 @@ export function useLauncherSession({
   const locale = useAppStore((s) => s.locale)
   const appSearchAliases = useAppStore((s) => s.settings.appSearchAliases)
   const appSearchAliasesRef = useRef(appSearchAliases)
-  const jevSettings = useAppStore((s) => s.settings.jevCommandSuggestion)
   const launcherUsageBySurface = useAppStore((s) => s.launcherUsageBySurface)
   const recordLauncherSelection = useAppStore((s) => s.recordLauncherSelection)
   const launcherFavoriteKeys = useAppStore((s) => s.launcherFavoriteKeys)
@@ -209,8 +205,6 @@ export function useLauncherSession({
   const [selectedIndex, setSelectedIndexState] = useState(0)
   const [controllerState, setControllerState] = useState<LauncherControllerState | null>(null)
   const [controller, setController] = useState<LauncherController | null>(null)
-  const [jevSuggestion, setJevSuggestion] = useState<{ query: string; item: LauncherItem; settings: typeof jevSettings; candidates: LauncherItem[] } | null>(null)
-  const jevGenerationRef = useRef(0)
   /** Plugin dynamicItems (calc, timestamp, web-open, …) — progressive. */
   const [pluginDynamicItems, pluginInputIdentity, setPluginDynamicItems, setPluginDynamicItemsNextFrame] = useFrameBatchedLauncherItems()
   /** Host dynamic items (apps / bridge tabs) — isolated from plugin path. */
@@ -719,7 +713,7 @@ export function useLauncherSession({
     return filterAvailableLauncherItems(resolvedCandidateItems, normalizedHostId)
   }, [resolvedCandidateItems, normalizedHostId, pluginPermissions, pluginRegistryVersion])
 
-  const localRankedItems = useMemo<LauncherItem[]>(() => {
+  const rankedItems = useMemo<LauncherItem[]>(() => {
     // The original ranking input and scoring remain shared by every host.
     const rankQuery = query.trim()
     const contentText = objectBlockText ?? (rankQuery || undefined)
@@ -755,62 +749,6 @@ export function useLauncherSession({
     rankingNow,
     resolvedCandidateItems,
   ])
-  const hasLocalMatches = localRankedItems.length > 0
-  const jevFrameKind = controllerState?.frames.at(-1)?.kind
-  useEffect(() => {
-    ++jevGenerationRef.current
-    setJevSuggestion(null)
-    return () => { ++jevGenerationRef.current }
-  }, [open, query, jevSettings, staticCandidates])
-
-  const rankedItems = useMemo<LauncherItem[]>(() => {
-    if (!allowDynamicItems || hasLocalMatches || !open || jevFrameKind !== 'list' ||
-      !jevSettings?.enabled || !validJevSettings(jevSettings) || query.trim().length < 2 || query.length > 500) return localRankedItems
-    const suggestion = jevSuggestion
-    if (suggestion?.query === query && suggestion.settings === jevSettings && suggestion.candidates === staticCandidates) {
-      const label = translate(locale, 'settings', 'jevBadge')
-      const item = { ...suggestion.item, display: { ...suggestion.item.display, kindLabel: label,
-        kindLabelI18n: { en: translate('en', 'settings', 'jevBadge'), zh: translate('zh', 'settings', 'jevBadge') } } }
-      return [mapCandidate ? mapCandidate(item) : item]
-    }
-    // Static command descriptions only; never send clipboard, editor, or dynamic result content.
-    const candidates = staticCandidates.filter((item) => item.kind === 'plugin' && !item.disabledReason &&
-      !item.systemKey.startsWith('plugin-settings:')).slice(0, 254)
-    if (!candidates.length) return localRankedItems
-    return [{
-      systemKey: 'host:jev:ask',
-      kind: 'host',
-      display: {
-        title: translate(locale, 'launcherHost', 'jevAsk', { query }),
-        subtitle: translate(locale, 'launcherHost', 'jevSendHint'),
-        icon: 'Sparkles',
-      },
-      behavior: { type: 'perform' },
-      recordUsage: false,
-      execute: async () => {
-        const generation = jevGenerationRef.current
-        try {
-          const answer = await chooseJevCandidate(jevSettings, query, candidates.map((item) => ({
-            id: item.systemKey,
-            description: [
-              resolveDisplayTitle(item.display, locale),
-              resolveDisplaySubtitle(item.display, locale),
-              ...(item.display.aliases ?? []).slice(0, 5),
-            ].filter(Boolean).join(' · '),
-          })))
-          if (generation !== jevGenerationRef.current || !launcherOpenRef.current || queryRef.current !== query) return { ok: true, keepOpen: true }
-          const candidate = answer && candidates.find((item) => item.systemKey === answer.id)
-          if (!candidate) return { ok: false, message: translate(locale, 'launcherHost', 'jevNoSuggestion') }
-          setJevSuggestion({ query, settings: jevSettings, candidates: staticCandidates,
-            item: answer.useInput ? { ...candidate, initialInputText: query } : candidate })
-          return { ok: true, keepOpen: true }
-        } catch {
-          if (generation !== jevGenerationRef.current || !launcherOpenRef.current || queryRef.current !== query) return { ok: true, keepOpen: true }
-          return { ok: false, message: translate(locale, 'launcherHost', 'jevRequestFailed') }
-        }
-      },
-    }]
-  }, [allowDynamicItems, hasLocalMatches, jevFrameKind, jevSettings, jevSuggestion, localRankedItems, locale, open, query, staticCandidates, mapCandidate])
   // After progressive partials / re-rank:
   // - user-pinned key → follow that row
   // - default (no pin) → stay on ranking top (index 0)

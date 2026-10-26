@@ -1,6 +1,5 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { JEV_PRESETS } from './workspace/ai/jev'
 import type { Locale } from './i18n'
 import { migrateLocalStorageKey } from './utils/persistMigration'
 import type {
@@ -184,7 +183,6 @@ interface AppState {
     aiDefaultProviderId?: string
     aiDefaultAgentId?: string
     aiDefaultEffort: 'low' | 'medium' | 'high' | 'xhigh'
-    jevCommandSuggestion?: import('./workspace/ai/jev').JevSettings
   }
   updateSetting: (key: string, value: any) => void
   setAppHotkey: (binding: AppHotkeyBinding) => void
@@ -398,7 +396,6 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
     aiDefaultProviderId: 'openai-chatgpt',
     aiDefaultAgentId: undefined,
     aiDefaultEffort: 'medium',
-    jevCommandSuggestion: { enabled: false, apiKey: '', ...JEV_PRESETS.tencent },
   },
   updateSetting: (key, value) => {
     if (key === 'appSearchAliases') throw new Error('Save application search aliases with setAppSearchAliases.')
@@ -492,6 +489,9 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
     set((state) => ({ locale, settings: { ...state.settings, locale } })),
 }), {
   name: 'hiven-settings',
+  version: 1,
+  // A versioned hydration writes the sanitized settings back to storage.
+  migrate: (persisted) => persisted as AppState,
   partialize: (state) => ({
     settings: {
       ...state.settings,
@@ -534,9 +534,11 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
 
     const merged = { ...current, ...persistedWithoutLegacyUsage }
     merged.settings = { ...current.settings, ...persistedState.settings }
-    // Retired experiment configuration is ignored without touching stored learning records.
+    // Remove retired command recommender credentials while preserving unrelated legacy settings.
+    for (const key of Object.keys(merged.settings)) {
+      if (key.endsWith('CommandSuggestion')) delete (merged.settings as unknown as Record<string, unknown>)[key]
+    }
     delete (merged.settings as unknown as Record<string, unknown>).automaticLearningEnabled
-    // Retired "persist params" preference is ignored on load.
     delete (merged.settings as unknown as Record<string, unknown>).persistParams
     merged.settings.globalPinnedLauncherShortcut = mergeShortcutRuntimeStatus(
       merged.settings.globalPinnedLauncherShortcut ?? current.settings.globalPinnedLauncherShortcut,

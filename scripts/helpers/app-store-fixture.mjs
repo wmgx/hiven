@@ -14,7 +14,7 @@ export const plain = (value) => JSON.parse(JSON.stringify(value))
 
 export function sharedStorage(initial) {
   const values = new Map()
-  if (initial !== undefined) values.set('hiven-settings', JSON.stringify({ state: initial, version: 0 }))
+  if (initial !== undefined) values.set('hiven-settings', JSON.stringify({ state: initial, version: 1 }))
   const storage = {
     writes: 0, failReads: false, failWrites: false,
     getItem(key) { if (storage.failReads) throw new Error('Synthetic storage read failure'); return values.get(key) ?? null },

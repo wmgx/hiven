@@ -57,7 +57,7 @@ try {
     const slots = [], lanes = [], rankCalls = []
     let cursor = 0
     const app = {
-      locale: 'en', settings: { appSearchAliases: {}, jevCommandSuggestion: {} },
+      locale: 'en', settings: { appSearchAliases: {} },
       launcherUsageBySurface: {}, launcherFavoriteKeys: [], launcherPersistableRecents: [],
       recordLauncherSelection() {}, recordPersistableLauncherSelection() {},
     }
