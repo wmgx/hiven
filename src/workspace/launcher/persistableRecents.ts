@@ -97,6 +97,13 @@ export function filterPersistableRecents(
   })
 }
 
+/** The Feishu plugin and these providers were removed together in 3c8eead8. */
+export function pruneRetiredPersistableRecents(recents: PersistableRecentEntry[]): PersistableRecentEntry[] {
+  const retired = new Set(['feishu.contacts', 'feishu.chats', 'feishu.docs'])
+  const kept = recents.filter(row => !retired.has(row.sourceId ?? row.systemKey.split(':')[0]))
+  return kept.length === recents.length ? recents : kept
+}
+
 /**
  * Turn persisted snapshots into host launcher items (open URL on activate).
  */
@@ -112,7 +119,8 @@ export function buildPersistableRecentLauncherItems(options: {
   const emptyQuery = !q
   // Keep every persisted candidate for the shared search/ranking pass. Callers may
   // still request a smaller explicit snapshot, but the default storage is already bounded.
-  const matched = options.max == null ? options.recents : options.recents.slice(0, options.max)
+  const recents = pruneRetiredPersistableRecents(options.recents)
+  const matched = options.max == null ? recents : recents.slice(0, options.max)
   const locale = options.locale
   const boost = emptyQuery ? PERSISTABLE_RECENTS_EMPTY_BOOST : PERSISTABLE_RECENTS_QUERY_BOOST
 

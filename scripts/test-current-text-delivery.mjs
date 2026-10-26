@@ -50,7 +50,7 @@ try {
   assert.equal(t('zh', 'palette.currentTextSourceInput'), '输入')
 
   const actions = recommendActionsForBlock(edited)
-  assert.deepEqual(actions.map((action) => action.id), ['paste-current-text', 'copy-current-text', 'open-in-quick-editor'])
+  assert.deepEqual(actions.map((action) => action.id), ['open-in-quick-editor'])
   assert.deepEqual(recommendActionsForBlock(original).map((action) => action.id), ['paste-history-text', 'copy-history-text', 'open-history-in-quick-editor'])
   for (const actionId of ['copy-current-text', 'paste-current-text', 'copy-history-text', 'paste-history-text']) {
     const copied = [], pasted = []

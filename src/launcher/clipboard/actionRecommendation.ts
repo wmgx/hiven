@@ -162,7 +162,7 @@ export function recommendActionsForBlock(block: LauncherObjectBlock): Recommende
   if (hasText && !isMedia) {
     // Prefer the open-clipboard-editor id for clipboard sources (legacy filter in host).
     const openEditor = block.source === 'clipboard' ? OPEN_CLIPBOARD_EDITOR : OPEN_QUICK_EDITOR
-    return getCurrentTextPayload(block) !== null ? [...CURRENT_TEXT_ACTIONS, openEditor] : [openEditor]
+    return block.source !== 'query' && getCurrentTextPayload(block) !== null ? [...CURRENT_TEXT_ACTIONS, openEditor] : [openEditor]
   }
 
   return []

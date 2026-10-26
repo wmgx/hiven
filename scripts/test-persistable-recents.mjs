@@ -38,7 +38,7 @@ const mod = await import(pathToFileURL(out).href)
 
 const payload = {
   persistKey: 'ou_1',
-  systemKey: 'feishu.contacts:person:ou_1',
+  systemKey: 'test.contacts:person:ou_1',
   kind: 'person',
   title: '李昊天',
   subtitle: 'dept',
@@ -57,7 +57,7 @@ recents = mod.recordPersistableRecent(
   recents,
   {
     persistKey: 'oc_2',
-    systemKey: 'feishu.chats:chat:oc_2',
+    systemKey: 'test.chats:chat:oc_2',
     kind: 'chat',
     title: '项目群',
     url: 'lark://applink.feishu.cn/client/chat/open?openChatId=oc_2',
@@ -72,12 +72,12 @@ assert.equal(filtered.length, 1)
 assert.equal(filtered[0].title, '李昊天')
 
 const items = mod.buildPersistableRecentLauncherItems({
-  recents,
+  recents: [...recents, { ...recents[0], sourceId: 'feishu.contacts' }, { ...recents[1], systemKey: 'feishu.docs:document:old' }],
   query: '',
   locale: 'zh',
   openUrl: async () => {},
 })
-assert.ok(items.length >= 2)
+assert.equal(items.length, 2, 'retired sources disappear while existing sources remain')
 // Builder preserves every stored candidate; shared launcher ranking owns final order.
 assert.equal(items[0].display.title, '项目群', 'builder preserves the recent snapshot order')
 assert.equal(items[0].ranking?.fallback, true, 'rehydrated recent keeps fallback ranking')

@@ -34,6 +34,7 @@ import {
 import { resolvePreservedSelection, type SelectableExtraRow } from './selectionPreserve'
 import {
   buildPersistableRecentLauncherItems,
+  pruneRetiredPersistableRecents,
   payloadFromLauncherItem,
 } from './persistableRecents'
 import {
@@ -673,6 +674,12 @@ export function useLauncherSession({
     }))
     return staticItemFilter ? staticItemFilter(raw) : raw
   }, [normalizedHostId, open, pluginRegistryVersion, pluginSettings, staticItemFilter])
+
+  useEffect(() => {
+    if (normalizedHostId !== 'global-launcher') return
+    const recents = pruneRetiredPersistableRecents(launcherPersistableRecents)
+    if (recents !== launcherPersistableRecents) useAppStore.setState({ launcherPersistableRecents: recents })
+  }, [launcherPersistableRecents, normalizedHostId])
 
   /** Host recents from plugin-opted persistable selections (contacts/chats/docs). */
   const persistableRecentItems = useMemo<LauncherItem[]>(() => {

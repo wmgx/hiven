@@ -41,32 +41,15 @@ function check(name, run) {
   console.log(`✓ ${name}`)
 }
 
-check('24 favorites survive both the 12-row visible cap and 16-row rank cap', () => {
-  const favoriteKeys = Object.freeze(keys(pins).reverse())
-  const rankedItems = Object.freeze(pins.slice(0, 16))
-  const availableItems = Object.freeze([...pins].reverse())
-  const visible = selectLauncherVisibleItems({ rankedItems, availableItems, favoriteKeys, query: '', keyOf })
-  assert.equal(visible.length, 24)
-  assert.deepEqual(keys(visible), [
-    ...keys(pins.slice(0, 12)),
-    ...keys(pins.slice(12)).reverse(),
-  ], 'keep the ranked prefix, then append omitted pins in saved favorite order')
-  assert.equal(new Set(keys(visible)).size, 24, 'pins already in the prefix appear only once')
-  for (const pin of pins) assert.ok(visible.includes(pin), `preserve the actual candidate ${pin.key}`)
-})
-
-check('only pins extend idle recommendations; duplicate keys keep the first available item', () => {
-  const duplicatePin = item(pins[0].key, 'later duplicate')
+check('idle shows saved favorites followed by at most five recent available items', () => {
   const visible = selectLauncherVisibleItems({
     rankedItems: ordinary,
-    availableItems: [...ordinary, pins[0], duplicatePin, pins[1]],
-    favoriteKeys: [ordinary[0].key, pins[1].key, pins[0].key, pins[1].key, pins[0].key],
-    query: '',
-    keyOf,
+    availableItems: [...pins, ...ordinary],
+    favoriteKeys: [pins[1].key, pins[0].key, pins[1].key],
+    recentKeys: ['missing', pins[0].key, ...keys(ordinary).reverse()],
+    query: '', keyOf,
   })
-  assert.deepEqual(keys(visible), [...keys(ordinary.slice(0, 12)), pins[1].key, pins[0].key])
-  assert.equal(visible[13], pins[0], 'first available instance wins over duplicate candidates')
-  assert.equal(visible.filter((row) => row.key.startsWith('ordinary-')).length, 12)
+  assert.deepEqual(keys(visible), [pins[1].key, pins[0].key, ...keys(ordinary).reverse().slice(0, 5)])
 })
 
 check('a typed query preserves every ranked result and its original order', () => {
@@ -82,27 +65,6 @@ check('a typed query preserves every ranked result and its original order', () =
   assert.deepEqual(keys(visible), keys(rankedItems), 'search must not be capped, reordered, deduplicated, or extended')
   assert.equal(visible.length, 29)
   assert.notEqual(visible, rankedItems, 'return a mutable result without exposing the readonly input array')
-})
-
-check('whitespace uses idle visibility and no favorites retain the original 12 recommendations', () => {
-  for (const query of ['', ' \t\n ']) {
-    const visible = selectLauncherVisibleItems({
-      rankedItems: ordinary,
-      availableItems: [...pins, ...ordinary],
-      favoriteKeys: [],
-      query,
-      keyOf,
-    })
-    assert.deepEqual(keys(visible), keys(ordinary.slice(0, 12)))
-  }
-  const visible = selectLauncherVisibleItems({
-    rankedItems: ordinary,
-    availableItems: [...ordinary, pins[0]],
-    favoriteKeys: [pins[0].key],
-    query: '\n\t ',
-    keyOf,
-  })
-  assert.deepEqual(keys(visible), [...keys(ordinary.slice(0, 12)), pins[0].key])
 })
 
 check('empty-query browse keeps every unknown candidate in first-occurrence order', () => {
@@ -229,17 +191,6 @@ check('browse groups tools by the existing catalog, keeps all candidates, and pr
   }
 })
 
-check('browse category has no effect on idle recommendations or available favorite expansion', () => {
-  for (const browseCategory of ['all', 'tools', 'apps', 'system']) {
-    const visible = selectLauncherVisibleItems({
-      rankedItems: ordinary, availableItems: [...ordinary, pins[0]], favoriteKeys: [pins[0].key],
-      query: '', browse: false, browseCategory, keyOf,
-      browseItemOf() { throw new Error('idle must not classify browse candidates') },
-    })
-    assert.deepEqual(keys(visible), [...keys(ordinary.slice(0, 12)), pins[0].key])
-  }
-})
-
 check('missing or unavailable favorites never create synthetic candidates', () => {
   const visible = selectLauncherVisibleItems({
     rankedItems: [],
@@ -253,24 +204,6 @@ check('missing or unavailable favorites never create synthetic candidates', () =
   assert.deepEqual(keys(selectLauncherVisibleItems({
     rankedItems: [], availableItems: [], favoriteKeys: keys(pins), query: '', keyOf,
   })), [])
-})
-
-check('unavailable favorites in the idle prefix disappear without backfilling ordinary rows', () => {
-  const rankedItems = Object.freeze([pins[0], ...ordinary.slice(0, 5), pins[1], ...ordinary.slice(5)])
-  const availableItems = Object.freeze([pins[1], pins[2]])
-  const favoriteKeys = Object.freeze([pins[0].key, pins[1].key, pins[2].key])
-  for (const query of ['', ' \n\t ']) {
-    const visible = selectLauncherVisibleItems({ rankedItems, availableItems, favoriteKeys, query, keyOf })
-    assert.deepEqual(keys(visible), [
-      ...keys(ordinary.slice(0, 5)), pins[1].key, ...keys(ordinary.slice(5, 10)), pins[2].key,
-    ], 'keep original ordinary rows, remove only the unavailable pin, then append an available pin')
-    assert.ok(!visible.includes(pins[0]), 'an unavailable pin cannot survive through the ranked prefix')
-    assert.ok(!visible.includes(ordinary[10]), 'ordinary row 13 must not fill the removed favorite slot')
-  }
-  const unpinned = selectLauncherVisibleItems({
-    rankedItems, availableItems: [], favoriteKeys: [], query: '', keyOf,
-  })
-  assert.deepEqual(keys(unpinned), keys(rankedItems.slice(0, 12)), 'ordinary idle semantics remain unchanged without pins')
 })
 
 check('typed queries leave unavailable ranked favorites under the existing search contract', () => {
