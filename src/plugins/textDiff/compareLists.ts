@@ -1,13 +1,11 @@
 export const MAX_LIST_BYTES = 1024 * 1024
 export const MAX_LIST_LINES = 20000
-export type ListOptions = { ignoreCase: boolean; trim: boolean }
 export type ListCategory = 'leftOnly' | 'common' | 'rightOnly'
 export type ListComparison =
   | { ok: false; reason: 'bytes' | 'lines' | 'failed' }
   | { ok: true; values: Record<ListCategory, string[]>; ignored: { left: number; right: number }; duplicates: { left: number; right: number } }
 
-/** ASCII case folding is deliberately narrow; other Unicode characters stay exact. */
-export function compareLists(left: string, right: string, options: ListOptions): ListComparison {
+export function compareLists(left: string, right: string): ListComparison {
   if (left.length + right.length > MAX_LIST_BYTES || new TextEncoder().encode(left).length + new TextEncoder().encode(right).length > MAX_LIST_BYTES) return { ok: false, reason: 'bytes' }
   const a = left ? left.split(/\r\n|\r|\n/) : []
   const b = right ? right.split(/\r\n|\r|\n/) : []
@@ -17,10 +15,9 @@ export function compareLists(left: string, right: string, options: ListOptions):
     let ignored = 0, duplicates = 0
     for (const original of lines) {
       if (!original.trim()) { ignored++; continue }
-      let key = options.trim ? original.trim() : original
-      if (options.ignoreCase) key = key.replace(/[A-Z]/g, letter => letter.toLowerCase())
+      const key = original.trim()
       if (entries.has(key)) duplicates++
-      else entries.set(key, original)
+      else entries.set(key, key)
     }
     return { entries, ignored, duplicates }
   }

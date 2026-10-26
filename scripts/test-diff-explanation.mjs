@@ -21,6 +21,9 @@ try {
     return { session, states, requests, cancelled, run: (left = '-old\n+new', right = '') => session.generate(left, right, 'English', selection) }
   }
   const ok = fixture(async function* () { yield start; yield delta('Changed old to new.'); yield done })
+  assert.equal(ok.requests.length, 0)
+  ok.session.cancel()
+  assert.equal(ok.requests.length, 0, 'cancelling before confirmation must not send text')
   await ok.run()
   assert.equal(ok.states.at(-1).text, 'Changed old to new.')
   assert.deepEqual(ok.requests[0].capabilities, ['text.generate'])

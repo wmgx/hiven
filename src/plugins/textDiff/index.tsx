@@ -119,7 +119,7 @@ export const textDiffPlugin = definePlugin({
       display: {
         title: 'command.compare.title',
         icon: 'GitCompare',
-        aliases: ['diff', 'compare', 'text diff', 'text-diff', '文本对比', 'json diff', 'json compare', 'json对比', 'json差异'],
+        aliases: ['diff', 'compare', 'text diff', 'text-diff', '文本对比', 'duibi', 'wenbenduibi', 'compare lists', 'list comparison', 'list difference', '名单核对', '名单对比', '交集', '差集', 'json diff', 'json compare', 'json对比', 'json差异'],
       },
       behavior: { type: 'perform' as const },
       surfaces: ['command-palette', 'global-launcher', 'editor-command-bar', 'quick-editor-command'],

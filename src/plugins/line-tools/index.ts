@@ -1,4 +1,3 @@
-import { ListCompareSurface } from './ListCompareSurface'
 import { definePlugin, type PluginToolContext, type PluginToolExplicitTextPreviewContext, type PluginToolTextPreviewResult, type PluginToolSurfaces } from '@hiven/plugin'
 import { TextToolsSurface } from './TextToolsSurface'
 import { TextWorkbenchSurface } from './TextWorkbenchSurface'
@@ -77,11 +76,6 @@ function extractListText(ctx: PluginToolExplicitTextPreviewContext): PluginToolT
 export const lineToolsPlugin = definePlugin({
   ui: {
     surfaces: [
-      {
-        id: 'list-compare', kind: 'custom-view', title: 'Compare lists', titleI18n: { zh: '名单核对' },
-        icon: 'ListFilter', aliases: ['compare lists', 'list comparison', 'list difference', '名单核对', '名单对比', '交集', '差集'],
-        component: ListCompareSurface, entry: { launcher: { surfaces: ['global-launcher'] }, shortcutBindable: true }, shell: WORKSPACE_SHELL,
-      },
       {
         id: 'main',
         kind: 'custom-view',

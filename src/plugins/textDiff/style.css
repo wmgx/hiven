@@ -1,9 +1,9 @@
 .td-surface { height: 100%; min-height: 0; display: flex; flex-direction: column; overflow: visible; color: var(--hiven-color-text-primary); background: var(--bg-surface, var(--hiven-color-bg-primary)); font-family: var(--hiven-font-ui); --td-border: var(--border, #e5e5e5); --td-bg-secondary: var(--surface, #f3f3f3); --td-bg-tertiary: var(--surface-2, #e8e8e8); }
 
 /* Header — matches .hdr in mockup */
-.td-hdr { display: flex; align-items: center; height: 42px; padding: 0 10px 0 12px; gap: 6px; border-bottom: 1px solid var(--td-border); background: var(--bg-surface, var(--hiven-color-bg-primary)); user-select: none; flex-shrink: 0; position: relative; z-index: 5; }
+.td-hdr { display: flex; flex-wrap: wrap; align-items: center; min-height: 42px; padding: 0 10px 0 12px; gap: 6px; border-bottom: 1px solid var(--td-border); background: var(--bg-surface, var(--hiven-color-bg-primary)); user-select: none; flex-shrink: 0; position: relative; z-index: 5; }
 .td-hdr-c { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-.td-hdr-a { display: flex; align-items: center; gap: 1px; margin-left: 8px; }
+.td-hdr-a { flex-shrink: 0; display: flex; align-items: center; gap: 1px; margin-left: 8px; }
 
 /* Breadcrumb — matches .bc-back/.bc-sep/.bc-cur in mockup */
 .td-bc-back { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 6px; border: 0; background: 0; color: var(--hiven-color-text-secondary); font: 500 13px/1 var(--hiven-font-ui); cursor: pointer; }
@@ -11,27 +11,7 @@
 .td-bc-back svg { width: 14px; height: 14px; }
 .td-bc-root { font-weight: 600; }
 .td-bc-sep { color: var(--hiven-color-text-tertiary); font-size: 12px; margin: 0 1px; }
-.td-bc-cur { font-size: 13px; color: var(--hiven-color-text-secondary); }
-
-/* Mode toggle — matches .mt in mockup */
-.td-mt { display: inline-flex; align-items: center; padding: 2px; gap: 1px; border-radius: 7px; background: var(--td-bg-secondary); }
-.td-mt-i { display: inline-flex; align-items: center; gap: 4px; border: 0; background: 0; color: var(--hiven-color-text-tertiary); font: 500 11px/1 var(--hiven-font-ui); padding: 4px 9px; border-radius: 5px; cursor: pointer; white-space: nowrap; transition: background 0.14s ease, color 0.14s ease, box-shadow 0.14s ease; }
-.td-mt-i:hover:not(.on) { color: var(--hiven-color-text-secondary); }
-.td-mt-i.on { background: var(--hiven-color-bg-primary); color: var(--hiven-color-text-primary); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06); }
-.td-mt-i svg { width: 11px; height: 11px; flex-shrink: 0; }
-
-/* JSON wrap + badge */
-.td-json-wrap { position: relative; display: inline-flex; }
-.td-mode-badge { font-size: 9px; font-weight: 600; color: var(--hiven-color-accent); margin-left: 1px; }
-
-/* Dropdown — matches .dd in mockup */
-.td-dd { position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; min-width: 110px; padding: 4px; border-radius: 7px; background: var(--panel, #ffffff); border: 1px solid var(--td-border); box-shadow: 0 6px 20px -4px rgba(0,0,0,0.16), 0 2px 6px rgba(0,0,0,0.06); z-index: 30; }
-.td-dd-i { display: flex; align-items: center; gap: 6px; border: 0; background: 0; color: var(--hiven-color-text-secondary); font: 500 12px/1 var(--hiven-font-ui); padding: 7px 10px; border-radius: 5px; cursor: pointer; white-space: nowrap; transition: background 0.12s ease, color 0.12s ease; }
-.td-dd-i:hover { background: var(--td-bg-secondary); color: var(--hiven-color-text-primary); }
-.td-dd-i.on { color: var(--hiven-color-accent); font-weight: 600; }
-.td-dd-i svg { width: 13px; height: 13px; flex-shrink: 0; }
-.td-dd-i .td-ck { opacity: 0; margin-left: auto; }
-.td-dd-i.on .td-ck { opacity: 1; }
+.td-bc-cur { flex-shrink: 0; white-space: nowrap; font-size: 13px; color: var(--hiven-color-text-secondary); }
 
 /* Icon buttons — matches .ib in mockup */
 .td-ib { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 6px; background: 0; color: var(--hiven-color-text-tertiary); cursor: pointer; transition: background 0.12s ease, color 0.12s ease, transform 0.1s ease; }
@@ -107,11 +87,14 @@
 .td-pane-label { display: flex; align-items: center; justify-content: space-between; min-width: 0; padding: 4px 10px; gap: 8px; }
 .td-pane-label + .td-pane-label { border-left: 1px solid var(--td-border); }
 .td-pane-label > span { padding: 0; }
-.td-copy { flex-shrink: 0; white-space: nowrap; }
 .td-source { border: 0; border-radius: 4px; background: transparent; color: var(--hiven-color-text-secondary); font: 12px var(--hiven-font-ui); padding: 4px 6px; cursor: pointer; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .td-source:hover { background: var(--td-bg-tertiary); }
 
-.td-explanation { flex-shrink: 0; padding: 5px 12px; border-bottom: 1px solid var(--td-border); color: var(--hiven-color-text-secondary); font: 12px/1.4 var(--hiven-font-ui); }
-.td-explanation-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.td-explanation-hint { font-size: 11px; margin-top: 3px; }
-.td-explanation-result { margin-top: 5px; max-height: 76px; overflow: auto; white-space: pre-wrap; user-select: text; color: var(--hiven-color-text-primary); }
+.td-set { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 12px; border-top: 1px solid var(--border); }
+.td-set-results { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.td-set-results section { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+.td-set-results section > div { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 12px; }
+.td-set-results textarea { flex: 1; min-height: 0; resize: none; }
+.td-set footer { color: var(--muted-foreground); font-size: 12px; }
+.td-set [role=alert] { color: var(--destructive); font-size: 12px; }
+.td-explanation-result { white-space: pre-wrap; user-select: text; font-size: 13px; }

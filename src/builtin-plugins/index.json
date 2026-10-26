@@ -1,5 +1,5 @@
 {
-  "version": 166,
+  "version": 168,
   "packages": [
     {
       "pluginId": "encode-decode",
@@ -24,7 +24,7 @@
     {
       "pluginId": "line-tools",
       "dir": "line-tools",
-      "version": "3.7.6"
+      "version": "3.8.0"
     },
     {
       "pluginId": "crypto",
@@ -64,7 +64,7 @@
     {
       "pluginId": "text-diff",
       "dir": "textDiff",
-      "version": "3.5.0"
+      "version": "3.6.1"
     },
     {
       "pluginId": "clipboard-history",
