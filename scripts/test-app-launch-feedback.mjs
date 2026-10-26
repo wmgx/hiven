@@ -78,6 +78,24 @@ function harness() {
   })
   return h
 }
+// Power commands use the same controller result flow before any native action.
+i18n.registerMessages('launcherHost', load('src/i18n/locales/launcherHost.ts').default)
+const powerCalls = []
+const power = load('src/workspace/launcher/hostActions.ts', {
+  '../quickEditor/quickEditorStore': {}, '../launcherHostSurfaceBridge': {},
+  '../../store': {}, './hostEditorActions': {}, '../windowManager/quickEditorWindow': {},
+  '../../i18n': i18n,
+  '@tauri-apps/api/core': { invoke: async (_command, payload) => { powerCalls.push(payload.action) } },
+})
+const powerController = harness().controller
+await powerController.selectItem(power.getHostSystemPowerItems()[0])
+assert.equal(powerCalls.length, 0, 'selecting restart only opens confirmation')
+const confirmation = powerController.getState().frames.at(-1)
+assert.equal(confirmation.kind, 'result')
+assert.equal(confirmation.output.choices[0].tone, 'danger')
+await confirmation.output.choices[0].primaryAction()
+assert.deepEqual(powerCalls, ['restart'], 'native action requires explicit confirmation')
+
 const [item] = await host.getHostAppLauncherDynamicItems({ query: '', locale: 'en', surfaceId: 'global-launcher' })
 assert.ok(item, 'real app index must produce the tested launcher item')
 const codes = {

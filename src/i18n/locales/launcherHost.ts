@@ -1,5 +1,13 @@
 export default {
   en: {
+    restartConfirmTitle: 'Are you sure you want to restart?',
+    shutdownConfirmTitle: 'Are you sure you want to shut down?',
+    powerConfirmHint: 'Press Enter to confirm',
+    powerCancel: 'Cancel',
+    jevAsk: 'Ask Jev: {query}',
+    jevSendHint: 'Press ↵ to send this query and command descriptions to Jev',
+    jevNoSuggestion: 'Jev found no suitable command',
+    jevRequestFailed: 'Could not reach Jev. Press Enter to retry.',
     processNoMatch: 'No matching process — pick one from the list',
     processMultiple: 'Multiple matches — highlight a process and press Enter',
     windowNoMatch: 'No matching window — pick one from the list',
@@ -19,6 +27,14 @@ export default {
     recentPerson: 'Recent person',
   },
   zh: {
+    restartConfirmTitle: '确定要重启吗？',
+    shutdownConfirmTitle: '确定要关机吗？',
+    powerConfirmHint: '按回车确认',
+    powerCancel: '取消',
+    jevAsk: '问 Jev：{query}',
+    jevSendHint: '按 ↵ 才将此查询和命令描述发送给 Jev',
+    jevNoSuggestion: 'Jev 未找到合适的命令',
+    jevRequestFailed: 'Jev 请求失败，按回车重试。',
     processNoMatch: '未找到匹配进程，请从列表中选择',
     processMultiple: '多个匹配，请用方向键选择进程后回车',
     windowNoMatch: '未找到匹配窗口，请从列表中选择',

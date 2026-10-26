@@ -63,7 +63,6 @@ const HOST_DYNAMIC_DEBOUNCE_MS = 0
  * Previously debounce was 0 on empty open and felt like a freeze on first show.
  */
 const HOST_EMPTY_OPEN_DELAY_MS = 120
-const JEV_DEBOUNCE_MS = 250
 const EMPTY_DYNAMIC_ITEMS: readonly LauncherItem[] = []
 
 type UseLauncherSessionOptions = {
@@ -211,10 +210,7 @@ export function useLauncherSession({
   const [controllerState, setControllerState] = useState<LauncherControllerState | null>(null)
   const [controller, setController] = useState<LauncherController | null>(null)
   const [jevSuggestion, setJevSuggestion] = useState<{ query: string; item: LauncherItem; settings: typeof jevSettings; candidates: LauncherItem[] } | null>(null)
-  const [jevSettledTick, setJevSettledTick] = useState(0)
   const jevGenerationRef = useRef(0)
-  const jevInFlightRef = useRef(false)
-  const jevPendingRef = useRef(false)
   /** Plugin dynamicItems (calc, timestamp, web-open, …) — progressive. */
   const [pluginDynamicItems, pluginInputIdentity, setPluginDynamicItems, setPluginDynamicItemsNextFrame] = useFrameBatchedLauncherItems()
   /** Host dynamic items (apps / bridge tabs) — isolated from plugin path. */
@@ -762,59 +758,59 @@ export function useLauncherSession({
   const hasLocalMatches = localRankedItems.length > 0
   const jevFrameKind = controllerState?.frames.at(-1)?.kind
   useEffect(() => {
-    const generation = ++jevGenerationRef.current
-    jevPendingRef.current = false
-    const q = query.trim()
-    if (!allowDynamicItems || hasLocalMatches || !open || jevFrameKind !== 'list' || !jevSettings?.enabled || !validJevSettings(jevSettings) || q.length < 2 || query.length > 500) {
-      setJevSuggestion(null)
-      return
-    }
-    // Static plugin actions only: never send clipboard, editor, history, or dynamic result content.
-    const candidates = staticCandidates.filter((item) => item.kind === 'plugin' && !item.disabledReason &&
-      !item.systemKey.startsWith('plugin-settings:')).slice(0, 254)
-    if (!candidates.length) return
-    const timer = window.setTimeout(() => {
-      if (jevInFlightRef.current) {
-        jevPendingRef.current = true
-        return
-      }
-      jevInFlightRef.current = true
-      void chooseJevCandidate(jevSettings, query, candidates.map((item) => ({
-        id: item.systemKey,
-        description: [
-          resolveDisplayTitle(item.display, locale),
-          resolveDisplaySubtitle(item.display, locale),
-          ...(item.display.aliases ?? []).slice(0, 5),
-        ].filter(Boolean).join(' · '),
-      }))).then((suggestion) => {
-        if (generation !== jevGenerationRef.current || !suggestion) return
-        const candidate = candidates.find((item) => item.systemKey === suggestion.id)
-        if (candidate) setJevSuggestion({
-          query,
-          item: suggestion.useInput ? { ...candidate, initialInputText: query } : candidate,
-          settings: jevSettings,
-          candidates: staticCandidates,
-        })
-      }).catch(() => { /* Network/model failures leave local search intact. */ }).finally(() => {
-        jevInFlightRef.current = false
-        if (jevPendingRef.current) {
-          jevPendingRef.current = false
-          setJevSettledTick((tick) => tick + 1)
-        }
-      })
-    }, JEV_DEBOUNCE_MS)
-    return () => { window.clearTimeout(timer); ++jevGenerationRef.current }
-  }, [allowDynamicItems, hasLocalMatches, jevFrameKind, jevSettings, jevSettledTick, locale, open, query, staticCandidates])
+    ++jevGenerationRef.current
+    setJevSuggestion(null)
+    return () => { ++jevGenerationRef.current }
+  }, [open, query, jevSettings, staticCandidates])
 
   const rankedItems = useMemo<LauncherItem[]>(() => {
+    if (!allowDynamicItems || hasLocalMatches || !open || jevFrameKind !== 'list' ||
+      !jevSettings?.enabled || !validJevSettings(jevSettings) || query.trim().length < 2 || query.length > 500) return localRankedItems
     const suggestion = jevSuggestion
-    if (hasLocalMatches || !open || jevFrameKind !== 'list' || !suggestion || suggestion.query !== query ||
-      suggestion.settings !== jevSettings || suggestion.candidates !== staticCandidates) return localRankedItems
-    const label = translate(locale, 'settings', 'jevBadge')
-    const item = { ...suggestion.item, display: { ...suggestion.item.display, kindLabel: label,
-      kindLabelI18n: { en: translate('en', 'settings', 'jevBadge'), zh: translate('zh', 'settings', 'jevBadge') } } }
-    return [mapCandidate ? mapCandidate(item) : item, ...localRankedItems.filter((candidate) => candidate.systemKey !== item.systemKey)]
-  }, [hasLocalMatches, jevFrameKind, jevSettings, jevSuggestion, localRankedItems, locale, open, query, staticCandidates, mapCandidate])
+    if (suggestion?.query === query && suggestion.settings === jevSettings && suggestion.candidates === staticCandidates) {
+      const label = translate(locale, 'settings', 'jevBadge')
+      const item = { ...suggestion.item, display: { ...suggestion.item.display, kindLabel: label,
+        kindLabelI18n: { en: translate('en', 'settings', 'jevBadge'), zh: translate('zh', 'settings', 'jevBadge') } } }
+      return [mapCandidate ? mapCandidate(item) : item]
+    }
+    // Static command descriptions only; never send clipboard, editor, or dynamic result content.
+    const candidates = staticCandidates.filter((item) => item.kind === 'plugin' && !item.disabledReason &&
+      !item.systemKey.startsWith('plugin-settings:')).slice(0, 254)
+    if (!candidates.length) return localRankedItems
+    return [{
+      systemKey: 'host:jev:ask',
+      kind: 'host',
+      display: {
+        title: translate(locale, 'launcherHost', 'jevAsk', { query }),
+        subtitle: translate(locale, 'launcherHost', 'jevSendHint'),
+        icon: 'Sparkles',
+      },
+      behavior: { type: 'perform' },
+      recordUsage: false,
+      execute: async () => {
+        const generation = jevGenerationRef.current
+        try {
+          const answer = await chooseJevCandidate(jevSettings, query, candidates.map((item) => ({
+            id: item.systemKey,
+            description: [
+              resolveDisplayTitle(item.display, locale),
+              resolveDisplaySubtitle(item.display, locale),
+              ...(item.display.aliases ?? []).slice(0, 5),
+            ].filter(Boolean).join(' · '),
+          })))
+          if (generation !== jevGenerationRef.current || !launcherOpenRef.current || queryRef.current !== query) return { ok: true, keepOpen: true }
+          const candidate = answer && candidates.find((item) => item.systemKey === answer.id)
+          if (!candidate) return { ok: false, message: translate(locale, 'launcherHost', 'jevNoSuggestion') }
+          setJevSuggestion({ query, settings: jevSettings, candidates: staticCandidates,
+            item: answer.useInput ? { ...candidate, initialInputText: query } : candidate })
+          return { ok: true, keepOpen: true }
+        } catch {
+          if (generation !== jevGenerationRef.current || !launcherOpenRef.current || queryRef.current !== query) return { ok: true, keepOpen: true }
+          return { ok: false, message: translate(locale, 'launcherHost', 'jevRequestFailed') }
+        }
+      },
+    }]
+  }, [allowDynamicItems, hasLocalMatches, jevFrameKind, jevSettings, jevSuggestion, localRankedItems, locale, open, query, staticCandidates, mapCandidate])
   // After progressive partials / re-rank:
   // - user-pinned key → follow that row
   // - default (no pin) → stay on ranking top (index 0)

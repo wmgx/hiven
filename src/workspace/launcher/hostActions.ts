@@ -5,6 +5,7 @@ import { useAppStore } from '../../store'
 import type { LauncherItem } from './types'
 import { getHostEditorActionItems } from './hostEditorActions'
 import { isQuickEditorWindowOpen, showQuickEditorWindow } from '../windowManager/quickEditorWindow'
+import { translate, type Locale } from '../../i18n'
 
 type SystemPowerAction = 'restart' | 'shutdown' | 'lock-screen'
 
@@ -16,6 +17,29 @@ async function performSystemPowerAction(action: SystemPowerAction): Promise<Laun
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     return { ok: false, message }
+  }
+}
+
+function confirmSystemPowerAction(action: 'restart' | 'shutdown', locale: Locale): LauncherExecuteResult {
+  return {
+    ok: true,
+    output: {
+      choices: [
+        {
+          id: `confirm-${action}`,
+          title: translate(locale, 'launcherHost', `${action}ConfirmTitle`),
+          subtitle: translate(locale, 'launcherHost', 'powerConfirmHint'),
+          tone: 'danger',
+          primaryAction: () => performSystemPowerAction(action),
+        },
+        {
+          id: `cancel-${action}`,
+          title: translate(locale, 'launcherHost', 'powerCancel'),
+          tone: 'muted',
+          primaryAction: () => ({ ok: true, keepOpen: true }),
+        },
+      ],
+    },
   }
 }
 
@@ -35,7 +59,7 @@ export function getHostSystemPowerItems(): LauncherItem[] {
       behavior: { type: 'perform' },
       surfaces: ['global-launcher'],
       requiredCapabilities: ['system-power'],
-      execute: async () => performSystemPowerAction('restart'),
+      execute: async (ctx) => confirmSystemPowerAction('restart', ctx.locale),
     },
     {
       systemKey: 'host:system:shutdown',
@@ -51,7 +75,7 @@ export function getHostSystemPowerItems(): LauncherItem[] {
       behavior: { type: 'perform' },
       surfaces: ['global-launcher'],
       requiredCapabilities: ['system-power'],
-      execute: async () => performSystemPowerAction('shutdown'),
+      execute: async (ctx) => confirmSystemPowerAction('shutdown', ctx.locale),
     },
     {
       systemKey: 'host:system:lock-screen',
