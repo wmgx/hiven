@@ -86,7 +86,7 @@ body,
 .global-launcher-surface-shell,
 .global-launcher-host-surface-shell,
 .global-launcher-settings-shell {
-  animation: launcher-frame-in 140ms ease-out both;
+  animation: launcher-frame-in 80ms ease-out both;
 }
 
 .global-launcher-flow-frame {
@@ -9489,306 +9489,189 @@ a:focus-visible {
 }
 
 /* ── Launcher material ─────────────────────────────────────────────────────
- * LIGHT: solid crisp workbench (previous usable baseline).
- * DARK: Tinycast-ish blur scrim + white-alpha rows.
- * Never apply light translucent glass — it washes contrast on macOS light desktops.
+ * One rule set for both themes; colours come from src/styles/theme.css.
+ * !important remains only where older launcher blocks above still force values.
  */
-
-/* —— Light: solid white, no blur, no mask fade —— */
-html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .global-launcher-panel.palette-panel {
-  background: #ffffff !important;
-  border: 1px solid rgba(17, 24, 39, 0.12) !important;
-  border-radius: 12px !important;
-  box-shadow: none !important;
+html[data-window='launcher'] .flux-spatial-shell .global-launcher-panel.palette-panel,
+html[data-window='launcher'] .flux-spatial-shell .palette-panel {
+  background: var(--background) !important;
+  border: 0 !important;
+  border-radius: var(--radius-lg) !important;
+  outline: none !important;
+  box-shadow: var(--shadow-window) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   overflow: hidden;
+  color: var(--foreground) !important;
 }
 
-html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .global-launcher-header.l-search,
-html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .l-search {
-  background: #f7f8f8 !important;
-  border-bottom: 1px solid rgba(17, 24, 39, 0.08) !important;
+html[data-window='launcher'] .flux-spatial-shell .global-launcher-header.l-search,
+html[data-window='launcher'] .flux-spatial-shell .l-search {
+  background: var(--subtle) !important;
+  border-bottom: var(--hairline) solid var(--border) !important;
+  box-shadow: none !important;
 }
 
-html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .global-launcher-footer.l-foot,
-html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .l-foot {
-  background: #ffffff !important;
-  border-top: 1px solid rgba(17, 24, 39, 0.08) !important;
-  padding: 9px 14px !important;
-}
-
-html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .l-search input,
-html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .global-launcher-header input {
-  font-size: 15px !important;
-  font-weight: 500 !important;
-  letter-spacing: 0;
-  background: transparent !important;
-  color: #111827 !important;
-}
-
-html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .l-search input::placeholder,
-html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .global-launcher-header input::placeholder {
-  color: #9ca3af !important;
-}
-
-/* No edge mask on light — it makes top/bottom rows look broken. */
-html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .global-launcher-body.l-list {
+html[data-window='launcher'] .flux-spatial-shell .global-launcher-body.l-list {
+  background: var(--background) !important;
   mask-image: none !important;
   -webkit-mask-image: none !important;
 }
 
-html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .l-foot .l-foot-primary {
+html[data-window='launcher'] .flux-spatial-shell .global-launcher-footer.l-foot,
+html[data-window='launcher'] .flux-spatial-shell .l-foot {
+  background: var(--background) !important;
+  border-top: var(--hairline) solid var(--border) !important;
+  padding: 9px 14px !important;
+  color: var(--muted-foreground) !important;
+}
+
+html[data-window='launcher'] .flux-spatial-shell .l-search input,
+html[data-window='launcher'] .flux-spatial-shell .global-launcher-header input {
+  font-size: var(--text-lg) !important;
+  font-weight: 500 !important;
+  letter-spacing: 0;
+  background: transparent !important;
+  color: var(--foreground) !important;
+}
+
+html[data-window='launcher'] .flux-spatial-shell .l-search input::placeholder,
+html[data-window='launcher'] .flux-spatial-shell .global-launcher-header input::placeholder {
+  color: var(--faint-foreground) !important;
+}
+
+html[data-window='launcher'] .flux-spatial-shell .l-search .ico {
+  color: var(--faint-foreground) !important;
+  opacity: 1 !important;
+}
+
+html[data-window='launcher'] .flux-spatial-shell .l-row {
+  border-radius: var(--radius-md) !important;
+  color: var(--foreground) !important;
+}
+
+html[data-window='launcher'] .flux-spatial-shell .l-row .r-title,
+html[data-window='launcher'] .flux-spatial-shell .l-row .launcher-item-title {
+  color: var(--foreground) !important;
+  font-weight: 500 !important;
+}
+
+html[data-window='launcher'] .flux-spatial-shell .l-row .r-desc {
+  color: var(--muted-foreground) !important;
+}
+
+html[data-window='launcher'] .flux-spatial-shell .l-row:hover:not(.sel):not(.selected),
+html[data-window='launcher'] .flux-spatial-shell .l-row.cmd-item:hover:not(.sel):not(.selected) {
+  background: var(--hover) !important;
+  box-shadow: none !important;
+}
+
+html[data-window='launcher'] .flux-spatial-shell .l-row.sel,
+html[data-window='launcher'] .flux-spatial-shell .l-row.selected,
+html[data-window='launcher'] .flux-spatial-shell .l-row.cmd-item.sel,
+html[data-window='launcher'] .flux-spatial-shell .l-row.cmd-item.selected {
+  background: var(--active) !important;
+  box-shadow: none !important;
+}
+
+html[data-window='launcher'] .flux-spatial-shell .l-row .r-ico {
+  color: var(--muted-foreground) !important;
+  opacity: 1 !important;
+}
+
+html[data-window='launcher'] .flux-spatial-shell .l-row.sel .r-ico,
+html[data-window='launcher'] .flux-spatial-shell .l-row.selected .r-ico {
+  color: var(--foreground) !important;
+}
+
+/* CDN avatars are often dark-on-transparent; a plate keeps them readable. Colour never paints over <img>. */
+html[data-window='launcher'] .flux-spatial-shell .l-row .r-ico.r-avatar {
+  background: var(--secondary) !important;
+  box-shadow: inset 0 0 0 var(--hairline) var(--border);
+  opacity: 1 !important;
+  color: var(--muted-foreground) !important;
+}
+
+html[data-window='launcher'] .flux-spatial-shell .l-row .r-ico.r-avatar img,
+html[data-window='launcher'] .flux-spatial-shell .l-row .r-ico img.r-avatar-img,
+html[data-window='launcher'] .flux-spatial-shell .l-row .r-ico img.r-remote-img {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+/* ⌘N chips — quiet, readable */
+html[data-window='launcher'] .flux-spatial-shell .l-row .r-quick-select {
+  min-width: 1.85rem;
+  border: var(--hairline) solid var(--border) !important;
+  border-radius: var(--radius-sm);
+  background: var(--secondary) !important;
+  color: var(--muted-foreground) !important;
+  font-weight: 500;
+}
+
+html[data-window='launcher'] .flux-spatial-shell .l-row.sel .r-quick-select,
+html[data-window='launcher'] .flux-spatial-shell .l-row.selected .r-quick-select,
+html[data-window='launcher'] .flux-spatial-shell .l-row .r-quick-select.is-selected {
+  border-color: var(--border-strong) !important;
+  background: var(--background) !important;
+  color: var(--foreground) !important;
+}
+
+/* Kind tags: faint text only */
+html[data-window='launcher'] .flux-spatial-shell .l-row .r-tag,
+html[data-window='launcher'] .flux-spatial-shell .l-row .launcher-kind-tag {
+  padding: 0 !important;
+  border-radius: 0 !important;
+  font-size: var(--text-sm) !important;
+  font-weight: 400 !important;
+  opacity: 1 !important;
+  background: transparent !important;
+  color: var(--faint-foreground) !important;
+}
+
+html[data-window='launcher'] .flux-spatial-shell .launcher-match-highlight {
+  color: var(--primary-text) !important;
+  font-weight: 600;
+}
+
+/* Primary action: quiet filled pill, no glass */
+html[data-window='launcher'] .flux-spatial-shell .l-foot .l-foot-primary {
   margin-left: auto;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-weight: 600;
-  color: #1e3a8a;
-  background: color-mix(in srgb, var(--accent, #2563eb) 10%, #fff);
-  border: 1px solid color-mix(in srgb, var(--accent, #2563eb) 22%, #e5e7eb);
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  color: var(--primary-text) !important;
+  background: var(--primary-soft) !important;
+  border: var(--hairline) solid var(--blue-6) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
-html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .l-foot .l-foot-primary kbd {
+html[data-window='launcher'] .flux-spatial-shell .l-foot .l-foot-primary kbd {
   border: none !important;
   background: transparent !important;
   box-shadow: none !important;
   padding: 0 0 0 2px !important;
-  font-size: 12px !important;
+  font-size: var(--text-sm) !important;
   color: inherit !important;
   opacity: 0.8;
 }
 
-html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .l-row .r-quick-select {
-  min-width: 1.85rem;
-  border-color: rgba(17, 24, 39, 0.12);
-  background: #f3f4f6;
-  color: #6b7280;
-  font-weight: 500;
-}
-
-html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .l-row.sel .r-quick-select,
-html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .l-row.selected .r-quick-select,
-html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .l-row .r-quick-select.is-selected {
-  border-color: color-mix(in srgb, var(--accent, #2563eb) 28%, #d1d5db);
-  color: #1e40af;
-  background: color-mix(in srgb, var(--accent, #2563eb) 10%, #fff);
-}
-
-html[data-window='launcher'] .flux-spatial-shell[data-theme='light'] .launcher-match-highlight {
-  color: var(--accent, #2563eb) !important;
-  font-weight: 650;
-}
-
-/*
- * —— Dark: SuperCmd-grade solid charcoal (NOT failed glass) ——
- * Fake translucency without native vibrancy reads as dirty mid-gray.
- * Use solid near-black faces + clear row elevation instead.
- */
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .global-launcher-panel.palette-panel,
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .palette-panel {
-  /*
-   * No double border / black ring. A hard 1px black outline against colorful
-   * desktops reads as 大黑边. Soft hairline + ambient only.
-   */
-  background: #1c1c1e !important;
-  border: 0 !important;
-  border-color: transparent !important;
-  border-radius: 12px !important;
-  outline: none !important;
-  /* soft ambient only — never 0 0 0 1px pure black */
-  box-shadow:
-    0 20px 50px rgba(0, 0, 0, 0.38),
-    0 0 0 0.5px rgba(255, 255, 255, 0.09) !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  overflow: hidden;
-  color: #f5f5f7 !important;
-}
-
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .global-launcher-header.l-search,
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-search {
-  background: #1c1c1e !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
-  min-height: 52px !important;
+html[data-window='launcher'] .flux-spatial-shell .l-foot kbd {
+  background: var(--secondary) !important;
+  border: var(--hairline) solid var(--border) !important;
   box-shadow: none !important;
+  color: var(--muted-foreground) !important;
 }
 
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .global-launcher-body.l-list {
-  background: #1c1c1e !important;
-  mask-image: none !important;
-  -webkit-mask-image: none !important;
-  padding: 6px 0 4px !important;
-}
-
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .global-launcher-footer.l-foot,
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-foot {
-  background: #1c1c1e !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
-  padding: 10px 12px 12px !important;
-  color: var(--text-2) !important;
-}
-
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-search input,
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .global-launcher-header input {
-  font-size: 16px !important;
-  font-weight: 500 !important;
-  letter-spacing: -0.015em;
-  background: transparent !important;
-  color: #f5f5f7 !important;
-}
-
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-search input::placeholder,
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .global-launcher-header input::placeholder {
-  color: rgba(235, 235, 245, 0.35) !important;
-}
-
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-search .ico {
-  color: rgba(235, 235, 245, 0.4) !important;
-  opacity: 1 !important;
-}
-
-/* Rows: solid lifts, not muddy translucent grey */
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row {
-  border-radius: 10px !important;
-  color: #f5f5f7 !important;
-}
-
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row .r-title,
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row .launcher-item-title {
-  color: #f5f5f7 !important;
-  font-weight: 510 !important;
-}
-
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row .r-desc {
-  color: rgba(235, 235, 245, 0.45) !important;
-}
-
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row:hover:not(.sel):not(.selected),
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row.cmd-item:hover:not(.sel):not(.selected) {
-  background: #2c2c2e !important;
-  box-shadow: none !important;
-}
-
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row.sel,
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row.selected,
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row.cmd-item.sel,
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row.cmd-item.selected {
-  background: #3a3a3c !important;
-  box-shadow: none !important;
-}
-
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row .r-ico {
-  color: rgba(235, 235, 245, 0.72) !important;
-  opacity: 1 !important;
-}
-
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row.sel .r-ico,
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row.selected .r-ico {
-  color: #f5f5f7 !important;
-}
-
-/*
- * Group/person CDN avatars are often dark-on-transparent. On charcoal they vanish.
- * Light plate + hairline keeps the slot readable; color must NOT paint over <img>.
- */
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row .r-ico.r-avatar {
-  background: rgba(255, 255, 255, 0.12) !important;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
-  opacity: 1 !important;
-  /* Keep text/lucide color for load-failure fallbacks; img ignores color. */
-  color: rgba(235, 235, 245, 0.85) !important;
-}
-
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row .r-ico.r-avatar img,
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row .r-ico img.r-avatar-img,
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row .r-ico img.r-remote-img {
-  opacity: 1 !important;
-  visibility: visible !important;
-  background: rgba(255, 255, 255, 0.06);
-}
-
-/* ⌘N chips — quiet, readable */
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row .r-quick-select {
-  min-width: 1.9rem;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  background: rgba(255, 255, 255, 0.06) !important;
-  color: rgba(235, 235, 245, 0.55) !important;
-  font-weight: 500;
-  border-radius: 6px;
-}
-
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row.sel .r-quick-select,
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row.selected .r-quick-select,
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row .r-quick-select.is-selected {
-  border-color: rgba(255, 255, 255, 0.14) !important;
-  background: rgba(255, 255, 255, 0.1) !important;
-  color: rgba(245, 245, 247, 0.88) !important;
-}
-
-/* Kind tags: faint text only */
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row .r-tag,
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-row .launcher-kind-tag {
-  padding: 0 !important;
-  border-radius: 0 !important;
-  font-size: 12px !important;
-  font-weight: 400 !important;
-  opacity: 1 !important;
-  background: transparent !important;
-  color: rgba(235, 235, 245, 0.35) !important;
-}
-
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .launcher-match-highlight {
-  color: #f5f5f7 !important;
-  font-weight: 650;
-}
-
-/* Primary action pill — solid elevated, not dirty glass */
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-foot .l-foot-primary {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-radius: 999px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: #f5f5f7 !important;
-  background: #3a3a3c !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  box-shadow: none !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-foot .l-foot-primary kbd {
-  border: none !important;
-  background: transparent !important;
-  box-shadow: none !important;
-  padding: 0 0 0 2px !important;
-  font-size: 12px !important;
-  color: rgba(245, 245, 247, 0.7) !important;
-  opacity: 1 !important;
-}
-
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .l-foot kbd {
-  background: #2c2c2e !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  border-bottom-width: 1px !important;
-  box-shadow: none !important;
-  color: rgba(235, 235, 245, 0.7) !important;
-}
-
-/* Object block / empty well on dark solid face */
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .object-block-token,
-html[data-window='launcher'] .flux-spatial-shell[data-theme='dark'] .recent-clipboard-hint {
-  background: #2c2c2e !important;
-  border-color: rgba(255, 255, 255, 0.08) !important;
+html[data-window='launcher'] .flux-spatial-shell .object-block-token,
+html[data-window='launcher'] .flux-spatial-shell .recent-clipboard-hint {
+  background: var(--secondary) !important;
+  border-color: var(--border) !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
