@@ -31,7 +31,6 @@ import { rankLauncherItems } from './ranking'
 import {
   collectDynamicItems,
   collectStaticCandidates,
-  getNearbySaveRunItem,
   filterDynamicForSurface,
   filterAvailableLauncherItems,
 } from './registry'
@@ -54,9 +53,6 @@ import type {
   PluginLauncherApi,
 } from './types'
 import { normalizeLauncherSurfaceId } from './types'
-import { subscribeSavedActions } from '../savedActions/store'
-import { getLastSaveableRun, subscribeLastSaveableRun } from '../savedActions/lastSaveableRun'
-import type { LastSaveableRunState } from '../savedActions/types'
 
 /** Local compute plugins (calc / timestamp / regex match) — keep near-instant. */
 const PLUGIN_DYNAMIC_DEBOUNCE_MS = 60
@@ -113,7 +109,6 @@ export type LauncherSession = {
   rankedItems: LauncherItem[]
   /** Current resolved candidates before ranking caps, strictly eligible for discovery. */
   availableItems: LauncherItem[]
-  nearbySaveItem: LauncherItem | null
   syncSelection: () => void
   reset: () => void
 }
@@ -210,36 +205,6 @@ export function useLauncherSession({
   const pluginSettings = usePluginSettingsStore((s) => s.pluginSettings)
   const pluginPermissions = usePluginPermissionStore((s) => s.permissions)
 
-  const [savedActionVersion, setSavedActionVersion] = useState(0)
-  useEffect(() => subscribeSavedActions(() => setSavedActionVersion((version) => version + 1)), [])
-  const [lastSaveableRun, setLastSaveableRun] = useState<LastSaveableRunState | null>(null)
-  useEffect(() => {
-    if (!open || normalizedHostId !== 'global-launcher') {
-      setLastSaveableRun(null)
-      return
-    }
-    let cancelled = false
-    let delivered = false
-    const unsubscribe = subscribeLastSaveableRun((run) => {
-      delivered = true
-      setLastSaveableRun(run)
-    })
-    // Recover a previous successful copy on reopen. A newer live delivery wins
-    // over an outstanding native read; no timer or new persistence is needed.
-    void getLastSaveableRun().then((run) => {
-      if (!cancelled && !delivered) setLastSaveableRun(run)
-    }).catch(() => {
-      if (!cancelled && !delivered) setLastSaveableRun(null)
-    })
-    return () => { cancelled = true; unsubscribe() }
-  }, [normalizedHostId, open])
-  const nearbySaveItem = useMemo(() => {
-    void pluginRegistryVersion
-    void pluginSettings
-    void pluginPermissions
-    void savedActionVersion
-    return open && normalizedHostId === 'global-launcher' ? getNearbySaveRunItem(lastSaveableRun) : null
-  }, [lastSaveableRun, normalizedHostId, open, pluginRegistryVersion, pluginSettings, pluginPermissions, savedActionVersion])
   const [query, setQueryState] = useState('')
   const queryRef = useRef('')
   const [selectedIndex, setSelectedIndexState] = useState(0)
@@ -252,7 +217,7 @@ export function useLauncherSession({
   const jevPendingRef = useRef(false)
   /** Plugin dynamicItems (calc, timestamp, web-open, …) — progressive. */
   const [pluginDynamicItems, pluginInputIdentity, setPluginDynamicItems, setPluginDynamicItemsNextFrame] = useFrameBatchedLauncherItems()
-  /** Host dynamic items (apps / workflow / bridge tabs) — isolated from plugin path. */
+  /** Host dynamic items (apps / bridge tabs) — isolated from plugin path. */
   const [hostDynamicItems, hostInputIdentity, setHostDynamicItems, setHostDynamicItemsNextFrame] = useFrameBatchedLauncherItems()
   const controllerRef = useRef<LauncherController | null>(null)
   // Registry notifications revoke an open flow synchronously, before React's
@@ -606,7 +571,7 @@ export function useLauncherSession({
     return unsubscribe
   }, [allowDynamicItems, open])
 
-  // ── Host dynamic path (apps / workflow) — isolated, longer debounce ────────
+  // ── Host dynamic path (apps) — isolated, longer debounce ────────
   useEffect(() => {
     if (!open) return
     if (!allowDynamicItems) {
@@ -713,12 +678,11 @@ export function useLauncherSession({
   const staticCandidates = useMemo<LauncherItem[]>(() => {
     void pluginRegistryVersion
     void pluginSettings
-    void savedActionVersion
     const raw = measureLauncherPerfSync('session:static-candidates', () => collectStaticCandidates(normalizedHostId), () => ({
       surfaceId: normalizedHostId,
     }))
     return staticItemFilter ? staticItemFilter(raw) : raw
-  }, [normalizedHostId, open, pluginRegistryVersion, pluginSettings, savedActionVersion, staticItemFilter])
+  }, [normalizedHostId, open, pluginRegistryVersion, pluginSettings, staticItemFilter])
 
   /** Host recents from plugin-opted persistable selections (contacts/chats/docs). */
   const persistableRecentItems = useMemo<LauncherItem[]>(() => {
@@ -807,7 +771,7 @@ export function useLauncherSession({
     }
     // Static plugin actions only: never send clipboard, editor, history, or dynamic result content.
     const candidates = staticCandidates.filter((item) => item.kind === 'plugin' && !item.disabledReason &&
-      !item.savedActionArtifactId && !item.systemKey.startsWith('plugin-settings:')).slice(0, 254)
+      !item.systemKey.startsWith('plugin-settings:')).slice(0, 254)
     if (!candidates.length) return
     const timer = window.setTimeout(() => {
       if (jevInFlightRef.current) {
@@ -873,7 +837,6 @@ export function useLauncherSession({
     controllerState,
     rankedItems,
     availableItems,
-    nearbySaveItem,
     syncSelection,
     reset,
   }

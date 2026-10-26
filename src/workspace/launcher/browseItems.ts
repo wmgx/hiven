@@ -17,8 +17,6 @@ const SYSTEM_KEYS = new Set([
   'host:system:restart',
   'host:system:shutdown',
   'host:system:lock-screen',
-  'host:saved-action:save-last',
-  'host:saved-action:delete',
 ])
 
 const DESKTOP_TARGET_PREFIXES = [
@@ -38,8 +36,6 @@ export function getLauncherBrowseCategory(item: LauncherBrowseItem): LauncherBro
     SYSTEM_KEYS.has(key)
     || key.startsWith('plugin-settings:')
     || key.startsWith('host:experience:')
-    || key.startsWith('host:saved-action:rename:')
-    || key.startsWith('host:saved-action:delete:')
   ) return 'system'
 
   if (DESKTOP_TARGET_PREFIXES.some((prefix) => key.startsWith(prefix))) return 'apps'

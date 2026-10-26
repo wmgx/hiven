@@ -334,7 +334,7 @@ export const randomPlugin = definePlugin({
           return ctx.output.error(toolErrorMessage(ctx.t, e))
         }
       },
-      surfaces: { launcher: { surfaces: ['editor-command-bar', 'quick-editor-command'] }, panel: true },
+      surfaces: { launcher: { surfaces: ['quick-editor-command'] }, panel: true },
     },
     {
       id: 'random.float',
@@ -360,7 +360,7 @@ export const randomPlugin = definePlugin({
           return ctx.output.error(toolErrorMessage(ctx.t, e))
         }
       },
-      surfaces: { launcher: { surfaces: ['editor-command-bar', 'quick-editor-command'] }, panel: true },
+      surfaces: { launcher: { surfaces: ['quick-editor-command'] }, panel: true },
     },
     {
       id: 'random.string',
@@ -399,7 +399,7 @@ export const randomPlugin = definePlugin({
           return ctx.output.error(toolErrorMessage(ctx.t, e))
         }
       },
-      surfaces: { launcher: { surfaces: ['editor-command-bar', 'quick-editor-command'] }, panel: true },
+      surfaces: { launcher: { surfaces: ['quick-editor-command'] }, panel: true },
     },
     {
       id: 'random.uuid',
@@ -418,7 +418,7 @@ export const randomPlugin = definePlugin({
           return ctx.output.error(toolErrorMessage(ctx.t, e))
         }
       },
-      surfaces: { launcher: { surfaces: ['editor-command-bar', 'quick-editor-command'] }, panel: true },
+      surfaces: { launcher: { surfaces: ['quick-editor-command'] }, panel: true },
     },
     {
       id: 'random.password',
@@ -440,7 +440,7 @@ export const randomPlugin = definePlugin({
           return ctx.output.error(toolErrorMessage(ctx.t, e))
         }
       },
-      surfaces: { launcher: { surfaces: ['editor-command-bar', 'quick-editor-command'] }, panel: true },
+      surfaces: { launcher: { surfaces: ['quick-editor-command'] }, panel: true },
     },
     {
       id: 'random.hex',
@@ -462,7 +462,7 @@ export const randomPlugin = definePlugin({
           return ctx.output.error(toolErrorMessage(ctx.t, e))
         }
       },
-      surfaces: { launcher: { surfaces: ['editor-command-bar', 'quick-editor-command'] }, panel: true },
+      surfaces: { launcher: { surfaces: ['quick-editor-command'] }, panel: true },
     },
     {
       id: 'random.color',
@@ -481,7 +481,7 @@ export const randomPlugin = definePlugin({
           return ctx.output.error(toolErrorMessage(ctx.t, e))
         }
       },
-      surfaces: { launcher: { surfaces: ['editor-command-bar', 'quick-editor-command'] }, panel: true },
+      surfaces: { launcher: { surfaces: ['quick-editor-command'] }, panel: true },
     },
     {
       id: 'random.boolean',
@@ -500,7 +500,7 @@ export const randomPlugin = definePlugin({
           return ctx.output.error(toolErrorMessage(ctx.t, e))
         }
       },
-      surfaces: { launcher: { surfaces: ['editor-command-bar', 'quick-editor-command'] }, panel: true },
+      surfaces: { launcher: { surfaces: ['quick-editor-command'] }, panel: true },
     },
   ],
 })

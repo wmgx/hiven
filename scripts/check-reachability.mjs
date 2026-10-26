@@ -30,7 +30,6 @@ const WHITELIST = new Set([
   'src/hiven.d.ts',
   // Barrel files and utilities — disconnected but may be needed
   'src/launcher/clipboard/index.ts',
-  'src/workflow/index.ts',
   // Barrel re-export only; consumers import concrete modules under desktopTargets/.
   'src/workspace/desktopTargets/index.ts',
 ])

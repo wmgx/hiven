@@ -140,17 +140,11 @@ function loadPluginPaste({
     '../appLauncher/appLaunchError': { rethrowAppLaunchError: forbidden },
     '../pluginClipboard': { writeClipboardText: forbidden },
   })
-  const router = loadModule('src/workflow/outputRouter.ts', {
-    '../workspace/pluginPaste': api,
-    '../workspace/launcher/pluginApi': launcherModule,
-    '../workspace/windowManager/pluginSurfaceWindows': { showPluginSurfaceWindow: forbidden },
-    '../workspace/quickEditor/quickEditorRequests': { createQuickEditorPane: forbidden, overwriteQuickEditorText: forbidden },
-  })
   const output = loadModule('src/workspace/launcher/output.ts', {
     './types': loadModule('src/workspace/launcher/types.ts'),
     '../../i18n': i18n,
   })
-  return { api, calls, telemetry, availabilityApi, availabilityCalls, state, appStore, settingsStore, recovery, ownershipCalls, launcherModule, router, output }
+  return { api, calls, telemetry, availabilityApi, availabilityCalls, state, appStore, settingsStore, recovery, ownershipCalls, launcherModule, output }
 }
 
 {
@@ -355,9 +349,9 @@ for (const availability of ['can-attempt', 'unknown']) {
 }
 
 // Host adapters used to discard fallback:none and turn it into a successful
-// action. Follow the real output callbacks and workflow router through paste.
+// action. Follow the real output callbacks through paste.
 for (const availability of ['unsupported', 'accessibility-required', 'can-attempt']) {
-  for (const entry of ['launcher-primary', 'launcher-secondary', 'workflow']) {
+  for (const entry of ['launcher-primary', 'launcher-secondary']) {
     const h = loadPluginPaste({
       availability, windowSearch: '?window=launcher',
       invokeImpl: async (command) => { h.calls.push(['invoke', command]); throw new Error('Native simulation failed') },
@@ -365,10 +359,7 @@ for (const availability of ['unsupported', 'accessibility-required', 'can-attemp
     const text = '  retained output\n'
     const launcher = h.launcherModule.createPluginLauncherApi()
     let run
-    if (entry === 'workflow') {
-      const ctx = h.router.createDefaultOutputRouterContext()
-      run = () => h.router.routeTextOutput(text, { kind: 'paste-to-foreground-app' }, ctx)
-    } else if (entry === 'launcher-primary') {
+    if (entry === 'launcher-primary') {
       const result = h.output.foregroundPasteResult(text, launcher)
       run = result.output.choices[0].primaryAction
     } else {
@@ -643,11 +634,9 @@ const server = await createServer({ server: { middlewareMode: true }, appType: '
 try {
   const { LauncherController } = await server.ssrLoadModule('/src/workspace/launcher/controller.ts')
   const { textResult } = await server.ssrLoadModule('/src/workspace/launcher/output.ts')
-  const { getLastSaveableRun, setLastSaveableRun } = await server.ssrLoadModule('/src/workspace/savedActions/lastSaveableRun.ts')
   for (const scenario of ['early-close-control', 'caller-completes-success', 'copied-keeps-result']) {
     const h = loadPluginPaste({ windowSearch: '?window=launcher', invokeImpl: async () => { if (scenario === 'copied-keeps-result') throw new Error('native insertion failed') } })
-    const seed = { status: 'ready', runId: 'prior-run', actionKey: 'host:review:prior', inputBinding: 'prompt', outputIntent: 'copy', savedParams: {}, contractFingerprint: 'v1:prior', actionPolicy: { effect: 'pure', learnable: true }, completedAt: Date.now() }
-    setLastSaveableRun(seed)
+
     let closed = 0
     let resets = 0
     const events = []
@@ -667,7 +656,7 @@ try {
     })
     const item = {
       systemKey: `host:review:${scenario}`, kind: 'host', display: { title: 'Paste integration' }, behavior: { type: 'perform' },
-      actionPolicy: { effect: 'pure', learnable: true }, contractFingerprint: 'v1:paste-review',
+      actionPolicy: { effect: 'pure' }, contractFingerprint: 'v1:paste-review',
       execute: context => {
         const result = textResult('keep complete draft\nsecond line', context.api, 'en')
         result.output.choices.push({ id: 'other', title: 'Other', primaryAction: async () => {} })
@@ -678,19 +667,18 @@ try {
     const frame = controller.getState().frames.at(-1)
     assert.equal(frame.kind, 'result')
     await controller.activateSecondary(frame.output.choices[0], 'paste-to-foreground-app')
-    const last = await getLastSaveableRun()
+
     const applied = events.filter(event => event.eventType === 'output.applied')
     if (scenario === 'early-close-control') {
       assert.equal(closed, 0)
       assert.equal(resets, 1)
-      assert.equal(last.actionKey, seed.actionKey)
+
       assert.equal(applied.length, 0)
     } else if (scenario === 'caller-completes-success') {
       assert.equal(closed, 1)
       assert.equal(resets, 1)
       assert.equal(h.state.open, false)
-      assert.equal(last.actionKey, item.systemKey)
-      assert.equal(last.outputIntent, 'paste-to-foreground-app')
+
       assert.equal(applied.length, 0)
     } else {
       assert.equal(closed, 0)
@@ -698,7 +686,7 @@ try {
       assert.equal(h.state.open, true)
       assert.equal(controller.getState().frames.at(-1), frame)
       assert.match(controller.getState().error, /Copied/)
-      assert.equal(last.actionKey, seed.actionKey)
+
       assert.equal(applied.length, 0)
     }
     stop()
@@ -708,7 +696,6 @@ try {
   await server.close()
   console.info = info
 }
-
 }
 
 // Telemetry is a fixed vocabulary of lifecycle state, with no delivery data.

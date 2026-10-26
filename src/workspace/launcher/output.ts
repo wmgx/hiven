@@ -15,11 +15,9 @@ import type {
   LauncherOutput,
   LauncherResultChoice,
   LauncherResultAction,
-  LauncherSurfaceId,
   OutputIntent,
   PluginLauncherApi,
 } from './types'
-import { normalizeLauncherSurfaceId } from './types'
 import { translate, type Locale } from '../../i18n'
 
 export const TEXT_OUTPUT_CHOICE_ID = 'launcher.text-output'
@@ -162,27 +160,6 @@ export function replaceActiveTextResult(text: string, api: PluginLauncherApi, lo
   return { ok: true, output: { choices: [choice] } }
 }
 
-/**
- * Pick the surface-appropriate text-output builder for a plain text result.
- * Global Launcher has no bound pane, so it gets textResult (primary=copy,
- * secondary=return-to-launcher); pane-bound surfaces (editor-command-bar,
- * quick-editor-command) get replaceActiveTextResult (primary=replace,
- * secondary=copy+insert). Shared by any host-owned launcher item that
- * produces text output across multiple surfaces (e.g. pipelineLauncher.ts).
- * toolAdapter.ts's per-tool makeOutput() has its own equivalent inline branch
- * and is intentionally left as-is (not this task's scope).
- */
-export function surfaceTextResult(
-  text: string,
-  api: PluginLauncherApi,
-  locale: Locale,
-  surfaceId: LauncherSurfaceId,
-): LauncherExecuteResult {
-  return normalizeLauncherSurfaceId(surfaceId) === 'global-launcher'
-    ? textResult(text, api, locale)
-    : replaceActiveTextResult(text, api, locale)
-}
-
 export function errorResult(message: string): LauncherExecuteResult {
   return { ok: false, message }
 }
@@ -198,28 +175,4 @@ export function emptyResult(): LauncherExecuteResult {
 
 export function isOutputResult(result: LauncherExecuteResult): result is { ok: true; output: LauncherOutput } {
   return result.ok === true && result.output != null && result.output.choices.length > 0
-}
-
-/** Select one existing Host-marked output path without trusting plugin ids or labels. */
-export function selectHostOutputResult(
-  result: LauncherExecuteResult,
-  intent: OutputIntent,
-): LauncherExecuteResult | null {
-  if (!isOutputResult(result)) return null
-  for (const choice of result.output.choices) {
-    if (getHostOutputIntent(choice) === intent) {
-      return { ok: true, output: { choices: [choice] } }
-    }
-    const action = choice.secondaryActions?.find((candidate) => getHostOutputIntent(candidate) === intent)
-    if (action) {
-      const projected = markHostOutputAction<LauncherResultChoice>({
-        id: `launcher.saved-output.${intent}`,
-        title: choice.title,
-        preview: choice.preview,
-        primaryAction: () => action.run(),
-      }, intent)
-      return { ok: true, output: { choices: [projected] } }
-    }
-  }
-  return null
 }

@@ -27,40 +27,11 @@ export type { ContentAccepts, IntentHit, IntentMatchContext } from './intentType
 
 // ─── System Surfaces ───────────────────────────────────────────────────────
 
-export type LauncherHostId = 'global-launcher' | 'editor-command-bar' | 'quick-editor-command'
+export type LauncherHostId = 'global-launcher' | 'quick-editor-command'
 
-/** `command-palette` is retained as a legacy alias for `editor-command-bar`. */
-export type LauncherSurfaceId = LauncherHostId | 'command-palette'
+export type LauncherSurfaceId = LauncherHostId
 
-export type InputBinding = 'selection' | 'active-text' | 'prompt'
-export type SaveableParamValue = boolean | number | string | string[]
-export type CommitVia = 'execute' | 'preview-choice' | 'suggestion' | 'saved-action'
-
-export type SaveableRunSnapshot = {
-  inputBinding: InputBinding
-  savedParams: Record<string, SaveableParamValue>
-  contractFingerprint: string
-  actionPolicy: ToolActionPolicy
-}
-
-export type BlockedSaveableRunSnapshot = {
-  blockedKeys: string[]
-  reason: 'unsaveable-non-default' | 'invalid-saveable-value'
-}
-
-export type CommittedRunContext = {
-  runId: string
-  actionKey: string
-  surfaceId: LauncherSurfaceId
-  via: CommitVia
-  inputBinding?: InputBinding
-  saveSnapshot?: SaveableRunSnapshot
-  /** An edited Saved Action saves the new settings under its underlying action. */
-  saveActionKey?: string
-  sourceSavedAction?: { id: string; snapshot: string }
-  saveBlocked?: BlockedSaveableRunSnapshot
-  artifactId?: string
-}
+export type CommitVia = 'execute' | 'preview-choice' | 'suggestion'
 
 export type LauncherHostCapability =
   | 'app-search'
@@ -104,16 +75,6 @@ export const LAUNCHER_HOSTS: Record<LauncherHostId, LauncherHostConfig> = {
       'desktop-browser-tabs',
     ],
   },
-  'editor-command-bar': {
-    id: 'editor-command-bar',
-    presentation: 'editor-overlay',
-    placeholderKey: 'placeholder',
-    capabilities: [
-      'text-input-actions',
-      'pane-actions',
-      'parameter-customization',
-    ],
-  },
   'quick-editor-command': {
     id: 'quick-editor-command',
     presentation: 'editor-overlay',
@@ -138,18 +99,16 @@ export function getLauncherHostConfig(hostId: LauncherHostId): LauncherHostConfi
 }
 
 export const LAUNCHER_SURFACE_IDS: readonly LauncherSurfaceId[] = [
-  'command-palette',
-  'editor-command-bar',
   'global-launcher',
   'quick-editor-command',
 ] as const
 
 export function isLauncherSurfaceId(value: unknown): value is LauncherSurfaceId {
-  return value === 'command-palette' || value === 'editor-command-bar' || value === 'global-launcher' || value === 'quick-editor-command'
+  return value === 'global-launcher' || value === 'quick-editor-command'
 }
 
 export function normalizeLauncherSurfaceId(surfaceId: LauncherSurfaceId): LauncherHostId {
-  return surfaceId === 'command-palette' ? 'editor-command-bar' : surfaceId
+  return surfaceId
 }
 
 // ─── System Identity ───────────────────────────────────────────────────────
@@ -239,22 +198,16 @@ export type LauncherParamSpec = {
   minSelect?: number
   /** For multi-select params: maximum selected items. Reaching it disables unselected options. */
   maxSelect?: number
-  /** Explicit opt-in for persisting this parameter in a Saved Action. */
-  saveable?: boolean
-  /** Required upper bound for saveable text parameters. */
-  saveableMaxLength?: number
 }
 
 export type ActionEffect = 'pure' | 'read' | 'local-write' | 'external-write' | 'destructive' | 'unknown'
 
 export type ToolActionPolicy = {
   effect: ActionEffect
-  learnable: boolean
 }
 
 export const DEFAULT_TOOL_ACTION_POLICY: ToolActionPolicy = {
   effect: 'unknown',
-  learnable: false,
 }
 
 /**
@@ -292,23 +245,6 @@ export type OutputIntent =
   | 'open-quick-editor'
   | 'paste-to-foreground-app'
 
-export type WorkflowObjectItemMetadata = {
-  kind: 'workflow-object'
-  objectId: string
-  objectType: string
-}
-
-export type WorkflowActionChoiceMetadata = {
-  kind: 'workflow-action'
-  objectId: string
-  actionId: string
-  outputTarget?: string
-}
-
-export type LauncherItemMetadata = WorkflowObjectItemMetadata
-
-export type LauncherResultChoiceMetadata = WorkflowActionChoiceMetadata
-
 export type LauncherResultChoice = {
   id: string
   title: string
@@ -323,7 +259,6 @@ export type LauncherResultChoice = {
    */
   tone?: 'default' | 'danger' | 'muted'
   preview?: string
-  metadata?: LauncherResultChoiceMetadata
   primaryAction: LauncherResultActionHandler
   secondaryActions?: LauncherResultAction[]
 }
@@ -606,16 +541,8 @@ export type LauncherItem = {
   prepare?: (ctx: LauncherExecutionContext) => Promise<LauncherItem | void> | LauncherItem | void
   /** Tool behavior metadata. Missing means {@link DEFAULT_TOOL_ACTION_POLICY}. */
   actionPolicy?: ToolActionPolicy
-  /** Stable behavior contract hash; labels and saveability metadata are excluded. */
+  /** Stable behavior contract hash; labels are excluded. */
   contractFingerprint?: string
-  /** Saved Action projections enter the same Commit Gate with a distinct source. */
-  commitVia?: CommitVia
-  /** Host-only artifact identity for Saved Action invocation facts. */
-  savedActionArtifactId?: string
-  /** Host-only base identity for saving a newly edited preview, without changing its artifact. */
-  savedActionBaseKey?: string
-  /** Host-only immutable row configuration used to reject stale management actions. */
-  savedActionSnapshot?: string
   /** Generic host-owned availability state; disabled items remain visible with an explanation. */
   disabledReason?: {
     code: string
@@ -653,7 +580,6 @@ export type LauncherItem = {
   params?: LauncherParamSpec[]
   requiredCapabilities?: LauncherHostCapability[]
   preferredCapabilities?: LauncherHostCapability[]
-  metadata?: LauncherItemMetadata
   /** Explicit default values used when entering the parameter form. */
   defaultParams?: Record<string, unknown>
   /** Host-owned execution policy: defaults can prefill UI but must not skip parameter selection. */
@@ -713,27 +639,6 @@ export type LauncherItem = {
   suggest?: LauncherSuggestHandler
   execute: LauncherExecuteHandler
   executeWithParams?: LauncherExecuteWithParamsHandler
-}
-
-export function filterEditorCommandBarItems(items: LauncherItem[]): LauncherItem[] {
-  return items.filter(isEditorCommandBarItem)
-}
-
-export function isEditorCommandBarItem(item: LauncherItem): boolean {
-  if (item.systemKey.startsWith('plugin-settings:')) return false
-  if (item.kind !== 'host') return true
-  const surfaces = item.surfaces?.map(normalizeLauncherSurfaceId)
-  if (surfaces?.length && !surfaces.includes('editor-command-bar')) return false
-  return (
-    item.systemKey.startsWith('host:pane:') ||
-    item.systemKey.startsWith('host:editor:') ||
-    item.systemKey.startsWith('host:text:') ||
-    item.systemKey.startsWith('host:pipeline:') ||
-    // host:view:devtools opts into editor-command-bar/quick-editor-command via
-    // its own `surfaces` (see hostActions.ts) so it can debug those windows —
-    // the surfaces check above already scopes this, this only widens the prefix.
-    item.systemKey.startsWith('host:view:')
-  )
 }
 
 // ─── Usage ─────────────────────────────────────────────────────────────────
@@ -846,16 +751,10 @@ type PluginToolContributionBase<TSettings> = {
   surfaces?: PluginToolSurfaces
 }
 
-export type PluginToolContribution<TSettings = unknown> = PluginToolContributionBase<TSettings> & (
-  | {
-      policy: ToolActionPolicy & { learnable: true }
-      params?: Array<LauncherParamSpec & { saveable: boolean }>
-    }
-  | {
-      policy?: ToolActionPolicy & { learnable: false }
-      params?: LauncherParamSpec[]
-    }
-)
+export type PluginToolContribution<TSettings = unknown> = PluginToolContributionBase<TSettings> & {
+  policy?: ToolActionPolicy
+  params?: LauncherParamSpec[]
+}
 
 // ─── Panel Action Model (separate surface) ───────────────────────────────────
 

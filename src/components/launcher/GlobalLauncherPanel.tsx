@@ -5,7 +5,6 @@ import type { LauncherHostSurfaceTarget, PluginSurfaceOpenTarget } from '../../s
 import type { PluginSettingsDialogTarget } from '../../workspace/pluginSettingsStore'
 import type { CollectInputFrame, LauncherController, LauncherControllerState, ParamInputFrame, ResultFrame } from '../../workspace/launcher/controller'
 import type { LauncherExecuteResult, LauncherResultChoice } from '../../workspace/launcher/types'
-import { createDeleteSavedActionItem, createRenameSavedActionItem } from '../../workspace/launcher/hostActions'
 import type { GlobalLauncherActiveSurfaceFrame } from './GlobalLauncherFrames'
 import { GlobalLauncherFrameSwitch } from './GlobalLauncherFrames'
 import type { LauncherSurfaceUnsavedChangesReport } from './useLauncherSurfaceBackgroundIdle'
@@ -52,7 +51,6 @@ type GlobalLauncherPanelProps = {
   toggleResultChoice: (choice: LauncherResultChoice, frame: ResultFrame) => void
   closeLauncher: () => void
   visibleFiltered: GlobalLauncherItem[]
-  nearbySaveItem?: GlobalLauncherItem
   selectedItem?: GlobalLauncherItem
   /** List selection; -1 means recent-clipboard hint is focused. */
   selectedIndex?: number
@@ -60,7 +58,6 @@ type GlobalLauncherPanelProps = {
     index: number | ((index: number) => number),
     options?: { pin?: boolean },
   ) => void
-  isWorkflowObjectLauncherItem: (item: GlobalLauncherItem | undefined) => boolean
   selectItem: (item: GlobalLauncherItem | undefined, customizeParams?: boolean) => void
   hostSurfaceTarget: LauncherHostSurfaceTarget | null
   clearLauncherHostSurface: () => void
@@ -115,11 +112,9 @@ export function GlobalLauncherPanel({
   toggleResultChoice,
   closeLauncher: _omit_closeLauncher,
   visibleFiltered,
-  nearbySaveItem,
   selectedItem,
   selectedIndex = 0,
   setSelectedIndex,
-  isWorkflowObjectLauncherItem,
   selectItem,
   hostSurfaceTarget,
   clearLauncherHostSurface: _omit_clearLauncherHostSurface,
@@ -158,17 +153,6 @@ export function GlobalLauncherPanel({
     syncSearchSelection(item)
     selectItem(item)
   }, [selectItem, syncSearchSelection])
-  const handleRenameSavedAction = useCallback((item: GlobalLauncherItem) => {
-    const artifactId = item.domainItem.savedActionArtifactId
-    if (!artifactId) return
-    syncSearchSelection(item)
-    void controllerRef.current?.selectItem(createRenameSavedActionItem(artifactId))
-  }, [controllerRef, syncSearchSelection])
-  const handleDeleteSavedAction = useCallback((item: GlobalLauncherItem) => {
-    if (!item.domainItem.savedActionArtifactId || !item.domainItem.savedActionSnapshot) return
-    syncSearchSelection(item)
-    void controllerRef.current?.selectItem(createDeleteSavedActionItem(item.domainItem))
-  }, [controllerRef, syncSearchSelection])
   const toggleLauncherFavorite = useAppStore((s) => s.toggleLauncherFavorite)
   const launcherFavoriteKeys = useAppStore((s) => s.launcherFavoriteKeys)
   // X11 tokens expire and settings fields exist only under an explicit query.
@@ -288,7 +272,6 @@ export function GlobalLauncherPanel({
         setSelectedIndex,
         selectedItem,
         visibleItems: visibleFiltered,
-        isWorkflowObjectLauncherItem,
         selectItem,
         handleClipboardBackspace: clipboardBlock?.handleBackspace,
         hasClipboardHint: Boolean(clipboardBlock?.hint && !clipboardBlock?.block),
@@ -316,13 +299,11 @@ export function GlobalLauncherPanel({
         searchRecovery={searchRecovery}
         searchPlaceholder={searchPlaceholder}
         visibleFiltered={visibleFiltered}
-        nearbySaveItem={nearbySaveItem}
         selectedItem={selectedItem}
         locale={locale}
         resultSelectedIndex={resultSelectedIndex}
         selectedResultChoiceIds={selectedResultChoiceIds}
         showCustomizeHint={selectedItem?.kind === 'domain' && supportsParamCustomization(selectedItem.domainItem)}
-        showWorkflowObjectHint={isWorkflowObjectLauncherItem(selectedItem)}
         customizeShortcutLabel={getPlatformShortcutMeta().label}
         isFavoriteSelected={isFavoriteSelected}
         isImeComposingRef={isImeComposingRef}
@@ -333,8 +314,6 @@ export function GlobalLauncherPanel({
         onLeaveActionBrowser={onLeaveActionBrowser}
         truncateSearchItems={false}
         onToggleSearchFavorite={handleToggleFavorite}
-        onRenameSavedAction={handleRenameSavedAction}
-        onDeleteSavedAction={handleDeleteSavedAction}
         favoriteKeys={launcherFavoriteKeys}
         pinnableItemKeys={pinnableItemKeys}
         onSettingsClose={() => {

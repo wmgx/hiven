@@ -494,7 +494,7 @@ const definition: PluginDefinition = {
         if (opened.errors.length > 0) return ctx.output.text(resultText)
         return { ok: true }
       },
-      surfaces: { launcher: { surfaces: ['editor-command-bar', 'quick-editor-command'] }, panel: true },
+      surfaces: { launcher: { surfaces: ['quick-editor-command'] }, panel: true },
     },
     {
       id: 'calculator.sum',
@@ -505,7 +505,7 @@ const definition: PluginDefinition = {
       run(ctx) {
         return ctx.output.replaceActiveText(sumNumericTokens(ctx.input.text))
       },
-      surfaces: { launcher: { surfaces: ['editor-command-bar', 'quick-editor-command'] }, panel: true },
+      surfaces: { launcher: { surfaces: ['quick-editor-command'] }, panel: true },
     },
     {
       id: 'calculator.base',
@@ -541,7 +541,7 @@ const definition: PluginDefinition = {
           return ctx.output.error(ctx.t('error.convert', { message: error.message }))
         }
       },
-      surfaces: { launcher: { surfaces: ['editor-command-bar', 'quick-editor-command'] }, panel: true },
+      surfaces: { launcher: { surfaces: ['quick-editor-command'] }, panel: true },
     },
   ],
   panels: [

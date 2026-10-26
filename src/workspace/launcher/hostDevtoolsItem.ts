@@ -30,7 +30,7 @@ export function getDevtoolsHostItems(): LauncherItem[] {
         ],
       },
       behavior: { type: 'perform' },
-      surfaces: ['global-launcher', 'editor-command-bar', 'quick-editor-command'],
+      surfaces: ['global-launcher', 'quick-editor-command'],
       execute: async () => {
         try {
           const { invoke } = await import('@tauri-apps/api/core')

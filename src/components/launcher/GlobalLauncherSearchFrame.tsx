@@ -1,6 +1,6 @@
 import type { LauncherSearchRecovery } from '../../workspace/launcher/searchRecovery'
 import { useLayoutEffect, useState, type FocusEvent as ReactFocusEvent, type MouseEvent as ReactMouseEvent, type MutableRefObject, type RefObject } from 'react'
-import { ArrowLeft, BookmarkPlus, FilePlus2, Search, X } from 'lucide-react'
+import { ArrowLeft, FilePlus2, Search, X } from 'lucide-react'
 import type { Locale } from '../../i18n'
 import { t } from '../../i18n'
 import { LauncherHintKey } from './LauncherFooterHints'
@@ -42,12 +42,10 @@ export function GlobalLauncherSearchFrame({
   searchContext,
   error,
   items,
-  nearbySaveItem,
   busy = false,
   selectedItem,
   locale,
   showCustomizeHint,
-  showWorkflowObjectHint,
   customizeShortcutLabel,
   clipboardBlock,
   onEditMaterial,
@@ -60,8 +58,6 @@ export function GlobalLauncherSearchFrame({
   onLeaveActionBrowser,
   truncateItems = true,
   onToggleFavorite,
-  onRenameSavedAction,
-  onDeleteSavedAction,
   favoriteKeys,
   pinnableItemKeys,
   onQueryChange,
@@ -78,12 +74,10 @@ export function GlobalLauncherSearchFrame({
   searchContext?: string
   error?: string | null
   items: LauncherMixedItem[]
-  nearbySaveItem?: LauncherMixedItem
   busy?: boolean
   selectedItem?: LauncherMixedItem
   locale: Locale
   showCustomizeHint: boolean
-  showWorkflowObjectHint: boolean
   customizeShortcutLabel: string
   clipboardBlock?: ClipboardObjectBlockState
   onEditMaterial?: () => void
@@ -97,8 +91,6 @@ export function GlobalLauncherSearchFrame({
   onLeaveActionBrowser?: () => void
   truncateItems?: boolean
   onToggleFavorite?: (item: LauncherMixedItem) => void
-  onRenameSavedAction?: (item: LauncherMixedItem) => void
-  onDeleteSavedAction?: (item: LauncherMixedItem) => void
   favoriteKeys?: readonly string[]
   pinnableItemKeys?: ReadonlySet<string>
   onQueryChange: (value: string) => void
@@ -338,23 +330,6 @@ export function GlobalLauncherSearchFrame({
             )}
           </div>
         )}
-        {nearbySaveItem && !query.trim() && !browsingActions && (
-          <div className="launcher-discovery-nav">
-            <button
-              type="button"
-              className="launcher-discovery-action"
-              disabled={busy}
-              onMouseDown={(event) => event.preventDefault()}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') event.stopPropagation()
-              }}
-              onClick={() => onSelectItem(nearbySaveItem)}
-            >
-              <BookmarkPlus size={14} aria-hidden />
-              {nearbySaveItem.title}
-            </button>
-          </div>
-        )}
         {hint && !block && (
           <RecentClipboardHint
             hint={hint}
@@ -381,8 +356,6 @@ export function GlobalLauncherSearchFrame({
               locale={locale}
               truncate={truncateItems && !query}
               onToggleFavorite={onToggleFavorite}
-              onRenameSavedAction={onRenameSavedAction}
-              onDeleteSavedAction={onDeleteSavedAction}
               favoriteKeys={favoriteKeys}
               pinnableItemKeys={pinnableItemKeys}
               onSelect={onSelectItem}
@@ -401,9 +374,6 @@ export function GlobalLauncherSearchFrame({
           )}
           {showListHints && showCustomizeHint && (
             <LauncherHintKey keys={`${customizeShortcutLabel}↵`} label={t(locale, 'palette.customizeParamsLabel')} />
-          )}
-          {showListHints && showWorkflowObjectHint && (
-            <LauncherHintKey keys="tab" label={t(locale, 'palette.select')} />
           )}
           <LauncherHintKey keys="esc" label={t(locale, browsingActions ? 'palette.back' : 'palette.close')} />
           {focusedControl && focusedControl.action !== 'primary' &&

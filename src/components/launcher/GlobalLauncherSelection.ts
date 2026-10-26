@@ -5,7 +5,6 @@ import { getPluginPermissionSnapshot, missingPluginPermissions } from '../../wor
 import { restartPluginBackground } from '../../workspace/pluginBackgroundManager'
 import type { LauncherItem as DomainLauncherItem } from '../../workspace/launcher/types'
 import { supportsDefaultParamRun } from './launcherParamShortcuts'
-import type { LauncherMixedItem } from './LauncherMixedList'
 
 export type PluginSurfaceTarget = {
   source: PluginSettingsSource
@@ -81,10 +80,6 @@ export function buildItemPermissionFrame(item: DomainLauncherItem, customizePara
 export function grantGlobalLauncherItemPermissions(frame: LauncherItemPermissionFrame, grantPluginPermissions: (source: PluginSettingsSource, pluginId: string, permissions: PluginPermission[]) => void) {
   grantPluginPermissions(frame.source, frame.pluginId, frame.permissions)
   void restartPluginBackground(frame.pluginId, frame.source)
-}
-
-export function isWorkflowObjectLauncherItem(item?: LauncherMixedItem): boolean {
-  return item?.kind === 'domain' && (item.domainItem.metadata?.kind === 'workflow-object' || item.domainItem.systemKey.startsWith('workflow:object:'))
 }
 
 export function getPluginSurfaceDefinition(target: PluginSurfaceTarget): {

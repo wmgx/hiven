@@ -141,7 +141,6 @@ function adapter(h, run) {
   const { adaptToolToLauncherItem } = load('src/workspace/launcher/toolAdapter.ts', {
     './types': types, './output': {}, './normalizeContribution': { toDirectAnswer: () => undefined },
     './contractFingerprint': { computeContractFingerprint: () => 'synthetic' },
-    './toolContract': { assertLearnableToolSaveableContract() {} },
     './foregroundSelectionCapture': h.captureApi, '../../i18n': i18n,
     '../pluginPermissions': { getPluginPermissionSnapshot: () => ({}) },
     '../pluginShell': { createPluginShell: () => ({}) },

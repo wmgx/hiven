@@ -10,37 +10,25 @@ import {
   registerDesktopTargetProvider,
 } from '../desktopTargets/registry'
 import { hostWindowTargetProvider } from '../desktopTargets/windowProvider'
-import { registerDefaultWorkflowProviders } from '../../workflow/defaultWorkflowProviders'
-import { getTextPipelineLauncherItems } from '../../workflow/pipelineLauncher'
-import { registerBuiltinTextPipelines } from '../../workflow/pipeline'
-import { getWorkflowObjectLauncherItems } from '../../workflow/workflowLauncherAdapter'
 import {
-  collectBaseCandidates,
-  filterAvailableLauncherItems,
   setHostLauncherDynamicItemsProvider,
   setHostLauncherItemsProvider,
 } from './registry'
 import { measureLauncherPerf } from './perf'
 import { getDevtoolsHostItems } from './hostDevtoolsItem'
-import { getHostPaneControlItems, getHostSavedActionItems, getHostSystemPowerItems } from './hostActions'
+import { getHostPaneControlItems, getHostSystemPowerItems } from './hostActions'
 import { registerPluginSurfacePanelProvider } from '../pluginSurfacePanelProvider'
-import { registerWorkflowOutputShelfPanelProvider } from '../workflowOutputShelfPanelProvider'
 
 export function registerHostLauncherProviders(): void {
   registerPluginSurfacePanelProvider()
-  registerWorkflowOutputShelfPanelProvider()
-  registerDefaultWorkflowProviders()
-  registerBuiltinTextPipelines()
   // Host-owned desktop targets (window). Browser tabs are registered by the
   // first-party Browser plugin (web-open) via desktopTargets.registerProvider.
   registerDesktopTargetProvider(hostWindowTargetProvider)
   setHostLauncherItemsProvider(() => [
     ...getHostPaneControlItems(),
     ...getHostSystemPowerItems(),
-    ...getHostSavedActionItems(() => filterAvailableLauncherItems(collectBaseCandidates(), 'global-launcher')),
     ...getHostAppLauncherStaticItems(),
     ...getDevtoolsHostItems(),
-    ...getTextPipelineLauncherItems(),
     // Kill Process: first-level command → collect-input second level (suggest list).
     getKillProcessHostItem(),
     // Switch Window: first-level command → collect-input second level (windows only).
@@ -50,7 +38,7 @@ export function registerHostLauncherProviders(): void {
   setHostLauncherDynamicItemsProvider(async (ctx) => {
     // Process terminate is NOT first-level dynamic. Use getKillProcessHostItem (static).
     // Window focus: both static L2 command and first-level dynamic mix (below).
-    // Empty open: apps + cached windows + cached browser recommendations. No workflow.
+    // Empty open: apps + cached windows + cached browser recommendations.
     // Query present: apps + windows + bridge tabs in parallel.
     // Slow remote document sources (remote document providers) are NOT collected here — they stream
     // on a separate progressive path in useLauncherSession so typing stays responsive.
@@ -77,34 +65,15 @@ export function registerHostLauncherProviders(): void {
           return [] as Awaited<ReturnType<typeof getDesktopBridgeLauncherDynamicItems>>
         })
 
-        if (!q) {
-          const [appItems, windowItems, bridgeItems] = await Promise.all([
-            appPromise,
-            windowPromise,
-            bridgePromise,
-          ])
-          return [...appItems, ...windowItems, ...bridgeItems]
-        }
-
-        const workflowPromise = measureLauncherPerf('host-provider:workflow-items', () => getWorkflowObjectLauncherItems(ctx), (items) => ({
-          queryLength: q.length,
-          itemCount: items.length,
-        })).catch((error) => {
-          console.warn('[launcher] workflow dynamic items failed:', error)
-          return [] as Awaited<ReturnType<typeof getWorkflowObjectLauncherItems>>
-        })
-
-        const [appItems, windowItems, workflowItems, bridgeItems] = await Promise.all([
+        const [appItems, windowItems, bridgeItems] = await Promise.all([
           appPromise,
           windowPromise,
-          workflowPromise,
           bridgePromise,
         ])
 
         // Window vs tab de-dupe is soft ranking (title near-dup + capability tier),
         // not a host product filter that knows about browser plugins.
         return [
-          ...workflowItems,
           ...appItems,
           ...windowItems,
           ...bridgeItems,

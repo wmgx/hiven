@@ -1,7 +1,6 @@
 import { searchableFieldsMatch, type SearchableFields } from '../searchRanking'
 import { t, type Locale } from '../../i18n'
 import type { DiscoveredApp, LauncherItem, LauncherSurfaceId } from '../launcher/types'
-import type { AppWorkObject } from '../../workflow/workObject'
 import { logLauncherPerfDuration, launcherPerfNow } from '../launcher/perf'
 import { normalizeHostAppEntries } from './hostAppIndex'
 import { rethrowAppLaunchError } from './appLaunchError'
@@ -106,10 +105,6 @@ async function launchInstalledApp(appId: string): Promise<void> {
   } catch (error) {
     await rethrowAppLaunchError(error)
   }
-}
-
-export async function launchHostAppObject(appId: string): Promise<void> {
-  await launchInstalledApp(appId)
 }
 
 function sourceLabel(app: HostAppEntry, locale: Locale): string {
@@ -289,21 +284,4 @@ export async function getHostAppLauncherDynamicItems({
     itemCount: items.length,
   })
   return items as import("../launcher/types").LauncherItem[]
-}
-
-export function getHostAppWorkObjects(query: string, locale: Locale): AppWorkObject[] {
-  const aliases = useAppStore.getState().settings.appSearchAliases
-  return readCache().apps
-    .filter((app) => appMatchesQuery(app, query, locale, aliases))
-    .map((app) => ({
-      id: `app:${app.appId}`,
-      type: 'app',
-      title: app.name,
-      subtitle: app.displayPath || sourceLabel(app, locale),
-      icon: appIconRef(app.appId),
-      source: 'host.app-index',
-      bundleId: app.appId,
-      executablePath: app.displayPath,
-      createdAt: app.installedAt,
-    }))
 }

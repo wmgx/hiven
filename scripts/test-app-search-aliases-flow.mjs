@@ -94,13 +94,12 @@ async function results(f, query, locale = 'zh') {
   const provider = await f.host.getHostAppLauncherDynamicItems({ query, locale, surfaceId: 'global-launcher' })
   const state = f.store.getState()
   const ranked = f.ranker.rankLauncherItems({ query, locale, surfaceId: 'global-launcher', usage: state.launcherUsageBySurface, favoriteKeys: state.launcherFavoriteKeys, now: Date.now() }, provider)
-  const objects = f.host.getHostAppWorkObjects(query, locale)
   // The settings picker uses these same real helper/search modules without appId/path fields.
   const picker = currentCatalog.filter((app) => f.search.searchableFieldsMatch({
     id: '', title: app.name, titleI18n: app.nameI18n,
     aliases: f.aliasHelpers.getAppSearchAliases(app, state.settings.appSearchAliases),
   }, query, locale))
-  return { provider, ranked, objects, picker }
+  return { provider, ranked, picker }
 }
 async function expectMatches(query, expected, f = A) {
   for (const locale of ['en', 'zh']) {
@@ -108,7 +107,6 @@ async function expectMatches(query, expected, f = A) {
     const ids = [...expected].sort()
     assert.deepEqual(appIds(actual.provider), ids, `provider: ${query} (${locale})`)
     assert.deepEqual(appIds(actual.ranked), ids, `ranker: ${query} (${locale})`)
-    assert.deepEqual(plain(actual.objects.map((object) => object.bundleId)).sort(), ids, `objects: ${query} (${locale})`)
     assert.deepEqual(actual.picker.map((app) => app.appId).sort(), ids, `picker fields: ${query} (${locale})`)
   }
 }
@@ -160,7 +158,7 @@ for (const query of [catalog[0].appId, keyFor(catalog[0]), catalog[0].displayPat
   await expectMatches(query, [])
   assert.throws(() => setAliases(catalog[0], [query]), 'internal ids and paths cannot be saved as aliases')
 }
-for (const surfaceId of ['command-palette', 'editor-command-bar', 'quick-editor-command']) {
+for (const surfaceId of ['quick-editor-command']) {
   assert.equal((await A.host.getHostAppLauncherDynamicItems({ query: '工作台', locale: 'zh', surfaceId })).length, 0)
 }
 assert.equal(calls.length, 0, 'search, settings and hydration make no native calls')

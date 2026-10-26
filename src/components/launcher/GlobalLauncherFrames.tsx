@@ -40,13 +40,11 @@ export function GlobalLauncherFrameSwitch({
   searchPlaceholder,
   searchContext,
   visibleFiltered,
-  nearbySaveItem,
   selectedItem,
   locale,
   resultSelectedIndex,
   selectedResultChoiceIds,
   showCustomizeHint,
-  showWorkflowObjectHint,
   customizeShortcutLabel,
   isFavoriteSelected,
   isImeComposingRef,
@@ -57,8 +55,6 @@ export function GlobalLauncherFrameSwitch({
   onLeaveActionBrowser,
   truncateSearchItems,
   onToggleSearchFavorite,
-  onRenameSavedAction,
-  onDeleteSavedAction,
   favoriteKeys,
   pinnableItemKeys,
   onSettingsClose,
@@ -108,13 +104,11 @@ export function GlobalLauncherFrameSwitch({
   searchPlaceholder: string
   searchContext?: string
   visibleFiltered: LauncherMixedItem[]
-  nearbySaveItem?: LauncherMixedItem
   selectedItem?: LauncherMixedItem
   locale: Locale
   resultSelectedIndex: number
   selectedResultChoiceIds: Set<string>
   showCustomizeHint: boolean
-  showWorkflowObjectHint: boolean
   customizeShortcutLabel: string
   /** Focused row is in launcher favorites. */
   isFavoriteSelected?: boolean
@@ -126,8 +120,6 @@ export function GlobalLauncherFrameSwitch({
   onLeaveActionBrowser?: () => void
   truncateSearchItems?: boolean
   onToggleSearchFavorite?: (item: LauncherMixedItem) => void
-  onRenameSavedAction?: (item: LauncherMixedItem) => void
-  onDeleteSavedAction?: (item: LauncherMixedItem) => void
   favoriteKeys?: readonly string[]
   pinnableItemKeys?: ReadonlySet<string>
   onSettingsClose: () => void
@@ -292,7 +284,7 @@ export function GlobalLauncherFrameSwitch({
   if (topFrame?.kind === 'result') {
     const frame = topFrame as ResultFrame
     return (
-      <LauncherFlowFrame frameKey={`result:${frame.committedRun?.runId ?? frame.sourceTitle ?? ''}`}>
+      <LauncherFlowFrame frameKey={`result:${frame.sourceTitle ?? ''}`}>
         <GlobalLauncherResultFrame
           frame={frame}
           busy={controllerState?.busy ?? false}
@@ -330,12 +322,10 @@ export function GlobalLauncherFrameSwitch({
       clipboardHintSelected={clipboardHintSelected}
       error={controllerState?.error ?? null}
       items={visibleFiltered}
-      nearbySaveItem={nearbySaveItem}
       busy={controllerState?.busy ?? false}
       selectedItem={selectedItem}
       locale={locale}
       showCustomizeHint={showCustomizeHint}
-      showWorkflowObjectHint={showWorkflowObjectHint}
       customizeShortcutLabel={customizeShortcutLabel}
       isFavoriteSelected={isFavoriteSelected}
       browsingActions={browsingActions}
@@ -345,8 +335,6 @@ export function GlobalLauncherFrameSwitch({
       onLeaveActionBrowser={onLeaveActionBrowser}
       truncateItems={truncateSearchItems}
       onToggleFavorite={onToggleSearchFavorite}
-      onRenameSavedAction={onRenameSavedAction}
-      onDeleteSavedAction={onDeleteSavedAction}
       favoriteKeys={favoriteKeys}
       pinnableItemKeys={pinnableItemKeys}
       onQueryChange={onSearchQueryChange}

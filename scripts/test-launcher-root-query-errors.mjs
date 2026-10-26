@@ -245,7 +245,7 @@ try {
   })
 
   await check('session reset aligns the synchronous query identity', async () => {
-    const h = harness('editor-command-bar')
+    const h = harness('quick-editor-command')
     h.session.reset()
     const selectedItem = item(async () => ({ ok: false, message: 'Empty-query failure' }))
     await h.controller.selectItem(selectedItem)

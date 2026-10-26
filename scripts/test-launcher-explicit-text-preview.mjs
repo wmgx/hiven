@@ -49,7 +49,6 @@ try {
   const { getHostOutputIntent } = await vite.ssrLoadModule('/src/workspace/launcher/output.ts')
   const { makePluginT } = await vite.ssrLoadModule('/src/i18n/pluginI18nRegistry.ts')
   const { registerActiveEditorContext } = await vite.ssrLoadModule('/src/workspace/editorBridge.ts')
-  const { createSavedAction, deleteSavedAction } = await vite.ssrLoadModule('/src/workspace/savedActions/store.ts')
   ;({ pluginRegistry: registry } = await vite.ssrLoadModule('/src/workspace/pluginRegistry.ts'))
   registerBundledPluginPackages()
   definition = registry.getPluginDefinition(pluginId, 'production')
@@ -72,12 +71,12 @@ try {
   ]
   for (const locale of ['en', 'zh']) {
     for (const [query, workbenchKey, toolKey] of naturalQueries) {
-      for (const surfaceId of ['global-launcher', 'editor-command-bar']) {
+      for (const surfaceId of ['global-launcher', 'quick-editor-command']) {
         const candidates = collectStaticCandidates(surfaceId)
         const workbenchItem = candidates.find((candidate) => candidate.systemKey === workbenchKey)
         if (surfaceId === 'global-launcher' && workbenchKey) assert.ok(workbenchItem && itemMatchesQuery(workbenchItem, query, locale), `${locale} ${surfaceId} should discover ${workbenchKey} using ${query}`)
         const toolItem = candidates.find((candidate) => candidate.systemKey === toolKey)
-        if (surfaceId === 'editor-command-bar' || toolKey === key) {
+        if (surfaceId === 'quick-editor-command' || toolKey === key) {
           assert.ok(toolItem && itemMatchesQuery(toolItem, query, locale), `${locale} ${surfaceId} should discover ${toolKey} using ${query}`)
         }
       }
@@ -91,27 +90,8 @@ try {
   assert.equal(item.display.title, 'JSON Prettify')
   assert.equal(item.display.titleI18n.zh, 'JSON 格式化')
   assert.deepEqual(items.filter((candidate) => candidate.executionMode).map((candidate) => candidate.systemKey).sort(), [key, 'plugin:encode-decode:tool:base64.decode', 'plugin:line-tools:tool:line-tools.remove-blank-lines', 'plugin:line-tools:tool:line-tools.clean-list', 'plugin:line-tools:tool:line-tools.extract-list'].sort(), 'only the explicitly declared bundled tools opt in')
-  assert.ok(collectStaticCandidates('editor-command-bar').some((candidate) => candidate.systemKey === key), 'editor entry remains')
+  assert.ok(collectStaticCandidates('quick-editor-command').some((candidate) => candidate.systemKey === key), 'editor entry remains')
   assert.equal(items.some((candidate) => candidate.systemKey === 'plugin:json-tools:launcher:open-format'), false, 'prettify has no separate workbench duplicate')
-
-  const savedRun = {
-    status: 'ready', runId: 'registry-read-test', actionKey: key,
-    savedParams: { indent: 4, sortKeys: true }, inputBinding: 'prompt',
-    outputIntent: 'copy', contractFingerprint: item.contractFingerprint,
-    actionPolicy: item.actionPolicy, completedAt: Date.now(),
-  }
-  const promptArtifact = createSavedAction(savedRun, 'Explicit JSON', [])
-  collectStaticCandidates('global-launcher')
-  assert.deepEqual(editorReads, { selection: 0, activeText: 0 }, 'prompt-only Saved Actions must not read the editor')
-  const selectionArtifact = createSavedAction({ ...savedRun, inputBinding: 'selection' }, 'Selection JSON', [])
-  collectStaticCandidates('global-launcher')
-  assert.deepEqual(editorReads, { selection: 1, activeText: 0 }, 'legacy selection binding reads only selection on demand')
-  deleteSavedAction(selectionArtifact.id)
-  const activeArtifact = createSavedAction({ ...savedRun, inputBinding: 'active-text' }, 'Document JSON', [])
-  collectStaticCandidates('global-launcher')
-  assert.deepEqual(editorReads, { selection: 1, activeText: 1 }, 'legacy active-text binding reads only the document on demand')
-  deleteSavedAction(activeArtifact.id)
-  deleteSavedAction(promptArtifact.id)
 
   const deliveries = []
   let hiddenReads = 0
@@ -156,15 +136,15 @@ try {
   assert.equal(deliveries.length, 2, 'invalid JSON causes no delivery')
 
   const ordinaryFingerprint = computeContractFingerprint({ systemKey: key, inputPolicy: tool.inputPolicy, params: tool.params })
-  assert.notEqual(item.contractFingerprint, ordinaryFingerprint, 'explicit preview is a material saved-action contract change')
+  assert.notEqual(item.contractFingerprint, ordinaryFingerprint, 'explicit preview is a material execution contract change')
   assert.equal(item.contractFingerprint, computeContractFingerprint({
     systemKey: key, inputPolicy: tool.inputPolicy, params: tool.params, executionMode: 'explicit-text-preview',
   }))
 
   const editorWrites = []
   const editor = await item.executeWithParams({
-    ...ctxWithoutGetters(ctx), surfaceId: 'editor-command-bar',
-    api: { getSelectionText: () => input, replaceActiveText: async (text) => { editorWrites.push(text) } },
+    ...ctxWithoutGetters(ctx), surfaceId: 'quick-editor-command',
+    api: { getSelectionText: () => '', getActiveText: () => input, replaceActiveText: async (text) => { editorWrites.push(text) } },
   }, { indent: 4, sortKeys: true })
   assert.deepEqual(editor, { ok: true }, 'editor retains direct replace flow')
   assert.deepEqual(editorWrites, [expected])
@@ -259,8 +239,8 @@ try {
     const [source, expectedText] = extension.cases[0]
     const writes = []
     assert.deepEqual(await actual.execute({
-      ...ctxWithoutGetters(extensionCtx), surfaceId: 'editor-command-bar',
-      api: { getSelectionText: () => source, replaceActiveText: async (text) => { writes.push(text) } },
+      ...ctxWithoutGetters(extensionCtx), surfaceId: 'quick-editor-command',
+      api: { getSelectionText: () => '', getActiveText: () => source, replaceActiveText: async (text) => { writes.push(text) } },
     }), { ok: true })
     assert.deepEqual(writes, [expectedText], 'editor tool still replaces directly')
     const currentDefinition = registry.getPluginDefinition(extension.pluginId, 'production')

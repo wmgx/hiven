@@ -68,9 +68,6 @@ const { LauncherController } = load('src/workspace/launcher/controller.ts', {
   './foregroundSelectionCapture': {},
   '../telemetry': { TelemetryEvents: {}, itemTelemetryProps: () => ({}), trackBehavior() {}, trackLatencyFrom() {}, telemetryNow: () => 0 },
   '../contentBoundary': { isSafeExperienceIdentifier: () => false },
-  '../experience/saveableParams': {},
-  '../savedActions/lastSaveableRun': {},
-  '../savedActions/store': {},
 })
 function harness() {
   const h = { closed: 0, selections: 0 }
@@ -209,10 +206,8 @@ assert.equal(accepted.closed, 1, 'confirmed helper acceptance follows existing c
 assert.equal(accepted.selections, 1)
 assert.equal(accepted.controller.getState().error, null)
 
-// The object workflow calls this export rather than the app-row execute function.
 locale = 'zh'
 nativeLaunch = async () => { throw 'APP_LAUNCH_UNCONFIRMED' }
-await assert.rejects(host.launchHostAppObject(appId), { message: messages.zh.unconfirmed })
 
 // PluginAppsApi is also a host boundary and must not leak raw native codes.
 const pluginDependencies = Object.fromEntries([
@@ -228,7 +223,7 @@ await assert.rejects(createPluginAppsApi().launchApp(appId), { message: messages
 
 const existingError = new Error('existing platform-specific failure')
 nativeLaunch = async () => { throw existingError }
-await assert.rejects(host.launchHostAppObject(appId), (error) => error === existingError)
+await assert.rejects(createPluginAppsApi().launchApp(appId), (error) => error === existingError)
 assert.equal(errors.appLaunchErrorMessage('toString', 'en'), undefined)
 assert.equal(errors.appLaunchErrorMessage(new Error('APP_LAUNCH_REJECTED'), 'en'), messages.en.rejected)
-console.log('app launch feedback: 12 localized failures, pending deduplication, no automatic retry, success, workflow and plugin host passed')
+console.log('app launch feedback: 12 localized failures, pending deduplication, no automatic retry, success and plugin host passed')

@@ -31,7 +31,7 @@ function loadTs(path, importStubs) {
 const searchRanking = loadTs('src/workspace/searchRanking.ts', [])
 // usage.ts
 const usage = loadTs('src/workspace/launcher/usage.ts', [
-  [/import\s*\{[^}]*\}\s*from\s*'\.\/types'\s*;?\s*\n?/, "const LAUNCHER_SURFACE_IDS=['command-palette','editor-command-bar','global-launcher'];\nconst normalizeLauncherSurfaceId=(surfaceId)=>surfaceId==='command-palette'?'editor-command-bar':surfaceId;\n"],
+  [/import\s*\{[^}]*\}\s*from\s*'\.\/types'\s*;?\s*\n?/, "const LAUNCHER_SURFACE_IDS=['quick-editor-command','global-launcher'];\nconst normalizeLauncherSurfaceId=(surfaceId)=>surfaceId;\n"],
 ])
 // display.ts
 const display = loadTs('src/workspace/launcher/display.ts', [

@@ -7,7 +7,7 @@ export default definePlugin({
     aliases: ['curl', 'curl parse', 'curl inspector', 'curl解析', '请求解析'],
     textMatch: (text) => /^\s*curl\s/.test(text),
     component: CurlInspector,
-    entry: { launcher: { surfaces: ['global-launcher', 'editor-command-bar', 'quick-editor-command'] }, shortcutBindable: true },
+    entry: { launcher: { surfaces: ['global-launcher', 'quick-editor-command'] }, shortcutBindable: true },
     shell: { defaultWidth: 840, defaultHeight: 660, minWidth: 600, minHeight: 440, closeOnBlur: false, resizable: true },
   }] },
 })

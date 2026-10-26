@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Important logic: exact text cleanup plus real bundled registry/controller/Saved Actions. */
+/** Important logic: exact text cleanup plus real bundled registry/controller. */
 import assert from 'node:assert/strict'
 import { createServer } from 'vite'
 
@@ -79,12 +79,10 @@ try {
 
   const { registerBundledPluginPackages } = await vite.ssrLoadModule('/src/workspace/bundledPluginLoader.ts')
   const { pluginRegistry } = await vite.ssrLoadModule('/src/workspace/pluginRegistry.ts')
-  const { collectStaticCandidates, getNearbySaveRunItem } = await vite.ssrLoadModule('/src/workspace/launcher/registry.ts')
+  const { collectStaticCandidates } = await vite.ssrLoadModule('/src/workspace/launcher/registry.ts')
   const { LauncherController } = await vite.ssrLoadModule('/src/workspace/launcher/controller.ts')
   const { getHostOutputIntent } = await vite.ssrLoadModule('/src/workspace/launcher/output.ts')
   const { makePluginT } = await vite.ssrLoadModule('/src/i18n/pluginI18nRegistry.ts')
-  const { getLastSaveableRun } = await vite.ssrLoadModule('/src/workspace/savedActions/lastSaveableRun.ts')
-  const store = await vite.ssrLoadModule('/src/workspace/savedActions/store.ts')
   const { createGlobalLauncherPluginApi } = await vite.ssrLoadModule('/src/launcher/clipboard/globalLauncherApi.ts')
   const { consumePendingObjectBlock } = await vite.ssrLoadModule('/src/launcher/clipboard/pendingObjectBlock.ts')
   registerBundledPluginPackages()
@@ -92,20 +90,20 @@ try {
   const item = collectStaticCandidates('global-launcher').find((candidate) => candidate.systemKey === key)
   assert.ok(item, 'actual bundled package registers the new global tool')
   assert.equal(item.executionMode, 'explicit-text-preview')
-  assert.deepEqual(item.actionPolicy, { effect: 'pure', learnable: true })
+  assert.deepEqual(item.actionPolicy, { effect: 'pure' })
   assert.equal(item.requireParamSelection, true)
   assert.equal(item.display.title, 'Clean Line List')
   assert.equal(item.display.titleI18n.zh, '清理行列表')
   assert.deepEqual(item.defaultParams, variants[2].params)
-  assert.deepEqual(item.params.map(({ key, type, default: value, saveable }) => [key, type, value, saveable]), [
-    ['trim', 'boolean', false, true], ['removeBlank', 'boolean', true, true], ['dedup', 'boolean', false, true],
+  assert.deepEqual(item.params.map(({ key, type, default: value }) => [key, type, value]), [
+    ['trim', 'boolean', false], ['removeBlank', 'boolean', true], ['dedup', 'boolean', false],
   ])
   for (const param of item.params) {
     assert.ok(param.label && param.labelI18n.zh, 'all parameter labels are localized')
     assert.notEqual(param.label, param.labelI18n.zh)
     assert.ok(!param.label.startsWith('param.'), 'locale keys are resolved by the actual loader')
   }
-  assert.ok(collectStaticCandidates('editor-command-bar').some((candidate) => candidate.systemKey === key), 'editor route remains available')
+  assert.ok(collectStaticCandidates('quick-editor-command').some((candidate) => candidate.systemKey === key), 'editor route remains available')
   assert.ok(collectStaticCandidates('quick-editor-command').some((candidate) => candidate.systemKey === key), 'quick editor route remains available')
   const registeredTools = pluginRegistry.getPluginDefinition('line-tools', 'production').tools
   assert.ok(registeredTools.find((tool) => tool.id === 'line-tools.clean-list').explicitTextPreview)
@@ -151,7 +149,7 @@ try {
 
   for (const [index, { params, expected }] of variants.entries()) {
     controller.reset()
-    const previousRun = structuredClone(await getLastSaveableRun())
+
     const beforeDelivery = deliveries.length
     await controller.selectItem(item, { customizeParams: true })
     await chooseParams(params)
@@ -169,7 +167,7 @@ try {
     assert.equal(getHostOutputIntent(choice), 'copy')
     assert.deepEqual(choice.secondaryActions.map(getHostOutputIntent), ['return-to-launcher'])
     assert.equal(deliveries.length, beforeDelivery, 'preview does not deliver')
-    assert.deepEqual(await getLastSaveableRun(), previousRun, 'preview cannot create a completed run')
+
     const destination = index % 2 === 0 ? 'copy' : 'return-to-launcher'
     const previousCloseCount = closeCount
     if (destination === 'copy') await controller.activateChoice(choice)
@@ -179,44 +177,6 @@ try {
       assert.equal(closeCount, previousCloseCount, 'return keeps the launcher open')
     }
     assert.deepEqual(deliveries.at(-1), [destination, expected])
-    const completed = structuredClone(await getLastSaveableRun())
-    assert.equal(completed.actionKey, key)
-    assert.equal(completed.inputBinding, 'prompt')
-    assert.equal(completed.outputIntent, destination)
-    assert.deepEqual(completed.savedParams, params, 'false options are saved, not replaced by defaults')
-    assert.equal(store.listSavedActions().length, 0, 'delivery alone does not create a Saved Action')
-
-    controller.reset()
-    const offer = getNearbySaveRunItem(completed)
-    assert.ok(offer, 'the existing nearby save mechanism recognizes the completed tool')
-    await controller.selectItem(offer)
-    assert.equal(top().kind, 'collect-input')
-    controller.setInputText(`Cleanup ${index}`)
-    await controller.submitInput()
-    assert.equal(top().kind, 'list')
-    const artifact = store.listSavedActions()[0]
-    assert.equal(artifact.baseActionKey, key)
-    assert.deepEqual(artifact.savedParams, params)
-    assert.equal(artifact.outputIntent, destination)
-    assert.ok(!Object.hasOwn(artifact, 'inputText') && !Object.hasOwn(artifact, 'outputText'), 'Saved Actions store configuration, not material')
-    assert.ok(!JSON.stringify(artifact).includes('Ada'), 'the sample text is not saved')
-
-    const replay = collectStaticCandidates('global-launcher').find((candidate) => candidate.savedActionArtifactId === artifact.id)
-    controller.reset()
-    await controller.selectItem(replay)
-    assert.equal(top().kind, 'collect-input', 'replay reuses parameters and still requires new input')
-    const replayInput = sample.replaceAll('Ada', 'Grace').replaceAll('ada', 'grace').replaceAll('Zed', 'Lin')
-    controller.setInputText(replayInput)
-    await controller.submitInput()
-    assert.equal(top().kind, 'result')
-    const replayChoice = top().output.choices[0]
-    assert.equal(replayChoice.preview, expected.replaceAll('Ada', 'Grace').replaceAll('ada', 'grace').replaceAll('Zed', 'Lin'), 'replay uses the three saved flags with new text')
-    assert.equal(getHostOutputIntent(replayChoice), destination, 'saved destination becomes the replay primary action')
-    assert.equal(deliveries.length, beforeDelivery + 1, 'replay waits for explicit delivery')
-    await controller.activateChoice(replayChoice)
-    assert.deepEqual(deliveries.at(-1), [destination, replayChoice.preview])
-    assert.ok((await getLastSaveableRun()).sourceSavedAction, 'saved replay becomes LastRun so it can be explicitly updated')
-    store.deleteSavedAction(artifact.id)
   }
 
   // Empty results are meaningful for both delivery actions, including return material.
@@ -236,13 +196,13 @@ try {
 
   const editorWrites = []
   const editorResult = await item.executeWithParams({
-    surfaceId: 'editor-command-bar', locale: 'en', t: makePluginT('line-tools', 'en'),
-    api: { getSelectionText: () => sample, replaceActiveText: async (text) => { editorWrites.push(text) } },
+    surfaceId: 'quick-editor-command', locale: 'en', t: makePluginT('line-tools', 'en'),
+    api: { getSelectionText: () => '', getActiveText: () => sample, replaceActiveText: async (text) => { editorWrites.push(text) } },
   }, variants[7].params)
   assert.deepEqual(editorResult, { ok: true })
   assert.deepEqual(editorWrites, [variants[7].expected], 'editor execution retains the existing direct replace route')
 
-  console.log('line-list-cleanup: pure text cases, all 8 parameter combinations, actual registry/controller, Copy/Return and Saved Action replay passed')
+  console.log('line-list-cleanup: pure text cases, all 8 parameter combinations, actual registry/controller, Copy/Return passed')
 } finally {
   console.info = originalInfo
   await vite.close()

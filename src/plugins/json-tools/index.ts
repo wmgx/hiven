@@ -23,12 +23,12 @@ import {
 } from './jsonCore'
 import './style.css'
 
-const LEARNABLE_PURE = { effect: 'pure', learnable: true } as const
+const PURE_ACTION_POLICY = { effect: 'pure' } as const
 
 // ─── Plugin Definition ────────────────────────────────────────────────────────
 
 const EDITOR_TOOL_SURFACES: PluginToolSurfaces = {
-  launcher: { surfaces: ['editor-command-bar', 'quick-editor-command'] },
+  launcher: { surfaces: ['quick-editor-command'] },
   panel: true,
 }
 
@@ -67,7 +67,7 @@ export const jsonToolsPlugin = definePlugin({
         textMatch: (text) => isJson(text) || isQueryString(text),
         component: JsonSurface,
         entry: {
-          launcher: { surfaces: ['global-launcher', 'editor-command-bar', 'quick-editor-command'] },
+          launcher: { surfaces: ['global-launcher', 'quick-editor-command'] },
           shortcutBindable: true,
         },
         shell: WORKSPACE_SHELL,
@@ -109,7 +109,7 @@ export const jsonToolsPlugin = definePlugin({
       icon: 'FileCode',
       aliases: ['yaml to json', 'yaml2json', 'yaml转json'],
       inputPolicy: { mode: 'auto' },
-      policy: LEARNABLE_PURE,
+      policy: PURE_ACTION_POLICY,
       accepts: { kinds: ['yaml'], aliases: ['yaml', '转json'] },
       run(ctx) {
         try { return ctx.output.text(yamlToJson(ctx.input.text)) }
@@ -124,7 +124,7 @@ export const jsonToolsPlugin = definePlugin({
       icon: 'FileCode',
       aliases: ['json to yaml', 'json2yaml', 'json转yaml'],
       inputPolicy: { mode: 'auto' },
-      policy: LEARNABLE_PURE,
+      policy: PURE_ACTION_POLICY,
       accepts: { kinds: ['json'], aliases: ['转yaml', 'json to yaml', 'json2yaml'] },
       run(ctx) {
         try { return ctx.output.text(jsonToYaml(ctx.input.text)) }
@@ -139,11 +139,11 @@ export const jsonToolsPlugin = definePlugin({
       icon: 'Braces',
       aliases: ['fmt', '格式化', 'pretty', 'json format', 'json格式化', 'format json', '格式化 JSON'],
       inputPolicy: { mode: 'auto' },
-      policy: LEARNABLE_PURE,
+      policy: PURE_ACTION_POLICY,
       explicitTextPreview: { run: prettifyText },
       params: [
-        { key: 'indent', label: 'json.indent.label', type: 'number', default: 2, saveable: true },
-        { key: 'sortKeys', label: 'json.sortKeys.label', type: 'boolean', default: false, saveable: true },
+        { key: 'indent', label: 'json.indent.label', type: 'number', default: 2 },
+        { key: 'sortKeys', label: 'json.sortKeys.label', type: 'boolean', default: false },
       ],
       accepts: { kinds: ['json'], aliases: ['fmt', '格式化', 'pretty'] },
       textMatch: isJson,
@@ -151,7 +151,7 @@ export const jsonToolsPlugin = definePlugin({
         const result = prettifyText(ctx)
         return result.ok ? ctx.output.text(result.text) : ctx.output.error(result.message)
       },
-      surfaces: EDITOR_TOOL_SURFACES,
+      surfaces: { launcher: { surfaces: ['global-launcher', 'quick-editor-command'] }, panel: true },
     },
     {
       id: 'json.compact',
@@ -160,7 +160,7 @@ export const jsonToolsPlugin = definePlugin({
       icon: 'Braces',
       aliases: ['json minify', 'json压缩', 'compact json', 'json compress', 'minify json', '压缩'],
       inputPolicy: { mode: 'auto' },
-      policy: LEARNABLE_PURE,
+      policy: PURE_ACTION_POLICY,
       accepts: { kinds: ['json'] },
       textMatch: isJson,
       run(ctx) {
@@ -176,7 +176,7 @@ export const jsonToolsPlugin = definePlugin({
       icon: 'Search',
       aliases: ['qs2json', 'query to json', 'querystring to json', 'qs转json', 'query string to json', '查询参数转json'],
       inputPolicy: { mode: 'auto' },
-      policy: LEARNABLE_PURE,
+      policy: PURE_ACTION_POLICY,
       textMatch: isQueryString,
       run(ctx) {
         try { return ctx.output.text(queryStringToJson(ctx.input.text)) }
@@ -191,7 +191,7 @@ export const jsonToolsPlugin = definePlugin({
       icon: 'Search',
       aliases: ['json2qs', 'json to query', 'json to querystring', 'json转qs', 'json to query string', 'json转查询参数'],
       inputPolicy: { mode: 'auto' },
-      policy: LEARNABLE_PURE,
+      policy: PURE_ACTION_POLICY,
       accepts: { kinds: ['json'] },
       textMatch: isJson,
       run(ctx) {
@@ -208,7 +208,7 @@ export const jsonToolsPlugin = definePlugin({
       aliases: ['json escape', 'escape string', '字符串转义', '转义'],
       accepts: { aliases: ['json escape', 'escape string', '字符串转义', '转义'] },
       inputPolicy: { mode: 'auto' },
-      policy: LEARNABLE_PURE,
+      policy: PURE_ACTION_POLICY,
       run(ctx) {
         try { return ctx.output.text(escapeJsonString(ctx.input.text)) }
         catch (error) { return ctx.output.error(toolError(error, ctx.t)) }
@@ -223,7 +223,7 @@ export const jsonToolsPlugin = definePlugin({
       aliases: ['json unescape', 'unescape string', '字符串反转义', '反转义'],
       accepts: { regex: '^\\s*".*"\\s*$', aliases: ['json unescape', 'unescape string', '字符串反转义', '反转义'] },
       inputPolicy: { mode: 'auto' },
-      policy: LEARNABLE_PURE,
+      policy: PURE_ACTION_POLICY,
       run(ctx) {
         try { return ctx.output.text(unescapeJsonString(ctx.input.text)) }
         catch (error) { return ctx.output.error(toolError(error, ctx.t)) }

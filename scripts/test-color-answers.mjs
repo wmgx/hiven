@@ -61,7 +61,7 @@ try {
   const copied = []
   const context = { query: '#FF6B35', surfaceId: 'global-launcher', t: (key, values) => `${key}:${values.format}:${values.hex}`, api: { copyText: async (text) => { copied.push(text) } } }
   assert.equal(plugin.launcher.dynamicItems({ ...context, query: 'search' }).length, 0)
-  assert.equal(plugin.launcher.dynamicItems({ ...context, surfaceId: 'editor-command-bar' }).length, 0)
+  assert.equal(plugin.launcher.dynamicItems({ ...context, surfaceId: 'quick-editor-command' }).length, 0)
   assert.equal(plugin.launcher.dynamicItems({ ...context, signal: { aborted: true } }).length, 0)
   const items = plugin.launcher.dynamicItems(context)
   assert.equal(items.length, 3)

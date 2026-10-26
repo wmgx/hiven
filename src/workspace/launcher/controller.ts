@@ -17,9 +17,7 @@
  */
 
 import type {
-  CommittedRunContext,
   CommitVia,
-  InputBinding,
   LauncherExecuteResult,
   LauncherInputSpec,
   LauncherItem,
@@ -34,7 +32,7 @@ import type {
 import type { PluginNetworkApi, PluginPrivateStorageApi, PluginShellApi } from '../pluginTypes'
 import type { PluginAiApi } from '../ai/types'
 import { appendUsageJournal } from '../usageJournal'
-import { explicitTextPreviewResult, getHostOutputIntent, isOutputResult, selectHostOutputResult } from './output'
+import { explicitTextPreviewResult, getHostOutputIntent, isOutputResult } from './output'
 import { captureForegroundSelectionText } from './foregroundSelectionCapture'
 import { translate, type Locale } from '../../i18n'
 import {
@@ -44,10 +42,6 @@ import {
   trackLatencyFrom,
   telemetryNow,
 } from '../telemetry'
-import { isSafeExperienceIdentifier } from '../contentBoundary'
-import { extractSaveableParams } from '../experience/saveableParams'
-import { setLastSaveableRun } from '../savedActions/lastSaveableRun'
-import { touchSavedAction } from '../savedActions/store'
 import { bindPluginLauncherApi } from './pluginLifetime'
 
 // ─── Frames ──────────────────────────────────────────────────────────────────
@@ -108,7 +102,6 @@ export type ResultFrame = {
   output: LauncherOutput
   /** The item or choice that produced this output (for labeling). */
   sourceTitle?: string
-  committedRun?: CommittedRunContext
   /** Delay usage until the user commits one successful output action. */
   pendingUsage?: { item: LauncherItem; recordUsage: boolean }
   /** A failed automatic action can only retry that same primary action. */
@@ -508,10 +501,8 @@ export class LauncherController {
     // Fresh host builders retain the private output-intent marks. Re-registering
     // old objects would revive callbacks captured before editing began.
     const choice = original.output.choices[0]
-    const intent = choice && getHostOutputIntent(choice)
-    const fresh = choice && explicitTextPreviewResult(choice.preview ?? choice.title, this.apiFor(snapshot.item), this.deps.locale as Locale)
-    const result = fresh && (intent === 'copy' || intent === 'return-to-launcher')
-      ? selectHostOutputResult(fresh, intent) : null
+    const result = choice && getHostOutputIntent(choice) === 'copy'
+      ? explicitTextPreviewResult(choice.preview ?? choice.title, this.apiFor(snapshot.item), this.deps.locale as Locale) : null
     if (!result || !isOutputResult(result)) {
       this.recoverPreviewInput(snapshot, frame.recordUsage)
       return
@@ -541,21 +532,10 @@ export class LauncherController {
     const error = this.validateParams(item, nextParams)
     if (error) { this.setState({ error }); return }
     await this.commitResolvedAction({
-      item, via: item.commitVia ?? 'execute', params: nextParams, inputBinding: 'prompt', inputText,
+      item, via: 'execute', params: nextParams, inputText,
       sourceTitle: this.itemTitle(item), recordUsage: frame.recordUsage, replacePreview: true,
       execute: () => Promise.resolve(item.executeWithParams!(this.buildExecutionContext(item, inputText), nextParams)),
     })
-  }
-
-  private inputBindingFor(item: LauncherItem): InputBinding | undefined {
-    if (this.isExplicitTextPreview(item)) return 'prompt'
-    const mode = item.inputPolicy?.mode
-    if (!mode) return undefined
-    const api = this.apiFor(item)
-    if (mode === 'selection') return api.getSelectionText() ? 'selection' : undefined
-    if (mode === 'all') return api.getActiveText() ? 'active-text' : undefined
-    if (api.getSelectionText()) return 'selection'
-    return api.getActiveText() ? 'active-text' : undefined
   }
 
   private paramOptions(param: LauncherParamSpec): unknown[] {
@@ -767,9 +747,8 @@ export class LauncherController {
         await this.commitResolvedAction({
           item,
           rootActionOwnership,
-          via: item.commitVia ?? 'execute',
+          via: 'execute',
           params: this.defaultParamsFor(item),
-          inputBinding: 'prompt',
           inputText: options.objectBlockText,
           sourceTitle: this.itemTitle(item),
           recordUsage,
@@ -791,9 +770,8 @@ export class LauncherController {
         await this.commitResolvedAction({
           item,
           rootActionOwnership,
-          via: item.commitVia ?? 'execute',
+          via: 'execute',
           params: this.defaultParamsFor(item),
-          inputBinding: 'prompt',
           inputText: options.objectBlockText,
           sourceTitle: this.itemTitle(item),
           recordUsage,
@@ -813,11 +791,10 @@ export class LauncherController {
     await this.commitResolvedAction({
       item,
       rootActionOwnership,
-      via: item.commitVia ?? 'execute',
+      via: 'execute',
       params: this.defaultParamsFor(item),
       sourceTitle: this.itemTitle(item),
       recordUsage,
-      inputBinding: inputText !== undefined ? 'prompt' : this.inputBindingFor(item),
       inputText,
       execute: () => Promise.resolve(item.execute(this.buildExecutionContext(item, inputText))),
     })
@@ -988,9 +965,8 @@ export class LauncherController {
       if (top.inputText === undefined && top.item.initialInputText === undefined && this.hasObjectBlockText(top.objectBlockText)) {
         await this.commitResolvedAction({
           item: top.item,
-          via: top.item.commitVia ?? 'execute',
+          via: 'execute',
           params: top.params,
-          inputBinding: 'prompt',
           inputText: top.objectBlockText,
           sourceTitle: this.itemTitle(top.item),
           recordUsage: top.recordUsage,
@@ -1007,9 +983,8 @@ export class LauncherController {
     const inputText = top.item.initialInputText ?? top.objectBlockText
     await this.commitResolvedAction({
       item: top.item,
-      via: top.item.commitVia ?? 'execute',
+      via: 'execute',
       params: top.params,
-      inputBinding: inputText !== undefined ? 'prompt' : this.inputBindingFor(top.item),
       inputText,
       sourceTitle: this.itemTitle(top.item),
       recordUsage: top.recordUsage,
@@ -1272,7 +1247,6 @@ export class LauncherController {
           item,
           via: 'suggestion',
           params: top.params ?? this.defaultParamsFor(item),
-          inputBinding: 'prompt',
           inputText,
           sourceTitle: highlighted.title,
           recordUsage: top.recordUsage,
@@ -1299,7 +1273,6 @@ export class LauncherController {
         item,
         via: 'preview-choice',
         params: top.params ?? this.defaultParamsFor(item),
-        inputBinding: 'prompt',
         inputText,
         sourceTitle: firstPreviewChoice.title,
         recordUsage: top.recordUsage,
@@ -1310,9 +1283,8 @@ export class LauncherController {
 
     await this.commitResolvedAction({
       item,
-      via: item.commitVia ?? 'execute',
+      via: 'execute',
       params: top.params ?? this.defaultParamsFor(item),
-      inputBinding: 'prompt',
       inputText,
       sourceTitle: this.itemTitle(item),
       recordUsage: top.recordUsage,
@@ -1353,7 +1325,7 @@ export class LauncherController {
     const generation = this.flowGeneration
     const pluginLifetime = this.activePluginLifetime
     await this.runChoiceAction(() => paste(text, () => pluginLifetime?.active !== false && generation === this.flowGeneration), choice.title, { via: 'preview-paste' },
-      undefined, undefined, pendingUsage, { intent: 'paste-to-foreground-app' })
+      undefined, pendingUsage, { intent: 'paste-to-foreground-app' })
   }
 
   /** Activate a result choice's primary action. */
@@ -1363,13 +1335,12 @@ export class LauncherController {
       via: 'primary',
     })
     const top = this.topFrame()
-    const committedRun = top.kind === 'result' ? top.committedRun : undefined
     const pendingUsage = top.kind === 'result'
       ? top.pendingUsage
       : top.kind === 'collect-input'
         ? { item: top.item, recordUsage: top.recordUsage }
         : undefined
-    await this.runChoiceAction(() => choice.primaryAction(), choice.title, undefined, committedRun, choice, pendingUsage)
+    await this.runChoiceAction(() => choice.primaryAction(), choice.title, undefined, choice, pendingUsage)
   }
 
   /** Activate a result choice's secondary action by id. */
@@ -1387,13 +1358,12 @@ export class LauncherController {
       actionId,
     })
     const top = this.topFrame()
-    const committedRun = top.kind === 'result' ? top.committedRun : undefined
     const pendingUsage = top.kind === 'result'
       ? top.pendingUsage
       : top.kind === 'collect-input'
         ? { item: top.item, recordUsage: top.recordUsage }
         : undefined
-    await this.runChoiceAction(() => action.run(), action.title, { via: 'secondary', actionId }, committedRun, action, pendingUsage)
+    await this.runChoiceAction(() => action.run(), action.title, { via: 'secondary', actionId }, action, pendingUsage)
   }
 
   /** Submit a multi-select result frame. */
@@ -1406,7 +1376,6 @@ export class LauncherController {
       () => top.output.selection?.submit(choices),
       top.sourceTitle ?? '',
       undefined,
-      top.committedRun,
       undefined,
       top.pendingUsage,
     )
@@ -1493,56 +1462,10 @@ export class LauncherController {
 
   // ─── Execution plumbing ────────────────────────────────────────────────────
 
-  private committedRunFor(item: LauncherItem, via: CommitVia): CommittedRunContext | undefined {
-    if (item.experienceRecord === false || !isSafeExperienceIdentifier(item.systemKey)) return undefined
-    return {
-      runId: `run_${globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`}`,
-      actionKey: item.systemKey,
-      surfaceId: this.deps.surfaceId,
-      via,
-      artifactId: item.savedActionArtifactId,
-    }
-  }
-
-  private recordOutputApplied(run: CommittedRunContext, node: LauncherResultChoice | LauncherResultAction, updateLastRun = true): void {
-    const outputIntent = getHostOutputIntent(node)
-    if (!outputIntent) return
-    if (run.via === 'saved-action' && run.artifactId) {
-      try {
-        touchSavedAction(run.artifactId)
-      } catch (error) {
-        console.warn('[hiven] Failed to update Saved Action usage:', error)
-      }
-    }
-    if (updateLastRun && (run.via !== 'saved-action' || run.saveActionKey)) {
-      const completedAt = Date.now()
-      if (run.saveSnapshot) {
-        setLastSaveableRun({
-          status: 'ready',
-          runId: run.runId,
-          actionKey: run.saveActionKey ?? run.actionKey,
-          ...run.saveSnapshot,
-          ...(run.sourceSavedAction ? { sourceSavedAction: run.sourceSavedAction } : {}),
-          outputIntent,
-          completedAt,
-        })
-      } else if (run.saveBlocked) {
-        setLastSaveableRun({
-          status: 'blocked',
-          runId: run.runId,
-          actionKey: run.saveActionKey ?? run.actionKey,
-          ...run.saveBlocked,
-          completedAt,
-        })
-      }
-    }
-  }
-
   private async commitResolvedAction(input: {
     item: LauncherItem
     via: CommitVia
     params: Record<string, unknown>
-    inputBinding?: InputBinding
     inputText?: string
     sourceTitle: string
     recordUsage: boolean
@@ -1561,48 +1484,13 @@ export class LauncherController {
       ? { item, params: this.copyParams(input.params), inputText: input.inputText,
           generation: flowGeneration, materialGeneration: this.deps.getMaterialGeneration?.() }
       : undefined
-    const committedRun = this.committedRunFor(item, via)
-    const saveActionKey = via === 'saved-action' && input.inputBinding === 'prompt' &&
-      this.isExplicitTextPreview(item) && item.actionPolicy?.effect === 'pure'
-      ? item.savedActionBaseKey : undefined
-    if (committedRun && saveActionKey) {
-      committedRun.saveActionKey = saveActionKey
-      if (item.savedActionArtifactId && item.savedActionSnapshot) {
-        committedRun.sourceSavedAction = { id: item.savedActionArtifactId, snapshot: item.savedActionSnapshot }
-      }
-    }
-    if (
-      committedRun &&
-      (via !== 'saved-action' || saveActionKey) &&
-      input.inputBinding &&
-      item.contractFingerprint &&
-      item.actionPolicy?.learnable === true &&
-      (item.actionPolicy.effect === 'pure' || item.actionPolicy.effect === 'read')
-    ) {
-      committedRun.inputBinding = input.inputBinding
-      const saveable = extractSaveableParams(item, input.params)
-      if (saveable.ok) {
-        committedRun.saveSnapshot = {
-          inputBinding: input.inputBinding,
-          savedParams: saveable.params,
-          contractFingerprint: item.contractFingerprint,
-          actionPolicy: item.actionPolicy,
-        }
-      } else {
-        committedRun.saveBlocked = {
-          blockedKeys: saveable.blockedKeys,
-          reason: saveable.reason,
-        }
-      }
-    }
-
     this.pendingItemKey = item.systemKey
     this.setState({ busy: true, error: null })
     const startedAt = telemetryNow()
 
     if (resolvedChoice) {
       await this.runChoiceAction(() => resolvedChoice.primaryAction(), sourceTitle,
-        { via, systemKey: item.systemKey }, committedRun, resolvedChoice,
+        { via, systemKey: item.systemKey }, resolvedChoice,
         { item, recordUsage: input.recordUsage })
       return
     }
@@ -1644,7 +1532,7 @@ export class LauncherController {
       this.setActionFailure(result.message, input.rootActionOwnership)
       return
     }
-    await this.applyResult(result, sourceTitle, committedRun, {
+    await this.applyResult(result, sourceTitle, {
       item,
       recordUsage: input.recordUsage,
     }, undefined, previewEdit, input.replacePreview)
@@ -1668,7 +1556,6 @@ export class LauncherController {
     run: () => Awaited<ReturnType<LauncherResultChoice['primaryAction']>> | Promise<Awaited<ReturnType<LauncherResultChoice['primaryAction']>>>,
     sourceTitle: string,
     extra?: Record<string, unknown>,
-    committedRun?: CommittedRunContext,
     actionNode?: LauncherResultChoice | LauncherResultAction,
     pendingUsage?: ResultFrame['pendingUsage'],
     options: { retryFrame?: ResultFrame; intent?: OutputIntent } = {},
@@ -1707,9 +1594,6 @@ export class LauncherController {
       : undefined
     const succeeded = launcherResult?.ok !== false
     trackLatencyFrom(TelemetryEvents.launcherChoiceLatency, startedAt, { terminal: !launcherResult, failed: !succeeded, ...extra })
-    // An already-started external delivery can finish after navigation. Record
-    // what actually happened, without replacing LastRun or touching the new flow.
-    if (committedRun && actionNode && succeeded) this.recordOutputApplied(committedRun, actionNode, isCurrent())
     if (!isCurrent()) return
     if (launcherResult?.ok === false) {
       this.failDelivery(launcherResult.message, options.retryFrame)
@@ -1721,7 +1605,7 @@ export class LauncherController {
       ? undefined
       : pendingUsage
     if (launcherResult) {
-      await this.applyResult(launcherResult, sourceTitle, committedRun, usageToCommit, actionNode ? getHostOutputIntent(actionNode) ?? undefined : undefined)
+      await this.applyResult(launcherResult, sourceTitle, usageToCommit, actionNode ? getHostOutputIntent(actionNode) ?? undefined : undefined)
     } else {
       this.flowGeneration += 1
       if (usageToCommit) this.recordSuccessfulSelection(usageToCommit.item, { recordUsage: usageToCommit.recordUsage })
@@ -1741,7 +1625,6 @@ export class LauncherController {
   private async applyResult(
     result: LauncherExecuteResult,
     sourceTitle: string,
-    committedRun?: CommittedRunContext,
     pendingUsage?: ResultFrame['pendingUsage'],
     appliedOutputIntent?: OutputIntent,
     previewEdit?: PreviewEditSnapshot,
@@ -1762,10 +1645,9 @@ export class LauncherController {
           () => choice.primaryAction(),
           choice.title,
           undefined,
-          committedRun,
           choice,
           pendingUsage,
-          { retryFrame: { kind: 'result', output: result.output.selection ? { choices: [choice] } : result.output, sourceTitle, committedRun, pendingUsage, retryOnly: true } },
+          { retryFrame: { kind: 'result', output: result.output.selection ? { choices: [choice] } : result.output, sourceTitle, pendingUsage, retryOnly: true } },
         )
         return
       }
@@ -1790,7 +1672,6 @@ export class LauncherController {
           executionMode: explicitPreview ? 'explicit-text-preview' : undefined,
           output: result.output,
           sourceTitle,
-          committedRun,
           pendingUsage,
           previewEdit,
         }],

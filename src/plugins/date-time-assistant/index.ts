@@ -462,7 +462,7 @@ const WORKSPACE_ROUTES: { id: string; title: string; aliases: string[] }[] = [
 ]
 
 const EDITOR_TOOL_SURFACES: PluginToolSurfaces = {
-  launcher: { surfaces: ['editor-command-bar', 'quick-editor-command'] },
+  launcher: { surfaces: ['quick-editor-command'] },
   panel: true,
 }
 

@@ -3,7 +3,6 @@ export const CONTENT_SOURCE_STORES = [
   'snippets',
   'quick-editor-history',
   'sticky-query-draft',
-  'saved-actions',
 ] as const
 
 export const NO_CONTENT_SINKS = [

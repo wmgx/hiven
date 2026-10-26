@@ -26,9 +26,9 @@ import {
 } from './core'
 import './style.css'
 
-const LEARNABLE_PURE = { effect: 'pure', learnable: true } as const
+const PURE_ACTION_POLICY = { effect: 'pure' } as const
 const EDITOR_TOOL_SURFACES: PluginToolSurfaces = {
-  launcher: { surfaces: ['editor-command-bar', 'quick-editor-command'] },
+  launcher: { surfaces: ['quick-editor-command'] },
   panel: true,
 }
 const WORKSPACE_SHELL = {
@@ -72,7 +72,7 @@ export const encodeDecodePlugin = definePlugin({
         textMatch: (text) => isBase64(text) || isUrlEncoded(text) || hasHtmlEntities(text) || hasEscapeSequences(text) || isJwt(text),
         component: EncodeDecodeSurface,
         entry: {
-          launcher: { surfaces: ['global-launcher', 'editor-command-bar', 'quick-editor-command'] },
+          launcher: { surfaces: ['global-launcher', 'quick-editor-command'] },
           shortcutBindable: true,
         },
         shell: WORKSPACE_SHELL,
@@ -111,7 +111,7 @@ export const encodeDecodePlugin = definePlugin({
       icon: 'Binary',
       aliases: ['base64 encode', 'base64编码', 'b64 encode', 'btoa', 'encode base64', '编码'],
       inputPolicy: { mode: 'auto' },
-      policy: LEARNABLE_PURE,
+      policy: PURE_ACTION_POLICY,
       textMatch: (text) => !isBase64(text), // text is NOT base64 → offer to encode
       run(ctx) {
         try { return ctx.output.text(base64Encode(ctx.input.text)) }
@@ -125,7 +125,7 @@ export const encodeDecodePlugin = definePlugin({
       icon: 'Binary',
       aliases: ['b64', 'base64', 'base64 decode', 'base64解码', 'b64 decode', 'atob', 'decode base64', '解码'],
       inputPolicy: { mode: 'auto' },
-      policy: LEARNABLE_PURE,
+      policy: PURE_ACTION_POLICY,
       explicitTextPreview: { run: decodeBase64Text },
       accepts: { kinds: ['base64'], aliases: ['b64', 'base64', 'base64 decode', 'base64解码'] },
       textMatch: isBase64,
@@ -133,7 +133,7 @@ export const encodeDecodePlugin = definePlugin({
         const result = decodeBase64Text(ctx)
         return result.ok ? ctx.output.text(result.text) : ctx.output.error(result.message)
       },
-      surfaces: EDITOR_TOOL_SURFACES,
+      surfaces: { launcher: { surfaces: ['global-launcher', 'quick-editor-command'] }, panel: true },
     },
     {
       id: 'url.encode',

@@ -43,7 +43,7 @@ const searchRanking = loadTs('src/workspace/searchRanking.ts', [])
 const usage = loadTs('src/workspace/launcher/usage.ts', [
   [
     /import\s*\{[^}]*\}\s*from\s*'\.\/types'\s*;?\s*\n?/,
-    "const LAUNCHER_SURFACE_IDS=['command-palette','editor-command-bar','global-launcher'];\nconst normalizeLauncherSurfaceId=(surfaceId)=>surfaceId==='command-palette'?'editor-command-bar':surfaceId;\n",
+    "const LAUNCHER_SURFACE_IDS=['quick-editor-command','global-launcher'];\nconst normalizeLauncherSurfaceId=(surfaceId)=>surfaceId;\n",
   ],
 ])
 const display = loadTs('src/workspace/launcher/display.ts', [
@@ -278,7 +278,7 @@ const hostApp = hostAppSandbox.module.exports
 
   const wrongSurface = await hostApp.getHostAppLauncherDynamicItems({
     query: '',
-    surfaceId: 'command-palette',
+    surfaceId: 'quick-editor-command',
     locale: 'en',
   })
   assert.equal(wrongSurface.length, 0, 'apps only appear on global-launcher')

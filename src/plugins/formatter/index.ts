@@ -16,7 +16,7 @@ function matchesContentKind(text: string, kind: 'css' | 'sql' | 'xml'): boolean 
 }
 
 const EDITOR_TOOL_SURFACES: PluginToolSurfaces = {
-  launcher: { surfaces: ['editor-command-bar', 'quick-editor-command'] },
+  launcher: { surfaces: ['quick-editor-command'] },
   panel: true,
 }
 
@@ -42,7 +42,7 @@ export const formatterPlugin = definePlugin({
         textMatch: (text) => (['css', 'sql', 'xml'] as const).some((kind) => matchesContentKind(text, kind)),
         component: FormatterSurface,
         entry: {
-          launcher: { surfaces: ['global-launcher', 'editor-command-bar', 'quick-editor-command'] },
+          launcher: { surfaces: ['global-launcher', 'quick-editor-command'] },
           shortcutBindable: true,
         },
         shell: WORKSPACE_SHELL,

@@ -69,8 +69,6 @@ const {LauncherController}=load('src/workspace/launcher/controller.ts',{
   '../usageJournal':{appendUsageJournal:async()=>{}},'./output':output,'./foregroundSelectionCapture':{captureForegroundSelectionText:fail('foreground capture')},'../../i18n':i18n,
   '../telemetry':{TelemetryEvents:{},itemTelemetryProps:()=>({}),trackBehavior:no,trackLatencyFrom:no,telemetryNow:Date.now},
   '../contentBoundary':{isSafeExperienceIdentifier:()=>true},
-  '../experience/saveableParams':{extractSaveableParams:()=>({ok:true,params:{}})},
-  '../savedActions/lastSaveableRun':{setLastSaveableRun:no},'../savedActions/store':{touchSavedAction:no},
 });
 // Actual web-open callbacks and history data, isolated from its optional browser UI.
 const model=load('src/plugins/web-open/settings/model.ts');
@@ -106,14 +104,6 @@ const launcherRegistry=load('src/workspace/launcher/registry.ts',{
   './perf':{launcherPerfNow:Date.now,logLauncherPerfDuration:no,measureLauncherPerf:(_label,run)=>run()},
   './pluginSource':pluginSource,'./toolAdapter':{adaptToolToLauncherItem:fail('unexpected tool')},
   './normalizeContribution':normalize,'../pluginProductCatalog':{resolvePluginProductMetadata:()=>({}),applyProductProviderToLauncherItem:item=>item},
-  '../savedActions/provider':{getSavedActionLauncherItems:()=>[]},'./hostActions':{createSaveLastRunItem:()=>null},
-  './display':{resolveDisplayTitle:display=>display.title},'../savedActions/lastSaveableRun':{freshLastSaveableRun:()=>null},
-  '../savedActions/compatibility':{savedActionDisabledReason:()=>null},'../savedActions/store':{listSavedActions:()=>[]},
-});
-const savedActions=load('src/workspace/savedActions/provider.ts',{
-  '../launcher/output':output,'./compatibility':{isGlobalLauncherSavedActionOutput:()=>true,savedActionDisabledReason:()=>null},
-  './store':{listSavedActions:()=>[],setSavedActionDisabledReason:no,savedActionSnapshot:load('src/workspace/savedActions/store.ts').savedActionSnapshot},
-  './display':{describeSavedAction:()=>({}),savedActionDisabledMessage:reason=>reason},
 });
 const disposals=[];
 const defer=()=>{let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no});return {promise,resolve,reject}};
@@ -290,24 +280,6 @@ await check('pending provider cannot stamp stale items with a replacement regist
   const collection=launcherRegistry.collectDynamicItems('query','global-launcher','en',()=>({}),undefined,{includeHost:false,onPartial:update=>partials.push(...update.items)});
   await started.promise;runtime.disablePlugin(f.id);f.register();gate.resolve();
   assert.equal((await collection).length,0);assert.equal(partials.length,0);untouched();
-});
-
-await check('saved-action projection retains the producer registration',async()=>{
-  const f=fixture('local','result');const artifact={schemaVersion:1,id:'synthetic-saved',name:'Saved action',aliases:[],createdAt:1,baseActionKey:f.item.systemKey,inputBinding:'prompt',savedParams:{},outputIntent:'copy',contractFingerprint:'synthetic',actionPolicy:{effect:'pure',learnable:false}};
-  const projected=savedActions.projectSavedAction(artifact,f.item,true,false,()=>[f.freshItem()]);
-  assert.equal(projected.pluginLifetime,f.item.pluginLifetime);
-  await f.controller.selectItem(projected);f.controller.setInputText('saved draft');
-  runtime.disablePlugin(f.id);f.register();await f.controller.submitInput();untouched();unavailable(f);
-});
-
-await check('parameter and pending prepare paths share the lifecycle gate',async()=>{
-  let executions=0;const f=fixture('local','result','en',{params:[{key:'n',type:'text',label:'Name'}],executeWithParams:async()=>{executions++;return {ok:true}}});
-  await f.controller.selectItem(f.item,{customizeParams:true});f.controller.setParamQuery('parameter draft');runtime.disablePlugin(f.id);
-  await f.controller.commitCurrentParam('name');await f.controller.submitParams();assert.equal(executions,0);unavailable(f);
-  assert.equal(f.controller.getState().frames.at(-1).query,'parameter draft');
-  f.register();const gate=defer();const item=f.freshItem();item.prepare=async()=>{await gate.promise;return {...item,pluginLifetime:undefined}};
-  const run=f.controller.selectItem(item);runtime.disablePlugin(f.id);f.register();gate.resolve();await run;
-  assert.equal(f.controller.getState().frames.at(-1).kind,'list');unavailable(f);untouched();
 });
 
 console.log(`launcher plugin lifetime: ${passed} real-module behavior scenarios passed`);

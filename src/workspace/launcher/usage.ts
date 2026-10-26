@@ -21,8 +21,6 @@ import { LAUNCHER_SURFACE_IDS, normalizeLauncherSurfaceId } from './types'
 
 export function emptyUsageBySurface(): LauncherUsageBySurface {
   return {
-    'command-palette': {},
-    'editor-command-bar': {},
     'global-launcher': {},
     'quick-editor-command': {},
   }
@@ -81,7 +79,7 @@ export type LegacyActionUsageBucket = {
 }
 
 export type LegacyActionUsageBySource = Partial<
-  Record<'command-palette' | 'editor-command-bar' | 'global-launcher', LegacyActionUsageBucket>
+  Record<'global-launcher', LegacyActionUsageBucket>
 >
 
 /**
@@ -134,10 +132,6 @@ export function migrateLegacyUsage(
   if (!legacy) return result
   for (const surfaceId of LAUNCHER_SURFACE_IDS) {
     result[surfaceId] = migrateLegacyBucket((legacy as Record<string, unknown>)[surfaceId] as never, mapKey, baseTime)
-  }
-  result['editor-command-bar'] = {
-    ...result['command-palette'],
-    ...result['editor-command-bar'],
   }
   return result
 }

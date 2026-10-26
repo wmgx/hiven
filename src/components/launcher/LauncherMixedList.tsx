@@ -33,8 +33,6 @@ export function LauncherMixedList({
   onHoverIndex,
   isKeyboardNavRef,
   onToggleFavorite,
-  onRenameSavedAction,
-  onDeleteSavedAction,
   favoriteKeys,
   pinnableItemKeys,
 }: {
@@ -51,8 +49,6 @@ export function LauncherMixedList({
    */
   isKeyboardNavRef?: MutableRefObject<boolean>
   onToggleFavorite?: (item: LauncherMixedItem) => void
-  onRenameSavedAction?: (item: LauncherMixedItem) => void
-  onDeleteSavedAction?: (item: LauncherMixedItem) => void
   favoriteKeys?: readonly string[]
   pinnableItemKeys?: ReadonlySet<string>
 }) {
@@ -82,8 +78,6 @@ export function LauncherMixedList({
             onHoverIndex={onHoverIndex ? handleHover : undefined}
             isKeyboardNavRef={isKeyboardNavRef}
             onToggleFavorite={pinnableItemKeys?.has(item.id) ? onToggleFavorite : undefined}
-            onRenameSavedAction={item.domainItem.savedActionArtifactId ? onRenameSavedAction : undefined}
-            onDeleteSavedAction={item.domainItem.savedActionArtifactId && item.domainItem.savedActionSnapshot ? onDeleteSavedAction : undefined}
             favorite={favoriteKeys?.includes(item.id) ?? false}
           />
         )
@@ -106,8 +100,6 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
   onHoverIndex,
   isKeyboardNavRef,
   onToggleFavorite,
-  onRenameSavedAction,
-  onDeleteSavedAction,
   favorite,
 }: {
   item: LauncherMixedItem
@@ -118,8 +110,6 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
   onHoverIndex?: (index: number) => void
   isKeyboardNavRef?: MutableRefObject<boolean>
   onToggleFavorite?: (item: LauncherMixedItem) => void
-  onRenameSavedAction?: (item: LauncherMixedItem) => void
-  onDeleteSavedAction?: (item: LauncherMixedItem) => void
   favorite: boolean
 }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -223,38 +213,6 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
         </kbd>
       )}
       </button>
-      {onRenameSavedAction && (
-        <button
-          type="button"
-          className="launcher-discovery-action"
-          aria-label={`${t(locale, 'palette.savedActionRename')}: ${item.title}`}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' || event.key === ' ') event.stopPropagation()
-          }}
-          onClick={(event) => {
-            event.stopPropagation()
-            onRenameSavedAction(item)
-          }}
-        >
-          {t(locale, 'palette.savedActionRename')}
-        </button>
-      )}
-      {onDeleteSavedAction && (
-        <button
-          type="button"
-          className="launcher-discovery-action"
-          aria-label={`${t(locale, 'palette.savedActionDelete')}: ${item.title}`}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' || event.key === ' ') event.stopPropagation()
-          }}
-          onClick={(event) => {
-            event.stopPropagation()
-            onDeleteSavedAction(item)
-          }}
-        >
-          {t(locale, 'palette.savedActionDelete')}
-        </button>
-      )}
       {onToggleFavorite && (
         <button
           type="button"

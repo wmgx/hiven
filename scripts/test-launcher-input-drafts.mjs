@@ -27,7 +27,7 @@ try {
   const { makePluginT } = await vite.ssrLoadModule('/src/i18n/pluginI18nRegistry.ts')
   registerBundledPluginPackages()
   const json = collectStaticCandidates('global-launcher').find((item) => item.systemKey === 'plugin:json-tools:tool:json.prettify')
-  const random = collectStaticCandidates('editor-command-bar').find((item) => item.systemKey === 'plugin:random:tool:random.integer')
+  const random = collectStaticCandidates('quick-editor-command').find((item) => item.systemKey === 'plugin:random:tool:random.integer')
   assert.ok(json)
   assert.ok(random)
 
@@ -79,7 +79,7 @@ try {
 
   // Real random tool: correcting a failed range must keep the chosen count.
   {
-    const h = harness('editor-command-bar')
+    const h = harness('quick-editor-command')
     await h.controller.selectItem(random, { customizeParams: true, recordUsage: false })
     for (const value of [10, 5, 7]) await h.controller.commitCurrentParam(value)
     assert.match(h.controller.getState().error, /Max can't be less than min/)
@@ -98,7 +98,7 @@ try {
 
   // An unsubmitted edit is a draft too, including an intentionally empty field.
   {
-    const h = harness('editor-command-bar')
+    const h = harness('quick-editor-command')
     await h.controller.selectItem(random, { customizeParams: true, recordUsage: false })
     await h.controller.commitCurrentParam(10)
     await h.controller.commitCurrentParam(20)
@@ -193,7 +193,7 @@ try {
 
   // A retained choice is only a draft: changed options and constraints still apply.
   {
-    const h = harness('editor-command-bar')
+    const h = harness('quick-editor-command')
     let executions = 0
     const params = [
       { key: 'group', label: 'Group', type: 'single-select', required: true, options: ['old', 'new'] },

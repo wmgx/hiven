@@ -88,7 +88,6 @@ export function applyProductProviderToLauncherItem(item: LauncherItem): Launcher
       ...item.display,
       aliases: [...(item.display.aliases ?? []), productProvider, metadata.providerZh ?? productProvider, metadata.productId],
     },
-    metadata: item.metadata,
     productProvider,
   } as LauncherItem & { productProvider: string }
 }

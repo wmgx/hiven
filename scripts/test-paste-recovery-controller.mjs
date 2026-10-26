@@ -18,7 +18,6 @@ const server = await createServer({ server: { middlewareMode: true }, appType: '
 try {
   const { LauncherController } = await server.ssrLoadModule('/src/workspace/launcher/controller.ts')
   const { textResult, foregroundPasteResult } = await server.ssrLoadModule('/src/workspace/launcher/output.ts')
-  const { getLastSaveableRun } = await server.ssrLoadModule('/src/workspace/savedActions/lastSaveableRun.ts')
   const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no }); return { promise, resolve, reject } }
   let mode = 'copied', wait, entered, closed = 0, nativeCalls = 0
   const guards = [], events = []
@@ -59,7 +58,6 @@ try {
     assert.equal(controller.getState().busy, false)
     assert.equal(closed, 0)
     assert.equal(events.filter(event => event.eventType === 'output.applied').length, 0)
-    assert.equal(await getLastSaveableRun(), null)
   }
   const oldGuard = guards.at(-1)
   controller.reset()

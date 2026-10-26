@@ -73,9 +73,6 @@ vm.runInNewContext(compiled, {
   exports: module.exports,
   require(specifier) {
     if (specifier === './quickEditorStore') return { useQuickEditorStore }
-    if (specifier === '../launcher/types') {
-      return { filterEditorCommandBarItems: (items) => items.filter((item) => !item.systemKey.startsWith('plugin-settings:')) }
-    }
     throw new Error(`Unexpected test import: ${specifier}`)
   },
 })

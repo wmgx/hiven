@@ -36,7 +36,6 @@ import { normalizeLauncherSurfaceId } from './types'
 import { emptyResult, textResult, explicitTextPreviewResult, foregroundPasteResult, replaceActiveTextResult, errorResult, choicesResult, REPLACE_ACTIVE_TEXT_OUTPUT_CHOICE_ID } from './output'
 import { toDirectAnswer } from './normalizeContribution'
 import { computeContractFingerprint } from './contractFingerprint'
-import { assertLearnableToolSaveableContract } from './toolContract'
 import { captureForegroundSelectionText } from './foregroundSelectionCapture'
 import { translate, type Locale } from '../../i18n'
 import { getPluginPermissionSnapshot } from '../pluginPermissions'
@@ -142,7 +141,6 @@ export function adaptToolToLauncherItem(
   tool: PluginToolContribution,
   options: ToolAdaptOptions,
 ): LauncherItem {
-  assertLearnableToolSaveableContract(tool)
   const launcherOpt = tool.surfaces?.launcher
   const launcherOptions = typeof launcherOpt === 'object' ? launcherOpt : undefined
   const mode: TextInputMode = tool.inputPolicy?.mode ?? 'auto'
@@ -155,15 +153,15 @@ export function adaptToolToLauncherItem(
     executionMode,
     params: tool.params,
   })
-  // Runtime edit/cancel must also reject saveability and validation changes,
+  // Runtime edit/cancel must also reject policy and validation changes,
   // which intentionally do not alter the persisted behavior fingerprint.
   const currentPreviewContract = () => JSON.stringify({
     policy: tool.policy,
     defaults: tool.defaultParams,
-    params: tool.params?.map(({ key, type, required, default: value, options, minSelect, maxSelect, saveable, saveableMaxLength }) => ({
+    params: tool.params?.map(({ key, type, required, default: value, options, minSelect, maxSelect }) => ({
       key, type, required, default: value,
       options: options?.map((option) => typeof option === 'string' ? option : option.value),
-      minSelect, maxSelect, saveable, saveableMaxLength,
+      minSelect, maxSelect,
     })),
   })
   const previewContract = currentPreviewContract()
@@ -183,13 +181,13 @@ export function adaptToolToLauncherItem(
     params: Record<string, unknown>,
   ): Promise<LauncherExecuteResult> => {
     const normalizedSurfaceId = normalizeLauncherSurfaceId(ctx.surfaceId)
-    const isEditorLike = normalizedSurfaceId === 'editor-command-bar' || normalizedSurfaceId === 'quick-editor-command'
+    const isEditorLike = normalizedSurfaceId === 'quick-editor-command'
     const isGlobalLauncher = normalizedSurfaceId === 'global-launcher'
     if (isGlobalLauncher && hasPreviewDeclaration) {
       // No fallback to the full tool context: a replaced/unregistered bundle
       // invalidates already collected items as well as future discovery.
       if (!previewRunner || !isExplicitTextPreviewAvailable()) {
-        return errorResult(translate(ctx.locale, 'palette', 'savedActionMissing'))
+        return errorResult(translate(ctx.locale, 'palette', 'actionUnavailable'))
       }
       const text = ctx.input?.text
       if (typeof text !== 'string' || text.length === 0) {
@@ -199,7 +197,7 @@ export function adaptToolToLauncherItem(
       // A registration change while an async pure runner was pending also
       // invalidates its output before any delivery actions can be produced.
       if (!isExplicitTextPreviewAvailable()) {
-        return errorResult(translate(ctx.locale, 'palette', 'savedActionMissing'))
+        return errorResult(translate(ctx.locale, 'palette', 'actionUnavailable'))
       }
       return result.ok
         ? explicitTextPreviewResult(result.text, ctx.api, ctx.locale)
@@ -253,9 +251,7 @@ export function adaptToolToLauncherItem(
     source: options.source,
     display: toolDisplay(tool),
     behavior: { type: 'perform' },
-    surfaces: previewRunner && launcherOptions?.surfaces?.length
-      ? [...new Set([...launcherOptions.surfaces, 'global-launcher' as const])]
-      : launcherOptions?.surfaces,
+    surfaces: launcherOptions?.surfaces,
     inputPolicy: tool.inputPolicy,
     executionMode,
     isExplicitTextPreviewAvailable: previewRunner ? isExplicitTextPreviewAvailable : undefined,

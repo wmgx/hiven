@@ -12,7 +12,7 @@
  * entries must be declared as `launcher.items` or `tools`.
  */
 
-import type { Locale } from '../../i18n'
+import { translate, type Locale } from '../../i18n'
 import { makePluginT } from '../../i18n/pluginI18nRegistry'
 import { pluginRegistry } from '../pluginRegistry'
 import { requestOpenLauncherPluginSettingsSurface } from '../launcherHostSurfaceBridge'
@@ -45,14 +45,6 @@ import { resolvePluginSettingsSource } from './pluginSource'
 import { adaptToolToLauncherItem } from './toolAdapter'
 import { normalizeContribution } from './normalizeContribution'
 import { applyProductProviderToLauncherItem, resolvePluginProductMetadata } from '../pluginProductCatalog'
-import { getSavedActionLauncherItems } from '../savedActions/provider'
-import { createSaveLastRunItem } from './hostActions'
-import { resolveDisplayTitle } from './display'
-import { translate } from '../../i18n'
-import { freshLastSaveableRun } from '../savedActions/lastSaveableRun'
-import { savedActionDisabledReason } from '../savedActions/compatibility'
-import { listSavedActions } from '../savedActions/store'
-import type { LastSaveableRunState } from '../savedActions/types'
 import { collectSettingsFieldSearchItems } from './settingsFieldSearch'
 
 const DYNAMIC_QUERY_MAX_LENGTH = 500
@@ -413,7 +405,7 @@ export type CollectDynamicItemsOptions = {
   onPartial?: (update: DynamicItemsPartialUpdate) => void
   /** Abort in-flight work when the query changes. */
   signal?: AbortSignal
-  /** Collect host dynamic items (apps / workflow). Default true. */
+  /** Collect host dynamic items (apps). Default true. */
   includeHost?: boolean
   /** Collect plugin dynamicItems providers. Default true. */
   includePlugins?: boolean
@@ -615,72 +607,13 @@ export function collectBaseCandidates(): LauncherItem[] {
   return [...getHostLauncherItems(), ...collectStaticPluginItems()]
 }
 
-/** A suggestion is only a shortcut into explicit naming, never an automatic save. */
-export function getNearbySaveRunItem(run: LastSaveableRunState | null): LauncherItem | null {
-  if (!run || run.status !== 'ready' || !freshLastSaveableRun(run) ||
-    (run.outputIntent !== 'copy' && run.outputIntent !== 'return-to-launcher')) return null
-  const snapshot = structuredClone(run)
-  const artifact = { ...snapshot, baseActionKey: snapshot.actionKey }
-  const resolveAction = () => {
-    const candidates = collectBaseCandidates().filter((item) => item.systemKey === snapshot.actionKey)
-    if (candidates.length !== 1) return null
-    const action = candidates[0]
-    if (savedActionDisabledReason(artifact, action) ||
-      filterAvailableLauncherItems([action], 'global-launcher').length !== 1) return null
-    return action
-  }
-  const action = resolveAction()
-  if (!action) return null
-  // The existing artifact store also tells us whether these settings were saved.
-  const paramsMatch = (params: typeof snapshot.savedParams) => {
-    const keys = Object.keys(snapshot.savedParams)
-    return keys.length === Object.keys(params).length &&
-      keys.every((key) => JSON.stringify(params[key]) === JSON.stringify(snapshot.savedParams[key]))
-  }
-  // Only a real configuration change warrants updating the originating artifact.
-  // Compare against its execution snapshot, not a potentially edited current row.
-  const sourceConfigurationChanged = (() => {
-    if (!snapshot.sourceSavedAction) return false
-    try {
-      const source = JSON.parse(snapshot.sourceSavedAction.snapshot)
-      return source?.id === snapshot.sourceSavedAction.id && source.baseActionKey === snapshot.actionKey &&
-        source.savedParams && typeof source.savedParams === 'object' && !Array.isArray(source.savedParams) &&
-        (source.outputIntent !== snapshot.outputIntent || !paramsMatch(source.savedParams))
-    } catch { return false }
-  })()
-  if (!sourceConfigurationChanged && listSavedActions().some((saved) => saved.baseActionKey === snapshot.actionKey &&
-    saved.contractFingerprint === snapshot.contractFingerprint &&
-    saved.actionPolicy.effect === snapshot.actionPolicy.effect &&
-    saved.actionPolicy.learnable === snapshot.actionPolicy.learnable &&
-    saved.inputBinding === snapshot.inputBinding && saved.outputIntent === snapshot.outputIntent &&
-    paramsMatch(saved.savedParams))) return null
-  const title = (locale: Locale) => translate(locale, 'palette', 'savedActionSaveSettings', {
-    action: resolveDisplayTitle(action.display, locale),
-  })
-  return createSaveLastRunItem({
-    run: snapshot,
-    resolveBaseItems: () => filterAvailableLauncherItems(collectBaseCandidates(), 'global-launcher'),
-    display: { title: title('en'), titleI18n: { zh: title('zh') }, icon: 'BookmarkPlus' },
-    validate: () => {
-      const current = resolveAction()
-      return Boolean(freshLastSaveableRun(snapshot) && current &&
-        current.source === action.source && current.executionMode === action.executionMode)
-    },
-  })
-}
-
 /**
  * All static candidates for a surface (host + plugin static), surface-filtered.
  * Dynamic items are collected separately (async) and merged by the controller.
  */
 export function collectStaticCandidates(surfaceId: LauncherSurfaceId): LauncherItem[] {
-  const baseItems = collectBaseCandidates()
-  const api = createPluginLauncherApi()
-  const all = [...baseItems, ...getSavedActionLauncherItems(baseItems, {
-    get selection() { return Boolean(api.getSelectionText()) },
-    get activeText() { return Boolean(api.getActiveText()) },
-  }, collectBaseCandidates)]
-  return all.filter((item) => appearsOnSurface(item, surfaceId))
+  return collectBaseCandidates().filter((item) => appearsOnSurface(item, surfaceId))
+
 }
 
 export function filterDynamicForSurface(

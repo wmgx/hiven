@@ -536,9 +536,8 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
     merged.settings = { ...current.settings, ...persistedState.settings }
     // Retired experiment configuration is ignored without touching stored learning records.
     delete (merged.settings as unknown as Record<string, unknown>).automaticLearningEnabled
-    // Retired "persist params" preference and its saved values are dropped on load.
+    // Retired "persist params" preference is ignored on load.
     delete (merged.settings as unknown as Record<string, unknown>).persistParams
-    delete (merged as unknown as Record<string, unknown>).savedActionParams
     merged.settings.globalPinnedLauncherShortcut = mergeShortcutRuntimeStatus(
       merged.settings.globalPinnedLauncherShortcut ?? current.settings.globalPinnedLauncherShortcut,
       current.settings.globalPinnedLauncherShortcut,
@@ -557,9 +556,7 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
     const persistedLauncherUsage = persistedState.launcherUsageBySurface
     const hasPersistedLauncherUsage =
       persistedLauncherUsage != null &&
-      (Object.keys(persistedLauncherUsage['command-palette'] ?? {}).length > 0 ||
-        Object.keys(persistedLauncherUsage['editor-command-bar'] ?? {}).length > 0 ||
-        Object.keys(persistedLauncherUsage['global-launcher'] ?? {}).length > 0 ||
+      (Object.keys(persistedLauncherUsage['global-launcher'] ?? {}).length > 0 ||
         Object.keys(persistedLauncherUsage['quick-editor-command'] ?? {}).length > 0)
     if (hasPersistedLauncherUsage) {
       merged.launcherUsageBySurface = {
@@ -567,20 +564,7 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
         ...persistedLauncherUsage,
       }
     } else {
-      let legacySource: LegacyActionUsageBySource | undefined = persistedState.actionUsageBySource
-      if (!legacySource && (persistedState.recentActionNames || persistedState.actionUsageCounts)) {
-        legacySource = {
-          'command-palette': {
-            recentActionNames: persistedState.recentActionNames ?? [],
-            actionUsageCounts: persistedState.actionUsageCounts ?? {},
-          },
-          'editor-command-bar': {
-            recentActionNames: persistedState.recentActionNames ?? [],
-            actionUsageCounts: persistedState.actionUsageCounts ?? {},
-          },
-          'global-launcher': { recentActionNames: [], actionUsageCounts: {} },
-        }
-      }
+      const legacySource: LegacyActionUsageBySource | undefined = persistedState.actionUsageBySource
       if (legacySource) {
         // Identity map command ids; launcher items expose the same id via legacyUsageKeys.
         merged.launcherUsageBySurface = migrateLegacyUsage(

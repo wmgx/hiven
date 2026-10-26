@@ -31,7 +31,6 @@ function load(path, modules = {}) {
 const translate = (_locale, _namespace, key) => key
 const types = load('src/workspace/launcher/types.ts')
 const output = load('src/workspace/launcher/output.ts', { './types': types, '../../i18n': { translate } })
-const lastRun = load('src/workspace/savedActions/lastSaveableRun.ts')
 const content = load('src/kits/content/detectContent.ts')
 const snapshot = load('src/launcher/clipboard/clipboardSnapshot.ts', { '../../kits/content/index': content })
 const attachPolicy = load('src/launcher/clipboard/attachPolicy.ts', {
@@ -49,9 +48,6 @@ const { LauncherController } = load('src/workspace/launcher/controller.ts', {
   '../usageJournal': { appendUsageJournal: forbidden },
   '../telemetry': { TelemetryEvents: {}, itemTelemetryProps: () => ({}), trackBehavior: noop, trackLatencyFrom: noop, telemetryNow: () => 0 },
   '../contentBoundary': load('src/workspace/contentBoundary.ts'),
-  '../experience/saveableParams': { extractSaveableParams: forbidden },
-  '../savedActions/lastSaveableRun': lastRun,
-  '../savedActions/store': { touchSavedAction: forbidden },
 })
 
 let query = 'format', browsing = true, notifications = 0, executions = 0
@@ -81,8 +77,6 @@ function editItem() {
     },
   }
 }
-const savedRun = { status: 'ready', actionKey: 'synthetic-prior-copy', completedAt: Date.now() }
-lastRun.setLastSaveableRun(savedRun)
 
 try {
   // Explicit initial input prevents the attached input shortcut from auto-executing.
@@ -118,7 +112,6 @@ try {
   assert.equal(current.previousBlock, null)
   assert.equal(pending.peekPendingObjectBlock().payloadText, draft)
   assert.equal(query, 'format'); assert.equal(browsing, true); assert.equal(notifications, 0)
-  assert.equal((await lastRun.getLastSaveableRun()).actionKey, savedRun.actionKey)
 
   // Stale buttons cannot submit a newer draft, including after cancel, close or replacement.
   for (const leave of ['back', 'exitCommand', 'reset']) {
@@ -162,7 +155,7 @@ try {
   assert.equal(current.block.secretMasked, true, 'edited material is classified afresh')
   assert.equal(current.block.preview, undefined)
   assert.equal(inputReads, 0)
-  assert.equal((await lastRun.getLastSaveableRun()).actionKey, savedRun.actionKey)
+
   console.log('Launcher material edit passed: explicit input, no implicit reads, cancel/confirm, stale submits, classification and delivery isolation')
 } finally {
   controller.reset()

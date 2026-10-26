@@ -29,7 +29,6 @@ function deferred() {
 try {
   const { LauncherController } = await vite.ssrLoadModule('/src/workspace/launcher/controller.ts')
   const output = await vite.ssrLoadModule('/src/workspace/launcher/output.ts')
-  const { getLastSaveableRun, setLastSaveableRun } = await vite.ssrLoadModule('/src/workspace/savedActions/lastSaveableRun.ts')
   const { createGlobalLauncherPluginApi } = await vite.ssrLoadModule('/src/launcher/clipboard/globalLauncherApi.ts')
   const { consumePendingObjectBlock } = await vite.ssrLoadModule('/src/launcher/clipboard/pendingObjectBlock.ts')
   const hostReturn = createGlobalLauncherPluginApi({}).returnToLauncher
@@ -104,7 +103,7 @@ try {
       behavior: kind === 'suggestion'
         ? { type: 'collect-input', input: { allowEmptyInput: false } }
         : { type: 'perform' },
-      actionPolicy: { effect: 'pure', learnable: true }, contractFingerprint: 'v1:delivery-regression',
+      actionPolicy: { effect: 'pure' }, contractFingerprint: 'v1:delivery-regression',
       execute: async () => { h.executions++; return makeOutput(h, options) },
     }
     if (kind === 'preview' || options.explicit) item.inputPolicy = { mode: 'auto' }
@@ -127,16 +126,6 @@ try {
     const started = deferred()
     h.effects[method] = () => { started.resolve(); return completion.promise }
     return { ...completion, started: started.promise }
-  }
-
-  function seedLastRun(label) {
-    const run = {
-      status: 'ready', runId: `run-${label}-${++serial}`, actionKey: 'host:test:newer-success',
-      inputBinding: 'prompt', outputIntent: 'copy', savedParams: {},
-      contractFingerprint: 'v1:newer', actionPolicy: { effect: 'pure', learnable: true }, completedAt: Date.now(),
-    }
-    setLastSaveableRun(run)
-    return structuredClone(run)
   }
 
   for (const kind of ['suggestion', 'preview']) {
@@ -163,7 +152,6 @@ try {
       assert.equal(h.calls.copy.length, 2)
       assert.equal(h.executions, beforeExecutions)
       assert.equal(h.closed, 1)
-      assert.equal((await getLastSaveableRun()).actionKey, item.systemKey)
     })
   }
 
@@ -220,9 +208,6 @@ try {
       assert.equal(h.rootReturns, 1)
       assert.equal(h.closed, 0)
       if (kind === 'result') {
-        const lastRun = await getLastSaveableRun()
-        assert.equal(lastRun.actionKey, item.systemKey)
-        assert.equal(lastRun.outputIntent, 'return-to-launcher')
       }
     })
 
@@ -232,7 +217,7 @@ try {
       const frame = h.top()
       const choices = h.choices()
       const beforeExecutions = h.executions
-      const priorRun = seedLastRun('before-failure')
+
       h.effects.copy = () => { throw new Error('Clipboard temporarily denied') }
       await h.controller.activateChoice(choices[0])
       assert.equal(h.top(), frame)
@@ -240,7 +225,7 @@ try {
       assert.equal(h.controller.getState().error, 'Clipboard temporarily denied')
       assert.equal(h.controller.getState().busy, false)
       assert.equal(h.closed, 0)
-      assert.deepEqual(await getLastSaveableRun(), priorRun)
+
       h.effects.copy = undefined
       await h.controller.activateChoice(choices[0])
       assert.equal(h.calls.copy.length, 2)
@@ -311,7 +296,7 @@ try {
         return originalPrimary()
       }
       item.execute = async () => { h.executions++; return result }
-      const priorRun = seedLastRun('before-auto-failure')
+
       await h.controller.selectItem(item, { objectBlockText: 'source input' })
       assert.equal(h.top().kind, 'result')
       assert.equal(h.top().retryOnly, true)
@@ -320,7 +305,7 @@ try {
       assert.equal(h.top().output.choices[0], choice)
       assert.equal(h.controller.getState().error, 'Automatic output failed')
       assert.equal(h.controller.getState().busy, false)
-      assert.deepEqual(await getLastSaveableRun(), priorRun)
+
       let fallbackCalls = 0
       for (const action of choice.secondaryActions) await h.controller.activateSecondary(choice, action.id)
       await h.controller.activatePreviewPaste(choice, () => { fallbackCalls++ })
@@ -337,7 +322,6 @@ try {
       assert.equal(attempts, 2)
       assert.equal(h.executions, 1)
       assert.equal(h.closed, 1)
-      assert.equal((await getLastSaveableRun()).actionKey, item.systemKey)
     })
   }
 
@@ -390,7 +374,7 @@ try {
             else h.controller[invalidation]()
             const newFrame = h.top()
             const newState = h.controller.getState()
-            const newerRun = seedLastRun('newer-completion')
+
             if (outcome === 'reject') gate.reject(new Error('Obsolete output failure'))
             else gate.resolve()
             await pending
@@ -399,7 +383,7 @@ try {
             assert.equal(h.controller.getState().busy, newState.busy)
             assert.equal(h.closed, 0)
             assert.equal(h.rootReturns, 0)
-            assert.deepEqual(await getLastSaveableRun(), newerRun)
+
             if (invalidation === 'edit') assert.equal(h.top().inputText, 'a newer draft')
             const counts = Object.fromEntries(Object.entries(h.calls).map(([key, calls]) => [key, calls.length]))
             await h.controller.activateChoice(choice)
@@ -426,7 +410,7 @@ try {
         else if (invalidation === 'select') await h.controller.selectItem(makeItem(h, 'preview'))
         else h.controller[invalidation]()
         const frame = h.top()
-        const newerRun = seedLastRun('after-auto-navigation')
+
         if (outcome === 'reject') gate.reject(new Error('Old automatic delivery failed'))
         else gate.resolve()
         await pending
@@ -435,7 +419,6 @@ try {
         assert.equal(h.controller.getState().error, null)
         assert.equal(h.controller.getState().busy, false)
         assert.equal(h.closed, 0)
-        assert.deepEqual(await getLastSaveableRun(), newerRun)
       })
     }
   }
@@ -459,14 +442,14 @@ try {
         const error = h.controller.getState().error
         assert.equal(h.controller.getState().busy, newerState === 'busy')
         if (newerState === 'error') assert.ok(error)
-        const newerRun = seedLastRun('new-flow')
+
         if (outcome === 'reject') gate.reject(new Error('Old error must not win'))
         else gate.resolve()
         await oldDelivery
         assert.equal(h.top(), frame)
         assert.equal(h.controller.getState().busy, newerState === 'busy')
         assert.equal(h.controller.getState().error, error)
-        assert.deepEqual(await getLastSaveableRun(), newerRun)
+
         assert.equal(h.closed, 0)
         if (newerState === 'busy') {
           execution.resolve(output.errorResult('Current execution ended'))

@@ -4,7 +4,7 @@ import { EDITOR_WINDOW_LABEL } from '../../workspace/windowManager/windowLabels'
 import { launcherPerfNow, logLauncherPerfDuration } from '../../workspace/launcher/perf'
 import { readNativeClipboardText } from '../../workspace/nativeClipboard'
 
-export type WorkContextInvocationSource = 'global-hotkey' | 'editor-command-bar' | 'plugin-surface'
+export type WorkContextInvocationSource = 'global-hotkey' | 'plugin-surface'
 
 
 export type EditorContextSnapshot = {

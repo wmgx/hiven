@@ -22,7 +22,7 @@ import { useGlobalLauncherSurfaceRegistry } from '../../components/launcher/Glob
 import { useAutoCloseStandaloneLauncherOnBackgroundIdle, useCloseStandaloneLauncherOnBlur, useFocusGlobalLauncherSurfaceShell, useGlobalLauncherNativeDrag, useStandaloneLauncherResize } from '../../components/launcher/GlobalLauncherWindowLifecycle'
 import { isStandaloneLauncherWindow, useGlobalLauncherCollectInputPreview, useGlobalLauncherFocusSession, useGlobalLauncherHostEscape, useGlobalLauncherImeComposition } from '../../components/launcher/GlobalLauncherHostLifecycle'
 import { closeGlobalLauncherWindow } from '../../components/launcher/GlobalLauncherClose'
-import { getPluginSurfaceDefinition, isWorkflowObjectLauncherItem } from '../../components/launcher/GlobalLauncherSelection'
+import { getPluginSurfaceDefinition } from '../../components/launcher/GlobalLauncherSelection'
 import { useGlobalLauncherSurfaceFrame } from '../../components/launcher/GlobalLauncherSurfaceFrame'
 import { readLauncherClipboard } from '../clipboard/readLauncherClipboard'
 import { peekTrackedClipboardText } from '../clipboard/clipboardTextCache'
@@ -80,7 +80,6 @@ const CONTENT_UNRELATED_HOST_KEYS: ReadonlySet<string> = new Set([
   'host:view:ai-settings',
   'host:view:devtools',
   'host:view:quick-editor',
-  'host:saved-action:delete',
   'host:app-launcher:refresh',
 ])
 
@@ -235,7 +234,6 @@ export function GlobalLauncherHost() {
     controllerState,
     rankedItems: rankedLauncherItems,
     availableItems: availableLauncherItems,
-    nearbySaveItem: nearbySaveDomainItem,
     syncSelection,
     reset: resetSession,
   } = useLauncherSession({
@@ -262,9 +260,6 @@ export function GlobalLauncherHost() {
       textExportMountedRef.current = false
     }
   }, [])
-  const nearbySaveItem = useMemo(() => nearbySaveDomainItem ? buildGlobalLauncherItems({
-    rankedLauncherItems: [nearbySaveDomainItem], query: '', locale,
-  })[0] : undefined, [nearbySaveDomainItem, locale])
   liveQueryRef.current = query
   // A failed delivery belongs to the visible material and flow, never the next
   // query or window session. Keep it readable in the existing error region.
@@ -1355,11 +1350,9 @@ export function GlobalLauncherHost() {
         toggleResultChoice={toggleResultChoice}
         closeLauncher={closeLauncher}
         visibleFiltered={visibleFiltered}
-        nearbySaveItem={nearbySaveItem}
         selectedItem={selectedItem}
         selectedIndex={clampedSelectedIndex}
         setSelectedIndex={setSelectedIndex}
-        isWorkflowObjectLauncherItem={isWorkflowObjectLauncherItem}
         selectItem={selectItemWithObjectActions as never}
         hostSurfaceTarget={hostSurfaceTarget}
         clearLauncherHostSurface={clearLauncherHostSurface}

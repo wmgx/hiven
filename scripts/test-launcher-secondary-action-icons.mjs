@@ -49,7 +49,7 @@ const output = loadModule('src/workspace/launcher/output.ts', {
   ],
   globals: {
     translate,
-    normalizeLauncherSurfaceId: (surfaceId) => surfaceId === 'command-palette' ? 'editor-command-bar' : surfaceId,
+    normalizeLauncherSurfaceId: (surfaceId) => surfaceId,
   },
 })
 

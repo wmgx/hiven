@@ -14,7 +14,7 @@ export default definePlugin({
       aliases: ['summary', 'summarize', 'ai writing', '摘要', '总结', 'AI 写作'],
       component: SummarySurface,
       entry: {
-        launcher: { surfaces: ['global-launcher', 'editor-command-bar', 'quick-editor-command'] },
+        launcher: { surfaces: ['global-launcher', 'quick-editor-command'] },
         shortcutBindable: true,
       },
       shell: { defaultWidth: 980, defaultHeight: 700, minWidth: 740, minHeight: 540, closeOnBlur: false, resizable: true },

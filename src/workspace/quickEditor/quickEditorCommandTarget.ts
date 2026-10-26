@@ -1,6 +1,5 @@
 import type { editor as MonacoEditor, IRange } from 'monaco-editor'
 import type { LauncherItem, PluginLauncherApi } from '../launcher/types'
-import { filterEditorCommandBarItems } from '../launcher/types'
 import { useQuickEditorStore } from './quickEditorStore'
 
 export type QuickEditorCommandTargetMode = 'full-text' | 'selection' | 'multiple-selections' | 'unavailable'
@@ -120,7 +119,12 @@ export function filterQuickEditorCommandItems(
   items: LauncherItem[],
   target: QuickEditorCommandTarget,
 ): LauncherItem[] {
-  const editorItems = filterEditorCommandBarItems(items)
+  const editorItems = items.filter((item) => {
+    if (item.systemKey.startsWith('plugin-settings:')) return false
+    if (item.kind !== 'host') return true
+    if (item.surfaces?.length && !item.surfaces.includes('quick-editor-command')) return false
+    return item.systemKey.startsWith('host:pane:') || item.systemKey.startsWith('host:view:')
+  })
   if (target.mode === 'unavailable') return []
   return target.mode === 'full-text'
     ? editorItems

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Important extraction logic and the actual registry → controller → Saved Action route. */
+/** Important extraction logic and the actual registry → controller route. */
 import assert from 'node:assert/strict'
 import { createServer } from 'vite'
 
@@ -63,12 +63,10 @@ try {
   assert.deepEqual(extractTextList(`https://${'['.repeat(50_000)} ${'text '.repeat(30_000)} https://example.com/end`, 'urls'), ['https://example.com/end'], 'large malformed URL token does not prevent later valid links')
 
   const { registerBundledPluginPackages } = await vite.ssrLoadModule('/src/workspace/bundledPluginLoader.ts')
-  const { collectStaticCandidates, getNearbySaveRunItem } = await vite.ssrLoadModule('/src/workspace/launcher/registry.ts')
+  const { collectStaticCandidates } = await vite.ssrLoadModule('/src/workspace/launcher/registry.ts')
   const { LauncherController } = await vite.ssrLoadModule('/src/workspace/launcher/controller.ts')
   const { getHostOutputIntent } = await vite.ssrLoadModule('/src/workspace/launcher/output.ts')
   const { makePluginT } = await vite.ssrLoadModule('/src/i18n/pluginI18nRegistry.ts')
-  const { getLastSaveableRun } = await vite.ssrLoadModule('/src/workspace/savedActions/lastSaveableRun.ts')
-  const store = await vite.ssrLoadModule('/src/workspace/savedActions/store.ts')
   const { createGlobalLauncherPluginApi } = await vite.ssrLoadModule('/src/launcher/clipboard/globalLauncherApi.ts')
   const { consumePendingObjectBlock } = await vite.ssrLoadModule('/src/launcher/clipboard/pendingObjectBlock.ts')
   registerBundledPluginPackages()
@@ -77,19 +75,19 @@ try {
   assert.ok(item, 'actual bundled package exposes the new global tool')
   assert.equal(item.executionMode, 'explicit-text-preview')
   assert.equal(item.requireParamSelection, true)
-  assert.deepEqual(item.actionPolicy, { effect: 'pure', learnable: true })
+  assert.deepEqual(item.actionPolicy, { effect: 'pure' })
   assert.equal(item.display.title, 'Extract Links / Emails')
   assert.equal(item.display.titleI18n.zh, '提取链接 / 邮箱')
   assert.deepEqual(item.defaultParams, { kind: 'urls', dedup: false })
-  assert.deepEqual(item.params.map(({ key, type, default: value, saveable }) => [key, type, value, saveable]), [
-    ['kind', 'single-select', 'urls', true], ['dedup', 'boolean', false, true],
+  assert.deepEqual(item.params.map(({ key, type, default: value }) => [key, type, value]), [
+    ['kind', 'single-select', 'urls'], ['dedup', 'boolean', false],
   ])
   for (const param of item.params) {
     assert.ok(param.label && param.labelI18n.zh)
     assert.ok(!param.label.startsWith('param.'))
     for (const option of param.options ?? []) assert.ok(option.label && option.labelI18n.zh)
   }
-  for (const surface of ['editor-command-bar', 'quick-editor-command']) {
+  for (const surface of ['quick-editor-command']) {
     assert.ok(collectStaticCandidates(surface).some((candidate) => candidate.systemKey === key))
   }
   const deliveries = []
@@ -129,7 +127,7 @@ try {
     ['emails', false, 'A@Example.com A@example.com other@example.org', 'A@Example.com\nA@example.com\nother@example.org', 'return-to-launcher'],
   ]) {
     controller.reset()
-    const previousRun = structuredClone(await getLastSaveableRun())
+
     const beforeDelivery = deliveries.length
     await controller.selectItem(item, { customizeParams: true })
     await chooseParams({ kind, dedup })
@@ -146,41 +144,10 @@ try {
     assert.equal(getHostOutputIntent(choice), 'copy')
     assert.deepEqual(choice.secondaryActions.map(getHostOutputIntent), ['return-to-launcher'])
     assert.equal(deliveries.length, beforeDelivery)
-    assert.deepEqual(await getLastSaveableRun(), previousRun, 'preview never creates completed-run metadata')
+
     if (destination === 'copy') await controller.activateChoice(choice)
     else await controller.activateSecondary(choice, 'return-to-launcher')
     assert.deepEqual(deliveries.at(-1), [destination, expected])
-    const completed = structuredClone(await getLastSaveableRun())
-    assert.equal(completed.actionKey, key)
-    assert.equal(completed.inputBinding, 'prompt')
-    assert.equal(completed.outputIntent, destination)
-    assert.deepEqual(completed.savedParams, { kind, dedup })
-    assert.equal(store.listSavedActions().length, 0)
-    controller.reset()
-    await controller.selectItem(getNearbySaveRunItem(completed))
-    assert.equal(top().kind, 'collect-input')
-    controller.setInputText(`Extract ${kind}`)
-    await controller.submitInput()
-    const artifact = store.listSavedActions()[0]
-    assert.deepEqual(artifact.savedParams, { kind, dedup })
-    assert.equal(artifact.outputIntent, destination)
-    assert.ok(!Object.hasOwn(artifact, 'inputText') && !Object.hasOwn(artifact, 'outputText'))
-    assert.ok(!JSON.stringify(artifact).includes('example.org') && !JSON.stringify(artifact).includes('Path?q='), 'material is not saved')
-    const replay = collectStaticCandidates('global-launcher').find((candidate) => candidate.savedActionArtifactId === artifact.id)
-    controller.reset()
-    await controller.selectItem(replay)
-    assert.equal(top().kind, 'collect-input', 'saved parameters skip prompts but require fresh material')
-    controller.setInputText(source.replaceAll('Example.com', 'New.example.org').replaceAll('example.com', 'new.example.org'))
-    await controller.submitInput()
-    assert.equal(top().kind, 'result')
-    const replayChoice = top().output.choices[0]
-    assert.equal(replayChoice.preview, expected.replaceAll('Example.com', 'New.example.org').replaceAll('example.com', 'new.example.org'))
-    assert.equal(getHostOutputIntent(replayChoice), destination)
-    assert.equal(deliveries.length, beforeDelivery + 1, 'Saved Action replay still waits for explicit delivery')
-    await controller.activateChoice(replayChoice)
-    assert.deepEqual(deliveries.at(-1), [destination, replayChoice.preview])
-    assert.ok((await getLastSaveableRun()).sourceSavedAction)
-    store.deleteSavedAction(artifact.id)
   }
   controller.reset()
   await controller.selectItem(item, { objectBlockText: 'Keep this source: https://example.com/preserved', customizeParams: true })
@@ -188,7 +155,7 @@ try {
   assert.equal(top().kind, 'result', 'explicit attached material uses the same preview route')
   assert.equal(top().output.choices[0].preview, 'https://example.com/preserved')
   const beforeErrors = deliveries.length
-  const previousRun = structuredClone(await getLastSaveableRun())
+
   controller.reset()
   await controller.selectItem(item, { customizeParams: true })
   await chooseParams({ kind: 'emails', dedup: true })
@@ -206,9 +173,9 @@ try {
     }
   }
   assert.equal(deliveries.length, beforeErrors, 'no-match result never copies, returns, or overwrites source')
-  assert.deepEqual(await getLastSaveableRun(), previousRun)
+
   assert.equal(hiddenReads, 0)
-  console.log('text-list-extraction: URL/email boundaries, punctuation, exact dedup, malformed input, localized errors, actual registry/controller, Copy/Return and Saved Action replay passed')
+  console.log('text-list-extraction: URL/email boundaries, punctuation, exact dedup, malformed input, localized errors, actual registry/controller, Copy/Return passed')
 } finally {
   console.info = originalInfo
   await vite.close()

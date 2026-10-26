@@ -38,7 +38,6 @@ try {
   const { rankLauncherItems } = await vite.ssrLoadModule('/src/workspace/launcher/ranking.ts')
   const { LauncherController } = await vite.ssrLoadModule('/src/workspace/launcher/controller.ts')
   const { normalizeContribution } = await vite.ssrLoadModule('/src/workspace/launcher/normalizeContribution.ts')
-  const { projectSavedAction } = await vite.ssrLoadModule('/src/workspace/savedActions/provider.ts')
   const messages = Object.fromEntries(['en', 'zh'].map(locale => [locale, JSON.parse(readFileSync(`src/plugins/web-open/locales/${locale}.json`, 'utf8'))]))
   registerPluginMessages('web-open', messages)
   const localized = localizeContributions('web-open', definition)
@@ -259,16 +258,6 @@ try {
     save({ ...defaults, enabled: false })
     assert.equal((await direct.execute(h.context())).ok, false)
     assert.deepEqual(h.opened, [])
-  })
-  await check('Saved Action references keep ordinary keys and report missing deleted rules', () => {
-    save(defaults)
-    const base = byId('google')
-    const artifact = { id: 'synthetic', name: 'Synthetic reference', aliases: [], baseActionKey: base.systemKey, inputBinding: 'prompt', savedParams: {}, actionPolicy: { effect: 'external', learnable: false }, outputIntent: 'copy' }
-    save(deleted)
-    const projection = projectSavedAction(artifact, byId('google') ?? null)
-    assert.equal(projection.disabledReason.code, 'missing-action')
-    save(renamed)
-    assert.equal(byId('google').systemKey, artifact.baseActionKey)
   })
   console.log(`Web rule consistency passed: ${passed} behavior cases`)
 } finally {

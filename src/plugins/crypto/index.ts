@@ -39,7 +39,7 @@ export const hashPlugin = definePlugin({
         return ctx.output.error(ctx.t('error.hash', { message: e instanceof Error ? e.message : String(e) }))
       }
     },
-    surfaces: { launcher: { surfaces: ['global-launcher', 'editor-command-bar', 'quick-editor-command'] as Array<'global-launcher' | 'editor-command-bar' | 'quick-editor-command'> }, panel: true },
+    surfaces: { launcher: { surfaces: ['global-launcher', 'quick-editor-command'] as Array<'global-launcher' | 'quick-editor-command'> }, panel: true },
   })),
 })
 

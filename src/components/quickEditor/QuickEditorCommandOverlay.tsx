@@ -237,7 +237,6 @@ function OpenQuickEditorCommandOverlay() {
         visibleFilteredLength: visibleFiltered.length,
         setSelectedIndex,
         selectedItem,
-        isWorkflowObjectLauncherItem: () => false,
         selectItem: (item) => selectMixedItem(item),
       })
     }
@@ -305,7 +304,6 @@ function OpenQuickEditorCommandOverlay() {
       visibleFilteredLength: visibleFiltered.length,
       setSelectedIndex,
       selectedItem,
-      isWorkflowObjectLauncherItem: () => false,
       selectItem: (item) => selectMixedItem(item),
     })
   }
@@ -351,7 +349,6 @@ function OpenQuickEditorCommandOverlay() {
         resultSelectedIndex={resultSelectedIndex}
         selectedResultChoiceIds={selectedResultChoiceIds}
         showCustomizeHint={false}
-        showWorkflowObjectHint={false}
         customizeShortcutLabel="⌘↵"
         onSettingsClose={closeCommandAndRestoreFocus}
         onSurfaceBack={closeCommandAndRestoreFocus}

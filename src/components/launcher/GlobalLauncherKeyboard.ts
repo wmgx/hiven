@@ -25,7 +25,6 @@ export function handleGlobalLauncherKeyDown({
   setSelectedIndex,
   selectedItem,
   visibleItems,
-  isWorkflowObjectLauncherItem,
   selectItem,
   handleClipboardBackspace,
   hasClipboardHint,
@@ -62,7 +61,6 @@ export function handleGlobalLauncherKeyDown({
   selectedItem?: LauncherMixedItem
   /** Visible list rows for ⌘1–8 quick-run (same order as rendered). */
   visibleItems?: LauncherMixedItem[]
-  isWorkflowObjectLauncherItem: (item?: LauncherMixedItem) => boolean
   selectItem: (item: LauncherMixedItem | undefined, customizeParams?: boolean) => void
   handleClipboardBackspace?: (queryEmpty: boolean) => boolean
   hasClipboardHint?: boolean
@@ -231,11 +229,6 @@ export function handleGlobalLauncherKeyDown({
     // When a recent-clipboard hint is shown, index -1 focuses the hint row above the list.
     const minIndex = hasClipboardHint ? -1 : 0
     setSelectedIndex((index) => Math.max(index - 1, minIndex))
-    return
-  }
-  if (event.key === 'Tab' && isWorkflowObjectLauncherItem(selectedItem)) {
-    event.preventDefault()
-    selectItem(selectedItem)
     return
   }
   if (event.key === 'Backspace' && handleClipboardBackspace) {

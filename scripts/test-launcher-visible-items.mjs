@@ -152,8 +152,6 @@ check('classification uses identity and metadata, including management before pl
     'host:view:settings', 'host:view:plugins', 'host:view:devtools',
     'host:system:restart', 'host:system:shutdown', 'host:system:lock-screen',
     'host:experience:learning-inbox', 'host:experience:pause',
-    'host:saved-action:save-last', 'host:saved-action:delete',
-    'host:saved-action:rename:one', 'host:saved-action:delete:one',
   ]) assert.equal(classify(key), 'system', key)
   assert.equal(classify('plugin-settings:installed:calculator', { pluginId: 'calculator' }), 'system')
   assert.equal(classify('host:app-launcher:refresh', {

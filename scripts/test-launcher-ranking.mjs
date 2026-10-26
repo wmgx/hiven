@@ -30,7 +30,7 @@ function loadTs(path, importStubs) {
 const searchRanking = loadTs('src/workspace/searchRanking.ts', [])
 // usage.ts
 const usage = loadTs('src/workspace/launcher/usage.ts', [
-  [/import\s*\{[^}]*\}\s*from\s*'\.\/types'\s*;?\s*\n?/, "const LAUNCHER_SURFACE_IDS=['command-palette','editor-command-bar','global-launcher'];\nconst normalizeLauncherSurfaceId=(surfaceId)=>surfaceId==='command-palette'?'editor-command-bar':surfaceId;\n"],
+  [/import\s*\{[^}]*\}\s*from\s*'\.\/types'\s*;?\s*\n?/, "const LAUNCHER_SURFACE_IDS=['quick-editor-command','global-launcher'];\nconst normalizeLauncherSurfaceId=(surfaceId)=>surfaceId;\n"],
 ])
 // display.ts
 const display = loadTs('src/workspace/launcher/display.ts', [
@@ -124,9 +124,9 @@ const now = 1_000_000_000_000
 const reverse = item('plugin:lt:launcher:reverse', 'Reverse')
 const base64 = item('plugin:b64:launcher:base64', 'Base64')
 let u = usage.emptyUsageBySurface()
-// base64 used a lot in command-palette; reverse never used
-for (let i = 0; i < 50; i++) u = usage.recordSelection(u, 'command-palette', base64.systemKey, now)
-const ctxQ = { query: 'reverse', locale: 'en', surfaceId: 'command-palette', usage: u, now }
+// base64 used a lot in quick-editor-command; reverse never used
+for (let i = 0; i < 50; i++) u = usage.recordSelection(u, 'quick-editor-command', base64.systemKey, now)
+const ctxQ = { query: 'reverse', locale: 'en', surfaceId: 'quick-editor-command', usage: u, now }
 const ranked = ranking.rankLauncherItems(ctxQ, [base64, reverse])
 assert.equal(ranked[0].systemKey, reverse.systemKey, 'exact match beats heavy-usage non-match')
 
@@ -135,22 +135,22 @@ const a = item('plugin:p:launcher:a', 'Alpha')
 const b = item('plugin:p:launcher:b', 'Beta')
 let u2 = usage.emptyUsageBySurface()
 for (let i = 0; i < 10; i++) u2 = usage.recordSelection(u2, 'global-launcher', b.systemKey, now)
-// query empty in command-palette: neither has cp usage → cold plugins dropped on empty open
-const cpEmpty = ranking.rankLauncherItems({ query: '', locale: 'en', surfaceId: 'command-palette', usage: u2, now }, [a, b])
+// query empty in quick-editor-command: neither has cp usage → cold plugins dropped on empty open
+const cpEmpty = ranking.rankLauncherItems({ query: '', locale: 'en', surfaceId: 'quick-editor-command', usage: u2, now }, [a, b])
 assert.equal(cpEmpty.length, 0, 'empty-open drops cold unused plugins (no surface usage)')
 // query empty in global-launcher: b has usage → kept and first; a cold → dropped
 const glEmpty = ranking.rankLauncherItems({ query: '', locale: 'en', surfaceId: 'global-launcher', usage: u2, now }, [a, b])
 assert.equal(glEmpty.length, 1, 'only used plugin survives empty-open')
 assert.equal(glEmpty[0].systemKey, b.systemKey, 'global-launcher usage influences global-launcher order')
 // With a typed query both match titles and surface isolation still holds
-const cpTyped = ranking.rankLauncherItems({ query: 'alph', locale: 'en', surfaceId: 'command-palette', usage: u2, now }, [a, b])
-assert.equal(cpTyped[0]?.systemKey, a.systemKey, 'typed query: global-launcher usage does not reorder command-palette matches')
+const cpTyped = ranking.rankLauncherItems({ query: 'alph', locale: 'en', surfaceId: 'quick-editor-command', usage: u2, now }, [a, b])
+assert.equal(cpTyped[0]?.systemKey, a.systemKey, 'typed query: global-launcher usage does not reorder quick-editor-command matches')
 
 // --- 3. Equal match is stable by input order (no pin boost) ---
 const eqA = item('plugin:p:launcher:samea', 'Same')
 const eqB = item('plugin:p:launcher:sameb', 'Same')
 const rankedEq = ranking.rankLauncherItems(
-  { query: 'same', locale: 'en', surfaceId: 'command-palette', usage: usage.emptyUsageBySurface(), now },
+  { query: 'same', locale: 'en', surfaceId: 'quick-editor-command', usage: usage.emptyUsageBySurface(), now },
   [eqA, eqB],
 )
 assert.equal(rankedEq[0].systemKey, eqA.systemKey, 'on equal match, input order is preserved')
@@ -159,19 +159,19 @@ assert.equal(rankedEq[0].systemKey, eqA.systemKey, 'on equal match, input order 
 const pluginWithPriority = item('plugin:p:launcher:x', 'XX', { kind: 'plugin', staticPriority: 999 })
 const hostPlain = item('host:view:y', 'XX', { kind: 'host' })
 const rankedStatic = ranking.rankLauncherItems(
-  { query: '', locale: 'en', surfaceId: 'command-palette', usage: usage.emptyUsageBySurface(), now },
+  { query: '', locale: 'en', surfaceId: 'quick-editor-command', usage: usage.emptyUsageBySurface(), now },
   [pluginWithPriority, hostPlain],
 )
 // plugin static priority ignored → stable input order, pluginWithPriority stays first only by index, not by score
-const scorePlugin = ranking.scoreLauncherItem({ query: '', locale: 'en', surfaceId: 'command-palette', usage: usage.emptyUsageBySurface(), now }, pluginWithPriority)
-const scoreHost = ranking.scoreLauncherItem({ query: '', locale: 'en', surfaceId: 'command-palette', usage: usage.emptyUsageBySurface(), now }, hostPlain)
+const scorePlugin = ranking.scoreLauncherItem({ query: '', locale: 'en', surfaceId: 'quick-editor-command', usage: usage.emptyUsageBySurface(), now }, pluginWithPriority)
+const scoreHost = ranking.scoreLauncherItem({ query: '', locale: 'en', surfaceId: 'quick-editor-command', usage: usage.emptyUsageBySurface(), now }, hostPlain)
 assert.equal(scorePlugin, scoreHost, 'plugin staticPriority is ignored in scoring')
 
 // --- 5. legacyUsageKeys fallback feeds usage ---
 const migratedItem = item('plugin:p:launcher:new', 'NewName', { legacyUsageKeys: ['old.command.id'] })
 let uLegacy = usage.emptyUsageBySurface()
-for (let i = 0; i < 8; i++) uLegacy = usage.recordSelection(uLegacy, 'command-palette', 'old.command.id', now)
-const scoreLegacy = ranking.usageScore({ query: '', locale: 'en', surfaceId: 'command-palette', usage: uLegacy, now }, migratedItem)
+for (let i = 0; i < 8; i++) uLegacy = usage.recordSelection(uLegacy, 'quick-editor-command', 'old.command.id', now)
+const scoreLegacy = ranking.usageScore({ query: '', locale: 'en', surfaceId: 'quick-editor-command', usage: uLegacy, now }, migratedItem)
 assert.ok(scoreLegacy > 0, 'legacy usage key contributes usage score')
 
 // --- 6. Host app selections use the same usage score ---

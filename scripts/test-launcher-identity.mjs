@@ -11,12 +11,11 @@ import ts from 'typescript'
 
 const src = readFileSync('src/workspace/launcher/identity.ts', 'utf8')
 
-
 // ─── Behavioral checks (transpile + vm, project convention) ─────────────────
 // Stub the ./types import so the module is standalone.
 const srcStubbed = src.replace(
   /import\s*\{[^}]*\}\s*from\s*'\.\/types'\s*;?\s*\n?/,
-  "const isLauncherSurfaceId = (v) => v === 'command-palette' || v === 'global-launcher';\n",
+  "const isLauncherSurfaceId = (v) => v === 'quick-editor-command' || v === 'global-launcher';\n",
 )
 const transpiled = ts.transpileModule(srcStubbed, {
   compilerOptions: {
@@ -58,11 +57,11 @@ const badErrors = mod.validateLauncherItemIds(['bad id!'])
 assert.ok(badErrors.some((e) => e.reason === 'invalid-format'), 'invalid format reported')
 
 // Unknown surfaces detected (compare by JSON — vm arrays live in another realm)
-assert.equal(JSON.stringify(mod.findUnknownSurfaces(['command-palette'])), '[]', 'valid surface ok')
+assert.equal(JSON.stringify(mod.findUnknownSurfaces(['quick-editor-command'])), '[]', 'valid surface ok')
 assert.equal(JSON.stringify(mod.findUnknownSurfaces(['unknown'])), '["unknown"]', 'unknown surface reported')
 assert.equal(
-  JSON.stringify(mod.sanitizeSurfaces(['command-palette', 'unknown'])),
-  '["command-palette"]',
+  JSON.stringify(mod.sanitizeSurfaces(['quick-editor-command', 'unknown'])),
+  '["quick-editor-command"]',
   'sanitize drops unknown',
 )
 

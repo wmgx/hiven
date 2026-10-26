@@ -17,7 +17,6 @@ export default {
     recentDocument: 'Recently visited',
     recentChat: 'Recent chat',
     recentPerson: 'Recent person',
-    pipelineInputRequired: 'Text input is required',
   },
   zh: {
     processNoMatch: '未找到匹配进程，请从列表中选择',
@@ -37,6 +36,5 @@ export default {
     recentDocument: '最近访问',
     recentChat: '最近会话',
     recentPerson: '最近联系人',
-    pipelineInputRequired: '需要文本输入',
   },
 }
