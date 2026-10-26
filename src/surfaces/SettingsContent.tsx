@@ -19,7 +19,7 @@ import type { AiProviderDescriptor, AiReasoningEffort } from '../workspace/ai/ty
 import { JEV_PRESETS, JevRequestError, testJevConnection, validJevEndpoint, validJevSettings, type JevSettings } from '../workspace/ai/jev'
 import { openExternalUrl } from '../workspace/effectRunner'
 import { showToast } from '../workspace/toast'
-import { Combobox, NumberField, Select, Switch } from '../plugin-ui'
+import { Combobox, NumberField, Select, Switch, TextInput } from '../plugin-ui'
 
 export function SettingsContent() {
   const suggestions = useSuggestionSettings()
@@ -615,13 +615,13 @@ function JevCommandSettings() {
         />
       </SettingsListRow>
       <SettingsListRow icon={<BrainCircuit size={15} />} name={t('jevEndpoint')}>
-        <input className="hiven-ui-input" style={inputStyle} value={draft.endpoint} disabled={testing} onChange={(event) => editDraft({ ...draft, enabled: false, endpoint: event.target.value })} aria-label={t('jevEndpoint')} spellCheck={false} />
+        <TextInput style={inputStyle} value={draft.endpoint} disabled={testing} onChange={(event) => editDraft({ ...draft, enabled: false, endpoint: event.target.value })} aria-label={t('jevEndpoint')} spellCheck={false} />
       </SettingsListRow>
       <SettingsListRow icon={<BrainCircuit size={15} />} name={t('jevApiKey')}>
-        <input className="hiven-ui-input" style={inputStyle} type="password" autoComplete="off" value={draft.apiKey} disabled={testing} onChange={(event) => editDraft({ ...draft, enabled: false, apiKey: event.target.value })} aria-label={t('jevApiKey')} />
+        <TextInput style={inputStyle} type="password" autoComplete="off" value={draft.apiKey} disabled={testing} onChange={(event) => editDraft({ ...draft, enabled: false, apiKey: event.target.value })} aria-label={t('jevApiKey')} />
       </SettingsListRow>
       <SettingsListRow icon={<BrainCircuit size={15} />} name={t('jevModel')}>
-        <input className="hiven-ui-input" style={inputStyle} value={draft.model} disabled={testing} onChange={(event) => editDraft({ ...draft, enabled: false, model: event.target.value })} aria-label={t('jevModel')} spellCheck={false} />
+        <TextInput style={inputStyle} value={draft.model} disabled={testing} onChange={(event) => editDraft({ ...draft, enabled: false, model: event.target.value })} aria-label={t('jevModel')} spellCheck={false} />
       </SettingsListRow>
       <SettingsListRow icon={<BrainCircuit size={15} />} name={t('jevActions')} desc={!validJevEndpoint(draft.endpoint) && draft.endpoint ? t('jevInvalidEndpoint') : testResult || undefined}>
         <div className="flex items-center gap-2">

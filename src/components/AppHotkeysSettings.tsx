@@ -8,7 +8,7 @@ import { t } from '../i18n'
 import { ShortcutRecorder } from './ShortcutRecorder'
 import type { AppHotkeyBinding } from '../workspace/appHotkeys'
 import type { DiscoveredApp } from '../workspace/launcher/types'
-import { Combobox } from '../plugin-ui'
+import { Combobox, TextArea } from '../plugin-ui'
 import { saveAppHotkey } from '../hotkeys/appHotkeys'
 import { showToast } from '../workspace/toast'
 import { AppSearchAliasConflictError, findAppSearchAliasConflicts, getAppSearchAliases, parseAppSearchAliasInput, type AppSearchAliasConflict } from '../workspace/appLauncher/appSearchAliases'
@@ -83,9 +83,8 @@ function AppSearchAliasEditor({ app, apps }: { app: DiscoveredApp; apps: readonl
     <>
       <label className="app-hotkeys-field" htmlFor={fieldId}>
         <span>{t(locale, 'settings.appSearchAliasesLabel', { name: app.name })}</span>
-        <textarea
+        <TextArea
           id={fieldId}
-          className="hiven-ui-input hiven-ui-textarea"
           rows={4}
           value={draft.text}
           placeholder={t(locale, 'settings.appSearchAliasesPlaceholder')}

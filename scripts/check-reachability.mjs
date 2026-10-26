@@ -71,10 +71,12 @@ function resolveImport(rawSpecifier, fromFile) {
     }
   }
 
-  if (!specifier.startsWith('.') && !specifier.startsWith('/')) return null
+  // `@/` is the Vite directory alias for src/ (shadcn/ui components live behind it).
+  const isSrcAlias = specifier.startsWith('@/')
+  if (!isSrcAlias && !specifier.startsWith('.') && !specifier.startsWith('/')) return null
 
   const base = dirname(fromFile)
-  let target = normalize(join(base, specifier))
+  let target = isSrcAlias ? join(srcDir, specifier.slice(2)) : normalize(join(base, specifier))
 
   for (const ext of EXTENSIONS) {
     if (target.endsWith(ext) && existsSync(target)) return target
