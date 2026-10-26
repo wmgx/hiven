@@ -1,0 +1,220 @@
+/*
+ * hiven design tokens — the single source for colour, type, radius, shadow and motion.
+ *
+ * Layers (top → bottom):
+ *   1. Radix Colors scales (slate / blue / red / green / amber), light + dark.
+ *   2. Semantic tokens (shadcn/ui names) — what components use.
+ *   3. Legacy aliases (--color-*, --text-*, --bg-*, …) — kept so existing CSS keeps working;
+ *      new code must use layer 2.
+ *
+ * Tokens are declared on every theme carrier ([data-theme] on html / body / shells) because a
+ * custom property's var() references resolve on the element that declares it.
+ */
+
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/* ─── 1. Radix Colors ─── */
+
+:root,
+[data-theme='light'] {
+  color-scheme: light;
+  --slate-1: #fcfcfd; --slate-2: #f9f9fb; --slate-3: #f0f0f3; --slate-4: #e8e8ec;
+  --slate-5: #e0e1e6; --slate-6: #d9d9e0; --slate-7: #cdced6; --slate-8: #b9bbc6;
+  --slate-9: #8b8d98; --slate-10: #80838d; --slate-11: #60646c; --slate-12: #1c2024;
+  --slate-a2: #00005506; --slate-a3: #0000330f; --slate-a4: #00002d17; --slate-a5: #0009321f;
+  --slate-a6: #00002f26; --slate-a7: #00062e32; --slate-a8: #00083046;
+  --blue-2: #f4faff; --blue-3: #e6f4fe; --blue-4: #d5efff; --blue-5: #c2e5ff; --blue-6: #acd8fc;
+  --blue-7: #8ec8f6; --blue-8: #5eb1ef; --blue-9: #0090ff; --blue-10: #0588f0; --blue-11: #0d74ce;
+  --blue-12: #113264;
+  --red-3: #feebec; --red-6: #fdbdbe; --red-9: #e5484d; --red-10: #dc3e42; --red-11: #ce2c31;
+  --green-3: #e6f6eb; --green-6: #adddc0; --green-9: #30a46c; --green-11: #218358;
+  --amber-3: #fff7c2; --amber-6: #f3d673; --amber-9: #ffc53d; --amber-11: #ab6400;
+  --white: #ffffff;
+
+  --background: var(--white);
+  --popover: var(--white);
+  --scrim: #0000330f;
+  --shadow-float: 0 4px 16px #00002d17, 0 0 0 var(--hairline) var(--slate-a6);
+  --shadow-window: 0 12px 40px #0000330f, 0 2px 8px #0000330f, 0 0 0 var(--hairline) var(--slate-a6);
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+  --slate-1: #111113; --slate-2: #18191b; --slate-3: #212225; --slate-4: #272a2d;
+  --slate-5: #2e3135; --slate-6: #363a3f; --slate-7: #43484e; --slate-8: #5a6169;
+  --slate-9: #696e77; --slate-10: #777b84; --slate-11: #b0b4ba; --slate-12: #edeef0;
+  --slate-a2: #d8f4f609; --slate-a3: #ddeaf814; --slate-a4: #d3edf81d; --slate-a5: #d9edfe25;
+  --slate-a6: #d6ebfd30; --slate-a7: #d9edff40; --slate-a8: #d9edff5d;
+  --blue-2: #111927; --blue-3: #0d2847; --blue-4: #003362; --blue-5: #004074; --blue-6: #104d87;
+  --blue-7: #205d9e; --blue-8: #2870bd; --blue-9: #0090ff; --blue-10: #3b9eff; --blue-11: #70b8ff;
+  --blue-12: #c2e6ff;
+  --red-3: #3b1219; --red-6: #72232d; --red-9: #e5484d; --red-10: #ec5d5e; --red-11: #ff9592;
+  --green-3: #132d21; --green-6: #20573e; --green-9: #30a46c; --green-11: #3dd68c;
+  --amber-3: #302008; --amber-6: #5c3d05; --amber-9: #ffc53d; --amber-11: #ffca16;
+
+  --background: var(--slate-2);
+  --popover: var(--slate-3);
+  --scrim: #00000066;
+  --shadow-float: 0 8px 24px #00000066, 0 0 0 var(--hairline) var(--slate-a6);
+  --shadow-window: 0 20px 50px #00000080, 0 0 0 var(--hairline) var(--slate-a6);
+}
+
+/* ─── 2. Semantic tokens ─── */
+
+:root,
+[data-theme] {
+  --foreground: var(--slate-12);
+  --card: var(--background);
+  --card-foreground: var(--slate-12);
+  --popover-foreground: var(--slate-12);
+  --primary: var(--blue-9);
+  --primary-hover: var(--blue-10);
+  --primary-foreground: var(--white);
+  --primary-soft: var(--blue-3);
+  --primary-text: var(--blue-11);
+  --secondary: var(--slate-3);
+  --secondary-foreground: var(--slate-12);
+  --muted: var(--slate-3);
+  --muted-foreground: var(--slate-11);
+  --faint-foreground: var(--slate-9);
+  --subtle: var(--slate-2);
+  --hover: var(--slate-a3);
+  --active: var(--slate-a4);
+  --ui-accent: var(--slate-a3);
+  --accent-foreground: var(--slate-12);
+  --destructive: var(--red-9);
+  --destructive-hover: var(--red-10);
+  --destructive-text: var(--red-11);
+  --destructive-soft: var(--red-3);
+  --success: var(--green-9);
+  --success-text: var(--green-11);
+  --success-soft: var(--green-3);
+  --warning: var(--amber-9);
+  --warning-text: var(--amber-11);
+  --warning-soft: var(--amber-3);
+  --border: var(--slate-5);
+  --border-subtle: var(--slate-4);
+  --border-strong: var(--slate-7);
+  --input: var(--slate-7);
+  --ring: var(--blue-8);
+  --radius: 8px;
+  --shadow-none: none;
+}
+
+/* ─── Type, radius, motion (theme-independent) ─── */
+
+:root {
+  --text-xs: 12px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 13px;
+  --text-lg: 15px;
+  --text-xl: 20px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 12px;
+  --radius-pill: 999px;
+  --duration-instant: 0ms;
+  --duration-fast: 120ms;
+  --duration-normal: 200ms;
+}
+
+/* ─── 3. Legacy aliases ─── */
+
+:root,
+[data-theme] {
+  --panel: var(--background);
+  --surface: var(--subtle);
+  --surface-2: var(--secondary);
+  --border-2: var(--border-strong);
+  --text: var(--foreground);
+  --text-2: var(--muted-foreground);
+  --text-3: var(--faint-foreground);
+  --text-primary: var(--foreground);
+  --text-secondary: var(--muted-foreground);
+  --text-tertiary: var(--faint-foreground);
+  --accent: var(--primary);
+  --accent-hover: var(--primary-hover);
+  --accent-soft: var(--primary-soft);
+  --accent-tint: var(--primary-soft);
+  --accent-border-soft: var(--blue-6);
+  --elev-highlight: none;
+  --elev-panel: 0 0 0 var(--hairline) var(--border);
+  --well-bg: var(--subtle);
+  --well-inset: none;
+
+  --bg-page: var(--background);
+  --bg-surface: var(--background);
+  --bg-surface-2: var(--subtle);
+  --bg-surface-3: var(--secondary);
+  --bg-surface-hover: var(--hover);
+  --bg-gradient: none;
+  --color-accent: var(--primary);
+  --color-accent-hover: var(--primary-hover);
+  --color-accent-light: var(--primary-soft);
+  --color-accent-bg: var(--primary-soft);
+  --color-accent-glow: var(--primary-soft);
+  --color-success: var(--success);
+  --color-success-bg: var(--success-soft);
+  --color-success-text: var(--success-text);
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-soft);
+  --color-error: var(--destructive);
+  --color-error-bg: var(--destructive-soft);
+  --color-error-text: var(--destructive-text);
+  --error: var(--destructive);
+  --glass-border: var(--border);
+  --glass-bg: var(--background);
+  --glass-bg-solid: var(--background);
+  --glass-shine: none;
+  --shadow-panel: var(--shadow-window);
+  --shadow-md: var(--shadow-float);
+  --shadow-sm: none;
+  --color-bg: var(--background);
+  --color-text: var(--foreground);
+  --color-text-muted: var(--muted-foreground);
+  --color-text-faint: var(--faint-foreground);
+  --color-surface: var(--subtle);
+  --color-surface-hover: var(--secondary);
+  --color-divider: var(--border-subtle);
+  --input-bg: var(--background);
+  --btn-ghost-hover: var(--hover);
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: var(--slate-7);
+  --scrollbar-thumb-hover: var(--slate-8);
+  --color-background-primary: var(--background);
+  --color-background-secondary: var(--subtle);
+  --color-background-tertiary: var(--secondary);
+  --color-text-primary: var(--foreground);
+  --color-text-secondary: var(--muted-foreground);
+  --color-text-tertiary: var(--faint-foreground);
+  --color-border-secondary: var(--border);
+  --color-border-tertiary: var(--border-subtle);
+  --color-bg-hover: var(--hover);
+  --color-bg-active: var(--active);
+}
+
+/* ─── Tailwind / shadcn bridge ─── */
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--ui-accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+}

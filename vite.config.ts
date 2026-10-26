@@ -24,6 +24,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss(), fullReloadStatefulModules()],
   resolve: {
     alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
       '@hiven/plugin': fileURLToPath(new URL('./src/plugin-sdk.ts', import.meta.url)),
       '@hiven/plugin-diff': fileURLToPath(new URL('./src/pluginHostDiff.ts', import.meta.url)),
       '@hiven/plugin-ui/icons': fileURLToPath(new URL('./src/plugin-ui-icons.ts', import.meta.url)),
