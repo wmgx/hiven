@@ -151,16 +151,6 @@
   "markdownPlain.limit": "Content exceeds the conversion limit. Reduce it.",
   "markdownPlain.timeout": "Conversion timed out. Simplify and retry.",
   "markdownPlain.failed": "Conversion failed. Check the content and retry.",
-  "hud.title": "Clean Agent Text",
-  "hud.result": "Cleaned text",
-  "hud.working": "Cleaning…",
-  "hud.errorStatus": "Not changed",
-  "hud.error.unavailable": "Can't read clipboard text",
-  "hud.error.no-change": "No borders to clean",
-  "hud.error.too-large": "Text too long to clean",
-  "hud.pasteFailed": "Can't paste",
-  "hud.pasteCopied": "Copied. Paste manually.",
-  "hud.paste": "Paste result",
   "workbench.error.sqlNumber": "Can't build an IN list: every line must be a number.",
   "error.sqlNumber": "Not a number: {value}"
 }

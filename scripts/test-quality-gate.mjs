@@ -44,7 +44,6 @@ const commands = [
   ['npm', ['run', 'test:shortcut-ownership-runtime']],
   ['npm', ['run', 'test:history-queue-handoff']],
   ['npm', ['run', 'test:clipboard-image-save-handoff']],
-  ['npm', ['run', 'test:text-result-hud-host']],
   ['npm', ['run', 'test:launcher-explicit-text-preview']],
   ['npm', ['run', 'test:launcher-explicit-text-flow']],
   ['npm', ['run', 'test:launcher-input-drafts']],

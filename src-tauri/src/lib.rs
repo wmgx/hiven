@@ -32,7 +32,6 @@ mod plugin_surface_handoff;
 mod host_text_export;
 mod text_material;
 mod toast_hud;
-mod text_result_hud;
 mod history_paste_queue;
 pub mod desktop_bridge;
 pub mod hotkeys;
@@ -8079,12 +8078,6 @@ pub fn run() {
             toast_hud::capture_hud_target,
             toast_hud::hud_ready,
             toast_hud::dismiss_toast,
-            text_result_hud::text_result_hud_present,
-            text_result_hud::text_result_hud_activate,
-            text_result_hud::text_result_hud_dismiss,
-            text_result_hud::text_result_hud_ready,
-            text_result_hud::text_result_hud_action,
-            text_result_hud::text_result_hud_paste,
             get_config_dir,
             init_config_dir,
             read_text_material_file,

@@ -18,7 +18,6 @@ import { prefetchDesktopWindowsOnStartup } from './workspace/desktopControl/wind
 import { registerHostLauncherProviders } from './workspace/launcher/hostProvider'
 import { installGlobalPinnedLauncherHotkeys, routeGlobalPinnedLauncherShortcut } from './hotkeys/globalPinnedLauncher'
 import { installPluginSurfaceShortcutHotkeys } from './hotkeys/pluginSurfaceShortcuts'
-import { installTextResultHudHosts } from './shortcutHosts/textResultHud'
 import { installClipboardImageSaveShortcuts } from './shortcutHosts/clipboardImageSave'
 import { installAppHotkeys } from './hotkeys/appHotkeys'
 import { installQuickEditorHotkeys } from './hotkeys/quickEditor'
@@ -139,7 +138,6 @@ function LauncherRuntimeApp() {
 
   useEffect(() => isNativeDesktopRuntime() ? installGlobalPinnedLauncherHotkeys() : undefined, [])
   useEffect(() => isNativeDesktopRuntime() ? installPluginSurfaceShortcutHotkeys() : undefined, [])
-  useEffect(() => isNativeDesktopRuntime() ? installTextResultHudHosts() : undefined, [])
   useEffect(() => isNativeDesktopRuntime() ? installClipboardImageSaveShortcuts() : undefined, [])
   useEffect(() => isNativeDesktopRuntime() ? installAppHotkeys() : undefined, [])
   useEffect(() => isNativeDesktopRuntime() ? installQuickEditorHotkeys() : undefined, [])

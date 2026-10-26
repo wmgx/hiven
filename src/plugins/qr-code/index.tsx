@@ -7,7 +7,6 @@
 import { definePlugin } from '@hiven/plugin'
 import { QrSurface } from './QrSurface'
 import { isImageDataUrl } from './qrCore'
-import { createQrHud } from './qrHudController'
 
 function isHttpUrl(text: string): boolean {
   return /^https?:\/\//i.test(text.trim())
@@ -47,21 +46,6 @@ const qrCodePlugin = definePlugin({
         textMatch: isImageDataUrl,
         component: QrSurface,
         entry: { launcher: { surfaces: ['global-launcher'] }, shortcutBindable: true },
-        textResultHud: {
-          product: 'qr-scan',
-          permissions: ['clipboard.read', 'clipboard.image', 'clipboard.write'],
-          labels: (t) => ({
-            title: t('hud.title'),
-            result: t('hud.result'),
-            working: t('hud.working'),
-            complete: t('hud.complete'),
-            error: t('hud.error'),
-            errorStatus: t('hud.errorStatus'),
-            'error.unavailable': t('hud.error.unavailable'),
-            'errorStatus.unavailable': t('hud.errorStatus.unavailable'),
-          }),
-          create: createQrHud,
-        },
         shell: QR_SHELL,
       },
     ],

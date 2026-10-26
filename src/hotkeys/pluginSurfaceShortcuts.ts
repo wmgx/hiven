@@ -9,6 +9,8 @@ import {
   type PluginSurfaceShortcut,
 } from '../workspace/pluginSurfaceShortcuts'
 import type { PluginSurfaceOpenTarget } from '../store'
+import { readNativeClipboardText } from '../workspace/nativeClipboard'
+import { hasSecretShape } from '../kits/content/detectContent'
 import { resolvePluginSettingsSource } from '../workspace/launcher/pluginSource'
 import { launcherPerfNow, logLauncherPerf, logLauncherPerfDuration } from '../workspace/launcher/perf'
 
@@ -204,11 +206,12 @@ async function registerShortcut(
 
 async function openSurfaceForShortcut(target: PluginSurfaceOpenTarget): Promise<void> {
   const startedAt = launcherPerfNow()
-  const presentation = getPluginSurfaceShortcutPresentation(target)
+  const openTarget = await withShortcutInitialText(target)
+  const presentation = getPluginSurfaceShortcutPresentation(openTarget)
   const details = { kind: 'latency', pluginId: target.pluginId, surfaceId: target.surfaceId, via: presentation }
   try {
-    if (presentation === 'window') await showPluginSurfaceWindow(target)
-    else await requestOpenPluginSurfaceTool(target)
+    if (presentation === 'window') await showPluginSurfaceWindow(openTarget)
+    else await requestOpenPluginSurfaceTool(openTarget)
     logLauncherPerfDuration('shortcut:surface.open', startedAt, details)
   } catch (error) {
     logLauncherPerfDuration('shortcut:surface.open', startedAt, { ...details, status: 'failed' })
@@ -251,12 +254,27 @@ async function unregisterAccelerator(accelerator: string): Promise<boolean> {
   }
 }
 
-function isBindableSurfaceTarget(target: PluginSurfaceOpenTarget): boolean {
+async function withShortcutInitialText(target: PluginSurfaceOpenTarget): Promise<PluginSurfaceOpenTarget> {
+  const surface = findSurface(target)
+  if (surface?.entry?.shortcutInitialText !== 'clipboard') return target
+  const requestedPermissions = pluginRegistry.getPluginPermissions(target.pluginId, target.source)
+  const snapshot = getPluginPermissionSnapshot(target.source, target.pluginId, requestedPermissions)
+  if (missingPluginPermissions(snapshot, ['clipboard.read']).length > 0) return target
+  const text = await readNativeClipboardText().catch(() => '')
+  if (!text.trim() || hasSecretShape(text)) return target
+  return { ...target, initialText: text }
+}
+
+function findSurface(target: PluginSurfaceOpenTarget) {
   const entry = pluginRegistry.getAllPluginDefinitions().find((candidate) => {
     if (candidate.pluginId !== target.pluginId) return false
     return resolvePluginSettingsSource(candidate.pluginId, candidate.source) === target.source
   })
-  const surface = entry?.definition.ui?.surfaces?.find((item) => item.id === target.surfaceId)
+  return entry?.definition.ui?.surfaces?.find((item) => item.id === target.surfaceId)
+}
+
+function isBindableSurfaceTarget(target: PluginSurfaceOpenTarget): boolean {
+  const surface = findSurface(target)
   return !!surface && surface.entry?.shortcutBindable !== false
 }
 

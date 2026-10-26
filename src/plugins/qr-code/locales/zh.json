@@ -39,13 +39,5 @@
   "action.saving": "保存中…",
   "toast.saveFailed": "保存失败",
   "toast.saveUnavailable": "请在桌面应用保存",
-  "hud.title": "二维码",
-  "hud.result": "文本",
-  "hud.working": "读取中…",
-  "hud.complete": "已识别",
-  "hud.error": "未识别到二维码",
-  "hud.errorStatus": "未识别",
-  "hud.error.unavailable": "无法读取剪贴板",
-  "hud.errorStatus.unavailable": "不可用",
   "error.tooLong": "内容太长，无法生成二维码。请缩短内容或降低纠错等级。"
 }

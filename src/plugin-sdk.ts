@@ -131,13 +131,6 @@ export type {
   PluginPasteApi,
   PluginPasteResult,
   // Bundled shortcut tasks
-  PluginTextResultHudContribution,
-  PluginTextResultHudHost,
-  PluginTextResultHudRunner,
-  PluginTextResultHudView,
-  PluginTextResultHudLabels,
-  PluginTextResultHudExpected,
-  PluginTextResultHudFailure,
   PluginClipboardImageSaveContribution,
   PluginClipboardImageSaveContext,
   PluginPasteQueueContribution,

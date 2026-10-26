@@ -24,7 +24,7 @@
     {
       "pluginId": "line-tools",
       "dir": "line-tools",
-      "version": "3.7.5"
+      "version": "3.7.6"
     },
     {
       "pluginId": "crypto",
@@ -49,7 +49,7 @@
     {
       "pluginId": "translate",
       "dir": "translate",
-      "version": "1.0.28"
+      "version": "1.0.29"
     },
     {
       "pluginId": "ai-writing",
@@ -79,7 +79,7 @@
     {
       "pluginId": "qr-code",
       "dir": "qr-code",
-      "version": "1.0.16"
+      "version": "1.0.17"
     },
     {
       "pluginId": "random",

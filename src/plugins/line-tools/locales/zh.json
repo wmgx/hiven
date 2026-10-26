@@ -151,16 +151,6 @@
   "markdownPlain.limit": "内容超出转换上限，请缩小范围",
   "markdownPlain.timeout": "转换超时，请简化内容后重试",
   "markdownPlain.failed": "转换失败，请检查内容后重试",
-  "hud.title": "清理 AI 终端文本",
-  "hud.result": "清理结果",
-  "hud.working": "正在清理…",
-  "hud.errorStatus": "未更改",
-  "hud.error.unavailable": "无法读取剪贴板文本",
-  "hud.error.no-change": "未发现可清理的边框",
-  "hud.error.too-large": "文本过长，无法清理",
-  "hud.pasteFailed": "无法粘贴",
-  "hud.pasteCopied": "已复制，请手动粘贴",
-  "hud.paste": "粘贴结果",
   "workbench.error.sqlNumber": "无法生成 IN 列表：每一行都必须是数字。",
   "error.sqlNumber": "不是数字：{value}"
 }
