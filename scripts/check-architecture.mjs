@@ -350,6 +350,37 @@ if (/from\s+['"]\.\/plugins\//.test(pluginHostSdk)) {
   addFailure('pluginHostSdk must not import from ./plugins/')
 }
 
+// ─── Style tokens (doc/redesign/03-roadmap.md V1) ──────────────────────────────
+// Colour / type / shadow values live in src/styles/theme.css. Legacy CSS may only shrink:
+// each ceiling is the count when the token layer landed; lower it when a cleanup removes literals.
+const STYLE_CEILINGS = { hex: 362, rgb: 178, smallFont: 197, important: 296, uppercase: 12 }
+const styleCounts = { hex: 0, rgb: 0, smallFont: 0, important: 0, uppercase: 0 }
+for (const file of walkWithExtensions(join(root, 'src'), styleExtensions)) {
+  if (rel(file) === 'src/styles/theme.css') continue
+  const css = read(file).replace(/\/\*[\s\S]*?\*\//g, '')
+  styleCounts.hex += (css.match(/#[0-9a-fA-F]{3,8}\b/g) ?? []).length
+  styleCounts.rgb += (css.match(/\brgba?\(/g) ?? []).length
+  styleCounts.smallFont += [...css.matchAll(/font-size:\s*(\d+(?:\.\d+)?)px/g)].filter((match) => Number(match[1]) < 12).length
+  styleCounts.important += (css.match(/!important/g) ?? []).length
+  styleCounts.uppercase += (css.match(/text-transform:\s*uppercase/g) ?? []).length
+}
+for (const [metric, ceiling] of Object.entries(STYLE_CEILINGS)) {
+  if (styleCounts[metric] > ceiling) {
+    addFailure(`CSS ${metric} literals grew to ${styleCounts[metric]} (ceiling ${ceiling}); use src/styles/theme.css tokens`)
+  }
+}
+// shadcn components and the plugin UI kit use tokens only: no literal colours, px font sizes or ad-hoc shadows.
+for (const file of [...walk(join(root, 'src/components/ui')), join(root, 'src/plugin-ui.tsx')]) {
+  const source = read(file)
+  for (const [pattern, label] of [
+    [/#[0-9a-fA-F]{3,8}\b|\brgba?\(/, 'literal colour'],
+    [/\btext-\[\d/, 'arbitrary font size'],
+    [/\bshadow-\[/, 'arbitrary shadow'],
+  ]) {
+    if (pattern.test(source)) addFailure(`${rel(file)} uses a ${label}; use theme tokens`)
+  }
+}
+
 if (failures.length > 0) {
   console.error('Architecture boundary check failed:')
   for (const failure of failures) {
