@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, IconButton, Select } from '@hiven/plugin-ui'
+import { Button, IconButton, Select, TextArea } from '@hiven/plugin-ui'
 import { BackIcon, SettingsIcon } from '@hiven/plugin-ui/icons'
 import { AlertTriangle, ArrowRight, LoaderCircle } from 'lucide-react'
 import type { SourceLanguageCode, TargetLanguageCode, TranslateProfile, TranslateSettings } from '../settings/model'
@@ -156,7 +156,7 @@ function SchemaSelect<T extends string>({
   ariaLabel: string
 }) {
   return (
-    <div className="translate-select" style={width ? { width } : undefined}>
+    <div className="translate-select" style={width ? { width: `var(--translate-select-width, ${width}px)` } : undefined}>
       <Select
         aria-label={ariaLabel}
         value={value}
@@ -511,7 +511,7 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
             {localizedText(t, 'pane.original', 'Original')}
             <span className="detected">· {sourceLang === 'auto' ? optionLabel(sourceOptions, sourceLang) : optionLabel(sourceOptions, sourceLang)}</span>
           </div>
-          <textarea
+          <TextArea
             ref={inputRef}
             className="translate-input"
             data-plugin-surface-autofocus="sticky"
@@ -531,7 +531,7 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
             <span className="detected">· {optionLabel(targetOptions, resolvedTarget)}</span>
             {outputText && status.kind !== 'success' && <span className="detected">· {t('pane.incomplete')}</span>}
           </div>
-          <textarea
+          <TextArea
             className={`translate-output ${status.kind !== 'success' ? 'is-stale' : ''}`}
             value={outputText}
             placeholder={localizedText(t, 'output.placeholder', 'Translation appears here.')}
@@ -562,7 +562,7 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
           <span className="sep">·</span>
           <div className={`translate-quota ${status.kind === 'quota-exceeded' ? 'is-over' : ''}`}>
             <span className="translate-quota__num">{formatLimit(activeUsedChars)} / {formatLimit(monthlyLimit)}</span>
-            <span className="translate-quota__bar"><span className="translate-quota__fill" style={{ width: `${quotaPercent}%` }} /></span>
+            <span className="translate-quota__bar"><span className="translate-quota__fill" style={{ width: `${status.kind === 'quota-exceeded' ? 100 : quotaPercent}%` }} /></span>
           </div>
           </>}
         </div>
