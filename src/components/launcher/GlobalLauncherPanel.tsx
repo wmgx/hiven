@@ -357,7 +357,6 @@ export function GlobalLauncherPanel({
         onSecondaryAction={activateSecondaryAction}
         onPastePreviewText={activatePreviewPaste}
         onSubmitCollectInput={(frame) => { void controllerRef.current?.submitInput?.(frame) }}
-        onCaptureSelection={() => { void controllerRef.current?.captureInput() }}
         onHoverResultChoice={setResultSelectedIndex}
         onToggleResultChoice={toggleResultChoice}
         onSearchQueryChange={(value) => { setQuery(value); setSelectedIndex(0, { pin: false }) }}

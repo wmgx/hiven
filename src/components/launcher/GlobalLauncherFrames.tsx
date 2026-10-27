@@ -78,7 +78,6 @@ export function GlobalLauncherFrameSwitch({
   onSecondaryAction,
   onPastePreviewText,
   onSubmitCollectInput,
-  onCaptureSelection,
   onHoverResultChoice,
   onToggleResultChoice,
   onSearchQueryChange,
@@ -152,7 +151,6 @@ export function GlobalLauncherFrameSwitch({
   onPastePreviewText?: (choice: LauncherResultChoice) => void | Promise<void>
   /** Package 4: default collect-input submit when no destination chrome. */
   onSubmitCollectInput?: (frame?: CollectInputFrame) => void
-  onCaptureSelection?: () => void
   onHoverResultChoice: (index: number) => void
   onToggleResultChoice: (choice: LauncherResultChoice, frame: ResultFrame) => void
   onSearchQueryChange: (value: string) => void
@@ -300,7 +298,6 @@ export function GlobalLauncherFrameSwitch({
           onSecondaryAction={onSecondaryAction}
           onPastePreviewText={onPastePreviewText}
           onSubmitPrimary={() => onSubmitCollectInput?.(frame)}
-          onCaptureSelection={onCaptureSelection}
           attachedBlock={clipboardBlock?.block}
           onRemoveBlock={() => onRemoveCommandBlock?.(frame)}
           onOpenParams={frame.item.executeWithParams && frame.item.params?.length ? () => onOpenCommandParams?.(frame) : undefined}

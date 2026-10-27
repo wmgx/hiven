@@ -16,7 +16,6 @@ use tauri::tray::TrayIconBuilder;
 use tauri::Emitter;
 use tauri::LogicalSize;
 use tauri::Manager;
-use tauri_plugin_clipboard_manager::ClipboardExt;
 use zip::ZipArchive;
 
 pub mod ai_codex;
@@ -1322,10 +1321,8 @@ async fn hide_launcher_window(
     .map_err(|error| error.to_string())
 }
 
-// Shared phase 1 for hide_launcher_and_paste / hide_launcher_and_capture_selection:
-// restore input source and hide whichever window actually invoked the command,
-// then resolve where the foreground interaction (paste or selection capture)
-// should target. Both the launcher's non-activating panel and an activating
+// Restore input source and hide whichever window actually invoked the paste command,
+// then resolve the foreground paste target. Both the launcher's non-activating panel and an activating
 // plugin surface window (e.g. the clipboard history panel opened via
 // Cmd+Shift+V) call this same path. Independent surfaces may stay visible,
 // but must still hand keyboard focus back to the paste target.
@@ -1787,95 +1784,6 @@ fn wait_for_foreground_handoff_then_paste(
     std::thread::sleep(Duration::from_millis(200));
     attempt.ensure_active()?;
     simulate_paste_impl()
-}
-
-/// Platform support only: never reads the clipboard, changes focus, or prompts.
-#[tauri::command]
-fn get_selection_capture_availability() -> &'static str {
-    if cfg!(any(target_os = "macos", target_os = "windows")) {
-        "can-attempt"
-    } else {
-        "unsupported"
-    }
-}
-
-// Mirror of hide_launcher_and_paste for the read direction: hide the launcher,
-// wait for OS focus to hand back to whatever app was previously in the
-// foreground, then simulate Cmd/Ctrl+C and read the result back off the
-// clipboard (restoring whatever was there before). Used as an on-demand,
-// last-resort text source for a Global Launcher tool run — never fired
-// automatically on launcher open, only when a matched tool actually executes
-// with no other input available (see resolveTextInputWithForegroundFallback
-// in src/workspace/launcher/toolAdapter.ts).
-#[tauri::command]
-async fn hide_launcher_and_capture_selection(
-    window: tauri::WebviewWindow,
-    app: tauri::AppHandle,
-) -> Result<Option<String>, String> {
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    {
-        // Unsupported capture must not disturb the launcher, pending paste
-        // recovery, or either clipboard selection (including X11 PRIMARY).
-        let _ = (window, app);
-        Err("SELECTION_CAPTURE_UNSUPPORTED".to_string())
-    }
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
-    {
-        paste_recovery::invalidate_all();
-        let (target_pid, target_is_self) =
-            hide_window_and_resolve_foreground_target(window, app.clone(), false, None)?;
-
-        tokio::task::spawn_blocking(move || {
-            wait_for_foreground_handoff_then_capture(app, target_pid, target_is_self)
-        })
-        .await
-        .map_err(|e| format!("spawn_blocking failed: {}", e))?
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn wait_for_foreground_handoff_then_capture(
-    app: tauri::AppHandle,
-    target_pid: Option<u32>,
-    target_is_self: bool,
-) -> Result<Option<String>, String> {
-    const POLL_INTERVAL_MS: u64 = 20;
-    const MAX_WAIT_MS: u64 = 1000;
-    const SETTLE_DELAY_MS: u64 = 120;
-
-    if target_is_self {
-        // Nothing meaningful to capture from one of hiven's own windows.
-        return Ok(None);
-    }
-
-    let own_pid = std::process::id();
-    let started_at = Instant::now();
-    let deadline = started_at + Duration::from_millis(MAX_WAIT_MS);
-    loop {
-        let handed_off = match target_pid {
-            Some(pid) => current_foreground_process_id() == Some(pid),
-            None => current_foreground_process_id() != Some(own_pid),
-        };
-        if handed_off || Instant::now() >= deadline {
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(POLL_INTERVAL_MS));
-    }
-    std::thread::sleep(Duration::from_millis(SETTLE_DELAY_MS));
-    capture_foreground_selection_text_impl(&app)
-}
-
-#[cfg(not(target_os = "macos"))]
-fn wait_for_foreground_handoff_then_capture(
-    app: tauri::AppHandle,
-    _target_pid: Option<u32>,
-    target_is_self: bool,
-) -> Result<Option<String>, String> {
-    if target_is_self {
-        return Ok(None);
-    }
-    std::thread::sleep(Duration::from_millis(200));
-    capture_foreground_selection_text_impl(&app)
 }
 
 #[tauri::command]
@@ -2498,57 +2406,6 @@ fn remember_previous_key_window_label(label: Option<String>) {
     }
 }
 
-/// Read whatever text is currently selected in the foreground app by
-/// simulating Cmd/Ctrl+C and diffing the clipboard change count, then
-/// restoring whatever was on the clipboard beforehand. Caller is responsible
-/// for ensuring the target app actually holds OS-level keyboard focus first
-/// (see `wait_for_foreground_handoff_then_capture`) — otherwise this simply
-/// copies from whatever hiven window still has focus.
-fn capture_foreground_selection_text_impl(app: &tauri::AppHandle) -> Result<Option<String>, String> {
-    const POLL_INTERVAL_MS: u64 = 20;
-    const MAX_WAIT_MS: u64 = 400;
-
-    let before = clipboard_privacy::with_clipboard(app, |app| {
-        app.clipboard().read_text().map_err(|error| error.to_string())
-    })
-    .ok();
-    let before_change_count = read_clipboard_change_count(app);
-    simulate_copy_selection_impl()?;
-
-    // Poll for the clipboard to actually change instead of a single fixed
-    // sleep: a synthetic Cmd/Ctrl+C needs the target app to notice the key
-    // event, run its own copy handling, and write the system pasteboard —
-    // JVM/Electron-backed apps (e.g. JetBrains IDEs) can take noticeably
-    // longer than native Cocoa apps to do that, and a too-short fixed wait
-    // reads a stale pasteboard and misreports "nothing selected".
-    let deadline = Instant::now() + Duration::from_millis(MAX_WAIT_MS);
-    let mut changed = false;
-    loop {
-        let after_change_count = read_clipboard_change_count(app);
-        if before_change_count.is_none() || after_change_count != before_change_count {
-            changed = true;
-            break;
-        }
-        if Instant::now() >= deadline {
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(POLL_INTERVAL_MS));
-    }
-    if !changed {
-        return Ok(None);
-    }
-
-    let selected = clipboard_privacy::read_public_clipboard_text(app)?
-        .trim()
-        .to_string();
-    if let Some(previous) = before {
-        let _ = clipboard_privacy::with_clipboard(app, move |app| {
-            clipboard_privacy::write_owned_text(&app, &previous)
-        });
-    }
-    Ok(if selected.is_empty() { None } else { Some(selected) })
-}
-
 #[cfg(target_os = "macos")]
 fn read_clipboard_change_count(app: &tauri::AppHandle) -> Option<i64> {
     clipboard_privacy::with_clipboard(app, |_| unsafe {
@@ -2718,72 +2575,6 @@ fn urlencoding_decode(input: &str) -> String {
         i += 1;
     }
     String::from_utf8_lossy(&out).into_owned()
-}
-
-#[cfg(target_os = "macos")]
-fn simulate_copy_selection_impl() -> Result<(), String> {
-    use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation};
-    use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
-
-    if !ax_is_trusted(false) {
-        return Err("Accessibility permission not granted".into());
-    }
-
-    const KEY_C: u16 = 8;
-    let src = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
-        .map_err(|_| "Failed to create event source")?;
-    let dn = CGEvent::new_keyboard_event(src.clone(), KEY_C, true)
-        .map_err(|_| "Failed to create key-down event")?;
-    let up = CGEvent::new_keyboard_event(src, KEY_C, false)
-        .map_err(|_| "Failed to create key-up event")?;
-    dn.set_flags(CGEventFlags::CGEventFlagCommand);
-    up.set_flags(CGEventFlags::CGEventFlagCommand);
-    dn.post(CGEventTapLocation::HID);
-    up.post(CGEventTapLocation::HID);
-    Ok(())
-}
-
-#[cfg(target_os = "windows")]
-fn simulate_copy_selection_impl() -> Result<(), String> {
-    use windows::Win32::UI::Input::KeyboardAndMouse::{
-        SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
-        VIRTUAL_KEY,
-    };
-
-    const VK_CONTROL: VIRTUAL_KEY = VIRTUAL_KEY(0x11);
-    const VK_C: VIRTUAL_KEY = VIRTUAL_KEY(0x43);
-
-    let make = |vk: VIRTUAL_KEY, flags: KEYBD_EVENT_FLAGS| INPUT {
-        r#type: INPUT_KEYBOARD,
-        Anonymous: INPUT_0 {
-            ki: KEYBDINPUT {
-                wVk: vk,
-                wScan: 0,
-                dwFlags: flags,
-                time: 0,
-                dwExtraInfo: 0,
-            },
-        },
-    };
-
-    let inputs = [
-        make(VK_CONTROL, KEYBD_EVENT_FLAGS(0)),
-        make(VK_C, KEYBD_EVENT_FLAGS(0)),
-        make(VK_C, KEYEVENTF_KEYUP),
-        make(VK_CONTROL, KEYEVENTF_KEYUP),
-    ];
-
-    let sent = unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
-    if sent == 4 {
-        Ok(())
-    } else {
-        Err(format!("SendInput sent {} of 4 expected events", sent))
-    }
-}
-
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
-fn simulate_copy_selection_impl() -> Result<(), String> {
-    Err("Selection copy simulation is not supported on this platform".to_string())
 }
 
 fn take_previous_foreground_process_id() -> Option<u32> {
@@ -8211,8 +8002,6 @@ pub fn run() {
             cancel_paste_attempt,
             get_paste_availability,
             hide_launcher_and_paste,
-            hide_launcher_and_capture_selection,
-            get_selection_capture_availability,
             show_quick_editor_window,
             close_quick_editor_window,
             show_plugin_surface_window,

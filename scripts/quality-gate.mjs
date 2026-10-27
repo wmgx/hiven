@@ -72,7 +72,6 @@ const commands = [
   ['npm', ['run', 'test:paste-recovery-controller']],
   ['npm', ['run', 'test:plugin-paste-behavior']],
   ['npm', ['run', 'test:native-clipboard-read']],
-  ['npm', ['run', 'test:foreground-selection-capture']],
   ['npm', ['run', 'test:plugin-clipboard-image-resource']],
   ['npm', ['run', 'test:plugin-clipboard-image-read']],
   ['npm', ['run', 'test:launcher-identity']],

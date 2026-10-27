@@ -142,7 +142,7 @@ export type ResolvedTextInput = {
   kind: 'text'
   text: string
   mode: TextInputMode
-  source: 'selection' | 'all' | 'manual' | 'empty' | 'foreground-app'
+  source: 'selection' | 'all' | 'manual' | 'empty'
   range?: TextRange
   paneId?: string
   panelId?: string
@@ -373,12 +373,8 @@ export type PluginAppsApi = {
 
 export type LauncherExecutionContext<TSettings = unknown> = {
   surfaceId: LauncherSurfaceId
-  /**
-   * Present for collected input or an attached Object Block. `source:
-   * 'foreground-app'` tells the tool adapter to prefer pasting the result
-   * back into that same app over the default copy-first output.
-   */
-  input?: { text: string; source?: 'foreground-app' }
+  /** Present for collected input or an attached Object Block. */
+  input?: { text: string }
   /** Attached image material for an image-input tool. */
   image?: PluginToolImageInput
   /** Resolved on access. Retained action handlers should read ctx.settings when run. */

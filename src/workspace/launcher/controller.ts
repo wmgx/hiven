@@ -37,7 +37,6 @@ import { aiSendGrantKey, decideAiSend, type AiSendApproval, type AiSendGrant, ty
 import { appendUsageJournal } from '../usageJournal'
 import { getHostOutputIntent, isOutputResult } from './output'
 import { explicitRunReason } from './commandPreviewPolicy'
-import { captureForegroundSelectionText } from './foregroundSelectionCapture'
 import { translate, type Locale } from '../../i18n'
 import {
   TelemetryEvents,
@@ -60,8 +59,6 @@ export type CollectInputFrame = {
   inputText: string
   /** Attached Block material; while present it is the command input instead of inputText. */
   blockText?: string
-  /** inputText was read from the foreground app's selection and not edited since. */
-  fromSelection?: boolean
   input: LauncherInputSpec
   params?: Record<string, unknown>
   recordUsage: boolean
@@ -419,12 +416,12 @@ export class LauncherController {
   /**
    * Build the execution context for an item, given optional collected input.
    */
-  private buildExecutionContext(item: LauncherItem, inputText?: string, inputSource?: 'foreground-app') {
+  private buildExecutionContext(item: LauncherItem, inputText?: string) {
     const resolvedInputText = inputText !== undefined ? inputText : item.initialInputText
     const getSettings = () => this.deps.getSettings(item)
     return {
       surfaceId: this.deps.surfaceId,
-      input: resolvedInputText !== undefined ? { text: resolvedInputText, source: inputSource } : undefined,
+      input: resolvedInputText !== undefined ? { text: resolvedInputText } : undefined,
       get settings() { return getSettings() },
       locale: this.deps.locale as never,
       api: this.apiFor(item),
@@ -651,44 +648,6 @@ export class LauncherController {
     return !hasBoundSelection
   }
 
-  /**
-   * Whether this item's collect-input flow may use an on-demand foreground-app
-   * capture as a text source at all. 'all' mode means "whole document", which
-   * a foreign app's selection can't stand in for. This governs eligibility
-   * only — callers decide *when* to actually trigger a capture.
-   */
-  private isForegroundCaptureEligible(item: LauncherItem): boolean {
-    if (item.metadataInput) return false
-    const mode = item.inputPolicy?.mode ?? 'auto'
-    return this.deps.surfaceId === 'global-launcher' &&
-      item.behavior.type === 'perform' &&
-      item.inputPolicy != null &&
-      mode !== 'all'
-  }
-
-  /** Explicitly import the foreground selection into an empty input step. */
-  async captureInput(): Promise<void> {
-    if (this.invalidateUnavailablePlugin()) return
-    const top = this.topFrame()
-    if (top.kind !== 'collect-input' || top.inputText || this.state.busy || !this.isForegroundCaptureEligible(top.item)) return
-    const api = this.apiFor(top.item)
-    const generation = this.flowGeneration
-    this.setState({ busy: true, error: null })
-    try {
-      const text = await captureForegroundSelectionText(api, this.deps.locale as Locale, { restoreLauncher: true })
-      // Navigation or typing while capture is pending must not overwrite a newer draft.
-      if (generation === this.flowGeneration && !this.invalidateUnavailablePlugin() && this.topFrame() === top && text !== undefined) {
-        this.setInputText(text)
-        const filled = this.topFrame()
-        if (filled.kind === 'collect-input') this.setState({ frames: [...this.state.frames.slice(0, -1), { ...filled, fromSelection: true }] })
-      }
-    } catch (error) {
-      if (generation === this.flowGeneration && !this.invalidateUnavailablePlugin() && this.topFrame() === top) this.setState({ error: error instanceof Error ? error.message : String(error) })
-    } finally {
-      if (generation === this.flowGeneration) this.setState({ busy: false })
-    }
-  }
-
   private hasObjectBlockText(text: string | undefined): text is string {
     return text !== undefined
   }
@@ -748,7 +707,7 @@ export class LauncherController {
     this.invalidatePendingActions()
     this.deps.keepInputAsBlock?.(text)
     const frames = this.state.frames.slice(0, -1)
-    frames.push({ ...top, blockText: text, inputText: '', fromSelection: false, previewInputText: undefined, selectedSuggestionIndex: -1 })
+    frames.push({ ...top, blockText: text, inputText: '', previewInputText: undefined, selectedSuggestionIndex: -1 })
     this.setState({ frames, error: null })
   }
 
@@ -1139,14 +1098,13 @@ export class LauncherController {
 
   /** Update the text in the active collect-input frame. */
   setInputText(text: string, expectedFrame?: CollectInputFrame): void {
-    let top = this.topFrame()
+    const top = this.topFrame()
     if (top.kind !== 'collect-input') return
     // Host drafts get a fresh item per edit. Typing replaces the frame, while
     // its item remains the same until that edit is left or another one starts.
     if (expectedFrame && top.item !== expectedFrame.item) return
     if (text !== top.inputText) this.invalidatePendingActions()
     const frames = this.state.frames.slice(0, -1)
-    if (text !== top.inputText) top = { ...top, fromSelection: false }
     if (top.item.suggest) {
       frames.push({ ...top, inputText: text })
     } else if (!text.trim()) {

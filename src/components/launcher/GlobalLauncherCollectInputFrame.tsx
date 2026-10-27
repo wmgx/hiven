@@ -10,7 +10,6 @@ import type { IconRef, LauncherOutput, LauncherResultChoice, LauncherTextFormat 
 import { LauncherMarkdown } from './LauncherMarkdown'
 import { resolveIcon } from '../../utils/resolveIcon'
 import { Tooltip } from '../Tooltip'
-import { useSelectionCaptureAvailability } from '../useSelectionCaptureAvailability'
 import { LauncherHintKey, LauncherHintText } from './LauncherFooterHints'
 import { LauncherCommandTag, LauncherParamChipTrail } from './LauncherCommandTag'
 import { LauncherEmptyWell } from './LauncherEmptyWell'
@@ -155,7 +154,6 @@ export function GlobalLauncherCollectInputFrame({
   onSecondaryAction,
   onPastePreviewText,
   onSubmitPrimary,
-  onCaptureSelection,
   attachedBlock,
   onRemoveBlock,
   onOpenParams,
@@ -186,7 +184,6 @@ export function GlobalLauncherCollectInputFrame({
   onPastePreviewText?: (choice: LauncherResultChoice) => void | Promise<void>
   /** Enter when no destination chrome — default submit path. */
   onSubmitPrimary?: () => void
-  onCaptureSelection?: () => void
   /** Host Block backing frame.blockText, used for its label. */
   attachedBlock?: LauncherObjectBlock | null
   onRemoveBlock?: () => void
@@ -204,8 +201,6 @@ export function GlobalLauncherCollectInputFrame({
   onRevokeAiSend?: () => void
 }) {
   const placeholder = frame.input.placeholderI18n?.[locale] ?? frame.input.placeholder ?? ''
-  const showCaptureSelection = Boolean(!frame.item.metadataInput && onCaptureSelection && !frame.inputText && frame.blockText === undefined && frame.item.behavior.type === 'perform' && frame.item.inputPolicy && frame.item.inputPolicy.mode !== 'all')
-  const captureAvailability = useSelectionCaptureAvailability(showCaptureSelection)
   const previewChoices = frame.previewOutput?.choices ?? []
   const selectedIndex = frame.selectedSuggestionIndex ?? -1
   const hasSuggestions = previewChoices.length > 0
@@ -286,15 +281,11 @@ export function GlobalLauncherCollectInputFrame({
   }
   const runPrimary = async () => {
     if (busy) return
-    if (frame.fromSelection && freshChoice) { await pastePreview(); return }
     // No fresh preview for the current input → full submit (fresh execute).
     if (!freshChoice) { onSubmitPrimary?.(); return }
     await onActivateChoice(freshChoice)
   }
   const menu: LauncherCommandMenuAction[] = [
-    ...(showCaptureSelection && captureAvailability === 'can-attempt' && onCaptureSelection
-      ? [{ id: 'read-selection', label: app ? t(locale, 'palette.readSelectionFrom', { app }) : t(locale, 'palette.captureSelection'), run: onCaptureSelection }]
-      : []),
     ...(freshChoice && hasReturn
       ? [{ id: 'continue', label: t(locale, 'outputActions.continue'), run: () => onSecondaryAction?.(freshChoice, 'return-to-launcher') }]
       : []),
@@ -309,9 +300,7 @@ export function GlobalLauncherCollectInputFrame({
     ? undefined
     : error && !freshChoice
       ? t(locale, 'palette.outputRetry')
-      : frame.fromSelection && freshChoice
-        ? (app ? t(locale, 'palette.pasteBack', { app }) : t(locale, 'palette.pasteBackForeground'))
-        : freshChoice ? t(locale, 'outputActions.copy') : t(locale, 'palette.quickEntryRun')
+      : freshChoice ? t(locale, 'outputActions.copy') : t(locale, 'palette.quickEntryRun')
 
   const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return

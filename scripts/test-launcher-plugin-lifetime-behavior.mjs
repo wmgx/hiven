@@ -66,7 +66,7 @@ const pluginApi=load('src/workspace/launcher/pluginApi.ts',{
 const output=load('src/workspace/launcher/output.ts',{'./types':types,'../../i18n':i18n});
 const {LauncherController}=load('src/workspace/launcher/controller.ts',{
   './pluginLifetime':load('src/workspace/launcher/pluginLifetime.ts'),
-  '../usageJournal':{appendUsageJournal:async()=>{}},'./output':output,'./commandPreviewPolicy':load('src/workspace/launcher/commandPreviewPolicy.ts'),'../ai/sendGate':{ aiSendGrantKey: (pluginId, commandId) => `${pluginId}:${commandId}`, decideAiSend: () => ({ confirm: true, secret: false }) },'./foregroundSelectionCapture':{captureForegroundSelectionText:fail('foreground capture')},'../../i18n':i18n,
+  '../usageJournal':{appendUsageJournal:async()=>{}},'./output':output,'./commandPreviewPolicy':load('src/workspace/launcher/commandPreviewPolicy.ts'),'../ai/sendGate':{ aiSendGrantKey: (pluginId, commandId) => `${pluginId}:${commandId}`, decideAiSend: () => ({ confirm: true, secret: false }) },'../../i18n':i18n,
   '../telemetry':{TelemetryEvents:{},itemTelemetryProps:()=>({}),trackBehavior:no,trackLatencyFrom:no,telemetryNow:Date.now},
   '../contentBoundary':{isSafeExperienceIdentifier:()=>true},
 });

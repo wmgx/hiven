@@ -350,21 +350,15 @@ for (const availability of ['can-attempt', 'unknown']) {
 // Host adapters used to discard fallback:none and turn it into a successful
 // action. Follow the real output callbacks through paste.
 for (const availability of ['unsupported', 'accessibility-required', 'can-attempt']) {
-  for (const entry of ['launcher-primary', 'launcher-secondary']) {
+  {
     const h = loadPluginPaste({
       availability, windowSearch: '?window=launcher',
       invokeImpl: async (command) => { h.calls.push(['invoke', command]); throw new Error('Native simulation failed') },
     })
     const text = '  retained output\n'
     const launcher = h.launcherModule.createPluginLauncherApi()
-    let run
-    if (entry === 'launcher-primary') {
-      const result = h.output.foregroundPasteResult(text, launcher)
-      run = result.output.choices[0].primaryAction
-    } else {
-      const result = h.output.textResult(text, launcher)
-      run = result.output.choices[0].secondaryActions.find((action) => action.id === 'paste-to-foreground-app').run
-    }
+    const result = h.output.textResult(text, launcher)
+    const run = result.output.choices[0].secondaryActions.find((action) => action.id === 'paste-to-foreground-app').run
     if (availability === 'can-attempt') {
       await assert.rejects(run(), (error) => error.message === workspaceMessages.en['paste.copied'], 'copied fallback cannot consume the result as delivered')
       assert.equal(h.calls.filter(([kind]) => kind === 'invoke').length, 1)
@@ -372,7 +366,7 @@ for (const availability of ['unsupported', 'accessibility-required', 'can-attemp
     } else {
       const key = availability === 'unsupported' ? 'paste.unsupported' : 'paste.permissionRequired'
       await assert.rejects(run(), (error) => error.message === workspaceMessages.en[key])
-      assert.deepEqual(h.calls, [], `${entry}: blocked output must not reach clipboard or native hide`)
+      assert.deepEqual(h.calls, [], 'blocked output must not reach clipboard or native hide')
       assert.equal(h.state.open, true)
     }
   }

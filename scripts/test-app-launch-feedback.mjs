@@ -67,7 +67,6 @@ const { LauncherController } = load('src/workspace/launcher/controller.ts', {
   './output': { isOutputResult: (result) => result.ok && Boolean(result.output) },
   './commandPreviewPolicy': load('src/workspace/launcher/commandPreviewPolicy.ts'),
   '../ai/sendGate': { aiSendGrantKey: (pluginId, commandId) => `${pluginId}:${commandId}`, decideAiSend: () => ({ confirm: true, secret: false }) },
-  './foregroundSelectionCapture': {},
   '../telemetry': { TelemetryEvents: {}, itemTelemetryProps: () => ({}), trackBehavior() {}, trackLatencyFrom() {}, telemetryNow: () => 0 },
   '../contentBoundary': { isSafeExperienceIdentifier: () => false },
 })

@@ -87,17 +87,6 @@ export const editorContextProvider: ContextSnapshotProvider = {
   },
 }
 
-// [DISABLED] External selection capture — logic preserved, export disabled.
-// export const externalSelectionContextProvider: ContextSnapshotProvider = {
-//   id: 'external-selection',
-//   getSnapshot: async () => {
-//     const text = await readLastForegroundSelectionText()
-//     return text
-//       ? { externalSelection: { kind: 'text', text, preview: text.slice(0, 240) } }
-//       : {}
-//   },
-// }
-
 export const clipboardContextProvider: ContextSnapshotProvider = {
   id: 'clipboard',
   getSnapshot: async () => {
@@ -124,8 +113,6 @@ export async function createDefaultWorkContextSnapshot(
 ): Promise<WorkContextSnapshot> {
   return createWorkContextSnapshot(
     { source, timestamp: Date.now() },
-    // NOTE: externalSelectionContextProvider intentionally removed from defaults.
-    // Global Launcher no longer auto-reads external app selection (clipboard-first design).
     [foregroundContextProvider, editorContextProvider, clipboardContextProvider, ...providers],
   )
 }

@@ -7,15 +7,7 @@
  *
  * Input resolution: the tool declares an `inputPolicy` (auto/all/selection). The
  * adapter resolves `ResolvedTextInput` from the controlled `PluginLauncherApi`
- * (selection vs active text). On the global-launcher surface, when that comes
- * back empty and the tool declares an inputPolicy, there is one on-demand
- * fallback: capture whatever is selected in the app that was foreground before
- * the launcher opened, before falling back to the manual collect-input prompt
- * (see LauncherController.selectItem/submitParams in controller.ts, the
- * primary trigger point; resolveTextInputWithForegroundFallback below is only
- * a backstop for callers that reach execute() outside that flow). A "nothing
- * selected" outcome is silent (no toast) since this fires on every eligible
- * invocation with no local selection, including plain manual-typing use.
+ * (selection vs active text), or uses explicitly collected input.
  */
 
 import { quickEditorCommandCursorOffset } from '../quickEditor/quickEditorCommandTarget'
@@ -36,10 +28,9 @@ import type {
 } from './types'
 import { DEFAULT_TOOL_ACTION_POLICY } from './types'
 import { normalizeLauncherSurfaceId } from './types'
-import { emptyResult, textResult, foregroundPasteResult, replaceActiveTextResult, errorResult, choicesResult, REPLACE_ACTIVE_TEXT_OUTPUT_CHOICE_ID } from './output'
+import { emptyResult, textResult, replaceActiveTextResult, errorResult, choicesResult, REPLACE_ACTIVE_TEXT_OUTPUT_CHOICE_ID } from './output'
 import { toDirectAnswer } from './normalizeContribution'
 import { computeContractFingerprint } from './contractFingerprint'
-import { captureForegroundSelectionText } from './foregroundSelectionCapture'
 import { translate, type Locale } from '../../i18n'
 import { getPluginPermissionSnapshot } from '../pluginPermissions'
 import { createPluginShell } from '../pluginShell'
@@ -74,54 +65,23 @@ function resolveTextInput(api: PluginLauncherApi, mode: TextInputMode): Resolved
 function manualTextInput(
   text: string,
   mode: TextInputMode,
-  source?: 'foreground-app',
 ): ResolvedTextInput {
-  return { kind: 'text', text, mode, source: !text ? 'empty' : (source ?? 'manual') }
-}
-
-/**
- * Last-resort input source for a Global Launcher tool run: Global Launcher has
- * no bound pane, so when there's no local selection/active text, fall back to
- * an on-demand capture of whatever is selected in the app that was foreground
- * before the launcher took focus. Only fires for tools that actually declare
- * an inputPolicy (i.e. genuinely consume text — generators like random don't),
- * and only for auto/selection modes ('all' means "whole document", which a
- * foreign app's selection can't stand in for). Never fires on launcher open —
- * only when a matching tool actually executes with nothing else available,
- * per the clipboard-first "explicit intent" direction (no ambient capture).
- *
- * Command entry collects input without capture. This fallback only applies to
- * direct executions that bypass that input step and have no explicit text.
- */
-async function resolveTextInputWithForegroundFallback(
-  api: PluginLauncherApi,
-  locale: Locale,
-  mode: TextInputMode,
-  allowForegroundFallback: boolean,
-): Promise<ResolvedTextInput> {
-  const local = resolveTextInput(api, mode)
-  if (local.source !== 'empty' || !allowForegroundFallback) return local
-  const captured = await captureForegroundSelectionText(api, locale)
-  return captured ? { kind: 'text', text: captured, mode, source: 'foreground-app' } : local
+  return { kind: 'text', text, mode, source: text ? 'manual' : 'empty' }
 }
 
 function makeOutput(
   api: PluginLauncherApi,
   locale: Locale,
   surfaceId: string | undefined,
-  preferForegroundPaste: boolean,
 ): PluginToolOutput {
   const normalizedSurfaceId = normalizeLauncherSurfaceId((surfaceId ?? "global-launcher") as import("./types").LauncherSurfaceId)
   const isGlobal = normalizedSurfaceId === 'global-launcher'
-  const globalResult = (value: string, format?: LauncherTextFormat) => preferForegroundPaste
-    ? foregroundPasteResult(value, api, locale, format)
-    : textResult(value, api, locale, format)
   return {
     text: (value: string, options?: { format?: LauncherTextFormat }) => isGlobal
-      ? globalResult(value, options?.format)
+      ? textResult(value, api, locale, options?.format)
       : replaceActiveTextResult(value, api, locale),
     replaceActiveText: (value: string) => isGlobal
-      ? globalResult(value)
+      ? textResult(value, api, locale)
       : replaceActiveTextResult(value, api, locale),
     error: (message: string) => errorResult(message),
     choices: (choices) => choicesResult(choices),
@@ -167,16 +127,14 @@ export function adaptToolToLauncherItem(
   ): Promise<LauncherExecuteResult> => {
     const normalizedSurfaceId = normalizeLauncherSurfaceId(ctx.surfaceId)
     const isEditorLike = normalizedSurfaceId === 'quick-editor-command'
-    const isGlobalLauncher = normalizedSurfaceId === 'global-launcher'
     if (tool.imageInput) {
       if (!ctx.image) return errorResult(translate(ctx.locale, 'palette', 'inputRequired'))
       ctx = { ...ctx, input: { text: '' } }
     }
     const hasManualInput = ctx.input?.text !== undefined
-    const allowForegroundFallback = isGlobalLauncher && tool.inputPolicy !== undefined && mode !== 'all'
     const input = hasManualInput
-      ? manualTextInput(ctx.input?.text ?? '', mode, ctx.input?.source)
-      : await resolveTextInputWithForegroundFallback(ctx.api, ctx.locale, mode, allowForegroundFallback)
+      ? manualTextInput(ctx.input?.text ?? '', mode)
+      : resolveTextInput(ctx.api, mode)
     if (isEditorLike && !hasManualInput && input.source !== 'selection') {
       const cursorOffset = quickEditorCommandCursorOffset(ctx.api)
       if (cursorOffset !== undefined) input.cursorOffset = cursorOffset
@@ -199,7 +157,7 @@ export function adaptToolToLauncherItem(
         shell,
         t: ctx.t,
         ...(tool.imageInput && ctx.image ? { image: ctx.image } : {}),
-        output: makeOutput(ctx.api, ctx.locale, ctx.surfaceId ?? '', input.source === 'foreground-app'),
+        output: makeOutput(ctx.api, ctx.locale, ctx.surfaceId ?? ''),
       }),
     )
     if (

@@ -17,7 +17,7 @@ console.info = (...args) => { if (args[0] !== '[hiven:launcher-perf]') info(...a
 const server = await createServer({ server: { middlewareMode: true }, appType: 'custom', logLevel: 'silent' })
 try {
   const { LauncherController } = await server.ssrLoadModule('/src/workspace/launcher/controller.ts')
-  const { textResult, foregroundPasteResult } = await server.ssrLoadModule('/src/workspace/launcher/output.ts')
+  const { textResult } = await server.ssrLoadModule('/src/workspace/launcher/output.ts')
   const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no }); return { promise, resolve, reject } }
   let mode = 'copied', wait, entered, closed = 0, nativeCalls = 0
   const guards = [], events = []
@@ -36,23 +36,22 @@ try {
     },
   })
   const top = () => controller.getState().frames.at(-1)
-  const item = (primary = false) => ({
+  const item = () => ({
     systemKey: 'host:paste-recovery:fixture', kind: 'host', display: { title: 'Synthetic paste' },
     behavior: { type: 'perform' },
     actionPolicy: { effect: 'pure' },
     execute: context => {
-      const result = (primary ? foregroundPasteResult : textResult)('完整正文\nsecond line', context.api, 'en')
+      const result = textResult('完整正文\nsecond line', context.api, 'en')
       result.output.choices.push({ id: 'other', title: 'Other', primaryAction: async () => {} })
       return result
     },
   })
-  for (const primary of [false, true]) {
+  {
     controller.reset()
-    await controller.selectItem(item(primary), { objectBlockText: "synthetic material" })
+    await controller.selectItem(item(), { objectBlockText: "synthetic material" })
     assert.equal(top().kind, 'result', JSON.stringify(controller.getState()))
     const choice = top().output.choices[0]
-    if (primary) await controller.activateChoice(choice)
-    else await controller.activateSecondary(choice, 'paste-to-foreground-app')
+    await controller.activateSecondary(choice, 'paste-to-foreground-app')
     assert.equal(top().kind, 'result')
     assert.equal(top().output.choices[0].preview, '完整正文\nsecond line')
     assert.match(controller.getState().error, /Copied, but not inserted/)
@@ -79,8 +78,8 @@ try {
   mode = 'success'
   await controller.activateSecondary(freshFrame.output.choices[0], 'paste-to-foreground-app')
   assert.equal(closed, 1, 'successful delivery keeps the existing controller close contract')
-  assert.equal(nativeCalls, 4)
-  console.log('PASS paste recovery actual controller: primary/secondary copied retention, stale API, late failure, success')
+  assert.equal(nativeCalls, 3)
+  console.log('PASS paste recovery actual controller: secondary copied retention, stale API, late failure, success')
 } finally { await server.close(); console.info = info }
 
 // Execute the real History delivery callback without rendering or testing styles.
