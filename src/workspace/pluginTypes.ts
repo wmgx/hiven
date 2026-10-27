@@ -897,11 +897,6 @@ export type PluginSurfaceHostApi = {
    * host surface lifecycle. Older hosts may omit this capability.
    */
   openAppSettings?(options: { section: 'ai' }): Promise<void>
-  /** Bundled History only: exactly two snapshots, total <= 1 MiB UTF-8.
-   * Keeps History mounted; resolves on Diff return, false on interruption.
-   * No arbitrary plugin routing, clipboard reads/writes, or pane binding.
-   */
-  compareHistoryTexts?(snapshots: readonly Readonly<{ id: string; title: string; text: string }>[], options?: { signal?: AbortSignal }): Promise<boolean>
   /** Bundled History only: open one validated full-text snapshot in Quick Editor.
    * The destination archives its current draft before replacement. This bridge
    * never reads or writes the system clipboard and does not mutate History.

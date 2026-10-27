@@ -15,16 +15,6 @@ import { getCachedIndex } from './storage/clipboardHistoryCache'
 
 const MB = 1024 * 1024
 
-const FILTER_ROUTES = [
-  {
-    id: 'favorite',
-    title: 'Clipboard Favorites',
-    titleZh: '剪贴板收藏',
-    titleKey: 'route.favorite',
-    aliases: ['clipboard favorites', 'clipboard favorite', 'favorite clipboard', '剪贴板收藏', '收藏剪贴板'],
-  },
-] as const
-
 const CLIPBOARD_HISTORY_SHELL = {
   defaultWidth: 900,
   defaultHeight: 640,
@@ -165,40 +155,9 @@ export default definePlugin<ClipboardHistorySettings>({
           recommendedShortcut: 'CmdOrCtrl+Shift+V',
           shortcutPresentation: 'window',
         },
-        pasteQueue: {
-          permissions: ['clipboard.write', 'accessibility.paste', 'globalShortcut.register'],
-          nextShortcut: 'Control+Shift+V',
-        },
         shell: CLIPBOARD_HISTORY_SHELL,
       },
-      ...FILTER_ROUTES.map((route) => ({
-        id: route.id,
-        kind: 'custom-view' as const,
-        title: route.title,
-        titleI18n: { zh: route.titleZh },
-        component: ClipboardHistorySurface,
-        entry: { launcher: false },
-        shell: CLIPBOARD_HISTORY_SHELL,
-      })),
     ],
-  },
-
-  launcher: {
-    items: FILTER_ROUTES.map((route) => ({
-      id: `open-${route.id}`,
-      display: {
-        title: route.titleKey,
-        subtitle: 'route.open',
-        icon: 'Clipboard',
-        aliases: [...route.aliases],
-      },
-      behavior: { type: 'perform' as const },
-      surfaces: ['global-launcher' as const],
-      execute(execution) {
-        execution.api.openSurface(route.id)
-        return { ok: true as const, keepOpen: true }
-      },
-    })),
   },
 
   background: clipboardHistoryBackground,

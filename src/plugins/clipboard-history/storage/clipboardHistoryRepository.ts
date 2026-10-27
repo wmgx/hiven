@@ -32,7 +32,6 @@ export type ClipboardHistoryRepository = {
   toggleFavorite(id: string): Promise<ClipboardHistoryItem | undefined>
   setFavorite(id: string, favorite: boolean, title?: string): Promise<ClipboardHistoryItem | undefined>
   updateFavoriteTitle(id: string, title: string): Promise<ClipboardHistoryItem | undefined>
-  updateText(id: string, expectedText: string, text: string, maxBytes: number, isCurrent?: () => boolean): Promise<ClipboardTextHistoryItem>
 }
 const DAY = 86_400_000
 const makeTextPreview = (text: string) => { const line = text.replace(/\n/g, ' ').trim(); return line.length > 200 ? `${line.slice(0, 200)}…` : line }
@@ -276,7 +275,7 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
       if (!prior) return { result: undefined, operations: [] }
       if (reason === 'expired' && (prior.isFavorite || (prior.legacy && !state.legacyEnabledAt) || Math.max(prior.lastCopiedAt, prior.retentionStartedAt ?? 0, prior.legacy ? state.legacyEnabledAt ?? 0 : 0) >= (cutoff ?? 0))) return { result: undefined, operations: [] }
       const now = Date.now()
-      const trash: TrashRecord = { metadata: prior, deletedAt: now, purgeAfter: now + 30 * DAY, reason }
+      const trash: TrashRecord = { metadata: prior, deletedAt: now, purgeAfter: now + (reason === 'manual' ? 5000 : 30 * DAY), reason }
       return { result: prior, next: { ...state, active: state.active - 1, trash: state.trash + 1, legacy: state.legacy - (prior.legacy ? 1 : 0) },
         operations: [...removeMetadata(prior), { type: 'set', key: trashKey(trash), value: trash }, { type: 'set', key: TRASH_ID + id, value: trashKey(trash) }] }
     }, () => requireCurrent(signal))
@@ -409,19 +408,5 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
     setFavorite,
     toggleFavorite: (id) => update(id, (item) => ({ ...item, isFavorite: !item.isFavorite, favoritedAt: !item.isFavorite ? Date.now() : undefined, favoriteTitle: !item.isFavorite ? item.favoriteTitle : undefined })),
     updateFavoriteTitle: (id, title) => update(id, (item) => item.isFavorite ? { ...item, favoriteTitle: title.trim() || undefined } : item),
-    updateText: async (id, expectedText, text, maxBytes, isCurrent = () => true) => {
-      const result = await update(id, (item) => {
-        if (item.kind !== 'text') throw new Error('missing')
-        if (item.text !== expectedText) throw new Error('changed')
-        const byteSize = new TextEncoder().encode(text).byteLength
-        if (byteSize > maxBytes) throw new Error('tooLarge')
-        let hash = 2166136261
-        const payload = `text:${text}`
-        for (let i = 0; i < payload.length; i++) { hash ^= payload.charCodeAt(i); hash = Math.imul(hash, 16777619) }
-        return { ...item, text, byteSize, hash: (hash >>> 0).toString(36), preview: makeTextPreview(text) }
-      }, isCurrent)
-      if (!result || result.kind !== 'text') throw new Error('missing')
-      return result
-    },
   }
 }

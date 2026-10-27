@@ -79,6 +79,10 @@ export function createClipboardHistoryBackground(): PluginBackgroundContribution
         if (cleaning || lifecycle.signal.aborted) return
         cleaning = true
         try {
+          if (!await ctx.storage.kv.get<boolean>('trash-cleared-s8')) {
+            await repository.emptyTrash({ signal: lifecycle.signal })
+            await ctx.storage.kv.set('trash-cleared-s8', true)
+          }
           // Bounded catch-up on startup/resume and once per minute, independent
           // of new clipboard changes or recording being enabled.
           for (let batch = 0; batch < 8 && !lifecycle.signal.aborted; batch++) {

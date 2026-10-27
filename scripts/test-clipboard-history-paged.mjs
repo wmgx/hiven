@@ -81,9 +81,6 @@ try {
   const added = await one.addItem({ kind: 'text', text: 'pin', hash: 'pin', byteSize: 3 })
   await Promise.all([one.toggleFavorite(added.id), two.toggleFavorite(added.id)])
   assert.equal((await one.getItem(added.id)).isFavorite, false, 'cross-repository CAS prevents lost toggles')
-  concurrent.failBatch((ops) => ops.some((op) => op.key === 'history/items/' + added.id))
-  await assert.rejects(one.updateText(added.id, 'pin', 'replacement', 100), /atomic failure/)
-  assert.equal((await one.getItem(added.id)).text, 'pin', 'body and index failure is atomic')
 
   const images = syntheticHistoryStorage(); const pictures = create(images.storage)
   const photo = { kind: 'image', blobId: 'shared', previewBlobId: 'shared', contentType: 'image/png', byteSize: 20 }
