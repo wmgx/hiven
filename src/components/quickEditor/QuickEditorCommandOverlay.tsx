@@ -351,6 +351,7 @@ function OpenQuickEditorCommandOverlay() {
         locale={locale}
         resultSelectedIndex={resultSelectedIndex}
         selectedResultChoiceIds={selectedResultChoiceIds}
+        customizeOnModEnter
         onSettingsClose={closeCommandAndRestoreFocus}
         onSurfaceBack={closeCommandAndRestoreFocus}
         onSurfaceClose={closeCommandAndRestoreFocus}

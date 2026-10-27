@@ -45,6 +45,7 @@ export function GlobalLauncherFrameSwitch({
   resultSelectedIndex,
   selectedResultChoiceIds,
   isFavoriteSelected,
+  customizeOnModEnter,
   isImeComposingRef,
   browsingActions,
   browseCategory,
@@ -110,6 +111,7 @@ export function GlobalLauncherFrameSwitch({
   selectedResultChoiceIds: Set<string>
   /** Focused row is in launcher favorites. */
   isFavoriteSelected?: boolean
+  customizeOnModEnter?: boolean
   isImeComposingRef: RefObject<boolean>
   browsingActions?: boolean
   browseCategory?: LauncherBrowseCategory
@@ -336,6 +338,7 @@ export function GlobalLauncherFrameSwitch({
       selectedItem={selectedItem}
       locale={locale}
       isFavoriteSelected={isFavoriteSelected}
+      customizeOnModEnter={customizeOnModEnter}
       browsingActions={browsingActions}
       browseCategory={browseCategory}
       onBrowseCategoryChange={onBrowseCategoryChange}
