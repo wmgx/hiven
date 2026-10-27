@@ -32,7 +32,7 @@ type Props = Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'onChange' | 'row
  * scrolls. Typing never inserts a line break; Enter stays with the host keys.
  */
 export const LauncherAutoGrowInput = forwardRef<HTMLTextAreaElement, Props>(function LauncherAutoGrowInput(
-  { value, onChange, className, ...rest },
+  { value, onChange, className, onFocus, ...rest },
   forwardedRef,
 ) {
   const ref = useRef<HTMLTextAreaElement | null>(null)
@@ -73,6 +73,15 @@ export const LauncherAutoGrowInput = forwardRef<HTMLTextAreaElement, Props>(func
       value={value}
       className={['l-search-field', className].filter(Boolean).join(' ')}
       onChange={(event) => onChange?.(event.target.value.replace(/[\r\n]+/g, ''))}
+      onFocus={(event) => {
+        // Remount + programmatic focus (e.g. Esc back to the list) lands at 0; resume at the end.
+        // A mouse click places its caret after this, so clicks still win.
+        const field = event.currentTarget
+        if (field.selectionStart === 0 && field.selectionEnd === 0 && field.value.length > 0) {
+          field.setSelectionRange(field.value.length, field.value.length)
+        }
+        onFocus?.(event)
+      }}
     />
   )
 })
