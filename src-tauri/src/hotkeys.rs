@@ -63,6 +63,18 @@ pub enum DoubleModifier {
     Option,
 }
 
+pub(crate) fn debug_double_modifier_registered(modifier: &str) -> bool {
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    {
+        let Some(state) = DOUBLE_MODIFIER_HOTKEY_STATE.get() else { return false; };
+        state.enabled.lock().is_ok_and(|enabled| *enabled)
+            && state.listener_running.lock().is_ok_and(|running| *running)
+            && state.modifier.lock().is_ok_and(|current| format!("{current:?}") == modifier)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    { let _ = modifier; false }
+}
+
 impl DoubleModifier {
     fn label(self) -> &'static str {
         match self {

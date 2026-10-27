@@ -47,6 +47,10 @@ const status = (): PasteQueueStatus => {
   const state = queue.getSnapshot()
   return { sessionId, version: revision, phase: state.phase, busy: state.busy, total: state.total, completed: state.completed, remaining: state.remaining, currentId: state.current?.id ?? null }
 }
+export function getPasteQueueDebugSnapshot() {
+  const { phase, busy, total, completed, remaining } = queue.getSnapshot()
+  return { phase, busy, total, completed, remaining }
+}
 function publish(outcome: PasteQueueNotice = 'ready') {
   revision += 1
   const shortcut = useAppStore.getState().settings.pasteQueueShortcut

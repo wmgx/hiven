@@ -17,6 +17,7 @@ const entry = join(srcDir, 'main.tsx')
 const EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs']
 
 const VITE_ALIASES = {
+  '@tauri-apps/api/core': join(srcDir, 'workspace/debugNativeCore.ts'),
   '@hiven/plugin': join(srcDir, 'plugin-sdk.ts'),
   '@hiven/plugin-diff': join(srcDir, 'pluginHostDiff.ts'),
   '@hiven/plugin-ui/icons': join(srcDir, 'plugin-ui-icons.ts'),

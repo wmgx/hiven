@@ -7,6 +7,10 @@ import { installWebNativeBridge } from './workspace/webNativeBridge'
 if (await installWebNativeBridge()) {
   document.documentElement.dataset.webNativeBridge = 'true'
 }
+if (import.meta.env.DEV) {
+  void import('./workspace/debugSnapshot').then(({ installNativeDebugSnapshot }) => installNativeDebugSnapshot())
+    .catch(() => console.warn('[hiven] DebugSnapshotUnavailable'))
+}
 
 const isNativeTauriRuntime = Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) && !window.__HIVEN_WEB_NATIVE_BRIDGE__
 const windowType = new URLSearchParams(window.location.search).get('window') ?? (isNativeTauriRuntime ? null : 'launcher')

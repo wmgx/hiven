@@ -20,10 +20,11 @@ function fullReloadStatefulModules(): Plugin {
   }
 }
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [react(), tailwindcss(), fullReloadStatefulModules()],
   resolve: {
     alias: {
+      ...(command === 'serve' ? { '@tauri-apps/api/core': fileURLToPath(new URL('./src/workspace/debugNativeCore.ts', import.meta.url)) } : {}),
       '@': fileURLToPath(new URL('./src', import.meta.url)),
       '@hiven/plugin': fileURLToPath(new URL('./src/plugin-sdk.ts', import.meta.url)),
       '@hiven/plugin-diff': fileURLToPath(new URL('./src/pluginHostDiff.ts', import.meta.url)),
@@ -37,4 +38,4 @@ export default defineConfig({
     port: 1420,
     strictPort: true,
   },
-})
+}))

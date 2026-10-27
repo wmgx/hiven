@@ -215,6 +215,27 @@ impl State {
     fn visible(&self) -> Vec<Snapshot> { self.slots.iter().flatten().map(|p| p.snapshot.clone()).collect() }
 }
 fn registry() -> &'static Mutex<State> { static STATE: OnceLock<Mutex<State>> = OnceLock::new(); STATE.get_or_init(|| Mutex::new(State::default())) }
+pub(crate) async fn debug_snapshot(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    ui(app, |app| {
+        let window = app.get_webview_window(LABEL);
+        let visible = window.as_ref().and_then(|window| window.is_visible().ok());
+        #[cfg(target_os = "macos")]
+        let ignores_mouse_events = window.as_ref().and_then(|window| window.ns_window().ok()).map(|window| unsafe {
+            let window = window as *mut objc2::runtime::AnyObject;
+            let ignores: bool = objc2::msg_send![window, ignoresMouseEvents];
+            ignores
+        });
+        #[cfg(not(target_os = "macos"))]
+        let ignores_mouse_events: Option<bool> = None;
+        let state = registry().lock().map_err(|_| "hud-unavailable")?;
+        let slots: Vec<_> = state.slots.iter().flatten().map(|pending| serde_json::json!({
+            "id": pending.snapshot.id, "slot": pending.snapshot.slot,
+            "interactive": pending.snapshot.interactive, "collapsed": pending.snapshot.collapsed,
+            "visible": visible, "ignoresMouseEvents": ignores_mouse_events,
+        })).collect();
+        Ok(serde_json::json!({ "exists": window.is_some(), "visible": visible, "ignoresMouseEvents": ignores_mouse_events, "slots": slots }))
+    }).await
+}
 // Fixed lifecycle stages only: no owner labels, ids, bodies, paths, or credentials.
 fn trace(stage: &'static str) { super::log_launcher_perf("native:hud.lifecycle", Instant::now(), stage); }
 fn now() -> u64 { SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64 }

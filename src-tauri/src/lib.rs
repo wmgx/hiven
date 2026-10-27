@@ -32,6 +32,7 @@ mod host_text_export;
 mod text_material;
 mod toast_hud;
 mod history_paste_queue;
+mod debug_snapshot;
 pub mod desktop_bridge;
 pub mod hotkeys;
 #[cfg(target_os = "linux")]
@@ -7904,6 +7905,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            debug_snapshot::hiven_debug_snapshot,
             history_paste_queue::begin_history_queue_paste,
             history_paste_queue::paste_history_queue_text,
             toast_hud::route_toast,
