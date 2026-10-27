@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, IconButton, SegmentedControl, Select, TextArea } from '@hiven/plugin-ui'
+import { Button, IconButton, SegmentedControl, Select, TextArea, TextInput } from '@hiven/plugin-ui'
 import { BackIcon } from '@hiven/plugin-ui/icons'
 import { saveQrImage } from './saveQrImage'
 import { createQrPasteHandlers } from './qrPaste'
@@ -234,7 +234,7 @@ export function QrSurface(props: PluginSurfaceProps) {
       ) : (
         <div className="qr-surface__body">
           <div className="qr-surface__pane">
-            <input
+            <TextInput
               ref={fileRef}
               className="qr-surface__file"
               type="file"

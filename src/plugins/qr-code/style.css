@@ -4,8 +4,8 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  color: var(--hiven-color-text-primary, var(--color-text-primary));
-  background: var(--bg-surface, var(--hiven-color-bg-primary, var(--color-background-primary)));
+  color: var(--foreground);
+  background: var(--background);
   font-family: var(--font, var(--font-sans));
 }
 
@@ -15,11 +15,11 @@
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  border-bottom: 1px solid var(--border, var(--hiven-color-border, var(--color-border-tertiary)));
+  border-bottom: 1px solid var(--border);
 }
 
 .qr-surface__crumb {
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 650;
 }
 
@@ -44,7 +44,7 @@
 }
 
 .qr-surface__pane--preview {
-  border-left: 1px solid var(--border-subtle, var(--color-border-tertiary));
+  border-left: 1px solid var(--border-subtle);
   align-items: stretch;
 }
 
@@ -56,8 +56,8 @@
 }
 
 .qr-surface__label {
-  font-size: 11.5px;
-  color: var(--text-2, var(--color-text-secondary));
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
 }
 
 .qr-surface__input {
@@ -65,7 +65,7 @@
   min-height: 0;
   resize: none;
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: var(--text-base);
   line-height: 1.55;
 }
 
@@ -76,9 +76,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px dashed var(--border, var(--color-border-secondary));
-  border-radius: 12px;
-  background: var(--bg-surface-2, var(--color-background-secondary));
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--subtle);
   overflow: auto;
 }
 
@@ -86,8 +86,7 @@
   max-width: min(100%, 360px);
   height: auto;
   image-rendering: pixelated;
-  background: #fff;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   user-select: none;
   -webkit-user-drag: none;
 }
@@ -96,99 +95,18 @@
 .qr-surface__error {
   margin: 16px;
   text-align: center;
-  font-size: 12.5px;
-  color: var(--text-3, var(--color-text-tertiary));
+  font-size: var(--text-base);
+  color: var(--faint-foreground);
 }
 
 .qr-surface__error {
-  color: var(--hiven-color-danger, var(--color-danger));
+  color: var(--destructive-text);
 }
 
 .qr-surface__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-}
-
-.qr-surface .hiven-ui-button,
-.qr-surface .hiven-ui-icon-button {
-  appearance: none;
-  -webkit-appearance: none;
-}
-
-.qr-surface .hiven-ui-button {
-  height: 28px;
-  min-height: 28px;
-  padding: 0 11px;
-  border: var(--hairline) solid var(--color-border-secondary, var(--border, var(--hiven-color-border)));
-  border-radius: 8px;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--color-background-primary, #fff) 70%, transparent) 0%, transparent 100%),
-    var(--color-background-secondary, var(--hiven-color-bg-secondary, #f3f3f3));
-  color: var(--color-text-secondary, var(--hiven-color-text-secondary));
-  font-size: 12px;
-  font-weight: 600;
-  box-shadow:
-    0 1px 0 color-mix(in srgb, #fff 55%, transparent) inset,
-    0 1px 2px rgba(0, 0, 0, 0.04);
-  transition:
-    background 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease,
-    box-shadow 120ms ease,
-    filter 120ms ease,
-    transform 80ms ease;
-}
-
-.qr-surface .hiven-ui-button:hover:not(:disabled):not(.hiven-ui-button-primary) {
-  color: var(--color-text-primary, var(--hiven-color-text-primary));
-  border-color: var(--color-border-primary, var(--border-2, var(--border)));
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--color-background-primary, #fff) 85%, transparent) 0%, transparent 100%),
-    color-mix(in srgb, var(--color-background-secondary, #f3f3f3) 88%, var(--color-text-primary) 4%);
-  box-shadow:
-    0 1px 0 color-mix(in srgb, #fff 65%, transparent) inset,
-    0 2px 6px rgba(0, 0, 0, 0.06);
-}
-
-.qr-surface .hiven-ui-button:active:not(:disabled) {
-  transform: translateY(1px) scale(0.98);
-}
-
-.qr-surface .hiven-ui-button-primary {
-  color: #fff;
-  border-color: transparent;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, #fff 18%, var(--hiven-color-accent, var(--color-accent, #2563eb))) 0%,
-    var(--hiven-color-accent, var(--color-accent, #2563eb)) 100%
-  );
-  box-shadow:
-    0 1px 0 color-mix(in srgb, #fff 28%, transparent) inset,
-    0 1px 3px color-mix(in srgb, var(--hiven-color-accent, var(--color-accent, #2563eb)) 35%, transparent);
-}
-
-.qr-surface .hiven-ui-button-primary:hover:not(:disabled) {
-  color: #fff;
-  border-color: transparent;
-  filter: none;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, #fff 28%, var(--hiven-color-accent, var(--color-accent, #2563eb))) 0%,
-    color-mix(in srgb, #000 8%, var(--hiven-color-accent, var(--color-accent, #2563eb))) 100%
-  );
-  box-shadow:
-    0 1px 0 color-mix(in srgb, #fff 34%, transparent) inset,
-    0 2px 8px color-mix(in srgb, var(--hiven-color-accent, var(--color-accent, #2563eb)) 40%, transparent);
-}
-
-.qr-surface .hiven-ui-icon-button:hover:not(:disabled) {
-  background: var(--color-background-secondary, var(--hiven-color-bg-secondary));
-}
-
-.qr-surface .hiven-ui-button:disabled {
-  opacity: 0.45;
-  cursor: default;
 }
 
 .qr-surface__drop {
@@ -200,20 +118,20 @@
   justify-content: center;
   gap: 8px;
   padding: 20px;
-  border: 1px dashed var(--border, var(--color-border-secondary));
-  border-radius: 12px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
   text-align: center;
   cursor: pointer;
-  background: var(--bg-surface-2, var(--color-background-secondary));
+  background: var(--subtle);
 }
 
 .qr-surface__drop.is-active {
-  border-color: var(--accent, var(--hiven-color-accent));
-  background: var(--accent-soft, var(--color-accent-bg));
+  border-color: var(--primary);
+  background: var(--primary-soft);
 }
 
 .qr-surface__drop-title {
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 600;
 }
 
@@ -223,11 +141,11 @@
   margin: 0;
   padding: 12px;
   overflow: auto;
-  border: 1px solid var(--border-subtle, var(--color-border-tertiary));
-  border-radius: 10px;
-  background: var(--color-background-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--background);
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: var(--text-base);
   line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
@@ -249,6 +167,6 @@
 
   .qr-surface__pane--preview {
     border-left: 0;
-    border-top: 1px solid var(--border-subtle, var(--color-border-tertiary));
+    border-top: 1px solid var(--border-subtle);
   }
 }
