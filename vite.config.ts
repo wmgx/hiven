@@ -22,6 +22,8 @@ function fullReloadStatefulModules(): Plugin {
 
 export default defineConfig(({ command }) => ({
   plugins: [react(), tailwindcss(), fullReloadStatefulModules()],
+  // The dev IPC alias must share diagnostics and application state with source modules.
+  optimizeDeps: { exclude: ['@tauri-apps/api', '@tauri-apps/plugin-global-shortcut', '@tauri-apps/plugin-dialog', '@tauri-apps/plugin-fs', '@tauri-apps/plugin-process', '@tauri-apps/plugin-shell', '@tauri-apps/plugin-updater'] },
   resolve: {
     alias: {
       ...(command === 'serve' ? { '@tauri-apps/api/core': fileURLToPath(new URL('./src/workspace/debugNativeCore.ts', import.meta.url)) } : {}),

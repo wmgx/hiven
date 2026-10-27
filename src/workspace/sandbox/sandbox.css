@@ -18,5 +18,4 @@
 .sandbox-panel textarea { min-height: 220px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); resize: vertical; }
 .sandbox-panel button { padding: 8px; border: 1px solid var(--border); border-radius: var(--radius); }
 .sandbox-hud { margin-top: auto; }
-html[data-sandbox] .global-launcher-overlay { right: 360px; }
-html[data-sandbox] .global-launcher-panel { max-width: calc(100vw - 400px); }
+html[data-sandbox] .global-launcher-panel { translate: -180px 0; max-width: calc(100vw - 400px); }

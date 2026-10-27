@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "sandbox:e2e": "python3 scripts/sandbox/e2e.py",
     "build": "vite build",
     "build:desktop": "tauri build --bundles app,dmg --config '{\"bundle\":{\"createUpdaterArtifacts\":false}}'",
     "build:desktop:debug": "tauri build --debug --bundles app,dmg --config '{\"bundle\":{\"createUpdaterArtifacts\":false}}'",

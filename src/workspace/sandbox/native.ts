@@ -82,7 +82,7 @@ async function invoke(command: string, args: Args = {}, options?: Args): Promise
     case 'paste_history_queue_text': {
       if (!attempts.has(args.attemptId)) throw new Error('QueueTargetError')
       const backup = structuredClone(clipboard)
-      updateClipboard({ text: args.text, transient: true })
+      updateClipboard({ text: args.text, transient: true, concealed: true })
       try { paste(clipboard.text) } finally { updateClipboard({ ...backup, origin: 'hiven' }) }
       return
     }
