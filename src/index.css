@@ -9337,3 +9337,26 @@ html[data-window='launcher'] .flux-spatial-shell .recent-clipboard-hint {
   background: var(--accent);
   transition: width 160ms ease;
 }
+
+/* AiSendGate: host-owned send confirmation and disclosure (tokens only). */
+.ai-send-preview {
+  margin: 0;
+  max-height: 120px;
+  overflow: auto;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--muted);
+  color: var(--foreground);
+  font: 12px/1.5 var(--font-sans);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.ai-send-meta { margin: 0; font-size: 12px; color: var(--muted-foreground); }
+.ai-send-secret { margin: 0; font-size: 12px; color: var(--destructive); }
+.ai-send-remember { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--foreground); }
+.ai-send-disclosure { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 12px; color: var(--muted-foreground); }
+.ai-send-disclosure button, .ai-send-grants button {
+  border: 0; padding: 0; background: none; font: inherit; font-size: 12px; color: var(--primary); cursor: pointer;
+}
+.ai-send-grants { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 13px; }
+.ai-send-grants li { display: flex; align-items: center; justify-content: space-between; gap: 12px; }

@@ -8,6 +8,7 @@ import type { ComponentType } from 'react'
 import type { Locale } from '../i18n'
 import type { FluxEffect, PaneId } from './types'
 import type { PluginAiApi } from './ai/types'
+import type { AiSendApproval, AiSendRequest } from './ai/sendGate'
 import type {
   LauncherItemContribution,
   LauncherDynamicItemProvider,
@@ -841,6 +842,19 @@ export type PluginSurfaceTelemetry = {
   trackBehavior(name: string, details?: PluginTelemetryDetails): void
 }
 
+export type PluginAiSendGate = {
+  /**
+   * Ask the host to send. The host checks readiness (unified unavailable view
+   * with "Open AI settings"), shows the send confirmation unless the user
+   * granted this command, and always confirms secret-shaped content.
+   * Resolves with the approved target, or null when cancelled/unavailable.
+   * Send only `text`/`extras` with the returned selection.
+   */
+  request(send: AiSendRequest, options?: { signal?: AbortSignal }): Promise<AiSendApproval | null>
+  /** Disclosure line for a remembered approval: "Sent to {provider · model}", click revokes. */
+  Disclosure: ComponentType<{ commandId: string; approval: AiSendApproval | null | undefined }>
+}
+
 export type PluginNotifyApi = {
   flash(notice: { level: 'success' | 'error' | 'info'; message: string }): void
   status(notice: { id: string; title: string; detail?: string; progress?: { completed: number; total: number } }): void
@@ -889,6 +903,8 @@ export type PluginSurfaceHostApi = {
    * `status` with the same id updates in place; `end` removes it. Older hosts may omit this.
    */
   notify?: PluginNotifyApi
+  /** Host-owned AI send permission. Older hosts may omit this. */
+  aiSendGate?: PluginAiSendGate
   /**
    * Content-free diagnostics into the host perf log (`npm run telemetry`).
    * Labels are recorded as `plugin:<pluginId>:<name>`; never pass user content

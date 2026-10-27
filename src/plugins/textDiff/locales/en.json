@@ -55,7 +55,5 @@
   "compare.error.lines": "Combined input exceeds {limit} lines. Reduce it.",
   "compare.error.failed": "Comparison failed. Edit the input and retry.",
   "diff.setMode": "Set",
-  "explain.confirm": "Send text",
-  "explain.confirmMessage": "Send the full text of both sides to {provider} · {model}, {count} characters in total",
   "explain.close": "Close"
 }

@@ -1,5 +1,5 @@
 {
-  "version": 171,
+  "version": 172,
   "packages": [
     {
       "pluginId": "encode-decode",
@@ -49,22 +49,22 @@
     {
       "pluginId": "translate",
       "dir": "translate",
-      "version": "1.0.29"
+      "version": "1.0.30"
     },
     {
       "pluginId": "ai-writing",
       "dir": "ai-writing",
-      "version": "1.0.5"
+      "version": "1.0.6"
     },
     {
       "pluginId": "regex-tester",
       "dir": "regex-tester",
-      "version": "1.4.4"
+      "version": "1.4.5"
     },
     {
       "pluginId": "text-diff",
       "dir": "textDiff",
-      "version": "3.6.2"
+      "version": "3.6.3"
     },
     {
       "pluginId": "clipboard-history",

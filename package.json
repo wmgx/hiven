@@ -195,6 +195,7 @@
     "test:current-material-compare": "node scripts/test-current-material-compare.mjs",
     "test:desktop-target-registry": "node scripts/test-desktop-target-registry.mjs",
     "test:diff-explanation": "node scripts/test-diff-explanation.mjs",
+    "test:ai-send-gate": "node scripts/test-ai-send-gate.mjs",
     "test:duplicate-line-locations": "node --experimental-strip-types scripts/test-duplicate-line-locations.mts",
     "test:encode-decode-core": "node --experimental-strip-types scripts/test-encode-decode-core.mts",
     "test:formatter-lexical": "node --experimental-strip-types scripts/test-formatter-lexical.mts",

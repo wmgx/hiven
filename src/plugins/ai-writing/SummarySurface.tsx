@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
-import type { PluginSurfaceProps } from '@hiven/plugin'
+import type { AiSendApproval, PluginSurfaceProps } from '@hiven/plugin'
 import { Button, IconButton, Select } from '@hiven/plugin-ui'
 import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
 import { SUMMARY_POINT_LIMITS, type SummaryPointLimit } from './prompt'
@@ -58,6 +58,21 @@ export function SummarySurface({ host, initialText, t }: PluginSurfaceProps) {
   ], snapshot.agentId, t('selection.unavailable', { value: snapshot.agentId }))
   const canUseOutput = bound && session.canUseOutput(snapshot)
   const generating = snapshot.phase === 'running'
+  const [approval, setApproval] = useState<AiSendApproval | null>(null)
+  const gate = host.aiSendGate
+  const generate = async () => {
+    if (!gate || !bound || !session.canGenerate(snapshot)) return
+    const expected = snapshot
+    const ready = readiness.result?.status === 'ready' ? readiness.result : undefined
+    const approved = await gate.request({
+      commandId: 'summarize', label: t('surface.title'), text: expected.text,
+      selection: ready,
+      preflight: { providerId: expected.providerId, agentId: expected.agentId, capabilities: ['text.generate'], inputModalities: ['text'] },
+    })
+    if (!approved || session.getSnapshot() !== expected) return
+    setApproval(approved)
+    void session.generate(expected)
+  }
 
   const openAiSettings = async () => {
     if (!host.openAppSettings || settingsVisit.current || !mounted.current) return
@@ -123,7 +138,7 @@ export function SummarySurface({ host, initialText, t }: PluginSurfaceProps) {
           <textarea data-plugin-surface-autofocus data-launcher-scrollable value={snapshot.text} disabled={snapshot.suspended} aria-label={t('pane.source')} placeholder={t('input.placeholder')} spellCheck={false} onChange={(event) => session.setText(event.currentTarget.value)} />
         </section>
         <section className="ai-summary-pane ai-summary-pane-output">
-          <div className="ai-summary-pane-header"><strong>{t('pane.summary')}</strong>{snapshot.preview && snapshot.phase !== 'success' && <span>{t('pane.incomplete')}</span>}</div>
+          <div className="ai-summary-pane-header"><strong>{t('pane.summary')}</strong>{gate && snapshot.phase !== 'idle' && <gate.Disclosure commandId="summarize" approval={approval} />}{snapshot.preview && snapshot.phase !== 'success' && <span>{t('pane.incomplete')}</span>}</div>
           <textarea data-launcher-scrollable value={snapshot.preview} aria-label={t('pane.summary')} aria-busy={generating} placeholder={t('output.placeholder')} readOnly spellCheck={false} />
         </section>
       </main>
@@ -134,7 +149,7 @@ export function SummarySurface({ host, initialText, t }: PluginSurfaceProps) {
           {snapshot.errorDetail && <details><summary>{t('readiness.diagnostic')}</summary><p>{snapshot.errorDetail}</p></details>}
         </div>
         <div className="ai-summary-actions">
-          {generating ? <Button type="button" variant="danger" onClick={() => session.stop()}>{t('action.stop')}</Button> : <Button type="button" variant="primary" disabled={!bound || !session.canGenerate(snapshot)} onClick={() => void session.generate(snapshot)}>{t(readiness.status === 'unknown' ? 'action.tryGenerate' : 'action.generate')}</Button>}
+          {generating ? <Button type="button" variant="danger" onClick={() => session.stop()}>{t('action.stop')}</Button> : <Button type="button" variant="primary" disabled={!gate || !bound || !session.canGenerate(snapshot)} onClick={() => void generate()}>{t(readiness.status === 'unknown' ? 'action.tryGenerate' : 'action.generate')}</Button>}
           <Button type="button" disabled={!canUseOutput} onClick={() => useOutput('copy')}>{t('action.copy')}</Button>
           <Button type="button" disabled={!canUseOutput} onClick={() => useOutput('continue')}>{t('action.continue')}</Button>
         </div>

@@ -85,6 +85,7 @@ export type {
   PluginSurfaceAppearance,
   PluginSurfaceHostApi,
   PluginNotifyApi,
+  PluginAiSendGate,
   PluginSurfaceTelemetry,
   PluginTelemetryDetails,
   PluginSurfaceSaveTextOptions,
@@ -204,3 +205,4 @@ export type {
   AiUsageRecord,
   PluginAiApi,
 } from './workspace/ai/types'
+export type { AiSendApproval, AiSendRequest } from './workspace/ai/sendGate'

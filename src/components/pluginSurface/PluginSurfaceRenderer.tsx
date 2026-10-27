@@ -11,6 +11,7 @@ import { createPluginPrivateStorage } from '../../workspace/pluginStorage'
 import { createPluginClipboard } from '../../workspace/pluginClipboard'
 import { showToast, dismissToast } from '../../workspace/toast'
 import { hostNotify } from '../../workspace/notify'
+import { useAiSendGate } from './AiSendGateLayer'
 import { createPluginTelemetry } from '../../workspace/telemetry/track'
 import { createPluginPaste } from '../../workspace/pluginPaste'
 import { captureLauncherPasteOwner, combinePasteRecoveryOwners, createPasteRecoveryScope, isPasteRecoveryTemporaryHidden, observePasteRecoveryFocus } from '../../workspace/pasteRecovery'
@@ -540,6 +541,15 @@ export function PluginSurfaceRenderer({
       isCurrent: deliveryFeedbackOwner.isCurrent, subscribeInvalidation: deliveryFeedbackOwner.subscribeInvalidation }) : undefined,
   [target, surfaceState, deliveryFeedbackOwner])
 
+  const openAiSettingsRef = useRef<(() => void) | undefined>(undefined)
+  const isGateCurrent = useCallback(() => mountedRef.current && !hiddenRef.current && !suspendedRef.current, [])
+  const aiSendGate = useAiSendGate({
+    pluginId: target.pluginId,
+    ai: 'ai' in surfaceState ? surfaceState.ai : undefined,
+    isCurrent: isGateCurrent,
+    openAiSettings: () => openAiSettingsRef.current?.(),
+  })
+
   if (surfaceState.status === 'loading-runtime' || ('target' in surfaceState && surfaceState.target !== target)) {
     return <PluginSurfaceMessage title={t(locale, 'palette.surfaceLoading')} />
   }
@@ -584,6 +594,21 @@ export function PluginSurfaceRenderer({
     if (onRequestLeave) onRequestLeave(action, leaveOwner, leaveActions)
     else leaveSurface(action === 'back' ? onBack : onClose)
   }
+
+  const openAppSettings = ({ section }: { section: 'ai' }): Promise<void> => {
+    if (section !== 'ai' || !isCurrentSurface() || document.visibilityState === 'hidden') return Promise.reject(settingsInterrupted())
+    if (sessionRef.current) return sessionRef.current.promise
+    pasteScope.invalidate()
+    closeOwnedSettings()
+    let resolve!: () => void
+    let reject!: (error: Error) => void
+    const promise = new Promise<void>((done, fail) => { resolve = done; reject = fail })
+    const session: AppSettingsSession = { target, owner: surfaceState, promise, resolve, reject }
+    sessionRef.current = session
+    setAppSettingsSession(session)
+    return promise
+  }
+  openAiSettingsRef.current = () => { void openAppSettings({ section: 'ai' }).catch(() => {}) }
 
   return (
     <PluginSurfaceErrorBoundary
@@ -677,19 +702,7 @@ export function PluginSurfaceRenderer({
               if (settingsTarget.presentation === 'dialog') ownedSettingsTargetRef.current = settingsTarget
               openSettingsDialog(settingsTarget)
             },
-            openAppSettings: ({ section }) => {
-              if (section !== 'ai' || !isCurrentSurface() || document.visibilityState === 'hidden') return Promise.reject(settingsInterrupted())
-              if (sessionRef.current) return sessionRef.current.promise
-              pasteScope.invalidate()
-              closeOwnedSettings()
-              let resolve!: () => void
-              let reject!: (error: Error) => void
-              const promise = new Promise<void>((done, fail) => { resolve = done; reject = fail })
-              const session: AppSettingsSession = { target, owner: surfaceState, promise, resolve, reject }
-              sessionRef.current = session
-              setAppSettingsSession(session)
-              return promise
-            },
+            openAppSettings,
             detachToWindow: (initialText?: string) => {
               if (!isCurrentSurface() || detachRef.current) return
               interruptSettings()
@@ -732,6 +745,7 @@ export function PluginSurfaceRenderer({
               status: (notice) => { if (surfaceOwner.isCurrent()) hostNotify.status(notice) },
               end: hostNotify.end,
             },
+            aiSendGate: aiSendGate.gate,
             telemetry: createPluginTelemetry(target.pluginId),
             saveText,
             returnToLauncherWithObject: (input: PluginObjectBlockInput, options?: { signal?: AbortSignal }) => {
@@ -861,6 +875,7 @@ export function PluginSurfaceRenderer({
         onConfirm={discardHistoryDiffChanges}
         onCancel={cancelHistoryDiffLeave}
       />
+      {aiSendGate.layer}
       {appSettingsSession && appSettingsSession.target === target && appSettingsSession.owner === surfaceState && (
         <PluginAppSettingsDialog locale={locale} onClose={() => finishAppSettings(appSettingsSession, isCurrentSurface() && document.visibilityState !== 'hidden')} />
       )}

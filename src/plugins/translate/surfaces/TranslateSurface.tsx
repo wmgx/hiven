@@ -314,6 +314,19 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
       runRef.current = null
       return
     }
+    // Typing or the bound shortcut is the consent; the host still forces a
+    // confirmation for secret-shaped text. The readiness line is the disclosure.
+    const checked = readinessController.getSnapshot().result
+    const gate = hostRef.current.aiSendGate
+    if (profile.provider === 'ai' && gate && checked?.status === 'ready') {
+      const approved = await gate.request({ commandId: 'translate', label: t('surface.title'), text, consent: 'implicit', selection: checked })
+      if (!isCurrent()) return
+      if (!approved) {
+        runRef.current = null
+        setView({ identity: run.identity, outputText: '', status: { kind: 'stopped' } })
+        return
+      }
+    }
 
     let preview = ''
     setView({ identity: run.identity, outputText: '', status: { kind: 'translating', requestId: run.id } })

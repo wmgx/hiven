@@ -55,7 +55,5 @@
   "compare.error.lines": "两侧合计超过 {limit} 行，请缩小范围",
   "compare.error.failed": "核对失败，请修改输入后重试",
   "diff.setMode": "集合",
-  "explain.confirm": "确认发送",
-  "explain.confirmMessage": "将发送两侧全文至 {provider} · {model}，共 {count} 字",
   "explain.close": "关闭"
 }
