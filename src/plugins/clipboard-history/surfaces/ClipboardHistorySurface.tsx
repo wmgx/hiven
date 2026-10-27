@@ -8,7 +8,7 @@
  * - Keyboard shortcuts: Enter=paste, Cmd/Ctrl+C=copy selection in preview, Delete=remove
  */
 
-import { useState, useEffect, useLayoutEffect, useCallback, useDeferredValue, useMemo, useRef, useId, memo, type CompositionEvent, type KeyboardEvent } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useDeferredValue, useMemo, useRef, useId, memo, type CompositionEvent, type KeyboardEvent, type MouseEvent } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import {
@@ -117,6 +117,9 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
 
   const [items, setItems] = useState<ClipboardHistoryItem[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const selectionAnchor = useRef<string | null>(null)
+  const moreButtonRef = useRef<HTMLButtonElement>(null)
   const [query, setQuery] = useState('')
   // Telemetry: when this browsing session opened (mount or a genuine reopen); cleared once the first list lands.
   const openStartedAtRef = useRef<number | null>(performance.now())
@@ -201,7 +204,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     pasteNoticeGenerationRef.current += 1
     setPasteNotice(null)
     return () => { pasteNoticeGenerationRef.current += 1 }
-  }, [query, searchMatchMode, selectedId, filter, timeRange, host, settings.enabled])
+  }, [query, searchMatchMode, selectedId, selectedIds, filter, timeRange, host, settings.enabled])
   useEffect(() => {
     const surface = containerRef.current
     if (surface) return observeClipboardHistoryShortcutFocus(surface, setShortcutFocus)
@@ -242,7 +245,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   useLayoutEffect(() => {
     copyLifecycle.cancel()
     quickEditorLifecycle.cancel()
-  }, [requestKey, refreshEpoch, copyLifecycle, quickEditorLifecycle])
+  }, [requestKey, refreshEpoch, selectedId, selectedIds, copyLifecycle, quickEditorLifecycle])
   const refreshPage = useCallback(() => {
     setLoadMoreFailed(false)
     setFullTextSearchState('loading')
@@ -250,6 +253,8 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     setRefreshEpoch((value) => value + 1)
   }, [])
   const clearPage = useCallback(() => {
+    setSelectedIds([])
+    selectionAnchor.current = null
     pageGeneration.current += 1
     pagesLoadedRef.current = 1
     setLoadMoreFailed(false)
@@ -541,7 +546,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       resetHistoryOpenSession({
         invalidatePasteNotice: () => { pasteNoticeGenerationRef.current += 1 },
         clearPasteNotice: () => setPasteNotice(null),
-        clearSelection: () => setSelectedId(null),
+        clearSelection: () => { setSelectedId(null); setSelectedIds([]); selectionAnchor.current = null },
         resetPage: () => { pagesLoadedRef.current = 1 },
         clearNextCursor: () => setNextCursor(undefined),
         resetScroll: () => listRef.current?.scrollTo({ top: 0 }),
@@ -557,15 +562,35 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       if (focusFrame !== undefined) cancelAnimationFrame(focusFrame)
     }
   }, [openSession, refreshPage, suspendPointerHover])
-  const selectListItem = useCallback((id: string) => {
+  const selectRange = useCallback((id: string) => {
+    const anchor = selectionAnchor.current ?? selectedId ?? id
+    selectionAnchor.current = anchor
+    const from = filteredItems.findIndex((item) => item.id === anchor)
+    const to = filteredItems.findIndex((item) => item.id === id)
+    if (from >= 0 && to >= 0) setSelectedIds(filteredItems.slice(Math.min(from, to), Math.max(from, to) + 1).map((item) => item.id))
     setSelectedId(id)
-    // Rows are virtualized. Their button must not own keyboard focus when a
-    // subsequent native scroll unmounts it and sends focus back to the body.
+  }, [filteredItems, selectedId])
+  const selectListItem = useCallback((id: string, event: MouseEvent) => {
+    if (event.shiftKey) selectRange(id)
+    else if (event.metaKey || event.ctrlKey) {
+      setSelectedIds((current) => {
+        const ids = current.length ? current : selectedId ? [selectedId] : []
+        return ids.includes(id) ? ids.filter((value) => value !== id) : [...ids, id]
+      })
+      selectionAnchor.current = id
+      setSelectedId(id)
+    } else {
+      setSelectedIds([])
+      selectionAnchor.current = id
+      setSelectedId(id)
+    }
     containerRef.current?.focus({ preventScroll: true })
-  }, [])
+  }, [selectRange, selectedId])
 
   const resetBrowser = useCallback(() => {
     setQuery('')
+    setSelectedIds([])
+    selectionAnchor.current = null
     setSearchMatchMode('literal')
     setFilter('all')
     setTimeRange('all')
@@ -587,22 +612,40 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     if (lastVisibleRow >= 0 && lastVisibleRow >= flatRows.length - LOAD_MORE_THRESHOLD_ROWS) loadMore()
   }, [flatRows.length, lastVisibleRow, loadMore])
 
+  const actionItems = useCallback((item: ClipboardHistoryItem) => selectedIds.length > 1 && selectedIds.includes(item.id)
+    ? filteredItems.filter((entry) => selectedIds.includes(entry.id)) : [item], [filteredItems, selectedIds])
+  const selectedItems = selectedItem ? actionItems(selectedItem) : []
+  const multiple = selectedItems.length > 1
+  const selectionHasNonText = multiple && selectedItems.some((item) => item.kind !== 'text')
+  const readActionItems = useCallback(async (item: ClipboardHistoryItem, isCurrent: () => boolean) => {
+    const selection = actionItems(item)
+    if (selection.length > 1 && selection.some((entry) => entry.kind !== 'text')) throw new Error('selection.textOnly')
+    const full = await Promise.all(selection.map(async (entry) => {
+      const value = await repository.getItem(entry.id)
+      if (!value || value.hash !== entry.hash) throw new Error('error.loadFailed')
+      return value
+    }))
+    if (!isCurrent() || !resultsActionableRef.current) throw new Error('cancelled')
+    return full
+  }, [actionItems, repository])
+  const joinedText = (full: ClipboardHistoryItem[]) => {
+    const text = full.map((item) => item.kind === 'text' ? item.text : '').join('\n')
+    if (new TextEncoder().encode(text).byteLength > 1024 * 1024) throw new Error('selection.tooLarge')
+    return text
+  }
+  const actionError = (error: unknown, fallback: string) => t(error instanceof Error &&
+    ['selection.textOnly', 'selection.tooLarge', 'error.loadFailed'].includes(error.message) ? error.message : fallback)
+
   const handlePaste = useCallback(async (item: ClipboardHistoryItem, plainTextOnly = false) => {
     if (!resultsActionableRef.current || (plainTextOnly && item.kind !== 'text')) return
     const generation = ++pasteNoticeGenerationRef.current
     setPasteNotice(null)
     try {
-      // Always re-read: a loaded preview can have been edited or deleted elsewhere.
-      const fullItem = await repository.getItem(item.id)
-      if (!fullItem) {
-        if (generation === pasteNoticeGenerationRef.current) setPasteNotice(t('error.pasteFailed'))
-        return
-      }
-      if (generation !== pasteNoticeGenerationRef.current || !resultsActionableRef.current) return
-
+      const fullItems = await readActionItems(item, () => generation === pasteNoticeGenerationRef.current && host.deliveryFeedbackOwner?.isCurrent() !== false)
+      const fullItem = fullItems[0]
       let result
       if (fullItem.kind === 'text') {
-        result = await host.paste.pasteText(fullItem.text)
+        result = await host.paste.pasteText(fullItems.length > 1 ? joinedText(fullItems) : fullItem.text)
       } else if (fullItem.kind === 'image') {
         result = await host.paste.pasteImage(fullItem.blobId)
       } else if (fullItem.kind === 'files') {
@@ -615,20 +658,13 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         return
       }
       // Persist paste count for Frequent tab (window closes; next open reads storage/cache).
-      void repository.recordPaste(fullItem.id).catch(() => {})
+      for (const entry of fullItems) void repository.recordPaste(entry.id).catch(() => {})
       resetBrowser()
       host.complete()
-    } catch {
-      if (generation === pasteNoticeGenerationRef.current) setPasteNotice(t('error.pasteFailed'))
+    } catch (error) {
+      if (generation === pasteNoticeGenerationRef.current) setPasteNotice(actionError(error, 'error.pasteFailed'))
     }
-  }, [host, t, repository, resetBrowser])
-
-  const resolveFullItem = useCallback(async (item: ClipboardHistoryItem) => {
-    if ((item.kind === 'text' && !item.text) || (item.kind === 'image' && !item.blobId) || (item.kind === 'files' && item.paths.length === 0)) {
-      return repository.getItem(item.id)
-    }
-    return item
-  }, [repository])
+  }, [host, t, repository, resetBrowser, readActionItems])
 
   const handleCopy = useCallback(async (item: ClipboardHistoryItem) => {
     if (!resultsActionableRef.current) return
@@ -636,14 +672,10 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     setPasteNotice(null)
     const submission = copyLifecycle.begin(() => host.deliveryFeedbackOwner?.isCurrent() !== false)
     try {
-      const fullItem = await resolveFullItem(item)
-      if (!submission.isCurrent()) return
-      if (!fullItem) {
-        host.showMessage(t('error.copyFailed'), 'error')
-        return
-      }
+      const fullItems = await readActionItems(item, submission.isCurrent)
+      const fullItem = fullItems[0]
       if (fullItem.kind === 'text') {
-        await host.clipboard.writeText(fullItem.text, { signal: submission.signal })
+        await host.clipboard.writeText(fullItems.length > 1 ? joinedText(fullItems) : fullItem.text, { signal: submission.signal })
       } else if (fullItem.kind === 'image') {
         await host.clipboard.writeImage(fullItem.blobId, { signal: submission.signal })
       } else {
@@ -653,12 +685,12 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       submission.commit()
       resetBrowser()
       host.complete()
-    } catch {
-      if (submission.isCurrent()) host.showMessage(t('error.copyFailed'), 'error')
+    } catch (error) {
+      if (submission.isCurrent()) host.showMessage(actionError(error, 'error.copyFailed'), 'error')
     } finally {
       submission.finish()
     }
-  }, [copyLifecycle, host, resetBrowser, resolveFullItem, t])
+  }, [copyLifecycle, host, resetBrowser, readActionItems, t])
 
   const handleSaveImage = useCallback(async (item: ClipboardHistoryItem) => {
     if (!resultsActionableRef.current || item.kind !== 'image') return
@@ -841,69 +873,53 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
 
   const handleReturnToLauncher = useCallback(async (item: ClipboardHistoryItem) => {
     if (!resultsActionableRef.current) return
-    pasteNoticeGenerationRef.current += 1
+    const generation = ++pasteNoticeGenerationRef.current
     setPasteNotice(null)
     try {
-      let fullItem = item
-      if ((item.kind === 'text' && !item.text) || (item.kind === 'image' && !item.blobId) || (item.kind === 'files' && item.paths.length === 0)) {
-        const loaded = await repository.getItem(item.id)
-        if (!resultsActionableRef.current) return
-        if (!loaded) {
-          host.showToast(t('error.loadFailed'), 'error')
-          return
-        }
-        fullItem = loaded
-      }
-
-      const ageMs = Date.now() - fullItem.lastCopiedAt
-      const ageLabel =
-        ageMs < 1000 ? undefined
-          : ageMs < 60_000 ? `${Math.floor(ageMs / 1000)}s`
-            : ageMs < 3_600_000 ? `${Math.floor(ageMs / 60_000)}m`
-              : undefined
-
-      if (fullItem.kind === 'text') {
-        if (!fullItem.text) {
-          host.showToast(t('error.returnFailed'), 'error')
-          return
-        }
-        host.returnToLauncherWithObject({ kind: 'text', text: fullItem.text, ageLabel })
-        return
-      }
-      if (fullItem.kind === 'image') {
-        if (!fullItem.blobId) {
-          host.showToast(t('error.returnFailed'), 'error')
-          return
-        }
-        host.returnToLauncherWithObject({
-          kind: 'image',
-          blobId: fullItem.blobId,
-          contentType: fullItem.contentType,
-          width: fullItem.width,
-          height: fullItem.height,
-          ageLabel,
-        })
-        return
-      }
-      if (fullItem.kind === 'files') {
-        if (!fullItem.paths?.length) {
-          host.showToast(t('error.returnFailed'), 'error')
-          return
-        }
-        host.returnToLauncherWithObject({
-          kind: 'files',
-          paths: fullItem.paths,
-          fileNames: fullItem.fileNames,
-          ageLabel,
-        })
-      }
-    } catch {
-      host.showToast(t('error.returnFailed'), 'error')
+      const full = await readActionItems(item, () => generation === pasteNoticeGenerationRef.current && host.deliveryFeedbackOwner?.isCurrent() !== false)
+      const first = full[0]
+      const object = first.kind === 'text' ? { kind: 'text' as const, text: joinedText(full) }
+        : first.kind === 'image' ? { kind: 'image' as const, blobId: first.blobId, contentType: first.contentType, width: first.width, height: first.height }
+          : { kind: 'files' as const, paths: first.paths, fileNames: first.fileNames }
+      if (!await host.returnToLauncherWithObject(object)) throw new Error('error.returnFailed')
+    } catch (error) {
+      if (generation === pasteNoticeGenerationRef.current) setPasteNotice(actionError(error, 'error.returnFailed'))
     }
-  }, [host, repository, t])
+  }, [host, readActionItems, t])
+  const handleSave = async () => {
+    if (!selectedItem || multiple || !resultsActionableRef.current) return
+    if (selectedItem.kind === 'image') { await handleSaveImage(selectedItem); return }
+    if (selectedItem.kind !== 'text' || !host.saveText) return
+    const generation = ++pasteNoticeGenerationRef.current
+    try {
+      const full = await readActionItems(selectedItem, () => generation === pasteNoticeGenerationRef.current && host.deliveryFeedbackOwner?.isCurrent() !== false)
+      if (full[0].kind === 'text') await host.saveText(full[0].text)
+    } catch { if (generation === pasteNoticeGenerationRef.current) setPasteNotice(t('imageSave.failed')) }
+  }
+  const moreItems: MenuItemSpec[] = [
+    { key: 'continue', label: t('action.continue'), disabled: !selectedItem || resultsActionBlocked || selectionHasNonText,
+      description: selectionHasNonText ? t('selection.textOnly') : undefined, onSelect: () => { if (selectedItem) void handleReturnToLauncher(selectedItem) } },
+    { key: 'quickEditor', label: t('quickEditor.action'), disabled: multiple || resultsActionBlocked || selectedItem?.kind !== 'text',
+      onSelect: () => { if (selectedItem) void prepareQuickEditorOpen(selectedItem) } },
+    { key: 'save', label: t('action.saveAs'), disabled: multiple || resultsActionBlocked || !selectedItem || selectedItem.kind === 'files' || imageSaveBusy,
+      onSelect: () => { void handleSave() } },
+  ]
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.defaultPrevented || titleDialog || legacyDialog) return
+    if (e.defaultPrevented || titleDialog || legacyDialog || imeKeyDown.shouldIgnoreKeyDown(e)) return
+    if (e.key === 'Escape' && selectedIds.length) {
+      e.preventDefault()
+      e.stopPropagation()
+      setSelectedIds([])
+      selectionAnchor.current = null
+      return
+    }
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'k') {
+      e.preventDefault()
+      e.stopPropagation()
+      moreButtonRef.current?.click()
+      return
+    }
     if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'g') {
       if (imeKeyDown.shouldIgnoreKeyDown(e)) return
       const target = e.target instanceof Element ? e.target : null
@@ -930,20 +946,10 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       if (!shortcuts.paste || imeKeyDown.shouldIgnoreKeyDown(e)) return
       e.preventDefault()
       void toggleQuickFavorite(selectedItem)
-    } else if (e.key === 'Enter' && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
-      if (!shortcuts.paste || imeKeyDown.shouldIgnoreKeyDown(e)) return
-      e.preventDefault()
-      if (selectedItem.kind === 'text') void handlePaste(selectedItem, true)
-    } else if (e.key === 'Enter' && !e.altKey && (e.metaKey || e.ctrlKey)) {
-      if (!shortcuts.returnToLauncher) return
-      if (imeKeyDown.shouldIgnoreKeyDown(e)) return
-      e.preventDefault()
-      void handleReturnToLauncher(selectedItem)
-    } else if (e.key === 'Enter' && !e.altKey && !e.shiftKey) {
+    } else if (e.key === 'Enter' && !e.altKey) {
       if (!shortcuts.paste) return
-      if (imeKeyDown.shouldIgnoreKeyDown(e)) return
       e.preventDefault()
-      void handlePaste(selectedItem)
+      void handlePaste(selectedItem, e.shiftKey)
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
       if (!shortcuts.delete) return
       e.preventDefault()
@@ -953,8 +959,8 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       e.preventDefault()
       void handleSaveImage(selectedItem)
     } else if ((e.metaKey || e.ctrlKey) && e.key === 'c') {
-      if (focus.editing || !shortcuts.paste) return
-      const selectedText = readDomSelectedText()
+      if ((!multiple && focus.editing) || !shortcuts.paste) return
+      const selectedText = multiple ? '' : readDomSelectedText()
       e.preventDefault()
       if (selectedText) {
         void host.clipboard.writeText(selectedText)
@@ -963,26 +969,17 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         return
       }
       void handleCopy(selectedItem)
-    } else if (e.key === 'ArrowDown') {
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault()
-      const idx = filteredItems.findIndex((i) => i.id === selectedId)
-      if (idx < filteredItems.length - 1) {
-        const nextId = filteredItems[idx + 1].id
-        setSelectedId(nextId)
-        const flatIndex = flatRows.findIndex((r) => r.type === 'item' && r.item.id === nextId)
-        if (flatIndex >= 0) virtualizer.scrollToIndex(flatIndex, { align: 'auto' })
-      }
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      const idx = filteredItems.findIndex((i) => i.id === selectedId)
-      if (idx > 0) {
-        const prevId = filteredItems[idx - 1].id
-        setSelectedId(prevId)
-        const flatIndex = flatRows.findIndex((r) => r.type === 'item' && r.item.id === prevId)
-        if (flatIndex >= 0) virtualizer.scrollToIndex(flatIndex, { align: 'auto' })
-      }
+      const index = filteredItems.findIndex((item) => item.id === selectedId)
+      const next = filteredItems[Math.max(0, Math.min(filteredItems.length - 1, index + (e.key === 'ArrowDown' ? 1 : -1)))]
+      if (!next) return
+      if (e.shiftKey) selectRange(next.id)
+      else { setSelectedIds([]); selectionAnchor.current = next.id; setSelectedId(next.id) }
+      const row = flatRows.findIndex((entry) => entry.type === 'item' && entry.item.id === next.id)
+      if (row >= 0) virtualizer.scrollToIndex(row, { align: 'auto' })
     }
-  }, [selectedItem, selectedId, filteredItems, flatRows, virtualizer, handlePaste, handleReturnToLauncher, handleDelete, handleCopy, handleSaveImage, host, t, imeKeyDown, titleDialog, toggleQuickFavorite, resultsActionBlocked, settings.enabled, filter, legacyDialog])
+  }, [selectedItem, selectedId, filteredItems, flatRows, virtualizer, handlePaste, handleReturnToLauncher, handleDelete, handleCopy, handleSaveImage, host, t, imeKeyDown, titleDialog, toggleQuickFavorite, resultsActionBlocked, settings.enabled, filter, legacyDialog, selectedIds, multiple, selectRange])
 
   const filterOptionLabel = (checked: boolean, text: string) => (
     <span className="clipboard-history-filter-option">
@@ -1111,7 +1108,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                             item={row.item}
                             query={appliedQuery}
                             matchMode={appliedSearchMatchMode}
-                            selected={row.item.id === selectedId}
+                            selected={selectedIds.length ? selectedIds.includes(row.item.id) : row.item.id === selectedId}
                             locale={locale}
                             t={t}
                             storage={host.storage}
@@ -1184,13 +1181,16 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         </div>
 
         <SurfaceFooterHints className="clipboard-history-footer">
+          {multiple && <span role="status">{t('selection.count', { count: selectedItems.length })}</span>}
+          {selectionHasNonText && <span role="status">{t('selection.textOnly')}</span>}
           {pendingDelete && <><span>{t('message.deleted.toast')}</span><Button type="button" onClick={pendingDelete.undo}>{t('message.undo')}</Button></>}
           {pasteNotice ? <span role="status" style={{ color: 'var(--text-1, var(--hiven-color-text-primary))' }}>{pasteNotice}</span> : <>
             {/* Keep hint slots in layout when button focus temporarily disables shortcuts. */}
             <span style={{ visibility: shortcutHints.paste ? 'visible' : 'hidden' }} aria-hidden={!shortcutHints.paste}>↵ {t('hint.paste')}</span>
-            <span style={{ visibility: shortcutHints.paste && selectedItem?.kind === 'text' ? 'visible' : 'hidden' }} aria-hidden={!shortcutHints.paste || selectedItem?.kind !== 'text'}>{modifierLabel}↵ {t('hint.pastePlain')}</span>
+            <span style={{ visibility: shortcutHints.paste && selectedItem?.kind === 'text' ? 'visible' : 'hidden' }} aria-hidden={!shortcutHints.paste || selectedItem?.kind !== 'text'}>⇧↵ {t('hint.pastePlain')}</span>
             <span style={{ visibility: shortcutHints.paste ? 'visible' : 'hidden' }} aria-hidden={!shortcutHints.paste}>{modifierLabel}P {t('hint.favorite')}</span>
-            <span style={{ visibility: shortcutHints.returnToLauncher ? 'visible' : 'hidden' }} aria-hidden={!shortcutHints.returnToLauncher}>{typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'}↵ {t('hint.returnToLauncher')}</span>
+            <span style={{ visibility: shortcutHints.returnToLauncher ? 'visible' : 'hidden' }} aria-hidden={!shortcutHints.returnToLauncher}>{primaryModifierLabel}K {t('action.more')}</span>
+            <span>{primaryModifierLabel}C {t('action.copy')}</span>
             <span style={{ visibility: shortcutHints.delete ? 'visible' : 'hidden' }} aria-hidden={!shortcutHints.delete}>⌫ {t('hint.delete')}</span>
           </>}
         </SurfaceFooterHints>
@@ -1237,6 +1237,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
           placeholder={t('search.placeholder')}
         />
         {filterMenu}
+        <Menu items={moreItems} trigger={<Button ref={moreButtonRef} type="button" aria-label={t('action.more')}>{primaryModifierLabel}K</Button>} />
         <Button
           type="button"
           variant="primary"
@@ -1351,7 +1352,7 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
   locale: string
   t: (key: string) => string
   storage: SurfaceStorage
-  onSelect: (id: string) => void
+  onSelect: (id: string, event: MouseEvent) => void
   onPaste: (item: ClipboardHistoryItem) => Promise<void>
   onDelete: (id: string) => void
   onFavorite: (item: ClipboardHistoryItem) => void
@@ -1378,7 +1379,7 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
             type="button"
             selected={selected}
             className="clipboard-history-item"
-            onClick={() => onSelect(item.id)}
+            onClick={(event) => onSelect(item.id, event)}
             onDoubleClick={() => { if (!actionsDisabled) void onPaste(item) }}
           >
             {renderItemMedia(item, storage)}

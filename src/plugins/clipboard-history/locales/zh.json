@@ -28,7 +28,6 @@
   "meta.showDetails": "详情",
   "meta.hideDetails": "收起",
   "hint.paste": "粘贴",
-  "hint.returnToLauncher": "带回 Launcher",
   "hint.delete": "删除",
   "error.loadFailed": "加载失败，请重试",
   "error.returnFailed": "带回失败，请重试",
@@ -84,5 +83,11 @@
   "retention.failed": "操作失败，请重试",
   "error.retentionCleanup": "清理历史失败，稍后将重试",
   "retention.label": "保留期",
-  "retention.protectedItem": "未纳入"
+  "retention.protectedItem": "未纳入",
+  "action.continue": "继续处理",
+  "action.more": "更多",
+  "action.saveAs": "另存为…",
+  "selection.textOnly": "包含图片或文件，无法拼接文本",
+  "selection.tooLarge": "拼接后超过 1 MiB，请减少选择",
+  "selection.count": "已选 {count} 条"
 }

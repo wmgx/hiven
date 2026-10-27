@@ -28,7 +28,6 @@
   "meta.showDetails": "Details",
   "meta.hideDetails": "Less",
   "hint.paste": "Paste",
-  "hint.returnToLauncher": "Return to Launcher",
   "hint.delete": "Delete",
   "error.loadFailed": "Couldn't load history. Try again.",
   "error.returnFailed": "Couldn't return to Launcher. Try again.",
@@ -84,5 +83,11 @@
   "retention.failed": "Failed. Try again.",
   "error.retentionCleanup": "Cleanup failed. It will retry later.",
   "retention.label": "Retention",
-  "retention.protectedItem": "Not applied"
+  "retention.protectedItem": "Not applied",
+  "action.continue": "Continue processing",
+  "action.more": "More",
+  "action.saveAs": "Save as…",
+  "selection.textOnly": "Selection contains images or files; text cannot be joined",
+  "selection.tooLarge": "Joined text exceeds 1 MiB; select fewer items",
+  "selection.count": "{count} selected"
 }
