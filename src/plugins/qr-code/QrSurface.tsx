@@ -158,7 +158,7 @@ export function QrSurface(props: PluginSurfaceProps) {
   }, [dataUrl, host, t])
 
   return (
-    <section className="qr-surface" aria-label={t('surface.title')} data-no-drag>
+    <section className="qr-surface" aria-label={t('surface.title')}>
       <header className="qr-surface__header">
         <IconButton type="button" label={t('action.back')} onClick={() => {
           scanRef.current?.reset()

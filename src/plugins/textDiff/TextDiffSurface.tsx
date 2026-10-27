@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, IconButton, Menu, SegmentedControl } from '@hiven/plugin-ui'
+import { Button, IconButton, Menu, SegmentedControl, SurfaceHeaderActions } from '@hiven/plugin-ui'
 import { getPluginDiffHost, type DiffSource } from '@hiven/plugin-diff'
 import { DiffExplanation } from './DiffExplanation'
 import { useDiffSourceText } from './useDiffSourceText'
@@ -55,12 +55,6 @@ function parsePayload(initialText?: string): DiffPayload {
     }
   }
 }
-
-const IconBack = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="m15 18-6-6 6-6" />
-  </svg>
-)
 
 const IconSwap = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -241,20 +235,15 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
   const editorLanguage = diffMode === 'json' ? 'json' : 'plaintext'
   return (
     <div className="td-surface">
-      {/* Header — breadcrumb left, mode center-right, actions right */}
       <div className="td-hdr">
-        <Button variant="ghost" type="button" className="td-bc-back" onClick={() => { leaveSurface(); host.requestBack() }}>
-          <IconBack /><span className="td-bc-root">hiven</span>
-        </Button>
-        <span className="td-bc-sep">/</span>
-        <span className="td-bc-cur">{t('surface.breadcrumb')}</span>
         <div className="td-hdr-c">
           <SegmentedControl aria-label={t('diff.mode')} value={diffMode}
             options={(['text', 'json', 'set'] as const).map(value => ({ value, label: t(`diff.${value}Mode`) }))}
             onChange={value => setDiffMode(value as DiffMode)} />
         </div>
-        <div className="td-hdr-a">
-          <DiffExplanation host={host} t={t} original={originalText} modified={modifiedText} />
+        <DiffExplanation host={host} t={t} original={originalText} modified={modifiedText} />
+      </div>
+      <SurfaceHeaderActions>
           {diffMode === 'json' && (
             <IconButton
               type="button"
@@ -273,8 +262,7 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
           <IconButton type="button" className="td-ib" onClick={handleDetach} title={t('diff.detach')} aria-label={t('diff.detach')}>
             <IconDetach />
           </IconButton>
-        </div>
-      </div>
+      </SurfaceHeaderActions>
 
       <div className="td-pane-labels">
         {([

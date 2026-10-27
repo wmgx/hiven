@@ -109,7 +109,6 @@ export const textDiffPlugin = definePlugin({
           minHeight: 480,
           closeOnBlur: false,
           resizable: true,
-          rendersTitlebar: true,
         },
       })),
   },

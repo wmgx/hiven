@@ -24,7 +24,6 @@ const CLIPBOARD_HISTORY_SHELL = {
   minHeight: 360,
   closeOnBlur: true,
   resizable: false,
-  rendersTitlebar: true,
   // 默认 2 分钟销毁对高频剪贴板场景太短，冷启动会反复加载 webview。
   // 30 分钟内热开：原生 show() 复用已存活 webview，接近瞬时。
   destroyTimeout: 30 * 60 * 1000,

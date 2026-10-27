@@ -32,7 +32,7 @@ export function DateTimeSurface({ defaultOffset, host, initialText, t, convert }
   ] : []
 
   return (
-    <section className="date-time-surface" aria-label={t('surface.title')} data-no-drag>
+    <section className="date-time-surface" aria-label={t('surface.title')}>
       <header className="date-time-surface__header">
         <IconButton type="button" label={t('surface.back')} onClick={() => host.requestBack()}>
           <BackIcon size={14} strokeWidth={2} />

@@ -23,7 +23,7 @@ export function ImageToolsSurface(props: PluginSurfaceProps) {
   const leave = (action: () => void) => () => { invalidation.current?.(); action() }
   const panelProps = { ...props, onDirtyChange: noop, invalidateRef: invalidation }
   return (
-    <section className="image-tools-surface" aria-label={t(TITLES[surfaceId] ?? 'surface.title')} data-no-drag>
+    <section className="image-tools-surface" aria-label={t(TITLES[surfaceId] ?? 'surface.title')}>
       <header className="image-tools-header">
         <IconButton type="button" label={t('action.back')} onClick={leave(() => host.requestBack())}>
           <BackIcon size={14} strokeWidth={2} />

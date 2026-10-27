@@ -3,14 +3,8 @@
 /* Header — matches .hdr in mockup */
 .td-hdr { display: flex; flex-wrap: wrap; align-items: center; min-height: 42px; padding: 0 10px 0 12px; gap: 6px; border-bottom: 1px solid var(--border); background: var(--background); user-select: none; flex-shrink: 0; position: relative; z-index: 5; }
 .td-hdr-c { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-.td-hdr-a { flex-shrink: 0; display: flex; align-items: center; gap: 1px; margin-left: 8px; }
 
 /* Breadcrumb — matches .bc-back/.bc-sep/.bc-cur in mockup */
-.td-bc-back { gap: 4px; padding: 4px 8px; }
-.td-bc-back svg { width: 14px; height: 14px; }
-.td-bc-root { font-weight: 600; }
-.td-bc-sep { color: var(--faint-foreground); font-size: var(--text-sm); margin: 0 1px; }
-.td-bc-cur { flex-shrink: 0; white-space: nowrap; font-size: var(--text-base); color: var(--muted-foreground); }
 
 /* Icon buttons — matches .ib in mockup */
 .td-ib { width: 28px; height: 28px; }

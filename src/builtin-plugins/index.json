@@ -1,15 +1,15 @@
 {
-  "version": 205,
+  "version": 206,
   "packages": [
     {
       "pluginId": "image-tools",
       "dir": "image-tools",
-      "version": "1.0.4"
+      "version": "1.0.5"
     },
     {
       "pluginId": "csv",
       "dir": "csv",
-      "version": "1.12.5"
+      "version": "1.12.6"
     },
     {
       "pluginId": "calculator",
@@ -19,7 +19,7 @@
     {
       "pluginId": "date-time-assistant",
       "dir": "date-time-assistant",
-      "version": "1.12.8"
+      "version": "1.12.9"
     },
     {
       "pluginId": "translate",
@@ -39,12 +39,12 @@
     {
       "pluginId": "text-diff",
       "dir": "textDiff",
-      "version": "3.6.5"
+      "version": "3.6.6"
     },
     {
       "pluginId": "clipboard-history",
       "dir": "clipboard-history",
-      "version": "2.1.12"
+      "version": "2.1.13"
     },
     {
       "pluginId": "web-open",
@@ -54,7 +54,7 @@
     {
       "pluginId": "qr-code",
       "dir": "qr-code",
-      "version": "1.0.20"
+      "version": "1.0.21"
     },
     {
       "pluginId": "random",
@@ -84,7 +84,7 @@
     {
       "pluginId": "text-tools",
       "dir": "text-tools",
-      "version": "1.0.5"
+      "version": "1.0.6"
     }
   ]
 }

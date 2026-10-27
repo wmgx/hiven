@@ -1069,7 +1069,6 @@ export function CsvSurface(props: PluginSurfaceProps) {
     <section
       className="csv-tools-surface"
       aria-label={localizedText(t, 'surface.title', 'CSV Tools')}
-      data-no-drag
       data-launcher-scrollable
     >
       <header className="csv-tools-surface__header">
@@ -1400,14 +1399,14 @@ export function CsvSurface(props: PluginSurfaceProps) {
 
       <div className="csv-tools-surface__body csv-tools-surface__body--single">
         {mainView === 'table' ? (
-          <div className="csv-tools-surface__grid-wrap" data-no-drag data-launcher-scrollable>
+          <div className="csv-tools-surface__grid-wrap" data-launcher-scrollable>
             {errorMessage ? (
               <div className="csv-tools-surface__empty is-error" role="alert">
                 {errorMessage}
               </div>
             ) : table && table.headers.length > 0 ? (
               <>
-                <div className="csv-tools-surface__table-tools" data-no-drag>
+                <div className="csv-tools-surface__table-tools">
                   <SegmentedControl
                     aria-label={localizedText(t, 'table.filterMode', 'Filter mode')}
                     value={filterMode}
@@ -1588,7 +1587,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
                     ))}
                   </div>
                 ) : null}
-                <div className="csv-tools-surface__grid-host" data-no-drag data-launcher-scrollable>
+                <div className="csv-tools-surface__grid-host" data-launcher-scrollable>
                   <DataGrid
                     className="csv-tools-surface__grid"
                     columns={gridColumns}

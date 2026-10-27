@@ -749,9 +749,6 @@ export type PluginSurfaceShell = {
   closeOnBlur?: boolean
   destroyTimeout?: number
   resizable?: boolean
-  rendersTitlebar?: boolean
-  breadcrumbTitle?: string
-  breadcrumbTitleI18n?: Partial<Record<Locale, string>>
   /**
    * Inline 'launcher' presentation only: treat defaultHeight as a max-height
    * cap and let the surface shrink-wrap its own content, instead of the

@@ -2,7 +2,7 @@
  * Clipboard History Plugin — Main Surface
  *
  * Host-openable custom-view surface providing:
- * - Top bar: plugin-owned back, search, type filter, settings, close
+ * - Search in body; filter, paste and settings in the host header
  * - Left panel: grouped clipboard history list
  * - Right panel: preview and metadata for the selected item
  * - Keyboard shortcuts: Enter=paste, Cmd/Ctrl+C=copy selection in preview, Delete=remove
@@ -20,6 +20,7 @@ import {
   SearchField,
   SegmentedControl,
   SurfaceEmptyState,
+  SurfaceHeaderActions,
   SurfaceFooterHints,
   SurfaceList,
   SurfaceListItem,
@@ -29,7 +30,7 @@ import {
   useImeKeyboard,
   type MenuItemSpec,
 } from '@hiven/plugin-ui'
-import { BackIcon, ClipboardIcon, CloseIcon, FileTextIcon, ImageIcon, SettingsIcon, StarIcon } from '@hiven/plugin-ui/icons'
+import { ClipboardIcon, CloseIcon, FileTextIcon, ImageIcon, SettingsIcon, StarIcon } from '@hiven/plugin-ui/icons'
 import { ArrowDown, ArrowUp, Check, ListFilter } from 'lucide-react'
 import { resolveClipboardHistoryRetentionMonths, type ClipboardHistorySettings } from '../settings/model'
 import type { ClipboardHistoryItem, FavoriteField } from '../storage/clipboardHistoryTypes'
@@ -1118,17 +1119,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       tabIndex={-1}
     >
       <div className="clipboard-history-topbar">
-        <IconButton
-          type="button"
-          label={t('action.back')}
-          onClick={() => {
-            setQuery('')
-            setSearchMatchMode('literal')
-            host.requestBack()
-          }}
-        >
-          <BackIcon size={18} />
-        </IconButton>
         <SearchField
           ref={searchRef}
           data-plugin-surface-autofocus
@@ -1138,6 +1128,8 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
           onCompositionEnd={endSearchComposition}
           placeholder={t('search.placeholder')}
         />
+      </div>
+      <SurfaceHeaderActions>
         {filterMenu}
         <Button
           type="button"
@@ -1154,18 +1146,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         >
           <SettingsIcon size={17} />
         </IconButton>
-        <IconButton
-          type="button"
-          label={t('action.close')}
-          onClick={() => {
-            setQuery('')
-            setSearchMatchMode('literal')
-            host.close()
-          }}
-        >
-          <CloseIcon size={18} />
-        </IconButton>
-      </div>
+      </SurfaceHeaderActions>
 
       {((retentionStatus?.legacyProtectedCount ?? 0) > 0 || fullTextSearchState === 'loading') && <SurfaceFooterHints className="clipboard-history-footer">
         {retentionStatus && retentionStatus.legacyProtectedCount > 0 && <>
