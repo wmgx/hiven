@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { copyPng } from './copyPng'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, useLocalEscapeLayer } from '@hiven/plugin-ui'
+import { Button, TextInput, useLocalEscapeLayer } from '@hiven/plugin-ui'
 import { MAX_IMAGE_BYTES } from './raster'
 import { loadRedactionImage, type Point } from './imageRedaction'
 import { cropFromDrag, exportCrop, parseCrop, type CropRect } from './imageCrop'
@@ -121,7 +121,7 @@ export function ImageCropPanel({ host, t, onDirtyChange, invalidateRef }: Props)
       <Button disabled={busy} onClick={() => choose('file')}>{t('image.chooseFile')}</Button>
       <Button disabled={busy || !host.clipboard.readImage} onClick={() => choose('clipboard')}>{t('image.readClipboard')}</Button>
       <Button disabled={busy || !ready || !original || dragActive} onClick={() => commit(null)}>{t('crop.clear')}</Button>
-      <input ref={file} type="file" hidden accept="image/png,image/jpeg,image/webp" onChange={event => {
+      <TextInput ref={file} type="file" hidden accept="image/png,image/jpeg,image/webp" onChange={event => {
         const selected = event.currentTarget.files?.[0]; event.currentTarget.value = ''
         if (selected) void load(async () => { if (selected.size > MAX_IMAGE_BYTES) throw new Error('size'); return { bytes: new Uint8Array(await selected.arrayBuffer()), contentType: selected.type || undefined } })
       }} />
@@ -129,7 +129,7 @@ export function ImageCropPanel({ host, t, onDirtyChange, invalidateRef }: Props)
     {replacement && <div role="alert" className="image-crop-replace"><span>{t('crop.replace')}</span><Button onClick={() => choose(replacement, true)}>{t('redact.replaceConfirm')}</Button><Button onClick={cancelDraft}>{t('redact.keep')}</Button></div>}
     {original && !ready && !busy && <div className="image-crop-replace"><span>{t('crop.previous')}</span><Button onClick={() => { readyRef.current = true; setReady(true); setStatus('') }}>{t('redact.keep')}</Button></div>}
     <div className="image-crop-fields">
-      {keys.map(key => <label key={key}>{t(`crop.${key}`)}<input type="number" min={key === 'x' || key === 'y' ? 0 : 1} max={original ? key === 'x' ? original.width - 1 : key === 'y' ? original.height - 1 : key === 'width' ? original.width : original.height : undefined} step={1} value={fields[key]} disabled={busy || !ready || !original || dragActive} aria-invalid={!!original && !selection} aria-describedby="crop-size-status" onChange={event => {
+      {keys.map(key => <label key={key}>{t(`crop.${key}`)}<TextInput type="number" min={key === 'x' || key === 'y' ? 0 : 1} max={original ? key === 'x' ? original.width - 1 : key === 'y' ? original.height - 1 : key === 'width' ? original.width : original.height : undefined} step={1} value={fields[key]} disabled={busy || !ready || !original || dragActive} aria-invalid={!!original && !selection} aria-describedby="crop-size-status" onChange={event => {
         if (pending.current) return
         invalidate(); setFields({ ...fields, [key]: event.target.value }); setDirty(true); setStatus('')
       }} /></label>)}

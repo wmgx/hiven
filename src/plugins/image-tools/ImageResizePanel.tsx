@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { copyPng } from './copyPng'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, useLocalEscapeLayer } from '@hiven/plugin-ui'
+import { Button, TextInput, useLocalEscapeLayer } from '@hiven/plugin-ui'
 import { MAX_IMAGE_BYTES } from './raster'
 import { loadRedactionImage } from './imageRedaction'
 import { exportResizedImage, resizeDimensions } from './imageResize'
@@ -96,7 +96,7 @@ export function ImageResizePanel({ host, t, onDirtyChange, invalidateRef }: Prop
     <div className="image-crop-toolbar">
       <Button disabled={busy} onClick={() => choose('file')}>{t('image.chooseFile')}</Button>
       <Button disabled={busy || !host.clipboard.readImage} onClick={() => choose('clipboard')}>{t('image.readClipboard')}</Button>
-      <input ref={file} type="file" hidden accept="image/png,image/jpeg,image/webp" onChange={event => {
+      <TextInput ref={file} type="file" hidden accept="image/png,image/jpeg,image/webp" onChange={event => {
         const selected = event.currentTarget.files?.[0]; event.currentTarget.value = ''
         if (selected) void load(async () => { if (selected.size > MAX_IMAGE_BYTES) throw new Error('size'); return { bytes: new Uint8Array(await selected.arrayBuffer()), contentType: selected.type || undefined } })
       }} />
@@ -104,7 +104,7 @@ export function ImageResizePanel({ host, t, onDirtyChange, invalidateRef }: Prop
     {replacement && <div role="alert" className="image-crop-replace"><span>{t('resize.replace')}</span><Button onClick={() => choose(replacement, true)}>{t('redact.replaceConfirm')}</Button><Button onClick={cancelReplacement}>{t('redact.keep')}</Button></div>}
     {original && !ready && !busy && <div className="image-crop-replace"><span>{t('resize.previous')}</span><Button onClick={() => { readyRef.current = true; setReady(true); setStatus('') }}>{t('redact.keep')}</Button></div>}
     <div className="image-crop-fields">
-      <label>{t('resize.width')}<input type="number" min={1} max={original?.width} step={1} value={width} disabled={busy || !ready || !original} aria-invalid={!!original && !size} aria-describedby="resize-size-status" onChange={event => {
+      <label>{t('resize.width')}<TextInput type="number" min={1} max={original?.width} step={1} value={width} disabled={busy || !ready || !original} aria-invalid={!!original && !size} aria-describedby="resize-size-status" onChange={event => {
         if (pending.current) return
         invalidate(); setWidth(event.target.value); setDirty(true); setStatus('')
       }} /></label>

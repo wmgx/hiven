@@ -27,7 +27,7 @@ vm.runInNewContext(ts.transpileModule(readFileSync('src/plugins/image-tools/Imag
 }).outputText, { exports, AbortController, Uint8Array, require(name) {
   if (name === 'react') return react
   if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx, Fragment: 'Fragment' }
-  if (name === '@hiven/plugin-ui') return { Button: 'Button' }
+  if (name === '@hiven/plugin-ui') return { Button: 'Button', TextArea: 'textarea', TextInput: 'input' }
   if (name === './saveClipboardPng') return { async saveClipboardPng(_storage, bytes, isCurrent) { assert.equal(isCurrent(), true); calls.screenshot.push(bytes[0]); return screenshotResult } }
   if (name === './imageBase64') return { MAX_IMAGE_BYTES: 100, inspectRaster: (bytes) => { if (bytes[0] === 0) throw Error('invalid image'); return { mime: 'image/png', width: 1, height: 1 } }, parseImageBase64: (text) => { if (text !== 'valid') throw Error('invalid base64'); return { bytes: new Uint8Array([9]), info: { mime: 'image/png' } } },
     decodeRaster: async (bytes) => ({ preview: `preview:${bytes[0]}`, png: bytes }), imageDataUri: (bytes) => `data:${bytes[0]}` }

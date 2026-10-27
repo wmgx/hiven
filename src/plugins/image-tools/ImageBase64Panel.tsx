@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button } from '@hiven/plugin-ui'
+import { Button, TextArea, TextInput } from '@hiven/plugin-ui'
 import { decodeRaster, imageDataUri, inspectRaster, MAX_IMAGE_BYTES, parseImageBase64 } from './imageBase64'
 
 type Result = { uri: string; preview: string; png: Uint8Array; width: number; height: number }
@@ -81,7 +81,7 @@ export function ImageBase64Panel({ host, t, initialText, active, onDirtyChange, 
         const image = await host.clipboard.readImage!({ signal }); return load(image.bytes, signal, current, image.contentType)
       }, true)}>{t('image.readClipboard')}</Button>
       <Button disabled={busy} onClick={() => file.current?.click()}>{t('image.chooseFile')}</Button>
-      <input ref={file} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(event) => {
+      <TextInput ref={file} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(event) => {
         const selected = event.currentTarget.files?.[0]; event.currentTarget.value = ''
         if (selected) void run(async (signal, current) => {
           if (selected.size > MAX_IMAGE_BYTES) throw new Error('size')
@@ -89,7 +89,7 @@ export function ImageBase64Panel({ host, t, initialText, active, onDirtyChange, 
         }, true)
       }} />
     </div>
-    <><label className="image-base64-input">{t('image.input')}<textarea data-launcher-scrollable value={text} spellCheck={false} onChange={(event) => {
+    <><label className="image-base64-input">{t('image.input')}<TextArea data-launcher-scrollable value={text} spellCheck={false} onChange={(event) => {
       invalidate(); deliverableRef.current = null; setDeliveryReady(false); setText(event.currentTarget.value); setResult(null); setBusy(false); setStatus('')
     }} /></label>
     <div className="image-base64-actions">
@@ -100,7 +100,7 @@ export function ImageBase64Panel({ host, t, initialText, active, onDirtyChange, 
     </div>
     {result && <>
       <div className="image-base64-preview"><img src={result.preview} alt={t('image.preview')} /><span>{t('image.dimensions', { width: result.width, height: result.height })}</span></div>
-      <label className="image-base64-input">{t('image.output')}<textarea readOnly data-launcher-scrollable value={result.uri} spellCheck={false} /></label>
+      <label className="image-base64-input">{t('image.output')}<TextArea readOnly data-launcher-scrollable value={result.uri} spellCheck={false} /></label>
       <div className="image-base64-actions">
         <Button disabled={busy || !deliveryReady} onClick={() => void deliver('uri')}>{t('image.copyUri')}</Button>
         <Button disabled={busy || !deliveryReady} onClick={() => void deliver('copy')}>{t('image.copyImage')}</Button>

@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { copyPng } from './copyPng'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, useLocalEscapeLayer } from '@hiven/plugin-ui'
+import { Button, TextInput, useLocalEscapeLayer } from '@hiven/plugin-ui'
 import { MAX_IMAGE_BYTES } from './raster'
 import { exportRedactions, loadRedactionImage, paintRedactions, redactionRect, type Point, type RedactionRect } from './imageRedaction'
 import './imageRedaction.css'
@@ -96,7 +96,7 @@ export function ImageRedactionPanel({ host, t, onDirtyChange, invalidateRef }: P
       <Button disabled={busy} onClick={() => choose('file')}>{t('image.chooseFile')}</Button>
       <Button disabled={busy || !host.clipboard.readImage} onClick={() => choose('clipboard')}>{t('image.readClipboard')}</Button>
       <Button disabled={busy || !rectangles.length} onClick={undo}>{t('redact.undo')}</Button>
-      <input ref={file} type="file" hidden accept="image/png,image/jpeg,image/webp" onChange={(event) => {
+      <TextInput ref={file} type="file" hidden accept="image/png,image/jpeg,image/webp" onChange={(event) => {
         const selected = event.currentTarget.files?.[0]; event.currentTarget.value = ''
         if (selected) void load(async () => { if (selected.size > MAX_IMAGE_BYTES) throw new Error('size'); return { bytes: new Uint8Array(await selected.arrayBuffer()), contentType: selected.type || undefined } })
       }} />
