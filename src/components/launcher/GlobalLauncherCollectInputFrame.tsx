@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type KeyboardEvent, type RefObject } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type RefObject } from 'react'
 import { CornerDownLeft, History } from 'lucide-react'
 // note: lastPreviewRef keeps display text across brief controller gaps
 import type { Locale } from '../../i18n'
@@ -18,6 +18,9 @@ import { createQueryObjectBlock, type LauncherObjectBlock } from '../../launcher
 import { shouldIgnoreImeKeyDown } from '../../utils/imeKeyboard'
 import { reconcileMaterialTextInput } from '../../launcher/clipboard/currentMaterial'
 import { LauncherCommandFooter, useForegroundAppName, type LauncherCommandMenuAction } from './LauncherCommandFooter'
+import { LauncherAutoGrowInput, measureWrappedLines } from './LauncherAutoGrowInput'
+import { shouldPasteAsBlock } from '../../launcher/clipboard/attachPolicy'
+import { useLauncherEscapeInterceptor } from './launcherEscapeInterceptor'
 
 /** Suggest row: keep keyboard highlight in view (same as result / mixed list). */
 function CollectInputSuggestRow({
@@ -124,6 +127,9 @@ export function GlobalLauncherCollectInputFrame({
   attachedBlock,
   onRemoveBlock,
   onOpenParams,
+  onPasteAsBlock,
+  onBlockTextChange,
+  onSyncBlock,
 }: {
   isImeComposingRef: RefObject<boolean>
   inputRef: RefObject<HTMLInputElement | HTMLTextAreaElement | null>
@@ -152,6 +158,12 @@ export function GlobalLauncherCollectInputFrame({
   onRemoveBlock?: () => void
   /** ⇥: edit parameters; absent when the command has none. */
   onOpenParams?: () => void
+  /** A paste that does not fit the input line becomes the Block. */
+  onPasteAsBlock?: (text: string) => void
+  /** ⌘E editing of the Block text. */
+  onBlockTextChange?: (text: string) => void
+  /** Editing ended with changed text: replace the list Block. */
+  onSyncBlock?: (text: string) => void
 }) {
   const placeholder = frame.input.placeholderI18n?.[locale] ?? frame.input.placeholder ?? ''
   const explicitPreview = frame.item.executionMode === 'explicit-text-preview'
@@ -170,6 +182,25 @@ export function GlobalLauncherCollectInputFrame({
     return attachedBlock?.payloadText === frame.blockText ? attachedBlock : createQueryObjectBlock({ query: frame.blockText })
   }, [attachedBlock, frame.blockText])
   const materialText = frame.blockText ?? frame.inputText
+  const [expanded, setExpanded] = useState(false)
+  const editorRef = useRef<HTMLTextAreaElement>(null)
+  const isExpanded = expanded && hasBlock
+  const collapse = useCallback(() => {
+    setExpanded(false)
+    if (frame.blockText !== undefined && frame.blockText !== attachedBlock?.payloadText) onSyncBlock?.(frame.blockText)
+    requestAnimationFrame(() => inputRef.current?.focus())
+  }, [attachedBlock?.payloadText, frame.blockText, inputRef, onSyncBlock])
+  // Esc closes the expanded editor first (one layer back).
+  const escapeEditor = useCallback((event: globalThis.KeyboardEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    collapse()
+    return true
+  }, [collapse])
+  useLauncherEscapeInterceptor(isExpanded ? escapeEditor : null)
+  useEffect(() => {
+    if (isExpanded) requestAnimationFrame(() => editorRef.current?.focus())
+  }, [isExpanded])
   const filterText = materialText.trim()
   // Local latch: never blank the well while typing — only replace when a new text arrives.
   const lastPreviewRef = useRef<string | null>(null)
@@ -242,6 +273,12 @@ export function GlobalLauncherCollectInputFrame({
       }
       return
     }
+    if (hasBlock && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'e') {
+      event.preventDefault()
+      event.stopPropagation()
+      setExpanded(true)
+      return
+    }
     if (event.key === 'Backspace' && !frame.inputText) {
       event.preventDefault()
       event.stopPropagation()
@@ -273,6 +310,40 @@ export function GlobalLauncherCollectInputFrame({
     }
   }
 
+  const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    if (hasBlock || !showLivePreview || !onPasteAsBlock) return
+    const pasted = event.clipboardData.getData('text/plain')
+    const field = event.currentTarget
+    const merged = frame.inputText.slice(0, field.selectionStart ?? frame.inputText.length) + pasted +
+      frame.inputText.slice(field.selectionEnd ?? frame.inputText.length)
+    if (!shouldPasteAsBlock(pasted, measureWrappedLines(field, merged))) return
+    event.preventDefault()
+    onPasteAsBlock(merged)
+  }
+
+  // The expanded Block is an editor: ↵ breaks lines, ⌘↵ runs, ⌘E collapses.
+  const handleEditorKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === 'Escape') return
+    event.stopPropagation()
+    if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
+    if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'e') {
+      event.preventDefault()
+      collapse()
+      return
+    }
+    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey) {
+      event.preventDefault()
+      void runPrimary()
+      return
+    }
+    if (event.key === 'Backspace' && !frame.blockText) {
+      event.preventDefault()
+      setExpanded(false)
+      onRemoveBlock?.()
+      requestAnimationFrame(() => inputRef.current?.focus())
+    }
+  }
+
   return (
     <>
       <div className="global-launcher-header l-search" style={{ borderBottom: '1px solid var(--border)' }}>
@@ -282,14 +353,34 @@ export function GlobalLauncherCollectInputFrame({
           locale={locale}
           onRemove={onExitCommand ?? onBack}
         />
-        {block && <ObjectBlockToken block={block} locale={locale} onRemove={() => onRemoveBlock?.()} />}
-        {!multilineInput && <input
-          ref={bindSearchInputRef ?? (inputRef as RefObject<HTMLInputElement | null>)}
+        {block && !isExpanded && <ObjectBlockToken block={block} locale={locale} onRemove={() => onRemoveBlock?.()} />}
+        {isExpanded && (
+          <textarea
+            ref={editorRef}
+            className="launcher-block-editor mono"
+            value={frame.blockText ?? ''}
+            rows={Math.min(10, Math.max(3, (frame.blockText ?? '').split('\n').length))}
+            spellCheck={false}
+            autoComplete="off"
+            autoCapitalize="none"
+            autoCorrect="off"
+            aria-label={t(locale, 'palette.expandBlock')}
+            data-no-drag
+            data-launcher-scrollable
+            onChange={(event) => onBlockTextChange?.(event.target.value)}
+            onKeyDown={handleEditorKeyDown}
+            onWheel={(event) => event.stopPropagation()}
+          />
+        )}
+        {!multilineInput && <LauncherAutoGrowInput
+          ref={bindSearchInputRef ?? (inputRef as RefObject<HTMLTextAreaElement | null>)}
           value={frame.inputText}
           autoFocus
           readOnly={hasBlock}
-          onChange={(event) => { if (!hasBlock) onInputChange(event.target.value) }}
+          hidden={isExpanded}
+          onChange={(value) => { if (!hasBlock) onInputChange(value) }}
           onKeyDown={handleInputKeyDown}
+          onPaste={handlePaste}
           placeholder={hasBlock ? t(locale, 'palette.blockInputHint') : placeholder}
           className="mono"
           style={{ caretColor: 'var(--text, currentColor)' }}
@@ -426,6 +517,7 @@ export function GlobalLauncherCollectInputFrame({
           onPaste={canPaste && freshChoice ? () => void pastePreview() : undefined}
           menu={menu}
           onBack={onBack}
+          hints={hasBlock ? <LauncherHintKey keys="⌘E" label={t(locale, isExpanded ? 'palette.collapseBlock' : 'palette.expandBlock')} /> : undefined}
         />
       ) : <div className="global-launcher-footer l-foot">
         {isSuggestMode && hasSuggestions ? (

@@ -1176,6 +1176,8 @@ html[data-window='quick-editor'] #root {
 .global-launcher-header input,
 .global-launcher-header .l-search input,
 .l-search input,
+.l-search-field,
+.launcher-block-editor,
 [data-launcher-drag-handle] input {
   -webkit-app-region: no-drag;
   app-region: no-drag;
@@ -4311,7 +4313,8 @@ body[data-theme='dark'] .quick-editor-command-panel {
   background: transparent;
 }
 
-.quick-editor-command-panel .l-search input {
+.quick-editor-command-panel .l-search input,
+.quick-editor-command-panel .l-search .l-search-field {
   font-size: 14px;
 }
 
@@ -4402,7 +4405,8 @@ body[data-theme='dark'] .l-search {
   color: var(--text);
 }
 
-.l-search input {
+.l-search input,
+.l-search .l-search-field {
   flex: 1;
   min-width: 72px;
   border: 0;
@@ -4416,12 +4420,14 @@ body[data-theme='dark'] .l-search {
   font-size: 16px;
 }
 
-.l-search input.mono {
+.l-search input.mono,
+.l-search .l-search-field.mono {
   font-family: var(--mono);
   font-size: 15px;
 }
 
-.l-search input::placeholder {
+.l-search input::placeholder,
+.l-search .l-search-field::placeholder {
   color: var(--text-3);
   font-family: var(--font);
 }
@@ -4861,6 +4867,40 @@ body[data-theme='dark'] .launcher-preview-well {
 
 .launcher-command-footer-spacer {
   flex: 1;
+}
+
+/* Launcher input line: soft-wraps up to 4 lines (height set by LauncherAutoGrowInput). */
+.l-search-field {
+  display: block;
+  margin: 0;
+  padding: 0;
+  resize: none;
+  line-height: 1.4;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+
+/* A wrapped input keeps the command token and parameters on its first line. */
+.l-search:has(.l-search-field[data-multiline='true']),
+.l-search:has(.launcher-block-editor) {
+  align-items: flex-start;
+}
+
+/* ⌘E: the Block opens in place as an editor of at most 10 lines. */
+.launcher-block-editor {
+  flex: 1;
+  min-width: 0;
+  max-height: calc(1.5em * 10);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  resize: none;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .launcher-output-actionbar > [role='status'] {
@@ -9082,6 +9122,7 @@ html[data-window='launcher'] .flux-spatial-shell .l-foot {
 }
 
 html[data-window='launcher'] .flux-spatial-shell .l-search input,
+html[data-window='launcher'] .flux-spatial-shell .l-search .l-search-field,
 html[data-window='launcher'] .flux-spatial-shell .global-launcher-header input {
   font-size: var(--text-lg) !important;
   font-weight: 500 !important;
@@ -9091,6 +9132,7 @@ html[data-window='launcher'] .flux-spatial-shell .global-launcher-header input {
 }
 
 html[data-window='launcher'] .flux-spatial-shell .l-search input::placeholder,
+html[data-window='launcher'] .flux-spatial-shell .l-search .l-search-field::placeholder,
 html[data-window='launcher'] .flux-spatial-shell .global-launcher-header input::placeholder {
   color: var(--faint-foreground) !important;
 }

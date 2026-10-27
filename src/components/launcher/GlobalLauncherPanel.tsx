@@ -337,8 +337,14 @@ export function GlobalLauncherPanel({
         onOpenCommandParams={(frame) => controllerRef.current?.openParams(frame)}
         onNextParam={(frame) => controllerRef.current?.nextParam(frame)}
         onRemoveCommandBlock={(frame) => {
-          if (clipboardBlock?.block?.payloadText === frame.blockText) clipboardBlock?.removeBlock()
+          // The command's Block is the list Block (selected with it, pasted or synced after editing).
+          if (frame.blockText !== undefined) clipboardBlock?.removeBlock()
           controllerRef.current?.removeBlockMaterial(frame)
+        }}
+        onCommandBlockChange={(change, text, frame) => {
+          if (change === 'paste') controllerRef.current?.setBlockMaterial(text, frame)
+          else if (change === 'edit') controllerRef.current?.setBlockText(text, frame)
+          else clipboardBlock?.attachQueryAsBlock(text)
         }}
         onActivateResultChoice={activateResultChoice}
         onSecondaryAction={activateSecondaryAction}

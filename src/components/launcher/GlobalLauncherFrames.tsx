@@ -70,6 +70,7 @@ export function GlobalLauncherFrameSwitch({
   onCollectInputChange,
   onRemoveCommandBlock,
   onOpenCommandParams,
+  onCommandBlockChange,
   onNextParam,
   onActivateResultChoice,
   onSecondaryAction,
@@ -134,6 +135,8 @@ export function GlobalLauncherFrameSwitch({
   onCollectInputChange: (value: string, frame?: CollectInputFrame) => void
   onRemoveCommandBlock?: (frame: CollectInputFrame) => void
   onOpenCommandParams?: (frame: CollectInputFrame) => void
+  /** paste: material becomes a Block · edit: ⌘E editor text · sync: replace the list Block */
+  onCommandBlockChange?: (change: 'paste' | 'edit' | 'sync', text: string, frame: CollectInputFrame) => void
   onNextParam?: (frame: ParamInputFrame) => void
   onActivateResultChoice: (choice: LauncherResultChoice) => void
   /** Collect-input / result secondary actions (id is plugin-defined). */
@@ -278,6 +281,9 @@ export function GlobalLauncherFrameSwitch({
           attachedBlock={clipboardBlock?.block}
           onRemoveBlock={() => onRemoveCommandBlock?.(frame)}
           onOpenParams={frame.item.executeWithParams && frame.item.params?.length ? () => onOpenCommandParams?.(frame) : undefined}
+          onPasteAsBlock={(text) => onCommandBlockChange?.('paste', text, frame)}
+          onBlockTextChange={(text) => onCommandBlockChange?.('edit', text, frame)}
+          onSyncBlock={(text) => onCommandBlockChange?.('sync', text, frame)}
         />
       </LauncherFlowFrame>
     )

@@ -702,6 +702,28 @@ export class LauncherController {
     return frame.blockText ?? frame.inputText
   }
 
+  /** A paste that would not fit the input line becomes the command's Block material. */
+  setBlockMaterial(text: string, expectedFrame?: CollectInputFrame): void {
+    const top = this.topFrame()
+    if (top.kind !== 'collect-input' || (expectedFrame && top.item !== expectedFrame.item)) return
+    this.invalidatePendingActions()
+    this.deps.keepInputAsBlock?.(text)
+    const frames = this.state.frames.slice(0, -1)
+    frames.push({ ...top, blockText: text, inputText: '', fromSelection: false, previewInputText: undefined, selectedSuggestionIndex: -1 })
+    this.setState({ frames, error: null })
+  }
+
+  /** Edit the Block text in place (⌘E); the list Block is synced when editing ends. */
+  setBlockText(text: string, expectedFrame?: CollectInputFrame): void {
+    const top = this.topFrame()
+    if (top.kind !== 'collect-input' || top.blockText === undefined || (expectedFrame && top.item !== expectedFrame.item)) return
+    if (text === top.blockText) return
+    this.invalidatePendingActions()
+    const frames = this.state.frames.slice(0, -1)
+    frames.push({ ...top, blockText: text })
+    this.setState({ frames, error: null })
+  }
+
   /** Drop the Block material; typing becomes the command input again. */
   removeBlockMaterial(expectedFrame?: CollectInputFrame): boolean {
     const top = this.topFrame()

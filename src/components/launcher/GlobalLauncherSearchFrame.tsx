@@ -12,6 +12,7 @@ import { LauncherEmptyWell } from './LauncherEmptyWell'
 import { getPlatformShortcutMeta } from './launcherParamShortcuts'
 import { FILE_TEXT_ERROR_KEYS } from '../../launcher/clipboard/fileTextMaterial'
 import { shouldPasteAsBlock } from '../../launcher/clipboard/attachPolicy'
+import { LauncherAutoGrowInput, measureWrappedLines } from './LauncherAutoGrowInput'
 import type { LauncherBrowseCategory } from '../../workspace/launcher/browseItems'
 
 const BROWSE_CATEGORIES = [
@@ -159,8 +160,8 @@ export function GlobalLauncherSearchFrame({
             }}
           />
         )}
-        <input
-          ref={bindSearchInputRef ?? (inputRef as RefObject<HTMLInputElement | null>)}
+        <LauncherAutoGrowInput
+          ref={bindSearchInputRef ?? (inputRef as RefObject<HTMLTextAreaElement | null>)}
           value={query}
           name="launcher-query"
           inputMode="text"
@@ -170,23 +171,12 @@ export function GlobalLauncherSearchFrame({
           spellCheck={false}
           lang="en"
           autoFocus
-          onChange={(event) => onQueryChange(event.target.value)}
+          onChange={onQueryChange}
           onPaste={(event) => {
             if (block || !clipboardBlock) return
             const pasted = event.clipboardData.getData('text/plain')
             const input = event.currentTarget
-            const style = getComputedStyle(input)
-            const measure = document.createElement('div')
-            const width = input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
-            const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.2
-            Object.assign(measure.style, { position: 'absolute', visibility: 'hidden', font: style.font,
-              letterSpacing: style.letterSpacing, width: `${width}px`, lineHeight: `${lineHeight}px`,
-              whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' })
-            measure.textContent = pasted
-            document.body.append(measure)
-            const lines = Math.round(measure.getBoundingClientRect().height / lineHeight)
-            measure.remove()
-            if (!shouldPasteAsBlock(pasted, lines)) return
+            if (!shouldPasteAsBlock(pasted, measureWrappedLines(input, pasted))) return
             event.preventDefault()
             clipboardBlock.attachQueryAsBlock(
               query.slice(0, input.selectionStart ?? query.length) + pasted +

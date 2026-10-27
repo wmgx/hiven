@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { t, type Locale } from '../../i18n'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -34,6 +34,7 @@ export function LauncherCommandFooter({
   onPaste,
   menu,
   onBack,
+  hints,
 }: {
   locale: Locale
   busy: boolean
@@ -45,6 +46,8 @@ export function LauncherCommandFooter({
   onPaste?: () => void
   menu: LauncherCommandMenuAction[]
   onBack: () => void
+  /** Extra key hints after ⌘K, such as ⌘E for the Block editor. */
+  hints?: ReactNode
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   // Paste falls back to copying when it cannot reach the app; say why up front.
@@ -81,6 +84,7 @@ export function LauncherCommandFooter({
           </DropdownMenuContent>
         </DropdownMenu>
       )}
+      {hints}
       <span className="launcher-command-footer-spacer" />
       {onPaste && pasteBlockedKey && <LauncherHintText label={t(locale, pasteBlockedKey)} />}
       {onPaste && !pasteBlockedKey && (
