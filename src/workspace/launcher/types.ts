@@ -371,6 +371,8 @@ export type LauncherExecutionContext<TSettings = unknown> = {
    * back into that same app over the default copy-first output.
    */
   input?: { text: string; source?: 'foreground-app' }
+  /** Attached image material for an image-input tool. */
+  image?: PluginToolImageInput
   /** Resolved on access. Retained action handlers should read ctx.settings when run. */
   settings: TSettings
   locale: Locale
@@ -535,6 +537,8 @@ export type LauncherItem = {
   isExplicitTextPreviewAvailable?: () => boolean
   /** Host-owned input form for action metadata; never seed it from an Object Block. */
   metadataInput?: boolean
+  /** Image-input tool: offered only for an attached image Block. */
+  imageInput?: boolean
   /** Freeze per-selection state before entering the host input flow. */
   prepare?: (ctx: LauncherExecutionContext) => Promise<LauncherItem | void> | LauncherItem | void
   /** Tool behavior metadata. Missing means {@link DEFAULT_TOOL_ACTION_POLICY}. */
@@ -676,8 +680,18 @@ export type PluginToolOutput = {
   choices(choices: LauncherResultChoice[]): LauncherExecuteResult
 }
 
+/** Read-only reference to the image material attached in the launcher. */
+export type PluginToolImageInput = {
+  contentType: string
+  width?: number
+  height?: number
+  readBytes(): Promise<Uint8Array>
+}
+
 export type PluginToolContext<TSettings = unknown> = {
   input: ResolvedTextInput
+  /** Set only for {@link PluginToolContributionBase.imageInput} tools; `input` is then empty. */
+  image?: PluginToolImageInput
   params: Record<string, unknown>
   settings: TSettings
   locale: Locale
@@ -745,6 +759,12 @@ type PluginToolContributionBase<TSettings> = {
    * Boolean by design; the ranking nudge is host-assigned (see normalizeContribution.ts).
    */
   directAnswer?: boolean
+  /**
+   * The tool takes the attached image material instead of text. It is listed
+   * only while an image Block is attached, runs when chosen and reads the
+   * image through `ctx.image`.
+   */
+  imageInput?: boolean
   run(ctx: PluginToolContext<TSettings>): Promise<PluginToolResult> | PluginToolResult
   surfaces?: PluginToolSurfaces
 }

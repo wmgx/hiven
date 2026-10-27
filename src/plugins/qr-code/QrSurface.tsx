@@ -18,18 +18,11 @@ import {
   normalizeQrErrorCorrection,
   normalizeQrSize,
   QR_TOO_LONG,
-  type QrDecodeResult,
+  decodeErrorKey,
   type QrErrorCorrection,
 } from './qrCore'
 
 type Mode = 'generate' | 'scan'
-
-function decodeErrorKey(code: Exclude<QrDecodeResult, { ok: true }>['code']): string {
-  if (code === 'not-image') return 'error.notImage'
-  if (code === 'no-qr') return 'error.noQr'
-  if (code === 'empty') return 'error.empty'
-  return 'error.decodeFailed'
-}
 
 function initialMode(surfaceId: string, initialText?: string): Mode {
   if (surfaceId === 'scan') return 'scan'

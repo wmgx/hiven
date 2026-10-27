@@ -1,5 +1,5 @@
 {
-  "version": 173,
+  "version": 174,
   "packages": [
     {
       "pluginId": "encode-decode",
@@ -79,7 +79,7 @@
     {
       "pluginId": "qr-code",
       "dir": "qr-code",
-      "version": "1.0.18"
+      "version": "1.0.19"
     },
     {
       "pluginId": "random",

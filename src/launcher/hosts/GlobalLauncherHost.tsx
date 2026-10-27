@@ -44,6 +44,7 @@ import { cancelPendingPasteRecovery, captureLauncherPasteOwner, isPasteCancelled
 import { LAUNCHER_NEW_SESSION_EVENT } from '../../workspace/launcherWindowEvents'
 import type { PluginPasteResult } from '../../workspace/pluginTypes'
 import { createPluginPrivateStorage } from '../../workspace/pluginStorage'
+import { imageBlockInput } from '../clipboard/imageBlockInput'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
 import { invalidateCurrentLauncherWindowResize, restoreLauncherInputSource, startCurrentLauncherWindowResize, type LauncherWindowResizeDirection } from '../../workspace/windowManager/launcherWindow'
 import { getHostSurfaceShell } from '../../components/launcher/hostSurfaceShell'
@@ -416,9 +417,11 @@ export function GlobalLauncherHost() {
   const rankedVisible = useMemo(() => {
     void pluginRegistryVersion
     // With content attached and no search typed, only content-related actions are listed.
+    // Image-input tools are offered only as pins for an attached image Block.
+    const textRows = rankedLauncherItems.filter((item) => !item.imageInput)
     const contentRows = hasContentBlock && !rankingQuery.trim()
-      ? rankedLauncherItems.filter((item) => !CONTENT_UNRELATED_HOST_KEYS.has(item.systemKey))
-      : rankedLauncherItems
+      ? textRows.filter((item) => !CONTENT_UNRELATED_HOST_KEYS.has(item.systemKey))
+      : textRows
     return buildGlobalLauncherItems({
       rankedLauncherItems: contentRows,
       query: rankingQuery,
@@ -519,6 +522,21 @@ export function GlobalLauncherHost() {
           domainItem,
         }
       })
+    const imagePayload = block.kind === 'image' ? block.payloadImage : undefined
+    if (imagePayload) {
+      const image = imageBlockInput(imagePayload)
+      for (const tool of availableLauncherItems) {
+        if (!tool.imageInput) continue
+        const title = pickLocale(locale, tool.display.titleI18n?.zh ?? tool.display.title, tool.display.titleI18n?.en ?? tool.display.title)
+        if (q && !title.toLowerCase().includes(q) && !tool.display.aliases?.some((alias) => alias.toLowerCase().includes(q))) continue
+        const domainItem: LauncherItem = {
+          ...tool,
+          display: { ...tool.display, kindLabel: kindLabel.en, kindLabelI18n: kindLabel },
+          execute: (ctx) => tool.execute({ ...ctx, image }),
+        }
+        items.push({ kind: 'domain', id: domainItem.systemKey, title, subtitle: tool.productProvider ?? '', icon: domainItem.display.icon, domainItem })
+      }
+    }
     const pair = clipboardBlock.beginTextPair()
     const compareTitles = { en: t('en', 'palette.comparePreviousMaterial'), zh: t('zh', 'palette.comparePreviousMaterial') }
     if (pair && (!q || compareTitles.en.toLowerCase().includes(q) || compareTitles.zh.includes(q) || CURRENT_MATERIAL_COMPARE_ACTION.includes(q))) {
@@ -569,7 +587,7 @@ export function GlobalLauncherHost() {
       }
     }
     return items
-  }, [clipboardBlock.block, clipboardBlock.beginTextPair, clipboardBlock.getMaterialGeneration, clipboardBlock.hasMaterial, controllerRef, controllerState, locale, objectActions, rankingQuery, standaloneLauncher])
+  }, [availableLauncherItems, clipboardBlock.block, clipboardBlock.beginTextPair, clipboardBlock.getMaterialGeneration, clipboardBlock.hasMaterial, controllerRef, controllerState, locale, objectActions, rankingQuery, standaloneLauncher])
 
   const composedRankedItems = useMemo(() => (
     objectBlockText && clipboardBlock.block?.source !== 'history-item' && rankedVisible.length
@@ -578,7 +596,7 @@ export function GlobalLauncherHost() {
   ), [clipboardBlock.block?.source, objectBlockText, pinnedObjectActionItems, rankedVisible])
   const availableItems = useMemo(() => [
     ...pinnedObjectActionItems,
-    ...buildGlobalLauncherItems({ rankedLauncherItems: availableLauncherItems, query: rankingQuery, locale }),
+    ...buildGlobalLauncherItems({ rankedLauncherItems: availableLauncherItems.filter((item) => !item.imageInput), query: rankingQuery, locale }),
   ], [availableLauncherItems, locale, pinnedObjectActionItems, rankingQuery])
   const availableItemKeys = useMemo(() => new Set(availableItems.map((item) => item.id)), [availableItems])
   const launcherUsage = useAppStore(s => s.launcherUsageBySurface['global-launcher'])

@@ -203,6 +203,10 @@ export function adaptToolToLauncherItem(
         ? explicitTextPreviewResult(result.text, ctx.api, ctx.locale)
         : errorResult(result.message)
     }
+    if (tool.imageInput) {
+      if (!ctx.image) return errorResult(translate(ctx.locale, 'palette', 'inputRequired'))
+      ctx = { ...ctx, input: { text: '' } }
+    }
     const hasManualInput = ctx.input?.text !== undefined
     const allowForegroundFallback = isGlobalLauncher && tool.inputPolicy !== undefined && mode !== 'all'
     const input = hasManualInput
@@ -222,6 +226,7 @@ export function adaptToolToLauncherItem(
         ai: ctx.ai,
         shell,
         t: ctx.t,
+        ...(tool.imageInput && ctx.image ? { image: ctx.image } : {}),
         output: makeOutput(ctx.api, ctx.locale, ctx.surfaceId ?? '', input.source === 'foreground-app'),
       }),
     )
@@ -256,6 +261,7 @@ export function adaptToolToLauncherItem(
       ? launcherOptions?.surfaces?.filter((surface) => surface !== 'global-launcher')
       : launcherOptions?.surfaces,
     inputPolicy: tool.inputPolicy,
+    ...(tool.imageInput ? { imageInput: true } : {}),
     executionMode,
     isExplicitTextPreviewAvailable: previewRunner ? isExplicitTextPreviewAvailable : undefined,
     actionPolicy: tool.policy ?? DEFAULT_TOOL_ACTION_POLICY,

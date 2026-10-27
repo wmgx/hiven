@@ -162,6 +162,7 @@ export type {
   PluginLauncherApi,
   PluginToolContribution,
   PluginToolContext,
+  PluginToolImageInput,
   PluginToolResult,
   PluginToolExplicitTextPreviewContext,
   PluginToolTextPreviewResult,

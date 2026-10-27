@@ -99,6 +99,13 @@ export async function copyPngBlobToClipboard(blob: Blob): Promise<void> {
   await navigator.clipboard.write([new ClipboardItemCtor({ 'image/png': blob })])
 }
 
+export function decodeErrorKey(code: Exclude<QrDecodeResult, { ok: true }>['code']): string {
+  if (code === 'not-image') return 'error.notImage'
+  if (code === 'no-qr') return 'error.noQr'
+  if (code === 'empty') return 'error.empty'
+  return 'error.decodeFailed'
+}
+
 export function decodeQrFromImageData(imageData: ImageData): string | null {
   const result = jsQR(imageData.data, imageData.width, imageData.height, {
     inversionAttempts: 'attemptBoth',

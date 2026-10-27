@@ -6,7 +6,7 @@
 
 import { definePlugin } from '@hiven/plugin'
 import { QrSurface } from './QrSurface'
-import { isImageDataUrl } from './qrCore'
+import { decodeErrorKey, decodeQrFromBlob, isImageDataUrl } from './qrCore'
 
 function isHttpUrl(text: string): boolean {
   return /^https?:\/\//i.test(text.trim())
@@ -22,6 +22,25 @@ const QR_SHELL = {
 }
 
 const qrCodePlugin = definePlugin({
+  tools: [
+    {
+      // Offered for an attached image Block (e.g. a copied screenshot).
+      id: 'decode-image',
+      title: 'qr.decode.title',
+      icon: 'ScanLine',
+      aliases: ['qr decode', 'scan qr', '识别二维码', '扫码'],
+      imageInput: true,
+      policy: { effect: 'read' },
+      async run(ctx) {
+        if (!ctx.image) return ctx.output.error(ctx.t('error.empty'))
+        const bytes = await ctx.image.readBytes().catch(() => null)
+        if (!bytes) return ctx.output.error(ctx.t('error.clipboardRead'))
+        const result = await decodeQrFromBlob(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: ctx.image.contentType }))
+        return result.ok ? ctx.output.text(result.text) : ctx.output.error(ctx.t(decodeErrorKey(result.code)))
+      },
+      surfaces: { launcher: { surfaces: ['global-launcher'] } },
+    },
+  ],
   ui: {
     surfaces: [
       {
