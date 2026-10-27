@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { marked } from 'marked'
-import { transformPaths, PathTransformError, MARKDOWN_IMAGE_MAX_BYTES } from '../src/plugins/file-paths/core.ts'
+import { transformPaths, PathTransformError, MARKDOWN_IMAGE_MAX_BYTES } from '../src/plugins/text-tools/paths/core.ts'
 const rejects = (fn: () => unknown, code: string) => assert.throws(fn, (error) => error instanceof PathTransformError && error.code === code)
 assert.equal(transformPaths('C:\\Users\\小王\\my file#.txt', 'posix'), 'C:/Users/小王/my file#.txt')
 assert.equal(transformPaths('C:\\Users\\小王\\my file#.txt', 'uri'), 'file:///C:/Users/%E5%B0%8F%E7%8E%8B/my%20file%23.txt')

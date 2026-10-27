@@ -48,6 +48,7 @@ export type ActionExecutionHandlers = {
   copyText: (text: string) => Promise<void>
   openInEditor: (text: string, options?: { language?: string; title?: string }) => Promise<void>
   openPluginSurface: (pluginId: string, options?: { initialText?: string }) => Promise<void>
+  openPluginTool?: (pluginId: string, toolId: string, text: string) => Promise<void>
   /** Resolve a local file path to its text content when the clipboard holds a path. */
   readLocalFileText?: (path: string) => Promise<string>
   getPluginSurfaceInitialTextMode?: (pluginId: string) => 'literal' | undefined
@@ -111,10 +112,12 @@ export async function executeRecommendedAction(
     if (action.id === 'convert-history-file-paths') {
       const paths = block.payloadFiles?.paths
       if (!paths?.length) return { ok: false, error: 'FilesPayloadMissing' }
-      // The file-paths surface intentionally accepts one path per text line.
+      // Path conversion accepts one path per text line.
       // Never flatten a legal POSIX filename containing a newline into extra files.
       if (paths.some((path) => /[\r\n]/.test(path))) return { ok: false, error: 'FilePathLineBreakError' }
-      await handlers.openPluginSurface('file-paths', { initialText: paths.join('\n') })
+      if (!handlers.openPluginTool) return { ok: false, error: 'HandlerUnavailable' }
+      // shortcut: tools accept text, not structured files; replace when the input protocol supports files.
+      await handlers.openPluginTool('text-tools', 'paths.convert', paths.join('\n'))
       return { ok: true }
     }
 

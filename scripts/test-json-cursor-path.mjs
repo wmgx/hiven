@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url'
 import ts from 'typescript'
 const dir = await mkdtemp(join(tmpdir(), 'hiven-json-path-'))
 try {
-  const source = await readFile(new URL('../src/plugins/json-tools/cursorPath.ts', import.meta.url), 'utf8')
+  const source = await readFile(new URL('../src/plugins/text-tools/json/cursorPath.ts', import.meta.url), 'utf8')
   const path = join(dir, 'path.mjs')
   await writeFile(path, ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText)
   const { jsonCursorPath: locate, formatJsonCursorPath: format } = await import(pathToFileURL(path))

@@ -43,5 +43,17 @@
   "resize.previous": "新图片未载入",
   "surface.title": "图片工具",
   "action.back": "返回",
-  "image.saved": "已保存"
+  "image.saved": "已保存",
+  "image.title": "图片 ⇄ Base64",
+  "image.input": "Base64 / data URI",
+  "image.decode": "还原图片",
+  "image.preview": "预览",
+  "image.dimensions": "{width} × {height} 像素",
+  "image.output": "data URI",
+  "image.copyUri": "复制 data URI",
+  "image.copyImage": "复制图片",
+  "image.copied": "已复制",
+  "image.error": "操作失败，请重试",
+  "image.loadError": "无法载入图片，支持 PNG、JPEG、WebP",
+  "image.previousNotUpdated": "预览未更新"
 }

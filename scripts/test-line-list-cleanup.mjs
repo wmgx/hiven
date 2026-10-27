@@ -21,7 +21,7 @@ console.info = (...args) => { if (args[0] !== '[hiven:launcher-perf]') originalI
 // Module loading only: no listening HTTP server, browser, or real user storage.
 const vite = await createServer({ server: { middlewareMode: true }, appType: 'custom', logLevel: 'silent' })
 try {
-  const { cleanLineList, removeBlankLines, trimLineWhitespace, dedupLines } = await vite.ssrLoadModule('/src/plugins/line-tools/core.ts')
+  const { cleanLineList, removeBlankLines, trimLineWhitespace, dedupLines } = await vite.ssrLoadModule('/src/plugins/text-tools/line/core.ts')
   const sample = '  Ada  \r\n\r\nAda\nada\r  Ada  \n \t\r\nZed'
   const variants = [
     { params: { trim: false, removeBlank: false, dedup: false }, expected: sample },
@@ -86,7 +86,7 @@ try {
   const { createGlobalLauncherPluginApi } = await vite.ssrLoadModule('/src/launcher/clipboard/globalLauncherApi.ts')
   const { consumePendingObjectBlock } = await vite.ssrLoadModule('/src/launcher/clipboard/pendingObjectBlock.ts')
   registerBundledPluginPackages()
-  const key = 'plugin:line-tools:tool:line-tools.clean-list'
+  const key = 'plugin:text-tools:tool:line-tools.clean-list'
   const item = collectStaticCandidates('global-launcher').find((candidate) => candidate.systemKey === key)
   assert.ok(item, 'actual bundled package registers the new global tool')
   assert.deepEqual(item.actionPolicy, { effect: 'pure' })
@@ -104,8 +104,8 @@ try {
   }
   assert.ok(collectStaticCandidates('quick-editor-command').some((candidate) => candidate.systemKey === key), 'editor route remains available')
   assert.ok(collectStaticCandidates('quick-editor-command').some((candidate) => candidate.systemKey === key), 'quick editor route remains available')
-  const registeredTools = pluginRegistry.getPluginDefinition('line-tools', 'production').tools
-  assert.ok(registeredTools.filter((tool) => !['line-tools.clean-list', 'line-tools.extract-list'].includes(tool.id)).every((tool) => !tool.requireParamSelection), 'existing text tools retain their optional parameter behavior')
+  const registeredTools = pluginRegistry.getPluginDefinition('text-tools', 'production').tools
+  assert.ok(registeredTools.filter((tool) => !['line-tools.clean-list', 'line-tools.extract-list', 'paths.convert'].includes(tool.id)).every((tool) => !tool.requireParamSelection), 'existing text tools retain their optional parameter behavior')
 
   const deliveries = []
   let hiddenReads = 0
@@ -127,7 +127,7 @@ try {
     async pasteToForegroundApp() { throw new Error('Unexpected paste') },
   }
   const beforeDefault = deliveries.length
-  const direct = await item.execute({ surfaceId: 'global-launcher', input: { text: sample }, api, locale: 'en', t: makePluginT('line-tools', 'en') })
+  const direct = await item.execute({ surfaceId: 'global-launcher', input: { text: sample }, api, locale: 'en', t: makePluginT('text-tools', 'en') })
   assert.equal(direct.output.choices[0].preview, variants[2].expected, 'real default execution matches the documented defaults')
   assert.equal(deliveries.length, beforeDefault, 'default execution only previews')
 
@@ -135,7 +135,7 @@ try {
 
   const editorWrites = []
   const editorResult = await item.executeWithParams({
-    surfaceId: 'quick-editor-command', locale: 'en', t: makePluginT('line-tools', 'en'),
+    surfaceId: 'quick-editor-command', locale: 'en', t: makePluginT('text-tools', 'en'),
     api: { getSelectionText: () => '', getActiveText: () => sample, replaceActiveText: async (text) => { editorWrites.push(text) } },
   }, variants[7].params)
   assert.deepEqual(editorResult, { ok: true })

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { cleanAgentText } from '../src/plugins/line-tools/cleanAgentText.ts'
+import { cleanAgentText } from '../src/plugins/text-tools/line/cleanAgentText.ts'
 
 const box = (rows: string[], ascii = false, eol = '\n') => {
   const width = Math.max(...rows.map((row) => Array.from(row).length))

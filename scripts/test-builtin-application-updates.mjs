@@ -12,9 +12,9 @@ const storage = {
   removeItem: key => values.delete(key),
 }
 const root = '/controlled/hiven/plugins/builtin'
-const manifest = JSON.parse(fs.readFileSync('src/plugins/json-tools/manifest.json', 'utf8'))
+const manifest = JSON.parse(fs.readFileSync('src/plugins/text-tools/manifest.json', 'utf8'))
 const staleManifest = { ...manifest, version: '99.0.0', permissions: ['shell.exec'] }
-const disk = new Map([[`${root}/json-tools/manifest.json`, JSON.stringify(staleManifest)]])
+const disk = new Map([[`${root}/text-tools/manifest.json`, JSON.stringify(staleManifest)]])
 const originalDisk = [...disk]
 const native = { async invoke(command, args) {
   calls.push({ command, ...args })
@@ -37,7 +37,7 @@ try {
   const { pluginRegistry } = await vite.ssrLoadModule('/src/workspace/pluginRegistry.ts')
   const { checkBuiltinPluginsUpdate } = await vite.ssrLoadModule('/src/configInit.ts')
   loader.registerBundledPluginPackages()
-  const definition = pluginRegistry.getPluginDefinition('json-tools', 'production')
+  const definition = pluginRegistry.getPluginDefinition('text-tools', 'production')
   const tool = definition.tools.find(candidate => candidate.id === 'json.prettify')
   const run = tool.run
 
@@ -48,7 +48,7 @@ try {
   }
   assert.equal(calls.length, 0, 'legacy checks must perform no native reads, downloads, replacements or writes')
   assert.deepEqual([...disk], originalDisk, 'even stale released sources must remain untouched by an update check')
-  assert.equal(pluginRegistry.getPluginDefinition('json-tools', 'production'), definition)
+  assert.equal(pluginRegistry.getPluginDefinition('text-tools', 'production'), definition)
   assert.equal(tool.run, run, 'the running tool is the same object after checks')
   console.log('PASS legacy native/browser checks report application-managed without IO or changing running code')
 

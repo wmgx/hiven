@@ -20,7 +20,7 @@ const originalInfo = console.info
 console.info = (...args) => { if (args[0] !== '[hiven:launcher-perf]') originalInfo(...args) }
 const vite = await createServer({ server: { middlewareMode: true }, appType: 'custom', logLevel: 'silent' })
 try {
-  const { extractTextList } = await vite.ssrLoadModule('/src/plugins/line-tools/extractTextList.ts')
+  const { extractTextList } = await vite.ssrLoadModule('/src/plugins/text-tools/line/extractTextList.ts')
   const urls = [
     'HTTPS://Example.com/Path?q=A&b=2#Part',
     'https://example.com/wiki/A_(B)',
@@ -70,7 +70,7 @@ try {
   const { createGlobalLauncherPluginApi } = await vite.ssrLoadModule('/src/launcher/clipboard/globalLauncherApi.ts')
   const { consumePendingObjectBlock } = await vite.ssrLoadModule('/src/launcher/clipboard/pendingObjectBlock.ts')
   registerBundledPluginPackages()
-  const key = 'plugin:line-tools:tool:line-tools.extract-list'
+  const key = 'plugin:text-tools:tool:line-tools.extract-list'
   const item = collectStaticCandidates('global-launcher').find((candidate) => candidate.systemKey === key)
   assert.ok(item, 'actual bundled package exposes the new global tool')
   assert.equal(item.requireParamSelection, true)
@@ -110,7 +110,7 @@ try {
   const beforeErrors = deliveries.length
   for (const locale of ['en', 'zh']) {
     for (const kind of ['urls', 'emails']) {
-      const result = await item.executeWithParams({ surfaceId: 'global-launcher', input: { text: 'Keep this original text' }, api, locale, t: makePluginT('line-tools', locale) }, { kind, dedup: true })
+      const result = await item.executeWithParams({ surfaceId: 'global-launcher', input: { text: 'Keep this original text' }, api, locale, t: makePluginT('text-tools', locale) }, { kind, dedup: true })
       assert.equal(result.ok, false)
       assert.ok(result.message, 'localized no-match error has a message')
       assert.equal(/[\u4e00-\u9fff]/.test(result.message), locale === 'zh')

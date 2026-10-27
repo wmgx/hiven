@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import ts from 'typescript'
 import { createJiti } from 'jiti'
-const { inferJsonType: infer, JsonTypeInferenceError } = await createJiti(import.meta.url).import('../src/plugins/json-tools/jsonTypeInference.ts')
+const { inferJsonType: infer, JsonTypeInferenceError } = await createJiti(import.meta.url).import('../src/plugins/text-tools/json/jsonTypeInference.ts')
 const bad = (input, code) => assert.throws(() => infer(input), error => error instanceof JsonTypeInferenceError && error.code === code)
 assert.equal(infer('1e9999'), 'export type Root = number;\n')
 assert.equal(infer('9007199254740993'), 'export type Root = number;\n')

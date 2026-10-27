@@ -25,8 +25,8 @@ function loadCore(relativePath, additionalDependencies = {}) {
   return exports
 }
 
-export const jsonCore = loadCore('../../src/plugins/json-tools/jsonCore.ts', {
-  './jsonTypeInference': loadCore('../../src/plugins/json-tools/jsonTypeInference.ts'),
-  './urlQueryCore': loadCore('../../src/plugins/json-tools/urlQueryCore.ts'),
+export const jsonCore = loadCore('../../src/plugins/text-tools/json/jsonCore.ts', {
+  './jsonTypeInference': loadCore('../../src/plugins/text-tools/json/jsonTypeInference.ts'),
+  './urlQueryCore': loadCore('../../src/plugins/text-tools/json/urlQueryCore.ts'),
 })
-export const encodeDecodeCore = loadCore('../../src/plugins/encode-decode/core.ts')
+export const encodeDecodeCore = loadCore('../../src/plugins/text-tools/encode/core.ts')

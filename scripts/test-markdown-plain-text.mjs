@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createJiti } from 'jiti'
-const { markdownPlainText: convert, MARKDOWN_INPUT_LIMIT } = await createJiti(import.meta.url).import('../src/plugins/line-tools/markdownPlainText.ts')
+const { markdownPlainText: convert, MARKDOWN_INPUT_LIMIT } = await createJiti(import.meta.url).import('../src/plugins/text-tools/line/markdownPlainText.ts')
 const fixture = JSON.parse(readFileSync(new URL('./fixtures/markdown-plain-text.json', import.meta.url), 'utf8'))
 assert.equal(convert(fixture.input, '图片'), fixture.expected)
 // Code bodies use source spelling, not marked's escaped/normalized codespan text.

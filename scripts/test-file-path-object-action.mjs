@@ -23,15 +23,16 @@ try {
   const { icon: _icon, ...actionWithoutIcon } = action
   assert.deepEqual(actionWithoutIcon, {
     id: 'convert-history-file-paths', title: 'Convert File Paths', titleZh: '转换文件路径',
-    pluginId: 'file-paths', defaultOutput: 'open-plugin-surface',
+    pluginId: 'text-tools', defaultOutput: 'open-plugin-tool',
   })
   const opened = []
   const result = await executeRecommendedAction({ block, action, target: action.defaultOutput }, {
     copyText: forbidden, openInEditor: forbidden, readLocalFileText: forbidden,
-    openPluginSurface: async (pluginId, options) => opened.push({ pluginId, options }),
+    openPluginSurface: forbidden,
+    openPluginTool: async (pluginId, toolId, text) => opened.push({ pluginId, toolId, text }),
   })
   assert.deepEqual(result, { ok: true })
-  assert.deepEqual(opened, [{ pluginId: 'file-paths', options: { initialText: paths.join('\n') } }])
+  assert.deepEqual(opened, [{ pluginId: 'text-tools', toolId: 'paths.convert', text: paths.join('\n') }])
 
   const ambiguous = { ...block, payloadFiles: { ...block.payloadFiles, paths: ['/synthetic/ok', '/synthetic/line\nbreak'] } }
   const rejected = await executeRecommendedAction({ block: ambiguous, action, target: action.defaultOutput }, {

@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import { createJiti } from 'jiti'
 
-const { cleanInvisibleCharacters } = await createJiti(import.meta.url).import('../src/plugins/line-tools/cleanInvisibleCharacters.ts')
+const { cleanInvisibleCharacters } = await createJiti(import.meta.url).import('../src/plugins/text-tools/line/cleanInvisibleCharacters.ts')
 
 const source = 'Acme\u00a0Inc\nAcme Inc\norder\u200b-142\norder-142\nco\u00adoperate\ncooperate\n10\u202fkg'
 assert.deepEqual(cleanInvisibleCharacters(source), {

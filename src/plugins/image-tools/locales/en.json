@@ -43,5 +43,17 @@
   "resize.previous": "New image didn't load",
   "surface.title": "Image Tools",
   "action.back": "Back",
-  "image.saved": "Saved"
+  "image.saved": "Saved",
+  "image.title": "Image ⇄ Base64",
+  "image.input": "Base64 / data URI",
+  "image.decode": "Restore image",
+  "image.preview": "Preview",
+  "image.dimensions": "{width} × {height} px",
+  "image.output": "data URI",
+  "image.copyUri": "Copy data URI",
+  "image.copyImage": "Copy image",
+  "image.copied": "Copied",
+  "image.error": "Something went wrong. Try again.",
+  "image.loadError": "Can't load this image. Supported: PNG, JPEG, WebP.",
+  "image.previousNotUpdated": "Preview not updated"
 }

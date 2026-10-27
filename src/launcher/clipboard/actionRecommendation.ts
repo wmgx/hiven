@@ -23,6 +23,7 @@ export type RecommendedOutputTarget =
   | 'copy'
   | 'open-editor'
   | 'open-plugin-surface'
+  | 'open-plugin-tool'
 
 export type RecommendedAction = {
   id: string
@@ -141,8 +142,8 @@ const FILES_HISTORY_ACTIONS: RecommendedAction[] = [
     id: 'convert-history-file-paths',
     icon: 'FileSymlink',
     ...labels('palette.actionConvertHistoryFilePaths'),
-    pluginId: 'file-paths',
-    defaultOutput: 'open-plugin-surface',
+    pluginId: 'text-tools',
+    defaultOutput: 'open-plugin-tool',
   },
 ]
 

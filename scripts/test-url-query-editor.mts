@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { addUrlParameter, editUrlParameter, parseUrlQuery, removeUrlParameter, serializeUrlQuery, URL_QUERY_MAX_CHARS } from '../src/plugins/json-tools/urlQueryCore.ts'
+import { addUrlParameter, editUrlParameter, parseUrlQuery, removeUrlParameter, serializeUrlQuery, URL_QUERY_MAX_CHARS } from '../src/plugins/text-tools/json/urlQueryCore.ts'
 const source = 'https://Example.test:443/a%2fb?q=hello+world&tag=one&tag=two&empty=&flag&=blank&&encoded=%2f%2F#frag%2f?keep=1'
 const parsed = parseUrlQuery(source)
 assert.equal(serializeUrlQuery(parsed), source)

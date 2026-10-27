@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { findDuplicateLines, sourceLineRanges, duplicateLineReport } from '../src/plugins/line-tools/core.ts'
+import { findDuplicateLines, sourceLineRanges, duplicateLineReport } from '../src/plugins/text-tools/line/core.ts'
 
 const exact = { ignoreCase: false, trim: false }
 const source = 'A\nB\nA\nA'

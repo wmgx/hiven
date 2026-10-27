@@ -22,7 +22,7 @@ const props = { active: true, saveFocused: false, initialText: '', surfaceId: 'i
     storage: { blob: { put: async ({ bytes }) => ({ blobId: `blob:${bytes[0]}` }), delete: async () => {}, savePng: async (id) => { calls.save.push(id); return { status: 'saved' } } } },
   } }
 const exports = {}
-vm.runInNewContext(ts.transpileModule(readFileSync('src/plugins/encode-decode/ImageBase64Panel.tsx', 'utf8'), {
+vm.runInNewContext(ts.transpileModule(readFileSync('src/plugins/image-tools/ImageBase64Panel.tsx', 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
 }).outputText, { exports, AbortController, Uint8Array, require(name) {
   if (name === 'react') return react

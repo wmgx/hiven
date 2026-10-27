@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
-import { formatText, processFormatter } from '../src/plugins/formatter/core.ts'
-import { formatXml, XmlFormatterError } from '../src/plugins/formatter/xml.ts'
+import { formatText, processFormatter } from '../src/plugins/text-tools/format/core.ts'
+import { formatXml, XmlFormatterError } from '../src/plugins/text-tools/format/xml.ts'
 
 // Node has no DOMParser. These known-valid fixtures exercise the actual lexical
 // formatter with a controlled validation boundary; they do not test XML grammar.

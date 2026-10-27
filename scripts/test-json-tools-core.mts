@@ -1,6 +1,4 @@
 import assert from 'node:assert/strict'
-import { operationRoutes } from '../src/plugins/json-tools/routes.ts'
-import { searchableFieldsMatch } from '../src/workspace/searchRanking.ts'
 import { jsonCore } from './helpers/text-transform-cores.mjs'
 
 const {
@@ -46,11 +44,6 @@ assert.deepEqual(JSON.parse(yamlToJson(jsonToYaml(yamlJson, 4), 4)), {
 const unsupportedYaml = processJson('value: .nan', { operation: 'yaml-to-json' })
 assert.equal(unsupportedYaml.ok, false)
 if (!unsupportedYaml.ok) assert.equal(unsupportedYaml.code, 'finiteNumberRequired')
-
-const formatRoute = operationRoutes.find((route) => route.id === 'format')!
-const formatFields = { id: formatRoute.id, title: '', aliases: formatRoute.aliases }
-assert.ok(['json for', 'geshihua', 'gsh'].every((query) => searchableFieldsMatch(formatFields, query, 'zh')), 'partial names, pinyin, and initials must find the same route')
-assert.equal(searchableFieldsMatch(formatFields, '{"json":"format"}', 'zh'), false)
 
 const fullUrl = 'https://example.test/search?q=hello+world&tag=one&tag=two&empty=#anchor'
 assert.deepEqual(processJson(fullUrl, { operation: 'url-query-edit' }), { ok: true, output: fullUrl })

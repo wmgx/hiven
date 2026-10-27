@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { evaluateRegex, MAX_REGEX_MATCHES } from '../src/plugins/regex-tester/regexCore.ts'
 import { extractRegexMatches } from '../src/plugins/regex-tester/extractMatches.ts'
-import { dedupLines, sortLines, sqlInString, sqlInNumber } from '../src/plugins/line-tools/core.ts'
+import { dedupLines, sortLines, sqlInString, sqlInNumber } from '../src/plugins/text-tools/line/core.ts'
 
 function extract(pattern: string, flags: string, source: string) {
   return extractRegexMatches(evaluateRegex(pattern, flags, source))

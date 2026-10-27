@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
-import { escapeRegexPattern } from '../src/plugins/line-tools/escapeRegexPattern.ts'
-import { extractTextList } from '../src/plugins/line-tools/extractTextList.ts'
+import { escapeRegexPattern } from '../src/plugins/text-tools/line/escapeRegexPattern.ts'
+import { extractTextList } from '../src/plugins/text-tools/line/extractTextList.ts'
 
 assert.equal(escapeRegexPattern('a.b'), 'a\\.b')
 assert.equal(escapeRegexPattern(''), '')

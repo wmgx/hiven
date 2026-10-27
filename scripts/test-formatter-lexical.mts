@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { formatText } from '../src/plugins/formatter/core.ts'
+import { formatText } from '../src/plugins/text-tools/format/core.ts'
 
 const sql = (text: string) => formatText('sql', 'compact', text)
 assert.equal(sql("SELECT 'a--b' AS value;"), "SELECT 'a--b' AS value;")

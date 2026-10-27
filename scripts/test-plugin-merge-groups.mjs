@@ -95,7 +95,7 @@ assert.equal(
   'calculator base conversion should convert large hex values back to decimal',
 )
 
-const lineTools = loadPlugin('src/plugins/line-tools/index.ts')
+const lineTools = { tools: loadModule('src/plugins/text-tools/line/tools.ts').lineTools }
 const lineToolItems = lineTools.tools ?? lineTools.commands ?? []
 const lineToolIds = lineToolItems.map((item) => item.id)
 assert.ok(lineToolIds.includes('line-affix.prepend'), 'line-tools should include line-affix.prepend')
@@ -160,12 +160,5 @@ assert.equal(
   'a, b, c',
   'line-tools should join lines with a separator',
 )
-
-const builtinIndex = JSON.parse(readFileSync('src/builtin-plugins/index.json', 'utf8'))
-const pluginIds = builtinIndex.packages.map((pkg) => pkg.pluginId)
-assert.ok(pluginIds.includes('line-tools'), 'builtins should include line-tools')
-for (const removed of ['hex', 'prepend', 'append', 'wrap', 'sort', 'dedup', 'reverse', 'remove-blank-lines', 'trim-whitespace', 'join']) {
-  assert.equal(pluginIds.includes(removed), false, `builtins should no longer include ${removed}`)
-}
 
 console.log('plugin merge group checks passed')

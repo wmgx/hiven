@@ -28,7 +28,7 @@ try {
   const { shouldPasteAsBlock } = await vite.ssrLoadModule('/src/launcher/clipboard/attachPolicy.ts')
   const { explicitRunReason, LIVE_PREVIEW_MAX_BYTES } = await vite.ssrLoadModule('/src/workspace/launcher/commandPreviewPolicy.ts')
   registerBundledPluginPackages()
-  const json = collectStaticCandidates('global-launcher').find((item) => item.systemKey === 'plugin:json-tools:tool:json.prettify')
+  const json = collectStaticCandidates('global-launcher').find((item) => item.systemKey === 'plugin:text-tools:tool:json.prettify')
   const random = collectStaticCandidates('quick-editor-command').find((item) => item.systemKey === 'plugin:random:tool:random.integer')
   assert.ok(json)
   assert.ok(random)

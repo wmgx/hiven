@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { md5Hex } from '../src/plugins/crypto/md5.ts'
+import { md5Hex } from '../src/plugins/text-tools/hash/md5.ts'
 
 const encoder = new TextEncoder()
 for (const text of ['', 'abc', 'hello 世界', 'a'.repeat(1000)]) {

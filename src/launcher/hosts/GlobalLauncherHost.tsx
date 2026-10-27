@@ -1,8 +1,9 @@
+import { getPluginToolItemKey } from '../../workspace/launcher/identity'
 import { isCurrentBundledDefinition } from '../../workspace/bundledPluginIdentity'
 import { CURRENT_MATERIAL_COMPARE_ACTION, createMaterialComparison, type MaterialTextPair } from '../../currentMaterialCompare'
 import { ensurePluginRuntimeReady } from '../../workspace/pluginRuntimeBootstrap'
 import { openLauncherHostedPluginSurface } from '../../workspace/pluginSurfaceOpenRequest'
-import { collectDynamicItems, filterAvailableLauncherItems } from '../../workspace/launcher/registry'
+import { collectDynamicItems, collectStaticCandidates, filterAvailableLauncherItems } from '../../workspace/launcher/registry'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '../../store'
 import { useShallow } from 'zustand/react/shallow'
@@ -1000,6 +1001,14 @@ export function GlobalLauncherHost() {
           initialText: options?.initialText,
         })
       },
+      openPluginTool: async (pluginId, toolId, text) => {
+        await ensurePluginRuntimeReady('builtin')
+        if (clipboardBlock.getMaterialGeneration() !== materialGeneration || !clipboardBlock.hasMaterial(block)) return
+        const item = filterAvailableLauncherItems(collectStaticCandidates('global-launcher'), 'global-launcher')
+          .find(candidate => candidate.systemKey === getPluginToolItemKey(pluginId, toolId) && candidate.source === 'builtin')
+        if (!item || !controllerRef.current) throw new Error(t(locale, 'palette.actionErrorUnavailable'))
+        selectItem(buildGlobalLauncherItems({ rankedLauncherItems: [{ ...item, initialInputText: text }], query: '', locale })[0], true)
+      },
       getPluginSurfaceInitialTextMode: (pluginId) => getPluginSurfaceDefinition({ source: 'builtin', pluginId, surfaceId: 'main' })?.surface.initialTextMode,
       readLocalFileText: async (path) => {
         const { invoke } = await import('@tauri-apps/api/core')
@@ -1040,14 +1049,14 @@ export function GlobalLauncherHost() {
 
     if (result.ok) {
       // Navigation into another Launcher surface is continuation, not completion.
-      if (target === 'open-plugin-surface' || useAppStore.getState().launcherHostSurfaceTarget) {
+      if (target === 'open-plugin-surface' || target === 'open-plugin-tool' || useAppStore.getState().launcherHostSurfaceTarget) {
         clipboardBlock.clearMaterial()
         setQuery('')
       } else {
         closeLauncherAfterAction()
       }
     }
-  }, [clipboardBlock.block, clipboardBlock.getMaterialGeneration, clipboardBlock.hasMaterial, clipboardBlock.clearMaterial, closeLauncherAfterAction, locale, openPluginSurface, setQuery])
+  }, [clipboardBlock.block, clipboardBlock.getMaterialGeneration, clipboardBlock.hasMaterial, clipboardBlock.clearMaterial, closeLauncherAfterAction, locale, openPluginSurface, setQuery, selectItem, controllerRef])
 
   const selectItemWithObjectActions = useCallback((item: GlobalLauncherItem | undefined, customizeParams = false) => {
     if (!item) return

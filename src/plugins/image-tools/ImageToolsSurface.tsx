@@ -2,12 +2,14 @@ import { useRef } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import { IconButton } from '@hiven/plugin-ui'
 import { BackIcon } from '@hiven/plugin-ui/icons'
+import { ImageBase64Panel } from './ImageBase64Panel'
 import { ImageCropPanel } from './ImageCropPanel'
 import { ImageRedactionPanel } from './ImageRedactionPanel'
 import { ImageResizePanel } from './ImageResizePanel'
 import { ImageSavePanel } from './ImageSavePanel'
 
 const TITLES: Record<string, string> = {
+  'image-base64': 'image.title',
   'image-resize': 'resize.title',
   'image-crop': 'crop.title',
   'image-redact': 'redact.title',
@@ -28,7 +30,8 @@ export function ImageToolsSurface(props: PluginSurfaceProps) {
         </IconButton>
         <strong>{t(TITLES[surfaceId] ?? 'surface.title')}</strong>
       </header>
-      {surfaceId === 'image-crop' ? <ImageCropPanel {...panelProps} />
+      {surfaceId === 'image-base64' ? <ImageBase64Panel {...panelProps} active />
+        : surfaceId === 'image-crop' ? <ImageCropPanel {...panelProps} />
         : surfaceId === 'image-redact' ? <ImageRedactionPanel {...panelProps} />
         : surfaceId === 'image-save' ? <ImageSavePanel {...props} invalidateRef={invalidation} />
         : <ImageResizePanel {...panelProps} />}
