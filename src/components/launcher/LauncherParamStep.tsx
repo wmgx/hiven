@@ -117,6 +117,10 @@ export function LauncherParamStep({
   const isTextParam = param?.type === 'text' || param?.type === 'number'
   const isMultiParam = param?.type === 'multi-select'
   const options = param ? filterParamOptions(paramOptions(param, locale), frame.query, locale) : []
+  // Text/number params may declare common values: ↑↓ fills one in, a click picks it; typing stays free.
+  const suggestions = isTextParam && param ? paramOptions(param, locale) : []
+  const suggestionIndex = suggestions.findIndex((option) => String(option.value) === frame.query)
+  const nextParam = isSublayer && params.length > 1 ? params[(frame.paramIndex + 1) % params.length] : undefined
   const selectedIndex = Math.min(frame.selectedIndex, Math.max(0, options.length - 1))
   const currentMultiValue = param && isMultiParam && Array.isArray(frame.params[param.key])
     ? (frame.params[param.key] as unknown[]).map(String)
@@ -242,6 +246,14 @@ export function LauncherParamStep({
                 if (!reachedMax || checked) commitOption(opt.value)
               }
             }
+            if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && suggestions.length > 0) {
+              event.preventDefault()
+              event.stopPropagation()
+              const next = event.key === 'ArrowDown'
+                ? Math.min(suggestionIndex + 1, suggestions.length - 1)
+                : Math.max(suggestionIndex - 1, 0)
+              onQueryChange(String(suggestions[next].value))
+            }
             if (event.key === 'ArrowDown' && !isTextParam) {
               event.preventDefault()
               event.stopPropagation()
@@ -262,10 +274,33 @@ export function LauncherParamStep({
         />
         {busy ? (
           <span className="meta anim-running-pulse" aria-live="polite">...</span>
-        ) : isSublayer && !isMultiParam ? null : (
+        ) : isSublayer && !isMultiParam ? (
+          params.length > 1 ? <span className="meta">{frame.paramIndex + 1}/{params.length}</span> : null
+        ) : (
           <span className="meta">{countLabel}</span>
         )}
       </div>
+      {suggestions.length > 0 && (
+        <div className={bodyClassName} data-no-drag data-launcher-scrollable>
+          {suggestions.map((option, index) => (
+            <button
+              key={String(option.value)}
+              type="button"
+              tabIndex={-1}
+              className={`l-option-row ${index === suggestionIndex ? 'sel selected' : ''}`}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => { if (!busy) onCommit(option.value) }}
+              disabled={busy}
+            >
+              <span className="opt-main">
+                <span className="opt-title">{option.label}</span>
+                {option.description && <span className="opt-desc">{option.description}</span>}
+              </span>
+              {index === suggestionIndex && <span className="r-kbd">↵</span>}
+            </button>
+          ))}
+        </div>
+      )}
       {!isTextParam && (
         <div className={bodyClassName} data-no-drag data-launcher-scrollable>
           {options.map((option, index) => {
@@ -303,12 +338,12 @@ export function LauncherParamStep({
         <div className="px-3.5 py-1.5 text-[11px]" style={{ color: 'var(--color-error)' }}>{error}</div>
       )}
       <div className={footerClassName} style={{ borderTop: '1px solid var(--border)' }}>
-        {!isTextParam && <HintKey keys="↑↓" label={t(locale, 'palette.navigate')} />}
+        {(!isTextParam || suggestions.length > 0) && <HintKey keys="↑↓" label={t(locale, 'palette.navigate')} />}
         {isMultiParam && <HintKey keys="␣" label={t(locale, 'palette.select')} />}
         {isSublayer ? (
           <>
             <HintKey keys="↵" label={isMultiParam ? t(locale, 'palette.submit') : t(locale, 'palette.select')} />
-            {params.length > 1 && <HintKey keys="⇥" label={t(locale, 'palette.nextParam')} />}
+            {nextParam && <HintKey keys="⇥" label={t(locale, 'palette.nextParamNamed', { label: localized(nextParam.label, nextParam.labelI18n, locale) })} />}
             <HintKey keys="esc" label={t(locale, 'palette.cancelParams')} />
           </>
         ) : (

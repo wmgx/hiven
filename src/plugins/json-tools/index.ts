@@ -143,7 +143,7 @@ export const jsonToolsPlugin = definePlugin({
       inputPolicy: { mode: 'auto' },
       policy: PURE_ACTION_POLICY,
       params: [
-        { key: 'indent', label: 'json.indent.label', type: 'number', default: 2 },
+        { key: 'indent', label: 'json.indent.label', type: 'number', default: 2, options: ['2', '4'] },
         { key: 'sortKeys', label: 'json.sortKeys.label', type: 'boolean', default: false },
       ],
       accepts: { kinds: ['json'], aliases: ['fmt', '格式化', 'pretty'] },
