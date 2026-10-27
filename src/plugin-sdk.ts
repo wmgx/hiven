@@ -164,8 +164,6 @@ export type {
   PluginToolContext,
   PluginToolImageInput,
   PluginToolResult,
-  PluginToolExplicitTextPreviewContext,
-  PluginToolTextPreviewResult,
   PluginToolSurfaces,
   PluginToolOutput,
   PanelActionContribution,

@@ -5,7 +5,7 @@
  * Direct tools plus a shared conversion workspace.
  */
 
-import { definePlugin, type PluginToolExplicitTextPreviewContext, type PluginToolTextPreviewResult, type PluginToolSurfaces } from '@hiven/plugin'
+import { definePlugin, type PluginToolContext, type PluginToolSurfaces } from '@hiven/plugin'
 import { EncodeDecodeSurface } from './EncodeDecodeSurface'
 import {
   base64Decode,
@@ -52,7 +52,9 @@ const OPERATION_ROUTES = [
   { id: 'jwt-decode', title: 'jwt.decode.title', aliases: ['jwt decode', 'decode jwt', 'jwt-decode', 'jwt解码', 'jwt 解码'] },
 ] as const
 
-function decodeBase64Text(ctx: PluginToolExplicitTextPreviewContext): PluginToolTextPreviewResult {
+type TextResult = { ok: true; text: string } | { ok: false; message: string }
+
+function decodeBase64Text(ctx: PluginToolContext): TextResult {
   try { return { ok: true, text: base64Decode(ctx.input.text) } }
   catch (error) { return { ok: false, message: ctx.t(conversionErrorKey(error)) } }
 }
@@ -126,7 +128,6 @@ export const encodeDecodePlugin = definePlugin({
       aliases: ['b64', 'base64', 'base64 decode', 'base64解码', 'b64 decode', 'atob', 'decode base64', '解码'],
       inputPolicy: { mode: 'auto' },
       policy: PURE_ACTION_POLICY,
-      explicitTextPreview: { run: decodeBase64Text },
       accepts: { kinds: ['base64'], aliases: ['b64', 'base64', 'base64 decode', 'base64解码'] },
       textMatch: isBase64,
       run(ctx) {

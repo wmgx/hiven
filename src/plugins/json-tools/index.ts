@@ -5,7 +5,7 @@
  * Direct conversion tools remain available in editor command entries.
  */
 
-import { definePlugin, type PluginToolExplicitTextPreviewContext, type PluginToolTextPreviewResult, type PluginToolSurfaces } from '@hiven/plugin'
+import { definePlugin, type PluginToolContext, type PluginToolSurfaces } from '@hiven/plugin'
 import { JsonSurface } from './JsonSurface'
 import { operationRoutes } from './routes'
 import {
@@ -46,7 +46,9 @@ function toolError(error: unknown, t: (key: string, vars?: Record<string, string
   return t('error.convert', { message: error instanceof Error ? error.message : String(error) })
 }
 
-function prettifyText(ctx: PluginToolExplicitTextPreviewContext): PluginToolTextPreviewResult {
+type TextResult = { ok: true; text: string } | { ok: false; message: string }
+
+function prettifyText(ctx: PluginToolContext): TextResult {
   try {
     return { ok: true, text: jsonPrettify(ctx.input.text, Number(ctx.params.indent ?? 2), Boolean(ctx.params.sortKeys)) }
   } catch (error) {
@@ -140,7 +142,6 @@ export const jsonToolsPlugin = definePlugin({
       aliases: ['fmt', '格式化', 'pretty', 'json format', 'json格式化', 'format json', '格式化 JSON'],
       inputPolicy: { mode: 'auto' },
       policy: PURE_ACTION_POLICY,
-      explicitTextPreview: { run: prettifyText },
       params: [
         { key: 'indent', label: 'json.indent.label', type: 'number', default: 2 },
         { key: 'sortKeys', label: 'json.sortKeys.label', type: 'boolean', default: false },

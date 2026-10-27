@@ -166,16 +166,14 @@ export function GlobalLauncherCollectInputFrame({
   onSyncBlock?: (text: string) => void
 }) {
   const placeholder = frame.input.placeholderI18n?.[locale] ?? frame.input.placeholder ?? ''
-  const explicitPreview = frame.item.executionMode === 'explicit-text-preview'
-  const showCaptureSelection = Boolean(!explicitPreview && !frame.item.metadataInput && onCaptureSelection && !frame.inputText && frame.blockText === undefined && frame.item.behavior.type === 'perform' && frame.item.inputPolicy && frame.item.inputPolicy.mode !== 'all')
+  const showCaptureSelection = Boolean(!frame.item.metadataInput && onCaptureSelection && !frame.inputText && frame.blockText === undefined && frame.item.behavior.type === 'perform' && frame.item.inputPolicy && frame.item.inputPolicy.mode !== 'all')
   const captureAvailability = useSelectionCaptureAvailability(showCaptureSelection)
-  const multilineInput = explicitPreview
   const previewChoices = frame.previewOutput?.choices ?? []
   const selectedIndex = frame.selectedSuggestionIndex ?? -1
   const hasSuggestions = previewChoices.length > 0
   const isSuggestMode = Boolean(frame.item.suggest)
   const livePreviewText = !isSuggestMode ? extractLivePreviewText(frame.previewOutput) : null
-  const showLivePreview = !isSuggestMode && !explicitPreview && !frame.item.metadataInput
+  const showLivePreview = !isSuggestMode && !frame.item.metadataInput
   const hasBlock = frame.blockText !== undefined
   const block = useMemo(() => {
     if (frame.blockText === undefined) return null
@@ -265,14 +263,6 @@ export function GlobalLauncherCollectInputFrame({
 
   const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
-    if (multilineInput) {
-      if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey) {
-        event.preventDefault()
-        event.stopPropagation()
-        if (!busy) onSubmitPrimary?.()
-      }
-      return
-    }
     if (hasBlock && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'e') {
       event.preventDefault()
       event.stopPropagation()
@@ -299,7 +289,7 @@ export function GlobalLauncherCollectInputFrame({
       event.preventDefault()
       event.stopPropagation()
       if (busy) return
-      if (explicitPreview || frame.item.metadataInput) {
+      if (frame.item.metadataInput) {
         if (!event.shiftKey && !event.altKey) onSubmitPrimary?.()
         return
       }
@@ -358,7 +348,7 @@ export function GlobalLauncherCollectInputFrame({
           <textarea
             ref={editorRef}
             className="launcher-block-editor mono"
-            value={frame.blockText ?? ''}
+            value={(frame.blockText ?? '').replace(/\r\n|\r/g, '\n')}
             rows={Math.min(10, Math.max(3, (frame.blockText ?? '').split('\n').length))}
             spellCheck={false}
             autoComplete="off"
@@ -367,12 +357,12 @@ export function GlobalLauncherCollectInputFrame({
             aria-label={t(locale, 'palette.expandBlock')}
             data-no-drag
             data-launcher-scrollable
-            onChange={(event) => onBlockTextChange?.(event.target.value)}
+            onChange={(event) => onBlockTextChange?.(reconcileMaterialTextInput(frame.blockText ?? '', event.target.value))}
             onKeyDown={handleEditorKeyDown}
             onWheel={(event) => event.stopPropagation()}
           />
         )}
-        {!multilineInput && <LauncherAutoGrowInput
+        <LauncherAutoGrowInput
           ref={bindSearchInputRef ?? (inputRef as RefObject<HTMLTextAreaElement | null>)}
           value={frame.inputText}
           autoFocus
@@ -384,33 +374,13 @@ export function GlobalLauncherCollectInputFrame({
           placeholder={hasBlock ? t(locale, 'palette.blockInputHint') : placeholder}
           className="mono"
           style={{ caretColor: 'var(--text, currentColor)' }}
-        />}
+        />
         <LauncherParamChipTrail chips={paramChips} />
         {onOpenParams && paramChips.length > 0 && <kbd className="r-kbd" title={t(locale, 'palette.customizeParamsLabel')}>⇥</kbd>}
         {busy && (
           <span className="meta anim-running-pulse" role="status" aria-live="polite">{t(locale, deliveryIntent === 'copy' ? 'palette.outputCopying' : deliveryIntent ? 'palette.outputDelivering' : 'palette.outputRunning')}</span>
         )}
       </div>
-      {multilineInput && (
-        <div className="global-launcher-body launcher-material-text-edit" data-no-drag>
-          <textarea
-            ref={bindSearchInputRef ?? (inputRef as RefObject<HTMLTextAreaElement | null>)}
-            value={frame.inputText.replace(/\r\n|\r/g, '\n')}
-            autoFocus
-            rows={8}
-            spellCheck={false}
-            autoComplete="off"
-            autoCapitalize="none"
-            autoCorrect="off"
-            aria-label={commandTitle}
-            placeholder={placeholder}
-            data-launcher-scrollable
-            onChange={(event) => onInputChange(reconcileMaterialTextInput(frame.inputText, event.target.value))}
-            onKeyDown={handleInputKeyDown}
-            onWheel={(event) => event.stopPropagation()}
-          />
-        </div>
-      )}
       {error && (
         <div role="alert" className="px-3.5 py-2 text-[12px]" style={{ color: 'var(--color-error)' }}>
           {error}
@@ -535,11 +505,6 @@ export function GlobalLauncherCollectInputFrame({
           data-testid="launcher-collect-footer-back"
           data-no-drag
           onMouseDown={(event) => event.preventDefault()}
-          onKeyDown={(event) => {
-            if (!multilineInput) return
-            if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) event.preventDefault()
-            if (event.key !== 'Escape') event.stopPropagation()
-          }}
           onClick={() => onBack()}
           aria-label={t(locale, 'palette.back')}
         >

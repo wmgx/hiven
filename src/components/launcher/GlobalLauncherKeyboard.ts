@@ -85,16 +85,6 @@ export function handleGlobalLauncherKeyDown({
     if (topFrame.kind === 'param-input') return
 
     if (topFrame.kind === 'collect-input') {
-      const inputFrame = topFrame as CollectInputFrame
-      if (inputFrame.item.executionMode === 'explicit-text-preview') {
-        // Multiline drafts own caret movement, line breaks and empty Backspace.
-        if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey) {
-          event.preventDefault()
-          event.stopPropagation()
-          if (!controllerState.busy) void controllerRef.current?.submitInput?.(inputFrame)
-        }
-        return
-      }
       if (event.key === 'ArrowDown') {
         event.preventDefault()
         event.stopPropagation()
@@ -110,8 +100,6 @@ export function handleGlobalLauncherKeyDown({
       if (event.key === 'Enter') {
         event.preventDefault()
         if (controllerState.busy) return
-        const inputFrame = topFrame as CollectInputFrame
-        if (inputFrame.item.executionMode === 'explicit-text-preview' && (event.shiftKey || event.altKey)) return
         void controllerRef.current?.submitInput?.()
         return
       }

@@ -85,9 +85,9 @@ try {
     return h
   }
 
-  function makeOutput(h, { count = 2, text = '  computed output\n', explicit = false } = {}) {
+  function makeOutput(h, { count = 2, text = '  computed output\n' } = {}) {
     const choices = Array.from({ length: count }, (_, index) => {
-      const result = (explicit ? output.explicitTextPreviewResult : output.textResult)(
+      const result = output.textResult(
         index === 0 ? text : `${text} alternative ${index}`, h.api, 'en',
       )
       const choice = result.output.choices[0]
@@ -106,8 +106,7 @@ try {
       actionPolicy: { effect: 'pure' }, contractFingerprint: 'v1:delivery-regression',
       execute: async () => { h.executions++; return makeOutput(h, options) },
     }
-    if (kind === 'preview' || options.explicit) item.inputPolicy = { mode: 'auto' }
-    if (options.explicit) item.executionMode = 'explicit-text-preview'
+    if (kind === 'preview') item.inputPolicy = { mode: 'auto' }
     if (kind !== 'result') item.initialInputText = 'source input'
     if (kind === 'suggestion') item.suggest = async () => makeOutput(h, options).output
     return item
@@ -459,33 +458,6 @@ try {
     }
   }
 
-  for (const text of ['  exact explicit output\n\n', '']) {
-    await check(`explicit output ${JSON.stringify(text)} never falls back to paste`, async () => {
-      const h = harness()
-      await enter(h, 'result', { explicit: true, count: 1, text })
-      const frame = h.top()
-      const choice = h.choices()[0]
-      assert.equal(frame.executionMode, 'explicit-text-preview')
-      assert.equal(frame.retryOnly, undefined)
-      assert.equal(choice.preview, text)
-      assert.equal(h.calls.copy.length, 0)
-      assert.deepEqual(choice.secondaryActions.map(output.getHostOutputIntent), ['return-to-launcher'])
-      let fallbackCalls = 0
-      await h.controller.activatePreviewPaste(choice, () => { fallbackCalls++ })
-      assert.equal(fallbackCalls, 0)
-      h.effects.copy = () => { throw new Error('Explicit copy failed') }
-      await h.controller.activateChoice(choice)
-      assert.equal(h.top(), frame)
-      assert.equal(h.top().retryOnly, undefined, 'explicit preview keeps its two permitted destinations')
-      await h.controller.activateSecondary(choice, 'return-to-launcher')
-      assert.equal(h.material, text)
-      assert.equal(h.top().kind, 'list')
-      assert.equal(h.rootReturns, 1)
-      assert.equal(h.closed, 0)
-      assert.equal(h.calls.paste.length, 0)
-    })
-  }
-
   for (const semantics of ['void', 'keep-open', 'nested-output', 'failure', 'throw']) {
     await check(`legacy preview paste honors ${semantics} callback results`, async () => {
       const h = harness()
@@ -627,7 +599,7 @@ try {
     assert.notEqual(h.top()?.kind, 'result', 'Back cannot expose a stale status snapshot')
   })
 
-  console.log(`Launcher output recovery passed: ${passed} real logic cases (delivery locks, retry-only recovery, stale completions, exact Return material, explicit previews and legacy paste semantics)`)
+  console.log(`Launcher output recovery passed: ${passed} real logic cases (delivery locks, retry-only recovery, stale completions, exact Return material and legacy paste semantics)`)
 } finally {
   console.info = originalInfo
   await vite.close()

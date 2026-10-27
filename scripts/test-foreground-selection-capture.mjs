@@ -145,7 +145,6 @@ function adapter(h, run) {
     '../pluginPermissions': { getPluginPermissionSnapshot: () => ({}) },
     '../pluginShell': { createPluginShell: () => ({}) },
     '../pluginRegistry': { pluginRegistry: { getPluginPermissions: () => [], getPluginLifetime: () => undefined } },
-    '../bundledPluginIdentity': { resolveBundledTextPreviewRunner: () => undefined },
   })
   return adaptToolToLauncherItem({
     id: 'synthetic', title: 'Synthetic', inputPolicy: { mode: 'selection' }, run,

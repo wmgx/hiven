@@ -35,14 +35,11 @@ const vite = await createServer({ server: { middlewareMode: true }, appType: 'cu
 try {
   const loader = await vite.ssrLoadModule('/src/workspace/bundledPluginLoader.ts')
   const { pluginRegistry } = await vite.ssrLoadModule('/src/workspace/pluginRegistry.ts')
-  const { makePluginT } = await vite.ssrLoadModule('/src/i18n/pluginI18nRegistry.ts')
   const { checkBuiltinPluginsUpdate } = await vite.ssrLoadModule('/src/configInit.ts')
   loader.registerBundledPluginPackages()
   const definition = pluginRegistry.getPluginDefinition('json-tools', 'production')
   const tool = definition.tools.find(candidate => candidate.id === 'json.prettify')
-  const context = { input: { text: '{"a":1}' }, params: {}, locale: 'en', t: makePluginT('json-tools', 'en') }
-  const before = await tool.explicitTextPreview.run(context)
-  assert.equal(before.ok, true)
+  const run = tool.run
 
   for (const isNative of [true, false]) {
     window.__TAURI_INTERNALS__ = isNative ? native : undefined
@@ -52,7 +49,7 @@ try {
   assert.equal(calls.length, 0, 'legacy checks must perform no native reads, downloads, replacements or writes')
   assert.deepEqual([...disk], originalDisk, 'even stale released sources must remain untouched by an update check')
   assert.equal(pluginRegistry.getPluginDefinition('json-tools', 'production'), definition)
-  assert.deepEqual(await tool.explicitTextPreview.run(context), before)
+  assert.equal(tool.run, run, 'the running tool is the same object after checks')
   console.log('PASS legacy native/browser checks report application-managed without IO or changing running code')
 
   const summaries = loader.listBundledPluginPackageSummaries(root)

@@ -1,4 +1,4 @@
-import { definePlugin, type PluginToolContext, type PluginToolExplicitTextPreviewContext, type PluginToolTextPreviewResult, type PluginToolSurfaces } from '@hiven/plugin'
+import { definePlugin, type PluginToolContext, type PluginToolSurfaces } from '@hiven/plugin'
 import { TextToolsSurface } from './TextToolsSurface'
 import { TextWorkbenchSurface } from './TextWorkbenchSurface'
 import {
@@ -64,7 +64,9 @@ function cleanListText(text: string, params: Record<string, unknown>): string {
   })
 }
 
-function extractListText(ctx: PluginToolExplicitTextPreviewContext): PluginToolTextPreviewResult {
+type TextResult = { ok: true; text: string } | { ok: false; message: string }
+
+function extractListText(ctx: PluginToolContext): TextResult {
   const kind = ctx.params.kind ?? 'urls'
   if (kind !== 'urls' && kind !== 'emails') return { ok: false, message: ctx.t('extractList.invalidKind') }
   const matches = extractTextList(ctx.input.text, kind, ctx.params.dedup === true)
@@ -134,7 +136,6 @@ export const lineToolsPlugin = definePlugin({
         { key: 'kind', label: 'param.extractList.kind', type: 'single-select', options: [{ label: 'param.extractList.urls', value: 'urls' }, { label: 'param.extractList.emails', value: 'emails' }], default: 'urls' },
         { key: 'dedup', label: 'param.extractList.dedup', type: 'boolean', default: false },
       ],
-      explicitTextPreview: { run: extractListText },
       run(ctx) {
         const result = extractListText(ctx)
         return result.ok ? ctx.output.text(result.text) : ctx.output.error(result.message)
@@ -150,7 +151,6 @@ export const lineToolsPlugin = definePlugin({
         { key: 'removeBlank', label: 'param.cleanList.removeBlank', type: 'boolean', default: true },
         { key: 'dedup', label: 'param.cleanList.dedup', type: 'boolean', default: false },
       ],
-      explicitTextPreview: { run: (ctx) => ({ ok: true, text: cleanListText(ctx.input.text, ctx.params) }) },
       run(ctx) { return ctx.output.text(cleanListText(ctx.input.text, ctx.params)) },
       surfaces: { launcher: { surfaces: ['global-launcher', 'quick-editor-command'] }, panel: true },
     },
@@ -183,7 +183,6 @@ export const lineToolsPlugin = definePlugin({
     {
       id: 'line-tools.remove-blank-lines', title: 'removeBlankLines.title', icon: 'RemoveFormatting',
       aliases: ['remove empty lines', '删除空行', 'remove blank lines', '去除空行'], inputPolicy: { mode: 'auto' }, policy: PURE_ACTION_POLICY,
-      explicitTextPreview: { run: (ctx) => ({ ok: true, text: removeBlankLines(ctx.input.text) }) },
       run(ctx) { return ctx.output.text(removeBlankLines(ctx.input.text)) }, surfaces: { launcher: { surfaces: ['global-launcher', 'quick-editor-command'] }, panel: true },
     },
     {

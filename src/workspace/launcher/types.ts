@@ -531,10 +531,6 @@ export type LauncherItem = {
   behavior: LauncherBehavior
   surfaces?: LauncherSurfaceId[]
   inputPolicy?: TextInputPolicy
-  /** Host-owned global execution path with explicit text and deferred delivery. */
-  executionMode?: 'explicit-text-preview'
-  /** Host-only read check for the current bundled preview registration and contract. */
-  isExplicitTextPreviewAvailable?: () => boolean
   /** Host-owned input form for action metadata; never seed it from an Object Block. */
   metadataInput?: boolean
   /** Image-input tool: offered only for an attached image Block. */
@@ -709,18 +705,6 @@ export type PluginToolContext<TSettings = unknown> = {
 
 export type PluginToolResult = LauncherExecuteResult
 
-/** Pure, explicit-input runner. It receives no workspace, storage, AI, or shell API. */
-export type PluginToolExplicitTextPreviewContext = {
-  input: { text: string }
-  params: Record<string, unknown>
-  locale: Locale
-  t: (key: string, vars?: Record<string, string | number>) => string
-}
-
-export type PluginToolTextPreviewResult =
-  | { ok: true; text: string }
-  | { ok: false; message: string }
-
 type PluginToolContributionBase<TSettings> = {
   id: string
   title: string
@@ -730,10 +714,6 @@ type PluginToolContributionBase<TSettings> = {
   icon?: IconRef
   aliases?: string[]
   inputPolicy?: TextInputPolicy
-  /** Opt in to host-gated explicit text preview on supported trusted packages. */
-  explicitTextPreview?: {
-    run(ctx: PluginToolExplicitTextPreviewContext): Promise<PluginToolTextPreviewResult> | PluginToolTextPreviewResult
-  }
   defaultParams?: Record<string, unknown>
   /** When true, launcher selection prompts for params even when defaults exist. */
   requireParamSelection?: boolean

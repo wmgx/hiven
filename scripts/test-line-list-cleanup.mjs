@@ -105,7 +105,6 @@ try {
   assert.ok(collectStaticCandidates('quick-editor-command').some((candidate) => candidate.systemKey === key), 'editor route remains available')
   assert.ok(collectStaticCandidates('quick-editor-command').some((candidate) => candidate.systemKey === key), 'quick editor route remains available')
   const registeredTools = pluginRegistry.getPluginDefinition('line-tools', 'production').tools
-  assert.ok(registeredTools.find((tool) => tool.id === 'line-tools.clean-list').explicitTextPreview)
   assert.ok(registeredTools.filter((tool) => !['line-tools.clean-list', 'line-tools.extract-list'].includes(tool.id)).every((tool) => !tool.requireParamSelection), 'existing text tools retain their optional parameter behavior')
 
   const deliveries = []
