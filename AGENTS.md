@@ -201,6 +201,6 @@ npm run telemetry -- --tail 3000 --last 5
 
 DevTools：`window.__hivenLauncherPerf.opens()` / `.dump()` / `.logPath()`。
 
-契约：`npm run test:telemetry`、`test:launcher-perf-instrumentation`、`test:launcher-perf-report`。
+契约：`npm run test:launcher-perf-report`（报告解析）。
 
 文档：`doc/launcher-perf-telemetry.md`。
