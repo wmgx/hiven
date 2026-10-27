@@ -9101,6 +9101,7 @@ html[data-window='launcher'] .flux-spatial-shell .recent-clipboard-hint {
 .hiven-output-actions kbd { margin-left: 6px; font: 12px var(--font-sans); opacity: .6; }
 
 /* Launcher AI send confirmation frame. */
-.launcher-ai-send { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; outline: none; }
+.launcher-ai-send { display: flex; flex: 0 0 auto; flex-direction: column; gap: 8px; padding: 12px 14px; outline: none; }
+.launcher-ai-send > * { flex-shrink: 0; }
 .launcher-ai-send-title { margin: 0; font-size: 13px; color: var(--foreground); }
 .launcher-ai-disclosure { padding: 6px 14px 0; }
