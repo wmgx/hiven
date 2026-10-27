@@ -1,8 +1,16 @@
 {
   "pluginId": "date-time-assistant",
   "displayName": "Date & Time Assistant",
-  "displayNameI18n": { "zh": "时间助手" },
-  "version": "1.12.7",
-  "capabilities": ["command", "instant-suggestion", "surface"],
-  "permissions": ["clipboard.write"]
+  "displayNameI18n": {
+    "zh": "时间助手"
+  },
+  "version": "1.12.8",
+  "capabilities": [
+    "command",
+    "instant-suggestion",
+    "surface"
+  ],
+  "permissions": [
+    "clipboard.write"
+  ]
 }

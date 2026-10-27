@@ -1,12 +1,11 @@
 .date-time-surface {
-  --date-time-line: var(--color-border-tertiary, var(--hiven-color-border));
   height: 100%;
   min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  color: var(--color-text-primary, var(--hiven-color-text-primary));
-  background: var(--color-background-primary, var(--hiven-color-bg-primary));
+  color: var(--foreground);
+  background: var(--background);
   font-family: var(--font, var(--hiven-font-ui));
 }
 
@@ -16,16 +15,16 @@
   align-items: center;
   gap: 12px;
   padding: 0 14px;
-  border-bottom: 1px solid var(--date-time-line);
+  border-bottom: 1px solid var(--border);
 }
 
-.date-time-surface__header strong { font-size: 13px; font-weight: 650; }
+.date-time-surface__header strong { font-size: var(--text-base); font-weight: 650; }
 .date-time-surface__header > span { flex: 1; }
 .date-time-surface__loading {
   align-items: center;
   justify-content: center;
-  color: var(--color-text-tertiary, var(--hiven-color-text-tertiary));
-  font-size: 12px;
+  color: var(--faint-foreground);
+  font-size: var(--text-sm);
 }
 
 .date-time-surface__body {
@@ -46,8 +45,8 @@
 .date-time-surface__offset { min-width: 0; display: grid; gap: 6px; }
 .date-time-surface__input > span,
 .date-time-surface__offset > span {
-  color: var(--color-text-secondary, var(--hiven-color-text-secondary));
-  font-size: 11px;
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
   font-weight: 600;
 }
 .date-time-surface__inputs .hiven-ui-input { height: 34px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
@@ -55,8 +54,8 @@
 
 .date-time-surface__results {
   margin-top: 22px;
-  border-top: 1px solid var(--date-time-line);
-  border-bottom: 1px solid var(--date-time-line);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
 }
 
 .date-time-surface__result {
@@ -67,17 +66,17 @@
   gap: 16px;
   padding: 12px 2px;
 }
-.date-time-surface__result + .date-time-surface__result { border-top: 1px solid var(--date-time-line); }
+.date-time-surface__result + .date-time-surface__result { border-top: 1px solid var(--border); }
 .date-time-surface__result > div { min-width: 0; display: grid; gap: 4px; }
-.date-time-surface__result strong { font-size: 12px; font-weight: 600; }
-.date-time-surface__result span { color: var(--color-text-tertiary); font: 10px/1.2 var(--font-mono); }
+.date-time-surface__result strong { font-size: var(--text-sm); font-weight: 600; }
+.date-time-surface__result span { color: var(--faint-foreground); font: var(--text-sm)/1.2 var(--font-mono); }
 .date-time-surface__result output {
   min-width: 0;
   overflow-wrap: anywhere;
-  font: 500 15px/1.5 var(--font-mono);
+  font: 500 var(--text-lg)/1.5 var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
-.date-time-surface__result .hiven-ui-button { min-height: 28px; padding: 0 9px; font-size: 11px; }
+.date-time-surface__result .hiven-ui-button { min-height: 28px; padding: 0 9px; font-size: var(--text-sm); }
 
 .date-time-surface__error {
   min-height: 114px;
@@ -85,9 +84,9 @@
   align-content: center;
   gap: 6px;
   margin: 0;
-  color: var(--hiven-color-danger);
+  color: var(--destructive-text);
 }
-.date-time-surface__error strong { font-size: 12px; }
+.date-time-surface__error strong { font-size: var(--text-sm); }
 
 @media (max-width: 720px) {
   .date-time-surface__header { gap: 6px; padding: 0 8px; }

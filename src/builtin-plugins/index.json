@@ -1,5 +1,5 @@
 {
-  "version": 193,
+  "version": 194,
   "packages": [
     {
       "pluginId": "image-tools",
@@ -19,7 +19,7 @@
     {
       "pluginId": "date-time-assistant",
       "dir": "date-time-assistant",
-      "version": "1.12.7"
+      "version": "1.12.8"
     },
     {
       "pluginId": "translate",
