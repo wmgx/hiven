@@ -32,6 +32,7 @@ export const hashPlugin = definePlugin({
     icon: 'Hash',
     aliases: algorithm.aliases,
     inputPolicy: { mode: 'auto' as const },
+    policy: { effect: 'pure' as const },
     async run(ctx) {
       try {
         return ctx.output.text(await computeHash(ctx.input.text, algorithm))

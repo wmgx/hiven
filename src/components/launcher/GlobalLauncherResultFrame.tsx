@@ -32,6 +32,7 @@ export function GlobalLauncherResultFrame({
   onToggleChoice,
   onSecondaryAction,
   onPastePreviewText,
+  onCopyAll,
 }: {
   frame: ResultFrame
   busy?: boolean
@@ -45,6 +46,7 @@ export function GlobalLauncherResultFrame({
   onToggleChoice: (choice: LauncherResultChoice, frame: ResultFrame) => void
   onSecondaryAction?: (choice: LauncherResultChoice, actionId: string) => void
   onPastePreviewText?: (choice: LauncherResultChoice) => void | Promise<void>
+  onCopyAll?: () => void
 }) {
   const app = useForegroundAppName()
   const choices = frame.output.choices
@@ -57,6 +59,8 @@ export function GlobalLauncherResultFrame({
 
   const isConfirmDialog = choices.length <= 3 && choices.some((c) => c.tone === 'danger' || c.tone === 'muted')
   const singleText = selection?.type !== 'multi' && (frame.retryOnly || isSingleTextResult(choices))
+  const canCopyAll = Boolean(onCopyAll) && !frame.retryOnly && selection?.type !== 'multi' && choices.length > 1 &&
+    choices.every((choice) => getHostOutputIntent(choice) === 'copy')
   const textChoice = singleText ? choices[0] : undefined
   const retryCopyAction = frame.retryOnly
     ? textChoice?.secondaryActions?.find((action) => getHostOutputIntent(action) === 'copy')
@@ -225,6 +229,12 @@ export function GlobalLauncherResultFrame({
           ? <LauncherHintKey keys="␣" label={t(locale, 'palette.select')} />
           : <LauncherHintKey keys="↵" label={t(locale, 'palette.confirm')} />
         }
+        {canCopyAll && (
+          <button type="button" className="launcher-footer-back-btn" data-no-drag disabled={busy}
+            onMouseDown={(event) => event.preventDefault()} onClick={onCopyAll}>
+            <LauncherHintKey keys="⌘↵" label={t(locale, 'palette.copyAll')} />
+          </button>
+        )}
         <LauncherHintKey keys="esc" label={t(locale, 'palette.back')} />
       </div>
     </>

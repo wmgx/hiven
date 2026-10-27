@@ -65,6 +65,7 @@ const { LauncherController } = load('src/workspace/launcher/controller.ts', {
   '../../i18n': i18n,
   '../usageJournal': { appendUsageJournal: async () => {} },
   './output': { isOutputResult: (result) => result.ok && Boolean(result.output) },
+  './commandPreviewPolicy': load('src/workspace/launcher/commandPreviewPolicy.ts'),
   './foregroundSelectionCapture': {},
   '../telemetry': { TelemetryEvents: {}, itemTelemetryProps: () => ({}), trackBehavior() {}, trackLatencyFrom() {}, telemetryNow: () => 0 },
   '../contentBoundary': { isSafeExperienceIdentifier: () => false },

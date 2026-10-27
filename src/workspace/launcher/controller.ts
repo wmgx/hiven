@@ -33,6 +33,7 @@ import type { PluginNetworkApi, PluginPrivateStorageApi, PluginShellApi } from '
 import type { PluginAiApi } from '../ai/types'
 import { appendUsageJournal } from '../usageJournal'
 import { getHostOutputIntent, isOutputResult } from './output'
+import { explicitRunReason } from './commandPreviewPolicy'
 import { captureForegroundSelectionText } from './foregroundSelectionCapture'
 import { translate, type Locale } from '../../i18n'
 import {
@@ -1143,6 +1144,11 @@ export class LauncherController {
       this.clearCollectInputPreview(top)
       return
     }
+    // Side effects and very large material wait for ↵ (submitInput).
+    if (explicitRunReason(item, inputText)) {
+      ++this.previewRunId
+      return
+    }
 
     const runId = ++this.previewRunId
     // Package 4: pure-function live preview must not flash busy (reflow jank).
@@ -1328,6 +1334,28 @@ export class LauncherController {
         ? { item: top.item, recordUsage: top.recordUsage }
         : undefined
     await this.runChoiceAction(() => choice.primaryAction(), choice.title, undefined, choice, pendingUsage)
+  }
+
+  /** Text rows of the current list when every row is a plain copy result. */
+  copyableChoices(): LauncherResultChoice[] {
+    const top = this.topFrame()
+    const choices = top.kind === 'result' && !top.retryOnly ? top.output.choices
+      : top.kind === 'collect-input' && !top.item.suggest ? top.previewOutput?.choices ?? [] : []
+    return choices.length > 1 && choices.every((choice) => getHostOutputIntent(choice) === 'copy') ? choices : []
+  }
+
+  /** ⌘↵ on a list of text results: copy every row, one per line. */
+  async copyAllChoices(): Promise<void> {
+    const choices = this.copyableChoices()
+    if (choices.length === 0 || !choices.every((choice) => this.canActivateChoice(choice))) return
+    const top = this.topFrame()
+    const pendingUsage = top.kind === 'result' ? top.pendingUsage
+      : top.kind === 'collect-input' ? { item: top.item, recordUsage: top.recordUsage } : undefined
+    if (!pendingUsage) return
+    const text = choices.map((choice) => choice.preview ?? choice.title).join('\n')
+    trackBehavior(TelemetryEvents.launcherChoiceActivate, { via: 'copy-all', count: choices.length })
+    await this.runChoiceAction(() => this.apiFor(pendingUsage.item).copyText(text), this.itemTitle(pendingUsage.item),
+      undefined, undefined, pendingUsage, { intent: 'copy' })
   }
 
   /** Activate a result choice's secondary action by id. */

@@ -1,5 +1,5 @@
 {
-  "version": 176,
+  "version": 177,
   "packages": [
     {
       "pluginId": "encode-decode",
@@ -29,7 +29,7 @@
     {
       "pluginId": "crypto",
       "dir": "crypto",
-      "version": "2.0.5"
+      "version": "2.0.6"
     },
     {
       "pluginId": "csv",

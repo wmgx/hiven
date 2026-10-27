@@ -341,6 +341,7 @@ export function GlobalLauncherPanel({
           if (frame.blockText !== undefined) clipboardBlock?.removeBlock()
           controllerRef.current?.removeBlockMaterial(frame)
         }}
+        onCopyAllChoices={() => void controllerRef.current?.copyAllChoices()}
         onCommandBlockChange={(change, text, frame) => {
           if (change === 'paste') controllerRef.current?.setBlockMaterial(text, frame)
           else if (change === 'edit') controllerRef.current?.setBlockText(text, frame)

@@ -25,6 +25,8 @@ try {
   const { collectStaticCandidates } = await vite.ssrLoadModule('/src/workspace/launcher/registry.ts')
   const { LauncherController } = await vite.ssrLoadModule('/src/workspace/launcher/controller.ts')
   const { makePluginT } = await vite.ssrLoadModule('/src/i18n/pluginI18nRegistry.ts')
+  const { shouldPasteAsBlock } = await vite.ssrLoadModule('/src/launcher/clipboard/attachPolicy.ts')
+  const { explicitRunReason, LIVE_PREVIEW_MAX_BYTES } = await vite.ssrLoadModule('/src/workspace/launcher/commandPreviewPolicy.ts')
   registerBundledPluginPackages()
   const json = collectStaticCandidates('global-launcher').find((item) => item.systemKey === 'plugin:json-tools:tool:json.prettify')
   const random = collectStaticCandidates('quick-editor-command').find((item) => item.systemKey === 'plugin:random:tool:random.integer')
@@ -162,7 +164,70 @@ try {
     assert.equal(executions, 2)
   }
 
-  console.log('launcher input drafts: real random/JSON recovery, draft lifecycle, stale output and schema validation passed')
+  // Command frame ⌫ order: the Block goes first, then the command itself.
+  {
+    const h = harness()
+    await h.controller.selectItem(json, { objectBlockText: '{"b":1}', recordUsage: false })
+    assert.equal(h.top().kind, 'collect-input')
+    assert.equal(h.top().blockText, '{"b":1}')
+    h.controller.removeBlockMaterial(h.top())
+    assert.equal(h.top().kind, 'collect-input', 'removing the Block keeps the command')
+    assert.equal(h.top().blockText, undefined)
+    h.controller.back()
+    assert.equal(h.top().kind, 'list')
+  }
+
+  // Paste becomes a Block only when it would not fit the line; side effects and huge material wait for ↵.
+  {
+    assert.equal(shouldPasteAsBlock('one\ntwo', 1), true)
+    assert.equal(shouldPasteAsBlock('fits', 4), false)
+    assert.equal(shouldPasteAsBlock('wraps', 5), true)
+    assert.equal(explicitRunReason(json, '{}'), undefined)
+    assert.equal(explicitRunReason(json, 'x'.repeat(LIVE_PREVIEW_MAX_BYTES + 1)), 'large')
+    assert.equal(explicitRunReason({ actionPolicy: { effect: 'read' } }, 'x'), 'effect')
+    assert.equal(explicitRunReason({}, 'x'), 'effect', 'an undeclared effect never previews')
+
+    const h = harness()
+    await h.controller.selectItem(json, { recordUsage: false })
+    h.controller.setBlockMaterial('{"a":1}')
+    assert.equal(h.top().blockText, '{"a":1}')
+    assert.equal(h.top().inputText, '')
+    await h.controller.previewInput()
+    assert.equal(h.top().previewOutput.choices[0].preview, '{\n  "a": 1\n}')
+
+    let executions = 0
+    const reader = { ...json, actionPolicy: { effect: 'read' }, params: undefined, executeWithParams: undefined,
+      execute: async () => { executions++; return { ok: true } } }
+    await h.controller.selectItem(reader, { recordUsage: false })
+    h.controller.setInputText('material')
+    await h.controller.previewInput()
+    assert.equal(executions, 0, 'a reading tool does not run while typing')
+    await h.controller.submitInput()
+    assert.equal(executions, 1, '↵ runs it')
+  }
+
+  // ⇥ sublayer: a typed number is parsed on Tab, rejected when invalid, and only refreshes the preview.
+  {
+    const h = harness()
+    await h.controller.selectItem(json, { recordUsage: false })
+    h.controller.setInputText('{"b":1,"a":2}')
+    assert.equal(h.controller.openParams(h.top()), true)
+    h.controller.setParamQuery('abc')
+    h.controller.nextParam()
+    assert.ok(h.controller.getState().error, 'invalid number stays on the field')
+    assert.equal(h.top().paramIndex, 0)
+    h.controller.setParamQuery('4')
+    h.controller.nextParam()
+    assert.equal(h.top().params.indent, 4)
+    await h.controller.commitCurrentParam(true)
+    assert.equal(h.top().kind, 'collect-input')
+    assert.deepEqual(h.top().params, { indent: 4, sortKeys: true })
+    assert.deepEqual(h.deliveries, [], 'applying parameters never delivers')
+    await h.controller.previewInput()
+    assert.equal(h.top().previewOutput.choices[0].preview, '{\n    "a": 2,\n    "b": 1\n}')
+  }
+
+  console.log('launcher input drafts: real random/JSON recovery, draft lifecycle, stale output and schema validation, command frame Block/explicit run/sublayer passed')
 } finally {
   for (const controller of controllers) controller.reset()
   await vite.close()

@@ -45,6 +45,8 @@ export function handleGlobalLauncherKeyDown({
     submitInput?: (frame?: CollectInputFrame) => void | Promise<void>
     back?: () => boolean | void
     moveSuggestionHighlight?: (delta: number) => void
+    copyableChoices?: () => unknown[]
+    copyAllChoices?: () => void | Promise<void>
   } | null>
   resultSelectedIndex: number
   setResultSelectedIndex: (updater: number | ((index: number) => number)) => void
@@ -140,7 +142,11 @@ export function handleGlobalLauncherKeyDown({
           if (!event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey) toggleResultChoice(choice, resultFrame)
           return
         }
-        // ↵ and ⌘↵ run the primary action; ⇧↵ pastes (continue lives in ⌘K).
+        // ↵ runs the primary action, ⌘↵ copies a whole text list; ⇧↵ pastes (continue lives in ⌘K).
+        if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.shiftKey && controllerRef.current?.copyableChoices?.().length) {
+          void controllerRef.current.copyAllChoices?.()
+          return
+        }
         if (event.key === 'Enter' && event.shiftKey && pastePreviewText) {
           const text = (choice.preview ?? choice.title ?? '').trim()
           if (text) {

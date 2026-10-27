@@ -21,6 +21,8 @@ import { LauncherCommandFooter, useForegroundAppName, type LauncherCommandMenuAc
 import { LauncherAutoGrowInput, measureWrappedLines } from './LauncherAutoGrowInput'
 import { shouldPasteAsBlock } from '../../launcher/clipboard/attachPolicy'
 import { useLauncherEscapeInterceptor } from './launcherEscapeInterceptor'
+import { explicitRunReason } from '../../workspace/launcher/commandPreviewPolicy'
+import { getHostOutputIntent } from '../../workspace/launcher/output'
 
 /** Suggest row: keep keyboard highlight in view (same as result / mixed list). */
 function CollectInputSuggestRow({
@@ -130,6 +132,7 @@ export function GlobalLauncherCollectInputFrame({
   onPasteAsBlock,
   onBlockTextChange,
   onSyncBlock,
+  onCopyAll,
 }: {
   isImeComposingRef: RefObject<boolean>
   inputRef: RefObject<HTMLInputElement | HTMLTextAreaElement | null>
@@ -164,6 +167,8 @@ export function GlobalLauncherCollectInputFrame({
   onBlockTextChange?: (text: string) => void
   /** Editing ended with changed text: replace the list Block. */
   onSyncBlock?: (text: string) => void
+  /** ⌘↵ on a list of text results. */
+  onCopyAll?: () => void
 }) {
   const placeholder = frame.input.placeholderI18n?.[locale] ?? frame.input.placeholder ?? ''
   const showCaptureSelection = Boolean(!frame.item.metadataInput && onCaptureSelection && !frame.inputText && frame.blockText === undefined && frame.item.behavior.type === 'perform' && frame.item.inputPolicy && frame.item.inputPolicy.mode !== 'all')
@@ -200,6 +205,11 @@ export function GlobalLauncherCollectInputFrame({
     if (isExpanded) requestAnimationFrame(() => editorRef.current?.focus())
   }, [isExpanded])
   const filterText = materialText.trim()
+  // Tools with side effects and very large material wait for ↵ instead of previewing.
+  const explicitReason = showLivePreview && filterText ? explicitRunReason(frame.item, materialText) : undefined
+  // Several text results: a list (↵ copies the selected row, ⌘↵ copies all).
+  const isList = showLivePreview && !explicitReason && previewChoices.length > 1
+  const listIndex = Math.min(Math.max(0, selectedIndex), previewChoices.length - 1)
   // Local latch: never blank the well while typing — only replace when a new text arrives.
   const lastPreviewRef = useRef<string | null>(null)
   if (!filterText) {
@@ -207,10 +217,10 @@ export function GlobalLauncherCollectInputFrame({
   } else if (livePreviewText) {
     lastPreviewRef.current = livePreviewText
   }
-  const displayPreviewText = filterText ? (livePreviewText ?? lastPreviewRef.current) : null
+  const displayPreviewText = filterText && !explicitReason && !isList ? (livePreviewText ?? lastPreviewRef.current) : null
   // Preview is fresh only when it was computed for the current inputText.
   const previewFresh = Boolean(
-    livePreviewText
+    (livePreviewText || isList)
     && frame.previewInputText !== undefined
     && frame.previewInputText === materialText,
   )
@@ -219,7 +229,8 @@ export function GlobalLauncherCollectInputFrame({
   // Suggest-backed collect-input: empty choices after load = true empty state (not a fake row).
   const showEmptyState = isSuggestMode && !busy && !hasSuggestions && frame.previewInputText !== undefined
   const commandTitle = resolveDisplayTitle(frame.item.display, locale)
-  const previewChoice = livePreviewText ? previewChoices[0] : undefined
+  const previewChoice = explicitReason ? undefined : isList ? previewChoices[listIndex] : livePreviewText ? previewChoices[0] : undefined
+  const canCopyAll = isList && previewFresh && Boolean(onCopyAll) && previewChoices.every((choice) => getHostOutputIntent(choice) === 'copy')
   const freshChoice = previewChoice && previewFresh ? previewChoice : undefined
   const hasReturn = Boolean(freshChoice?.secondaryActions?.some((a) => a.id === 'return-to-launcher'))
   const canPaste = showLivePreview && Boolean(onPastePreviewText)
@@ -257,9 +268,11 @@ export function GlobalLauncherCollectInputFrame({
   ]
   const primaryLabel = !filterText
     ? undefined
-    : frame.fromSelection && freshChoice
-      ? (app ? t(locale, 'palette.pasteBack', { app }) : t(locale, 'palette.pasteBackForeground'))
-      : freshChoice ? t(locale, 'outputActions.copy') : t(locale, 'palette.quickEntryRun')
+    : error && !freshChoice
+      ? t(locale, 'palette.outputRetry')
+      : frame.fromSelection && freshChoice
+        ? (app ? t(locale, 'palette.pasteBack', { app }) : t(locale, 'palette.pasteBackForeground'))
+        : freshChoice ? t(locale, 'outputActions.copy') : t(locale, 'palette.quickEntryRun')
 
   const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
@@ -293,8 +306,9 @@ export function GlobalLauncherCollectInputFrame({
         if (!event.shiftKey && !event.altKey) onSubmitPrimary?.()
         return
       }
-      // ↵ and ⌘↵ run the primary action; ⇧↵ pastes into the previous app.
+      // ↵ runs the primary action, ⌘↵ copies a whole list; ⇧↵ pastes into the previous app.
       if (event.altKey) return
+      if ((event.metaKey || event.ctrlKey) && canCopyAll) { onCopyAll?.(); return }
       if (event.shiftKey) { if (canPaste) void pastePreview(); return }
       void runPrimary()
     }
@@ -393,6 +407,19 @@ export function GlobalLauncherCollectInputFrame({
               testId="launcher-preview-well"
               title={t(locale, 'palette.livePreviewEmpty')}
             />
+          ) : isList ? (
+            <div className="global-launcher-body l-results l-suggest-list" data-testid="launcher-preview-list" data-stale={previewFresh ? undefined : 'true'}>
+              {previewChoices.map((choice, index) => (
+                <CollectInputSuggestRow
+                  key={choice.id}
+                  choice={choice}
+                  selected={index === listIndex}
+                  fallbackIcon={frame.item.display.icon}
+                  disabled={busy || !previewFresh}
+                  onActivateChoice={onActivateChoice}
+                />
+              ))}
+            </div>
           ) : (
             // Always keep the well mounted while typing so window height does not thrash.
             // Text only replaces when a new preview arrives (lastPreviewRef latch).
@@ -411,7 +438,11 @@ export function GlobalLauncherCollectInputFrame({
                 event.stopPropagation()
               }}
             >
-              {displayPreviewText ? (
+              {explicitReason ? (
+                <span className="meta" data-testid="launcher-explicit-run-hint">
+                  {t(locale, explicitReason === 'large' ? 'palette.largeInputRunHint' : 'palette.explicitRunHint')}
+                </span>
+              ) : displayPreviewText ? (
                 <pre
                   tabIndex={0}
                   aria-label={t(locale, 'palette.preview')}
@@ -487,7 +518,12 @@ export function GlobalLauncherCollectInputFrame({
           onPaste={canPaste && freshChoice ? () => void pastePreview() : undefined}
           menu={menu}
           onBack={onBack}
-          hints={hasBlock ? <LauncherHintKey keys="⌘E" label={t(locale, isExpanded ? 'palette.collapseBlock' : 'palette.expandBlock')} /> : undefined}
+          hints={(
+            <>
+              {canCopyAll && <LauncherHintKey keys="⌘↵" label={t(locale, 'palette.copyAll')} />}
+              {hasBlock && <LauncherHintKey keys="⌘E" label={t(locale, isExpanded ? 'palette.collapseBlock' : 'palette.expandBlock')} />}
+            </>
+          )}
         />
       ) : <div className="global-launcher-footer l-foot">
         {isSuggestMode && hasSuggestions ? (
