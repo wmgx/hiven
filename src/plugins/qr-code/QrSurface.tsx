@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type DragEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, ContextMenu, IconButton, SegmentedControl, Select, TextArea } from '@hiven/plugin-ui'
-import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
-import { createQrResultHandoff, EMPTY_QR_HANDOFF } from './qrResultHandoff'
+import { Button, IconButton, SegmentedControl, Select, TextArea } from '@hiven/plugin-ui'
+import { BackIcon } from '@hiven/plugin-ui/icons'
 import { saveQrImage } from './saveQrImage'
 import { createQrPasteHandlers } from './qrPaste'
 import { createQrScanSession, EMPTY_QR_SCAN } from './qrScanSession'
@@ -50,8 +49,6 @@ export function QrSurface(props: PluginSurfaceProps) {
   const [dataUrl, setDataUrl] = useState('')
   const [genError, setGenError] = useState('')
   const [scan, setScan] = useState(EMPTY_QR_SCAN)
-  const [handoffState, setHandoffState] = useState(EMPTY_QR_HANDOFF)
-  const [handoff] = useState(() => createQrResultHandoff(setHandoffState))
   const [dragOver, setDragOver] = useState(false)
   const [saving, setSaving] = useState(false)
   const savingRef = useRef(false)
@@ -64,33 +61,16 @@ export function QrSurface(props: PluginSurfaceProps) {
   const scanResult = scan.result?.ok ? scan.result.text : ''
   const scanError = scan.clipboardError ? t('error.clipboardRead') : scan.result?.ok === false ? t(decodeErrorKey(scan.result.code)) : ''
 
-  useLayoutEffect(() => {
-    handoff.activate()
-    const stop = host.subscribeLeaveIntent?.(handoff.interrupt)
-    const hide = () => { if (document.visibilityState === 'hidden') handoff.interrupt() }
-    window.addEventListener('pagehide', handoff.interrupt)
-    document.addEventListener('visibilitychange', hide)
-    return () => {
-      stop?.()
-      window.removeEventListener('pagehide', handoff.interrupt)
-      document.removeEventListener('visibilitychange', hide)
-      handoff.deactivate()
-    }
-  }, [handoff, host.subscribeLeaveIntent])
-
   useEffect(() => {
     mountedRef.current = true
-    const session = createQrScanSession((next) => {
-      handoff.setResult(next.result?.ok ? next.result : null)
-      setScan(next)
-    })
+    const session = createQrScanSession(setScan)
     scanRef.current = session
     return () => {
       mountedRef.current = false
       session.dispose()
       scanRef.current = null
     }
-  }, [handoff])
+  }, [])
 
   useEffect(() => {
     const payload = text.trim()
@@ -155,54 +135,18 @@ export function QrSurface(props: PluginSurfaceProps) {
     if (file) void decodeBlob(file)
   }, [decodeBlob])
 
-  const copyText = useCallback(async (value: string) => {
-    if (!value) return
-    handoff.interrupt()
-    try {
-      await host.clipboard.writeText(value)
-      host.complete()
-    } catch {
-      host.showMessage(t('toast.copyFailed'), 'error')
-    }
-  }, [handoff, host, t])
-
-  const copyDataUrl = useCallback(async () => {
-    if (!dataUrl) return
-    await copyText(dataUrl)
-  }, [copyText, dataUrl])
-
-  const copyImage = useCallback(async () => {
-    if (!dataUrl) return
+  // Throws on failure; OutputActions reports the result and completes the surface.
+  const writeImage = useCallback(async () => {
+    if (!dataUrl) throw new Error('empty')
     try {
       const bytes = dataUrlToBytes(dataUrl)
       const ref = await host.storage.blob.put({ bytes, contentType: 'image/png', extension: 'png' })
       await host.clipboard.writeImage(ref.blobId)
-      host.complete()
-      return
     } catch {
       // Browser / webview path: put a real PNG on the clipboard.
-    }
-    try {
       await copyPngBlobToClipboard(dataUrlToPngBlob(dataUrl))
-      host.complete()
-    } catch {
-      host.showMessage(t('toast.copyFailed'), 'error')
     }
-  }, [dataUrl, host, t])
-
-  useEffect(() => {
-    if (mode !== 'generate') return
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'c') return
-      const target = event.target as HTMLElement | null
-      if (target?.closest('textarea, input, [contenteditable]')) return
-      if (!dataUrl) return
-      event.preventDefault()
-      void copyImage()
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [copyImage, dataUrl, mode])
+  }, [dataUrl, host])
 
   const saveImage = useCallback(async () => {
     if (!dataUrl || savingRef.current) return
@@ -244,26 +188,12 @@ export function QrSurface(props: PluginSurfaceProps) {
           ]}
         />
         <div className="qr-surface__header-spacer" />
-        {mode === 'generate' ? (
-          <Button type="button" variant="primary" disabled={!dataUrl} onClick={() => void copyImage()}>
-            {t('action.copyImage')}
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            variant="primary"
-            disabled={!scanResult}
-            onClick={() => void copyText(scanResult)}
-          >
-            {t('action.copyText')}
-          </Button>
-        )}
-        <IconButton type="button" label={t('action.close')} onClick={() => {
-          scanRef.current?.reset()
-          host.close()
-        }}>
-          <CloseIcon size={14} strokeWidth={2} />
-        </IconButton>
+        {host.OutputActions && (mode === 'generate'
+          ? <host.OutputActions copy={writeImage} disabled={!dataUrl} more={[
+            { id: 'copy-data-url', label: t('action.copyDataUrl'), run: () => host.clipboard.writeText(dataUrl) },
+            { id: 'save-image', label: t(saving ? 'action.saving' : 'action.saveImage'), run: saveImage },
+          ]} />
+          : <host.OutputActions text={scan.busy ? '' : scanResult} />)}
       </header>
 
       {mode === 'generate' ? (
@@ -297,32 +227,14 @@ export function QrSurface(props: PluginSurfaceProps) {
             />
           </div>
           <div className="qr-surface__pane qr-surface__pane--preview">
-            <ContextMenu
-              disabled={!dataUrl}
-              trigger={
-                <div className="qr-surface__preview">
-                  {dataUrl ? (
-                    <img src={dataUrl} alt={t('surface.title')} draggable={false} />
-                  ) : (
-                    <div className={genError ? 'qr-surface__error' : 'qr-surface__placeholder'}>
-                      {genError || t('generate.empty')}
-                    </div>
-                  )}
+            <div className="qr-surface__preview">
+              {dataUrl ? (
+                <img src={dataUrl} alt={t('surface.title')} draggable={false} />
+              ) : (
+                <div className={genError ? 'qr-surface__error' : 'qr-surface__placeholder'}>
+                  {genError || t('generate.empty')}
                 </div>
-              }
-              items={[
-                { key: 'copy-image', label: t('action.copyImage'), onSelect: () => void copyImage() },
-                { key: 'copy-data-url', label: t('action.copyDataUrl'), onSelect: () => void copyDataUrl() },
-                { key: 'save-image', label: t(saving ? 'action.saving' : 'action.saveImage'), onSelect: () => void saveImage() },
-              ]}
-            />
-            <div className="qr-surface__actions">
-              <Button type="button" disabled={!dataUrl} onClick={() => void copyDataUrl()}>
-                {t('action.copyDataUrl')}
-              </Button>
-              <Button type="button" disabled={!dataUrl || saving} onClick={() => void saveImage()}>
-                {t(saving ? 'action.saving' : 'action.saveImage')}
-              </Button>
+              )}
             </div>
           </div>
         </div>
@@ -366,26 +278,13 @@ export function QrSurface(props: PluginSurfaceProps) {
           <div className="qr-surface__pane qr-surface__pane--preview">
             <div className="qr-surface__toolbar">
               <span className="qr-surface__label">{t('scan.result')}</span>
-              <Button type="button" disabled={!scanResult || scan.busy || handoffState.status === 'pending' || handoffState.status === 'accepted'}
-                onClick={() => void handoff.submit(handoffState, host)}>
-                {t(handoffState.status === 'pending' ? 'action.returning' : 'action.continue')}
-              </Button>
             </div>
-            {handoffState.status === 'failed' && <div className="qr-surface__error" role="status">{t('error.returnFailed')}</div>}
             {scanError ? (
               <div className="qr-surface__error">{scanError}</div>
             ) : (
-              <ContextMenu
-                disabled={!scanResult}
-                trigger={
-                  <pre className="qr-surface__result">
-                    {scan.busy ? t('scan.working') : (scanResult || t('scan.drop'))}
-                  </pre>
-                }
-                items={[
-                  { key: 'copy-text', label: t('action.copyText'), onSelect: () => void copyText(scanResult) },
-                ]}
-              />
+              <pre className="qr-surface__result">
+                {scan.busy ? t('scan.working') : (scanResult || t('scan.drop'))}
+              </pre>
             )}
           </div>
         </div>

@@ -352,7 +352,8 @@ for (const failure of ['error', 'end', 'cancel', 'empty']) {
   const visit = (node) => {
     if (ts.isVariableDeclaration(node) && node.name.getText(renderer) === 'resolved') resolvedExpression = node.initializer
     if (ts.isJsxAttribute(node) && node.name.getText(renderer) === 'host') {
-      const object = node.initializer?.expression
+      const wrapped = node.initializer?.expression
+      const object = wrapped && ts.isCallExpression(wrapped) ? wrapped.arguments[0] : wrapped
       if (object && ts.isObjectLiteralExpression(object)) {
         aiExpression = object.properties.find((property) => property.name?.getText(renderer) === 'ai')?.initializer
       }

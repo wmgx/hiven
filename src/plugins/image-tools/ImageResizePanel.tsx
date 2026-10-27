@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react'
+import { copyPng } from './copyPng'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import { Button, useLocalEscapeLayer } from '@hiven/plugin-ui'
 import { MAX_IMAGE_BYTES } from './raster'
@@ -78,7 +79,7 @@ export function ImageResizePanel({ host, t, onDirtyChange, invalidateRef }: Prop
     if (kind === 'file') file.current?.click()
     else if (host.clipboard.readImage) void load(signal => host.clipboard.readImage!({ signal }))
   }
-  const deliver = (action: 'copy' | 'save') => {
+  const save = () => {
     if (!readyRef.current || !ready || !original || imageRef.current !== original || stateRef.current.width !== width || !size) return
     void run(async (signal, current) => {
       const bytes = await exportResizedImage(original, width, signal)
@@ -86,13 +87,8 @@ export function ImageResizePanel({ host, t, onDirtyChange, invalidateRef }: Prop
       const blob = await host.storage.blob.put({ bytes, contentType: 'image/png', extension: 'png' })
       try {
         if (!current()) return
-        if (action === 'copy') {
-          await host.clipboard.writeImage(blob.blobId, { signal })
-          if (current()) { setDirty(false); setStatus('image.copied') }
-        } else {
-          const saved = await host.storage.blob.savePng(blob.blobId, { suggestedFilename: 'resized.png' })
-          if (current()) { setStatus(saved.status === 'saved' ? 'image.saved' : ''); if (saved.status === 'saved') setDirty(false) }
-        }
+        const saved = await host.storage.blob.savePng(blob.blobId, { suggestedFilename: 'resized.png' })
+        if (current()) { setStatus(saved.status === 'saved' ? 'image.saved' : ''); if (saved.status === 'saved') setDirty(false) }
       } finally { try { await host.storage.blob.delete(blob.blobId) } catch { /* Delivery result takes priority over cleanup. */ } }
     })
   }
@@ -119,8 +115,9 @@ export function ImageResizePanel({ host, t, onDirtyChange, invalidateRef }: Prop
     </div>
     <footer className="image-crop-footer">
       <span id="resize-size-status" role="status" aria-live="polite">{status ? t(status) : size ? t('crop.dimensions', size) : t(original ? 'resize.invalid' : 'crop.empty')}</span>
-      <Button disabled={busy || !ready || !size} onClick={() => deliver('copy')}>{t('image.copyImage')}</Button>
-      <Button disabled={busy || !ready || !size} onClick={() => deliver('save')}>{t('image.save')}</Button>
+      {host.OutputActions && <host.OutputActions disabled={busy || !ready || !size}
+        copy={async () => copyPng(host, await exportResizedImage(original!, width, new AbortController().signal))}
+        more={[{ id: 'save', label: t('image.save'), run: save }]} />}
     </footer>
   </main>
 }

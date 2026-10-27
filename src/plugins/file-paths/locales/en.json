@@ -1,7 +1,6 @@
 {
   "title": "File Paths",
   "back": "Back",
-  "close": "Close",
   "source": "Source paths",
   "output": "Converted paths",
   "formatLabel": "Output format",
@@ -14,10 +13,6 @@
   "style.unix": "Unix",
   "style.windows": "Windows",
   "base": "Base directory",
-  "copy": "Copy output",
-  "copying": "Copying…",
-  "copied": "Copied",
-  "copyFailed": "Copy failed. Retry.",
   "error.invalid": "Invalid path or file URI. One unquoted path per line.",
   "error.absolute": "An absolute path is required. For Windows, include the drive or UNC share.",
   "error.base": "A base directory is required.",

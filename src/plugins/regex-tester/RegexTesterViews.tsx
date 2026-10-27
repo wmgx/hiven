@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, IconButton, Select } from '@hiven/plugin-ui'
-import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
+import { IconButton, Select } from '@hiven/plugin-ui'
+import { BackIcon } from '@hiven/plugin-ui/icons'
 import { MAX_REGEX_MATCHES, type MatchResult } from './regexCore'
 import { useRegexExecution } from './useRegexExecution'
 import { extractRegexMatches, type RegexExtractionTarget } from './extractMatches'
@@ -50,28 +50,19 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
   const activeRef = useRef(true)
   const actionEpochRef = useRef(0)
   const [actionEpoch, setActionEpoch] = useState(0)
-  const handedOffResultRef = useRef<typeof result | null>(null)
-  const [handedOffResult, setHandedOffResult] = useState<typeof result | null>(null)
-  const [failedResult, setFailedResult] = useState<typeof result | null>(null)
-  const handoffRef = useRef<AbortController | null>(null)
   const sourceLines = sourceText ? sourceText.split('\n').length : 0
 
   useEffect(() => setActiveMatch(-1), [flags, pattern, sourceText])
   useEffect(() => {
     activeRef.current = true
-    return () => { activeRef.current = false; handoffRef.current?.abort() }
+    return () => { activeRef.current = false }
   }, [])
 
   // Revoke rendered actions immediately, before an input change commits a new render.
   const invalidateResult = (cancelExecution = true) => {
     aiSession.current?.invalidate()
     if (cancelExecution) execution.cancel()
-    handoffRef.current?.abort()
-    handoffRef.current = null
     currentResultRef.current = null
-    handedOffResultRef.current = null
-    setHandedOffResult(null)
-    setFailedResult(null)
     actionEpochRef.current += 1
     // Hidden native surfaces remain mounted. Refresh the current button while
     // permanently invalidating callbacks captured before leaving this view.
@@ -88,26 +79,6 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
       else values.add(flag)
       return [...values].join('')
     })
-  }
-
-  const continueProcessing = async () => {
-    if (host.deliveryFeedbackOwner?.isCurrent() === false || !activeRef.current || actionEpochRef.current !== actionEpoch || currentResultRef.current !== result || extraction.status !== 'ready' || handedOffResultRef.current === result) return
-    aiSession.current?.invalidate()
-    const submission = new AbortController()
-    handoffRef.current = submission
-    handedOffResultRef.current = result
-    setHandedOffResult(result)
-    setFailedResult(null)
-    const current = () => host.deliveryFeedbackOwner?.isCurrent() !== false && actionEpochRef.current === actionEpoch && activeRef.current && !submission.signal.aborted && currentResultRef.current === result && handoffRef.current === submission
-    try {
-      const accepted = await host.returnToLauncherWithObject({ kind: 'text', text: extraction.text, source: 'tool-result' }, { signal: submission.signal })
-      if (!current() || accepted !== false) return
-    } catch {
-      if (!current()) return
-    }
-    handedOffResultRef.current = null
-    setHandedOffResult(null)
-    setFailedResult(result)
   }
 
   const revealMatch = (match: MatchResult, index: number) => {
@@ -129,9 +100,6 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
         </IconButton>
         <strong>{t('surface.title')}</strong>
         <div className="regex-tester-surface__header-spacer" />
-        <IconButton type="button" label={t('surface.close')} onClick={() => { invalidateResult(); host.close() }}>
-          <CloseIcon size={14} strokeWidth={2} />
-        </IconButton>
       </header>
 
       <div className="regex-tester-surface__controls">
@@ -261,10 +229,7 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
               onChange={(event) => { invalidateResult(false); setExtractionTarget(event.currentTarget.value as RegexExtractionTarget) }} />
             {extraction.status === 'empty-matches' ? <p role="status">{t('surface.emptyMatches')}</p> : null}
             {['missing-group', 'empty-group', 'truncated', 'too-large'].includes(extraction.status) ? <p role="alert">{t(`extraction.${extraction.status}`, { limit: MAX_REGEX_MATCHES })}</p> : null}
-            {failedResult === result ? <p role="alert">{t('error.continueFailed')}</p> : null}
-            <Button type="button" disabled={extraction.status !== 'ready' || handedOffResult === result} onClick={() => void continueProcessing()}>
-              {t('surface.extractMatches', { count: result.matches.length })}
-            </Button>
+            {host.OutputActions && <host.OutputActions text={extraction.status === 'ready' ? extraction.text : ''} />}
           </footer>
         </div>
       </div>

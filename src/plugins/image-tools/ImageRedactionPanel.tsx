@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react'
+import { copyPng } from './copyPng'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import { Button, useLocalEscapeLayer } from '@hiven/plugin-ui'
 import { MAX_IMAGE_BYTES } from './raster'
@@ -75,7 +76,7 @@ export function ImageRedactionPanel({ host, t, onDirtyChange, invalidateRef }: P
     const box = event.currentTarget.getBoundingClientRect()
     return { x: (event.clientX - box.left) * event.currentTarget.width / box.width, y: (event.clientY - box.top) * event.currentTarget.height / box.height }
   }
-  const deliver = (action: 'copy' | 'save') => {
+  const save = () => {
     if (!ready || !original || drag.current) return
     void run(async (signal, current) => {
       const bytes = await exportRedactions(original, rectangles, signal)
@@ -83,13 +84,8 @@ export function ImageRedactionPanel({ host, t, onDirtyChange, invalidateRef }: P
       const blob = await host.storage.blob.put({ bytes, contentType: 'image/png', extension: 'png' })
       try {
         if (!current()) return
-        if (action === 'copy') {
-          await host.clipboard.writeImage(blob.blobId, { signal })
-          if (current()) { setDirty(false); setStatus('image.copied') }
-        } else {
-          const saved = await host.storage.blob.savePng(blob.blobId, { suggestedFilename: 'redacted.png' })
-          if (current()) { setStatus(saved.status === 'saved' ? 'image.saved' : ''); if (saved.status === 'saved') setDirty(false) }
-        }
+        const saved = await host.storage.blob.savePng(blob.blobId, { suggestedFilename: 'redacted.png' })
+        if (current()) { setStatus(saved.status === 'saved' ? 'image.saved' : ''); if (saved.status === 'saved') setDirty(false) }
       } finally { try { await host.storage.blob.delete(blob.blobId) } catch { /* Cleanup cannot turn completed delivery into failure. */ } }
     })
   }
@@ -126,8 +122,9 @@ export function ImageRedactionPanel({ host, t, onDirtyChange, invalidateRef }: P
     </div>
     <footer className="image-redaction-footer">
       <span role="status" aria-live="polite">{status ? t(status) : original ? t('redact.count', { count: rectangles.length, width: original.width, height: original.height }) : ''}</span>
-      <Button disabled={busy || !ready || !original || dragActive} onClick={() => deliver('copy')}>{t('image.copyImage')}</Button>
-      <Button disabled={busy || !ready || !original || dragActive} onClick={() => deliver('save')}>{t('image.save')}</Button>
+      {host.OutputActions && <host.OutputActions disabled={busy || !ready || !original || dragActive}
+        copy={async () => copyPng(host, await exportRedactions(original!, rectangles, new AbortController().signal))}
+        more={[{ id: 'save', label: t('image.save'), run: save }]} />}
     </footer>
   </main>
 }

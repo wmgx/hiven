@@ -71,7 +71,6 @@ const commands = [
   ['npm', ['run', 'test:translate-output-eligibility']],
   ['npm', ['run', 'test:regex-match-extraction']],
   ['npm', ['run', 'test:text-diff-source-read-lifetime']],
-  ['npm', ['run', 'test:text-explode-output']],
   ['npm', ['run', 'test:translate-plugin']],
   ['npm', ['run', 'test:ime-enter-confirmation']],
   ['npm', ['run', 'test:window-architecture-phases']],

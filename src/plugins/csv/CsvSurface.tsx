@@ -11,7 +11,7 @@ import {
 import 'react-data-grid/lib/styles.css'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import { Checkbox, IconButton, SearchField, SegmentedControl, Select, TextInput, useImeKeyboard, useLocalEscapeLayer } from '@hiven/plugin-ui'
-import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
+import { BackIcon } from '@hiven/plugin-ui/icons'
 import {
   applyTransforms,
   applyTableQuery,
@@ -41,7 +41,6 @@ const OUTPUT_PREVIEW_MAX_ROWS = 1_500
 const SOURCE_TEXTAREA_MAX_CHARS = 200_000
 /** Above this, skip full JSON re-stringify on every render path. */
 const LARGE_SOURCE_CHARS = 512_000
-const RETURN_MAX_BYTES = 1024 * 1024
 const SAVE_MAX_BYTES = 10 * 1024 * 1024
 
 const JSON_OUTPUTS: OutputMode[] = ['objects', 'array', 'columns', 'keyed']
@@ -293,13 +292,10 @@ export function CsvSurface(props: PluginSurfaceProps) {
   const fileReadRef = useRef<object | null>(null)
   const [resultRevision, setResultRevision] = useState(0)
   const resultRevisionRef = useRef(0)
-  const returnSubmissionRef = useRef<AbortController | null>(null)
-  const [returnSubmission, setReturnSubmission] = useState<{ owner: typeof owner; controller: AbortController } | null>(null)
   const saveSubmissionRef = useRef<AbortController | null>(null)
   const [saveSubmission, setSaveSubmission] = useState<{ owner: typeof owner; controller: AbortController } | null>(null)
   const surfaceLifetimeRef = useRef({ owner, active: false })
   const pendingCopiesRef = useRef(0)
-  const returning = returnSubmission?.owner === owner && !returnSubmission.controller.signal.aborted
   const saving = saveSubmission?.owner === owner && !saveSubmission.controller.signal.aborted
 
   useLayoutEffect(() => {
@@ -314,8 +310,6 @@ export function CsvSurface(props: PluginSurfaceProps) {
     surfaceLifetimeRef.current = lifetime
     return () => {
       lifetime.active = false
-      returnSubmissionRef.current?.abort()
-      returnSubmissionRef.current = null
       saveSubmissionRef.current?.abort()
       saveSubmissionRef.current = null
       fileReadRef.current = null
@@ -328,9 +322,6 @@ export function CsvSurface(props: PluginSurfaceProps) {
   const cancelSubmissions = useCallback(() => {
     resultRevisionRef.current += 1
     setResultRevision(resultRevisionRef.current)
-    returnSubmissionRef.current?.abort()
-    returnSubmissionRef.current = null
-    setReturnSubmission(null)
     saveSubmissionRef.current?.abort()
     saveSubmissionRef.current = null
     setSaveSubmission(null)
@@ -539,44 +530,6 @@ export function CsvSurface(props: PluginSurfaceProps) {
     return toOutput(finalTable!, output, { minify, indent, inferTypes }, { tableName })
   }, [canReturnOutput, finalTable, fullJobReady, indent, inferTypes, minify, output, resultRevision, tableName])
 
-  const returnOutput = async () => {
-    const lifetime = surfaceLifetimeRef.current
-    if (!canReturnOutput || !lifetime.active || lifetime.owner !== owner
-      || resultRevision !== resultRevisionRef.current || fileReadRef.current
-      || returnSubmissionRef.current || saveSubmissionRef.current || pendingCopiesRef.current > 0) return
-    // Serialize all transformed rows, never the grid selection or 1,500-row preview.
-    let text: string
-    try {
-      const currentOutput = getCompleteOutput()
-      if (currentOutput === null) return
-      text = currentOutput
-      if (text.length > RETURN_MAX_BYTES || new TextEncoder().encode(text).byteLength > RETURN_MAX_BYTES) {
-        host.showMessage(t('toast.returnTooLarge'), 'error')
-        return
-      }
-    } catch {
-      host.showMessage(t('toast.returnFailed'), 'error')
-      return
-    }
-    const submission = new AbortController()
-    returnSubmissionRef.current = submission
-    setReturnSubmission({ owner, controller: submission })
-    try {
-      const accepted = await host.returnToLauncherWithObject({ kind: 'text', text, source: 'tool-result' }, { signal: submission.signal })
-      if (!lifetime.active || returnSubmissionRef.current !== submission || submission.signal.aborted) return
-      // The host owns successful navigation. A failed receipt leaves the draft intact.
-      if (accepted === false) {
-        returnSubmissionRef.current = null
-        setReturnSubmission(null)
-      }
-    } catch {
-      if (!lifetime.active || returnSubmissionRef.current !== submission || submission.signal.aborted) return
-      returnSubmissionRef.current = null
-      setReturnSubmission(null)
-      host.showMessage(t('toast.returnFailed'), 'error')
-    }
-  }
-
   const runFullProcess = useCallback(async () => {
     const lifetime = surfaceLifetimeRef.current
     if (abortRef.current || resultRevision !== resultRevisionRef.current || !currentInputReady
@@ -668,7 +621,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
     const lifetime = surfaceLifetimeRef.current
     if (!canReturnOutput || !lifetime.active || lifetime.owner !== owner
       || resultRevision !== resultRevisionRef.current || fileReadRef.current
-      || saveSubmissionRef.current || returnSubmissionRef.current || pendingCopiesRef.current > 0) return
+      || saveSubmissionRef.current || pendingCopiesRef.current > 0) return
     if (!host.saveText) {
       host.showMessage(t('toast.saveUnsupported'), 'error')
       return
@@ -1193,19 +1146,11 @@ export function CsvSurface(props: PluginSurfaceProps) {
             type="button"
             className="csv-tools-surface__ib"
             label={t(saving ? 'job.saving' : 'job.saveFull')}
-            disabled={!canReturnOutput || saving || returning}
+            disabled={!canReturnOutput || saving}
             onClick={() => void saveFullResult()}
           >
             <IconDownload />
           </IconButton>
-          <button
-            type="button"
-            className="csv-tools-surface__file-btn"
-            disabled={!canReturnOutput || returning || saving}
-            onClick={() => void returnOutput()}
-          >
-            {t('action.returnToSearch')}
-          </button>
           <IconButton
             type="button"
             className="csv-tools-surface__ib"
@@ -1214,14 +1159,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
           >
             <IconDetach />
           </IconButton>
-          <IconButton
-            type="button"
-            className="csv-tools-surface__ib csv-tools-surface__ib--close"
-            label={localizedText(t, 'action.close', 'Close')}
-            onClick={() => host.close()}
-          >
-            <CloseIcon size={14} strokeWidth={2} />
-          </IconButton>
+          {host.OutputActions && <host.OutputActions text={getCompleteOutput} disabled={!canCopyOutput || saving} />}
         </div>
       </header>
 

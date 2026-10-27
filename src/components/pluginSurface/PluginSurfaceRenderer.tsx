@@ -12,6 +12,7 @@ import { createPluginClipboard } from '../../workspace/pluginClipboard'
 import { showToast, dismissToast } from '../../workspace/toast'
 import { hostNotify } from '../../workspace/notify'
 import { useAiSendGate } from './AiSendGateLayer'
+import { useOutputActionsComponent } from './OutputActions'
 import { createPluginTelemetry } from '../../workspace/telemetry/track'
 import { createPluginPaste } from '../../workspace/pluginPaste'
 import { captureLauncherPasteOwner, combinePasteRecoveryOwners, createPasteRecoveryScope, isPasteRecoveryTemporaryHidden, observePasteRecoveryFocus } from '../../workspace/pasteRecovery'
@@ -541,6 +542,7 @@ export function PluginSurfaceRenderer({
       isCurrent: deliveryFeedbackOwner.isCurrent, subscribeInvalidation: deliveryFeedbackOwner.subscribeInvalidation }) : undefined,
   [target, surfaceState, deliveryFeedbackOwner])
 
+  const outputActions = useOutputActionsComponent()
   const openAiSettingsRef = useRef<(() => void) | undefined>(undefined)
   const isGateCurrent = useCallback(() => mountedRef.current && !hiddenRef.current && !suspendedRef.current, [])
   const aiSendGate = useAiSendGate({
@@ -608,6 +610,12 @@ export function PluginSurfaceRenderer({
     setAppSettingsSession(session)
     return promise
   }
+  // The shared output buttons act through exactly the host object this plugin receives.
+  const bindOutputHost = (host: Omit<PluginSurfaceHostApi, 'OutputActions'>): PluginSurfaceHostApi => {
+    const bound = { ...host, OutputActions: outputActions.OutputActions }
+    outputActions.bind(bound)
+    return bound
+  }
   openAiSettingsRef.current = () => { void openAppSettings({ section: 'ai' }).catch(() => {}) }
 
   return (
@@ -642,7 +650,7 @@ export function PluginSurfaceRenderer({
           appearance={appearance}
           permissions={surfaceState.permissions}
           initialText={target.initialText}
-          host={{
+          host={bindOutputHost({
             pasteQueue,
             compareHistoryTexts: target.pluginId === 'clipboard-history' && isCurrentBundledDefinition(target.pluginId, target.source, surfaceState.definition) ? async (snapshots, options) => {
               const owner = deliveryFeedbackOwner
@@ -851,7 +859,7 @@ export function PluginSurfaceRenderer({
             network: createPluginNetwork(surfaceState.permissions),
             shell: createPluginShell(surfaceState.permissions),
             ai: surfaceState.ai,
-          }}
+          })}
         />
         {onHandoffReady && <PluginSurfaceCommitted onCommit={() => { if (!crashedRef.current && activeStateRef.current === surfaceState) onHandoffReady(true) }} />}
         </div>

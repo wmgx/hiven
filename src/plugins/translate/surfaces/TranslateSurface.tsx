@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import { Button, IconButton, Select } from '@hiven/plugin-ui'
-import { BackIcon, CloseIcon, SettingsIcon } from '@hiven/plugin-ui/icons'
+import { BackIcon, SettingsIcon } from '@hiven/plugin-ui/icons'
 import { AlertTriangle, ArrowRight, LoaderCircle } from 'lucide-react'
 import type { SourceLanguageCode, TargetLanguageCode, TranslateProfile, TranslateSettings } from '../settings/model'
 import { currentUsageMonth, isProfileUsable, profileDisplayName } from '../settings/model'
@@ -255,13 +255,8 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
     : null
   const outputRef = useRef<TranslationOutput | null>(null)
   outputRef.current = availableOutput
-  const outputActionRef = useRef<TranslationOutput['view'] | null>(null)
-  const returnSubmissionRef = useRef<AbortController | null>(null)
-  const [outputActionView, setOutputActionView] = useState<TranslationOutput['view'] | null>(null)
 
   const cancelCurrentRun = useCallback(() => {
-    returnSubmissionRef.current?.abort()
-    returnSubmissionRef.current = null
     const run = runRef.current
     runRef.current = null
     outputRef.current = null
@@ -464,53 +459,6 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
 
   const canRetry = !appSettingsOpen && (activeProfile?.provider !== 'ai' || Boolean(readinessController.execution(host.ai, activeProfile)))
 
-  const canUseOutput = (output: TranslationOutput | null): output is TranslationOutput =>
-    isCurrentTranslationOutput(output, outputRef.current, identityRef.current, readinessController.getSnapshot().revision)
-
-  const copyOutput = async () => {
-    const output = availableOutput
-    if (!canUseOutput(output) || outputActionRef.current === output.view) return
-    outputActionRef.current = output.view
-    setOutputActionView(output.view)
-    try {
-      await host.clipboard.writeText(output.view.outputText)
-      if (!canUseOutput(output)) return
-      host.showMessage(localizedText(t, 'toast.copied', 'Copied'), 'success')
-      host.complete()
-    } catch {
-      if (!canUseOutput(output)) return
-      host.showMessage(localizedText(t, 'toast.copyFailed', 'Copy failed'), 'error')
-    } finally {
-      if (outputActionRef.current === output.view && canUseOutput(output)) {
-        outputActionRef.current = null
-        setOutputActionView((current) => current === output.view ? null : current)
-      }
-    }
-  }
-
-  const continueProcessing = async () => {
-    const output = availableOutput
-    if (!canUseOutput(output) || outputActionRef.current === output.view) return
-    outputActionRef.current = output.view
-    setOutputActionView(output.view)
-    const submission = new AbortController()
-    returnSubmissionRef.current = submission
-    try {
-      const accepted = await host.returnToLauncherWithObject({ kind: 'text', text: output.view.outputText, source: 'tool-result' }, { signal: submission.signal })
-      if (!canUseOutput(output)) return
-      if (accepted === false) host.showMessage(t('toast.continueFailed'), 'error')
-      else cancelCurrentRun()
-    } catch {
-      if (canUseOutput(output)) host.showMessage(t('toast.continueFailed'), 'error')
-    } finally {
-      if (returnSubmissionRef.current === submission) returnSubmissionRef.current = null
-      if (outputActionRef.current === output.view) {
-        outputActionRef.current = null
-        if (mountedRef.current) setOutputActionView((current) => current === output.view ? null : current)
-      }
-    }
-  }
-
   const activeUsedChars = activeProfile ? (usageByProfile.get(activeProfile.id) ?? activeProfile.usedChars) : 0
   const monthlyLimit = activeProfile?.monthlyLimitChars ?? 0
   const quotaPercent = monthlyLimit > 0 ? Math.min(100, Math.round((activeUsedChars / monthlyLimit) * 100)) : 0
@@ -533,18 +481,10 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
         {(status.kind === 'stopped' || status.kind === 'settings-paused' || status.kind === 'error') && (
           <Button type="button" onClick={retryTranslation} disabled={!canRetry}>{t('action.retry')}</Button>
         )}
-        <IconButton type="button" label={t('action.continueProcessing')} disabled={!availableOutput || outputActionView === view} onClick={() => { void continueProcessing() }}>
-          <ArrowRight size={16} />
-        </IconButton>
-        <Button type="button" variant="primary" disabled={!availableOutput || outputActionView === view} onClick={() => void copyOutput()}>
-          {localizedText(t, 'action.copy', 'Copy')}
-        </Button>
         <IconButton type="button" label={t('action.translationSettings')} onClick={openSettings}>
           <SettingsIcon size={16} />
         </IconButton>
-        <IconButton type="button" label={localizedText(t, 'action.close', 'Close')} onClick={() => host.close()}>
-          <CloseIcon size={14} strokeWidth={2} />
-        </IconButton>
+        {host.OutputActions && <host.OutputActions text={isCurrentTranslationOutput(availableOutput, outputRef.current, identityRef.current, readinessController.getSnapshot().revision) ? availableOutput.view.outputText : ''} />}
       </header>
 
       <div className="translate-surface__controls">

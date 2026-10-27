@@ -2,6 +2,7 @@ import { registerLocalEscapeLayer } from './utils/localEscapeLayer'
 import {
   forwardRef,
   lazy,
+  useEffect,
   useRef,
   useLayoutEffect,
   type RefObject,
@@ -17,7 +18,7 @@ import {
 import { Combobox as BaseCombobox } from '@base-ui/react/combobox'
 import { NumberField as BaseNumberField } from '@base-ui/react/number-field'
 import { cn } from 'cn'
-import { ChevronDownIcon } from 'lucide-react'
+import { CheckIcon, ChevronDownIcon, CopyIcon } from 'lucide-react'
 import { buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -274,6 +275,24 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
     />
   )
 })
+
+/** Field-level copy: the icon turns into ✓ briefly and the surface stays open. */
+export function CopyIconButton({ label, copy, disabled, className }: { label: string; copy: () => Promise<void>; disabled?: boolean; className?: string }) {
+  const [copied, setCopied] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  useEffect(() => () => clearTimeout(timer.current), [])
+  return (
+    <IconButton type="button" label={label} disabled={disabled} className={className} onClick={() => {
+      void copy().then(() => {
+        clearTimeout(timer.current)
+        setCopied(true)
+        timer.current = setTimeout(() => setCopied(false), 1200)
+      }).catch(() => setCopied(false))
+    }}>
+      {copied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
+    </IconButton>
+  )
+}
 
 export const ToolbarButton = forwardRef<HTMLButtonElement, ButtonProps>(function ToolbarButton(
   { className, variant = 'ghost', ...props },

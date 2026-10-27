@@ -19,7 +19,6 @@
 .td-ib:active:not(:disabled) { transform: scale(0.92); }
 .td-ib:disabled { opacity: 0.35; cursor: default; }
 .td-ib svg { width: 14px; height: 14px; }
-.td-ib--close:hover { background: var(--hiven-color-error-bg, rgba(190,17,0,0.08)); color: var(--hiven-color-error, #be1100); }
 
 /* Body */
 .td-pane-labels { display: grid; grid-template-columns: 1fr 1fr; min-height: 24px; flex-shrink: 0; border-bottom: 1px solid var(--td-border); background: var(--td-bg-secondary); color: var(--hiven-color-text-tertiary); font: 600 10px/24px var(--hiven-font-ui); letter-spacing: 0.04em; text-transform: uppercase; }

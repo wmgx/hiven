@@ -2,7 +2,6 @@
   "image.readClipboard": "Read clipboard image",
   "image.chooseFile": "Choose image file",
   "image.cancel": "Cancel",
-  "image.copyImage": "Copy image",
   "image.save": "Save PNG…",
   "image.busy": "Processing…",
   "image.sizeError": "Image exceeds 10 MiB or 16 million pixels",
@@ -44,7 +43,5 @@
   "resize.previous": "New image didn't load",
   "surface.title": "Image Tools",
   "action.back": "Back",
-  "action.close": "Close",
-  "image.copied": "Copied",
   "image.saved": "Saved"
 }

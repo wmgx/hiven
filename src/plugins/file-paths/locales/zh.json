@@ -1,7 +1,6 @@
 {
   "title": "文件路径转换",
   "back": "返回",
-  "close": "关闭",
   "source": "原始路径",
   "output": "转换后路径",
   "formatLabel": "输出格式",
@@ -14,10 +13,6 @@
   "style.unix": "Unix",
   "style.windows": "Windows",
   "base": "基准目录",
-  "copy": "复制输出",
-  "copying": "正在复制…",
-  "copied": "已复制",
-  "copyFailed": "复制失败，请重试。",
   "error.invalid": "路径或 file URI 无效，每行一条，不带引号。",
   "error.absolute": "需要绝对路径，Windows 路径请补全盘符或 UNC。",
   "error.base": "需要基准目录。",

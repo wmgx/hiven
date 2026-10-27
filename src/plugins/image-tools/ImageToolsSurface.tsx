@@ -1,7 +1,7 @@
 import { useRef } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import { IconButton } from '@hiven/plugin-ui'
-import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
+import { BackIcon } from '@hiven/plugin-ui/icons'
 import { ImageCropPanel } from './ImageCropPanel'
 import { ImageRedactionPanel } from './ImageRedactionPanel'
 import { ImageResizePanel } from './ImageResizePanel'
@@ -27,9 +27,6 @@ export function ImageToolsSurface(props: PluginSurfaceProps) {
           <BackIcon size={14} strokeWidth={2} />
         </IconButton>
         <strong>{t(TITLES[surfaceId] ?? 'surface.title')}</strong>
-        <IconButton type="button" label={t('action.close')} onClick={leave(() => host.close())}>
-          <CloseIcon size={14} strokeWidth={2} />
-        </IconButton>
       </header>
       {surfaceId === 'image-crop' ? <ImageCropPanel {...panelProps} />
         : surfaceId === 'image-redact' ? <ImageRedactionPanel {...panelProps} />

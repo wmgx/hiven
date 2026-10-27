@@ -1,5 +1,5 @@
 {
-  "version": 172,
+  "version": 173,
   "packages": [
     {
       "pluginId": "encode-decode",
@@ -9,7 +9,7 @@
     {
       "pluginId": "image-tools",
       "dir": "image-tools",
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     {
       "pluginId": "formatter",
@@ -34,22 +34,22 @@
     {
       "pluginId": "csv",
       "dir": "csv",
-      "version": "1.12.1"
+      "version": "1.12.2"
     },
     {
       "pluginId": "calculator",
       "dir": "calculator",
-      "version": "1.9.3"
+      "version": "1.9.4"
     },
     {
       "pluginId": "date-time-assistant",
       "dir": "date-time-assistant",
-      "version": "1.12.5"
+      "version": "1.12.6"
     },
     {
       "pluginId": "translate",
       "dir": "translate",
-      "version": "1.0.30"
+      "version": "1.0.31"
     },
     {
       "pluginId": "ai-writing",
@@ -59,12 +59,12 @@
     {
       "pluginId": "regex-tester",
       "dir": "regex-tester",
-      "version": "1.4.5"
+      "version": "1.4.6"
     },
     {
       "pluginId": "text-diff",
       "dir": "textDiff",
-      "version": "3.6.3"
+      "version": "3.6.4"
     },
     {
       "pluginId": "clipboard-history",
@@ -79,7 +79,7 @@
     {
       "pluginId": "qr-code",
       "dir": "qr-code",
-      "version": "1.0.17"
+      "version": "1.0.18"
     },
     {
       "pluginId": "random",
@@ -89,7 +89,7 @@
     {
       "pluginId": "text-explode",
       "dir": "text-explode",
-      "version": "1.0.12"
+      "version": "1.0.13"
     },
     {
       "pluginId": "user-commands",
@@ -104,7 +104,7 @@
     {
       "pluginId": "file-paths",
       "dir": "file-paths",
-      "version": "1.0.6"
+      "version": "1.0.7"
     },
     {
       "pluginId": "curl-inspector",

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, IconButton, TextInput } from '@hiven/plugin-ui'
-import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
+import { Button, CopyIconButton, IconButton, TextInput } from '@hiven/plugin-ui'
+import { BackIcon } from '@hiven/plugin-ui/icons'
 import './style.css'
 
 export type DateTimeSnapshot = {
@@ -25,16 +25,6 @@ export function DateTimeSurface({ defaultOffset, host, initialText, t, convert }
   const [offset, setOffset] = useState(defaultOffset)
   const result = useMemo(() => convert(input, offset), [convert, input, offset])
 
-  const copy = async (value: string) => {
-    try {
-      await host.clipboard.writeText(value)
-      host.showMessage(t('surface.copied'), 'success')
-      host.complete()
-    } catch {
-      host.showMessage(t('surface.copyFailed'), 'error')
-    }
-  }
-
   const values = result.ok ? [
     { key: 'datetime', label: t('surface.dateTime'), unit: result.value.offsetLabel, value: result.value.dateTime },
     { key: 'seconds', label: t('surface.unixSeconds'), unit: t('surface.secondsUnit'), value: result.value.unixSeconds },
@@ -49,9 +39,6 @@ export function DateTimeSurface({ defaultOffset, host, initialText, t, convert }
         </IconButton>
         <strong>{t('surface.title')}</strong>
         <span />
-        <IconButton type="button" label={t('surface.close')} onClick={() => host.close()}>
-          <CloseIcon size={14} strokeWidth={2} />
-        </IconButton>
       </header>
 
       <main className="date-time-surface__body" data-launcher-scrollable>
@@ -89,7 +76,7 @@ export function DateTimeSurface({ defaultOffset, host, initialText, t, convert }
                 <span>{item.unit}</span>
               </div>
               <output>{item.value}</output>
-              <Button type="button" onClick={() => void copy(item.value)}>{t('surface.copy')}</Button>
+              <CopyIconButton label={t('surface.copy')} copy={() => host.clipboard.writeText(item.value)} />
             </div>
           )) : (
             <p className="date-time-surface__error" role="alert">
@@ -97,6 +84,7 @@ export function DateTimeSurface({ defaultOffset, host, initialText, t, convert }
             </p>
           )}
         </section>
+        {host.OutputActions && <host.OutputActions text={result.ok ? result.value.dateTime : ''} />}
       </main>
     </section>
   )

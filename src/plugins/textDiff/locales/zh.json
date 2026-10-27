@@ -12,7 +12,6 @@
   "diff.format": "格式化",
   "diff.swap": "交换两侧",
   "diff.detach": "独立窗口打开",
-  "diff.close": "关闭",
   "diff.navPrev": "上一处",
   "diff.navNext": "下一处",
   "diff.navPosition": "{current} / {total}",

@@ -1,13 +1,9 @@
 {
   "token.label": "大爆炸",
   "token.remove": "返回",
-  "action.close": "关闭",
   "action.clear": "清除",
   "action.selectAll": "全选",
   "action.invert": "反选",
-  "action.copy": "复制",
-  "action.continueProcessing": "继续处理",
-  "action.confirm": "上屏",
   "input.placeholder": "文本",
   "input.clear": "清空",
   "canvas.label": "碎片",
@@ -15,9 +11,5 @@
   "selection.toolbar": "选择",
   "selection.summary": "{selected}/{total}",
   "preview.title": "预览",
-  "preview.characters": "{count} 字",
-  "message.copied": "已复制",
-  "error.copyFailed": "复制失败",
-  "error.pasteFailed": "上屏失败",
-  "error.continueFailed": "继续处理失败"
+  "preview.characters": "{count} 字"
 }

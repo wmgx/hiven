@@ -12,7 +12,6 @@
   "diff.format": "Format",
   "diff.swap": "Swap sides",
   "diff.detach": "Open in window",
-  "diff.close": "Close",
   "diff.navPrev": "Previous change",
   "diff.navNext": "Next change",
   "diff.navPosition": "{current} / {total}",

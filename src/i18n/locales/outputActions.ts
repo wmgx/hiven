@@ -1,0 +1,28 @@
+export default {
+  en: {
+    copy: 'Copy',
+    pasteTo: 'Paste to {app}',
+    pasteToForeground: 'Paste to App',
+    continue: 'Continue with Result',
+    openEditor: 'Open in Quick Editor',
+    more: 'More',
+    copied: 'Copied',
+    copyFailed: 'Copy did not complete',
+    pasteCopied: 'Copied. Paste it manually',
+    continueFailed: 'Could not return to the launcher',
+    continueTooLarge: 'Result is too large to continue with',
+  },
+  zh: {
+    copy: '复制',
+    pasteTo: '粘贴到 {app}',
+    pasteToForeground: '粘贴到应用',
+    continue: '继续处理',
+    openEditor: '打开到快捷编辑器',
+    more: '更多',
+    copied: '已复制',
+    copyFailed: '复制未完成',
+    pasteCopied: '已复制，请手动粘贴',
+    continueFailed: '无法回到 launcher',
+    continueTooLarge: '结果太大，无法继续处理',
+  },
+}

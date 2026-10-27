@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, IconButton, ToolbarButton, useImeKeyboard } from '@hiven/plugin-ui'
+import { IconButton, ToolbarButton, useImeKeyboard } from '@hiven/plugin-ui'
 import { CloseIcon } from '@hiven/plugin-ui/icons'
 import { Bomb } from 'lucide-react'
 import { assembleFromSelection, isSelectableToken, tokenize, type ExplodeToken } from '../tokenize'
-import { createExplodeOutputGate, settleExplodeHandoff } from '../outputActionGate'
 
 /** Matches the launcher's own query_change debounce so the explode replay doesn't fire per keystroke. */
 const COMMIT_DEBOUNCE_MS = 280
@@ -44,23 +43,8 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
   const [committedInput, setCommittedInput] = useState(input)
   const inputValue = input.text
   const committedText = committedInput.text.trim()
-  const [outputGate] = useState(createExplodeOutputGate)
-  const [outputRevision, setOutputRevision] = useState(outputGate.getRevision)
-  const [outputPending, setOutputPending] = useState(false)
-  const [handedOffRevision, setHandedOffRevision] = useState<number | null>(null)
-  const activeRef = useRef(true)
   const [exploded, setExploded] = useState(false)
-  const [copyFeedback, setCopyFeedback] = useState<{ text: string; error: boolean } | null>(null)
   const ime = useImeKeyboard()
-
-  const invalidateOutput = useCallback(() => {
-    setOutputRevision(outputGate.invalidate())
-  }, [outputGate])
-
-  useEffect(() => {
-    activeRef.current = true
-    return () => { activeRef.current = false; outputGate.invalidate() }
-  }, [outputGate])
 
   // Live typing feel: input reacts every keystroke, explode/re-tokenize settles
   // after a short pause so the canvas doesn't re-burst on every character.
@@ -74,12 +58,11 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
   // A selection belongs to the exact token array it was made from.
   const selected = selection.tokens === tokens ? selection.indexes : EMPTY_SELECTION
   const setSelected = useCallback((next: React.SetStateAction<Set<number>>) => {
-    invalidateOutput()
     setSelection((previous) => {
       const indexes = previous.tokens === tokens ? previous.indexes : EMPTY_SELECTION
       return { tokens, indexes: typeof next === 'function' ? next(indexes) : next }
     })
-  }, [invalidateOutput, tokens])
+  }, [tokens])
   const anims = useMemo(() => buildAnims(tokens), [tokens])
 
   const groups = useMemo(() => {
@@ -126,10 +109,9 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
   }, [])
 
   const updateInput = useCallback((text: string) => {
-    invalidateOutput()
     cancelDrag()
     setInput({ text })
-  }, [cancelDrag, invalidateOutput])
+  }, [cancelDrag])
 
   const assembled = useMemo(() => assembleFromSelection(tokens, selected), [tokens, selected])
   const selectableIndexes = useMemo(
@@ -250,73 +232,11 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
     return () => window.removeEventListener('pointerup', handlePointerUp)
   }, [handlePointerUp])
 
-  const output = { text: assembled, revision: outputRevision }
   const outputReady = committedInput === input && selection.tokens === tokens && Boolean(assembled)
-  const outputDisabled = !outputReady || outputPending || handedOffRevision === outputRevision
 
-  const confirmPaste = async () => {
-    if (!activeRef.current || !outputReady || !outputGate.begin(output)) return
-    setOutputPending(true)
-    try {
-      const result = await host.paste.pasteText(output.text)
-      // Native paste hides this surface before settling; preserve its fallback
-      // feedback unless an explicit edit or navigation revoked the output.
-      if (!outputGate.isCurrent(output)) return
-      if (!result.ok) {
-        if (result.message) host.showMessage(result.message, result.fallback === 'copied' ? 'info' : 'error')
-        return
-      }
-      host.complete()
-    } catch {
-      if (outputGate.isCurrent(output)) host.showMessage(t('error.pasteFailed'), 'error')
-    } finally {
-      outputGate.finish(output)
-      if (activeRef.current) setOutputPending(false)
-    }
-  }
-
-  const copySelection = async () => {
-    if (!activeRef.current || !outputReady || !outputGate.begin(output)) return
-    setOutputPending(true)
-    try {
-      await host.clipboard.writeText(output.text)
-      if (!activeRef.current || !outputGate.isCurrent(output)) return
-      setCopyFeedback({ text: output.text, error: false })
-      host.complete()
-    } catch {
-      if (activeRef.current && outputGate.isCurrent(output)) setCopyFeedback({ text: output.text, error: true })
-    } finally {
-      outputGate.finish(output)
-      if (activeRef.current) setOutputPending(false)
-    }
-  }
-
-  const continueProcessing = async () => {
-    if (!activeRef.current || !outputReady || !outputGate.begin(output)) return
-    setOutputPending(true)
-    try {
-      const result = await settleExplodeHandoff(output, outputGate,
-        (signal) => host.returnToLauncherWithObject({ kind: 'text', text: output.text, source: 'tool-result' }, { signal }),
-        () => activeRef.current)
-      if (result === 'accepted') setHandedOffRevision(output.revision)
-      else if (result === 'failed') host.showMessage(t('error.continueFailed'), 'error')
-    } finally {
-      if (activeRef.current) setOutputPending(false)
-    }
-  }
-
-  // Navigation intent revokes pending delivery, but leaves source and selection
-  // intact if the host's discard confirmation is cancelled.
-  const requestBack = useCallback(() => { invalidateOutput(); host.requestBack() }, [host, invalidateOutput])
-  const close = () => { invalidateOutput(); host.close() }
+  const requestBack = useCallback(() => { host.requestBack() }, [host])
 
   const handleInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter') {
-      if (ime.shouldIgnoreKeyDown(event)) return
-      event.preventDefault()
-      void confirmPaste()
-      return
-    }
     // Token-input convention: ⌫ on an empty field removes the command token (= back).
     if (event.key === 'Backspace' && inputValue === '') {
       event.preventDefault()
@@ -368,9 +288,6 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
             <CloseIcon size={14} />
           </IconButton>
         )}
-        <IconButton label={t('action.close')} className="tx-chrome-btn" onClick={close}>
-          <CloseIcon size={15} />
-        </IconButton>
       </div>
 
       {hasTokens ? (
@@ -435,17 +352,7 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
       </div>
 
       <div className="tx-footer">
-        <Button disabled={outputDisabled} onClick={() => void copySelection()}>
-          {copyFeedback?.text === assembled
-            ? t(copyFeedback.error ? 'error.copyFailed' : 'message.copied')
-            : t('action.copy')}
-        </Button>
-        <Button disabled={outputDisabled} onClick={() => { void continueProcessing() }}>
-          {t('action.continueProcessing')}
-        </Button>
-        <Button variant="primary" disabled={outputDisabled} onClick={() => void confirmPaste()}>
-          {t('action.confirm')}
-        </Button>
+        {host.OutputActions && <host.OutputActions primary="paste" text={outputReady ? assembled : ''} />}
       </div>
     </div>
   )

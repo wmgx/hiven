@@ -80,12 +80,6 @@ const IconDetach = () => (
   </svg>
 )
 
-const IconClose = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M18 6 6 18" /><path d="m6 6 12 12" />
-  </svg>
-)
-
 const IconUp = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <path d="m18 15-6-6-6 6" />
@@ -278,9 +272,6 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
           </button>
           <button type="button" className="td-ib" onClick={handleDetach} title={t('diff.detach')} aria-label={t('diff.detach')}>
             <IconDetach />
-          </button>
-          <button type="button" className="td-ib td-ib--close" onClick={() => { leaveSurface(); host.close() }} title={t('diff.close')} aria-label={t('diff.close')}>
-            <IconClose />
           </button>
         </div>
       </div>

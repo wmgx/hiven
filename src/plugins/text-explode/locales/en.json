@@ -1,13 +1,9 @@
 {
   "token.label": "Text Explode",
   "token.remove": "Back",
-  "action.close": "Close",
   "action.clear": "Clear",
   "action.selectAll": "Select all",
   "action.invert": "Invert",
-  "action.copy": "Copy",
-  "action.continueProcessing": "Continue processing",
-  "action.confirm": "Insert",
   "input.placeholder": "Text",
   "input.clear": "Clear",
   "canvas.label": "Fragments",
@@ -15,9 +11,5 @@
   "selection.toolbar": "Selection",
   "selection.summary": "{selected}/{total}",
   "preview.title": "Preview",
-  "preview.characters": "{count} chars",
-  "message.copied": "Copied",
-  "error.copyFailed": "Copy failed",
-  "error.pasteFailed": "Could not insert text",
-  "error.continueFailed": "Could not continue processing"
+  "preview.characters": "{count} chars"
 }

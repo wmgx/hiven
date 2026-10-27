@@ -2,7 +2,6 @@
   "image.readClipboard": "读取剪贴板图片",
   "image.chooseFile": "选择图片文件",
   "image.cancel": "取消",
-  "image.copyImage": "复制图片",
   "image.save": "另存 PNG…",
   "image.busy": "处理中…",
   "image.sizeError": "图片超过 10 MiB 或 1600 万像素",
@@ -44,7 +43,5 @@
   "resize.previous": "新图片未载入",
   "surface.title": "图片工具",
   "action.back": "返回",
-  "action.close": "关闭",
-  "image.copied": "已复制",
   "image.saved": "已保存"
 }

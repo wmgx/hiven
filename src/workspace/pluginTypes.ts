@@ -855,6 +855,21 @@ export type PluginAiSendGate = {
   Disclosure: ComponentType<{ commandId: string; approval: AiSendApproval | null | undefined }>
 }
 
+export type PluginOutputActionsProps = {
+  /**
+   * Main text result. Empty disables the text actions. A function is resolved
+   * only when an action runs (large results); returning null cancels it.
+   */
+  text?: string | (() => string | null)
+  /** 'paste' when the page's intent is to put the result back into the app. Default 'copy'. */
+  primary?: 'copy' | 'paste'
+  /** Replaces the text copy for a non-text primary output (e.g. copy an image). */
+  copy?: () => Promise<void>
+  /** Plugin-specific actions listed under ⌘K, between Continue and Quick Editor. */
+  more?: ReadonlyArray<{ id: string; label: string; run: () => void | Promise<void> }>
+  disabled?: boolean
+}
+
 export type PluginNotifyApi = {
   flash(notice: { level: 'success' | 'error' | 'info'; message: string }): void
   status(notice: { id: string; title: string; detail?: string; progress?: { completed: number; total: number } }): void
@@ -903,6 +918,13 @@ export type PluginSurfaceHostApi = {
    * `status` with the same id updates in place; `end` removes it. Older hosts may omit this.
    */
   notify?: PluginNotifyApi
+  /**
+   * Shared output buttons: Copy / Paste to {App} / ⌘K Continue with Result,
+   * Open in Quick Editor. ⌘↵ runs the primary action, ⌘⇧↵ pastes. A main copy
+   * shows "Copied" in the global notification and completes the surface.
+   * Field-level copies stay in the plugin. Older hosts may omit this.
+   */
+  OutputActions?: ComponentType<PluginOutputActionsProps>
   /** Host-owned AI send permission. Older hosts may omit this. */
   aiSendGate?: PluginAiSendGate
   /**

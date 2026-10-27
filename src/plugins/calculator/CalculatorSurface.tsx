@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import { IconButton, TextInput, useImeKeyboard } from '@hiven/plugin-ui'
-import { BackIcon, CloseIcon } from '@hiven/plugin-ui/icons'
+import { BackIcon } from '@hiven/plugin-ui/icons'
 import { readHistory, rememberCalculation, type HistoryEntry } from './history'
 
 let historyWrite = Promise.resolve()
@@ -76,17 +76,6 @@ export function CalculatorSurface({ host, initialText, t, calculate, calculateVa
     setHistoryIndex(-1)
   }
 
-  const copyResult = async () => {
-    if (!displayedResult) return
-    try {
-      await host.clipboard.writeText(displayedResult)
-      host.showMessage(t('surface.copied'), 'success')
-      host.complete()
-    } catch {
-      host.showMessage(t('surface.copyFailed'), 'error')
-    }
-  }
-
   const navigateHistory = (direction: 'older' | 'newer') => {
     if (history.length === 0) return
     if (direction === 'older') {
@@ -105,13 +94,7 @@ export function CalculatorSurface({ host, initialText, t, calculate, calculateVa
 
     const input = inputRef.current
     const hasSelection = input?.selectionStart !== input?.selectionEnd
-    if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'c' && !hasSelection) {
-      event.preventDefault()
-      void copyResult()
-      return
-    }
-
-    if (event.key === 'Enter') {
+    if (event.key === 'Enter' && !event.metaKey && !event.ctrlKey) {
       event.preventDefault()
       commit()
       return
@@ -136,9 +119,6 @@ export function CalculatorSurface({ host, initialText, t, calculate, calculateVa
         </IconButton>
         <strong>{t('surface.title')}</strong>
         <div className="calculator-surface__spacer" />
-        <IconButton type="button" label={t('surface.close')} onClick={() => host.close()}>
-          <CloseIcon size={14} strokeWidth={2} />
-        </IconButton>
       </header>
 
       <main className="calculator-surface__body">
@@ -181,11 +161,7 @@ export function CalculatorSurface({ host, initialText, t, calculate, calculateVa
           <output>{displayedResult ?? '—'}</output>
         </div>
 
-        <p className="calculator-surface__keyboard-hint">
-          <button type="button" disabled={!displayedResult} onClick={() => void copyResult()}>
-            {t('surface.copyResult')}
-          </button>
-        </p>
+        {host.OutputActions && <host.OutputActions text={displayedResult ?? ''} />}
 
         <section className="calculator-surface__history" aria-label={t('surface.history')}>
           <div className="calculator-surface__history-heading">
