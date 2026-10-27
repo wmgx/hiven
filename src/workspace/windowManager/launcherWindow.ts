@@ -160,8 +160,20 @@ export async function onCurrentLauncherWindowFocusChanged(
   return getCurrentWindow().onFocusChanged(({ payload: focused }) => onFocusChanged(focused))
 }
 
+// Native centering and AppKit resizes also emit Moved; only moves that follow
+// a header drag are the user's placement.
+let userDragUntil = 0
+
+/** True while moves belong to a header drag; each such move extends the drag. */
+export function claimLauncherUserDragMove(now = Date.now()): boolean {
+  if (now >= userDragUntil) return false
+  userDragUntil = now + 600
+  return true
+}
+
 export async function startCurrentLauncherWindowDrag(): Promise<void> {
   if (!isNativeDesktopRuntime()) return
+  userDragUntil = Date.now() + 1500
   const { getCurrentWindow } = await import('@tauri-apps/api/window')
   await getCurrentWindow().startDragging()
 }

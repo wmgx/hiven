@@ -175,7 +175,8 @@ interface AppState {
     /** Global shortcut to summon Quick Editor as an independent window. */
     quickEditorShortcut: GlobalPinnedLauncherShortcut
     globalLauncherWindowPosition?: GlobalLauncherPosition
-    globalLauncherWindowPositionSource?: 'user'
+    /** 'drag' = placed by a header drag. Older 'user' values were polluted by programmatic moves and are ignored. */
+    globalLauncherWindowPositionSource?: 'user' | 'drag'
     /** Per-app global shortcuts (focus/hide toggle). */
     appHotkeys: AppHotkeyBinding[]
     /** Explicit human search aliases; app ids and launch behavior stay unchanged. */

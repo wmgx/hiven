@@ -1021,7 +1021,7 @@ fn show_launcher_window_for_hotkey_with_event(
             }
             let (compact_width, compact_height) = launcher_default_window_size_for_window(&window);
             match window.set_size(LogicalSize::new(compact_width, compact_height)) {
-                Ok(()) => requested_launcher_width = Some(compact_width),
+                Ok(()) => requested_launcher_width = Some((compact_width, compact_height)),
                 Err(error) => eprintln!(
                     "[hiven] Failed to compact launcher window before show: {}",
                     error
@@ -1053,9 +1053,9 @@ fn show_launcher_window_for_hotkey_with_event(
             // Position AFTER showing: on macOS a `set_position` on a hidden
             // window gets clobbered by the window's initial frame when it is
             // ordered front, leaving it at the OS default (bottom-right) spot.
-            if let Some(width) = requested_launcher_width {
+            if let Some((width, height)) = requested_launcher_width {
                 let started_at = Instant::now();
-                center_launcher_window(&window, width);
+                center_launcher_window(&window, width, height);
                 log_launcher_perf("native:center-window", started_at, "");
             }
             let started_at = Instant::now();
@@ -1135,7 +1135,24 @@ fn launcher_centered_x(origin: i32, monitor_width: u32, scale: f64, logical_widt
     i32::try_from(i64::from(origin) + offset).ok()
 }
 
-fn center_launcher_window(window: &tauri::WebviewWindow, requested_logical_width: f64) {
+/// CGRect for a synchronous `-[NSWindow setFrame:display:]`.
+#[cfg(target_os = "macos")]
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct LauncherFrame {
+    origin: [f64; 2],
+    size: [f64; 2],
+}
+
+#[cfg(target_os = "macos")]
+unsafe impl objc2::encode::Encode for LauncherFrame {
+    const ENCODING: objc2::encode::Encoding = objc2::encode::Encoding::Struct("CGRect", &[
+        objc2::encode::Encoding::Struct("CGPoint", &[f64::ENCODING, f64::ENCODING]),
+        objc2::encode::Encoding::Struct("CGSize", &[f64::ENCODING, f64::ENCODING]),
+    ]);
+}
+
+fn center_launcher_window(window: &tauri::WebviewWindow, requested_logical_width: f64, requested_logical_height: f64) {
     let monitor = monitor_under_cursor(window)
         .or_else(|| window.current_monitor().ok().flatten())
         .or_else(|| window.primary_monitor().ok().flatten());
@@ -1171,13 +1188,15 @@ fn center_launcher_window(window: &tauri::WebviewWindow, requested_logical_width
                     let ns_x = x as f64 / scale;
                     let ns_y = (primary_height - y as f64) / scale;
 
-                    // setFrameTopLeftPoint: takes a CGPoint/NSPoint {x, y}
-                    // which is repr(C) two f64s. Pass as two separate args
-                    // encoded as a single NSPoint via raw msg_send.
-                    let sel = objc2::sel!(setFrameTopLeftPoint:);
-                    let point: [f64; 2] = [ns_x, ns_y];
-                    let _: () =
-                        objc2::runtime::MessageReceiver::send_message(ns_window, sel, (point,));
+                    // Size and top-left in one synchronous frame: the pre-show
+                    // set_size is queued asynchronously and keeps the bottom-left
+                    // corner, so applying it after a top-left-only move pushed
+                    // the launcher up by the height difference.
+                    let frame = LauncherFrame {
+                        origin: [ns_x, ns_y - requested_logical_height],
+                        size: [requested_logical_width, requested_logical_height],
+                    };
+                    let _: () = objc2::msg_send![ns_window, setFrame: frame, display: true];
                 }
                 return;
             }

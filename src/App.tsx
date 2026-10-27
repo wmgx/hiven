@@ -24,7 +24,7 @@ import { installQuickEditorHotkeys } from './hotkeys/quickEditor'
 import { consumePendingPluginSurfaceOpenTarget, isPluginSurfaceOpenTarget, openLauncherHostedPluginSurface } from './workspace/pluginSurfaceOpenRequest'
 import { LAUNCHER_HOST_SURFACE_OPEN_EVENT, consumePendingLauncherHostSurfaceOpen, isLauncherHostSurfaceOpenRequest, isLauncherHostSurfaceTarget, openLauncherHostSurfaceLocally, openLauncherHostSurfaceRequestLocally } from './workspace/launcherHostSurfaceBridge'
 import { LAUNCHER_NEW_SESSION_EVENT, LAUNCHER_PROGRAMMATIC_MOVE_EVENT } from './workspace/launcherWindowEvents'
-import { onCurrentLauncherWindowMoved, setCurrentLauncherWindowPosition, type LauncherWindowMovedPosition } from './workspace/windowManager/launcherWindow'
+import { claimLauncherUserDragMove, onCurrentLauncherWindowMoved, setCurrentLauncherWindowPosition, type LauncherWindowMovedPosition } from './workspace/windowManager/launcherWindow'
 import {
   beginLauncherPerfOpenSession,
   launcherPerfNow,
@@ -250,7 +250,7 @@ function LauncherRuntimeApp() {
         })
         if (!isNativeDesktopRuntime()) return
         const settings = useAppStore.getState().settings
-        const saved = settings.globalLauncherWindowPositionSource === 'user'
+        const saved = settings.globalLauncherWindowPositionSource === 'drag'
           ? settings.globalLauncherWindowPosition
           : undefined
         if (!saved || !isLauncherPositionFresh(saved)) return
@@ -340,6 +340,7 @@ function LauncherRuntimeApp() {
     let lastMovePayload: unknown = null
 
     onCurrentLauncherWindowMoved(async (position, { toLogical }) => {
+      if (!claimLauncherUserDragMove()) return
       if (launcherProgrammaticMoveRef.current) {
         launcherProgrammaticMoveRef.current = false
         if (launcherProgrammaticMoveResetRef.current !== undefined) {
@@ -364,7 +365,7 @@ function LauncherRuntimeApp() {
             screenWidth: window.screen.width,
             screenHeight: window.screen.height,
           })
-          useAppStore.getState().updateSetting('globalLauncherWindowPositionSource', 'user')
+          useAppStore.getState().updateSetting('globalLauncherWindowPositionSource', 'drag')
         } catch (error) {
           console.warn('[hiven] Failed to persist launcher window position:', error)
         }
