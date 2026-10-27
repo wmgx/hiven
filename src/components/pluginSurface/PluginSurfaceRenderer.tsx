@@ -10,6 +10,7 @@ import { restartPluginBackground } from '../../workspace/pluginBackgroundManager
 import { createPluginPrivateStorage } from '../../workspace/pluginStorage'
 import { createPluginClipboard } from '../../workspace/pluginClipboard'
 import { showToast, dismissToast } from '../../workspace/toast'
+import { hostNotify } from '../../workspace/notify'
 import { createPluginTelemetry } from '../../workspace/telemetry/track'
 import { createPluginPaste } from '../../workspace/pluginPaste'
 import { captureLauncherPasteOwner, combinePasteRecoveryOwners, createPasteRecoveryScope, isPasteRecoveryTemporaryHidden, observePasteRecoveryFocus } from '../../workspace/pasteRecovery'
@@ -725,6 +726,12 @@ export function PluginSurfaceRenderer({
               return showToast(message, level, options)
             },
             dismissToast,
+            // Only a current surface may notify; this is a user-action gate, not delivery ownership.
+            notify: {
+              flash: (notice) => { if (surfaceOwner.isCurrent()) hostNotify.flash(notice) },
+              status: (notice) => { if (surfaceOwner.isCurrent()) hostNotify.status(notice) },
+              end: hostNotify.end,
+            },
             telemetry: createPluginTelemetry(target.pluginId),
             saveText,
             returnToLauncherWithObject: (input: PluginObjectBlockInput, options?: { signal?: AbortSignal }) => {

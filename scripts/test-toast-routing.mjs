@@ -50,7 +50,8 @@ function fixture() {
     return exports
   }
   h.routing = modules['./toastRouting'] = load('toastRouting')
-  h.toast = load('toast')
+  h.toast = modules['./toast'] = load('toast')
+  h.notify = load('notify')
   h.items = () => h.toast.useToastStore.getState().toasts
   h.tick = (delta) => {
     now += delta
@@ -148,19 +149,44 @@ console.log('Toast routing passed: privacy, issue epoch, late dismissal, expiry,
 
 {
   const h = fixture()
-  const hud = { operation: '00000000-0000-4000-8000-000000000000', revision: 1, result: 'paste-failed' }
+  const hud = { operation: '00000000-0000-4000-8000-000000000000', revision: 1 }
   const first = h.toast.showToast('PRIVATE_BODY', 'error', { hud, durationMs: 6000 })
   h.tick(1000)
-  h.toast.showToast('safe retry', 'success', { hud: { ...hud, revision: 2, result: 'pasted' } })
+  h.toast.showToast('safe retry', 'success', { hud: { ...hud, revision: 2 } })
   h.toast.showToast('late failure', 'error', { hud })
   assert.equal(h.items().length, 1)
-  assert.equal(h.items()[0].hud.result, 'pasted')
+  assert.equal(h.items()[0].message, 'safe retry')
   h.toast.dismissToast(first)
   assert.equal(h.items().length, 1, 'Old dismissal cannot clear the replacement')
   await flush()
   const payloads = h.calls.filter(call => call.command === 'route_toast').map(call => call.payload)
-  assert.equal(payloads.at(-1).receipt.result, 'pasted')
+  assert.equal(payloads.at(-1).receipt.revision, 2)
   assert.equal(JSON.stringify(payloads).includes('PRIVATE_BODY'), false)
   h.tick(3600)
   assert.equal(h.items().length, 0)
 }
+
+{
+  // notify: localized status text reaches the HUD; a status updates in place by id.
+  const h = fixture()
+  h.notify.flash({ level: 'success', message: 'Copied' })
+  h.notify.status({ id: 'queue', title: 'Paste queue ready', progress: { completed: 0, total: 2 } })
+  h.notify.status({ id: 'queue', title: 'Queue item pasted', progress: { completed: 1, total: 2 } })
+  await flush()
+  const routed = h.calls.filter(({ command }) => command === 'route_toast').map(({ payload }) => payload)
+  assert.deepEqual(routed.map(({ slot, message }) => [slot, message]), [['flash', 'Copied'], ['status', 'Paste queue ready'], ['status', 'Queue item pasted']])
+  assert.equal(routed[1].id, routed[2].id, 'Same status id updates one notice')
+  assert.equal(h.items().filter(({ notify }) => notify?.slot === 'status').length, 1)
+  assert.ok(routed[1].expiresAt - routed[1].sequence / 1000 > 60_000, 'Status is not bounded by the flash lifetime')
+  h.tick(1300)
+  assert.deepEqual(Array.from(h.items(), ({ message }) => message), ['Queue item pasted'], 'Flash expires while the status stays')
+  h.notify.end('queue')
+  assert.equal(h.items().length, 0)
+  assert.ok(h.calls.some(({ command, payload }) => command === 'dismiss_toast' && payload.id === routed[2].id))
+  h.notify.status({ id: 'queue', title: 'Paste queue ready' })
+  await flush()
+  assert.notEqual(h.calls.filter(({ command }) => command === 'route_toast').at(-1).payload.id, routed[2].id, 'A restarted session is not hidden by the ended tombstone')
+  h.notify.flash({ level: 'info', message: `${'x'.repeat(100)}\nnext line` })
+  assert.ok(h.items().at(-1).message.length <= 80 && !h.items().at(-1).message.includes('\n'))
+}
+console.log('Notify passed: status text, same-id update, flash/status coexistence, end and restart')

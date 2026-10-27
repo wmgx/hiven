@@ -84,6 +84,7 @@ export type {
   PluginSurfaceProps,
   PluginSurfaceAppearance,
   PluginSurfaceHostApi,
+  PluginNotifyApi,
   PluginSurfaceTelemetry,
   PluginTelemetryDetails,
   PluginSurfaceSaveTextOptions,

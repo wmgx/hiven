@@ -31,7 +31,9 @@ function fixture() {
     '../workspace/pluginClipboardImageRead': { createPluginClipboardImageReader: () => async () => { h.readCount++; return { bytes: new Uint8Array([1]), contentType: 'image/png' } } },
     '../workspace/launcherBlurGuard': { acquireLauncherNativeDialogFocus: () => () => {} },
     '../workspace/toastRouting': { captureHudTarget: async () => '0000000000000001', nativeToastRoutingAvailable: () => true },
-    '../workspace/toast': { dismissToast: id => h.dismissed.push(id), showToast: (_text, _level, options) => notices.push(options.hud) },
+    '../workspace/toast': { dismissToast: id => h.dismissed.push(id) },
+    // i18n stub returns keys, so the flash message names the fixed outcome.
+    '../workspace/notify': { flash: (notice, receipt) => { notices.push({ ...receipt, result: notice.message.replace('hud.result.', '') }); return 'notice' } },
     '../workspace/launcher/identity': { getPluginLauncherItemKey: (pluginId, itemId) => `plugin:${pluginId}:launcher:${itemId}` },
     '../workspace/pluginSurfaceShortcuts': { pluginSurfaceShortcutKey: () => 'key', usePluginSurfaceShortcutStore: { getState: () => ({ shortcuts: {} }) } },
     '../hotkeys/pluginSurfaceShortcuts': { installRegisteredSurfaceShortcutHandler: () => () => {} },

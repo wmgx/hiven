@@ -841,6 +841,12 @@ export type PluginSurfaceTelemetry = {
   trackBehavior(name: string, details?: PluginTelemetryDetails): void
 }
 
+export type PluginNotifyApi = {
+  flash(notice: { level: 'success' | 'error' | 'info'; message: string }): void
+  status(notice: { id: string; title: string; detail?: string; progress?: { completed: number; total: number } }): void
+  end(id: string): void
+}
+
 export type PluginSurfaceHostApi = {
   /** Present only on surfaces that declare `pasteQueue`. */
   pasteQueue?: PasteQueueBridge
@@ -876,6 +882,13 @@ export type PluginSurfaceHostApi = {
   showMessage(message: string, level?: 'info' | 'success' | 'warning' | 'error'): void
   showToast(message: string, level?: 'info' | 'success' | 'warning' | 'error', options?: { action?: { label: string; onClick: () => void }; duration?: number }): string
   dismissToast(id: string): void
+  /**
+   * Global notification shown at the bottom of the screen even after the
+   * launcher closes. Pass localized status text and counts only — never the
+   * user's content. Call from a user action or a session the user started.
+   * `status` with the same id updates in place; `end` removes it. Older hosts may omit this.
+   */
+  notify?: PluginNotifyApi
   /**
    * Content-free diagnostics into the host perf log (`npm run telemetry`).
    * Labels are recorded as `plugin:<pluginId>:<name>`; never pass user content

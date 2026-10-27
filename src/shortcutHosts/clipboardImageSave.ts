@@ -10,7 +10,10 @@ import { createPluginPrivateStorage } from '../workspace/pluginStorage'
 import { createPluginClipboardImageReader } from '../workspace/pluginClipboardImageRead'
 import { acquireLauncherNativeDialogFocus } from '../workspace/launcherBlurGuard'
 import { captureHudTarget, nativeToastRoutingAvailable } from '../workspace/toastRouting'
-import { showToast, dismissToast, type HudResult } from '../workspace/toast'
+import { dismissToast } from '../workspace/toast'
+import { flash } from '../workspace/notify'
+
+type ImageSaveResult = 'image-saved' | 'image-saved-path-failed' | 'image-save-failed' | 'image-save-cancelled'
 import { pluginSurfaceShortcutKey, usePluginSurfaceShortcutStore } from '../workspace/pluginSurfaceShortcuts'
 import type { PluginClipboardImageSaveContribution } from '../workspace/pluginTypes'
 import { t } from '../i18n'
@@ -24,7 +27,7 @@ let lastNotice: string | undefined
 type ImageSaveOwner = {
   current: () => boolean
   definition: object
-  afterResult: (result: HudResult, current: boolean) => void | Promise<void>
+  afterResult: (result: ImageSaveResult, current: boolean) => void | Promise<void>
   reportCommittedAfterInvalidation: boolean
   backgroundAction?: 'image-save-shortcut'
 }
@@ -49,7 +52,7 @@ async function runClipboardImageSave(task: Task, owner: ImageSaveOwner): Promise
     } catch { invalidated = true; controller.abort() }
   }
   const stops = [useAppStore.subscribe(observe), usePluginPermissionStore.subscribe(observe), pluginRegistry.subscribe(observe)]
-  let result: HudResult = 'image-save-failed'
+  let result: ImageSaveResult = 'image-save-failed'
   let target: string | undefined
   try {
     observe()
@@ -77,7 +80,7 @@ async function runClipboardImageSave(task: Task, owner: ImageSaveOwner): Promise
       // A shortcut owner that disappeared never leaves a late status behind.
       if (result !== 'image-save-cancelled' && (mayFinish || (committed && owner.reportCommittedAfterInvalidation))) {
         const level = result === 'image-saved' ? 'success' : 'error'
-        lastNotice = showToast(t(locale, `hud.result.${result}`), level, { durationMs: level === 'error' ? 6000 : 3500, hud: { operation, target, revision: 1, result } })
+        lastNotice = flash({ level, message: t(locale, `hud.result.${result}`) }, { operation, target, revision: 1 })
       }
     } finally { busy = false }
   }

@@ -8,9 +8,10 @@ import { dismissRoutedToast, routeToast } from './toastRouting'
 
 export type ToastLevel = 'info' | 'success' | 'error' | 'warning'
 
-/** Host-only fixed results. Never populated from plugin text or error messages. */
-export type HudResult = 'copied' | 'pasted' | 'copy-failed' | 'paste-failed' | 'copied-paste-failed' | 'queue-ready' | 'queue-pasted' | 'queue-failed' | 'image-saved' | 'image-saved-path-failed' | 'image-save-failed' | 'image-save-cancelled'
-export type HudReceipt = { operation: string; revision: number; result: HudResult; target?: string }
+/** Anti-replay identity for one output operation; never carries text. */
+export type HudReceipt = { operation: string; revision: number; target?: string }
+/** Present only on `notify` items: their localized status text may reach the desktop HUD. */
+export type ToastNotify = { slot: 'flash' | 'status'; detail?: string }
 
 export interface ToastAction {
   label: string
@@ -27,6 +28,7 @@ export interface ToastItem {
   /** Host-authored progress only; no user content. */
   progress?: { completed: number; total: number }
   hud?: HudReceipt
+  notify?: ToastNotify
   /** If true, toast will not auto-dismiss */
   persistent?: boolean
   /** Optional action button displayed in the toast */
@@ -61,12 +63,13 @@ export const useToastStore = create<ToastStore>((set) => ({
 export function showToast(
   message: string,
   level: ToastLevel = 'info',
-  options?: number | { durationMs?: number; persistent?: boolean; action?: ToastAction; progress?: { completed: number; total: number }; hud?: HudReceipt }
+  options?: number | { id?: string; durationMs?: number; persistent?: boolean; action?: ToastAction; progress?: { completed: number; total: number }; hud?: HudReceipt; notify?: ToastNotify }
 ): string {
   const hud = typeof options === 'object' ? options.hud : undefined
   const existing = hud && useToastStore.getState().toasts.find(item => item.hud?.operation === hud.operation && item.hud.revision >= hud.revision)
   if (existing) return existing.id
-  const id = `toast-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`
+  const id = (typeof options === 'object' && options.id) || `toast-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`
+  const notify = typeof options === 'object' ? options.notify : undefined
 
   let persistent = false
   let durationMs = 3500
@@ -81,8 +84,9 @@ export function showToast(
   }
 
   const createdAt = Date.now()
-  const desktopDuration = persistent ? 8000 : Math.min(15000, Math.max(1000, durationMs))
-  const item: ToastItem = { id, message, level, createdAt, expiresAt: createdAt + desktopDuration, persistent, action, hud: typeof options === 'object' ? options.hud : undefined, progress: typeof options === 'object' ? options.progress : undefined }
+  // A status lives until its session ends; the native bound only stops leaks.
+  const desktopDuration = notify?.slot === 'status' ? 590_000 : persistent ? 8000 : Math.min(15000, Math.max(1000, durationMs))
+  const item: ToastItem = { id, message, level, createdAt, expiresAt: createdAt + desktopDuration, persistent, action, hud, notify, progress: typeof options === 'object' ? options.progress : undefined }
   useToastStore.getState().addToast(item)
   void routeToast(item, (toastId) => useToastStore.getState().removeToast(toastId))
 

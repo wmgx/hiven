@@ -60,7 +60,7 @@ import type { LauncherItem } from '../../workspace/launcher/types'
 import { getPluginPermissionSnapshot } from '../../workspace/pluginPermissions'
 import { selectLauncherVisibleItems } from '../../workspace/launcher/visibleItems'
 import type { LauncherBrowseCategory } from '../../workspace/launcher/browseItems'
-import { showToast } from '../../workspace/toast'
+import { flash as flashNotice } from '../../workspace/notify'
 import { withClipboardImageSave } from '../../shortcutHosts/clipboardImageSave'
 import { captureHudTarget } from '../../workspace/toastRouting'
 
@@ -888,7 +888,7 @@ export function GlobalLauncherHost() {
       if (result.message) {
         setDeliveryFailure({ message: result.message, isCurrent: scope.isCurrent })
         const outcome = action.startsWith('copy-') ? 'copy-failed' : result.fallback === 'copied' ? 'copied-paste-failed' : 'paste-failed'
-        showToast(t(locale, `hud.result.${outcome}`), 'error', { durationMs: 6000, hud: { operation, target, revision: generation, result: outcome } })
+        flashNotice({ level: 'error', message: t(locale, `hud.result.${outcome}`) }, { operation, target, revision: generation })
       }
     }
     else {
@@ -897,7 +897,7 @@ export function GlobalLauncherHost() {
       await closing
       const current = useAppStore.getState()
       if (current.globalLauncherSessionId === closedSession && !current.globalLauncherOpen) {
-        showToast(t(locale, action.startsWith('copy-') ? 'palette.copied' : 'hud.pasted'), 'success', { hud: { operation, target, revision: generation, result: action.startsWith('copy-') ? 'copied' : 'pasted' } })
+        flashNotice({ level: 'success', message: t(locale, action.startsWith('copy-') ? 'palette.copied' : 'hud.pasted') }, { operation, target, revision: generation })
       }
     }
   }, [closeLauncherAfterAction, locale, overlay, pastePreviewText, standaloneLauncher])

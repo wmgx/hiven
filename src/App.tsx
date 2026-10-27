@@ -1,7 +1,7 @@
 import { beginSuggestionSession } from './workspace/launcher/contextSuggestionsStore'
 import { translate } from './i18n'
 import { installPasteQueueHost } from './shortcutHosts/pasteQueue'
-import { dismissToast, showToast } from './workspace/toast'
+import { end as endNotice, flash as flashNotice, status as statusNotice } from './workspace/notify'
 import { useEffect, useRef } from 'react'
 import { useAppStore } from './store'
 import type { GlobalLauncherPosition } from './store'
@@ -143,22 +143,25 @@ function LauncherRuntimeApp() {
   useEffect(() => isNativeDesktopRuntime() ? installQuickEditorHotkeys() : undefined, [])
   useEffect(() => {
     if (!isNativeDesktopRuntime()) return
-    let session = '', lastNotice: string | undefined
+    let session = ''
     const stop = installPasteQueueHost({ notify: (status, outcome, hud) => {
       if (outcome === 'cancelled' || status.sessionId !== session) {
-        if (lastNotice) dismissToast(lastNotice)
-        lastNotice = undefined
-        if (outcome === 'cancelled') return
+        if (session) endNotice(session)
+        if (outcome === 'cancelled') { session = ''; return }
         session = status.sessionId
       }
       const locale = useAppStore.getState().settings.locale
-      lastNotice = showToast(translate(locale, 'hud', `queue.${outcome}`), outcome === 'failed' ? 'error' : outcome === 'delivered' ? 'success' : 'info', {
-        durationMs: outcome === 'failed' ? 6000 : 3500,
-        progress: status.total ? { completed: status.completed, total: status.total } : undefined,
-        hud: { ...hud, revision: status.version, result: outcome === 'failed' ? 'queue-failed' : outcome === 'delivered' ? 'queue-pasted' : 'queue-ready' },
-      })
+      const message = translate(locale, 'hud', `queue.${outcome}`)
+      const receipt = { ...hud, revision: status.version }
+      if (outcome === 'failed') { flashNotice({ level: 'error', message }, receipt); return }
+      if (status.phase === 'completed') {
+        endNotice(session)
+        flashNotice({ level: 'success', message }, receipt)
+        return
+      }
+      statusNotice({ id: session, title: message, progress: status.total ? { completed: status.completed, total: status.total } : undefined }, receipt)
     } })
-    return () => { stop(); if (lastNotice) dismissToast(lastNotice) }
+    return () => { stop(); if (session) endNotice(session) }
   }, [])
 
   // Background clipboard age clock: first see = unknown baseline; real changes get known changedAt.

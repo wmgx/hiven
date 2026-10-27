@@ -30,10 +30,12 @@ export async function routeToast(item: ToastItem, removeLocal: (id: string) => v
     const { useAppStore } = await import('../store')
     if (ticket.cancelled || Date.now() >= item.expiresAt) return
     const { locale, theme } = useAppStore.getState().settings
-    // Original text and action callbacks never enter the desktop HUD.
+    // Only notify items carry localized status text; other toast text and
+    // action callbacks never enter the desktop HUD.
     const target = await invoke<string | null>('route_toast', {
       id: item.id, level: item.level, expiresAt: item.expiresAt,
       progress: item.progress, receipt: item.hud, sequence: issuedSequence, locale: locale === 'zh' ? 'zh' : 'en', theme,
+      slot: item.notify?.slot ?? 'flash', ...(item.notify ? { message: item.message, detail: item.notify.detail } : {}),
     })
     if (!target || target === getCurrentWindow().label) return
     ticket.target = target
