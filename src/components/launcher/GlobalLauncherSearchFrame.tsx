@@ -339,7 +339,7 @@ export function GlobalLauncherSearchFrame({
       <div className="global-launcher-footer l-foot" onFocusCapture={handleFocus} onBlurCapture={handleBlur}>
         <div className="l-foot-hints">
           {showListHints && selectedItem?.domainItem.executeWithParams && selectedItem.domainItem.params?.length ? (
-            <LauncherHintKey keys="⌘↵" label={t(locale, 'palette.setParams')} />
+            <LauncherHintKey keys="⇥" label={t(locale, 'palette.customizeParamsLabel')} />
           ) : null}
           {showListHints && selectedItem && onToggleFavorite && pinnableItemKeys?.has(selectedItem.id) && (
             <LauncherHintKey

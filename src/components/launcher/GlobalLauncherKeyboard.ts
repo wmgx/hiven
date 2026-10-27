@@ -1,4 +1,3 @@
-import { shouldCustomizeParams } from './launcherParamShortcuts'
 import type { KeyboardEvent as ReactKeyboardEvent, MutableRefObject } from 'react'
 import type { LauncherResultChoice } from '../../workspace/launcher/types'
 import type { CollectInputFrame, ResultFrame } from '../../workspace/launcher/controller'
@@ -210,10 +209,20 @@ export function handleGlobalLauncherKeyDown({
       return
     }
   }
-  if (event.key === 'Tab' && !event.shiftKey && !event.metaKey && !event.ctrlKey && hasClipboardHint) {
-    event.preventDefault()
-    attachHintAsBlock?.()
-    return
+  // ⇥ = parameters, as in the command frame. The focused clipboard hint row keeps ⇥ for its Block,
+  // and so does a row without parameters.
+  if (event.key === 'Tab' && !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) {
+    const hintFocused = hasClipboardHint && (isClipboardHintSelected || selectedIndex === -1)
+    if (!hintFocused && selectedItem?.domainItem.executeWithParams && selectedItem.domainItem.params?.length) {
+      event.preventDefault()
+      selectItem(selectedItem, true)
+      return
+    }
+    if (hasClipboardHint) {
+      event.preventDefault()
+      attachHintAsBlock?.()
+      return
+    }
   }
   // Only activate the clipboard hint when it is the focused row — never steal Enter from list selection.
   if (
@@ -228,7 +237,6 @@ export function handleGlobalLauncherKeyDown({
   }
   if (event.key === 'Enter') {
     event.preventDefault()
-    // ⌘↵: set the command's parameters before running it.
-    selectItem(selectedItem, shouldCustomizeParams(event.metaKey, event.ctrlKey))
+    selectItem(selectedItem, false)
   }
 }

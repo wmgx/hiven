@@ -16,11 +16,6 @@ export function getPlatformShortcutMeta(): ShortcutMeta {
   return isMacPlatform() ? { modifier: 'meta', label: '⌘' } : { modifier: 'ctrl', label: 'Ctrl' }
 }
 
-export function shouldCustomizeParams(metaKey: boolean, ctrlKey: boolean): boolean {
-  const shortcutMeta = getPlatformShortcutMeta()
-  return shortcutMeta.modifier === 'meta' ? metaKey : ctrlKey
-}
-
 export function hasExplicitDefaultParams(item: LauncherItem): boolean {
   return (item.params ?? []).every((param) => param.default !== undefined || item.defaultParams?.[param.key] !== undefined)
 }
