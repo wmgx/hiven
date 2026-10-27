@@ -224,6 +224,8 @@ export function useGlobalLauncherHostEscape({
     if (document.querySelector('[role="dialog"][data-open]')) return
     // Let an open tooltip consume Escape before the host leaves its page.
     if (document.querySelector('[role="tooltip"][data-open]')) return
+    // An open menu (⌘K more actions) closes first.
+    if (document.querySelector('[role="menu"][data-open]')) return
     // A visible Select or Combobox portal owns Escape before its containing surface.
     const openSelect = Array.from(document.querySelectorAll('.hiven-ui-select-menu[data-open], .hiven-ui-combobox-menu[data-open]'))
       .some((popup) => popup.getClientRects().length > 0 && getComputedStyle(popup).visibility === 'visible')

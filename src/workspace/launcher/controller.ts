@@ -56,6 +56,8 @@ export type CollectInputFrame = {
   inputText: string
   /** Attached Block material; while present it is the command input instead of inputText. */
   blockText?: string
+  /** inputText was read from the foreground app's selection and not edited since. */
+  fromSelection?: boolean
   input: LauncherInputSpec
   params?: Record<string, unknown>
   recordUsage: boolean
@@ -636,7 +638,11 @@ export class LauncherController {
     try {
       const text = await captureForegroundSelectionText(api, this.deps.locale as Locale, { restoreLauncher: true })
       // Navigation or typing while capture is pending must not overwrite a newer draft.
-      if (generation === this.flowGeneration && !this.invalidateUnavailablePlugin() && this.topFrame() === top && text !== undefined) this.setInputText(text)
+      if (generation === this.flowGeneration && !this.invalidateUnavailablePlugin() && this.topFrame() === top && text !== undefined) {
+        this.setInputText(text)
+        const filled = this.topFrame()
+        if (filled.kind === 'collect-input') this.setState({ frames: [...this.state.frames.slice(0, -1), { ...filled, fromSelection: true }] })
+      }
     } catch (error) {
       if (generation === this.flowGeneration && !this.invalidateUnavailablePlugin() && this.topFrame() === top) this.setState({ error: error instanceof Error ? error.message : String(error) })
     } finally {
@@ -1083,13 +1089,14 @@ export class LauncherController {
 
   /** Update the text in the active collect-input frame. */
   setInputText(text: string, expectedFrame?: CollectInputFrame): void {
-    const top = this.topFrame()
+    let top = this.topFrame()
     if (top.kind !== 'collect-input') return
     // Host drafts get a fresh item per edit. Typing replaces the frame, while
     // its item remains the same until that edit is left or another one starts.
     if (expectedFrame && top.item !== expectedFrame.item) return
     if (text !== top.inputText) this.invalidatePendingActions()
     const frames = this.state.frames.slice(0, -1)
+    if (text !== top.inputText) top = { ...top, fromSelection: false }
     if (top.item.suggest) {
       frames.push({ ...top, inputText: text })
     } else if (!text.trim()) {

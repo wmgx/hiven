@@ -1,29 +1,22 @@
-import { useEffect, useRef } from 'react'
 import type { Locale } from '../../i18n'
 import { t } from '../../i18n'
-import { localized } from '../../store'
 import type { LauncherControllerState, ResultFrame } from '../../workspace/launcher/controller'
 import type { LauncherResultChoice } from '../../workspace/launcher/types'
 import { LauncherHintKey, LauncherHintText } from './LauncherFooterHints'
 import { LauncherResultChoiceRow } from './LauncherResultChoiceRow'
-import { LauncherCommandTag, LauncherParamValueChip } from './LauncherCommandTag'
-import { resolveParamValueLabel } from './LauncherParamStep'
+import { LauncherCommandTag } from './LauncherCommandTag'
 import { getHostOutputIntent } from '../../workspace/launcher/output'
 import { shouldIgnoreImeKeyDown } from '../../utils/imeKeyboard'
-import {
-  type OutputDestinationId,
-  LauncherOutputTargetsBar,
-  useOutputDestinations,
-} from './LauncherOutputTargets'
+import { LauncherCommandFooter, useForegroundAppName, type LauncherCommandMenuAction } from './LauncherCommandFooter'
 
-function isSingleTextResult(choices: LauncherResultChoice[], explicitPreview = false): boolean {
+function isSingleTextResult(choices: LauncherResultChoice[]): boolean {
   if (choices.length !== 1) return false
   const choice = choices[0]
   const text = (choice.preview ?? choice.title ?? '').trim()
-  if (!text && !explicitPreview) return false
+  if (!text) return false
   // Confirm dialogs use tone danger/muted — keep list UI.
   if (choice.tone === 'danger' || choice.tone === 'muted') return false
-  return explicitPreview || getHostOutputIntent(choice) === 'copy' || getHostOutputIntent(choice) === 'return-to-launcher'
+  return getHostOutputIntent(choice) === 'copy' || getHostOutputIntent(choice) === 'return-to-launcher'
 }
 
 export function GlobalLauncherResultFrame({
@@ -39,8 +32,6 @@ export function GlobalLauncherResultFrame({
   onToggleChoice,
   onSecondaryAction,
   onPastePreviewText,
-  canEditPreviewParam,
-  onEditPreviewParam,
 }: {
   frame: ResultFrame
   busy?: boolean
@@ -54,10 +45,8 @@ export function GlobalLauncherResultFrame({
   onToggleChoice: (choice: LauncherResultChoice, frame: ResultFrame) => void
   onSecondaryAction?: (choice: LauncherResultChoice, actionId: string) => void
   onPastePreviewText?: (choice: LauncherResultChoice) => void | Promise<void>
-  canEditPreviewParam?: (key: string, frame: ResultFrame) => boolean
-  onEditPreviewParam?: (key: string, frame: ResultFrame) => void
 }) {
-  const resultRef = useRef<HTMLDivElement>(null)
+  const app = useForegroundAppName()
   const choices = frame.output.choices
   const selection = frame.output.selection
   const clampedSelectedIndex = Math.min(selectedIndex, Math.max(0, choices.length - 1))
@@ -67,103 +56,43 @@ export function GlobalLauncherResultFrame({
     : null
 
   const isConfirmDialog = choices.length <= 3 && choices.some((c) => c.tone === 'danger' || c.tone === 'muted')
-  const explicitPreview = frame.executionMode === 'explicit-text-preview'
-  const singleText = selection?.type !== 'multi' && (frame.retryOnly || isSingleTextResult(choices, explicitPreview))
+  const singleText = selection?.type !== 'multi' && (frame.retryOnly || isSingleTextResult(choices))
   const textChoice = singleText ? choices[0] : undefined
   const retryCopyAction = frame.retryOnly
     ? textChoice?.secondaryActions?.find((action) => getHostOutputIntent(action) === 'copy')
     : undefined
-  const previewEdit = explicitPreview && !frame.retryOnly ? frame.previewEdit : undefined
-  const previewParams = onEditPreviewParam ? previewEdit?.item.params ?? [] : []
-  const hasPreviewParams = previewParams.length > 0
-
-  useEffect(() => {
-    if (!hasPreviewParams) return
-    const request = requestAnimationFrame(() => resultRef.current?.focus({ preventScroll: true }))
-    return () => cancelAnimationFrame(request)
-  }, [frame, hasPreviewParams])
-  const rawPreviewText = textChoice ? (textChoice.preview ?? textChoice.title ?? '') : ''
-  const previewText = explicitPreview ? rawPreviewText : rawPreviewText.trim()
-  const primaryIntent = textChoice ? getHostOutputIntent(textChoice) : null
-  const hasIntent = (intent: 'copy' | 'return-to-launcher') => Boolean(textChoice && (
-    primaryIntent === intent || textChoice.secondaryActions?.some((action) => getHostOutputIntent(action) === intent)
-  ))
-  const hasReturn = explicitPreview || primaryIntent === 'return-to-launcher' ? hasIntent('return-to-launcher') : Boolean(textChoice?.secondaryActions?.some((a) => a.id === 'return-to-launcher'))
-  const hasCopy = hasIntent('copy')
-  const hasPaste = !explicitPreview && !frame.retryOnly && Boolean(onPastePreviewText)
-  const {
-    destinations,
-    activeDest,
-    cycle,
-    selectId,
-    resolveFromKeyboard,
-  } = useOutputDestinations({
-    hasPaste,
-    hasReturn,
-    hasCopy,
-    primaryIntent: primaryIntent === 'return-to-launcher' ? 'return-to-launcher' : 'copy',
-    resetKey: `${frame.sourceTitle ?? ''}:${previewText}`,
-  })
-
-  const runDestination = async (destId: OutputDestinationId) => {
-    if (!textChoice || busy || frame.retryOnly) return
-    if (explicitPreview || primaryIntent === 'return-to-launcher') {
-      const intent = destId === 'copy' ? 'copy' : destId === 'return-to-launcher' ? 'return-to-launcher' : null
-      if (!intent) return
-      if (getHostOutputIntent(textChoice) === intent) onToggleChoice(textChoice, frame)
-      else {
-        const action = textChoice.secondaryActions?.find((candidate) => getHostOutputIntent(candidate) === intent)
-        if (action) onSecondaryAction?.(textChoice, action.id)
-      }
-      return
-    }
-    if (destId === 'copy') {
-      onToggleChoice(textChoice, frame)
-      return
-    }
-    if (destId === 'paste-foreground') {
-      await onPastePreviewText?.(textChoice)
-      return
-    }
-    if (destId === 'return-to-launcher') {
-      onSecondaryAction?.(textChoice, 'return-to-launcher')
-    }
-  }
+  const previewText = textChoice ? (textChoice.preview ?? textChoice.title ?? '').trim() : ''
+  const primaryIsReturn = textChoice ? getHostOutputIntent(textChoice) === 'return-to-launcher' : false
+  const returnAction = textChoice?.secondaryActions?.find((action) => getHostOutputIntent(action) === 'return-to-launcher' || action.id === 'return-to-launcher')
+  const canPaste = !frame.retryOnly && !primaryIsReturn && Boolean(onPastePreviewText)
 
   if (singleText && textChoice) {
+    const runPrimary = () => { if (!busy) onToggleChoice(textChoice, frame) }
+    const paste = () => { if (!busy && canPaste) void onPastePreviewText?.(textChoice) }
+    const menu: LauncherCommandMenuAction[] = frame.retryOnly ? [] : [
+      ...(returnAction ? [{ id: 'continue', label: t(locale, 'outputActions.continue'), run: () => onSecondaryAction?.(textChoice, returnAction.id) }] : []),
+      ...(previewText ? [{ id: 'open-editor', label: t(locale, 'outputActions.openEditor'), run: async () => {
+        const { overwriteQuickEditorText } = await import('../../workspace/quickEditor/quickEditorRequests')
+        await overwriteQuickEditorText(previewText, { source: 'tool-result' })
+      } }] : []),
+    ]
     return (
       <div
-        ref={resultRef}
         className="launcher-result-text-frame"
         tabIndex={-1}
         onKeyDown={(event) => {
           if (shouldIgnoreImeKeyDown(event, { current: false })) return
-          if (hasPreviewParams && (
-            event.key === 'Tab'
-            || ((event.key === 'Enter' || event.key === ' ' || event.code === 'Space')
-              && event.target instanceof HTMLElement && event.target.closest('button'))
-          )) {
-            // Every parameter and output remains reachable by native Tab;
-            // focused buttons own Enter / Space instead of executing output.
-            event.stopPropagation()
-            return
-          }
-          if (event.key === 'Tab' && !event.metaKey && !event.ctrlKey && !event.altKey) {
-            event.preventDefault()
-            event.stopPropagation()
-            cycle(event.shiftKey ? -1 : 1)
-            return
-          }
           if (event.key !== 'Enter') return
           event.preventDefault()
           event.stopPropagation()
-          if (busy) return
+          if (busy || event.altKey) return
           if (frame.retryOnly) {
-            if (!event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey) onToggleChoice(textChoice, frame)
+            if (!event.shiftKey && !event.metaKey && !event.ctrlKey) runPrimary()
             return
           }
-          if (explicitPreview && (event.shiftKey || event.altKey)) return
-          void runDestination(resolveFromKeyboard(event))
+          // ↵ and ⌘↵ run the primary action; ⇧↵ pastes into the previous app.
+          if (event.shiftKey) paste()
+          else runPrimary()
         }}
       >
         <div className="global-launcher-header l-search" style={{ borderBottom: '1px solid var(--border)' }}>
@@ -172,37 +101,7 @@ export function GlobalLauncherResultFrame({
             locale={locale}
             onRemove={onBack}
           />
-          {previewEdit && (
-            <span className="launcher-preview-source">
-              {t(locale, 'palette.previewInputSummary', { count: previewEdit.inputText.length })}
-            </span>
-          )}
         </div>
-        {hasPreviewParams && previewEdit && (
-          <div
-            className="launcher-preview-params"
-            data-testid="launcher-preview-params"
-            data-no-drag
-            data-launcher-scrollable
-            role="group"
-            aria-label={t(locale, 'palette.customizeParamsLabel')}
-          >
-            {previewParams.map((param) => {
-              const label = localized(param.label, param.labelI18n, locale)
-              return (
-                <LauncherParamValueChip
-                  key={param.key}
-                  paramKey={param.key}
-                  label={label}
-                  value={resolveParamValueLabel(param, previewEdit.params[param.key], locale)}
-                  editLabel={t(locale, 'palette.editPreviewParam', { label })}
-                  disabled={busy || !canEditPreviewParam?.(param.key, frame)}
-                  onEdit={() => onEditPreviewParam?.(param.key, frame)}
-                />
-              )
-            })}
-          </div>
-        )}
         <div
           className="launcher-preview-well"
           data-testid="launcher-result-preview-well"
@@ -231,9 +130,6 @@ export function GlobalLauncherResultFrame({
             }}
           >
             <span className="launcher-preview-text">{previewText}</span>
-            {explicitPreview && previewText.length === 0 ? (
-              <span className="meta">{t(locale, 'palette.emptyTextOutput')}</span>
-            ) : null}
           </pre>
         </div>
         {busy && <span role="status" aria-live="polite">{t(locale, deliveryIntent === 'copy' ? 'palette.outputCopying' : 'palette.outputDelivering')}</span>}
@@ -266,27 +162,23 @@ export function GlobalLauncherResultFrame({
                 event.stopPropagation()
                 if (event.shiftKey || event.altKey || event.metaKey || event.ctrlKey) event.preventDefault()
               }}
-              onClick={() => onToggleChoice(textChoice, frame)}
+              onClick={runPrimary}
             >
               <LauncherHintKey keys="↵" label={t(locale, 'palette.outputRetry')} />
             </button>
           </div>
-        ) : <LauncherOutputTargetsBar
-          disabled={busy}
-          destinations={destinations}
-          activeId={activeDest?.id ?? 'copy'}
-          locale={locale}
-          footerHints={<>
-            {hasPreviewParams
-              ? <LauncherHintKey keys="⇥" label={t(locale, 'palette.previewParamNavigation')} />
-              : destinations.length > 1 && <LauncherHintKey keys="⇥" label={t(locale, 'palette.outputSwitchTarget')} />}
-            <LauncherHintKey keys="esc" label={t(locale, 'palette.back')} />
-          </>}
-          onSelect={(id) => {
-            selectId(id)
-            void runDestination(id)
-          }}
-        />}
+        ) : (
+          <LauncherCommandFooter
+            locale={locale}
+            busy={busy}
+            primaryLabel={primaryIsReturn ? t(locale, 'outputActions.continue') : t(locale, 'outputActions.copy')}
+            onPrimary={runPrimary}
+            pasteApp={app}
+            onPaste={canPaste ? paste : undefined}
+            menu={menu}
+            onBack={onBack}
+          />
+        )}
       </div>
     )
   }

@@ -3,7 +3,6 @@ import { CornerDownLeft, History } from 'lucide-react'
 // note: lastPreviewRef keeps display text across brief controller gaps
 import type { Locale } from '../../i18n'
 import { t } from '../../i18n'
-import { getHostOutputIntent } from '../../workspace/launcher/output'
 import { showToast } from '../../workspace/toast'
 import type { CollectInputFrame, LauncherControllerState } from '../../workspace/launcher/controller'
 import { resolveDisplayTitle } from '../../workspace/launcher/display'
@@ -18,13 +17,7 @@ import { ObjectBlockToken } from './ObjectBlockToken'
 import { createQueryObjectBlock, type LauncherObjectBlock } from '../../launcher/clipboard/objectBlock'
 import { shouldIgnoreImeKeyDown } from '../../utils/imeKeyboard'
 import { reconcileMaterialTextInput } from '../../launcher/clipboard/currentMaterial'
-import { getPlatformShortcutMeta } from './launcherParamShortcuts'
-import {
-  type OutputDestinationId,
-  LauncherOutputTargetsBar,
-  LauncherOutputTargetsFooter,
-  useOutputDestinations,
-} from './LauncherOutputTargets'
+import { LauncherCommandFooter, useForegroundAppName, type LauncherCommandMenuAction } from './LauncherCommandFooter'
 
 /** Suggest row: keep keyboard highlight in view (same as result / mixed list). */
 function CollectInputSuggestRow({
@@ -99,8 +92,6 @@ function CollectInputSuggestRow({
     </div>
   )
 }
-
-export type { OutputDestinationId } from './LauncherOutputTargets'
 
 /** Extract single-text live preview from pure-function preview output. */
 export function extractLivePreviewText(output?: LauncherOutput): string | null {
@@ -200,48 +191,46 @@ export function GlobalLauncherCollectInputFrame({
   const showEmptyState = isSuggestMode && !busy && !hasSuggestions && frame.previewInputText !== undefined
   const commandTitle = resolveDisplayTitle(frame.item.display, locale)
   const previewChoice = livePreviewText ? previewChoices[0] : undefined
-  const hasReturn = Boolean(previewChoice?.secondaryActions?.some((a) => a.id === 'return-to-launcher'))
-  const hasPaste = !explicitPreview && !frame.item.metadataInput && Boolean(onPastePreviewText)
-  const {
-    destinations,
-    activeDest,
-    cycle,
-    selectId,
-    resolveFromKeyboard,
-  } = useOutputDestinations({
-    hasPaste,
-    hasReturn,
-    hasCopy: !previewChoice || getHostOutputIntent(previewChoice) === 'copy',
-    hasPrimary: Boolean(previewChoice && getHostOutputIntent(previewChoice) !== 'copy'),
-    // Do not reset destination index on every preview text change (avoids bar remount thrash).
-    resetKey: frame.item.systemKey,
-  })
+  const freshChoice = previewChoice && previewFresh ? previewChoice : undefined
+  const hasReturn = Boolean(freshChoice?.secondaryActions?.some((a) => a.id === 'return-to-launcher'))
+  const canPaste = showLivePreview && Boolean(onPastePreviewText)
+  const app = useForegroundAppName()
 
-  const runDestination = async (destId: OutputDestinationId) => {
+  const pastePreview = async () => {
     if (busy) return
-    if (destId === 'paste-foreground') {
-      // Preserve the explicit paste intent; a stale preview must neither paste
-      // old text nor fall through to the primary action (commonly Copy).
-      if (!previewChoice || !livePreviewText || !previewFresh) {
-        showToast(t(locale, 'palette.outputPastePreviewPending'), 'info')
-        return
-      }
-      await onPastePreviewText?.(previewChoice)
+    // A stale preview must neither paste old text nor fall through to Copy.
+    if (!freshChoice) {
+      showToast(t(locale, 'palette.outputPastePreviewPending'), 'info')
       return
     }
-    // No fresh preview for current input → full submit (fresh execute).
-    if (!previewChoice || !livePreviewText || !previewFresh) {
-      onSubmitPrimary?.()
-      return
-    }
-    if (destId === 'copy' || destId === 'primary') {
-      await onActivateChoice(previewChoice)
-      return
-    }
-    if (destId === 'return-to-launcher') {
-      onSecondaryAction?.(previewChoice, 'return-to-launcher')
-    }
+    await onPastePreviewText?.(freshChoice)
   }
+  const runPrimary = async () => {
+    if (busy) return
+    if (frame.fromSelection && freshChoice) { await pastePreview(); return }
+    // No fresh preview for the current input → full submit (fresh execute).
+    if (!freshChoice) { onSubmitPrimary?.(); return }
+    await onActivateChoice(freshChoice)
+  }
+  const menu: LauncherCommandMenuAction[] = [
+    ...(showCaptureSelection && captureAvailability === 'can-attempt' && onCaptureSelection
+      ? [{ id: 'read-selection', label: app ? t(locale, 'palette.readSelectionFrom', { app }) : t(locale, 'palette.captureSelection'), run: onCaptureSelection }]
+      : []),
+    ...(freshChoice && hasReturn
+      ? [{ id: 'continue', label: t(locale, 'outputActions.continue'), run: () => onSecondaryAction?.(freshChoice, 'return-to-launcher') }]
+      : []),
+    ...(freshChoice && displayPreviewText
+      ? [{ id: 'open-editor', label: t(locale, 'outputActions.openEditor'), run: async () => {
+          const { overwriteQuickEditorText } = await import('../../workspace/quickEditor/quickEditorRequests')
+          await overwriteQuickEditorText(displayPreviewText, { source: 'tool-result' })
+        } }]
+      : []),
+  ]
+  const primaryLabel = !filterText
+    ? undefined
+    : frame.fromSelection && freshChoice
+      ? (app ? t(locale, 'palette.pasteBack', { app }) : t(locale, 'palette.pasteBackForeground'))
+      : freshChoice ? t(locale, 'outputActions.copy') : t(locale, 'palette.quickEntryRun')
 
   const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
@@ -267,12 +256,6 @@ export function GlobalLauncherCollectInputFrame({
       if (!busy) onOpenParams()
       return
     }
-    if (showLivePreview && displayPreviewText && event.key === 'Tab' && !event.metaKey && !event.ctrlKey && !event.altKey) {
-      event.preventDefault()
-      event.stopPropagation()
-      cycle(event.shiftKey ? -1 : 1)
-      return
-    }
     if (event.key === 'Enter') {
       // Suggest mode: panel keyboard owns ↑↓/Enter via controller.
       if (isSuggestMode) return
@@ -283,7 +266,10 @@ export function GlobalLauncherCollectInputFrame({
         if (!event.shiftKey && !event.altKey) onSubmitPrimary?.()
         return
       }
-      void runDestination(resolveFromKeyboard(event))
+      // ↵ and ⌘↵ run the primary action; ⇧↵ pastes into the previous app.
+      if (event.altKey) return
+      if (event.shiftKey) { if (canPaste) void pastePreview(); return }
+      void runPrimary()
     }
   }
 
@@ -389,18 +375,6 @@ export function GlobalLauncherCollectInputFrame({
               ) : null}
             </div>
           )}
-          {displayPreviewText && destinations.length > 0 && (
-            <LauncherOutputTargetsBar
-              destinations={destinations}
-              disabled={busy}
-              activeId={activeDest?.id ?? 'copy'}
-              locale={locale}
-              onSelect={(id) => {
-                selectId(id)
-                void runDestination(id)
-              }}
-            />
-          )}
         </>
       )}
       {isSuggestMode && hasSuggestions && (
@@ -442,44 +416,19 @@ export function GlobalLauncherCollectInputFrame({
           )}
         />
       )}
-      <div className="global-launcher-footer l-foot">
-        {showCaptureSelection && (captureAvailability === 'can-attempt' ? (
-          <button
-            type="button"
-            className="launcher-footer-back-btn"
-            disabled={busy}
-            onMouseDown={(event) => event.preventDefault()}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') event.stopPropagation()
-            }}
-            onClick={onCaptureSelection}
-          >
-            {t(locale, 'palette.captureSelection')}
-          </button>
-        ) : (
-          <LauncherHintText label={t(locale, 'palette.captureSelectionUnavailable')} />
-        ))}
-        {multilineInput ? (
-          <>
-            <LauncherHintKey keys="↵" label={t(locale, 'palette.inputNewline')} />
-            <button
-              type="button"
-              className="launcher-footer-back-btn"
-              disabled={busy}
-              data-no-drag
-              onMouseDown={(event) => event.preventDefault()}
-              onKeyDown={(event) => {
-                if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) event.preventDefault()
-                if (event.key !== 'Escape') event.stopPropagation()
-              }}
-              onClick={() => { if (!busy) onSubmitPrimary?.() }}
-            >
-              <LauncherHintKey keys={`${getPlatformShortcutMeta().label}↵`} label={t(locale, 'palette.preview')} />
-            </button>
-          </>
-        ) : showLivePreview && displayPreviewText && !showLiveEmpty ? (
-          <LauncherOutputTargetsFooter destinations={destinations} locale={locale} />
-        ) : isSuggestMode && hasSuggestions ? (
+      {showLivePreview ? (
+        <LauncherCommandFooter
+          locale={locale}
+          busy={busy}
+          primaryLabel={primaryLabel}
+          onPrimary={() => void runPrimary()}
+          pasteApp={app}
+          onPaste={canPaste && freshChoice ? () => void pastePreview() : undefined}
+          menu={menu}
+          onBack={onBack}
+        />
+      ) : <div className="global-launcher-footer l-foot">
+        {isSuggestMode && hasSuggestions ? (
           <LauncherHintText label={t(locale, 'palette.collectInputSuggestHint')} />
         ) : showEmptyState && filterText ? (
           <LauncherHintKey keys="↵" label={t(locale, 'palette.quickEntryRun')} />
@@ -504,7 +453,7 @@ export function GlobalLauncherCollectInputFrame({
         >
           <LauncherHintKey keys="esc" label={t(locale, 'palette.back')} />
         </button>
-      </div>
+      </div>}
     </>
   )
 }

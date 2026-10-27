@@ -1,6 +1,5 @@
 import { shouldCustomizeParams } from './launcherParamShortcuts'
 import type { KeyboardEvent as ReactKeyboardEvent, MutableRefObject } from 'react'
-import { getHostOutputIntent } from '../../workspace/launcher/output'
 import type { LauncherResultChoice } from '../../workspace/launcher/types'
 import type { CollectInputFrame, ResultFrame } from '../../workspace/launcher/controller'
 import type { LauncherMixedItem } from './LauncherMixedList'
@@ -18,7 +17,6 @@ export function handleGlobalLauncherKeyDown({
   resultSelectedIndex,
   setResultSelectedIndex,
   toggleResultChoice,
-  activateResultSecondary,
   pastePreviewText,
   isKeyboardNavRef,
   visibleFilteredLength,
@@ -51,8 +49,6 @@ export function handleGlobalLauncherKeyDown({
   resultSelectedIndex: number
   setResultSelectedIndex: (updater: number | ((index: number) => number)) => void
   toggleResultChoice: (choice: unknown, frame: ResultFrame) => void
-  /** Package 4: result secondary e.g. return-to-launcher */
-  activateResultSecondary?: (choice: { secondaryActions?: Array<{ id: string }>; preview?: string; title?: string }, actionId: string) => void
   pastePreviewText?: (choice: LauncherResultChoice) => void | Promise<void>
   isKeyboardNavRef: MutableRefObject<boolean>
   visibleFilteredLength: number
@@ -156,28 +152,7 @@ export function handleGlobalLauncherKeyDown({
           if (!event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey) toggleResultChoice(choice, resultFrame)
           return
         }
-        if (resultFrame.executionMode === 'explicit-text-preview') {
-          if (controllerState.busy || event.shiftKey || event.altKey) return
-          const markedChoice = choice as LauncherResultChoice
-          if (event.metaKey || event.ctrlKey) {
-            if (getHostOutputIntent(markedChoice) === 'return-to-launcher') {
-              toggleResultChoice(choice, resultFrame)
-              return
-            }
-            const action = markedChoice.secondaryActions?.find((candidate) => getHostOutputIntent(candidate) === 'return-to-launcher')
-            if (action) activateResultSecondary?.(choice, action.id)
-            return
-          }
-          toggleResultChoice(choice, resultFrame)
-          return
-        }
-        // Align with collect-input destinations: ⇧↵ paste · ⌘↵ return · ↵ primary
-        if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-          if (choice.secondaryActions?.some((a) => a.id === 'return-to-launcher')) {
-            activateResultSecondary?.(choice, 'return-to-launcher')
-            return
-          }
-        }
+        // ↵ and ⌘↵ run the primary action; ⇧↵ pastes (continue lives in ⌘K).
         if (event.key === 'Enter' && event.shiftKey && pastePreviewText) {
           const text = (choice.preview ?? choice.title ?? '').trim()
           if (text) {

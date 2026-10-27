@@ -74,8 +74,6 @@ export function GlobalLauncherFrameSwitch({
   onActivateResultChoice,
   onSecondaryAction,
   onPastePreviewText,
-  canEditPreviewParam,
-  onEditPreviewParam,
   onSubmitCollectInput,
   onCaptureSelection,
   onHoverResultChoice,
@@ -142,8 +140,6 @@ export function GlobalLauncherFrameSwitch({
   onSecondaryAction?: (choice: LauncherResultChoice, actionId: string) => void
   /** Package 4: paste live-preview text into the foreground app. */
   onPastePreviewText?: (choice: LauncherResultChoice) => void | Promise<void>
-  canEditPreviewParam?: (key: string, frame: ResultFrame) => boolean
-  onEditPreviewParam?: (key: string, frame: ResultFrame) => void
   /** Package 4: default collect-input submit when no destination chrome. */
   onSubmitCollectInput?: (frame?: CollectInputFrame) => void
   onCaptureSelection?: () => void
@@ -304,8 +300,6 @@ export function GlobalLauncherFrameSwitch({
           onToggleChoice={onToggleResultChoice}
           onSecondaryAction={onSecondaryAction}
           onPastePreviewText={onPastePreviewText}
-          canEditPreviewParam={canEditPreviewParam}
-          onEditPreviewParam={onEditPreviewParam}
         />
       </LauncherFlowFrame>
     )

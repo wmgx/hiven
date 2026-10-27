@@ -262,7 +262,6 @@ export function GlobalLauncherPanel({
         resultSelectedIndex,
         setResultSelectedIndex: setResultSelectedIndex as never,
         toggleResultChoice: toggleResultChoice as never,
-        activateResultSecondary: activateSecondaryAction as never,
         pastePreviewText: activatePreviewPaste,
         isKeyboardNavRef,
         visibleFilteredLength: visibleFiltered.length,
@@ -344,8 +343,6 @@ export function GlobalLauncherPanel({
         onActivateResultChoice={activateResultChoice}
         onSecondaryAction={activateSecondaryAction}
         onPastePreviewText={activatePreviewPaste}
-        canEditPreviewParam={(key, frame) => Boolean(controllerRef.current?.canEditPreviewParam(key, frame))}
-        onEditPreviewParam={(key, frame) => controllerRef.current?.editPreviewParam(key, frame)}
         onSubmitCollectInput={(frame) => { void controllerRef.current?.submitInput?.(frame) }}
         onCaptureSelection={() => { void controllerRef.current?.captureInput() }}
         onHoverResultChoice={setResultSelectedIndex}
