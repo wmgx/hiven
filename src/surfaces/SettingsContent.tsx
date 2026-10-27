@@ -123,6 +123,14 @@ export function SettingsContent() {
             onClear={() => updateSetting('quickEditorShortcut', { kind: 'disabled' })}
           />
         </SettingsListRow>
+        <SettingsListRow icon={<Command size={15} strokeWidth={2} />} name={t('pasteQueueShortcut')}>
+          <ShortcutRecorder
+            value={settings.pasteQueueShortcut ?? { kind: 'disabled' }}
+            status={formatHotkeyRegistrationStatus(settings.pasteQueueShortcut, t)}
+            onRecord={(recordedShortcut) => updateSetting('pasteQueueShortcut', recordedShortcut)}
+            onClear={() => updateSetting('pasteQueueShortcut', { kind: 'disabled' })}
+          />
+        </SettingsListRow>
         <SettingsListRow stacked icon={<Command size={15} strokeWidth={2} />} name={t('appHotkeys')}>
           <AppHotkeysSettings />
         </SettingsListRow>

@@ -605,6 +605,7 @@ export type ClipboardChange =
       hash: string
       changedAt: number
       sourceApp?: string
+      origin?: 'hiven'
     }
   | {
       kind: 'image'
@@ -617,6 +618,7 @@ export type ClipboardChange =
       hash: string
       changedAt: number
       sourceApp?: string
+      origin?: 'hiven'
     }
   | {
       kind: 'files'
@@ -625,6 +627,7 @@ export type ClipboardChange =
       hash: string
       changedAt: number
       sourceApp?: string
+      origin?: 'hiven'
     }
 
 export type ClipboardWatchOptions = {
@@ -814,7 +817,7 @@ export type PluginSurfaceFeedbackOwner = {
   subscribeInvalidation(listener: () => void): () => void
 }
 
-/** Session-only paste queue snapshot; only surfaces that declare `pasteQueue` receive the bridge. */
+/** In-memory delivery status; never contains clipboard text. */
 export type PasteQueueStatus = {
   sessionId: string
   version: number
@@ -825,13 +828,11 @@ export type PasteQueueStatus = {
   remaining: number
   currentId: string | null
 }
-export type PasteQueueBridge = {
-  /** Largest number of snapshots one session accepts. */
-  readonly maxItems: number
-  getAvailability(): Promise<'can-attempt' | 'unsupported' | 'unknown'>
-  start(snapshots: readonly Readonly<{ id: string; text: string }>[], options?: { signal?: AbortSignal }): Promise<boolean>
-  cancel(): Promise<void>
-  getStatus(): Promise<PasteQueueStatus>
+export type PluginBackgroundPasteQueue = {
+  /** Same round may only append; delivery progress is retained. A new id replaces it. */
+  setRound(roundId: string, snapshots: readonly Readonly<{ id: string; text: string }>[], options?: { full?: boolean }): void
+  clear(): void
+  /** Enables the queue shortcut while subscribed; disposal cancels the round. */
   subscribe(listener: (status: PasteQueueStatus) => void): () => void
 }
 
@@ -877,8 +878,6 @@ export type PluginNotifyApi = {
 }
 
 export type PluginSurfaceHostApi = {
-  /** Present only on surfaces that declare `pasteQueue`. */
-  pasteQueue?: PasteQueueBridge
   /** Stable across ordinary renders; revoked on replacement, hide, or session expiry. */
   deliveryFeedbackOwner?: PluginSurfaceFeedbackOwner
   close(): void
@@ -1015,8 +1014,6 @@ export type PluginUiSurfaceContribution<TSettings = unknown> = {
   shell?: PluginSurfaceShell
   /** Bundled plugins only: the surface's shortcut (and launcher item) saves the clipboard image through the host flow. */
   clipboardImageSave?: PluginClipboardImageSaveContribution
-  /** Bundled plugins only: the surface may start a session-only sequential paste queue. */
-  pasteQueue?: PluginPasteQueueContribution
 }
 
 // ─── Shortcut tasks hosted by the app (bundled plugins only) ─────────────────
@@ -1034,12 +1031,6 @@ export type PluginClipboardImageSaveContribution = {
   permissions: readonly PluginPermission[]
   /** Convert and save the image through `storage`; the host owns reading, busy state and the result HUD. */
   run(context: PluginClipboardImageSaveContext): Promise<PluginBlobSaveResult>
-}
-
-export type PluginPasteQueueContribution = {
-  permissions: readonly PluginPermission[]
-  /** Accelerator held only while a queue session is running; pressing it pastes the next snapshot. */
-  nextShortcut: string
 }
 
 export type PluginUiContribution<TSettings = unknown> = {
@@ -1060,6 +1051,7 @@ export type PluginBackgroundContext<TSettings = unknown> = {
   storage: PluginPrivateStorageApi
   clipboard: PluginClipboardApi
   paste: PluginPasteApi
+  pasteQueue?: PluginBackgroundPasteQueue
   network: PluginNetworkApi
   shell: PluginShellApi
   ai: PluginAiApi

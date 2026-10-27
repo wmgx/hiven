@@ -89,5 +89,6 @@
   "action.saveAs": "另存为…",
   "selection.textOnly": "包含图片或文件，无法拼接文本",
   "selection.tooLarge": "拼接后超过 1 MiB，请减少选择",
-  "selection.count": "已选 {count} 条"
+  "selection.count": "已选 {count} 条",
+  "settings.automaticQueue": "连续复制自动成队"
 }

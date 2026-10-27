@@ -2540,9 +2540,7 @@ fn capture_foreground_selection_text_impl(app: &tauri::AppHandle) -> Result<Opti
         .to_string();
     if let Some(previous) = before {
         let _ = clipboard_privacy::with_clipboard(app, move |app| {
-            app.clipboard()
-                .write_text(previous)
-                .map_err(|error| error.to_string())
+            clipboard_privacy::write_owned_text(&app, &previous)
         });
     }
     Ok(if selected.is_empty() { None } else { Some(selected) })
@@ -8112,16 +8110,12 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            history_paste_queue::history_queue_request,
-            history_paste_queue::history_queue_take,
-            history_paste_queue::history_queue_reply,
-            history_paste_queue::history_queue_publish,
-            history_paste_queue::get_history_queue_availability,
             history_paste_queue::begin_history_queue_paste,
             history_paste_queue::paste_history_queue_text,
             toast_hud::route_toast,
             toast_hud::capture_hud_target,
             toast_hud::hud_ready,
+            toast_hud::hud_status_action,
             toast_hud::dismiss_toast,
             get_config_dir,
             init_config_dir,
@@ -8135,6 +8129,7 @@ pub fn run() {
             clipboard_privacy::clipboard_write_sensitive_text,
             clipboard_privacy::clipboard_write_login_link,
             clipboard_privacy::clipboard_write_text,
+            clipboard_privacy::clipboard_origin,
             clipboard_change_count,
             clipboard_privacy::clipboard_read_image,
             clipboard_privacy::clipboard_write_image,

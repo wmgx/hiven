@@ -8,6 +8,8 @@ import './ToastHud.css'
 type HudToast = {
   id: string
   slot: 'flash' | 'status'
+  interactive: boolean
+  collapsed: boolean
   level: ToastLevel
   message?: string
   detail?: string
@@ -56,8 +58,11 @@ function HudCard({ toast }: { toast: HudToast }) {
   const detail = toast.progress
     ? t('queue.progress', { completed: toast.progress.completed, total: toast.progress.total, remaining: toast.progress.total - toast.progress.completed })
     : toast.message ? toast.detail : t('details')
+  const control = (action: 'cancel' | 'expand') => { void invoke('hud_status_action', { id: toast.id, action }).catch(() => {}) }
+  if (toast.collapsed) return <button className="toast-hud-dot" aria-label={t('queue.expand')} onClick={() => control('expand')}>•</button>
   return <div className="toast-hud" data-slot={toast.slot} data-level={toast.level} role={toast.level === 'error' ? 'alert' : 'status'}>
     <span className="toast-hud__icon" aria-hidden="true">{toast.level === 'success' ? '✓' : toast.level === 'info' ? 'i' : '!'}</span>
     <div><strong>{message}</strong>{detail ? <p>{detail}</p> : null}</div>
+    {toast.interactive && <button className="toast-hud-cancel" aria-label={t('queue.cancel')} onClick={() => control('cancel')}>×</button>}
   </div>
 }

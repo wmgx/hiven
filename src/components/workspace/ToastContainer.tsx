@@ -8,7 +8,7 @@ import { Copy, X } from 'lucide-react'
 import { useAppStore } from '../../store'
 import { translate } from '../../i18n'
 import { writeClipboardText } from '../../workspace/pluginClipboard'
-import { listenForRoutedToasts } from '../../workspace/toastRouting'
+import { listenForRoutedToasts, requestToastControl } from '../../workspace/toastRouting'
 import { dismissToast, showToast, useToastStore, type ToastItem, type ToastLevel } from '../../workspace/toast'
 
 const levelStyles: Record<ToastLevel, { bg: string; color: string }> = {
@@ -113,6 +113,8 @@ export function ToastContainer() {
   return (
     <div className="fixed bottom-12 right-4 z-[9999] flex flex-col gap-2 pointer-events-none">
       {items.map((toast) => {
+        const controls = toast.notify?.controls
+        if (controls?.collapsed) return <button key={toast.id} className="hiven-toast-dot pointer-events-auto" aria-label={translate(locale, 'hud', 'queue.expand')} onClick={() => requestToastControl(toast.id, controls.owner, 'expand')}>•</button>
         const style = levelStyles[toast.level]
         const phaseClass =
           toast.phase === 'shown' ? ' is-visible' : toast.phase === 'exit' ? ' is-exiting' : ''
@@ -122,7 +124,7 @@ export function ToastContainer() {
             className={`hiven-toast pointer-events-auto px-3 py-2 rounded-md shadow-lg text-[12px] max-w-[320px] flex items-start gap-2${phaseClass}`}
             style={{ background: style.bg, color: style.color, border: '1px solid color-mix(in srgb, currentColor 20%, transparent)' }}
           >
-            <span className="flex-1">{toast.message}</span>
+            <span className="flex-1">{toast.message}{toast.notify?.detail && <span className="block opacity-70">{toast.notify.detail}</span>}</span>
             {toast.action && (
               <button
                 className="font-medium underline underline-offset-2 shrink-0 hover:opacity-80"
@@ -134,7 +136,7 @@ export function ToastContainer() {
                 {toast.action.label}
               </button>
             )}
-            <button
+            {!controls && <button
               className="opacity-50 hover:opacity-100 shrink-0"
               title={translate(locale, 'palette', 'copy')}
               aria-label={translate(locale, 'palette', 'copy')}
@@ -143,12 +145,12 @@ export function ToastContainer() {
               })}
             >
               <Copy size={13} strokeWidth={1.8} />
-            </button>
+            </button>}
             <button
               className="opacity-50 hover:opacity-100 shrink-0"
-              title={translate(locale, 'workspace', 'close')}
-              aria-label={translate(locale, 'workspace', 'close')}
-              onClick={() => requestRemove(toast.id)}
+              title={controls ? translate(locale, 'hud', 'queue.cancel') : translate(locale, 'workspace', 'close')}
+              aria-label={controls ? translate(locale, 'hud', 'queue.cancel') : translate(locale, 'workspace', 'close')}
+              onClick={() => controls ? requestToastControl(toast.id, controls.owner, 'cancel') : requestRemove(toast.id)}
             >
               <X size={13} strokeWidth={1.8} />
             </button>

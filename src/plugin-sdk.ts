@@ -136,8 +136,7 @@ export type {
   // Bundled shortcut tasks
   PluginClipboardImageSaveContribution,
   PluginClipboardImageSaveContext,
-  PluginPasteQueueContribution,
-  PasteQueueBridge,
+  PluginBackgroundPasteQueue,
   PasteQueueStatus,
 } from './workspace/pluginTypes'
 export type {

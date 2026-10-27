@@ -6,7 +6,7 @@ type ReloadParticipant = {
 const participants = new Map<string, ReloadParticipant>()
 let reloading = false
 
-const RECORDING_PARTICIPANTS = new Set(['global-launcher', 'quick-editor', 'plugin-surfaces', 'apps'])
+const RECORDING_PARTICIPANTS = new Set(['global-launcher', 'quick-editor', 'plugin-surfaces', 'apps', 'paste-queue'])
 const RECORDING_LEASE_MS = 10_000
 const recordingTokens = new Set<symbol>()
 let recordingQueue: Promise<void> = Promise.resolve()

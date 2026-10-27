@@ -1,299 +1,147 @@
-/** App composition only: a bundled plugin's `pasteQueue` surface -> one session-only hidden-launcher queue. */
-import { captureHudTarget } from '../workspace/toastRouting'
-import type { PasteQueueBridge, PasteQueueStatus, PluginPasteQueueContribution } from '../workspace/pluginTypes'
-import { CLIPBOARD_QUEUE_MAX_ITEMS, createClipboardPasteQueue, validateQueueSnapshots } from '../workspace/pasteQueue/clipboardPasteQueue'
-import { acquireSurfaceShortcutInterceptor } from '../hotkeys/pluginSurfaceShortcuts'
+/** Background-owned in-memory delivery; round policy belongs to the provider. */
+import type { PasteQueueStatus, PluginBackgroundPasteQueue } from '../workspace/pluginTypes'
+import { createClipboardPasteQueue, validateQueueSnapshots } from '../workspace/pasteQueue/clipboardPasteQueue'
 import { registerHotkeyReloadParticipant } from '../hotkeys/pageReload'
-import { pluginRegistry } from '../workspace/pluginRegistry'
-import { usePluginPermissionStore } from '../workspace/pluginPermissions'
-import { usePluginSurfaceShortcutStore } from '../workspace/pluginSurfaceShortcuts'
-import { BUNDLED_SOURCE, grantedPermissions, isLauncherNativeRuntime, listBundledSurfaceTasks, type BundledSurfaceTask } from './bundledSurfaces'
+import { useAppStore } from '../store'
+import { translate } from '../i18n'
+import { formatPluginShortcutLabel } from '../utils/formatPluginShortcutLabel'
+import { isLauncherNativeRuntime } from './bundledSurfaces'
 
-type Task = BundledSurfaceTask<PluginPasteQueueContribution>
-/** The (single) bundled surface that opted into the paste queue. */
-function provider(): Task | undefined {
-  return listBundledSurfaceTasks<PluginPasteQueueContribution>((surface) => surface.pasteQueue)[0]
-}
-const targetOf = (task: Task) => ({ source: BUNDLED_SOURCE, pluginId: task.pluginId, surfaceId: task.surfaceId })
-const REQUEST = 'hiven://history-queue-request'
-const REPLY = 'hiven://history-queue-reply'
-const STATUS = 'hiven://history-queue-status'
-type QueueAvailability = 'can-attempt' | 'unsupported' | 'unknown'
-async function readQueueAvailability(): Promise<QueueAvailability> {
-  let timer: ReturnType<typeof setTimeout> | undefined
-  try {
-    return await Promise.race([
-      import('@tauri-apps/api/core').then(({ invoke }) => invoke<string>('get_history_queue_availability')).then((value): QueueAvailability => value === 'can-attempt' || value === 'unsupported' ? value : 'unknown'),
-      new Promise<QueueAvailability>((resolve) => { timer = setTimeout(() => resolve('unknown'), 8_000) }),
-    ])
-  } finally { if (timer) clearTimeout(timer) }
-}
-const emptyStatus = (): PasteQueueStatus => ({ sessionId: '', version: 0, phase: 'idle', busy: false, total: 0, completed: 0, remaining: 0, currentId: null })
-type Snapshot = Readonly<{ id: string; text: string }>
-type Request = { id: string; action: 'start' | 'cancel' | 'status'; items: Snapshot[]; sessionId?: string }
-type Reply = { id: string; ok: boolean; status: PasteQueueStatus; errorCode?: string }
-export type PasteQueueNotice = 'ready' | 'delivered' | 'failed' | 'cancelled'
-
-function allowed(): boolean {
-  const task = provider()
-  // The History setting only pauses capture; existing-history actions remain explicit.
-  return !!task && grantedPermissions(task.pluginId, task.contribution.permissions) !== null
-}
-
-let installedStop: (() => void) | null = null
-/** Install only in the long-lived native launcher, never a plugin webview. */
-export function installPasteQueueHost(options: { notify?: (status: PasteQueueStatus, outcome: PasteQueueNotice, hud: { operation: string; target?: string }) => void } = {}): () => void {
-  if (installedStop || !isLauncherNativeRuntime()) return () => {}
-  let alive = true
-  let sessionId = ''
-  let hudOperation = crypto.randomUUID()
-  let deliveryHudTarget: string | undefined
-  let sessionDefinition = provider()?.definition
-  let generation = 0
-  let statusRevision = 0
-  let publishFlight = Promise.resolve()
-  let release: (() => Promise<void>) | null = null
-  let releaseFlight = Promise.resolve()
-  let startingId = ''
-  let startLane = Promise.resolve()
-  const cancelled = new Set<string>()
-  const stops: (() => void)[] = []
-  const queue = createClipboardPasteQueue({
-    owner: { isCurrent: () => alive && allowed() },
-    deliver: async ({ snapshot, signal, isCurrent }) => {
-      const { invoke } = await import('@tauri-apps/api/core')
-      if (!isCurrent()) return { ok: false }
-      let attemptId: string | undefined
-      const cancel = () => { if (attemptId) void invoke('cancel_paste_attempt', { attemptId }).catch(() => undefined) }
-      signal.addEventListener('abort', cancel, { once: true })
-      try {
-        deliveryHudTarget = undefined
-        attemptId = await invoke<string>('begin_history_queue_paste')
-        deliveryHudTarget = await captureHudTarget(hudOperation, attemptId)
-        if (!isCurrent()) { cancel(); return { ok: false } }
-        await invoke('paste_history_queue_text', { attemptId, text: snapshot.text })
-        return { ok: isCurrent() }
-      } catch { return { ok: false } }
-      finally { signal.removeEventListener('abort', cancel); cancel() }
-    },
-  })
-  const status = (): PasteQueueStatus => {
-    const state = queue.getSnapshot()
-    return { sessionId, version: statusRevision, phase: state.phase, busy: state.busy, total: state.total, completed: state.completed, remaining: state.remaining, currentId: state.current?.id ?? null }
-  }
-  const publish = () => {
-    if (!alive) return
-    statusRevision += 1
-    const snapshot = status()
-    publishFlight = publishFlight.catch(() => undefined).then(async () => {
-      const { invoke } = await import('@tauri-apps/api/core')
-      await invoke('history_queue_publish', { status: snapshot })
-    }).catch(() => undefined)
-  }
-  const releaseShortcut = () => {
-    const stop = release
-    release = null
-    if (stop) releaseFlight = releaseFlight.catch(() => undefined).then(async () => {
-      try { await stop() }
-      catch (error) { if (!release) release = stop; throw error }
-    })
-    return releaseFlight
-  }
-  const cancelQueue = (id?: string) => {
-    if (id && id !== sessionId && id !== startingId) { cancelled.add(id); setTimeout(() => cancelled.delete(id), 15_000); return }
-    generation += 1
-    if (startingId) cancelled.add(startingId)
-    queue.cancel()
-    options.notify?.(status(), 'cancelled', { operation: hudOperation })
-    void releaseShortcut().catch(() => undefined)
-  }
-  const next = async (): Promise<boolean> => {
-    if (!alive || !allowed()) { cancelQueue(); return false }
-    if (!queue.getSnapshot().remaining) return false
-    const outcome = await queue.next()
-    if (outcome === 'delivered' || outcome === 'failed') options.notify?.(status(), outcome, { operation: hudOperation, target: deliveryHudTarget })
-    if (queue.getSnapshot().phase === 'completed') void releaseShortcut().catch(() => undefined)
-    return true
-  }
-  stops.push(queue.subscribe(publish))
-  const receive = async (id: string) => {
+export type PasteQueueNotice = 'ready' | 'delivered' | 'failed' | 'cancelled' | 'empty'
+type NoticeDetails = { full: boolean; copiedAt: number; shortcut: string; cancel(): void }
+type Notify = (status: PasteQueueStatus, outcome: PasteQueueNotice, hud: { operation: string }, details: NoticeDetails) => void
+let notify: Notify | undefined
+let owner: symbol | undefined
+let sessionId = ''
+let operation = crypto.randomUUID()
+let revision = 0
+let full = false
+let copiedAt = 0
+const listeners = new Set<(status: PasteQueueStatus) => void>()
+let syncShortcut = () => {}
+const queue = createClipboardPasteQueue({
+  owner: { isCurrent: () => !!owner },
+  deliver: async ({ snapshot, signal, isCurrent }) => {
     const { invoke } = await import('@tauri-apps/api/core')
-    const request = await invoke<Request | null>('history_queue_take', { id })
-    if (!request || !alive) return
-    let ok = true
-    let errorCode: string | undefined
+    let attemptId: string | undefined
+    const cancel = () => { if (attemptId) void invoke('cancel_paste_attempt', { attemptId }).catch(() => {}) }
+    signal.addEventListener('abort', cancel, { once: true })
     try {
-      if (!allowed()) throw new Error('QueueUnavailableError')
-      if (request.action === 'cancel') {
-        cancelQueue(request.sessionId)
-        await releaseFlight
-      } else if (request.action === 'start') {
-        const previousStart = startLane
-        let finishStart!: () => void
-        startLane = new Promise<void>((resolve) => { finishStart = resolve })
-        try {
-        await previousStart
-        if (cancelled.has(request.id)) throw new Error('QueueCancelledError')
-        if (await readQueueAvailability() !== 'can-attempt') throw new Error('QueuePlatformUnavailableError')
-        const snapshots = validateQueueSnapshots(request.items)
-        const requestedGeneration = ++generation
-        const task = provider()
-        if (!task) throw new Error('QueueUnavailableError')
-        const requestedDefinition = task.definition
-        startingId = request.id
-        try { await releaseFlight } catch { await releaseShortcut() }
-        if (!alive || cancelled.has(request.id) || requestedGeneration !== generation) throw new Error('QueueCancelledError')
-        if (!release) release = await acquireSurfaceShortcutInterceptor(targetOf(task), task.contribution.nextShortcut, next)
-        if (!alive || !allowed() || requestedDefinition !== provider()?.definition || cancelled.has(request.id) || requestedGeneration !== generation) {
-          await releaseShortcut()
-          throw new Error('QueueCancelledError')
-        }
-        sessionDefinition = requestedDefinition
-        sessionId = request.id
-        startingId = ''
-        hudOperation = crypto.randomUUID()
-        queue.replace(snapshots)
-        options.notify?.(status(), 'ready', { operation: hudOperation })
-        } finally { finishStart() }
+      if (!isCurrent()) return { ok: false }
+      attemptId = await invoke<string>('begin_history_queue_paste')
+      if (!isCurrent()) return { ok: false }
+      await invoke('paste_history_queue_text', { attemptId, text: snapshot.text })
+      return { ok: isCurrent() }
+    } catch { return { ok: false } }
+    finally { signal.removeEventListener('abort', cancel); cancel() }
+  },
+})
+const status = (): PasteQueueStatus => {
+  const state = queue.getSnapshot()
+  return { sessionId, version: revision, phase: state.phase, busy: state.busy, total: state.total, completed: state.completed, remaining: state.remaining, currentId: state.current?.id ?? null }
+}
+function publish(outcome: PasteQueueNotice = 'ready') {
+  revision += 1
+  const shortcut = useAppStore.getState().settings.pasteQueueShortcut
+  const current = status()
+  for (const listener of listeners) listener(current)
+  notify?.(current, outcome, { operation }, {
+    full, copiedAt, shortcut: shortcut.kind === 'accelerator' ? formatPluginShortcutLabel(shortcut.accelerator) : '',
+    cancel: () => { if (current.sessionId === sessionId) queue.cancel() },
+  })
+}
+queue.subscribe(() => publish(queue.getSnapshot().phase === 'cancelled' ? 'cancelled' : 'ready'))
+
+export function createBackgroundPasteQueue(signal: AbortSignal, isCurrent: () => boolean): PluginBackgroundPasteQueue | undefined {
+  if (!isLauncherNativeRuntime() || window.__HIVEN_WEB_NATIVE_BRIDGE__ || !/Mac/i.test(navigator.platform)) return undefined
+  const token = Symbol()
+  const ownedListeners = new Set<(status: PasteQueueStatus) => void>()
+  const check = () => { if (signal.aborted || !isCurrent() || owner !== token) throw new Error('QueueUnavailableError') }
+  const dispose = () => {
+    if (owner === token) { queue.cancel(); owner = undefined; syncShortcut() }
+    for (const listener of ownedListeners) listeners.delete(listener)
+    ownedListeners.clear()
+  }
+  signal.addEventListener('abort', dispose, { once: true })
+  return {
+    setRound(id, snapshots, options) {
+      check()
+      if (typeof id !== 'string' || !id || id.length > 160) throw new Error('QueueSnapshotError')
+      const validated = validateQueueSnapshots(snapshots)
+      full = options?.full === true
+      copiedAt = Date.now()
+      if (sessionId === id) queue.appendRound(validated)
+      else { sessionId = id; operation = crypto.randomUUID(); queue.replace(validated) }
+    },
+    clear() { if (owner === token) queue.cancel() },
+    subscribe(listener) {
+      if (signal.aborted || !isCurrent() || (owner && owner !== token)) throw new Error('QueueUnavailableError')
+      owner = token
+      ownedListeners.add(listener); listeners.add(listener)
+      syncShortcut()
+      return () => {
+        ownedListeners.delete(listener); listeners.delete(listener)
+        if (!ownedListeners.size) dispose()
       }
-    } catch (error) {
-      ok = false
-      const code = error instanceof Error ? error.message : ''
-      errorCode = ['QueueShortcutConflictError', 'QueueCancelledError', 'QueueSnapshotError', 'QueuePlatformUnavailableError'].includes(code) ? code : 'QueueUnavailableError'
-      if (startingId === request.id) startingId = ''
-    }
-    await invoke('history_queue_reply', { id: request.id, ok, status: status(), errorCode }).catch(() => undefined)
+    },
   }
-  void import('@tauri-apps/api/event').then(async ({ listen }) => {
-    const stop = await listen<string>(REQUEST, (event) => { void receive(event.payload).catch(() => undefined) })
-    if (alive) stops.push(stop); else stop()
-  })
-  stops.push(pluginRegistry.subscribe(() => {
-    if (!allowed() || (sessionId && sessionDefinition !== provider()?.definition)) cancelQueue()
-  }))
-  stops.push(usePluginPermissionStore.subscribe(() => { if (!allowed()) cancelQueue() }))
-  stops.push(usePluginSurfaceShortcutStore.subscribe((state, previous) => {
-    // User edits invalidate the temporary ownership instead of silently moving
-    // or taking over a different shortcut. Registration status updates do not.
-    const signature = (shortcuts: typeof state.shortcuts) => JSON.stringify(Object.entries(shortcuts).map(([key, value]) => [key, value.accelerator, value.enabled]))
-    if (signature(state.shortcuts) !== signature(previous.shortcuts) && (sessionId || startingId)) cancelQueue()
-  }))
-  const stop = () => {
-    if (!alive) return
-    alive = false
-    generation += 1
-    queue.dispose()
-    options.notify?.(status(), 'cancelled', { operation: hudOperation })
-    for (const cleanup of stops) cleanup()
-    void releaseShortcut().catch(() => undefined)
-    installedStop = null
-  }
-  installedStop = stop
-  const unregisterReload = registerHotkeyReloadParticipant('history-paste-queue', {
-    stop: async () => { stop(); await releaseFlight },
-    resume: () => { installPasteQueueHost(options) },
-  })
-  return () => { stop(); unregisterReload() }
 }
 
-/** Caller must be the current bundled surface that declares `pasteQueue`; native verifies its real window. */
-export function createPasteQueueBridge(options: {
-  source: string; pluginId: string; isCurrent: () => boolean
-  subscribeInvalidation?: (listener: () => void) => () => void
-}): PasteQueueBridge {
-  let latest = emptyStatus()
-  const check = () => {
-    if (options.source !== BUNDLED_SOURCE || provider()?.pluginId !== options.pluginId || !options.isCurrent()) throw new Error('QueueUnavailableError')
+export function installPasteQueueHost(options: { notify: Notify }): () => void {
+  if (notify || !isLauncherNativeRuntime() || window.__HIVEN_WEB_NATIVE_BRIDGE__ || !/Mac/i.test(navigator.platform)) return () => {}
+  notify = options.notify
+  let alive = true
+  let paused = false
+  let registered = ''
+  let generation = 0
+  let lane = Promise.resolve()
+  const identity = () => {
+    const shortcut = useAppStore.getState().settings.pasteQueueShortcut
+    return shortcut.kind === 'accelerator' ? shortcut.accelerator.replace(/\bCmd\b/g, 'Command') : ''
   }
-  async function rpc(action: Request['action'], items?: readonly Snapshot[], signal?: AbortSignal, cancelId?: string): Promise<Reply> {
-    const { invoke } = await import('@tauri-apps/api/core')
-    const { listen } = await import('@tauri-apps/api/event')
-    check()
-    if (signal?.aborted) throw new Error('QueueCancelledError')
-    const id = crypto.randomUUID()
-    return new Promise<Reply>((resolve, reject) => {
-      let finished = false
-      let unlisten = () => {}
-      let stopOwner = () => {}
-      let timer: ReturnType<typeof setTimeout> | undefined
-      const finish = (reply?: Reply, error?: Error) => {
-        if (finished) return
-        finished = true
-        if (timer) clearTimeout(timer)
-        unlisten(); stopOwner(); signal?.removeEventListener('abort', abort)
-        if (reply) { if (reply.status.version >= latest.version) latest = reply.status; resolve(reply) } else reject(error ?? new Error('QueueCancelledError'))
+  const sync = () => {
+    const requested = ++generation
+    lane = lane.catch(() => {}).then(async () => {
+      const { register, unregister, isRegistered } = await import('@tauri-apps/plugin-global-shortcut')
+      if (registered) { await unregister(registered); registered = '' }
+      if (requested !== generation || !alive || paused) return
+      const accelerator = identity()
+      const update = (registrationStatus: string, registrationError?: string) => {
+        if (requested !== generation) return
+        const shortcut = useAppStore.getState().settings.pasteQueueShortcut
+        useAppStore.getState().updateSetting('pasteQueueShortcut', { ...shortcut, registrationStatus, registrationError })
       }
-      const abort = () => {
-        // A cancelled start may have crossed the boundary already. Cancel only
-        // that exact session, never a queue replacing it in another window.
-        if (action === 'start') void invoke('history_queue_request', { id: crypto.randomUUID(), action: 'cancel', sessionId: id }).catch(() => undefined)
-        finish(undefined, new Error('QueueCancelledError'))
+      if (!owner || !accelerator) { update('Disabled'); return }
+      try {
+        if (await isRegistered(accelerator)) throw new Error('occupied')
+        if (requested !== generation) return
+        await register(accelerator, (event) => {
+          if (!alive || paused || requested !== generation || !owner || event.state !== 'Released') return
+          if (!queue.getSnapshot().remaining) { publish('empty'); return }
+          void queue.next().then((outcome) => { if (outcome === 'failed' || outcome === 'delivered') publish(outcome) })
+        })
+        registered = accelerator
+        if (requested !== generation) { await unregister(accelerator); registered = ''; return }
+        update('Registered')
+      } catch {
+        update('Registration failed', translate(useAppStore.getState().settings.locale, 'hud', 'queue.shortcutFailed'))
       }
-      void listen<Reply>(REPLY, (event) => { if (event.payload.id === id) finish(event.payload) }).then(async (stop) => {
-        unlisten = stop
-        if (finished) { stop(); return }
-        signal?.addEventListener('abort', abort, { once: true })
-        stopOwner = options.subscribeInvalidation?.(abort) ?? (() => {})
-        if (!options.isCurrent() || signal?.aborted) { abort(); return }
-        timer = setTimeout(abort, 8_000)
-        try { await invoke('history_queue_request', { id, action, items, sessionId: cancelId }) }
-        catch { finish(undefined, new Error('QueueUnavailableError')) }
-      }).catch(() => finish(undefined, new Error('QueueUnavailableError')))
+    })
+    void lane.catch(() => { /* Keep ownership if unregister failed; a later sync can retry. */ })
+  }
+  syncShortcut = sync
+  const stopStore = useAppStore.subscribe((state, previous) => {
+    const key = (s: typeof state.settings.pasteQueueShortcut) => s.kind === 'accelerator' ? s.accelerator : s.kind
+    if (key(state.settings.pasteQueueShortcut) !== key(previous.settings.pasteQueueShortcut)) { sync(); publish() }
+  })
+  let stopReload = () => {}
+  const resume = () => {
+    paused = false
+    sync()
+    stopReload = registerHotkeyReloadParticipant('paste-queue', {
+      stop: () => { paused = true; sync(); return lane }, resume,
     })
   }
-  const getAvailability = async (): Promise<'can-attempt' | 'unsupported' | 'unknown'> => {
-    check()
-    return new Promise((resolve, reject) => {
-      let finished = false
-      let stopOwner = () => {}
-      let timer: ReturnType<typeof setTimeout> | undefined
-      const finish = (value?: 'can-attempt' | 'unsupported' | 'unknown', error?: Error) => {
-        if (finished) return
-        finished = true
-        if (timer) clearTimeout(timer)
-        stopOwner()
-        if (error) reject(error); else resolve(value ?? 'unknown')
-      }
-      stopOwner = options.subscribeInvalidation?.(() => finish(undefined, new Error('QueueCancelledError'))) ?? (() => {})
-      if (finished) { stopOwner(); return }
-      timer = setTimeout(() => finish('unknown'), 8_000)
-      void Promise.resolve().then(async () => {
-        if (finished) return
-        check()
-        const value = await readQueueAvailability()
-        check() // A late result cannot authorize a replaced surface owner.
-        finish(value === 'can-attempt' || value === 'unsupported' ? value : 'unknown')
-      }).catch(() => finish(undefined, new Error('QueueUnavailableError')))
-    })
-  }
-  return {
-    maxItems: CLIPBOARD_QUEUE_MAX_ITEMS,
-    getAvailability,
-    async start(snapshots, options) {
-      check()
-      const validated = validateQueueSnapshots(snapshots)
-      const reply = await rpc('start', validated, options?.signal)
-      if (!reply.ok) throw new Error(reply.errorCode ?? 'QueueUnavailableError')
-      return true
-    },
-    async cancel() {
-      check()
-      if (!latest.sessionId) await rpc('status')
-      if (latest.sessionId) await rpc('cancel', undefined, undefined, latest.sessionId)
-    },
-    async getStatus() {
-      check()
-      const reply = await rpc('status')
-      if (!reply.ok) throw new Error(reply.errorCode ?? 'QueueUnavailableError')
-      return latest
-    },
-    subscribe(listener) {
-      let active = true
-      let stop = () => {}
-      void import('@tauri-apps/api/event').then(({ listen }) => listen<PasteQueueStatus>(STATUS, (event) => {
-        if (active && options.isCurrent() && event.payload.version >= latest.version) { latest = event.payload; listener(latest) }
-      })).then((unlisten) => { if (active) stop = unlisten; else unlisten() }).catch(() => undefined)
-      return () => { active = false; stop() }
-    },
-  }
+  resume()
+  return () => { alive = false; stopReload(); stopStore(); syncShortcut = () => {}; notify = undefined }
 }

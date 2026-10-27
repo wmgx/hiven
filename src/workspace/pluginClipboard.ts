@@ -387,9 +387,16 @@ export function createPluginClipboard(
       let imageCheckedCount: number | null = initialChangeCount
       let textCheckedCount: number | null = initialChangeCount
 
+      const originAt = async (count: number | null): Promise<'hiven' | undefined> => {
+        if (count === null) return undefined
+        const { invoke } = await import('@tauri-apps/api/core')
+        return await invoke<'hiven' | null>('clipboard_origin', { expectedCount: count }) ?? undefined
+      }
+      const unchanged = async (count: number | null) => count === null || count === await readClipboardChangeCount()
       const pollImage = async (count: number | null) => {
+        const origin = await originAt(count)
         const image = await readClipboardImageSnapshot()
-        if (image) {
+        if (image && await unchanged(count)) {
           const imageHash = hashBytes(image.hashBytes)
           if (imageHash !== lastImageHash) {
             const storedImage = await image.toStoredImage()
@@ -403,6 +410,7 @@ export function createPluginClipboard(
               const sourceApp = await readClipboardSourceApp()
               emitChange({
                 kind: 'image',
+                origin,
                 blobId: blobRef.blobId,
                 previewBlobId: previewRef?.blobId ?? blobRef.blobId,
                 contentType: blobRef.contentType,
@@ -420,7 +428,9 @@ export function createPluginClipboard(
       }
 
       const pollText = async (count: number | null) => {
+        const origin = await originAt(count)
         const currentText = await readWatchedText()
+        if (!await unchanged(count)) return
         textCheckedCount = count
         if (!currentText) {
           // Copying A, then an image, then A again must register as a change.
@@ -430,7 +440,7 @@ export function createPluginClipboard(
 
         const filePaths = options.files ? extractFilePaths(currentText) : []
         const currentHash = hashString(`${filePaths.length > 0 ? 'files' : 'text'}:${currentText}`)
-        if (currentHash === lastTextHash) return
+        if (currentHash === lastTextHash && count === null) return
 
         const byteSize = new TextEncoder().encode(currentText).length
         lastTextHash = currentHash
@@ -440,6 +450,7 @@ export function createPluginClipboard(
           const sourceApp = await readClipboardSourceApp()
           emitChange({
             kind: 'files',
+            origin,
             paths: filePaths,
             fileNames: filePaths.map(fileNameForPath),
             hash: currentHash,
@@ -453,6 +464,7 @@ export function createPluginClipboard(
 
         emitChange({
           kind: 'text',
+          origin,
           text: currentText,
           byteSize,
           hash: currentHash,

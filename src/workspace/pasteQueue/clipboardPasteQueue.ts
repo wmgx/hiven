@@ -1,6 +1,5 @@
 /** Session-only snapshots. Never persist this state or use a list preview as text. */
 export type ClipboardQueueSnapshot = Readonly<{ id: string; text: string }>
-export const CLIPBOARD_QUEUE_MAX_ITEMS = 20
 export const CLIPBOARD_QUEUE_MAX_BYTES = 1024 * 1024
 
 export type ClipboardQueueState = Readonly<{
@@ -26,11 +25,11 @@ export type ClipboardQueueOwner = {
 }
 
 export function validateQueueSnapshots(items: readonly ClipboardQueueSnapshot[]): readonly ClipboardQueueSnapshot[] {
-  if (items.length < 1 || items.length > CLIPBOARD_QUEUE_MAX_ITEMS) throw new Error('QueueCountError')
+  if (!Array.isArray(items) || items.length < 1) throw new Error('QueueCountError')
   const seen = new Set<string>()
   let bytes = 0
   const snapshots = items.map((item) => {
-    if (!item || typeof item.id !== 'string' || !item.id || typeof item.text !== 'string' || seen.has(item.id)) {
+    if (!item || typeof item.id !== 'string' || !item.id || item.id.length > 256 || typeof item.text !== 'string' || seen.has(item.id)) {
       throw new Error('QueueSnapshotError')
     }
     seen.add(item.id)
@@ -88,6 +87,13 @@ export function createClipboardPasteQueue(options: {
       snapshots = next
       completed = 0
       phase = 'ready'
+      publish()
+    },
+    appendRound(items: readonly ClipboardQueueSnapshot[]) {
+      if (!ownerCurrent()) throw new Error('QueueOwnerError')
+      const next = validateQueueSnapshots(items)
+      if (next.length < snapshots.length || snapshots.some((item, index) => item.id !== next[index].id || item.text !== next[index].text)) throw new Error('QueueSnapshotError')
+      snapshots = next
       publish()
     },
     cancel,

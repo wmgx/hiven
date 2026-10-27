@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import ts from 'typescript'
-const roots = { clipboardPasteQueue: 'src/workspace/pasteQueue/' }
+const roots = { clipboardPasteQueue: 'src/workspace/pasteQueue/', clipboardCopyRound: 'src/plugins/clipboard-history/background/' }
 const urls = new Map()
 function moduleUrl(name) {
   if (urls.has(name)) return urls.get(name)
@@ -83,7 +83,6 @@ assert.equal(JSON.stringify(thrown.getSnapshot()).includes('private'), false)
 assert.throws(() => thrown.replace([{ id: 'x', text: '😀'.repeat(300000) }]), /Size/)
 assert.equal(thrown.getSnapshot().current.text, 'retained')
 assert.throws(() => validateQueueSnapshots([{ id: 'x', text: 'x' }, { id: 'x', text: 'y' }]), /Snapshot/)
-assert.throws(() => validateQueueSnapshots(Array.from({ length: 21 }, (_, i) => ({ id: String(i), text: '' }))), /Count/)
 assert.equal(validateQueueSnapshots([{ id: 'empty', text: '' }])[0].text, '')
 assert.throws(() => validateQueueSnapshots([{ id: 'one', text: 'a'.repeat(600000) }, { id: 'two', text: 'b'.repeat(600000) }]), /Size/)
 const duringPublish = createClipboardPasteQueue({ deliver: async () => { throw new Error('must not be called') } })
@@ -99,3 +98,57 @@ assert.equal(await duringPublish.next(), 'stale')
 assert.equal(duringPublish.getSnapshot().busy, false)
 
 console.log('✓ queue delivery: ordered snapshots, failure/cancel/replace/owner fencing')
+
+const { createClipboardCopyRound } = await import(moduleUrl('clipboardCopyRound'))
+let clock = 0
+let current
+let clears = 0
+const round = createClipboardCopyRound({
+  setRound: (id, items, options) => { current = { id, items: [...items], ...options } },
+  clear: () => { current = undefined; clears++ },
+}, () => clock, text => text === 'secret')
+const copy = (text, origin) => round.change({ kind: 'text', text, origin })
+copy('first')
+const initial = current.id
+clock = 10_000; copy('second')
+assert.equal(current.id, initial, '10 seconds stays in the round')
+clock = 20_001; copy('third')
+assert.notEqual(current.id, initial, 'greater than 10 seconds replaces the round')
+assert.equal(current.items.length, 1)
+copy(' third ')
+assert.equal(current.items.length, 1, 'trimmed duplicates preserve the original text')
+clock = 29_000; copy('own output', 'hiven'); copy('secret')
+round.change({ kind: 'image' }); round.change({ kind: 'files' })
+assert.equal(current.items.length, 1)
+clock = 30_002; copy('new')
+assert.equal(current.items.length, 1, 'excluded copies do not reset the clock')
+const active = current.id
+round.status({ sessionId: active, busy: true })
+clock += 20_000; copy('append')
+assert.equal(current.id, active)
+assert.equal(current.items.length, 2, 'pasting keeps the round open beyond ten seconds')
+round.status({ sessionId: active, phase: 'completed' })
+copy('after completion')
+assert.notEqual(current.id, active)
+for (let i = 0; i < 21; i++) copy(`item ${i}`)
+assert.equal(current.items.length, 20)
+assert.equal(current.full, true)
+clock += 599_999; round.expire(); assert.ok(current)
+clock++; round.expire(); assert.equal(current, undefined)
+assert.equal(clears, 1)
+copy('cancel'); const cancelledRound = current.id
+round.status({ sessionId: cancelledRound, phase: 'cancelled' }); copy('restart')
+assert.notEqual(current.id, cancelledRound)
+
+const appendDelivery = deferred()
+const appending = createClipboardPasteQueue({ deliver: () => appendDelivery.promise })
+const snapshots = [{ id: '1', text: 'one' }]
+appending.replace(snapshots)
+const pendingAppend = appending.next()
+appending.appendRound([...snapshots, { id: '2', text: 'two' }])
+appendDelivery.resolve({ ok: true })
+assert.equal(await pendingAppend, 'delivered')
+assert.equal(appending.getSnapshot().completed, 1)
+assert.equal(appending.getSnapshot().current.text, 'two')
+assert.throws(() => appending.appendRound([{ id: 'changed', text: 'one' }]), /Snapshot/)
+console.log('✓ copy rounds: 10s boundary, dedup/exclusions, append/completion/cancel, 20 items, 10min expiry')

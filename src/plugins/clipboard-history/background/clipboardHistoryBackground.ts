@@ -1,3 +1,5 @@
+import { getPluginHostSdk } from '@hiven/plugin'
+import { createClipboardCopyRound } from './clipboardCopyRound'
 /**
  * Clipboard History Plugin — Background Lifecycle
  *
@@ -20,10 +22,11 @@ import type { AddItemInput } from '../storage/clipboardHistoryTypes'
 
 function buildWatchOptions(settings: ClipboardHistorySettings): ClipboardWatchOptions {
   return {
-    text: settings.recordText,
+    text: settings.recordText || settings.automaticQueue,
+    pollIntervalMs: 250,
     images: settings.recordImages,
     files: settings.recordFiles,
-    maxTextBytes: settings.maxTextBytes,
+    maxTextBytes: settings.automaticQueue ? Math.max(settings.maxTextBytes, 1024 * 1024) : settings.maxTextBytes,
     maxImageBytes: settings.maxImageBytes,
   }
 }
@@ -72,6 +75,10 @@ export function createClipboardHistoryBackground(): PluginBackgroundContribution
       const repository = createClipboardHistoryRepository(ctx.storage)
       const watchOptions = buildWatchOptions(ctx.settings)
 
+      const round = ctx.settings.enabled && ctx.settings.automaticQueue && ctx.pasteQueue
+        ? createClipboardCopyRound(ctx.pasteQueue, Date.now, (text) => getPluginHostSdk().kits.content.detectContent(text).some((item) => item.kind === 'secret' || item.kind === 'secret-like')) : null
+      const stopQueue = round ? ctx.pasteQueue!.subscribe(round.status) : undefined
+      const expiryTimer = round ? setInterval(round.expire, 1000) : undefined
       let unwatch: (() => void) | null = null
       const lifecycle = new AbortController()
       let cleaning = false
@@ -102,8 +109,10 @@ export function createClipboardHistoryBackground(): PluginBackgroundContribution
       try {
         if (ctx.settings.enabled) unwatch = await ctx.clipboard.watch(watchOptions, async (change: ClipboardChange) => {
           try {
+            if (ctx.signal.aborted) return
+            round?.change(change)
             // Filter based on settings
-            if (change.kind === 'text' && !ctx.settings.recordText) return
+            if (change.kind === 'text' && (!ctx.settings.recordText || change.byteSize > ctx.settings.maxTextBytes)) return
             if (change.kind === 'image' && !ctx.settings.recordImages) return
             if (change.kind === 'files' && !ctx.settings.recordFiles) return
 
@@ -126,6 +135,9 @@ export function createClipboardHistoryBackground(): PluginBackgroundContribution
       // Return stop function for cleanup
       const stop: PluginBackgroundStop = () => {
         lifecycle.abort()
+        clearInterval(expiryTimer)
+        round?.stop()
+        stopQueue?.()
         clearInterval(cleanupTimer)
         if (typeof window !== 'undefined') window.removeEventListener('focus', onResume)
         if (unwatch) {

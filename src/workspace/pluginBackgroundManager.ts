@@ -22,6 +22,7 @@ import { useAppStore } from '../store'
 import { showToast } from './toast'
 import { getPluginPermissionSnapshot, missingPluginPermissions, usePluginPermissionStore } from './pluginPermissions'
 import { resolvePluginSettingsSource } from './launcher/pluginSource'
+import { createBackgroundPasteQueue } from '../shortcutHosts/pasteQueue'
 import { makePluginT } from '../i18n/pluginI18nRegistry'
 
 type BackgroundInstance = {
@@ -59,6 +60,8 @@ function buildBackgroundContext(
     storage,
     clipboard: createPluginClipboard(pluginId, permissions, storage),
     paste: createPluginPaste(permissions, storage),
+    pasteQueue: ['clipboard.write', 'accessibility.paste', 'globalShortcut.register'].every((key) => requestedPermissions.includes(key as PluginPermission))
+      ? createBackgroundPasteQueue(signal, isCurrent) : undefined,
     network: createPluginNetwork(permissions),
     shell: createPluginShell(permissions),
     ai: createPluginAi(pluginId, source, permissions),

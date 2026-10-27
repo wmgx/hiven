@@ -5,6 +5,8 @@
  * selection or other user content. Call only from a user action or a session
  * the user started; plugins must not push in the background.
  */
+import { getCurrentWindow } from '@tauri-apps/api/window'
+import { nativeToastRoutingAvailable, setStatusControls, type StatusControls } from './toastRouting'
 import { dismissToast, showToast, type HudReceipt } from './toast'
 
 export type NotifyLevel = 'success' | 'error' | 'info'
@@ -39,14 +41,15 @@ export function flash(notice: NotifyFlash, receipt?: HudReceipt): string | undef
   })
 }
 
-export function status(notice: NotifyStatus, receipt?: HudReceipt): void {
+export function status(notice: NotifyStatus, receipt?: HudReceipt, controls?: StatusControls): void {
   const title = statusText(notice.title)
   if (!notice.id || !title) return
   // An ended id is tombstoned natively, so a restarted session needs a fresh toast id.
   const toastId = statusToastIds.get(notice.id) ?? `status-${++statusGeneration}-${Date.now().toString(36)}`
   statusToastIds.set(notice.id, toastId)
   const detail = notice.detail === undefined ? undefined : statusText(notice.detail) || undefined
-  showToast(title, 'info', { id: toastId, persistent: true, progress: notice.progress, hud: receipt, notify: { slot: 'status', detail } })
+  setStatusControls(toastId, controls)
+  showToast(title, 'info', { id: toastId, persistent: true, progress: notice.progress, hud: receipt, notify: { slot: 'status', detail, controls: controls ? { collapsed: controls.collapsed, owner: nativeToastRoutingAvailable() ? getCurrentWindow().label : undefined } : undefined } })
 }
 
 export function end(id: string): void {

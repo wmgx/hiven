@@ -4,14 +4,14 @@
  */
 
 import { create } from 'zustand'
-import { dismissRoutedToast, routeToast } from './toastRouting'
+import { dismissRoutedToast, routeToast, setStatusControls } from './toastRouting'
 
 export type ToastLevel = 'info' | 'success' | 'error' | 'warning'
 
 /** Anti-replay identity for one output operation; never carries text. */
 export type HudReceipt = { operation: string; revision: number; target?: string }
 /** Present only on `notify` items: their localized status text may reach the desktop HUD. */
-export type ToastNotify = { slot: 'flash' | 'status'; detail?: string }
+export type ToastNotify = { slot: 'flash' | 'status'; detail?: string; controls?: { owner?: string; collapsed?: boolean } }
 
 export interface ToastAction {
   label: string
@@ -104,5 +104,6 @@ export function showToast(
  */
 export function dismissToast(id: string) {
   useToastStore.getState().removeToast(id)
+  setStatusControls(id)
   dismissRoutedToast(id)
 }

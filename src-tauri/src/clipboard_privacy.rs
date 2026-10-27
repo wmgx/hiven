@@ -58,7 +58,7 @@ pub async fn clipboard_write_text(
     with_clipboard(&app, move |app| {
         let mut history = HISTORY_COPY.lock().map_err(|_| "Clipboard unavailable")?;
         history.write(text, record_in_history != Some(false), |text| {
-            app.clipboard().write_text(text.to_owned()).map_err(|_| "Clipboard write failed".to_string())
+            write_owned_text(&app, text)
         })
     })
 }
@@ -94,7 +94,8 @@ pub async fn clipboard_write_image(webview: tauri::Webview, image: JsImage) -> R
     with_clipboard(webview.app_handle(), move |app| {
         app.clipboard()
             .write_image(&image)
-            .map_err(|error| error.to_string())
+            .map_err(|error| error.to_string())?;
+        mark_owned_clipboard()
     })
 }
 
@@ -151,7 +152,7 @@ pub async fn clipboard_write_login_link(app: tauri::AppHandle, text: String) -> 
                     let _ = app;
                     use objc2::{class, msg_send, runtime::AnyObject};
                     let board: *mut AnyObject = msg_send![class!(NSPasteboard), generalPasteboard];
-                    write_sensitive_text(board, text.to_owned())
+                    write_marked_text(board, text.to_owned(), true)
                 }
                 #[cfg(target_os = "linux")]
                 {
@@ -179,7 +180,7 @@ pub async fn clipboard_write_sensitive_text(
         unsafe {
             use objc2::{class, msg_send, runtime::AnyObject};
             let board: *mut AnyObject = msg_send![class!(NSPasteboard), generalPasteboard];
-            write_sensitive_text(board, text)
+            write_marked_text(board, text, true)
         }
         #[cfg(not(target_os = "macos"))]
         {
@@ -239,23 +240,28 @@ unsafe fn has_private_marker(board: *mut objc2::runtime::AnyObject) -> Result<bo
 }
 
 #[cfg(target_os = "macos")]
-unsafe fn write_sensitive_text(
+pub(crate) unsafe fn write_marked_text(
     board: *mut objc2::runtime::AnyObject,
     text: String,
+    sensitive: bool,
 ) -> Result<(), String> {
     use objc2::{class, msg_send, runtime::AnyObject};
     if board.is_null() {
         return Err("Clipboard unavailable".into());
     }
-    let value = std::ffi::CString::new(text).map_err(|_| "Invalid clipboard text")?;
-    let value: *mut AnyObject = msg_send![class!(NSString), stringWithUTF8String: value.as_ptr()];
+    let value: *mut AnyObject = msg_send![class!(NSString), alloc];
+    let value: *mut AnyObject = msg_send![value, initWithBytes: text.as_ptr(), length: text.len(), encoding: 4usize];
+    if value.is_null() { return Err("Invalid clipboard text".into()); }
+    let _: *mut AnyObject = msg_send![value, autorelease];
     let item: *mut AnyObject = msg_send![class!(NSPasteboardItem), new];
     let empty: *mut AnyObject = msg_send![class!(NSString), stringWithUTF8String: c"".as_ptr()];
     for (kind, content) in [
         (c"public.utf8-plain-text", value),
         (c"org.nspasteboard.ConcealedType", empty),
         (c"org.nspasteboard.TransientType", empty),
+        (c"org.hiven.ClipboardOrigin", empty),
     ] {
+        if !sensitive && (kind == c"org.nspasteboard.ConcealedType" || kind == c"org.nspasteboard.TransientType") { continue; }
         let kind: *mut AnyObject = msg_send![class!(NSString), stringWithUTF8String: kind.as_ptr()];
         let accepted: bool = msg_send![item, setString: content, forType: kind];
         if !accepted {
@@ -272,6 +278,50 @@ unsafe fn write_sensitive_text(
     } else {
         Err("Sensitive clipboard write failed".into())
     }
+}
+
+// Called inside with_clipboard, shared by every host write path.
+pub(crate) fn write_owned_text(app: &tauri::AppHandle, text: &str) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    unsafe {
+        let _ = app;
+        let board = objc2::msg_send![objc2::class!(NSPasteboard), generalPasteboard];
+        write_marked_text(board, text.to_owned(), false)
+    }
+    #[cfg(not(target_os = "macos"))]
+    app.clipboard().write_text(text.to_owned()).map_err(|_| "Clipboard write failed".to_string())
+}
+pub(crate) fn mark_owned_clipboard() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    unsafe {
+        use objc2::{class, msg_send, runtime::AnyObject};
+        let board: *mut AnyObject = msg_send![class!(NSPasteboard), generalPasteboard];
+        let kind: *mut AnyObject = msg_send![class!(NSString), stringWithUTF8String: c"org.hiven.ClipboardOrigin".as_ptr()];
+        let types: *mut AnyObject = msg_send![class!(NSArray), arrayWithObject: kind];
+        let _: isize = msg_send![board, addTypes: types, owner: std::ptr::null::<AnyObject>()];
+        let empty: *mut AnyObject = msg_send![class!(NSString), stringWithUTF8String: c"".as_ptr()];
+        let written: bool = msg_send![board, setString: empty, forType: kind];
+        if !written { return Err("Clipboard marker write failed".into()); }
+    }
+    Ok(())
+}
+#[tauri::command]
+pub async fn clipboard_origin(app: tauri::AppHandle, expected_count: isize) -> Result<Option<&'static str>, String> {
+    with_clipboard(&app, move |_| {
+        #[cfg(target_os = "macos")]
+        unsafe {
+            use objc2::{class, msg_send, runtime::AnyObject};
+            let board: *mut AnyObject = msg_send![class!(NSPasteboard), generalPasteboard];
+            let count: isize = msg_send![board, changeCount];
+            if count != expected_count { return Err("Clipboard changed".into()); }
+            let kind: *mut AnyObject = msg_send![class!(NSString), stringWithUTF8String: c"org.hiven.ClipboardOrigin".as_ptr()];
+            let types: *mut AnyObject = msg_send![board, types];
+            let owned: bool = msg_send![types, containsObject: kind];
+            return Ok(owned.then_some("hiven"));
+        }
+        #[cfg(not(target_os = "macos"))]
+        { let _ = expected_count; Ok(None) }
+    })
 }
 
 #[cfg(all(test, target_os = "macos"))]
@@ -291,7 +341,7 @@ mod tests {
                 msg_send![class!(NSString), stringWithUTF8String: c"ordinary".as_ptr()];
             let _: bool = msg_send![board, setString: ordinary, forType: kind];
             assert_eq!(super::read_public_text(board).unwrap(), "ordinary");
-            super::write_sensitive_text(board, "  dummy-secret  ".into()).unwrap();
+            super::write_marked_text(board, "  dummy-secret  ".into(), true).unwrap();
             assert_eq!(super::read_public_text(board).unwrap(), "");
             let value: *mut AnyObject = msg_send![board, stringForType: kind];
             let bytes: *const std::ffi::c_char = msg_send![value, UTF8String];

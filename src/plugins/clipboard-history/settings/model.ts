@@ -4,6 +4,7 @@
 
 export type ClipboardHistorySettings = {
   enabled: boolean
+  automaticQueue: boolean
   recordText: boolean
   recordImages: boolean
   recordFiles: boolean
@@ -20,6 +21,7 @@ export type ClipboardHistorySettings = {
 
 export const DEFAULT_CLIPBOARD_HISTORY_SETTINGS: ClipboardHistorySettings = {
   enabled: false,
+  automaticQueue: true,
   recordText: true,
   recordImages: true,
   recordFiles: true,

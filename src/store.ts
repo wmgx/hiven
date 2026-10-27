@@ -173,6 +173,7 @@ interface AppState {
     disabledCustoms: string[]
     globalPinnedLauncherShortcut: GlobalPinnedLauncherShortcut
     /** Global shortcut to summon Quick Editor as an independent window. */
+    pasteQueueShortcut: GlobalPinnedLauncherShortcut
     quickEditorShortcut: GlobalPinnedLauncherShortcut
     globalLauncherWindowPosition?: GlobalLauncherPosition
     /** 'drag' = placed by a header drag. Older 'user' values were polluted by programmatic moves and are ignored. */
@@ -391,6 +392,7 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
     disabledBuiltins: [],
     disabledCustoms: [],
     globalPinnedLauncherShortcut: { kind: 'accelerator', accelerator: 'Shift+Cmd+Space' },
+    pasteQueueShortcut: { kind: 'accelerator', accelerator: 'Control+Shift+V' },
     quickEditorShortcut: { kind: 'disabled' },
     globalLauncherWindowPosition: undefined,
     globalLauncherWindowPositionSource: undefined,
@@ -503,6 +505,7 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
         ? state.settings.appSearchAliases
         : persistedAppSearchAliases(state.settings.appSearchAliases),
       globalPinnedLauncherShortcut: stripShortcutRuntimeStatus(state.settings.globalPinnedLauncherShortcut),
+      pasteQueueShortcut: stripShortcutRuntimeStatus(state.settings.pasteQueueShortcut),
       quickEditorShortcut: stripShortcutRuntimeStatus(state.settings.quickEditorShortcut),
     },
     locale: state.locale,
@@ -547,6 +550,10 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
     merged.settings.globalPinnedLauncherShortcut = mergeShortcutRuntimeStatus(
       merged.settings.globalPinnedLauncherShortcut ?? current.settings.globalPinnedLauncherShortcut,
       current.settings.globalPinnedLauncherShortcut,
+    )
+    merged.settings.pasteQueueShortcut = mergeShortcutRuntimeStatus(
+      merged.settings.pasteQueueShortcut ?? current.settings.pasteQueueShortcut,
+      current.settings.pasteQueueShortcut,
     )
     merged.settings.quickEditorShortcut = mergeShortcutRuntimeStatus(
       merged.settings.quickEditorShortcut ?? current.settings.quickEditorShortcut,

@@ -144,24 +144,40 @@ function LauncherRuntimeApp() {
   useEffect(() => {
     if (!isNativeDesktopRuntime()) return
     let session = ''
-    const stop = installPasteQueueHost({ notify: (status, outcome, hud) => {
+    let collapseTimer: ReturnType<typeof setTimeout> | undefined
+    let noticeRevision = 0
+    const stop = installPasteQueueHost({ notify: (status, outcome, hud, details) => {
+      clearTimeout(collapseTimer)
       if (outcome === 'cancelled' || status.sessionId !== session) {
         if (session) endNotice(session)
         if (outcome === 'cancelled') { session = ''; return }
         session = status.sessionId
       }
       const locale = useAppStore.getState().settings.locale
-      const message = translate(locale, 'hud', `queue.${outcome}`)
-      const receipt = { ...hud, revision: status.version }
-      if (outcome === 'failed') { flashNotice({ level: 'error', message }, receipt); return }
+      const t = (key: string, vars?: Record<string, string | number>) => translate(locale, 'hud', key, vars)
+      const receipt = () => ({ ...hud, revision: ++noticeRevision })
+      if (outcome === 'empty' || outcome === 'failed') {
+        flashNotice({ level: outcome === 'failed' ? 'error' : 'info', message: t(`queue.${outcome}`) }, receipt())
+      }
       if (status.phase === 'completed') {
         endNotice(session)
-        flashNotice({ level: 'success', message }, receipt)
+        if (outcome === 'delivered') flashNotice({ level: 'success', message: t('queue.complete') }, receipt())
         return
       }
-      statusNotice({ id: session, title: message, progress: status.total ? { completed: status.completed, total: status.total } : undefined }, receipt)
+      if (status.total < 2 || status.phase === 'cancelled') return
+      const render = (collapsed: boolean) => statusNotice({
+        id: session, title: t(details.full ? 'queue.full' : 'queue.title'),
+        detail: status.completed || status.busy ? t('queue.progress', { completed: status.completed, total: status.total })
+          : t(details.shortcut ? 'queue.copied' : 'queue.copiedNoShortcut', { count: status.total, shortcut: details.shortcut }),
+      }, receipt(), {
+        collapsed, cancel: details.cancel,
+        expand: () => { render(false); collapseTimer = setTimeout(() => render(true), 8000) },
+      })
+      const delay = Math.max(0, details.copiedAt + 8000 - Date.now())
+      render(delay === 0 && !status.busy)
+      if (delay > 0) collapseTimer = setTimeout(() => render(true), delay)
     } })
-    return () => { stop(); if (session) endNotice(session) }
+    return () => { clearTimeout(collapseTimer); stop(); if (session) endNotice(session) }
   }, [])
 
   // Background clipboard age clock: first see = unknown baseline; real changes get known changedAt.

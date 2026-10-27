@@ -10,7 +10,6 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{Manager, Resource, ResourceId, ResourceTable};
-use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_dialog::DialogExt;
 
 const MAX_PNG_BYTES: usize = 10 * 1024 * 1024;
@@ -422,7 +421,7 @@ pub async fn plugin_blob_commit_png_export(
             || {
                 path.is_some_and(|path| {
                     super::clipboard_privacy::with_clipboard(&app, move |app| {
-                        app.clipboard().write_text(path).map_err(|_| WRITE_FAILED.to_string())
+                        crate::clipboard_privacy::write_owned_text(&app, &path).map_err(|_| WRITE_FAILED.to_string())
                     }).is_ok()
                 })
             },

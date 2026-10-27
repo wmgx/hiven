@@ -6,6 +6,8 @@
  */
 
 import { definePlugin } from '@hiven/plugin'
+import en from './locales/en.json'
+import zh from './locales/zh.json'
 import type { ClipboardHistorySettings } from './settings/model'
 import { DEFAULT_CLIPBOARD_HISTORY_SETTINGS, migrateClipboardHistorySettings } from './settings/model'
 import { ClipboardHistorySurface } from './surfaces/ClipboardHistorySurface'
@@ -32,7 +34,7 @@ export default definePlugin<ClipboardHistorySettings>({
   settings: {
     title: 'Clipboard History',
     titleI18n: { zh: '剪贴板历史' },
-    version: 2,
+    version: 3,
     defaultValue: DEFAULT_CLIPBOARD_HISTORY_SETTINGS,
     migrate: migrateClipboardHistorySettings,
     schema: {
@@ -49,6 +51,14 @@ export default definePlugin<ClipboardHistorySettings>({
               label: 'Enable clipboard history',
               labelI18n: { zh: '启用剪贴板历史' },
               requires: ['clipboard.watch', 'storage.private'],
+            },
+            {
+              kind: 'switch',
+              key: 'automaticQueue',
+              icon: 'ListOrdered',
+              label: en['settings.automaticQueue'],
+              labelI18n: { zh: zh['settings.automaticQueue'] },
+              requires: ['clipboard.watch', 'clipboard.write', 'accessibility.paste', 'globalShortcut.register'],
             },
             {
               kind: 'switch',
