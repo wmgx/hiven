@@ -40,21 +40,12 @@ pub(crate) async fn paste_history_queue_text(app: tauri::AppHandle, window: taur
 
 #[cfg(target_os = "macos")]
 fn deliver(app: &tauri::AppHandle, attempt: &std::sync::Arc<crate::paste_recovery::Attempt>, pid: u32, text: String) -> Result<(), String> {
-    use std::time::{Duration, Instant};
-    #[link(name = "CoreGraphics", kind = "framework")]
-    extern "C" { fn CGEventSourceFlagsState(state: i32) -> u64; }
+    use std::time::Duration;
     let verify = || {
         attempt.ensure_active()?;
         if crate::current_foreground_process_id() != Some(pid) { return Err("QueueTargetError".into()); }
         Ok::<(), String>(())
     };
-    let deadline = Instant::now() + Duration::from_secs(1);
-    // A released letter can leave Ctrl/Shift held; never inject through them.
-    while unsafe { CGEventSourceFlagsState(1) } & ((1 << 17) | (1 << 18) | (1 << 19) | (1 << 20)) != 0 {
-        verify()?;
-        if Instant::now() >= deadline { return Err("QueueHeldKeyError".into()); }
-        std::thread::sleep(Duration::from_millis(10));
-    }
     verify()?;
     let for_write = attempt.clone();
     let (snapshot, written_count) = crate::clipboard_privacy::with_clipboard(app, move |_app| unsafe {
@@ -71,7 +62,8 @@ fn deliver(app: &tauri::AppHandle, attempt: &std::sync::Arc<crate::paste_recover
     let result = verify().and_then(|_| crate::clipboard_privacy::with_clipboard(app, move |_| unsafe {
         for_paste.ensure_active()?;
         if change_count() != written_count || crate::current_foreground_process_id() != Some(pid) { return Err("QueueTargetError".into()); }
-        crate::simulate_paste_impl()
+        // Users hold the shortcut's modifiers while tapping its key; inject ⌘V without them.
+        crate::simulate_paste_ignoring_held_modifiers()
     }));
     // shortcut: macOS has no paste-consumed acknowledgement; validate this delay
     // with destination apps before extending delivery beyond plain-text targets.

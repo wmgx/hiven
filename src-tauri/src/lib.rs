@@ -2268,8 +2268,21 @@ async fn simulate_paste(window: tauri::WebviewWindow) -> Result<(), String> {
 
 #[cfg(target_os = "macos")]
 fn simulate_paste_impl() -> Result<(), String> {
+    post_command_v(core_graphics::event_source::CGEventSourceStateID::CombinedSessionState)
+}
+
+/// The paste queue fires while the user may still hold its shortcut's modifiers
+/// (hold ⌃⇧, tap V repeatedly). A private source does not inherit that physical
+/// modifier state, so the target app receives exactly ⌘V.
+#[cfg(target_os = "macos")]
+fn simulate_paste_ignoring_held_modifiers() -> Result<(), String> {
+    post_command_v(core_graphics::event_source::CGEventSourceStateID::Private)
+}
+
+#[cfg(target_os = "macos")]
+fn post_command_v(state: core_graphics::event_source::CGEventSourceStateID) -> Result<(), String> {
     use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation};
-    use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+    use core_graphics::event_source::CGEventSource;
 
     // Check accessibility permission first
     if !ax_is_trusted(false) {
@@ -2282,7 +2295,7 @@ fn simulate_paste_impl() -> Result<(), String> {
     // by the window server, so they serialize after the panel's just-issued
     // orderOut instead of racing it the way HID-layer injection can before
     // the focus handoff has completed.
-    let src = CGEventSource::new(CGEventSourceStateID::CombinedSessionState)
+    let src = CGEventSource::new(state)
         .map_err(|_| "Failed to create event source")?;
     let dn = CGEvent::new_keyboard_event(src.clone(), KEY_V, true)
         .map_err(|_| "Failed to create key-down event")?;

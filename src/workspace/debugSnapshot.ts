@@ -1,6 +1,6 @@
 const reasonCodes = new Set([
   'QueueTargetError', 'QueuePermissionError', 'QueueUnavailableError', 'QueueSnapshotError',
-  'QueuePlatformUnavailableError', 'QueueDeliveryError', 'QueueHeldKeyError', 'QueueClipboardError',
+  'QueuePlatformUnavailableError', 'QueueDeliveryError', 'QueueClipboardError',
   'hud-unavailable',
 ])
 
