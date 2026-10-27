@@ -46,6 +46,7 @@ import { adaptToolToLauncherItem } from './toolAdapter'
 import { normalizeContribution } from './normalizeContribution'
 import { applyProductProviderToLauncherItem, resolvePluginProductMetadata } from '../pluginProductCatalog'
 import { collectSettingsFieldSearchItems } from './settingsFieldSearch'
+import { collectHostSettingsSearchItems } from './hostSettingsSearch'
 
 const DYNAMIC_QUERY_MAX_LENGTH = 500
 const DYNAMIC_PROVIDER_TIMEOUT_MS = 1000
@@ -390,7 +391,9 @@ export async function collectDynamicItems(
   const resolvedInputText = (q || inputText?.trim() || '')
   if (signal?.aborted || resolvedInputText.length > DYNAMIC_QUERY_MAX_LENGTH) return []
 
-  const settingsFieldItems = includeHost ? collectSettingsFieldSearchItems(q, surfaceId) : []
+  const settingsFieldItems = includeHost
+    ? [...collectHostSettingsSearchItems(q, surfaceId, locale), ...collectSettingsFieldSearchItems(q, surfaceId)]
+    : []
   if (settingsFieldItems.length > 0) onPartial?.({ kind: 'host', items: settingsFieldItems })
 
   const hostPromise: Promise<LauncherItem[]> = includeHost && hostDynamicItemsProvider

@@ -114,6 +114,20 @@ function fieldTextMatchTier(text: string, query: string, prefixTier: number): nu
 
 /** Single match classification shared by filtering and scoring. */
 function searchableFieldsMatchTier(fields: SearchableFields, query: string, locale: Locale): number {
+  const whole = wholeQueryMatchTier(fields, query, locale)
+  if (whole || !/\s/.test(query)) return whole
+  // Several words: every word must match the title or an alias (AND). Capped below a
+  // whole-query prefix so "图片 base64" ranks under a title that starts with the full text.
+  let tier = 3
+  for (const word of query.split(/\s+/)) {
+    if (!word) continue
+    tier = Math.min(tier, wholeQueryMatchTier(fields, word, locale))
+    if (!tier) return 0
+  }
+  return tier
+}
+
+function wholeQueryMatchTier(fields: SearchableFields, query: string, locale: Locale): number {
   const title = localizedText(fields.title || '', fields.titleI18n, locale)
   let tier = fieldTextMatchTier(title, query, 4)
   if (tier === 6) return tier
@@ -149,6 +163,16 @@ export function searchableFieldsMatch(fields: SearchableFields, q: string, local
   const query = q.trim().toLowerCase()
   if (!query) return true
   return searchableFieldsMatchTier(fields, query, locale) > 0
+}
+
+/**
+ * Description recall, used only when nothing matched by name: every word must appear in
+ * the current-locale description (prefix rules as for titles).
+ */
+export function searchableDescriptionMatch(fields: SearchableFields, q: string, locale: Locale): boolean {
+  const description = localizedText(fields.description || '', fields.descriptionI18n, locale)
+  const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  return Boolean(description) && words.length > 0 && words.every((word) => fieldTextMatchTier(description, word, 4) > 0)
 }
 
 // ─── Match Ranges (pure data for rendering) ─────────────────────────────────

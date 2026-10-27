@@ -24,7 +24,7 @@ export type SettingsFieldSearchEntry = {
 const FIELD_KINDS = new Set(['switch', 'number', 'select', 'text', 'textarea', 'list', 'object-list'])
 const SETTINGS_FIELD_RESULT_LIMIT = 20
 
-/** Require a separate prefix token and a nonempty term; ordinary search is untouched. */
+/** The explicit "settings"/"设置" prefix token; without it the whole query is the term. */
 export function parseSettingsFieldSearchQuery(query: string): string | null {
   const match = /^(?:settings|设置)\s+(.+)$/iu.exec(query.trim())
   return match ? match[1].trim().toLowerCase().replace(/\s+/g, ' ') || null : null
@@ -124,8 +124,14 @@ function fieldMatches(entry: SettingsFieldSearchEntry, term: string): boolean {
   return term.split(' ').every((token) => text.some((value) => value.includes(token)))
 }
 
+/** Without the prefix, short terms would substring-match too many field descriptions. */
+const UNPREFIXED_MIN_TERM_LENGTH = 2
+
 export function collectSettingsFieldSearchItems(query: string, surfaceId: LauncherSurfaceId): LauncherItem[] {
-  const term = parseSettingsFieldSearchQuery(query)
+  const prefixed = parseSettingsFieldSearchQuery(query)
+  const unprefixed = query.trim().toLowerCase().replace(/\s+/g, ' ')
+  const bare = unprefixed.length < UNPREFIXED_MIN_TERM_LENGTH || /^(?:settings|设置)$/u.test(unprefixed)
+  const term = prefixed ?? (bare ? null : unprefixed)
   const hostId = normalizeLauncherSurfaceId(surfaceId)
   if (!term || hostId !== 'global-launcher' || !launcherHostHasCapability(hostId, 'settings')) return []
   const items: LauncherItem[] = []
@@ -158,6 +164,8 @@ export function collectSettingsFieldSearchItems(query: string, surfaceId: Launch
           subtitle: subtitle('en'),
           subtitleI18n: { zh: subtitle('zh') },
           icon: 'Settings',
+          kindLabel: translate('en', 'palette', 'kindSettings'),
+          kindLabelI18n: { zh: translate('zh', 'palette', 'kindSettings') },
           // This provider has already matched the explicit term. The full query
           // makes that match survive the shared ranker without changing its rules.
           aliases: [query.trim()],
@@ -166,6 +174,7 @@ export function collectSettingsFieldSearchItems(query: string, surfaceId: Launch
         surfaces: ['global-launcher'],
         requiredCapabilities: ['settings'],
         recordUsage: false,
+        ranking: { trailing: true },
         execute: async (ctx) => {
           const current = availableFields().find((candidate) => candidate.sectionId === entry.sectionId && candidate.fieldKey === entry.fieldKey)
           if (!current) return { ok: false, message: translate(ctx.locale, 'palette', 'pluginActionUnavailable') }

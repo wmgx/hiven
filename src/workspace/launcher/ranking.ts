@@ -27,6 +27,7 @@
 import type { Locale } from '../../i18n'
 import {
   scoreSearchableFields,
+  searchableDescriptionMatch,
   searchableFieldsMatch,
   type SearchableFields,
 } from '../searchRanking'
@@ -486,9 +487,16 @@ export function rankLauncherItems(ctx: RankContext, items: LauncherItem[]): Laun
   // URL subtitle (searchableFieldsMatch intentionally ignores subtitle).
   // contentText (textMatch) still only scores, not filters — Base64-style tools
   // remain dynamic providers rather than always-visible static rows.
-  const candidates = q
+  let candidates = q
     ? items.filter((item) => item.kind === 'dynamic' || itemMatchesQuery(item, q, ctx.locale))
     : items.slice()
+  // Nothing matched by name: let descriptions recall rows, still ahead of fallback recall.
+  let recalledByDescription: LauncherItem[] = []
+  if (q && !candidates.some((item) => !item.ranking?.fallback)) {
+    recalledByDescription = items.filter((item) => item.kind !== 'dynamic' && !isHostAppLauncherItem(item) &&
+      !candidates.includes(item) && searchableDescriptionMatch(getCachedSearchableFields(item, ctx.locale), q, ctx.locale))
+    candidates = [...candidates, ...recalledByDescription]
+  }
 
   // Legacy aliases can collide with another installed app's actual name.
   // In that case name relevance wins by one match tier, above bounded favorite
@@ -506,7 +514,7 @@ export function rankLauncherItems(ctx: RankContext, items: LauncherItem[]): Laun
       (hasAppAliasCollision && isInstalledAppNameExact(item, q) ? 1000 : 0),
     // Product semantics are categorical: an automatic answer on empty input is
     // immediately useful, while fallback recall must stay behind live results.
-    band: item.ranking?.fallback ? 0 : !q && item.directAnswer ? 2 : 1,
+    band: item.ranking?.fallback ? 0 : item.ranking?.trailing || recalledByDescription.includes(item) ? 0.5 : !q && item.directAnswer ? 2 : 1,
   }))
 
   // Empty open: drop cold unused plugins so Recent/Favorites/Apps stay scannable.

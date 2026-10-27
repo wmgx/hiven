@@ -72,11 +72,19 @@ try {
     assert.equal(recordImages.display.subtitleI18n.zh, '剪贴板历史 · 记录设置')
   }
   const existingStatic = registry.collectStaticCandidates('global-launcher')
-  for (const query of ['', 'settings', '设置', '图片', 'image']) {
+  for (const query of ['', 'settings', '设置']) {
     const items = await collect(query)
-    assert.deepEqual(fieldRows(items), [], `ordinary query ${query} must not receive field rows`)
+    assert.deepEqual(fieldRows(items), [], `bare query ${query} must not receive field rows`)
     assert.deepEqual(rank([...existingStatic, ...items], query, 'en').map((item) => item.systemKey),
-      rank(existingStatic, query, 'en').map((item) => item.systemKey), 'ordinary ranking must remain unchanged')
+      rank(existingStatic, query, 'en').map((item) => item.systemKey), 'bare ranking must remain unchanged')
+  }
+  // Without the prefix, field rows still answer and trail every existing result.
+  for (const query of ['图片', 'image']) {
+    const items = await collect(query)
+    assert.ok(fieldRows(items).length > 0, `${query} finds settings fields without the prefix`)
+    const ranked = rank([...existingStatic, ...items], query, 'en').map((item) => item.systemKey)
+    const existing = rank(existingStatic, query, 'en').map((item) => item.systemKey)
+    assert.deepEqual(ranked.slice(0, existing.length), existing, `${query} settings rows rank after existing results`)
   }
   assert.deepEqual(search.collectSettingsFieldSearchItems('settings image', 'quick-editor-command'), [])
   assert.deepEqual(await collect('settings image', 'en', { signal: AbortSignal.abort() }), [])

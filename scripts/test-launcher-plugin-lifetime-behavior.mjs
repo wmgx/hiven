@@ -95,6 +95,7 @@ const selection=load('src/components/launcher/GlobalLauncherSelection.ts',{
 });
 const launcherRegistry=load('src/workspace/launcher/registry.ts',{
   './settingsFieldSearch':{collectSettingsFieldSearchItems:()=>[]},
+  './hostSettingsSearch':{collectHostSettingsSearchItems:()=>[]},
   '../../i18n':i18n,'../../i18n/pluginI18nRegistry':pluginI18n,'../pluginRegistry':registry,
   '../launcherHostSurfaceBridge':{requestOpenLauncherPluginSettingsSurface:fail('settings')},
   '../pluginSettingsStore':settings,'./types':types,'./identity':identity,'./pluginApi':pluginApi,

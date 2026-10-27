@@ -591,6 +591,8 @@ export type LauncherItem = {
     scoreBias?: number
     /** Keep secondary recall rows below live/primary results regardless of text score. */
     fallback?: boolean
+    /** Host-only: settings rows sit after every primary result but ahead of fallback recall. */
+    trailing?: boolean
   }
   /**
    * Host-only legacy usage keys (e.g. the backing command id) consulted as a
