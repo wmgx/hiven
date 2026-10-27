@@ -287,7 +287,7 @@ fn current_update() -> Result<HudUpdate, String> {
 }
 /// Logical card height; a detail, progress or generic "review" line adds a second row.
 fn card_height(snapshot: &Snapshot) -> f64 {
-    if snapshot.message.is_none() || snapshot.detail.is_some() || snapshot.progress.is_some() { 72.0 } else { 52.0 }
+    if snapshot.message.is_none() || snapshot.detail.is_some() || snapshot.progress.is_some() { 56.0 } else { 40.0 }
 }
 /// Render whatever slots remain valid; hides the window when none do.
 fn show_current(app: &tauri::AppHandle) -> Result<HudUpdate, String> {

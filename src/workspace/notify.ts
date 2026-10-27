@@ -17,7 +17,7 @@ export type NotifyApi = {
   end(id: string): void
 }
 
-const FLASH_MS = 1200
+const FLASH_MS = 2000
 const ERROR_FLASH_MS = 3000
 const MAX_CHARS = 80
 const statusToastIds = new Map<string, string>()

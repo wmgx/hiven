@@ -1119,15 +1119,20 @@ body[data-theme='dark'] .clipboard-history-surface {
 
 .clipboard-history-merge-separator {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px 12px;
   padding: 10px 16px;
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   color: var(--hiven-color-text-secondary);
   font-size: 12px;
 }
+
+.clipboard-history-merge-separator > span { flex: none; white-space: nowrap; }
+
+.clipboard-history-merge-separator .hiven-ui-segmented { max-width: 100%; flex-wrap: wrap; }
 
 .clipboard-history-merge-separator .hiven-ui-segmented-item {
   min-height: 27px;

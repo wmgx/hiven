@@ -178,7 +178,7 @@ console.log('Toast routing passed: privacy, issue epoch, late dismissal, expiry,
   assert.equal(routed[1].id, routed[2].id, 'Same status id updates one notice')
   assert.equal(h.items().filter(({ notify }) => notify?.slot === 'status').length, 1)
   assert.ok(routed[1].expiresAt - routed[1].sequence / 1000 > 60_000, 'Status is not bounded by the flash lifetime')
-  h.tick(1300)
+  h.tick(2100)
   assert.deepEqual(Array.from(h.items(), ({ message }) => message), ['Queue item pasted'], 'Flash expires while the status stays')
   h.notify.end('queue')
   assert.equal(h.items().length, 0)

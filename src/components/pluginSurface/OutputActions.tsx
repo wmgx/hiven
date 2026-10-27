@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useT } from '../../i18n'
 import { flash } from '../../workspace/notify'
+import { useAppStore } from '../../store'
 import type { PluginObjectBlockInput, PluginOutputActionsProps, PluginPasteResult, PluginSurfaceHostApi } from '../../workspace/pluginTypes'
 
 /** Host capabilities the shared output actions need; refreshed on every surface render. */
@@ -21,6 +22,17 @@ type Action = { id: string; label: string; run: () => void | Promise<void> }
 
 /** A launcher Block carries at most this much tool output. */
 const CONTINUE_MAX_BYTES = 1024 * 1024
+
+/** Completing closes the launcher; notify after it hides so the desktop HUD shows it instead of the closing window. */
+function completeThenNotify(complete: () => void, notice: Parameters<typeof flash>[0]) {
+  const wasOpen = useAppStore.getState().globalLauncherOpen
+  complete()
+  if (!wasOpen) { flash(notice); return }
+  let done = false
+  const finish = () => { if (done) return; done = true; stop(); clearTimeout(timer); flash(notice) }
+  const stop = useAppStore.subscribe(state => { if (!state.globalLauncherOpen) finish() })
+  const timer = setTimeout(finish, 1000)
+}
 
 async function foregroundAppName(): Promise<string | undefined> {
   try { return (await invoke<string | null>('current_foreground_app_name'))?.trim() || undefined } catch { return undefined }
@@ -54,8 +66,7 @@ function HostOutputActions({ deps, text, primary = 'copy', copy, more = [], disa
       flash({ level: 'error', message: t('copyFailed') })
       return
     }
-    flash({ level: 'success', message: t('copied') })
-    deps.current.complete()
+    completeThenNotify(deps.current.complete, { level: 'success', message: t('copied') })
   })
   const doPaste = once(async () => {
     const value = resolveText()
@@ -65,8 +76,7 @@ function HostOutputActions({ deps, text, primary = 'copy', copy, more = [], disa
     if (result.fallback !== 'copied') {
       try { await deps.current.writeText(value) } catch { flash({ level: 'error', message: t('copyFailed') }); return }
     }
-    flash({ level: 'info', message: t('pasteCopied') })
-    deps.current.complete()
+    completeThenNotify(deps.current.complete, { level: 'info', message: t('pasteCopied') })
   })
   const doContinue = once(async () => {
     const value = resolveText()
