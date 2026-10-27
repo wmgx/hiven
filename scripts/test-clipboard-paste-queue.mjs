@@ -140,6 +140,16 @@ copy('cancel'); const cancelledRound = current.id
 round.status({ sessionId: cancelledRound, phase: 'cancelled' }); copy('restart')
 assert.notEqual(current.id, cancelledRound)
 
+copy('second pending item')
+const idleRound = current.id
+clock += 60_000
+round.status({ sessionId: idleRound, phase: 'ready', completed: 1 })
+clock += 599_999; round.expire(); assert.ok(current, 'last paste progress starts the idle deadline')
+round.status({ sessionId: idleRound, phase: 'ready', completed: 1 })
+clock++; round.expire(); assert.equal(current, undefined, 'started rounds expire after ten idle minutes; status updates do not extend them')
+copy('after idle expiry')
+assert.notEqual(current.id, idleRound)
+
 const appendDelivery = deferred()
 const appending = createClipboardPasteQueue({ deliver: () => appendDelivery.promise })
 const snapshots = [{ id: '1', text: 'one' }]
