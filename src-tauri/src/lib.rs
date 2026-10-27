@@ -892,6 +892,9 @@ async fn configure_launcher_window(
             // adding a focus/rekey loop while the user is typing or composing.
             if window.is_resizable().map_err(|error| error.to_string())? != request.resizable {
                 window.set_resizable(request.resizable).map_err(|error| error.to_string())?;
+                // The real toggle (entering/leaving a resizable surface) did move
+                // the responder off WebKit: hand it back so typing reaches the DOM.
+                restore_launcher_first_responder(&window);
             }
             // A constraint-only update retains the user's dimensions unless a
             // changed minimum or monitor work area requires fitting them.
@@ -917,9 +920,9 @@ async fn configure_launcher_window(
                     x = x.clamp(origin.x, origin.x + (area.width - width).max(0.0));
                     y = y.clamp(origin.y, origin.y + (area.height - height).max(0.0));
                 }
-                if (x - old_position.x).abs() >= 0.5 || (y - old_position.y).abs() >= 0.5 {
-                    window.set_position(tauri::LogicalPosition::new(x, y)).map_err(|error| error.to_string())?;
-                }
+                // AppKit's setContentSize keeps the bottom-left corner, so a
+                // height-only change still moves the top edge: always re-pin it.
+                window.set_position(tauri::LogicalPosition::new(x, y)).map_err(|error| error.to_string())?;
             }
             Ok(true)
         })();
@@ -2954,6 +2957,29 @@ fn rekey_launcher_window_macos(window: &tauri::WebviewWindow) -> Result<(), Stri
         let _: bool = objc2::msg_send![ns_window, makeFirstResponder: responder_target];
     }
     Ok(())
+}
+
+/// Return first responder to WebKit's content view without re-keying the
+/// panel, and only while the launcher is already the key window.
+fn restore_launcher_first_responder(window: &tauri::WebviewWindow) {
+    #[cfg(target_os = "macos")]
+    {
+        let (Ok(ns_window), Ok(ns_view)) = (window.ns_window(), window.ns_view()) else { return };
+        if ns_window.is_null() || ns_view.is_null() {
+            return;
+        }
+        unsafe {
+            let ns_window = ns_window as *mut objc2::runtime::AnyObject;
+            let is_key: bool = objc2::msg_send![ns_window, isKeyWindow];
+            if !is_key {
+                return;
+            }
+            let responder_target = launcher_first_responder_target(ns_view as *mut objc2::runtime::AnyObject);
+            let _: bool = objc2::msg_send![ns_window, makeFirstResponder: responder_target];
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = window;
 }
 
 /// Convert the Tauri-created NSWindow into a custom NSPanel subclass at

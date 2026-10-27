@@ -186,7 +186,7 @@ export function EncodeDecodeSurface(props: PluginSurfaceProps) {
             </Button>
           </div>
           <textarea
-            data-plugin-surface-autofocus
+            data-plugin-surface-autofocus="sticky"
             data-launcher-scrollable
             value={inputText}
             aria-label={t('pane.input')}

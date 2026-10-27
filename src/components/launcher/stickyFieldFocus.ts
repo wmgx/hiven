@@ -1,38 +1,26 @@
 /**
- * A surface with exactly one usable text field keeps it as the typing target:
- * clicks elsewhere hand focus back, and typing while focus sits on a button or
- * the page goes into the field. Surfaces with several fields are left alone.
+ * A field a plugin marks `data-plugin-surface-autofocus="sticky"` stays the
+ * typing target: clicks elsewhere hand focus back, and typing while focus sits
+ * on a button or the page goes into it. Other fields keep focus when chosen.
  */
 export const SURFACE_SHELL_SELECTOR = '.global-launcher-surface-shell, .global-launcher-settings-shell, .global-launcher-host-surface-shell'
 
-const FIELD_SELECTOR = [
-  'input:not([type])', 'input[type="text"]', 'input[type="search"]', 'input[type="url"]',
-  'input[type="email"]', 'input[type="number"]', 'input[type="password"]', 'textarea', '[contenteditable="true"]', '[contenteditable=""]',
-].join(', ')
+const STICKY_SELECTOR = '[data-plugin-surface-autofocus="sticky"]'
 const OVERLAY_SELECTOR = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]'
 const ACTIVATABLE_SELECTOR = 'button, a[href], summary, label, [role="button"], [role="checkbox"], [role="radio"], [role="switch"], [role="tab"]'
 
-function usable(element: HTMLElement): boolean {
-  if (element.matches(':disabled, [readonly]') || element.getClientRects().length === 0) return false
-  if (element.closest('[inert], [hidden], [aria-hidden="true"]')) return false
-  return element.ownerDocument.defaultView?.getComputedStyle(element).visibility === 'visible'
-}
-
-export function soleField(shell: HTMLElement): HTMLElement | null {
-  let found: HTMLElement | null = null
-  for (const element of shell.querySelectorAll<HTMLElement>(FIELD_SELECTOR)) {
-    if (!usable(element)) continue
-    if (found) return null
-    found = element
-  }
-  return found
+function stickyField(shell: HTMLElement): HTMLElement | null {
+  const element = shell.querySelector<HTMLElement>(STICKY_SELECTOR)
+  if (!element || element.matches(':disabled, [readonly]') || element.getClientRects().length === 0) return null
+  if (element.closest('[inert], [hidden], [aria-hidden="true"]')) return null
+  return element
 }
 
 function isEditable(element: Element | null): boolean {
   return element instanceof HTMLElement && (element.isContentEditable || element.matches('input, textarea, select'))
 }
 
-export function keepSoleFieldFocus(panel: HTMLElement): () => void {
+export function keepStickyFieldFocus(panel: HTMLElement): () => void {
   const document = panel.ownerDocument
   const view = document.defaultView
   if (!view) return () => {}
@@ -41,7 +29,7 @@ export function keepSoleFieldFocus(panel: HTMLElement): () => void {
   const target = (): HTMLElement | null => {
     if (document.querySelector(OVERLAY_SELECTOR)) return null
     const shell = panel.querySelector<HTMLElement>(SURFACE_SHELL_SELECTOR)
-    return shell ? soleField(shell) : null
+    return shell ? stickyField(shell) : null
   }
 
   function onKeyDown(event: KeyboardEvent) {

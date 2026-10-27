@@ -137,7 +137,7 @@ export function CalculatorSurface({ host, initialText, t, calculate, calculateVa
             onKeyDown={handleKeyDown}
             placeholder={t('surface.placeholder')}
             autoFocus
-            data-plugin-surface-autofocus
+            data-plugin-surface-autofocus="sticky"
             autoComplete="off"
             spellCheck={false}
             onCompositionStart={ime.onCompositionStart}

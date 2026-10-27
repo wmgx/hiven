@@ -270,6 +270,7 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
         </span>
         <input
           autoFocus
+          data-plugin-surface-autofocus="sticky"
           value={inputValue}
           name="text-explode-query"
           inputMode="text"

@@ -25,7 +25,7 @@ export function FilePathsSurface({ host, t, initialText = '' }: PluginSurfacePro
       <button type="button" key={item} aria-pressed={style === item} onClick={() => setStyle(item)}>{t(`style.${item}`)}</button>)}</nav>
     {(format === 'relative' || format === 'markdown-image') && <label>{t(format === 'markdown-image' ? 'documentBase' : 'base')}<input aria-label={t(format === 'markdown-image' ? 'documentBase' : 'base')} value={base} onChange={(event) => setBase(event.target.value)} /></label>}
     <div className="file-paths-editors">
-      <label>{t('source')}<textarea aria-label={t('source')} placeholder={t('sourcePlaceholder')} spellCheck={false} value={source} onChange={(event) => setSource(event.target.value)} /></label>
+      <label>{t('source')}<textarea data-plugin-surface-autofocus="sticky" aria-label={t('source')} placeholder={t('sourcePlaceholder')} spellCheck={false} value={source} onChange={(event) => setSource(event.target.value)} /></label>
       <label>{t('output')}<textarea aria-label={t('output')} spellCheck={false} readOnly value={result.output} /></label>
     </div>
     {status && <div role="status" aria-live="polite">{status}</div>}

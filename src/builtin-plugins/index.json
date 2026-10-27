@@ -1,10 +1,10 @@
 {
-  "version": 174,
+  "version": 175,
   "packages": [
     {
       "pluginId": "encode-decode",
       "dir": "encode-decode",
-      "version": "2.10.7"
+      "version": "2.10.8"
     },
     {
       "pluginId": "image-tools",
@@ -39,17 +39,17 @@
     {
       "pluginId": "calculator",
       "dir": "calculator",
-      "version": "1.9.4"
+      "version": "1.9.5"
     },
     {
       "pluginId": "date-time-assistant",
       "dir": "date-time-assistant",
-      "version": "1.12.6"
+      "version": "1.12.7"
     },
     {
       "pluginId": "translate",
       "dir": "translate",
-      "version": "1.0.31"
+      "version": "1.0.32"
     },
     {
       "pluginId": "ai-writing",
@@ -89,7 +89,7 @@
     {
       "pluginId": "text-explode",
       "dir": "text-explode",
-      "version": "1.0.13"
+      "version": "1.0.14"
     },
     {
       "pluginId": "user-commands",
@@ -104,7 +104,7 @@
     {
       "pluginId": "file-paths",
       "dir": "file-paths",
-      "version": "1.0.7"
+      "version": "1.0.8"
     },
     {
       "pluginId": "curl-inspector",

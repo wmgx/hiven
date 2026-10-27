@@ -514,6 +514,7 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
           <textarea
             ref={inputRef}
             className="translate-input"
+            data-plugin-surface-autofocus="sticky"
             value={inputText}
             onChange={(event) => {
               if (event.target.value === inputText) return

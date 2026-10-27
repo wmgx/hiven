@@ -50,7 +50,7 @@ export function DateTimeSurface({ defaultOffset, host, initialText, t, convert }
               onChange={(event) => setInput(event.target.value)}
               placeholder={t('surface.inputPlaceholder')}
               autoFocus
-              data-plugin-surface-autofocus
+              data-plugin-surface-autofocus="sticky"
               autoComplete="off"
               spellCheck={false}
             />

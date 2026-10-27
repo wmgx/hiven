@@ -1,4 +1,4 @@
-import { SURFACE_SHELL_SELECTOR, soleField } from './soleFieldFocus'
+import { SURFACE_SHELL_SELECTOR } from './stickyFieldFocus'
 
 /** One opening owns one handoff to its explicitly marked, ready control. */
 export function focusInitialSurfaceTarget(panel: HTMLElement, settingsOwnFocus = false): () => void {
@@ -51,12 +51,6 @@ export function focusInitialSurfaceTarget(panel: HTMLElement, settingsOwnFocus =
       && !target.closest('[inert], [hidden], [aria-hidden="true"], [aria-disabled="true"]')
       && view!.getComputedStyle(target).visibility === 'visible') {
       if (document.activeElement !== target) focus(target)
-      return stop()
-    }
-    // Unmarked page with a single text field: that field is the typing target.
-    const sole = soleField(shell)
-    if (sole) {
-      if (document.activeElement !== sole) focus(sole)
       return stop()
     }
     if (!fallbackFocused) {
