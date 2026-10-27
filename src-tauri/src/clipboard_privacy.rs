@@ -352,4 +352,22 @@ mod tests {
             let _: () = msg_send![board, releaseGlobally];
         })
     }
+
+    #[test]
+    fn marked_text_keeps_non_ascii_text_intact() {
+        objc2::rc::autoreleasepool(|_| unsafe {
+            use objc2::{class, msg_send, runtime::AnyObject};
+            let board: *mut AnyObject = msg_send![class!(NSPasteboard), pasteboardWithUniqueName];
+            assert!(!board.is_null());
+            let kind: *mut AnyObject = msg_send![class!(NSString), stringWithUTF8String: c"public.utf8-plain-text".as_ptr()];
+            for sensitive in [false, true] {
+                let text = "合成文本 第一段 😀 é\nline two";
+                super::write_marked_text(board, text.into(), sensitive).unwrap();
+                let value: *mut AnyObject = msg_send![board, stringForType: kind];
+                let bytes: *const std::ffi::c_char = msg_send![value, UTF8String];
+                assert_eq!(std::ffi::CStr::from_ptr(bytes).to_str().unwrap(), text);
+            }
+            let _: () = msg_send![board, releaseGlobally];
+        })
+    }
 }

@@ -32,11 +32,12 @@ const queue = createClipboardPasteQueue({
       attemptId = await invoke<string>('begin_history_queue_paste')
       if (!isCurrent()) return { ok: false }
       await invoke('paste_history_queue_text', { attemptId, text: snapshot.text })
-      trackBehavior('paste_queue.deliver', { ok: true })
+      trackBehavior('paste_queue.deliver', { status: 'delivered' })
       return { ok: isCurrent() }
     } catch (error) {
-      // Native errors are fixed reason codes (QueueTargetError, …), never clipboard text.
-      trackBehavior('paste_queue.deliver', { ok: false, error: String(error).slice(0, 80) })
+      // Native errors are fixed reason codes (QueueTargetError, …); anything else is "other".
+      const reason = /^Queue[A-Za-z]+Error$/.test(String(error)) ? String(error) : 'other'
+      trackBehavior('paste_queue.deliver', { status: 'failed', reason })
       return { ok: false }
     }
     finally { signal.removeEventListener('abort', cancel); cancel() }
@@ -114,6 +115,7 @@ export function installPasteQueueHost(options: { notify: Notify }): () => void {
       const accelerator = identity()
       const update = (registrationStatus: string, registrationError?: string) => {
         if (requested !== generation) return
+        trackBehavior('paste_queue.shortcut', { status: registrationStatus })
         const shortcut = useAppStore.getState().settings.pasteQueueShortcut
         useAppStore.getState().updateSetting('pasteQueueShortcut', { ...shortcut, registrationStatus, registrationError })
       }
@@ -123,6 +125,7 @@ export function installPasteQueueHost(options: { notify: Notify }): () => void {
         if (requested !== generation) return
         await register(accelerator, (event) => {
           if (!alive || paused || requested !== generation || !owner || event.state !== 'Released') return
+          trackBehavior('paste_queue.shortcut', { status: 'pressed', phase: queue.getSnapshot().remaining ? 'ready' : 'empty' })
           if (!queue.getSnapshot().remaining) { publish('empty'); return }
           void queue.next().then((outcome) => { if (outcome === 'failed' || outcome === 'delivered') publish(outcome) })
         })

@@ -97,7 +97,7 @@ export async function captureForegroundSelectionText(
 ): Promise<string | undefined> {
   const availability = await readSelectionCaptureAvailability()
   if (availability !== 'can-attempt') {
-    trackBehavior('launcher.selection_capture', { outcome: availability })
+    trackBehavior('launcher.selection_capture', { status: availability })
     api.showMessage(t(locale, availability === 'unsupported'
       ? 'workspace.captureSelection.unsupported'
       : 'workspace.captureSelection.unavailable'), 'warning')
@@ -105,8 +105,8 @@ export async function captureForegroundSelectionText(
   }
   const startedAt = Date.now()
   const { text, error } = await invokeCapture()
-  // Error text is a native reason code/message, never captured content.
-  trackBehavior('launcher.selection_capture', { outcome: text ? 'captured' : error ? 'failed' : 'empty', durationMs: Date.now() - startedAt, ...(error ? { error: error.slice(0, 160) } : {}) })
+  // Telemetry keeps only whitelisted string keys; the reason is a code, never captured text.
+  trackBehavior('launcher.selection_capture', { status: text ? 'captured' : error ? 'failed' : 'empty', durationMs: Date.now() - startedAt, ...(error ? { reason: captureFailureMessageKey(error).split('.').pop() } : {}) })
   if (error !== SELECTION_CAPTURE_UNSUPPORTED && (!text || options.restoreLauncher)) await restoreLauncherWindow()
   if (text) return text
   if (error) api.showMessage(t(locale, captureFailureMessageKey(error)), 'warning')
