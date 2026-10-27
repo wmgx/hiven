@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { IconButton, ToolbarButton, useImeKeyboard } from '@hiven/plugin-ui'
+import { IconButton, TextInput, ToolbarButton, useImeKeyboard } from '@hiven/plugin-ui'
 import { CloseIcon } from '@hiven/plugin-ui/icons'
 import { Bomb } from 'lucide-react'
 import { assembleFromSelection, isSelectableToken, tokenize, type ExplodeToken } from '../tokenize'
@@ -255,20 +255,20 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
 
   return (
     <div className="text-explode-surface" onKeyDown={handleKeyDown}>
-      <div className="l-search tx-search-row">
+      <div className="tx-search-row">
         <span className="tx-token" data-no-select>
           <Bomb size={13} aria-hidden="true" />
           {t('token.label')}
-          <button
+          <IconButton
             type="button"
             className="tx-token-remove"
-            aria-label={t('token.remove')}
+            label={t('token.remove')}
             onClick={requestBack}
           >
             <CloseIcon size={11} />
-          </button>
+          </IconButton>
         </span>
-        <input
+        <TextInput
           autoFocus
           data-plugin-surface-autofocus="sticky"
           value={inputValue}
@@ -459,7 +459,7 @@ function renderChip(
         '--dx': `${anim.dx}px`,
         '--dy': `${anim.dy}px`,
         '--rot': `${anim.rot}deg`,
-        transitionDelay: `${anim.delay}ms`,
+        transitionDelay: `calc(var(--duration-normal) * ${anim.delay / 200})`,
       }}
     >
       {token.text}
