@@ -1,5 +1,5 @@
 {
-  "version": 194,
+  "version": 195,
   "packages": [
     {
       "pluginId": "image-tools",
@@ -39,7 +39,7 @@
     {
       "pluginId": "text-diff",
       "dir": "textDiff",
-      "version": "3.6.4"
+      "version": "3.6.5"
     },
     {
       "pluginId": "clipboard-history",

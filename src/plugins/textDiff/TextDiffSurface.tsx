@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Menu, SegmentedControl } from '@hiven/plugin-ui'
+import { Button, IconButton, Menu, SegmentedControl } from '@hiven/plugin-ui'
 import { getPluginDiffHost, type DiffSource } from '@hiven/plugin-diff'
 import { DiffExplanation } from './DiffExplanation'
 import { useDiffSourceText } from './useDiffSourceText'
@@ -243,9 +243,9 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
     <div className="td-surface">
       {/* Header — breadcrumb left, mode center-right, actions right */}
       <div className="td-hdr">
-        <button type="button" className="td-bc-back" onClick={() => { leaveSurface(); host.requestBack() }}>
+        <Button variant="ghost" type="button" className="td-bc-back" onClick={() => { leaveSurface(); host.requestBack() }}>
           <IconBack /><span className="td-bc-root">hiven</span>
-        </button>
+        </Button>
         <span className="td-bc-sep">/</span>
         <span className="td-bc-cur">{t('surface.breadcrumb')}</span>
         <div className="td-hdr-c">
@@ -256,7 +256,7 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
         <div className="td-hdr-a">
           <DiffExplanation host={host} t={t} original={originalText} modified={modifiedText} />
           {diffMode === 'json' && (
-            <button
+            <IconButton
               type="button"
               className="td-ib"
               onClick={handleFormat}
@@ -265,14 +265,14 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
               aria-label={t('diff.format')}
             >
               <IconFormat />
-            </button>
+            </IconButton>
           )}
-          <button type="button" className="td-ib" onClick={handleSwap} title={t('diff.swap')} aria-label={t('diff.swap')}>
+          <IconButton type="button" className="td-ib" onClick={handleSwap} title={t('diff.swap')} aria-label={t('diff.swap')}>
             <IconSwap />
-          </button>
-          <button type="button" className="td-ib" onClick={handleDetach} title={t('diff.detach')} aria-label={t('diff.detach')}>
+          </IconButton>
+          <IconButton type="button" className="td-ib" onClick={handleDetach} title={t('diff.detach')} aria-label={t('diff.detach')}>
             <IconDetach />
-          </button>
+          </IconButton>
         </div>
       </div>
 
@@ -285,7 +285,7 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
             <span>{t(`surface.${side}`)}</span>
             <Menu
               header={t('source.snapshotHint')}
-              trigger={<button type="button" className="td-source" aria-label={t('source.choose', { side: t(`surface.${side}`) })}>{source.title || t('source.chooseShort')} ▾</button>}
+              trigger={<Button variant="ghost" type="button" className="td-source" aria-label={t('source.choose', { side: t(`surface.${side}`) })}>{source.title || t('source.chooseShort')} ▾</Button>}
               items={sourceOptions.map((option) => ({
                 key: option.sourceId,
                 label: option.kind === 'empty' ? t('source.empty') : option.title,
@@ -344,7 +344,7 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
       {/* Status bar — matches .sbar from mockup */}
       {diffMode !== 'set' && <div className="td-sbar">
         <div className="td-nav">
-          <button
+          <Button variant="ghost"
             type="button"
             className="td-nav-b"
             onClick={() => navigateHunk(-1)}
@@ -352,13 +352,13 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
             aria-label={t('diff.navPrev')}
           >
             <IconUp />{t('diff.navPrev')}
-          </button>
+          </Button>
           <span className="td-nav-p">
             {totalHunks > 0
               ? t('diff.navPosition', { current: String(displayedHunkIndex + 1), total: String(totalHunks) })
               : t('diff.noChanges')}
           </span>
-          <button
+          <Button variant="ghost"
             type="button"
             className="td-nav-b"
             onClick={() => navigateHunk(1)}
@@ -366,7 +366,7 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
             aria-label={t('diff.navNext')}
           >
             {t('diff.navNext')}<IconDown />
-          </button>
+          </Button>
         </div>
       </div>}
     </div>
