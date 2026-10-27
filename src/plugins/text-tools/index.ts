@@ -1,4 +1,5 @@
 import { definePlugin } from '@hiven/plugin'
+import { additionalTools } from './additionalTools'
 import { lineTools } from './line/tools'
 import { jsonTools } from './json/tools'
 import { encodeTools } from './encode/tools'
@@ -9,7 +10,7 @@ import { UrlQuerySurface } from './json/UrlQuerySurface'
 import './style.css'
 
 export default definePlugin({
-  tools: [...lineTools, ...jsonTools, ...encodeTools, ...formatTools, ...hashTools, ...pathTools],
+  tools: [...lineTools, ...jsonTools, ...encodeTools, ...formatTools, ...hashTools, ...pathTools, ...additionalTools],
   ui: { surfaces: [{
     id: 'url-query', kind: 'custom-view', title: 'urlQuery.title', icon: 'Link',
     aliases: ['edit URL parameters', 'URL query editor', '编辑 URL 参数'],

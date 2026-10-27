@@ -40,6 +40,7 @@ const commands = [
   ['npm', ['run', 'test:ai-provider-runtime']],
   ['npm', ['run', 'test:plugin-i18n-localization']],
   ['npm', ['run', 'test:plugin-merge-groups']],
+  ['npm', ['run', 'test:text-tools-execution']],
   ['npm', ['run', 'test:web-open-dynamic-items']],
   ['npm', ['run', 'test:web-open-rule-consistency']],
   ['npm', ['run', 'test:web-open-query-history']],

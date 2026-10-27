@@ -226,7 +226,8 @@
     "test:ai-permission-behavior": "node scripts/test-ai-permission-behavior.mjs",
     "test:clipboard-history-paged": "node scripts/test-clipboard-history-paged.mjs",
     "test:ime-input-handlers": "node scripts/test-ime-input-handlers.mjs",
-    "test:launcher-surface-background-idle": "node scripts/test-launcher-surface-background-idle.mjs"
+    "test:launcher-surface-background-idle": "node scripts/test-launcher-surface-background-idle.mjs",
+    "test:text-tools-execution": "node --experimental-strip-types scripts/test-text-tools-execution.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

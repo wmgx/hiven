@@ -105,7 +105,7 @@
   "url.decode.title": "URL 解码",
   "html.encode.title": "HTML 实体编码",
   "html.decode.title": "HTML 实体解码",
-  "slashes.escape.title": "转义",
+  "slashes.escape.title": "反斜杠转义",
   "slashes.unescape.title": "反转义",
   "jwt.decode.title": "JWT 解码",
   "error.invalid": "无法处理此输入",
@@ -161,5 +161,16 @@
   "paths.error.output-limit": "Markdown 输出超过 1 MiB，请减少路径数量。",
   "urlQuery.title": "编辑 URL 参数",
   "urlQuery.url": "URL",
-  "paths.error.empty": "请输入路径"
+  "paths.error.empty": "请输入路径",
+  "markdownPlain.timeout": "转换超时，请简化内容后重试",
+  "invisibleCharacters.title": "清理不可见字符",
+  "markdownPlain.title": "Markdown 转纯文本",
+  "markdownPlain.image": "图片",
+  "cleanAgent.title": "清理 AI 终端文本",
+  "cleanAgent.includeAscii": "同时清理 ASCII 边框",
+  "duplicates.title": "查重复行",
+  "typescript.title": "JSON → TypeScript 类型",
+  "expression.title": "JSON 表达式",
+  "expression.label": "表达式",
+  "error.expression": "JSON 或表达式无效"
 }
