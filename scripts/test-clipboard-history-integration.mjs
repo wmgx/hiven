@@ -33,9 +33,6 @@ const requiredKeys = [
   'state.empty',
   'preview.empty',
   'hint.paste',
-  // 'hint.copy' removed: the surface footer now shows paste / return / delete
-  // only, and no component references the key.
-  'hint.returnToLauncher',
   'hint.delete',
   'action.back',
   'action.paste',

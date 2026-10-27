@@ -57,7 +57,7 @@ async function runClipboardImageSave(task: Task, owner: ImageSaveOwner): Promise
   try {
     observe()
     if (!current()) return
-    target = await captureHudTarget(operation, undefined, owner.backgroundAction)
+    target = await captureHudTarget(operation, owner.backgroundAction)
     if (!current()) return
     const storage = createPluginPrivateStorage(BUNDLED_SOURCE, pluginId, permissions, {
       capture: () => current,

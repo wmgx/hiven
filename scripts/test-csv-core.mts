@@ -1,6 +1,5 @@
 #!/usr/bin/env npx tsx
 import assert from 'node:assert/strict'
-import { joinClipboardTexts } from '../src/plugins/clipboard-history/merge/clipboardTextMerge.ts'
 import {
   applyTransforms,
   applyTableQuery,
@@ -46,10 +45,10 @@ function table(headers: string[], rows: string[][]): Table {
   }
 }
 
-// History's structured merge preserves each complete item through the real CSV pipeline.
+// Quoted text cells survive the complete CSV pipeline.
 {
   const texts = ['跨行\n中文', 'comma, and "quotes"', '  首尾空白  ', '', '001', '=literal', '']
-  const source = joinClipboardTexts(texts, 'csv')
+  const source = 'text\r\n"跨行\n中文"\r\n"comma, and ""quotes"""\r\n"  首尾空白  "\r\n""\r\n"001"\r\n"=literal"\r\n""'
   const expected = texts.map(text => ({ text }))
   const parsed = parseSource(source, 'auto', 'auto')
   assert.equal(parsed.ok, true)

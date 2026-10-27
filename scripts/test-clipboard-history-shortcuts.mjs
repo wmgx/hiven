@@ -146,12 +146,11 @@ function dispatch(key, target, options = {}) {
   const selectedItem = { id: 'selected', kind: 'text' }
   const context = {
     ...policy, Element, HTMLElement: Element, document,
-    titleDialog: null, legacyDialog: null, emptyTrashDialog: false, purgeDialog: false, quickEditorOpen: null, textEdit: null, combining: false, filter: 'all', resultsActionBlocked: false, settings: { enabled: true },
+    titleDialog: null, legacyDialog: null, selectedIds: [], multiple: false, filter: 'all', resultsActionBlocked: false, settings: { enabled: true },
     selectedItem, selectedId: 'selected', filteredItems: [selectedItem], flatRows: [],
     imeKeyDown: { shouldIgnoreKeyDown: () => false },
     handlePaste: (_item, plain) => calls.push(plain ? 'plainPaste' : 'paste'), toggleQuickFavorite: () => calls.push('favorite'), handleReturnToLauncher: () => calls.push('return'),
     handleDelete: () => calls.push('delete'), handleCopy: () => calls.push('copy'), handleSaveImage: () => calls.push('save-image'),
-    cancelMerge: () => calls.push('cancel-merge'), toggleMergeItem: () => calls.push('toggle-merge'),
     readDomSelectedText: () => '', setSelectedId: () => calls.push('selection'),
     virtualizer: { scrollToIndex() {} }, host: {}, t: (value) => value,
     ...options.context,
@@ -170,7 +169,7 @@ const untouched = { calls: [], prevented: false, stopped: false }
 for (const target of [search, select, row, rowLabel, list, surface]) {
   assert.deepEqual(dispatch('Enter', target), { calls: ['paste'], prevented: true, stopped: false })
   for (const modifier of ['metaKey', 'ctrlKey']) {
-    assert.deepEqual(dispatch('Enter', target, { event: { [modifier]: true } }), { calls: ['return'], prevented: true, stopped: false })
+    assert.deepEqual(dispatch('Enter', target, { event: { [modifier]: true } }), { calls: ['paste'], prevented: true, stopped: false })
   }
 }
 for (const target of [settings, settingsIcon, rowDelete]) {
@@ -210,20 +209,13 @@ assert.deepEqual(dispatch('s', settings, {
 assert.deepEqual(dispatch('s', row, {
   event: { ctrlKey: true, shiftKey: true }, context: { selectedItem: { id: 'image', kind: 'image' } },
 }), untouched, 'modified save chords do not trigger image save')
-assert.deepEqual(dispatch('Enter', search, { context: { combining: true } }), { calls: ['toggle-merge'], prevented: true, stopped: true })
-assert.deepEqual(dispatch('Enter', search, { context: { combining: true, resultsActionBlocked: true } }), { calls: [], prevented: true, stopped: true }, 'pending merge search cannot select a stale row')
-assert.deepEqual(dispatch('Delete', row, { context: { combining: true } }), untouched)
-assert.deepEqual(dispatch('Escape', search, { context: { combining: true } }), { calls: ['cancel-merge'], prevented: true, stopped: true })
 
 console.log('✓ Clipboard history shortcut eligibility, focus lifecycle and production handler passed')
 
 for (const target of [search, row, list]) {
-  assert.deepEqual(dispatch('Enter', target, { event: { altKey: true } }).calls, ['plainPaste'])
+  assert.deepEqual(dispatch('Enter', target, { event: { shiftKey: true } }).calls, ['plainPaste'])
   assert.deepEqual(dispatch('p', target, { event: { altKey: true, code: 'KeyP' } }).calls, ['favorite'])
   assert.deepEqual(dispatch('π', target, { event: { altKey: true, code: 'KeyP' } }).calls, ['favorite'], 'macOS Option-produced character still resolves its physical P key')
 }
 assert.deepEqual(dispatch('Enter', search, { event: { altKey: true }, context: { selectedItem: { id: 'image', kind: 'image' } } }).calls, [])
 assert.deepEqual(dispatch('Enter', search, { event: { altKey: true, ctrlKey: true } }).calls, [])
-for (const event of [{ altKey: true }, { altKey: true, code: 'KeyP' }]) {
-  assert.deepEqual(dispatch('Enter', search, { event, context: { textEdit: {} } }), { ...untouched, stopped: true })
-}

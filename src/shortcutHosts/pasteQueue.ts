@@ -143,5 +143,5 @@ export function installPasteQueueHost(options: { notify: Notify }): () => void {
     })
   }
   resume()
-  return () => { alive = false; stopReload(); stopStore(); syncShortcut = () => {}; notify = undefined }
+  return () => { alive = false; stopReload(); stopStore(); sync(); syncShortcut = () => {}; notify = undefined }
 }

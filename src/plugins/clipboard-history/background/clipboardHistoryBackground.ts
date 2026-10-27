@@ -25,7 +25,7 @@ function buildWatchOptions(settings: ClipboardHistorySettings): ClipboardWatchOp
     text: settings.recordText || settings.automaticQueue,
     pollIntervalMs: 250,
     images: settings.recordImages,
-    files: settings.recordFiles,
+    files: settings.recordFiles || settings.automaticQueue,
     maxTextBytes: settings.automaticQueue ? Math.max(settings.maxTextBytes, 1024 * 1024) : settings.maxTextBytes,
     maxImageBytes: settings.maxImageBytes,
   }

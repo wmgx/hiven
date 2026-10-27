@@ -54,7 +54,10 @@ export async function writeClipboardText(text: string, options?: { sensitive?: b
   try {
     const { writeText } = await import('./nativeClipboard')
     await writeText(text, options?.signal)
-  } catch {
+  } catch (error) {
+    if (options?.signal?.aborted) return
+    // A web fallback cannot preserve native origin/privacy markers.
+    if (isTauriClipboardRuntime()) throw error
     try {
       if (options?.signal?.aborted) return
       await navigator.clipboard.writeText(text)
@@ -115,7 +118,9 @@ export async function writeClipboardImageBytes(bytes: Uint8Array, signal?: Abort
       )
       return
     }
-  } catch {
+  } catch (error) {
+    if (signal?.aborted) return
+    if (isTauriClipboardRuntime()) throw error
     // Native image write unavailable — browser ClipboardItem PNG.
   }
 

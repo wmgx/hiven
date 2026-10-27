@@ -60,6 +60,7 @@ export function settingsWindow(storage, { backgrounds = false } = {}) {
       }).outputText : source)
     }
     const scopedRequire = (specifier) => {
+      if (specifier === '@hiven/plugin') return { getPluginHostSdk: forbidden }
       if (specifier === 'react') return require(specifier)
       if (specifier === 'zustand' || specifier.startsWith('zustand/')) return load(require.resolve(specifier))
       assert.ok(specifier.startsWith('.'), `Unexpected module: ${specifier}`)
@@ -72,6 +73,7 @@ export function settingsWindow(storage, { backgrounds = false } = {}) {
     return module.exports
   }
   const path = (file) => resolve(root, file)
+  mocks.set(path('src/shortcutHosts/pasteQueue.ts'), { createBackgroundPasteQueue: () => undefined })
   mocks.set(path('src/store.ts'), { useAppStore: { getState: () => ({ locale: 'en' }) } })
   mocks.set(path('src/workspace/pluginStore.ts'), {
     usePluginStore: { getState: () => ({ plugins: { 'clipboard-history': { source: 'builtin' } } }) },

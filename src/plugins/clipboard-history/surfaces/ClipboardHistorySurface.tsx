@@ -573,19 +573,18 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const selectListItem = useCallback((id: string, event: MouseEvent) => {
     if (event.shiftKey) selectRange(id)
     else if (event.metaKey || event.ctrlKey) {
-      setSelectedIds((current) => {
-        const ids = current.length ? current : selectedId ? [selectedId] : []
-        return ids.includes(id) ? ids.filter((value) => value !== id) : [...ids, id]
-      })
+      const ids = selectedIds.length ? selectedIds : selectedId ? [selectedId] : []
+      const next = ids.includes(id) ? ids.filter((value) => value !== id) : [...ids, id]
+      setSelectedIds(next)
       selectionAnchor.current = id
-      setSelectedId(id)
+      setSelectedId(next.includes(id) ? id : next.at(-1) ?? id)
     } else {
       setSelectedIds([])
       selectionAnchor.current = id
       setSelectedId(id)
     }
     containerRef.current?.focus({ preventScroll: true })
-  }, [selectRange, selectedId])
+  }, [selectRange, selectedId, selectedIds])
 
   const resetBrowser = useCallback(() => {
     setQuery('')
@@ -619,6 +618,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const selectionHasNonText = multiple && selectedItems.some((item) => item.kind !== 'text')
   const readActionItems = useCallback(async (item: ClipboardHistoryItem, isCurrent: () => boolean) => {
     const selection = actionItems(item)
+    if (selectedIds.length > 1 && selectedIds.includes(item.id) && selection.length !== selectedIds.length) throw new Error('error.loadFailed')
     if (selection.length > 1 && selection.some((entry) => entry.kind !== 'text')) throw new Error('selection.textOnly')
     const full = await Promise.all(selection.map(async (entry) => {
       const value = await repository.getItem(entry.id)
@@ -627,7 +627,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     }))
     if (!isCurrent() || !resultsActionableRef.current) throw new Error('cancelled')
     return full
-  }, [actionItems, repository])
+  }, [actionItems, repository, selectedIds])
   const joinedText = (full: ClipboardHistoryItem[]) => {
     const text = full.map((item) => item.kind === 'text' ? item.text : '').join('\n')
     if (new TextEncoder().encode(text).byteLength > 1024 * 1024) throw new Error('selection.tooLarge')
@@ -894,7 +894,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     try {
       const full = await readActionItems(selectedItem, () => generation === pasteNoticeGenerationRef.current && host.deliveryFeedbackOwner?.isCurrent() !== false)
       if (full[0].kind === 'text') await host.saveText(full[0].text)
-    } catch { if (generation === pasteNoticeGenerationRef.current) setPasteNotice(t('imageSave.failed')) }
+    } catch { if (generation === pasteNoticeGenerationRef.current) setPasteNotice(t('error.saveFailed')) }
   }
   const moreItems: MenuItemSpec[] = [
     { key: 'continue', label: t('action.continue'), disabled: !selectedItem || resultsActionBlocked || selectionHasNonText,

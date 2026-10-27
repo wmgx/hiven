@@ -61,10 +61,18 @@ fn deliver(app: &tauri::AppHandle, attempt: &std::sync::Arc<crate::paste_recover
         for_write.ensure_active()?;
         if crate::current_foreground_process_id() != Some(pid) { return Err("QueueTargetError".into()); }
         let snapshot = capture()?;
-        crate::clipboard_privacy::write_marked_text(board(), text, true)?;
+        if let Err(error) = crate::clipboard_privacy::write_marked_text(board(), text, true) {
+            restore(snapshot)?;
+            return Err(error);
+        }
         Ok((snapshot, change_count()))
     })?;
-    let result = verify().and_then(|_| crate::simulate_paste_impl());
+    let for_paste = attempt.clone();
+    let result = verify().and_then(|_| crate::clipboard_privacy::with_clipboard(app, move |_| unsafe {
+        for_paste.ensure_active()?;
+        if change_count() != written_count || crate::current_foreground_process_id() != Some(pid) { return Err("QueueTargetError".into()); }
+        crate::simulate_paste_impl()
+    }));
     // shortcut: macOS has no paste-consumed acknowledgement; validate this delay
     // with destination apps before extending delivery beyond plain-text targets.
     if result.is_ok() { std::thread::sleep(Duration::from_millis(250)); }

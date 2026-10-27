@@ -34,7 +34,7 @@ globalThis.clearInterval = (id) => timers.delete(id)
 globalThis.window = { addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: (name, fn) => { if (listeners.get(name) === fn) listeners.delete(name) } }
 const memory = syntheticHistoryStorage()
 const repo = createRepo(memory.storage)
-const context = (settings) => ({ settings, storage: memory.storage, t: (key) => key, showMessage: (...args) => messages.push(args), clipboard: { watch: async (options, callback) => { watcherCalls++; watchOptions = options; changeHandler = callback; return () => { watcherStop++ } } } })
+const context = (settings) => ({ signal: new AbortController().signal, settings: { ...settings, automaticQueue: false }, storage: memory.storage, t: (key) => key, showMessage: (...args) => messages.push(args), clipboard: { watch: async (options, callback) => { watcherCalls++; watchOptions = options; changeHandler = callback; return () => { watcherStop++ } } } })
 async function until(check) {
   for (let tries = 0; tries < 100; tries++) { if (await check()) return; await tick() }
   assert.fail('background operation did not complete')

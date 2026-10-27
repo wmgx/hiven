@@ -96,9 +96,10 @@ const js = ts.transpileModule(`const run = ${callback}; globalThis.run = run`, {
 for (const result of [{ ok: true }, { ok: false, fallback: 'copied', message: 'copied only' }, { ok: false, fallback: 'none', message: 'write failed' }, { ok: false, fallback: 'none', message: '' }, { ok: false, fallback: 'copied', message: 'late failure', stale: true }]) {
   let reset = 0, complete = 0, recorded = 0
   const messages = []
-  const context = { combining: false, textEdit: null, resultsActionableRef: { current: true }, pasteNoticeGenerationRef: { current: 0 }, setPasteNotice: message => { if (message) messages.push([message]) }, t: key => key, resetBrowser() { reset++ },
+  const context = { actionError: (_error, fallback) => fallback, resultsActionableRef: { current: true }, pasteNoticeGenerationRef: { current: 0 }, setPasteNotice: message => { if (message) messages.push([message]) }, t: key => key, resetBrowser() { reset++ },
     repository: { getItem: async () => ({ id: 'synthetic', kind: 'text', text: 'current full text' }), recordPaste: async () => { recorded++ } },
     host: { paste: { pasteText: async text => { assert.equal(text, 'current full text'); if (result.stale) context.pasteNoticeGenerationRef.current++; return result } }, complete() { complete++ }, showMessage: (...args) => messages.push(args) } }
+  context.readActionItems = async (item, isCurrent) => { const full = await context.repository.getItem(item.id); assert.ok(isCurrent()); return [full] }
   vm.createContext(context); vm.runInContext(js, context)
   await context.run({ id: 'synthetic', kind: 'text', text: 'current full text' })
   assert.equal(reset, result.ok ? 1 : 0)

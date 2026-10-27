@@ -1,5 +1,5 @@
 {
-  "version": 188,
+  "version": 189,
   "packages": [
     {
       "pluginId": "image-tools",
@@ -44,7 +44,7 @@
     {
       "pluginId": "clipboard-history",
       "dir": "clipboard-history",
-      "version": "2.1.8"
+      "version": "2.1.9"
     },
     {
       "pluginId": "web-open",

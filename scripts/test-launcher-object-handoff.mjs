@@ -225,7 +225,7 @@ for (const failure of ['none', 'throw', 'hidden', 'owner']) {
 }
 console.log(`Launcher object handoff: ${passed} production-module scenarios passed`)
 
-// Execute the production host/merge callbacks directly: lifecycle logic, not rendered UI assertions.
+// Execute the production host callbacks directly: lifecycle logic, not rendered UI assertions.
 function callbackFrom(path, name) {
   const source = readFileSync(path, 'utf8')
   const file = ts.createSourceFile(path, source, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TSX)
@@ -318,32 +318,6 @@ for (const publish of [false, true]) {
   assert.equal(test.back, publish ? 1 : 0)
   assert.equal(test.cleared, publish ? 0 : 1, 'unreceived local drafts are withdrawn')
   assert.equal(test.shows, 0, 'same native window needs no focus-changing show')
-  passed++
-}
-const mergeCode = callbackFrom('src/plugins/clipboard-history/surfaces/ClipboardHistorySurface.tsx', 'continueMerge')
-for (const outcome of ['accepted', 'failed', 'cancelled', 'new-draft']) {
-  const result = deferred(), mergeSubmissionRef = { current: null }, mergePreview = { text: '完整预览' }
-  let cancelled = 0, loading = false, retries = 0
-  const context = {
-    exports: {}, AbortController, mergeSubmissionRef, queueSubmissionRef: { current: null }, compareSubmissionRef: { current: null }, mergePreview, settings: { enabled: true }, combining: true,
-    mergeSuspended: false, mergeSuspendedRef: { current: false }, mergeReader: { isCurrent: () => true },
-    host: { returnToLauncherWithObject: () => result.promise, showMessage() {} },
-    setMergeLoading: (value) => { loading = value }, setMergeRetry: () => retries++,
-    cancelMerge: () => cancelled++, t: (key) => key,
-  }
-  vm.runInNewContext(mergeCode, context)
-  const pending = context.exports.run()
-  assert.equal(loading, true)
-  assert.equal(cancelled, 0, 'draft remains while waiting for an actual receipt')
-  if (outcome === 'cancelled' || outcome === 'new-draft') {
-    mergeSubmissionRef.current.abort()
-    mergeSubmissionRef.current = outcome === 'new-draft' ? new AbortController() : null
-  }
-  result.resolve(outcome !== 'failed')
-  await pending
-  assert.equal(cancelled, outcome === 'accepted' ? 1 : 0)
-  assert.equal(retries, outcome === 'failed' ? 1 : 0)
-  assert.equal(mergePreview.text, '完整预览')
   passed++
 }
 console.log(`Launcher object handoff: ${passed} total production-module and callback scenarios passed`)

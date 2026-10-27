@@ -90,5 +90,6 @@
   "selection.textOnly": "Selection contains images or files; text cannot be joined",
   "selection.tooLarge": "Joined text exceeds 1 MiB; select fewer items",
   "selection.count": "{count} selected",
-  "settings.automaticQueue": "Automatically queue consecutive copies"
+  "settings.automaticQueue": "Automatically queue consecutive copies",
+  "error.saveFailed": "Couldn't save. Try again."
 }

@@ -110,6 +110,7 @@ console.log('Browser snapshot owner, coalescing, deletion and stale receipt beha
   mock('workspace/launcher/pluginSource', { resolvePluginSettingsSource: () => 'builtin' })
   mock('store', { useAppStore: { getState: () => ({ locale: 'en' }) } })
   mock('i18n/pluginI18nRegistry', { makePluginT: () => key => key })
+  mock('shortcutHosts/pasteQueue', { createBackgroundPasteQueue: () => undefined })
   mock('workspace/toast', { showToast() {} })
   for (const [file, name] of [['pluginStorage', 'createPluginPrivateStorage'], ['pluginClipboard','createPluginClipboard'], ['pluginPaste','createPluginPaste'], ['pluginNetwork','createPluginNetwork'], ['pluginShell','createPluginShell'], ['ai/runtime','createPluginAi']]) mock('workspace/' + file, { [name]: () => ({}) })
   const manager = f.load('src/workspace/pluginBackgroundManager.ts')

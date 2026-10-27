@@ -2,10 +2,12 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import ts from 'typescript'
 const cache = new Map()
+const sdkStub = `data:text/javascript;base64,${Buffer.from('export function getPluginHostSdk() { throw new Error("Host SDK forbidden in storage fixtures") }').toString('base64')}`
 export function historyModule(relative) {
   const file = path.resolve(relative)
   if (cache.has(file)) return cache.get(file)
   let source = ts.transpileModule(readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2023 } }).outputText
+  source = source.replaceAll("'@hiven/plugin'", JSON.stringify(sdkStub))
   source = source.replace(/from ['"](\.[^'"]+)['"]/g, (_, dependency) => `from '${historyModule(path.resolve(path.dirname(file), dependency + '.ts'))}'`)
   const url = `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`
   cache.set(file, url)

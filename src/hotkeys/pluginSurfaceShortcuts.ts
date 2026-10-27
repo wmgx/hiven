@@ -340,55 +340,6 @@ function sameAccelerator(left: string, right: string): boolean {
   return canonical(left) === canonical(right)
 }
 
-/** Narrow app-composition hook: only an existing permission-approved surface.
- * It never takes an occupied key from another registrar and never persists a key.
- */
-export async function acquireSurfaceShortcutInterceptor(
-  target: PluginSurfaceOpenTarget,
-  accelerator: string,
-  handle: () => Promise<boolean>,
-): Promise<() => Promise<void>> {
-  if (!isTauriRuntime() || !installed || !isBindableSurfaceTarget(target) || missingShortcutPermissions(target).length) throw new Error('QueueUnavailableError')
-  await syncQueue
-  const key = pluginSurfaceShortcutKey(target)
-  const previous = shortcutInterceptors.get(key)
-  if (previous?.release) await previous.release()
-  else if (previous) throw new Error('QueueShortcutConflictError')
-  const entry: { accelerator: string; registered: boolean; handle: () => Promise<boolean>; pressed: boolean; release?: () => Promise<void> } = { accelerator, registered: false, handle, pressed: false }
-  const registered = currentAccelerators.get(key)
-  let temporary = false
-  if (!registered || !sameAccelerator(registered, accelerator)) {
-    const { register, isRegistered } = await loadGlobalShortcutApi()
-    if (await isRegistered(accelerator)) throw new Error('QueueShortcutConflictError')
-    await register(accelerator, (event) => {
-      if (shortcutInterceptors.get(key) !== entry || !installed) return
-      if (event.state === 'Released') { entry.pressed = false; return }
-      if (event.state !== 'Pressed' || entry.pressed || entry.release) return
-      entry.pressed = true
-      void handle().catch(() => undefined)
-    })
-    temporary = true
-  }
-  shortcutInterceptors.set(key, entry)
-  let stopped = false
-  let releasing: Promise<void> | null = null
-  const stop = (): Promise<void> => {
-    if (stopped) return Promise.resolve()
-    if (releasing) return releasing
-    // Preserve this exact release capability on failure. A later cancel,
-    // controlled reload recovery, or acquisition can retry only our own key.
-    entry.release = stop
-    releasing = (async () => {
-      if (temporary && !await unregisterAccelerator(accelerator)) throw new Error('QueueShortcutReleaseError')
-      stopped = true
-      if (shortcutInterceptors.get(key) === entry) shortcutInterceptors.delete(key)
-      if (temporary && installed) await enqueueSync().catch(() => undefined)
-    })().finally(() => { releasing = null })
-    return releasing
-  }
-  return stop
-}
-
 /** Attach behavior only to the user's already-registered surface shortcut.
  * Never registers, moves, or persists an accelerator of its own.
  */
