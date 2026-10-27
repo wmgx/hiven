@@ -220,6 +220,8 @@ export function GlobalLauncherCollectInputFrame({
   const materialText = frame.blockText ?? frame.inputText
   // Streamed partial output of the running command.
   const progress = busy ? frame.progress : undefined
+  // A running command (not an output delivery) shows its status in the preview well.
+  const runningInWell = busy && !deliveryIntent && showLivePreview && !isSuggestMode && Boolean(materialText.trim())
   const [expanded, setExpanded] = useState(false)
   const editorRef = useRef<HTMLTextAreaElement>(null)
   const isExpanded = expanded && hasBlock
@@ -430,7 +432,7 @@ export function GlobalLauncherCollectInputFrame({
         />
         <LauncherParamChipTrail chips={paramChips} />
         {onOpenParams && paramChips.length > 0 && <kbd className="r-kbd" title={t(locale, 'palette.customizeParamsLabel')}>⇥</kbd>}
-        {busy && (
+        {busy && !runningInWell && (
           <span className="meta anim-running-pulse" role="status" aria-live="polite">{t(locale, deliveryIntent === 'copy' ? 'palette.outputCopying' : deliveryIntent ? 'palette.outputDelivering' : 'palette.outputRunning')}</span>
         )}
       </div>
@@ -489,6 +491,10 @@ export function GlobalLauncherCollectInputFrame({
             >
               {progress ? (
                 <PreviewText text={progress.text} format={progress.format} label={t(locale, 'palette.preview')} />
+              ) : runningInWell ? (
+                <span className="meta anim-running-pulse" role="status" aria-live="polite" data-testid="launcher-running-status">
+                  {t(locale, 'palette.outputRunning')}
+                </span>
               ) : explicitReason ? (
                 <span className="meta" data-testid="launcher-explicit-run-hint">
                   {t(locale, explicitReason === 'large' ? 'palette.largeInputRunHint' : 'palette.explicitRunHint')}
