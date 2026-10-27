@@ -60,9 +60,9 @@ fn deliver(app: &tauri::AppHandle, attempt: &std::sync::Arc<crate::paste_recover
     let (snapshot, written_count) = crate::clipboard_privacy::with_clipboard(app, move |_app| unsafe {
         for_write.ensure_active()?;
         if crate::current_foreground_process_id() != Some(pid) { return Err("QueueTargetError".into()); }
-        let snapshot = capture()?;
+        let snapshot = capture(board())?;
         if let Err(error) = crate::clipboard_privacy::write_marked_text(board(), text, true) {
-            restore(snapshot)?;
+            restore(board(), snapshot)?;
             return Err(error);
         }
         Ok((snapshot, change_count()))
@@ -78,7 +78,7 @@ fn deliver(app: &tauri::AppHandle, attempt: &std::sync::Arc<crate::paste_recover
     if result.is_ok() { std::thread::sleep(Duration::from_millis(250)); }
     let restored = crate::clipboard_privacy::with_clipboard(app, move |_| unsafe {
         // Never overwrite a newer copy made while the destination was reading.
-        if change_count() == written_count { restore(snapshot)?; }
+        if change_count() == written_count { restore(board(), snapshot)?; }
         Ok(())
     });
     result.and(restored)
@@ -93,10 +93,12 @@ unsafe fn board() -> *mut objc2::runtime::AnyObject {
 #[cfg(target_os = "macos")]
 unsafe fn change_count() -> isize { objc2::msg_send![board(), changeCount] }
 #[cfg(target_os = "macos")]
-unsafe fn capture() -> Result<Snapshot, String> {
+type Board = *mut objc2::runtime::AnyObject;
+#[cfg(target_os = "macos")]
+unsafe fn capture(board: Board) -> Result<Snapshot, String> {
     use objc2::{msg_send, runtime::AnyObject};
-    let revision = change_count();
-    let items: *mut AnyObject = msg_send![board(), pasteboardItems];
+    let revision: isize = msg_send![board, changeCount];
+    let items: *mut AnyObject = msg_send![board, pasteboardItems];
     let count: usize = msg_send![items, count];
     if count > 128 { return Err("QueueClipboardError".into()); }
     let mut snapshot = Vec::new();
@@ -125,18 +127,23 @@ unsafe fn capture() -> Result<Snapshot, String> {
         }
         if !contents.is_empty() { snapshot.push(contents); }
     }
-    if revision != change_count() { return Err("QueueClipboardError".into()); }
+    let current: isize = msg_send![board, changeCount];
+    if revision != current { return Err("QueueClipboardError".into()); }
     Ok(snapshot)
 }
 #[cfg(target_os = "macos")]
-unsafe fn restore(snapshot: Snapshot) -> Result<(), String> {
+unsafe fn restore(board: Board, snapshot: Snapshot) -> Result<(), String> {
     use objc2::{class, msg_send, runtime::AnyObject};
     // Nothing readable was captured: leave the board alone rather than clear it.
     if snapshot.is_empty() { return Ok(()); }
     let items: *mut AnyObject = msg_send![class!(NSMutableArray), array];
-    for contents in snapshot {
+    for (index, mut contents) in snapshot.into_iter().enumerate() {
         let item: *mut AnyObject = msg_send![class!(NSPasteboardItem), new];
         let _: *mut AnyObject = msg_send![item, autorelease];
+        // The restored copy is written by hiven; mark it on this board so history ignores it.
+        if index == 0 && !contents.iter().any(|(name, _)| name == "org.hiven.ClipboardOrigin") {
+            contents.push(("org.hiven.ClipboardOrigin".into(), Vec::new()));
+        }
         for (name, bytes) in contents {
             let name = std::ffi::CString::new(name).map_err(|_| "QueueClipboardError")?;
             let kind: *mut AnyObject = msg_send![class!(NSString), stringWithUTF8String: name.as_ptr()];
@@ -146,8 +153,51 @@ unsafe fn restore(snapshot: Snapshot) -> Result<(), String> {
         }
         let _: () = msg_send![items, addObject: item];
     }
-    let _: isize = msg_send![board(), clearContents];
-    let written: bool = msg_send![board(), writeObjects: items];
-    if !written { return Err("QueueClipboardError".into()); }
-    crate::clipboard_privacy::mark_owned_clipboard()
+    let _: isize = msg_send![board, clearContents];
+    let written: bool = msg_send![board, writeObjects: items];
+    if written { Ok(()) } else { Err("QueueClipboardError".into()) }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod tests {
+    use objc2::{class, msg_send, runtime::AnyObject};
+
+    unsafe fn set(board: *mut AnyObject, kinds: &[(&std::ffi::CStr, &[u8])]) {
+        let item: *mut AnyObject = msg_send![class!(NSPasteboardItem), new];
+        for (kind, bytes) in kinds {
+            let kind: *mut AnyObject = msg_send![class!(NSString), stringWithUTF8String: kind.as_ptr()];
+            let data: *mut AnyObject = msg_send![class!(NSData), dataWithBytes: bytes.as_ptr(), length: bytes.len()];
+            let _: bool = msg_send![item, setData: data, forType: kind];
+        }
+        let items: *mut AnyObject = msg_send![class!(NSArray), arrayWithObject: item];
+        let _: isize = msg_send![board, clearContents];
+        let _: bool = msg_send![board, writeObjects: items];
+        let _: () = msg_send![item, release];
+    }
+
+    #[test]
+    fn delivery_restores_every_flavor_of_the_previous_copy() {
+        objc2::rc::autoreleasepool(|_| unsafe {
+            // A private pasteboard leaves the user's clipboard untouched.
+            let board: *mut AnyObject = msg_send![class!(NSPasteboard), pasteboardWithUniqueName];
+            assert!(!board.is_null());
+            let rtf: &[u8] = b"{\\rtf1\\ansi \\u21512?\\u25104? bold}";
+            let png: &[u8] = &[0x89, b'P', b'N', b'G', 0, 1, 2, 255];
+            set(board, &[
+                (c"public.utf8-plain-text", "合成 第一段 😀".as_bytes()),
+                (c"public.rtf", rtf),
+                (c"public.png", png),
+                (c"com.example.empty", b""),
+            ]);
+            let before = super::capture(board).unwrap();
+            crate::clipboard_privacy::write_marked_text(board, "队列第二段 é".into(), true).unwrap();
+            assert_eq!(super::capture(board).unwrap()[0][0], ("public.utf8-plain-text".into(), "队列第二段 é".as_bytes().to_vec()));
+            super::restore(board, before.clone()).unwrap();
+            let after = super::capture(board).unwrap();
+            // Restore adds the hiven origin marker; every original flavor must survive byte-for-byte.
+            for flavor in &before[0] { assert!(after[0].contains(flavor), "lost {}", flavor.0); }
+            assert!(after[0].iter().any(|(name, _)| name == "org.hiven.ClipboardOrigin"));
+            let _: () = msg_send![board, releaseGlobally];
+        })
+    }
 }
