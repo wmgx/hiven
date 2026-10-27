@@ -1,5 +1,5 @@
 {
-  "version": 197,
+  "version": 198,
   "packages": [
     {
       "pluginId": "image-tools",
@@ -34,7 +34,7 @@
     {
       "pluginId": "regex-tester",
       "dir": "regex-tester",
-      "version": "1.4.6"
+      "version": "1.4.7"
     },
     {
       "pluginId": "text-diff",

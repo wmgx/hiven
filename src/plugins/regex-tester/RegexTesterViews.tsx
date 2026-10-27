@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { IconButton, Select } from '@hiven/plugin-ui'
+import { Button, IconButton, Select, TextArea, TextInput } from '@hiven/plugin-ui'
 import { BackIcon } from '@hiven/plugin-ui/icons'
 import { MAX_REGEX_MATCHES, type MatchResult } from './regexCore'
 import { useRegexExecution } from './useRegexExecution'
@@ -107,7 +107,7 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
           <span>{t('surface.expression')}</span>
           <div className="regex-tester-surface__pattern">
             <i aria-hidden="true">/</i>
-            <input
+            <TextInput
               value={pattern}
               onChange={(event) => { invalidateResult(); setPattern(event.target.value) }}
               placeholder={t('panel.regex.pattern')}
@@ -116,7 +116,7 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
               autoFocus
             />
             <i aria-hidden="true">/</i>
-            <input
+            <TextInput
               className="regex-tester-surface__flags"
               value={flags}
               onChange={(event) => { invalidateResult(); setFlags(event.target.value) }}
@@ -129,16 +129,16 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
         <fieldset className="regex-tester-surface__flag-list">
           <legend>{t('surface.quickFlags')}</legend>
           {COMMON_FLAGS.map((flag) => (
-            <button
+            <Button
               key={flag}
               type="button"
-              className={flags.includes(flag) ? 'is-active' : undefined}
+              variant={flags.includes(flag) ? 'primary' : 'secondary'}
               aria-pressed={flags.includes(flag)}
               title={t(`surface.flag.${flag}`)}
               onClick={() => toggleFlag(flag)}
             >
               {flag}
-            </button>
+            </Button>
           ))}
         </fieldset>
       </div>
@@ -164,7 +164,7 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
             <strong>{t('surface.sampleText')}</strong>
             <small>{t('surface.sourceStats', { lines: sourceLines, chars: sourceText.length })}</small>
           </span>
-          <textarea
+          <TextArea
             ref={sourceRef}
             value={sourceText}
             onChange={(event) => { invalidateResult(); setSourceText(event.target.value) }}
@@ -196,9 +196,10 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
             {result.status === 'ready' && result.matches.length > 0 && (
               <>
                 {result.matches.slice(0, 100).map((match, index) => (
-                  <button
+                  <Button
                     key={`${match.index}:${index}`}
                     type="button"
+                    variant="ghost"
                     className={activeMatch === index ? 'regex-tester-surface__match is-active' : 'regex-tester-surface__match'}
                     aria-label={t('surface.revealMatch', { line: match.line, col: match.col })}
                     onClick={() => revealMatch(match, index)}
@@ -211,7 +212,7 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
                         {match.groups.map((group) => group === undefined ? t('surface.missingGroup') : group === '' ? t('surface.emptyGroup') : group).join(', ')}
                       </em>
                     ) : <em />}
-                  </button>
+                  </Button>
                 ))}
                 {result.matches.length > 100 ? (
                   <div className="regex-tester-surface__more">

@@ -353,7 +353,7 @@ if (/from\s+['"]\.\/plugins\//.test(pluginHostSdk)) {
 // ─── Style tokens (doc/redesign/03-roadmap.md V1) ──────────────────────────────
 // Colour / type / shadow values live in src/styles/theme.css. Legacy CSS may only shrink:
 // each ceiling is the count when the token layer landed; lower it when a cleanup removes literals.
-const STYLE_CEILINGS = { hex: 277, rgb: 141, smallFont: 122, important: 266, uppercase: 10 }
+const STYLE_CEILINGS = { hex: 266, rgb: 141, smallFont: 113, important: 266, uppercase: 9 }
 const styleCounts = { hex: 0, rgb: 0, smallFont: 0, important: 0, uppercase: 0 }
 for (const file of walkWithExtensions(join(root, 'src'), styleExtensions)) {
   if (rel(file) === 'src/styles/theme.css') continue
