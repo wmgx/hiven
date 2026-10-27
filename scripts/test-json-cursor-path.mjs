@@ -16,7 +16,11 @@ try {
   assert.deepEqual(locate(input, input.indexOf('false')).value, { jsonPath: '$["users"][0][""]', pointer: '/users/0/' })
   assert.deepEqual(locate(input, 0).value, { jsonPath: '$', pointer: '' })
   assert.deepEqual(locate('[null,true,1e3,-2.5]', 15).value, { jsonPath: '$[3]', pointer: '/3' })
-  assert.equal(locate(input, input.indexOf(':')).reason, 'position')
+  // A caret right after a key or value (where a click lands) names it; brackets name the container.
+  assert.deepEqual(locate(input, input.indexOf(':')).value, { jsonPath: '$["users"]', pointer: '/users' })
+  const items = '{"user":{"items":[1,2]}}'
+  assert.deepEqual(locate(items, items.indexOf('2]') + 1).value, { jsonPath: '$["user"]["items"][1]', pointer: '/user/items/1' })
+  assert.deepEqual(locate(items, items.indexOf('[1')).value, { jsonPath: '$["user"]["items"]', pointer: '/user/items' })
   assert.equal(locate('{ "x" : 1 }', 1).reason, 'position')
   assert.equal(locate(input, input.length).reason, 'position')
   assert.equal(locate('{"a":1,"a":2}', 2).reason, 'duplicate')

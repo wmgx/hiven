@@ -12,11 +12,13 @@ export function formatJsonCursorPath(path: Segment[]): JsonCursorPath {
   }
 }
 
-/** Token locations only: punctuation and whitespace do not guess a nearby field.
+/** Token locations only: whitespace does not guess a nearby field. A caret inside a key or
+ * value, or right after one (where a click usually lands), names that key or value.
+ * Brackets and braces name their container.
  * Reject duplicate decoded keys in any object, including escaped-equivalent keys. */
 export function jsonCursorPath(text: string, offset: number): JsonCursorPathResult {
   if (text.length > MAX_TEXT) return { ok: false, reason: 'limit' }
-  if (!Number.isInteger(offset) || offset < 0 || offset >= text.length) return { ok: false, reason: 'position' }
+  if (!Number.isInteger(offset) || offset < 0 || offset > text.length) return { ok: false, reason: 'position' }
   try { JSON.parse(text) } catch { return { ok: false, reason: 'invalid' } }
   let at = 0, duplicate = false
   const spans: Span[] = []
@@ -66,6 +68,9 @@ export function jsonCursorPath(text: string, offset: number): JsonCursorPathResu
   }
   try { value([], 0) } catch { return { ok: false, reason: 'limit' } }
   if (duplicate) return { ok: false, reason: 'duplicate' }
-  const span = spans.find((item) => offset >= item.start && offset < item.end)
+  const isBracket = (item: Span) => item.end - item.start === 1 && '{}[]'.includes(text[item.start])
+  const inside = spans.find((item) => offset >= item.start && offset < item.end)
+  const before = spans.find((item) => item.end === offset && !isBracket(item))
+  const span = inside && !isBracket(inside) ? inside : before ?? inside
   return span ? { ok: true, value: formatJsonCursorPath(span.path) } : { ok: false, reason: 'position' }
 }

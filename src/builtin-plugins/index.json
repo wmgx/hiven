@@ -1,5 +1,5 @@
 {
-  "version": 203,
+  "version": 204,
   "packages": [
     {
       "pluginId": "image-tools",
@@ -84,7 +84,7 @@
     {
       "pluginId": "text-tools",
       "dir": "text-tools",
-      "version": "1.0.4"
+      "version": "1.0.5"
     }
   ]
 }
