@@ -35,6 +35,7 @@ vm.runInNewContext(compiled, {
       return component
     } }
     if (name === './entryLoader') return { createEntryLoader: read => ({ read }), identifyStylesheetFailure() {}, EntryStylesheetError: Error }
+    if (name.startsWith('./locales/')) return { default: JSON.parse(fs.readFileSync(`src/plugins/csv/${name.slice(2)}`, 'utf8')) }
     if (name === './style.css') return {}
     throw new Error(`Unexpected eager dependency: ${name}`)
   },

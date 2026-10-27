@@ -172,5 +172,12 @@
   "typescript.title": "JSON → TypeScript 类型",
   "expression.title": "JSON 表达式",
   "expression.label": "表达式",
-  "error.expression": "JSON 或表达式无效"
+  "error.expression": "JSON 或表达式无效",
+  "cursor.jsonPath": "复制光标处 JSONPath",
+  "cursor.pointer": "复制光标处 JSON Pointer",
+  "cursor.root": "根节点（空 JSON Pointer）",
+  "cursor.error.invalid": "当前草稿不是有效 JSON",
+  "cursor.error.duplicate": "JSON 含有重复键",
+  "cursor.error.position": "请取消选区，将光标放到 JSON 键或值上",
+  "cursor.error.limit": "JSON 超出支持的大小或嵌套限制"
 }

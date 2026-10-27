@@ -122,6 +122,7 @@ export function createQuickEditorLauncherApi(
   const targetText = target ? quickEditorCommandApiText(target) : null
   return {
     ...baseApi,
+    ...targetText,
     getActiveText: targetText?.getActiveText ?? (() => useQuickEditorStore.getState().text),
     getSelectionText: targetText?.getSelectionText ?? (() => ''),
     getPaneSnapshot: () => {

@@ -153,22 +153,22 @@ check('browse groups tools by the existing catalog, keeps all candidates, and pr
   const app = row('host:app-launcher:app:notes')
   const settings = row('host:view:settings')
   const unknown = row('object-action:new-object')
-  const textOne = row('plugin:line-tools:tool:first', { pluginId: 'line-tools' })
-  const jsonOne = row('plugin:yaml:tool:first', { pluginId: 'yaml' })
-  const textTwo = row('plugin:case:tool:second', { pluginId: 'case' })
+  const textOne = row('plugin:text-tools:tool:line.first', { pluginId: 'text-tools' })
+  const jsonOne = row('plugin:text-tools:tool:json.first', { pluginId: 'text-tools' })
+  const textTwo = row('plugin:text-tools:tool:line.second', { pluginId: 'text-tools' })
   const calculator = row('plugin:calculator:tool:calculate', { pluginId: 'calculator' })
-  const jsonTwo = row('plugin:json-tools:tool:second', { pluginId: 'json-tools' })
+  const jsonTwo = row('plugin:text-tools:tool:json.second', { pluginId: 'text-tools' })
   const extraOne = row('plugin:extra-one:tool:first', { pluginId: 'extra-one', productProvider: 'Extra' })
   const quickEditor = row('host:view:quick-editor')
   const extraTwo = row('plugin:extra-two:tool:second', { pluginId: 'extra-two', productProvider: 'Extra' })
   const pluginSettings = row('plugin-settings:installed:calculator', { pluginId: 'calculator' })
-  const providerOnly = row('provider:json', { productProvider: 'JSON / YAML Tools' })
+  const providerOnly = row('provider:json', { productProvider: 'Text tools' })
   const availableItems = Object.freeze([
     app, settings, textOne, unknown, extraOne, jsonOne, textTwo, quickEditor,
     calculator, extraTwo, jsonTwo, pluginSettings, providerOnly,
-    row(textOne.id, { pluginId: 'line-tools' }),
+    row(textOne.id, { pluginId: 'text-tools' }),
   ])
-  const toolRows = [calculator, jsonOne, jsonTwo, providerOnly, textOne, textTwo, extraOne, extraTwo, quickEditor]
+  const toolRows = [calculator, textOne, jsonOne, textTwo, jsonTwo, providerOnly, extraOne, extraTwo, quickEditor]
   const ids = (rows) => Array.from(rows, (item) => item.id)
   const before = ids(availableItems)
   for (const [browseCategory, expected] of [

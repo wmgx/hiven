@@ -172,5 +172,12 @@
   "typescript.title": "JSON to TypeScript types",
   "expression.title": "JSON expression",
   "expression.label": "Expression",
-  "error.expression": "Invalid JSON or expression"
+  "error.expression": "Invalid JSON or expression",
+  "cursor.jsonPath": "Copy JSONPath at cursor",
+  "cursor.pointer": "Copy JSON Pointer at cursor",
+  "cursor.root": "Root (empty JSON Pointer)",
+  "cursor.error.invalid": "The draft is not valid JSON",
+  "cursor.error.duplicate": "JSON contains duplicate keys",
+  "cursor.error.position": "Place the cursor on a JSON key or value without selecting text",
+  "cursor.error.limit": "JSON exceeds the supported size or nesting limit"
 }

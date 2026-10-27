@@ -1,3 +1,5 @@
+import en from './locales/en.json'
+import zh from './locales/zh.json'
 /**
  * First-party Image Tools plugin: shrink, crop, redact a clipboard/file image, or save a
  * clipboard screenshot as PNG. Includes raster image and Base64 conversion.
@@ -29,7 +31,8 @@ export const imageToolsPlugin = definePlugin({
     surfaces: ROUTES.map((route) => ({
       id: route.id,
       kind: 'custom-view' as const,
-      title: route.title,
+      title: en[route.title],
+      titleI18n: { zh: zh[route.title] },
       component: ImageToolsSurface,
       entry: { launcher: false, shortcutBindable: route.id === 'image-save' },
       clipboardImageSave: route.id === 'image-save'

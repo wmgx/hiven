@@ -139,6 +139,7 @@ for (const [error, key, restore] of [
 function adapter(h, run) {
   const types = load('src/workspace/launcher/types.ts')
   const { adaptToolToLauncherItem } = load('src/workspace/launcher/toolAdapter.ts', {
+    '../quickEditor/quickEditorCommandTarget': { quickEditorCommandCursorOffset: () => undefined },
     './types': types, './output': {}, './normalizeContribution': { toDirectAnswer: () => undefined },
     './contractFingerprint': { computeContractFingerprint: () => 'synthetic' },
     './foregroundSelectionCapture': h.captureApi, '../../i18n': i18n,

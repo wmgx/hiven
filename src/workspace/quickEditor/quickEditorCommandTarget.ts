@@ -228,11 +228,22 @@ export function insertIntoQuickEditorCommandTarget(
   throw new Error(changedMessage)
 }
 
-export function quickEditorCommandApiText(target: QuickEditorCommandTarget): Pick<PluginLauncherApi, 'getActiveText' | 'getSelectionText'> {
+const commandTargetKey = Symbol('quick-editor-command-target')
+type CommandTextApi = Pick<PluginLauncherApi, 'getActiveText' | 'getSelectionText'> & { [commandTargetKey]?: QuickEditorCommandTarget }
+
+export function quickEditorCommandCursorOffset(api: PluginLauncherApi): number | undefined {
+  const target = (api as CommandTextApi)[commandTargetKey]
+  if (!target || target.mode !== 'full-text' || !target.owner.active || target.owner.invalidated || !target.cursorRange || !target.model) return
+  if (target.model.isDisposed() || target.editor?.getModel() !== target.model || target.model.getValue() !== target.body) return
+  return target.model.getOffsetAt({ lineNumber: target.cursorRange.startLineNumber, column: target.cursorRange.startColumn })
+}
+
+export function quickEditorCommandApiText(target: QuickEditorCommandTarget): CommandTextApi {
   if (target.mode === 'multiple-selections' || target.mode === 'unavailable') {
     return { getActiveText: () => '', getSelectionText: () => '' }
   }
   return {
+    [commandTargetKey]: target,
     getActiveText: () => target.body,
     getSelectionText: () => target.selectionText,
   }

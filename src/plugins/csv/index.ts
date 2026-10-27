@@ -1,3 +1,5 @@
+import en from './locales/en.json'
+import zh from './locales/zh.json'
 /**
  * First-party CSV Tools plugin — surface-only table converter.
  * Opens in launcher tool-shell (in-place), not a detached window.
@@ -112,7 +114,7 @@ export const csvPlugin = definePlugin({
       {
         id: 'main',
         kind: 'custom-view',
-        title: 'surface.title',
+        title: en['surface.title'], titleI18n: { zh: zh['surface.title'] },
         icon: 'Table',
         aliases: ['csv', 'tsv', 'table convert', '表格转换'],
         textMatch: csvSurfaceTextMatch,

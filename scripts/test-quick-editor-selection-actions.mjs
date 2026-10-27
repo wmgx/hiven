@@ -81,6 +81,7 @@ const {
   createQuickEditorCommandOwner,
   filterQuickEditorCommandItems,
   quickEditorCommandApiText,
+  quickEditorCommandCursorOffset,
   replaceQuickEditorCommandTarget,
 } = module.exports
 
@@ -113,6 +114,7 @@ function fakeEditor(initialText, selections) {
   let undoStops = 0
   const model = {
     getValue: () => value,
+    getOffsetAt: ({ lineNumber, column }) => offsetAt(value, lineNumber, column),
     isDisposed: () => false,
     getValueInRange: (range) => value.slice(
       offsetAt(value, range.startLineNumber, range.startColumn),
@@ -180,6 +182,7 @@ assert.equal(selectionTarget.mode, 'selection')
 assert.equal(selectionTarget.selectionText, json)
 assert.equal(quickEditorCommandApiText(selectionTarget).getActiveText(), body)
 assert.equal(quickEditorCommandApiText(selectionTarget).getSelectionText(), json)
+assert.equal(quickEditorCommandCursorOffset(quickEditorCommandApiText(selectionTarget)), undefined)
 
 const pretty = JSON.stringify(JSON.parse(json), null, 2)
 const selectionStart = offsetAt(body, range.startLineNumber, range.startColumn)
@@ -197,20 +200,22 @@ assert.equal(selectionEditor.value(), expected)
 selectionTarget.dispose()
 
 // No selection keeps whole-text input/output behavior.
-const wholeBody = '{"whole":true}'
+const wholeBody = '{"😀":true}'
 const wholePane = resetWithText(wholeBody)
 const caret = { startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 1 }
-const wholeEditor = fakeEditor(wholeBody, [fakeSelection(caret)])
+const wholeEditor = fakeEditor(wholeBody, [fakeSelection({ ...caret, startColumn: 6, endColumn: 6 })])
 const wholeTarget = captureQuickEditorCommandTarget(createQuickEditorCommandOwner(), wholeEditor, wholePane)
 assert.equal(wholeTarget.mode, 'full-text')
 assert.equal(quickEditorCommandApiText(wholeTarget).getSelectionText(), '')
 assert.equal(quickEditorCommandApiText(wholeTarget).getActiveText(), wholeBody)
+assert.equal(quickEditorCommandCursorOffset(quickEditorCommandApiText(wholeTarget)), 5)
 // StrictMode runs the overlay effect's cleanup once before remounting; the target must stay usable.
 wholeTarget.activate()()
 wholeTarget.activate()
 replaceQuickEditorCommandTarget(wholeTarget, 'WHOLE', 'changed', 'multiple')
 assert.equal(wholeEditor.value(), 'WHOLE')
 wholeTarget.dispose()
+assert.equal(quickEditorCommandCursorOffset(quickEditorCommandApiText(wholeTarget)), undefined)
 
 // While unwatched, a real edit still invalidates the snapshot on reactivation.
 const gapBody = '{"gap":1}'

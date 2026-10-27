@@ -6,10 +6,11 @@ import { parseUrlQuery } from './urlQueryCore'
 
 export function UrlQuerySurface({ host, t, initialText }: PluginSurfaceProps) {
   const [value, setValue] = useState(initialText ?? '')
+  const reportUnsavedChanges = host.setUnsavedChanges
   useEffect(() => {
-    host.setUnsavedChanges?.(value !== (initialText ?? ''))
-    return () => host.setUnsavedChanges?.(false)
-  }, [host, value, initialText])
+    reportUnsavedChanges?.(value !== (initialText ?? ''))
+  }, [reportUnsavedChanges, value, initialText])
+  useEffect(() => () => reportUnsavedChanges?.(false), [reportUnsavedChanges])
   let output = ''
   try { parseUrlQuery(value); output = value } catch { /* The editor displays validation errors. */ }
   return <section className="url-query-surface" data-no-drag>

@@ -145,6 +145,8 @@ export type ResolvedTextInput = {
   range?: TextRange
   paneId?: string
   panelId?: string
+  /** UTF-16 position in the full Quick Editor draft; absent when a selection is active. */
+  cursorOffset?: number
 }
 
 // ─── Display ───────────────────────────────────────────────────────────────

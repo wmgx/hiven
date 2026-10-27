@@ -18,6 +18,7 @@
  * invocation with no local selection, including plain manual-typing use.
  */
 
+import { quickEditorCommandCursorOffset } from '../quickEditor/quickEditorCommandTarget'
 import type {
   IconRef,
   LauncherExecuteHandler,
@@ -171,6 +172,10 @@ export function adaptToolToLauncherItem(
     const input = hasManualInput
       ? manualTextInput(ctx.input?.text ?? '', mode, ctx.input?.source)
       : await resolveTextInputWithForegroundFallback(ctx.api, ctx.locale, mode, allowForegroundFallback)
+    if (isEditorLike && !hasManualInput && input.source !== 'selection') {
+      const cursorOffset = quickEditorCommandCursorOffset(ctx.api)
+      if (cursorOffset !== undefined) input.cursorOffset = cursorOffset
+    }
     const requestedPermissions = pluginRegistry.getPluginPermissions(options.pluginId, options.source)
     const permissions = getPluginPermissionSnapshot(options.source, options.pluginId, requestedPermissions)
     const shell = createPluginShell(permissions)

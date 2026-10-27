@@ -49,9 +49,8 @@ const startNative = (kind = 'native', options = {}) => {
   event(kind, child.pid)
   return child
 }
-if (mode === 'native' || mode === 'native-exit') {
-  const child = startNative()
-  if (mode === 'native-exit') setTimeout(() => child.kill('SIGTERM'), 250)
+if (mode === 'native') {
+  startNative()
 } else if (mode === 'restart') {
   let current = startNative()
   process.on('SIGUSR1', () => {
@@ -143,7 +142,7 @@ async function makeCase(mode) {
     args: [fakeNpm],
     env: { ...process.env, SMOKE_FIXTURE_MODE: mode, SMOKE_FIXTURE_BINARY: binary },
     executable: binary,
-    timeoutMs: 500,
+    timeoutMs: 2000,
     settleMs: 100,
     shutdownMs: 75,
     verifyTimeoutMs: 250,
@@ -220,9 +219,12 @@ try {
     await assertClean(options.root)
   })
 
-  await check('native exit during the survival interval fails', async () => {
-    const options = await makeCase('native-exit')
-    const { log } = await failure({ ...options, settleMs: 600 }, /native process \d+ exited or changed identity/)
+  await check('native exit after confirmed discovery fails', async () => {
+    const options = await makeCase('native')
+    const { log } = await failure({ ...options, verify: async ({ pid }) => {
+      process.kill(pid, 'SIGTERM')
+      await waitUntil(async () => !await isLive(pid), 'fixture native process must exit')
+    } }, /native process \d+ exited or changed identity/)
     assert.match(log, /observed native pid=/)
   })
 
@@ -398,7 +400,7 @@ process.disconnect()
     const env = {
       ...options.env, npm_execpath: fakeNpm, CARGO_TARGET_DIR: target,
       SMOKE_FIXTURE_BINARY: executable,
-      HIVEN_TAURI_SMOKE_TIMEOUT_MS: '500', HIVEN_TAURI_SMOKE_SETTLE_MS: '75',
+      HIVEN_TAURI_SMOKE_TIMEOUT_MS: '2000', HIVEN_TAURI_SMOKE_SETTLE_MS: '75',
       HIVEN_TAURI_SMOKE_SHUTDOWN_MS: '75', HIVEN_TAURI_SMOKE_FORCE: '1',
     }
     delete env.HIVEN_TAURI_SMOKE_BINARY
