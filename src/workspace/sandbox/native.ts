@@ -157,6 +157,7 @@ export const sandbox = {
   },
   occupyShortcut(accelerator: string) { occupied.add(normalize(accelerator)) },
   toasts: () => structuredClone(hudUpdate().toasts),
+  surfaceToasts: () => [...document.querySelectorAll('.surface-toast')].map(node => ({ message: node.querySelector('span')?.textContent, level: (node as HTMLElement).dataset.level, actions: [...node.querySelectorAll('button')].map(button => button.textContent || button.getAttribute('aria-label')) })),
   async snapshot() {
     const { getPasteQueueDebugSnapshot } = await import('../../shortcutHosts/pasteQueue')
     return { queue: getPasteQueueDebugSnapshot(), shortcuts: [...shortcuts.values()].map(({ key }) => key), toasts: sandbox.toasts(), commands: [...commands].sort(), blocked: [...blocked].sort(), visible }

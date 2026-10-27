@@ -869,6 +869,8 @@ export type PluginOutputActionsProps = {
 }
 
 export type PluginNotifyApi = {
+  /** Window-local notice; resolves on dismissal (after any running action settles). */
+  toast(notice: { level: 'success' | 'error' | 'info'; message: string; action?: { label: string; run: () => void | Promise<void> }; durationMs?: number }): Promise<void>
   flash(notice: { level: 'success' | 'error' | 'info'; message: string }): void
   status(notice: { id: string; title: string; detail?: string; progress?: { completed: number; total: number } }): void
   end(id: string): void

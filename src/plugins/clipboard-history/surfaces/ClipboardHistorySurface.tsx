@@ -174,8 +174,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const searchRef = useRef<HTMLInputElement>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
   const imeKeyDown = useImeKeyboard()
-  const [pendingDelete, setPendingDelete] = useState<{ id: string; undo: () => void } | null>(null)
-  const pendingDeletesRef = useRef(new Map<string, ReturnType<typeof setTimeout>>())
+  const pendingDeletesRef = useRef(new Set<string>())
   const frequentThreshold = settings.frequentPasteThreshold ?? 3
   useLayoutEffect(() => {
     pasteNoticeGenerationRef.current += 1
@@ -595,7 +594,10 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const readActionItems = useCallback(async (item: ClipboardHistoryItem, isCurrent: () => boolean) => {
     const selection = actionItems(item)
     if (selectedIds.length > 1 && selectedIds.includes(item.id) && selection.length !== selectedIds.length) throw new Error('error.loadFailed')
-    if (selection.length > 1 && selection.some((entry) => entry.kind !== 'text')) throw new Error('selection.textOnly')
+    if (selection.length > 1 && selection.some((entry) => entry.kind !== 'text')) {
+      void host.notify?.toast({ level: 'info', message: t('selection.textOnly') })
+      throw new Error('cancelled')
+    }
     const full = await Promise.all(selection.map(async (entry) => {
       const value = await repository.getItem(entry.id)
       if (!value || value.hash !== entry.hash) throw new Error('error.loadFailed')
@@ -603,7 +605,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     }))
     if (!isCurrent() || !resultsActionableRef.current) throw new Error('cancelled')
     return full
-  }, [actionItems, repository, selectedIds])
+  }, [actionItems, repository, selectedIds, host, t])
   const joinedText = (full: ClipboardHistoryItem[]) => {
     const text = full.map((item) => item.kind === 'text' ? item.text : '').join('\n')
     if (new TextEncoder().encode(text).byteLength > 1024 * 1024) throw new Error('selection.tooLarge')
@@ -638,7 +640,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       resetBrowser()
       host.complete()
     } catch (error) {
-      if (generation === pasteNoticeGenerationRef.current) setPasteNotice(actionError(error, 'error.pasteFailed'))
+      if (generation === pasteNoticeGenerationRef.current && !(error instanceof Error && error.message === 'cancelled')) setPasteNotice(actionError(error, 'error.pasteFailed'))
     }
   }, [host, t, repository, resetBrowser, readActionItems])
 
@@ -759,24 +761,21 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     try {
       await repository.deleteItem(id)
       refreshPage()
-      const timer = setTimeout(() => {
-        pendingDeletesRef.current.delete(id)
-        setPendingDelete((current) => current?.id === id ? null : current)
-        void repository.purgeTrashItem(id).catch(() => host.showMessage(t('retention.failed'), 'error'))
-      }, 5000)
-      pendingDeletesRef.current.set(id, timer)
-      setPendingDelete({ id, undo: () => {
-        const timer = pendingDeletesRef.current.get(id)
-        if (timer === undefined) return
-        clearTimeout(timer)
-        pendingDeletesRef.current.delete(id)
-        setPendingDelete(null)
-        void repository.restoreItem(id).then((restored) => {
-          if (!restored) throw new Error('unavailable')
+      pendingDeletesRef.current.add(id)
+      let restored = false
+      void host.notify?.toast({
+        level: 'success', message: t('message.deleted.toast'), durationMs: 5000,
+        action: { label: t('message.undo'), run: async () => {
+          const item = await repository.restoreItem(id)
+          if (!item) throw new Error('unavailable')
+          restored = true
           refreshPage()
           setSelectedId(id)
-        }).catch(() => host.showMessage(t('retention.failed'), 'error'))
-      } })
+        } },
+      }).then(async () => {
+        pendingDeletesRef.current.delete(id)
+        if (!restored) await repository.purgeTrashItem(id)
+      }).catch(() => host.showMessage(t('retention.failed'), 'error'))
     } catch { host.showMessage(t('retention.failed'), 'error') }
   }, [repository, refreshPage, host, t])
 
@@ -1085,8 +1084,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
 
         <SurfaceFooterHints className="clipboard-history-footer">
           {multiple && <span role="status">{t('selection.count', { count: selectedItems.length })}</span>}
-          {selectionHasNonText && <span role="status">{t('selection.textOnly')}</span>}
-          {pendingDelete && <><span>{t('message.deleted.toast')}</span><Button type="button" onClick={pendingDelete.undo}>{t('message.undo')}</Button></>}
           {pasteNotice ? <span role="status" style={{ color: 'var(--foreground)' }}>{pasteNotice}</span> : <>
             {/* Keep hint slots in layout when button focus temporarily disables shortcuts. */}
             <span style={{ visibility: shortcutHints.paste ? 'visible' : 'hidden' }} aria-hidden={!shortcutHints.paste}>↵ {t('hint.paste')}</span>
