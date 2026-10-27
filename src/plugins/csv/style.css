@@ -3,9 +3,9 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: var(--color-background-primary);
-  color: var(--color-text-primary);
-  font-family: var(--hiven-font-ui, inherit);
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
   /* Inside launcher drag region: keep pointer events for scroll / select */
   -webkit-app-region: no-drag;
   app-region: no-drag;
@@ -19,32 +19,9 @@
   flex-shrink: 0;
   gap: 6px;
   padding: 0 10px 0 10px;
-  border-bottom: 1px solid var(--color-border-tertiary);
-  background: var(--color-background-primary);
+  border-bottom: 1px solid var(--border);
+  background: var(--background);
   user-select: none;
-}
-
-.csv-tools-surface__back {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--color-text-secondary);
-  font: 500 13px/1 var(--hiven-font-ui, inherit);
-  cursor: pointer;
-}
-
-.csv-tools-surface__back:hover {
-  background: var(--color-background-secondary);
-  color: var(--color-text-primary);
-}
-
-.csv-tools-surface__back svg {
-  width: 14px;
-  height: 14px;
 }
 
 .csv-tools-surface__back-root {
@@ -52,24 +29,24 @@
 }
 
 .csv-tools-surface__sep {
-  color: var(--color-text-tertiary);
-  font-size: 12px;
+  color: var(--faint-foreground);
+  font-size: var(--text-sm);
   margin: 0 1px;
 }
 
 .csv-tools-surface__crumb {
-  font-size: 13px;
-  color: var(--color-text-secondary);
+  font-size: var(--text-base);
+  color: var(--muted-foreground);
   font-weight: 500;
 }
 
 .csv-tools-surface__meta {
   margin-left: 2px;
   padding: 2px 7px;
-  border-radius: 999px;
-  background: var(--color-background-secondary);
-  color: var(--color-text-tertiary);
-  font-size: 11px;
+  border-radius: var(--radius-pill);
+  background: var(--subtle);
+  color: var(--faint-foreground);
+  font-size: var(--text-sm);
   font-weight: 500;
 }
 
@@ -82,104 +59,30 @@
   min-width: 8px;
 }
 
-.csv-tools-surface__file-btn {
-  height: 28px;
-  padding: 0 11px;
-  border: var(--hairline) solid var(--color-border-secondary, var(--border));
-  border-radius: 8px;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--color-background-primary) 70%, transparent) 0%, transparent 100%),
-    var(--color-background-secondary);
-  color: var(--color-text-secondary);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  box-shadow:
-    0 1px 0 color-mix(in srgb, #fff 55%, transparent) inset,
-    0 1px 2px rgba(0, 0, 0, 0.04);
-  transition:
-    background 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease,
-    box-shadow 120ms ease,
-    transform 80ms ease;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.csv-tools-surface__file-btn svg {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-  opacity: 0.85;
-}
-
-.csv-tools-surface__file-btn:hover {
-  color: var(--color-text-primary);
-  border-color: var(--color-border-primary, var(--border-2, var(--border)));
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--color-background-primary) 85%, transparent) 0%, transparent 100%),
-    color-mix(in srgb, var(--color-background-secondary) 88%, var(--color-text-primary) 4%);
-  box-shadow:
-    0 1px 0 color-mix(in srgb, #fff 65%, transparent) inset,
-    0 2px 6px rgba(0, 0, 0, 0.06);
-}
-
-.csv-tools-surface__file-btn:active {
-  transform: translateY(1px) scale(0.98);
-  box-shadow:
-    0 1px 0 rgba(0, 0, 0, 0.04) inset,
-    0 0 0 transparent;
-}
-
-.csv-tools-surface__file-btn:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--hiven-color-accent, #2563eb) 55%, transparent);
-  outline-offset: 1px;
-}
-
-.csv-tools-surface__file-btn--primary {
-  color: #fff;
-  border-color: transparent;
-  background: linear-gradient(180deg, color-mix(in srgb, #fff 18%, var(--hiven-color-accent, #2563eb)) 0%, var(--hiven-color-accent, #2563eb) 100%);
-  box-shadow:
-    0 1px 0 color-mix(in srgb, #fff 28%, transparent) inset,
-    0 1px 3px color-mix(in srgb, var(--hiven-color-accent, #2563eb) 35%, transparent);
-}
-
-.csv-tools-surface__file-btn--primary:hover {
-  color: #fff;
-  border-color: transparent;
-  filter: brightness(1.04);
-}
-
 .csv-tools-surface__banner {
   flex-shrink: 0;
   padding: 6px 12px;
-  font-size: 12px;
-  border-bottom: 1px solid var(--color-border-tertiary);
-  background: var(--color-background-secondary);
-  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  border-bottom: 1px solid var(--border);
+  background: var(--subtle);
+  color: var(--muted-foreground);
 }
 
 .csv-tools-surface__banner.is-error {
-  color: var(--hiven-color-error, #be1100);
-  background: var(--hiven-color-error-bg, rgba(190, 17, 0, 0.06));
+  color: var(--destructive-text);
+  background: var(--destructive-soft);
 }
 
 .csv-tools-surface__banner.is-warn {
-  color: var(--color-text-secondary);
-  background: color-mix(in srgb, #f59e0b 10%, var(--color-background-secondary));
-  border-bottom-color: color-mix(in srgb, #f59e0b 22%, var(--color-border-tertiary));
+  color: var(--muted-foreground);
+  background: color-mix(in srgb, var(--warning) 10%, var(--subtle));
+  border-bottom-color: color-mix(in srgb, var(--warning) 22%, var(--border));
 }
 
 .csv-tools-surface__banner.is-ok {
-  color: var(--color-text-secondary);
-  background: color-mix(in srgb, #22c55e 10%, var(--color-background-secondary));
-  border-bottom-color: color-mix(in srgb, #22c55e 22%, var(--color-border-tertiary));
+  color: var(--muted-foreground);
+  background: color-mix(in srgb, var(--success) 10%, var(--subtle));
+  border-bottom-color: color-mix(in srgb, var(--success) 22%, var(--border));
 }
 
 .csv-tools-surface__banner-row {
@@ -206,20 +109,16 @@
 .csv-tools-surface__progress {
   margin-top: 6px;
   height: 4px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--color-text-primary) 8%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
   overflow: hidden;
 }
 
 .csv-tools-surface__progress-bar {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(
-    90deg,
-    var(--hiven-color-accent, #2563eb),
-    color-mix(in srgb, var(--hiven-color-accent, #2563eb) 60%, #22c55e)
-  );
-  transition: width 120ms linear;
+  background: var(--primary);
+  transition: width var(--duration-fast) linear;
 }
 
 .csv-tools-surface__output-wrap {
@@ -232,10 +131,10 @@
 .csv-tools-surface__output-hint {
   flex-shrink: 0;
   padding: 6px 12px;
-  font-size: 11.5px;
-  color: var(--color-text-tertiary);
-  border-bottom: 1px solid var(--color-border-tertiary);
-  background: var(--color-background-secondary);
+  font-size: var(--text-sm);
+  color: var(--faint-foreground);
+  border-bottom: 1px solid var(--border);
+  background: var(--subtle);
 }
 
 .csv-tools-surface__output-wrap pre {
@@ -262,44 +161,6 @@
   gap: 1px;
 }
 
-.csv-tools-surface__ib {
-  width: 28px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--color-text-tertiary);
-  cursor: pointer;
-  transition: background 0.12s, color 0.12s;
-}
-
-.csv-tools-surface__ib:hover:not(:disabled) {
-  background: var(--color-background-secondary);
-  color: var(--color-text-primary);
-}
-
-.csv-tools-surface__ib:active:not(:disabled) {
-  transform: scale(0.92);
-}
-
-.csv-tools-surface__ib:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
-
-.csv-tools-surface__ib svg {
-  width: 14px;
-  height: 14px;
-}
-
-.csv-tools-surface__ib--close:hover:not(:disabled) {
-  background: var(--hiven-color-error-bg, rgba(190, 17, 0, 0.08));
-  color: var(--hiven-color-error, #be1100);
-}
-
 .csv-tools-surface__toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -307,8 +168,8 @@
   justify-content: space-between;
   gap: 10px 12px;
   padding: 8px 12px;
-  border-bottom: 1px solid var(--color-border-tertiary);
-  background: var(--color-background-primary);
+  border-bottom: 1px solid var(--border);
+  background: var(--background);
   flex-shrink: 0;
 }
 
@@ -324,8 +185,8 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--color-text-tertiary);
-  font-size: 11.5px;
+  color: var(--faint-foreground);
+  font-size: var(--text-sm);
   font-weight: 500;
 }
 
@@ -333,75 +194,9 @@
   white-space: nowrap;
 }
 
-.csv-tools-surface__field select,
-.csv-tools-surface__text {
-  height: 28px;
-  border: 1px solid var(--color-border-tertiary);
-  border-radius: 6px;
-  background: var(--color-background-secondary);
-  color: var(--color-text-primary);
-  font-size: 12px;
-  padding: 0 8px;
-}
-
-.csv-tools-surface__field select:hover:not(:disabled),
-.csv-tools-surface__text:hover {
-  border-color: var(--color-border-secondary);
-}
-
-.csv-tools-surface__field select:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
 .csv-tools-surface__text {
   width: 100px;
   font-family: var(--font-mono);
-}
-
-.csv-tools-surface__check {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--color-text-secondary);
-  font-size: 11.5px;
-  cursor: pointer;
-  user-select: none;
-}
-
-.csv-tools-surface__seg {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px;
-  gap: 1px;
-  border-radius: 7px;
-  background: var(--color-background-secondary);
-  flex-shrink: 0;
-}
-
-.csv-tools-surface__seg-item {
-  display: inline-flex;
-  align-items: center;
-  border: 0;
-  background: transparent;
-  color: var(--color-text-tertiary);
-  font: 500 11px/1 var(--hiven-font-ui, inherit);
-  padding: 5px 9px;
-  border-radius: 5px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.12s, color 0.12s;
-}
-
-.csv-tools-surface__seg-item:hover:not(.is-on) {
-  color: var(--color-text-secondary);
-}
-
-.csv-tools-surface__seg-item.is-on {
-  background: var(--color-background-primary);
-  color: var(--color-text-primary);
-  font-weight: 600;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .csv-tools-surface__body {
@@ -409,7 +204,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: var(--color-background-primary);
+  background: var(--background);
 }
 
 .csv-tools-surface__body--single {
@@ -422,8 +217,8 @@
   gap: 10px;
   height: 36px;
   padding: 0 10px;
-  border-bottom: 1px solid var(--color-border-tertiary);
-  background: var(--color-background-secondary);
+  border-bottom: 1px solid var(--border);
+  background: var(--subtle);
   flex-shrink: 0;
 }
 
@@ -435,18 +230,11 @@
 .csv-tools-surface__viewbar .hiven-ui-segmented-item {
   min-height: 26px;
   height: 100%;
-  font-size: 12px;
+  font-size: var(--text-sm);
   padding: 0 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-}
-
-.csv-tools-surface__viewbar .hiven-ui-segmented-item.is-active {
-  /* Reinforce active pill in surface chrome (track is secondary bg) */
-  background: var(--color-background-primary, #fff);
-  color: var(--color-text-primary);
-  font-weight: 650;
 }
 
 .csv-tools-surface__source-guard {
@@ -463,16 +251,16 @@
 }
 
 .csv-tools-surface__source-guard-title {
-  font-size: 15px;
+  font-size: var(--text-lg);
   font-weight: 650;
-  color: var(--color-text-primary);
+  color: var(--foreground);
 }
 
 .csv-tools-surface__source-guard-body {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--text-base);
   line-height: 1.55;
-  color: var(--color-text-secondary);
+  color: var(--muted-foreground);
 }
 
 .csv-tools-surface__source-guard-actions {
@@ -482,43 +270,10 @@
   margin-top: 6px;
 }
 
-.csv-tools-surface__right-tabs {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  height: 34px;
-  padding: 0 8px;
-  border-bottom: 1px solid var(--color-border-tertiary);
-  background: var(--color-background-secondary);
-  flex-shrink: 0;
-}
-
-.csv-tools-surface__tab {
-  height: 26px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--color-text-tertiary);
-  font: 500 11.5px/1 var(--hiven-font-ui, inherit);
-  cursor: pointer;
-}
-
-.csv-tools-surface__tab:hover:not(.is-on) {
-  color: var(--color-text-secondary);
-}
-
-.csv-tools-surface__tab.is-on {
-  background: var(--color-background-primary);
-  color: var(--color-text-primary);
-  font-weight: 650;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
-}
-
 .csv-tools-surface__tab-hint {
   margin-left: auto;
-  color: var(--color-text-tertiary);
-  font-size: 11px;
+  color: var(--faint-foreground);
+  font-size: var(--text-sm);
 }
 
 .csv-tools-surface__native-select {
@@ -527,7 +282,7 @@
 
 .csv-tools-surface__native-select .hiven-ui-select-trigger {
   min-width: 108px;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .csv-tools-surface__transform-checks {
@@ -538,75 +293,9 @@
 }
 
 .csv-tools-surface__transform-checks .hiven-ui-check {
-  font-size: 11.5px;
-  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
   gap: 6px;
-}
-
-.csv-tools-surface__right-tabs .hiven-ui-segmented {
-  height: 28px;
-}
-
-.csv-tools-surface__right-tabs .hiven-ui-segmented-item {
-  font-size: 11.5px;
-  padding: 0 10px;
-}
-
-.csv-tools-surface__back {
-  display: inline-flex !important;
-  align-items: center;
-  gap: 4px;
-  width: auto !important;
-  min-width: 0;
-  height: 30px;
-  padding: 0 8px !important;
-  border: 0 !important;
-  background: transparent !important;
-  color: var(--color-text-secondary);
-  font: 500 13px/1 var(--hiven-font-ui, inherit);
-}
-
-.csv-tools-surface__back:hover {
-  background: var(--color-background-secondary) !important;
-  color: var(--color-text-primary);
-}
-
-.csv-tools-surface__ib {
-  width: 28px !important;
-  height: 28px !important;
-  border: var(--hairline) solid transparent !important;
-  border-radius: 8px !important;
-  background: transparent !important;
-  color: var(--color-text-tertiary);
-  transition:
-    background 120ms ease,
-    color 120ms ease,
-    border-color 120ms ease,
-    transform 80ms ease,
-    box-shadow 120ms ease;
-}
-
-.csv-tools-surface__ib:hover:not(:disabled) {
-  background: var(--color-background-secondary) !important;
-  border-color: var(--color-border-tertiary) !important;
-  color: var(--color-text-primary);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-}
-
-.csv-tools-surface__ib:active:not(:disabled) {
-  transform: scale(0.94);
-  box-shadow: none;
-}
-
-.csv-tools-surface__ib svg {
-  width: 14px;
-  height: 14px;
-}
-
-.csv-tools-surface__ib--close:hover:not(:disabled) {
-  background: var(--hiven-color-error-bg, rgba(190, 17, 0, 0.08)) !important;
-  border-color: color-mix(in srgb, var(--hiven-color-error, #be1100) 18%, transparent) !important;
-  color: var(--hiven-color-error, #be1100) !important;
 }
 
 .csv-tools-surface textarea,
@@ -615,30 +304,22 @@
   min-height: 0;
   margin: 0;
   padding: 12px;
-  border: 0;
-  outline: 0;
   resize: none;
   overflow: auto;
   overscroll-behavior: contain;
   touch-action: pan-x pan-y;
   -webkit-app-region: no-drag;
   app-region: no-drag;
-  background: transparent;
-  color: var(--color-text-primary);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.55;
   -webkit-user-select: text;
   user-select: text;
 }
 
-.csv-tools-surface textarea::placeholder {
-  color: var(--color-text-tertiary);
-}
-
 .csv-tools-surface pre.is-error,
 .csv-tools-surface__empty.is-error {
-  color: var(--color-danger, var(--hiven-color-error, #be1100));
+  color: var(--destructive-text);
 }
 
 .csv-tools-surface__grid-wrap {
@@ -659,8 +340,8 @@
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  border-bottom: 1px solid var(--color-border-tertiary);
-  background: var(--color-background-secondary);
+  border-bottom: 1px solid var(--border);
+  background: var(--subtle);
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
@@ -682,12 +363,12 @@
   min-width: 140px;
   max-width: 480px;
   min-height: 28px;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .csv-tools-surface__filter--sql {
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: var(--text-sm);
   width: 100%;
   max-width: none;
 }
@@ -715,34 +396,16 @@
   list-style: none;
   max-height: 220px;
   overflow: auto;
-  border-radius: 8px;
-  border: var(--hairline) solid var(--color-border-secondary, var(--color-border-tertiary));
-  background: var(--color-background-primary);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  border-radius: var(--radius-md);
+  border: var(--hairline) solid var(--border-strong);
+  background: var(--background);
+  box-shadow: var(--shadow-float);
   z-index: 20;
 }
 
-.csv-tools-surface__sql-suggest-item {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 6px 8px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--color-text-primary);
-  font: inherit;
-  font-size: 12px;
-  text-align: left;
-  cursor: pointer;
-}
+.csv-tools-surface__sql-suggest-item { width: 100%; height: auto; justify-content: space-between; gap: 10px; padding: 6px 8px; text-align: left; }
 
-.csv-tools-surface__sql-suggest-item:hover,
-.csv-tools-surface__sql-suggest-item.is-active {
-  background: color-mix(in srgb, var(--hiven-color-accent, #2563eb) 12%, transparent);
-}
+.csv-tools-surface__sql-suggest-item.is-active { background: var(--active); }
 
 .csv-tools-surface__sql-suggest-label {
   min-width: 0;
@@ -750,24 +413,23 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: var(--text-sm);
 }
 
 .csv-tools-surface__sql-suggest-detail {
   flex-shrink: 0;
-  font-size: 10.5px;
-  color: var(--color-text-tertiary);
-  text-transform: uppercase;
+  font-size: var(--text-sm);
+  color: var(--faint-foreground);
   letter-spacing: 0.04em;
 }
 
 .csv-tools-surface__filter-error {
   flex-shrink: 0;
   padding: 4px 12px;
-  font-size: 11.5px;
-  color: var(--hiven-color-error, #be1100);
-  background: var(--hiven-color-error-bg, rgba(190, 17, 0, 0.06));
-  border-bottom: 1px solid var(--color-border-tertiary);
+  font-size: var(--text-sm);
+  color: var(--destructive-text);
+  background: var(--destructive-soft);
+  border-bottom: 1px solid var(--border);
 }
 
 .csv-tools-surface__table-hint {
@@ -777,8 +439,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11px;
-  color: var(--color-text-tertiary);
+  font-size: var(--text-sm);
+  color: var(--faint-foreground);
 }
 
 .csv-tools-surface__col-header {
@@ -791,28 +453,7 @@
   padding-inline: 2px;
 }
 
-.csv-tools-surface__col-name {
-  flex: 1;
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  height: 26px;
-  padding: 0 4px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  font-weight: 600;
-  font-size: 11.5px;
-  text-align: left;
-  cursor: pointer;
-  -webkit-app-region: no-drag;
-}
-
-.csv-tools-surface__col-name:hover {
-  background: color-mix(in srgb, var(--hiven-color-accent, #2563eb) 10%, transparent);
-}
+.csv-tools-surface__col-name { flex: 1; min-width: 0; justify-content: flex-start; height: 26px; padding: 0 4px; text-align: left; -webkit-app-region: no-drag; }
 
 .csv-tools-surface__col-name-text {
   overflow: hidden;
@@ -820,29 +461,11 @@
   white-space: nowrap;
 }
 
-.csv-tools-surface__col-sort {
-  flex-shrink: 0;
-  width: 24px;
-  height: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--color-text-tertiary);
-  cursor: pointer;
-  -webkit-app-region: no-drag;
-}
-
-.csv-tools-surface__col-sort:hover {
-  color: var(--color-text-primary);
-  background: color-mix(in srgb, var(--color-text-primary) 8%, transparent);
-}
+.csv-tools-surface__col-sort { width: 24px; height: 24px; -webkit-app-region: no-drag; }
 
 .csv-tools-surface__col-sort.is-on {
-  color: var(--hiven-color-accent, #2563eb);
-  background: color-mix(in srgb, var(--hiven-color-accent, #2563eb) 12%, transparent);
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
 }
 
 .csv-tools-surface__cell {
@@ -863,99 +486,100 @@
   min-height: 0;
   width: 100%;
   block-size: 100%;
-  overflow: auto !important;
+  overflow: auto;
   overscroll-behavior: contain;
   touch-action: pan-x pan-y;
-  -webkit-app-region: no-drag !important;
-  app-region: no-drag !important;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
   /* Theme bridge — never inherit rdg default white selected rows */
   --rdg-color-scheme: light;
-  --rdg-background-color: var(--color-background-primary);
-  --rdg-header-background-color: var(--color-background-secondary);
+  --rdg-background-color: var(--background);
+  --rdg-header-background-color: var(--subtle);
   --rdg-header-draggable-background-color: color-mix(
     in srgb,
-    var(--color-background-secondary) 70%,
-    var(--hiven-color-accent, #2563eb) 12%
+    var(--subtle) 70%,
+    var(--primary) 12%
   );
   --rdg-row-hover-background-color: color-mix(
     in srgb,
-    var(--hiven-color-accent, #2563eb) 8%,
-    var(--color-background-primary)
+    var(--primary) 8%,
+    var(--background)
   );
   --rdg-row-selected-background-color: color-mix(
     in srgb,
-    var(--hiven-color-accent, #2563eb) 18%,
-    var(--color-background-primary)
+    var(--primary) 18%,
+    var(--background)
   );
   --rdg-row-selected-hover-background-color: color-mix(
     in srgb,
-    var(--hiven-color-accent, #2563eb) 26%,
-    var(--color-background-primary)
+    var(--primary) 26%,
+    var(--background)
   );
-  --rdg-selection-color: var(--hiven-color-accent, #2563eb);
-  --rdg-checkbox-focus-color: var(--hiven-color-accent, #2563eb);
-  --rdg-border-color: var(--color-border-tertiary);
-  --rdg-summary-border-color: var(--color-border-secondary, var(--color-border-tertiary));
-  --rdg-color: var(--color-text-primary);
-  --rdg-font-size: 12px;
-  font-size: 12px;
-  color: var(--color-text-primary);
-  background: var(--color-background-primary);
+  --rdg-selection-color: var(--primary);
+  --rdg-checkbox-focus-color: var(--primary);
+  --rdg-border-color: var(--border);
+  --rdg-summary-border-color: var(--border-strong);
+  --rdg-color: var(--foreground);
+  --rdg-font-size: var(--text-sm);
+  font-size: var(--text-sm);
+  color: var(--foreground);
+  background: var(--background);
 }
 
 .csv-tools-surface__grid .rdg-row[aria-selected='true'],
 .csv-tools-surface__grid .csv-row--selected {
-  color: var(--color-text-primary);
+  color: var(--foreground);
 }
 
 .csv-tools-surface__grid [role='gridcell'][aria-selected='true'] {
-  outline: 2px solid var(--hiven-color-accent, #2563eb) !important;
+  outline: 2px solid var(--primary);
   outline-offset: -2px;
   background-color: color-mix(
     in srgb,
-    var(--hiven-color-accent, #2563eb) 14%,
-    var(--color-background-primary)
-  ) !important;
-  color: var(--color-text-primary) !important;
+    var(--primary) 14%,
+    var(--background)
+  );
+  color: var(--foreground);
   z-index: 1;
 }
 
 .csv-tools-surface__grid .csv-cell--range {
   background-color: color-mix(
     in srgb,
-    var(--hiven-color-accent, #2563eb) 22%,
-    var(--color-background-primary)
-  ) !important;
-  color: var(--color-text-primary) !important;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--hiven-color-accent, #2563eb) 35%, transparent);
+    var(--primary) 22%,
+    var(--background)
+  );
+  color: var(--foreground);
+  outline: 1px solid color-mix(in srgb, var(--primary) 35%, transparent);
+  outline-offset: -1px;
 }
 
 .csv-tools-surface__grid .csv-cell--col-selected {
   background-color: color-mix(
     in srgb,
-    var(--hiven-color-accent, #2563eb) 12%,
-    var(--color-background-primary)
-  ) !important;
-  color: var(--color-text-primary) !important;
+    var(--primary) 12%,
+    var(--background)
+  );
+  color: var(--foreground);
 }
 
 .csv-tools-surface__grid .csv-cell--focus:not(.csv-cell--range) {
   background-color: color-mix(
     in srgb,
-    var(--hiven-color-accent, #2563eb) 16%,
-    var(--color-background-primary)
-  ) !important;
+    var(--primary) 16%,
+    var(--background)
+  );
 }
 
 .csv-tools-surface__header-cell.is-col-selected {
-  background: color-mix(in srgb, var(--hiven-color-accent, #2563eb) 18%, var(--color-background-secondary)) !important;
-  color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--primary) 18%, var(--subtle));
+  color: var(--foreground);
 }
 
 .csv-tools-surface__empty {
   padding: 16px 12px;
-  color: var(--color-text-tertiary);
-  font-size: 12px;
+  color: var(--faint-foreground);
+  font-size: var(--text-sm);
   line-height: 1.5;
 }
 
@@ -964,7 +588,7 @@
   justify-content: flex-start;
   gap: 7px;
   padding: 7px 10px;
-  background: var(--color-background-secondary);
+  background: var(--subtle);
 }
 
 .csv-tools-surface__control-group {
@@ -973,9 +597,9 @@
   align-items: center;
   gap: 8px;
   padding: 5px 8px;
-  border: 1px solid var(--color-border-tertiary);
-  border-radius: 9px;
-  background: var(--color-background-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--background);
 }
 
 .csv-tools-surface__control-group--transform {
@@ -984,11 +608,10 @@
 
 .csv-tools-surface__control-title {
   flex: none;
-  color: var(--color-text-tertiary);
-  font-size: 10px;
+  color: var(--faint-foreground);
+  font-size: var(--text-sm);
   font-weight: 700;
   letter-spacing: 0.07em;
-  text-transform: uppercase;
 }
 
 .csv-tools-surface__toolbar-group {
@@ -1000,7 +623,7 @@
 }
 
 .csv-tools-surface__field > span {
-  font-size: 10.5px;
+  font-size: var(--text-sm);
 }
 
 .csv-tools-surface__native-select,
@@ -1013,12 +636,12 @@
 }
 
 .csv-tools-surface__viewbar {
-  background: var(--color-background-primary);
+  background: var(--background);
 }
 
 .csv-tools-surface__table-tools {
   min-height: 42px;
-  background: color-mix(in srgb, var(--color-background-secondary) 82%, transparent);
+  background: color-mix(in srgb, var(--subtle) 82%, transparent);
 }
 
 .csv-tools-surface__empty--start {
@@ -1038,26 +661,26 @@
   width: 58px;
   height: 40px;
   margin-bottom: 14px;
-  border: 1px solid color-mix(in srgb, var(--hiven-color-accent, #2563eb) 28%, var(--color-border-tertiary));
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--hiven-color-accent, #2563eb) 9%, var(--color-background-primary));
-  color: var(--hiven-color-accent, #2563eb);
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--primary) 9%, var(--background));
+  color: var(--primary);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 750;
   letter-spacing: 0.08em;
 }
 
 .csv-tools-surface__empty--start strong {
-  color: var(--color-text-primary);
-  font-size: 14px;
+  color: var(--foreground);
+  font-size: var(--text-lg);
   font-weight: 650;
 }
 
 .csv-tools-surface__empty--start p {
   max-width: 380px;
   margin: 6px 0 16px;
-  color: var(--color-text-tertiary);
+  color: var(--faint-foreground);
 }
 
 .csv-tools-surface__empty-actions {
@@ -1088,8 +711,8 @@
   max-height: 130px;
   overflow: auto;
   padding: 7px 12px;
-  border-bottom: 1px solid var(--color-border-tertiary);
-  font-size: 11px;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
   line-height: 1.6;
   user-select: text;
 }
@@ -1120,3 +743,6 @@
     flex-basis: 100%;
   }
 }
+
+.csv-tools-surface__back { width: auto; min-width: 0; height: 30px; gap: 4px; padding: 0 8px; }
+.csv-tools-surface__file-btn { gap: 6px; padding: 0 11px; }

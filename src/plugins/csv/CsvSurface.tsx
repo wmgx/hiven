@@ -10,7 +10,7 @@ import {
 } from 'react-data-grid'
 import 'react-data-grid/lib/styles.css'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Checkbox, IconButton, SearchField, SegmentedControl, Select, TextInput, useImeKeyboard, useLocalEscapeLayer } from '@hiven/plugin-ui'
+import { Button, Checkbox, IconButton, SearchField, SegmentedControl, Select, TextArea, TextInput, useImeKeyboard, useLocalEscapeLayer } from '@hiven/plugin-ui'
 import { BackIcon } from '@hiven/plugin-ui/icons'
 import {
   applyTransforms,
@@ -795,8 +795,9 @@ export function CsvSurface(props: PluginSurfaceProps) {
         },
         renderHeaderCell: () => (
           <div className="csv-tools-surface__col-header">
-            <button
+            <Button
               type="button"
+              variant="ghost"
               className="csv-tools-surface__col-name"
               title={localizedText(t, 'table.clickSelectCol', 'Click to select column')}
               onClick={(event) => {
@@ -806,12 +807,12 @@ export function CsvSurface(props: PluginSurfaceProps) {
               }}
             >
               <span className="csv-tools-surface__col-name-text">{label}</span>
-            </button>
-            <button
+            </Button>
+            <IconButton
               type="button"
               className={`csv-tools-surface__col-sort${dir ? ' is-on' : ''}`}
               title={localizedText(t, 'table.clickSort', 'Click to sort')}
-              aria-label={localizedText(t, 'table.clickSort', 'Click to sort')}
+              label={localizedText(t, 'table.clickSort', 'Click to sort')}
               onClick={(event) => {
                 event.preventDefault()
                 event.stopPropagation()
@@ -819,7 +820,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
               }}
             >
               {dir === 'ASC' ? <IconSortAsc /> : dir === 'DESC' ? <IconSortDesc /> : <IconSortNone />}
-            </button>
+            </IconButton>
           </div>
         ),
         renderCell: ({ row }: { row: CsvGridRow }) => (
@@ -1099,15 +1100,15 @@ export function CsvSurface(props: PluginSurfaceProps) {
         <div className="csv-tools-surface__header-spacer" />
 
         <div className="csv-tools-surface__actions">
-          <button
+          <Button
             type="button"
             className="csv-tools-surface__file-btn"
             onClick={() => fileInputRef.current?.click()}
           >
             <IconFolder />
             <span>{localizedText(t, 'action.openFile', 'Open file')}</span>
-          </button>
-          <input
+          </Button>
+          <TextInput
             ref={fileInputRef}
             type="file"
             accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain"
@@ -1209,29 +1210,31 @@ export function CsvSurface(props: PluginSurfaceProps) {
             </div>
             <div className="csv-tools-surface__banner-actions">
               {fullJob.status === 'running' ? (
-                <button type="button" className="csv-tools-surface__file-btn" onClick={cancelFullProcess}>
+                <Button type="button" className="csv-tools-surface__file-btn" onClick={cancelFullProcess}>
                   {localizedText(t, 'job.cancel', 'Cancel')}
-                </button>
+                </Button>
               ) : fullJob.status === 'done' ? (
                 <>
-                  <button
+                  <Button
                     type="button"
-                    className="csv-tools-surface__file-btn csv-tools-surface__file-btn--primary"
+                    variant="primary"
+                    className="csv-tools-surface__file-btn"
                     disabled={!canCopyOutput}
                     onClick={copyFullOutput}
                   >
                     {localizedText(t, 'job.copyFull', 'Copy full')}
-                  </button>
+                  </Button>
                 </>
               ) : (
-                <button
+                <Button
                   type="button"
-                  className="csv-tools-surface__file-btn csv-tools-surface__file-btn--primary"
+                  variant="primary"
+                  className="csv-tools-surface__file-btn"
                   disabled={Boolean(errorMessage || filterError) || !sourceText.trim() || !currentInputReady}
                   onClick={() => void runFullProcess()}
                 >
                   {localizedText(t, 'job.runFull', 'Process full file')}
-                </button>
+                </Button>
               )}
             </div>
           </div>
@@ -1327,7 +1330,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
             {output === 'sql' && mainView === 'output' && (
               <label className="csv-tools-surface__field">
                 <span>{localizedText(t, 'param.tableName', 'Table name')}</span>
-                <input
+                <TextInput
                   type="text"
                   className="csv-tools-surface__text"
                   value={tableName}
@@ -1509,9 +1512,10 @@ export function CsvSurface(props: PluginSurfaceProps) {
                         <ul ref={sqlPopupRef} className="csv-tools-surface__sql-suggest" role="listbox">
                           {sqlCompletions.items.map((item, index) => (
                             <li key={`${item.kind}-${item.label}-${index}`}>
-                              <button
+                              <Button
                                 type="button"
                                 role="option"
+                                variant="ghost"
                                 aria-selected={index === sqlSuggestIndex}
                                 className={
                                   index === sqlSuggestIndex
@@ -1528,7 +1532,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
                                 {item.detail ? (
                                   <span className="csv-tools-surface__sql-suggest-detail">{item.detail}</span>
                                 ) : null}
-                              </button>
+                              </Button>
                             </li>
                           ))}
                         </ul>
@@ -1545,7 +1549,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
                     globalFilter ||
                     sqlFilter ||
                     sortColumns.length > 0) && (
-                    <button
+                    <Button
                       type="button"
                       className="csv-tools-surface__file-btn"
                       onClick={() => {
@@ -1562,7 +1566,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
                       }}
                     >
                       {localizedText(t, 'table.clearSelection', 'Clear')}
-                    </button>
+                    </Button>
                   )}
                 </div>
                 {filterError ? (
@@ -1613,21 +1617,22 @@ export function CsvSurface(props: PluginSurfaceProps) {
                 <strong>{localizedText(t, 'empty.title', 'Start with table data')}</strong>
                 <p>{localizedText(t, 'empty.source', 'CSV, TSV, or JSON array')}</p>
                 <div className="csv-tools-surface__empty-actions">
-                  <button
+                  <Button
                     type="button"
-                    className="csv-tools-surface__file-btn csv-tools-surface__file-btn--primary"
+                    variant="primary"
+                    className="csv-tools-surface__file-btn"
                     onClick={() => setMainView('source')}
                   >
                     {localizedText(t, 'empty.enterSource', 'Enter source')}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
                     className="csv-tools-surface__file-btn"
                     onClick={() => fileInputRef.current?.click()}
                   >
                     <IconFolder />
                     <span>{localizedText(t, 'action.openFile', 'Open file')}</span>
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
@@ -1658,24 +1663,25 @@ export function CsvSurface(props: PluginSurfaceProps) {
                 )}
               </p>
               <div className="csv-tools-surface__source-guard-actions">
-                <button
+                <Button
                   type="button"
-                  className="csv-tools-surface__file-btn csv-tools-surface__file-btn--primary"
+                  variant="primary"
+                  className="csv-tools-surface__file-btn"
                   onClick={() => setSourceEditUnlocked(true)}
                 >
                   {localizedText(t, 'source.unlockEdit', 'Edit anyway')}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
                   className="csv-tools-surface__file-btn"
                   onClick={() => void writeClipboard(sourceText)}
                 >
                   {localizedText(t, 'source.copyRaw', 'Copy source')}
-                </button>
+                </Button>
               </div>
             </div>
           ) : (
-            <textarea
+            <TextArea
               value={sourceText}
               onChange={(event) => {
                 const next = event.target.value
