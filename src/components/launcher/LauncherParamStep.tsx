@@ -220,10 +220,11 @@ export function LauncherParamStep({
               return
             }
             if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
-            if (event.key === 'Tab' && isSublayer && !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) {
+            if (event.key === 'Tab') {
+              // ⇥ only moves between parameters; it never moves focus out to icon buttons.
               event.preventDefault()
               event.stopPropagation()
-              if (!busy) onNextParam?.()
+              if (isSublayer && !busy && !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) onNextParam?.()
               return
             }
             if (event.key === 'Enter') {

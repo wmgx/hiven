@@ -290,10 +290,11 @@ export function GlobalLauncherCollectInputFrame({
       else onBack()
       return
     }
-    if (onOpenParams && event.key === 'Tab' && !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) {
+    if (event.key === 'Tab') {
+      // ⇥ only opens parameters; it never moves focus out to icon buttons.
       event.preventDefault()
       event.stopPropagation()
-      if (!busy) onOpenParams()
+      if (onOpenParams && !busy && !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) onOpenParams()
       return
     }
     if (event.key === 'Enter') {
@@ -329,6 +330,7 @@ export function GlobalLauncherCollectInputFrame({
   const handleEditorKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Escape') return
     event.stopPropagation()
+    if (event.key === 'Tab') { event.preventDefault(); return }
     if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
     if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'e') {
       event.preventDefault()

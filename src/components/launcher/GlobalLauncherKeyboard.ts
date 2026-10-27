@@ -224,6 +224,11 @@ export function handleGlobalLauncherKeyDown({
       return
     }
   }
+  // Tab never walks from the search field to row / header icon buttons.
+  if (event.key === 'Tab' && onSearchRoot) {
+    event.preventDefault()
+    return
+  }
   // Only activate the clipboard hint when it is the focused row — never steal Enter from list selection.
   if (
     event.key === 'Enter'
