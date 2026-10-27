@@ -25,7 +25,6 @@ const helperModule = await import(
 )
 
 // Run actual extracted production handlers instead of the obsolete Enter-branch regex.
-await import('./test-ime-input-handlers.mjs')
 
 const {
   finishImeComposition,

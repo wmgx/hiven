@@ -5,7 +5,7 @@ import { execFile } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
-import { duration, isPortBusy, nativeExecutable, runNativeSmoke, tauriCommand } from './lib/tauri-debug-runner.mjs'
+import { duration, isPortBusy, nativeExecutable, runNativeSmoke, tauriCommand } from '../lib/tauri-debug-runner.mjs'
 
 if (process.platform !== 'darwin') {
   console.log(`tauri debug runtime-state skipped: System Events window verification requires macOS (current: ${process.platform})`)

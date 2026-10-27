@@ -39,7 +39,5 @@ const quota = xaiExports.quotaFromBilling({
 assert.equal(quota.buckets[0].primary.usedPercent, 37)
 assert.equal(quota.buckets[0].primary.windowDurationMinutes, 7 * 24 * 60)
 
-await import('./test-ai-cancellation-behavior.mjs')
-await import('./test-ai-permission-behavior.mjs')
 
 console.log('AI provider runtime contract OK')

@@ -78,6 +78,7 @@ function fixture({ initiallyFocused = true } = {}) {
     './telemetry': { trackBehavior() {} }, '@tauri-apps/api/core': { invoke: async () => 'attempt' },
   })
   const lifecycle = load('src/components/launcher/GlobalLauncherWindowLifecycle.ts', {
+    './stickyFieldFocus': {},
     react: hostHooks.react, './surfaceInitialFocus': { focusInitialSurfaceTarget() {} },
     '../../workspace/windowManager/launcherWindow': {
       onCurrentLauncherWindowFocusChanged: async (callback) => {

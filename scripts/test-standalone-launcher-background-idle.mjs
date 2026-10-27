@@ -111,5 +111,3 @@ assert.equal(
 )
 
 console.log('standalone-launcher-background-idle: ok')
-
-await import('./test-launcher-surface-background-idle.mjs')

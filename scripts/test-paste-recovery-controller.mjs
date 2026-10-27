@@ -38,7 +38,8 @@ try {
   const top = () => controller.getState().frames.at(-1)
   const item = (primary = false) => ({
     systemKey: 'host:paste-recovery:fixture', kind: 'host', display: { title: 'Synthetic paste' },
-    behavior: { type: 'perform' }, inputPolicy: { mode: 'none' },
+    behavior: { type: 'perform' },
+    actionPolicy: { effect: 'pure' },
     execute: context => {
       const result = (primary ? foregroundPasteResult : textResult)('完整正文\nsecond line', context.api, 'en')
       result.output.choices.push({ id: 'other', title: 'Other', primaryAction: async () => {} })

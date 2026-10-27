@@ -409,7 +409,7 @@ process.disconnect()
 
   await check('the smoke entry launches only fake npm and observes an external Cargo target', async () => {
     const { options, env } = await entryOptions('native')
-    const { stdout } = await exec(process.execPath, [join(root, 'scripts/test-tauri-debug-smoke.mjs')], { cwd: options.root, env, timeout: 3_000 })
+    const { stdout } = await exec(process.execPath, [join(root, 'scripts/smoke/tauri-debug-smoke.mjs')], { cwd: options.root, env, timeout: 3_000 })
     const native = (await events(options.root)).find((row) => row.kind === 'native')
     assert.ok(native)
     assert.match(stdout, new RegExp(`tauri debug smoke checks passed: native pid=${native.pid}`))
@@ -420,7 +420,7 @@ process.disconnect()
     const { options, env } = await entryOptions('vite-only')
     let rejected
     try {
-      await exec(process.execPath, [join(root, 'scripts/test-tauri-debug-smoke.mjs')], { cwd: options.root, env, timeout: 3_000 })
+      await exec(process.execPath, [join(root, 'scripts/smoke/tauri-debug-smoke.mjs')], { cwd: options.root, env, timeout: 3_000 })
     } catch (error) { rejected = error }
     assert.ok(rejected)
     assert.equal(rejected.code, 1)
@@ -435,7 +435,7 @@ process.disconnect()
   if (process.platform !== 'darwin') {
     await check('the runtime-state entry explicitly skips unsupported hosts without launching npm', async () => {
       const { options, env } = await entryOptions('native')
-      const { stdout } = await exec(process.execPath, [join(root, 'scripts/test-tauri-debug-runtime-state.mjs')], { cwd: options.root, env, timeout: 3_000 })
+      const { stdout } = await exec(process.execPath, [join(root, 'scripts/smoke/tauri-debug-runtime-state.mjs')], { cwd: options.root, env, timeout: 3_000 })
       assert.match(stdout, /runtime-state skipped:.*requires macOS/)
       assert.doesNotMatch(stdout, /checks passed/)
       assert.deepEqual(await events(options.root), [])

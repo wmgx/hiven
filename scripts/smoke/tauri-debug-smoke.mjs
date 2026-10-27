@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { duration, isPortBusy, nativeExecutable, runNativeSmoke, tauriCommand } from './lib/tauri-debug-runner.mjs'
+import { duration, isPortBusy, nativeExecutable, runNativeSmoke, tauriCommand } from '../lib/tauri-debug-runner.mjs'
 
 if (!['linux', 'darwin'].includes(process.platform)) {
   console.log(`tauri debug smoke skipped: native process probing is unsupported on ${process.platform}`)

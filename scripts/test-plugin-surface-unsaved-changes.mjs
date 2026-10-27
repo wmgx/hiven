@@ -194,7 +194,7 @@ const declarations = new Map(rendererFunction.body.statements.filter(ts.isVariab
 const callbacks = {}
 function inspect(node) {
   if (ts.isJsxAttribute(node) && node.name.text === 'host') {
-    for (const prop of node.initializer.expression.properties) {
+    for (const prop of node.initializer.expression.arguments[0].properties) {
       if (ts.isPropertyAssignment(prop)) callbacks[prop.name.getText(rendererFile)] = prop.initializer.getText(rendererFile)
     }
   }
