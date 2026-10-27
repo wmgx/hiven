@@ -125,6 +125,14 @@ const IMAGE_HISTORY_ACTIONS: RecommendedAction[] = [
   },
 ]
 
+const CONVERT_FILE_PATHS: RecommendedAction = {
+  id: 'convert-history-file-paths',
+  icon: 'FileSymlink',
+  ...labels('palette.actionConvertHistoryFilePaths'),
+  pluginId: 'text-tools',
+  defaultOutput: 'open-plugin-tool',
+}
+
 const FILES_HISTORY_ACTIONS: RecommendedAction[] = [
   {
     id: 'paste-history-files',
@@ -138,13 +146,7 @@ const FILES_HISTORY_ACTIONS: RecommendedAction[] = [
     ...labels('palette.actionCopyHistoryFilePaths', CLIPBOARD_HISTORY_PROVIDER),
     defaultOutput: 'copy',
   },
-  {
-    id: 'convert-history-file-paths',
-    icon: 'FileSymlink',
-    ...labels('palette.actionConvertHistoryFilePaths'),
-    pluginId: 'text-tools',
-    defaultOutput: 'open-plugin-tool',
-  },
+  CONVERT_FILE_PATHS,
 ]
 
 /**
@@ -157,6 +159,9 @@ export function recommendActionsForBlock(block: LauncherObjectBlock): Recommende
     if (block.kind === 'files') return FILES_HISTORY_ACTIONS
     return getCurrentTextPayload(block) !== null ? TEXT_HISTORY_ACTIONS : TEXT_HISTORY_ACTIONS.slice(2)
   }
+
+  // Files copied in Finder carry the same path payload as a history file item.
+  if (block.kind === 'files' && block.source === 'clipboard' && block.payloadFiles?.paths.length) return [CONVERT_FILE_PATHS]
 
   const hasText = block.payloadText != null || block.preview != null
   const isMedia = block.kind === 'image' || block.kind === 'files'

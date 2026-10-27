@@ -42,6 +42,7 @@ function harness({ runtime = 'native', availability = 'can-attempt', capture = '
   const captureApi = load('src/workspace/launcher/foregroundSelectionCapture.ts', {
     '../../i18n': i18n,
     '../webNativeBridge': bridge,
+    '../telemetry': { trackBehavior() {} },
     '@tauri-apps/api/core': {
       async invoke(command, args) {
         calls.push([command, args])
@@ -120,6 +121,9 @@ for (const capture of [null, '', ' \r\n ']) {
   assert.equal(await h.run(), undefined)
   assert.equal(h.calls.at(-1)[0], 'show_launcher_window', 'Empty supported capture still restores silently')
   assert.deepEqual(h.messages, [])
+  const explicit = harness({ capture })
+  assert.equal(await explicit.run('en', { restoreLauncher: true }), undefined)
+  assert.deepEqual(explicit.messages, [{ text: i18n.t('en', 'workspace.captureSelection.empty'), tone: 'warning' }], 'Explicit import says nothing was selected')
 }
 
 for (const [error, key, restore] of [

@@ -82,7 +82,7 @@ try {
   assert.ok(summary)
   assert.ok(uuid)
 
-  function harness({ preflight = (request) => ({ status: 'ready', reason: 'configuration_ready', providerId: explicit.providerId, agentId: explicit.agentId, providerName: 'Provider', agentName: 'Model', ...request }) } = {}) {
+  function harness({ stream, preflight = (request) => ({ status: 'ready', reason: 'configuration_ready', providerId: explicit.providerId, agentId: explicit.agentId, providerName: 'Provider', agentName: 'Model', ...request }) } = {}) {
     const streams = []
     const deliveries = []
     const grants = new Map()
@@ -91,6 +91,7 @@ try {
       preflight: async (request) => preflight(request),
       stream(request) {
         streams.push(request)
+        if (stream) return stream(request)
         return events([{ type: 'run.started', ...explicit }, { type: 'text.delta', delta: '- Synthetic point' }, { type: 'completed', status: 'completed' }])
       },
       cancel: async () => {},
@@ -172,6 +173,29 @@ try {
     h.controller.back()
     await secret
     assert.equal(h.streams.length, 2)
+  }
+
+  // Esc while a run streams stops it and stays on the command; the next Esc goes back.
+  {
+    let release
+    const h = harness({ stream: () => (async function* () {
+      yield { type: 'run.started', ...explicit }
+      await new Promise((resolve) => { release = resolve })
+    })() })
+    h.grants.set('ai-writing:summarize', { key: 'ai-writing:summarize', label: 'AI Summary' })
+    await h.controller.selectItem(summary, { recordUsage: false })
+    h.controller.setInputText('Synthetic note')
+    const run = h.controller.submitInput()
+    for (let i = 0; i < 50 && !release; i++) await new Promise((resolve) => setImmediate(resolve))
+    assert.ok(release, 'the run is streaming')
+    assert.equal(h.controller.back(), true)
+    assert.equal(h.top().kind, 'collect-input', 'first Esc stays on the command')
+    assert.equal(h.controller.getState().busy, false)
+    release()
+    await run
+    assert.equal(h.top().previewOutput, undefined, 'a stopped run never shows a late result')
+    h.controller.back()
+    assert.equal(h.top().kind, 'list', 'second Esc goes back')
   }
 
   // Unavailable AI shows the reason and never streams.

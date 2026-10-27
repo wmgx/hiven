@@ -12,15 +12,29 @@
 
 import { t, type Locale } from '../../i18n'
 import { isNativeDesktopRuntime } from '../webNativeBridge'
+import { trackBehavior } from '../telemetry'
 import type { PluginLauncherApi } from './types'
 
 type CaptureInvokeResult = { text: string; error?: string }
 export type SelectionCaptureAvailability = 'can-attempt' | 'unsupported' | 'unknown'
 const SELECTION_CAPTURE_UNSUPPORTED = 'SELECTION_CAPTURE_UNSUPPORTED'
 
+/**
+ * A definite native answer is a fixed platform fact; keep it so a busy main thread
+ * later (the 300ms preflight race) cannot turn a supported host into "unavailable".
+ */
+let knownAvailability: Exclude<SelectionCaptureAvailability, 'unknown'> | undefined
+
 /** Match the native capture capability, independently of direct-paste support. */
 export async function readSelectionCaptureAvailability(): Promise<SelectionCaptureAvailability> {
   if (typeof window === 'undefined' || !isNativeDesktopRuntime()) return 'unsupported'
+  if (knownAvailability) return knownAvailability
+  const availability = await queryNativeAvailability()
+  if (availability !== 'unknown') knownAvailability = availability
+  return availability
+}
+
+async function queryNativeAvailability(): Promise<SelectionCaptureAvailability> {
   let timeout: ReturnType<typeof setTimeout> | undefined
   try {
     return await Promise.race([
@@ -83,14 +97,20 @@ export async function captureForegroundSelectionText(
 ): Promise<string | undefined> {
   const availability = await readSelectionCaptureAvailability()
   if (availability !== 'can-attempt') {
+    trackBehavior('launcher.selection_capture', { outcome: availability })
     api.showMessage(t(locale, availability === 'unsupported'
       ? 'workspace.captureSelection.unsupported'
       : 'workspace.captureSelection.unavailable'), 'warning')
     return undefined
   }
+  const startedAt = Date.now()
   const { text, error } = await invokeCapture()
+  // Error text is a native reason code/message, never captured content.
+  trackBehavior('launcher.selection_capture', { outcome: text ? 'captured' : error ? 'failed' : 'empty', durationMs: Date.now() - startedAt, ...(error ? { error: error.slice(0, 160) } : {}) })
   if (error !== SELECTION_CAPTURE_UNSUPPORTED && (!text || options.restoreLauncher)) await restoreLauncherWindow()
   if (text) return text
   if (error) api.showMessage(t(locale, captureFailureMessageKey(error)), 'warning')
+  // The direct-run fallback stays silent; an explicit import must not leave the input silently empty.
+  else if (options.restoreLauncher) api.showMessage(t(locale, 'workspace.captureSelection.empty'), 'warning')
   return undefined
 }

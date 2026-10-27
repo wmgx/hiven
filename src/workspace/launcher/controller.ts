@@ -1630,6 +1630,12 @@ export class LauncherController {
       this.cancelAiSend()
       return true
     }
+    if (current.kind === 'collect-input' && this.state.busy && this.runAbort) {
+      // First Esc stops a running command and stays on it; the next Esc goes back.
+      this.invalidatePendingActions()
+      this.setState({ busy: false, error: null, frames: this.withoutProgress() })
+      return true
+    }
     if (current.kind === 'param-input' && current.sublayer) {
       // Cancel edits; a required choice that was never made leaves the command.
       const frames = this.state.frames.slice(0, current.sublayer === 'required' ? -2 : -1)

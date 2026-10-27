@@ -74,9 +74,12 @@ try {
     const running = h.controller.submitInput()
     await Promise.resolve()
     h.controller.back()
+    assert.equal(h.top().kind, 'collect-input', 'first Esc stops the run and stays on the command')
+    assert.equal(h.controller.getState().busy, false)
     finish({ ok: false, message: 'late synthetic error' }); await running
+    assert.equal(h.controller.getState().error, null, 'a stopped run cannot report late')
+    h.controller.back()
     assert.equal(h.top().kind, 'list')
-    assert.equal(h.controller.getState().error, null)
   }
 
   // Real random tool: correcting a failed range must keep the chosen count.
