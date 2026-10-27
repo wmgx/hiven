@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { IconButton, TextInput, useImeKeyboard } from '@hiven/plugin-ui'
+import { Button, IconButton, TextInput, useImeKeyboard } from '@hiven/plugin-ui'
 import { BackIcon } from '@hiven/plugin-ui/icons'
 import { readHistory, rememberCalculation, type HistoryEntry } from './history'
 
@@ -167,12 +167,12 @@ export function CalculatorSurface({ host, initialText, t, calculate, calculateVa
           <div className="calculator-surface__history-heading">
             <strong>{t('surface.history')}</strong>
             {history.length > 0 && (
-              <button type="button" onClick={() => {
+              <Button variant="ghost" type="button" onClick={() => {
                 saveHistory([])
                 setHistoryIndex(-1)
               }}>
                 {t('surface.clearHistory')}
-              </button>
+              </Button>
             )}
           </div>
           {historyStatus === 'unavailable' && <p className="calculator-surface__history-hint">{t('surface.historyLoadFailed')}</p>}
@@ -182,18 +182,18 @@ export function CalculatorSurface({ host, initialText, t, calculate, calculateVa
             <ol data-launcher-scrollable>
               {history.map((item, index) => (
                 <li key={`${item.expression}:${item.result}`}>
-                  <button type="button" className="calculator-surface__history-expression"
+                  <Button variant="ghost" type="button" className="calculator-surface__history-expression"
                     title={t('surface.reuseExpression', { value: item.expression })}
                     aria-label={t('surface.reuseExpression', { value: item.expression })}
                     onClick={() => useExpression(item.expression, index)}>
                     <span>{item.expression}</span>
-                  </button>
-                  <button type="button" className="calculator-surface__history-result"
+                  </Button>
+                  <Button variant="ghost" type="button" className="calculator-surface__history-result"
                     title={t('surface.reuseResult', { value: item.result })}
                     aria-label={t('surface.reuseResult', { value: item.result })}
                     onClick={() => useExpression(item.result)}>
                     <strong>{item.result}</strong>
-                  </button>
+                  </Button>
                 </li>
               ))}
             </ol>
