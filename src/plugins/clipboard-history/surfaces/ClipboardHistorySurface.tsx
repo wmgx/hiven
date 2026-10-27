@@ -25,6 +25,7 @@ import {
   SurfaceListItem,
   SurfacePreview,
   ToolbarButton,
+  TextInput,
   useImeKeyboard,
   type MenuItemSpec,
 } from '@hiven/plugin-ui'
@@ -909,7 +910,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
             </div>
             <div className="clipboard-history-list" style={{ overflow: 'hidden', flex: 1 }}>
               {Array.from({ length: 7 }, (_, i) => (
-                <div key={i} className="clipboard-history-skeleton-item" style={{ animationDelay: `${i * 80}ms` }} />
+                <div key={i} className="clipboard-history-skeleton-item" style={{ animationDelay: `calc(var(--duration-normal) * ${i * 0.4})` }} />
               ))}
             </div>
           </div>
@@ -1068,7 +1069,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                         <dl className="clipboard-history-favorite-fields">
                           {(previewItem.favoriteFields ?? []).map((field, index) => <div key={index}>
                             <dt>{field.name}</dt>
-                            <dd><button type="button" disabled={resultsActionBlocked} title={t('favorite.copyValue')} onClick={() => void handleCopyField(field.value)}>{field.value}</button></dd>
+                            <dd><Button variant="ghost" type="button" disabled={resultsActionBlocked} title={t('favorite.copyValue')} onClick={() => void handleCopyField(field.value)}>{field.value}</Button></dd>
                           </div>)}
                         </dl>
                       </div>
@@ -1085,7 +1086,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
           {multiple && <span role="status">{t('selection.count', { count: selectedItems.length })}</span>}
           {selectionHasNonText && <span role="status">{t('selection.textOnly')}</span>}
           {pendingDelete && <><span>{t('message.deleted.toast')}</span><Button type="button" onClick={pendingDelete.undo}>{t('message.undo')}</Button></>}
-          {pasteNotice ? <span role="status" style={{ color: 'var(--text-1, var(--hiven-color-text-primary))' }}>{pasteNotice}</span> : <>
+          {pasteNotice ? <span role="status" style={{ color: 'var(--foreground)' }}>{pasteNotice}</span> : <>
             {/* Keep hint slots in layout when button focus temporarily disables shortcuts. */}
             <span style={{ visibility: shortcutHints.paste ? 'visible' : 'hidden' }} aria-hidden={!shortcutHints.paste}>↵ {t('hint.paste')}</span>
             <span style={{ visibility: shortcutHints.paste && selectedItem?.kind === 'text' ? 'visible' : 'hidden' }} aria-hidden={!shortcutHints.paste || selectedItem?.kind !== 'text'}>⇧↵ {t('hint.pastePlain')}</span>
@@ -1204,7 +1205,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
             onCompositionEnd={imeKeyDown.onCompositionEnd}
           >
             <label htmlFor={`${fieldNamesId}-title`}>{t('favorite.titlePlaceholder')}</label>
-            <input
+            <TextInput
               id={`${fieldNamesId}-title`}
               ref={titleInputRef}
               className="clipboard-history-title-dialog-input"
@@ -1216,7 +1217,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
             />
             <div className="clipboard-history-field-rows">
               {titleDialog.fields.map((field, index) => <div className="clipboard-history-field-row" key={index}>
-                <input
+                <TextInput
                   className="clipboard-history-title-dialog-input clipboard-history-field-name"
                   aria-label={t('favorite.fieldName')}
                   placeholder={t('favorite.fieldName')}
@@ -1227,7 +1228,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                   disabled={titleDialog.saving}
                   onChange={(event) => setTitleDialog({ ...titleDialog, fields: titleDialog.fields.map((entry, i) => i === index ? { ...entry, name: event.target.value } : entry) })}
                 />
-                <input
+                <TextInput
                   className="clipboard-history-title-dialog-input"
                   aria-label={t('favorite.fieldValue')}
                   placeholder={t('favorite.fieldValue')}
@@ -1560,7 +1561,8 @@ function ClipboardHistoryMetadata({ item, locale, t }: {
   const detailsId = useId()
   return (
     <div className={`clipboard-history-meta${expanded ? ' is-expanded' : ''}`}>
-      <button
+      <Button
+        variant="ghost"
         type="button"
         className="clipboard-history-meta-summary"
         aria-expanded={expanded}
@@ -1572,7 +1574,7 @@ function ClipboardHistoryMetadata({ item, locale, t }: {
         </span>
         <span className="clipboard-history-meta-toggle">{t(expanded ? 'meta.hideDetails' : 'meta.showDetails')}</span>
         <span className="clipboard-history-meta-chevron" aria-hidden="true">⌃</span>
-      </button>
+      </Button>
       <div id={detailsId} className="clipboard-history-meta-details" hidden={!expanded}>
         {getMetaRows(item, locale, t).map((row) => (
           <div key={row.label} className="clipboard-history-meta-row">
