@@ -134,7 +134,7 @@ function OpenQuickEditorCommandOverlay() {
     }
   }
 
-  const selectMixedItem = (item?: GlobalLauncherItem) => {
+  const selectMixedItem = (item?: GlobalLauncherItem, customizeParams = false) => {
     if (item?.kind === 'domain') {
       const index = visibleFiltered.findIndex(
         (candidate) => candidate.domainItem.systemKey === item.domainItem.systemKey,
@@ -143,6 +143,7 @@ function OpenQuickEditorCommandOverlay() {
       executeGlobalLauncherDomainItem({
         item: item.domainItem,
         controller: controllerRef.current,
+        customizeParams,
       })
     }
   }
@@ -225,7 +226,6 @@ function OpenQuickEditorCommandOverlay() {
       handleGlobalLauncherKeyDown({
         event: synthetic,
         isImeComposingRef,
-        customizeOnModEnter: true,
         launcherSettingsTarget: null,
         hostSurfaceTarget: null,
         surfaceFrame: null,
@@ -239,7 +239,7 @@ function OpenQuickEditorCommandOverlay() {
         visibleFilteredLength: visibleFiltered.length,
         setSelectedIndex,
         selectedItem,
-        selectItem: (item) => selectMixedItem(item),
+        selectItem: (item, customizeParams) => selectMixedItem(item, customizeParams),
       })
     }
     window.addEventListener('keydown', onKeyDown, true)
@@ -293,7 +293,6 @@ function OpenQuickEditorCommandOverlay() {
     handleGlobalLauncherKeyDown({
       event,
       isImeComposingRef,
-      customizeOnModEnter: true,
       launcherSettingsTarget: null,
       hostSurfaceTarget: null,
       surfaceFrame: null,
@@ -307,7 +306,7 @@ function OpenQuickEditorCommandOverlay() {
       visibleFilteredLength: visibleFiltered.length,
       setSelectedIndex,
       selectedItem,
-      selectItem: (item) => selectMixedItem(item),
+      selectItem: (item, customizeParams) => selectMixedItem(item, customizeParams),
     })
   }
 
@@ -351,7 +350,6 @@ function OpenQuickEditorCommandOverlay() {
         locale={locale}
         resultSelectedIndex={resultSelectedIndex}
         selectedResultChoiceIds={selectedResultChoiceIds}
-        customizeOnModEnter
         onSettingsClose={closeCommandAndRestoreFocus}
         onSurfaceBack={closeCommandAndRestoreFocus}
         onSurfaceClose={closeCommandAndRestoreFocus}

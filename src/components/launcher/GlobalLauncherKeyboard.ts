@@ -24,7 +24,6 @@ export function handleGlobalLauncherKeyDown({
   selectedItem,
   visibleItems,
   selectItem,
-  customizeOnModEnter,
   handleClipboardBackspace,
   hasClipboardHint,
   attachHintAsBlock,
@@ -62,8 +61,6 @@ export function handleGlobalLauncherKeyDown({
   /** Visible list rows for ⌘1–8 quick-run (same order as rendered). */
   visibleItems?: LauncherMixedItem[]
   selectItem: (item: LauncherMixedItem | undefined, customizeParams?: boolean) => void
-  /** Quick editor keeps ⌘↵ as "choose parameters first"; elsewhere ⌘↵ equals ↵. */
-  customizeOnModEnter?: boolean
   handleClipboardBackspace?: (queryEmpty: boolean) => boolean
   hasClipboardHint?: boolean
   attachHintAsBlock?: () => void
@@ -231,6 +228,7 @@ export function handleGlobalLauncherKeyDown({
   }
   if (event.key === 'Enter') {
     event.preventDefault()
-    selectItem(selectedItem, Boolean(customizeOnModEnter) && shouldCustomizeParams(event.metaKey, event.ctrlKey))
+    // ⌘↵: set the command's parameters before running it.
+    selectItem(selectedItem, shouldCustomizeParams(event.metaKey, event.ctrlKey))
   }
 }

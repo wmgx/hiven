@@ -50,7 +50,6 @@ export function GlobalLauncherSearchFrame({
   clipboardBlock,
   clipboardHintSelected,
   isFavoriteSelected,
-  customizeOnModEnter,
   browsingActions = false,
   browseCategory = 'all',
   onBrowseCategoryChange,
@@ -81,8 +80,6 @@ export function GlobalLauncherSearchFrame({
   clipboardHintSelected?: boolean
   /** Whether the focused row is currently pinned. */
   isFavoriteSelected?: boolean
-  /** Quick editor: ⌘↵ sets the focused command's parameters before running. */
-  customizeOnModEnter?: boolean
   browsingActions?: boolean
   browseCategory?: LauncherBrowseCategory
   onBrowseCategoryChange?: (category: LauncherBrowseCategory) => void
@@ -341,7 +338,7 @@ export function GlobalLauncherSearchFrame({
       </div>
       <div className="global-launcher-footer l-foot" onFocusCapture={handleFocus} onBlurCapture={handleBlur}>
         <div className="l-foot-hints">
-          {showListHints && customizeOnModEnter && selectedItem?.domainItem.executeWithParams && selectedItem.domainItem.params?.length ? (
+          {showListHints && selectedItem?.domainItem.executeWithParams && selectedItem.domainItem.params?.length ? (
             <LauncherHintKey keys="⌘↵" label={t(locale, 'palette.setParams')} />
           ) : null}
           {showListHints && selectedItem && onToggleFavorite && pinnableItemKeys?.has(selectedItem.id) && (
