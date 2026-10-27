@@ -5,7 +5,7 @@
     "zh": "AI 写作",
     "en": "AI Writing"
   },
-  "version": "2.0.0",
+  "version": "2.0.1",
   "capabilities": [
     "command"
   ],

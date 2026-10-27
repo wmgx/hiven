@@ -53,6 +53,8 @@ dual-pane diff layout
 默认不属于 framework。
 ```
 
+例外（2026-10-27 用户拍板）：文本结果的**展示格式**可以由插件声明为 Markdown（`ctx.output.text(v, { format: 'markdown' })`），宿主统一渲染（`LauncherMarkdown`，基于语法树生成元素、不插入 HTML、链接不可跳转）。这只是展示格式，复制/粘贴仍用原文；Markdown 的转换、清理等产品能力仍属于插件。
+
 ## Diff 能力原则
 
 Diff 是插件产品，不是 framework 能力。

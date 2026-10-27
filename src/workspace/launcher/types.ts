@@ -248,6 +248,9 @@ export type OutputIntent =
   | 'open-quick-editor'
   | 'paste-to-foreground-app'
 
+/** Display format of a text result. Markdown is rendered by the host without HTML. */
+export type LauncherTextFormat = 'plain' | 'markdown'
+
 export type LauncherResultChoice = {
   id: string
   title: string
@@ -262,6 +265,8 @@ export type LauncherResultChoice = {
    */
   tone?: 'default' | 'danger' | 'muted'
   preview?: string
+  /** How the host renders `preview`; copying and pasting always use the raw text. */
+  previewFormat?: LauncherTextFormat
   primaryAction: LauncherResultActionHandler
   secondaryActions?: LauncherResultAction[]
 }
@@ -386,6 +391,8 @@ export type LauncherExecutionContext<TSettings = unknown> = {
   aiSend?: PluginToolAiSend
   /** Aborted when the user leaves this run (Esc, closing the launcher). */
   signal?: AbortSignal
+  /** Partial output shown while the run is in progress. */
+  progress?: (text: string, options?: { format?: LauncherTextFormat }) => void
   /** Plugin-scoped translate function. */
   t: (key: string, vars?: Record<string, string | number>) => string
 }
@@ -683,8 +690,8 @@ export type PluginToolSurfaces = {
 }
 
 export type PluginToolOutput = {
-  /** Default text output: shown as a result choice, Enter copies. */
-  text(value: string): LauncherExecuteResult
+  /** Default text output: shown as a result choice, Enter copies. `format` only changes how it is shown. */
+  text(value: string, options?: { format?: LauncherTextFormat }): LauncherExecuteResult
   /** Explicit replace-active-text primary action. */
   replaceActiveText(value: string): LauncherExecuteResult
   /** Explicit error result. */
@@ -715,6 +722,8 @@ export type PluginToolContext<TSettings = unknown> = {
   aiSend: PluginToolAiSend
   /** Aborted when the user leaves this run; pass it to `ai.stream`. */
   signal: AbortSignal
+  /** Show partial output while running (e.g. streamed AI text); ignored once the run ends. */
+  progress(text: string, options?: { format?: LauncherTextFormat }): void
   /**
    * Shell runtime when the plugin requested `shell.run`.
    * Unauthorized / missing → calls throw a permission error.

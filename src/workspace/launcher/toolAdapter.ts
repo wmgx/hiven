@@ -26,6 +26,7 @@ import type {
   LauncherExecuteWithParamsHandler,
   LauncherItem,
   LauncherItemDisplay,
+  LauncherTextFormat,
   PluginLauncherApi,
   PluginToolAiSend,
   PluginToolContribution,
@@ -112,12 +113,12 @@ function makeOutput(
 ): PluginToolOutput {
   const normalizedSurfaceId = normalizeLauncherSurfaceId((surfaceId ?? "global-launcher") as import("./types").LauncherSurfaceId)
   const isGlobal = normalizedSurfaceId === 'global-launcher'
-  const globalResult = (value: string) => preferForegroundPaste
-    ? foregroundPasteResult(value, api, locale)
-    : textResult(value, api, locale)
+  const globalResult = (value: string, format?: LauncherTextFormat) => preferForegroundPaste
+    ? foregroundPasteResult(value, api, locale, format)
+    : textResult(value, api, locale, format)
   return {
-    text: (value: string) => isGlobal
-      ? globalResult(value)
+    text: (value: string, options?: { format?: LauncherTextFormat }) => isGlobal
+      ? globalResult(value, options?.format)
       : replaceActiveTextResult(value, api, locale),
     replaceActiveText: (value: string) => isGlobal
       ? globalResult(value)
@@ -194,6 +195,7 @@ export function adaptToolToLauncherItem(
         ai: ctx.ai,
         aiSend: ctx.aiSend ?? unavailableAiSend,
         signal: ctx.signal ?? new AbortController().signal,
+        progress: ctx.progress ?? (() => {}),
         shell,
         t: ctx.t,
         ...(tool.imageInput && ctx.image ? { image: ctx.image } : {}),

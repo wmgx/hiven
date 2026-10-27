@@ -35,7 +35,8 @@ export default definePlugin({
       if (!approval?.selection.providerId || !approval.selection.agentId) return ctx.output.error(ctx.t('error.unavailable'))
       const selection = { providerId: approval.selection.providerId, agentId: approval.selection.agentId }
       try {
-        return ctx.output.text(await streamSummary(ctx.ai, text, maxPoints, selection, ctx.signal, () => {}))
+        const summary = await streamSummary(ctx.ai, text, maxPoints, selection, ctx.signal, (partial) => ctx.progress(partial, { format: 'markdown' }))
+        return ctx.output.text(summary, { format: 'markdown' })
       } catch (error) {
         const code = error instanceof SummaryError ? error.code : 'provider'
         return ctx.output.error(ctx.t(`error.${code}`))

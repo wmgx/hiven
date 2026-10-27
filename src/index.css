@@ -4751,7 +4751,7 @@ body[data-theme='dark'] .launcher-empty-well {
 .launcher-preview-well {
   /* Stable shell: avoid native window shrink/grow when content is empty between replaces */
   min-height: 112px;
-  max-height: min(48vh, 320px);
+  max-height: min(60vh, 400px);
   overflow: auto;
   overscroll-behavior: contain;
   padding: 12px 14px;
@@ -9103,5 +9103,23 @@ html[data-window='launcher'] .flux-spatial-shell .recent-clipboard-hint {
 /* Launcher AI send confirmation frame. */
 .launcher-ai-send { display: flex; flex: 0 0 auto; flex-direction: column; gap: 8px; padding: 12px 14px; outline: none; }
 .launcher-ai-send > * { flex-shrink: 0; }
+.launcher-ai-send .ai-send-preview { max-height: 240px; }
+
+/* Text results declared as Markdown (rendered without HTML). */
+.launcher-markdown { font-size: 13px; line-height: 1.6; color: var(--foreground); white-space: normal; }
+.launcher-markdown > :first-child { margin-top: 0; }
+.launcher-markdown > :last-child { margin-bottom: 0; }
+.launcher-markdown p, .launcher-markdown ul, .launcher-markdown ol, .launcher-markdown blockquote, .launcher-markdown pre { margin: 0 0 8px; }
+.launcher-markdown ul, .launcher-markdown ol { padding-left: 20px; }
+.launcher-markdown ul { list-style: disc; }
+.launcher-markdown ol { list-style: decimal; }
+.launcher-markdown li > p { margin: 0; }
+.launcher-markdown li + li { margin-top: 2px; }
+.launcher-markdown h3, .launcher-markdown h4, .launcher-markdown h5, .launcher-markdown h6 { margin: 10px 0 6px; font-size: 13px; font-weight: 600; }
+.launcher-markdown blockquote { padding-left: 10px; border-left: 2px solid var(--border); color: var(--muted-foreground); }
+.launcher-markdown code { padding: 1px 4px; border-radius: 4px; background: var(--muted); font: 12px var(--font-mono, ui-monospace, monospace); }
+.launcher-markdown pre code { display: block; padding: 8px 10px; white-space: pre-wrap; }
+.launcher-markdown hr { margin: 10px 0; border: 0; border-top: 1px solid var(--border); }
+.launcher-markdown-link { text-decoration: underline; text-underline-offset: 2px; }
 .launcher-ai-send-title { margin: 0; font-size: 13px; color: var(--foreground); }
 .launcher-ai-disclosure { padding: 6px 14px 0; }

@@ -143,6 +143,8 @@ try {
     assert.equal(h.top().kind, 'collect-input')
     assert.equal(h.top().previewOutput.choices[0].preview ?? h.top().previewOutput.choices[0].title, '- Synthetic point')
     assert.equal(h.top().aiDisclosure, undefined, 'a confirmed send needs no disclosure')
+    assert.equal(h.top().previewOutput.choices[0].previewFormat, 'markdown')
+    assert.equal(h.top().progress, undefined, 'partial output is cleared when the run ends')
     assert.deepEqual(h.deliveries, [])
     assert.ok(h.grants.has('ai-writing:summarize'))
 

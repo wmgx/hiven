@@ -6,7 +6,8 @@ import { t } from '../../i18n'
 import { showToast } from '../../workspace/toast'
 import type { CollectInputFrame, LauncherControllerState } from '../../workspace/launcher/controller'
 import { resolveDisplayTitle } from '../../workspace/launcher/display'
-import type { IconRef, LauncherOutput, LauncherResultChoice } from '../../workspace/launcher/types'
+import type { IconRef, LauncherOutput, LauncherResultChoice, LauncherTextFormat } from '../../workspace/launcher/types'
+import { LauncherMarkdown } from './LauncherMarkdown'
 import { resolveIcon } from '../../utils/resolveIcon'
 import { Tooltip } from '../Tooltip'
 import { useSelectionCaptureAvailability } from '../useSelectionCaptureAvailability'
@@ -108,6 +109,35 @@ export function extractLivePreviewText(output?: LauncherOutput): string | null {
   return text || null
 }
 
+/** ⌘/Ctrl+A selects only the preview text (not the whole launcher). */
+function selectPreviewText(event: KeyboardEvent<HTMLElement>) {
+  if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'a') return
+  event.preventDefault()
+  event.stopPropagation()
+  const node = event.currentTarget.querySelector('.launcher-preview-text')
+  const sel = window.getSelection()
+  if (!node || !sel) return
+  const range = document.createRange()
+  range.selectNodeContents(node)
+  sel.removeAllRanges()
+  sel.addRange(range)
+}
+
+function PreviewText({ text, format, label }: { text: string; format?: LauncherTextFormat; label: string }) {
+  if (format === 'markdown') {
+    return (
+      <div tabIndex={0} aria-label={label} onKeyDown={selectPreviewText}>
+        <div className="launcher-preview-text"><LauncherMarkdown text={text} /></div>
+      </div>
+    )
+  }
+  return (
+    <pre tabIndex={0} aria-label={label} onKeyDown={selectPreviewText}>
+      <span className="launcher-preview-text">{text}</span>
+    </pre>
+  )
+}
+
 export function GlobalLauncherCollectInputFrame({
   isImeComposingRef,
   inputRef,
@@ -188,6 +218,8 @@ export function GlobalLauncherCollectInputFrame({
     return attachedBlock?.payloadText === frame.blockText ? attachedBlock : createQueryObjectBlock({ query: frame.blockText })
   }, [attachedBlock, frame.blockText])
   const materialText = frame.blockText ?? frame.inputText
+  // Streamed partial output of the running command.
+  const progress = busy ? frame.progress : undefined
   const [expanded, setExpanded] = useState(false)
   const editorRef = useRef<HTMLTextAreaElement>(null)
   const isExpanded = expanded && hasBlock
@@ -455,32 +487,14 @@ export function GlobalLauncherCollectInputFrame({
                 event.stopPropagation()
               }}
             >
-              {explicitReason ? (
+              {progress ? (
+                <PreviewText text={progress.text} format={progress.format} label={t(locale, 'palette.preview')} />
+              ) : explicitReason ? (
                 <span className="meta" data-testid="launcher-explicit-run-hint">
                   {t(locale, explicitReason === 'large' ? 'palette.largeInputRunHint' : 'palette.explicitRunHint')}
                 </span>
               ) : displayPreviewText ? (
-                <pre
-                  tabIndex={0}
-                  aria-label={t(locale, 'palette.preview')}
-                  onKeyDown={(event) => {
-                    // ⌘/Ctrl+A selects only the preview text (not the whole launcher).
-                    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {
-                      event.preventDefault()
-                      event.stopPropagation()
-                      const range = document.createRange()
-                      const sel = window.getSelection()
-                      const node = event.currentTarget.querySelector('.launcher-preview-text')
-                      if (node && sel) {
-                        range.selectNodeContents(node)
-                        sel.removeAllRanges()
-                        sel.addRange(range)
-                      }
-                    }
-                  }}
-                >
-                  <span className="launcher-preview-text">{displayPreviewText}</span>
-                </pre>
+                <PreviewText text={displayPreviewText} format={previewChoices[0]?.previewFormat} label={t(locale, 'palette.preview')} />
               ) : null}
             </div>
           )}

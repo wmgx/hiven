@@ -1,5 +1,5 @@
 {
-  "version": 184,
+  "version": 185,
   "packages": [
     {
       "pluginId": "image-tools",
@@ -29,7 +29,7 @@
     {
       "pluginId": "ai-writing",
       "dir": "ai-writing",
-      "version": "2.0.0"
+      "version": "2.0.1"
     },
     {
       "pluginId": "regex-tester",

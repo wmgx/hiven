@@ -29,6 +29,7 @@ import type {
   OutputIntent,
   PluginLauncherApi,
   PluginToolAiSend,
+  LauncherTextFormat,
 } from './types'
 import type { PluginNetworkApi, PluginPrivateStorageApi, PluginShellApi } from '../pluginTypes'
 import type { AiPreflightReason, AiPreflightResult, PluginAiApi } from '../ai/types'
@@ -66,6 +67,8 @@ export type CollectInputFrame = {
   recordUsage: boolean
   previewOutput?: LauncherOutput
   previewInputText?: string
+  /** Partial output of the running command (streamed AI text); cleared when the run ends. */
+  progress?: { text: string; format?: LauncherTextFormat }
   /** The preview was produced by AI through a remembered grant: show "Sent to …" with revoke. */
   aiDisclosure?: { target: string; grantKey: string }
   /**
@@ -274,6 +277,8 @@ export class LauncherController {
   private aiSendPrompt: { resolve: (approval: AiSendApproval | null) => void } | null = null
   /** Approval given during the current explicit run, for the disclosure line. */
   private lastAiApproval: { approval: AiSendApproval; grantKey: string } | null = null
+  private pendingProgress: { text: string; format?: LauncherTextFormat } | null = null
+  private progressTimer: ReturnType<typeof setTimeout> | null = null
 
   /** Locale switches must reach an already-created controller (errors, titles, plugin ctx.t). */
   updateLocale(locale: LauncherControllerDeps['locale'], makeT: LauncherControllerDeps['makeT']): void {
@@ -345,6 +350,7 @@ export class LauncherController {
   }
 
   private invalidatePendingActions(): void {
+    this.clearProgress()
     this.runAbort?.abort()
     this.runAbort = null
     const prompt = this.aiSendPrompt
@@ -426,8 +432,33 @@ export class LauncherController {
       ai: this.deps.getAi?.(item) ?? emptyAi,
       aiSend: this.aiSendFor(item),
       signal: (this.runAbort ??= new AbortController()).signal,
+      progress: this.progressFor(item),
       t: this.deps.makeT(item),
     }
+  }
+
+  /** Streamed partial output lands on the running command frame, at most every 60ms. */
+  private progressFor(item: LauncherItem): (text: string, options?: { format?: LauncherTextFormat }) => void {
+    const generation = this.flowGeneration
+    return (text, options) => {
+      if (generation !== this.flowGeneration) return
+      this.pendingProgress = { text, format: options?.format }
+      if (this.progressTimer != null) return
+      this.progressTimer = setTimeout(() => {
+        this.progressTimer = null
+        const progress = this.pendingProgress
+        this.pendingProgress = null
+        const top = this.topFrame()
+        if (!progress || generation !== this.flowGeneration || !this.state.busy || top.kind !== 'collect-input' || top.item.systemKey !== item.systemKey) return
+        this.setState({ frames: [...this.state.frames.slice(0, -1), { ...top, progress }] })
+      }, 60)
+    }
+  }
+
+  private clearProgress(): void {
+    if (this.progressTimer != null) clearTimeout(this.progressTimer)
+    this.progressTimer = null
+    this.pendingProgress = null
   }
 
   // ─── AI send confirmation ──────────────────────────────────────────────────
@@ -1441,11 +1472,17 @@ export class LauncherController {
       )
     } catch (error) {
       if (!isCurrent()) return
-      this.setState({ busy: false, error: error instanceof Error ? error.message : String(error) })
+      this.clearProgress()
+      this.setState({ busy: false, error: error instanceof Error ? error.message : String(error), frames: this.withoutProgress() })
       return
     }
     if (!isCurrent()) return
+    this.clearProgress()
     trackLatencyFrom(TelemetryEvents.launcherItemExecute, startedAt, { ...itemTelemetryProps(item), via: 'execute', ok: result.ok, hasOutput: isOutputResult(result) })
+    if (!result.ok) {
+      this.setState({ busy: false, error: result.message, frames: this.withoutProgress() })
+      return
+    }
     const top = this.topFrame()
     if (!result.ok || !isOutputResult(result) || top.kind !== 'collect-input' || top.item.systemKey !== item.systemKey) {
       await this.applyResult(result, this.itemTitle(item), { item, recordUsage: frame.recordUsage })
@@ -1464,8 +1501,15 @@ export class LauncherController {
     this.setState({
       busy: false,
       error: null,
-      frames: [...this.state.frames.slice(0, -1), { ...top, previewOutput: result.output, previewInputText: inputText, selectedSuggestionIndex: -1, aiDisclosure }],
+      frames: [...this.state.frames.slice(0, -1), { ...top, previewOutput: result.output, previewInputText: inputText, selectedSuggestionIndex: -1, aiDisclosure, progress: undefined }],
     })
+  }
+
+  private withoutProgress(): LauncherFrame[] {
+    const top = this.topFrame()
+    return top.kind === 'collect-input' && top.progress
+      ? [...this.state.frames.slice(0, -1), { ...top, progress: undefined }]
+      : this.state.frames
   }
 
   private canActivateChoice(choice: LauncherResultChoice): boolean {

@@ -15,6 +15,7 @@ import type {
   LauncherOutput,
   LauncherResultChoice,
   LauncherResultAction,
+  LauncherTextFormat,
   OutputIntent,
   PluginLauncherApi,
 } from './types'
@@ -44,11 +45,12 @@ function palette(locale: Locale, key: string): string {
  * Build a default text-output result. Shown as one choice; Enter copies the text.
  * `api` is captured so the copy action can run without re-plumbing.
  */
-export function textResult(text: string, api: PluginLauncherApi, locale: Locale = 'en'): LauncherExecuteResult {
+export function textResult(text: string, api: PluginLauncherApi, locale: Locale = 'en', format?: LauncherTextFormat): LauncherExecuteResult {
   const choice: LauncherResultChoice = markHostOutputAction({
     id: TEXT_OUTPUT_CHOICE_ID,
     title: text,
     preview: text,
+    ...(format === 'markdown' ? { previewFormat: format } : {}),
     primaryAction: async () => {
       // Silent copy: toast after ↵ 复制 is noise (launcher often closes anyway).
       await api.copyText(text)
@@ -93,11 +95,12 @@ export function textResult(text: string, api: PluginLauncherApi, locale: Locale 
  * is no other sensible destination for the result, so paste-back is the
  * primary action rather than a buried secondary one.
  */
-export function foregroundPasteResult(text: string, api: PluginLauncherApi, locale: Locale = 'en'): LauncherExecuteResult {
+export function foregroundPasteResult(text: string, api: PluginLauncherApi, locale: Locale = 'en', format?: LauncherTextFormat): LauncherExecuteResult {
   const choice: LauncherResultChoice = markHostOutputAction({
     id: FOREGROUND_PASTE_OUTPUT_CHOICE_ID,
     title: text,
     preview: text,
+    ...(format === 'markdown' ? { previewFormat: format } : {}),
     primaryAction: async () => {
       await api.pasteToForegroundApp(text)
     },
