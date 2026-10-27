@@ -11,7 +11,7 @@ function load(path, dependencies = {}, globals = {}) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText
   vm.runInNewContext(compiled, {
-    exports, module: { exports }, Error, Promise, setTimeout, clearTimeout, console,
+    exports, module: { exports }, Error, Promise, setTimeout, clearTimeout, console, AbortController,
     ...globals,
     require(id) {
       assert.ok(Object.hasOwn(dependencies, id), `Unexpected import ${id} from ${path}`)
@@ -66,6 +66,7 @@ const { LauncherController } = load('src/workspace/launcher/controller.ts', {
   '../usageJournal': { appendUsageJournal: async () => {} },
   './output': { isOutputResult: (result) => result.ok && Boolean(result.output) },
   './commandPreviewPolicy': load('src/workspace/launcher/commandPreviewPolicy.ts'),
+  '../ai/sendGate': { aiSendGrantKey: (pluginId, commandId) => `${pluginId}:${commandId}`, decideAiSend: () => ({ confirm: true, secret: false }) },
   './foregroundSelectionCapture': {},
   '../telemetry': { TelemetryEvents: {}, itemTelemetryProps: () => ({}), trackBehavior() {}, trackLatencyFrom() {}, telemetryNow: () => 0 },
   '../contentBoundary': { isSafeExperienceIdentifier: () => false },

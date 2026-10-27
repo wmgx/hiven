@@ -13,7 +13,7 @@ function load(path, dependencies = {}, globals = {}) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText
   vm.runInNewContext(compiled, {
-    exports, module: { exports }, Error, Promise, setTimeout, clearTimeout,
+    exports, module: { exports }, Error, Promise, setTimeout, clearTimeout, AbortController,
     console: { warn() {} }, crypto: { randomUUID: () => 'synthetic' },
     ...globals,
     require(id) {

@@ -18,6 +18,7 @@ import type { ComponentType } from 'react'
 import type { Locale } from '../../i18n'
 import type { PluginNetworkApi, PluginPrivateStorageApi, PluginShellApi } from '../pluginTypes'
 import type { PluginAiApi } from '../ai/types'
+import type { AiSendApproval, AiSendRequest } from '../ai/sendGate'
 import type { FluxEffect } from '../types'
 import type { DiffSourcePayload } from '../diffTypes'
 import type { EffectRunnerResult } from '../effectRunner'
@@ -381,8 +382,22 @@ export type LauncherExecutionContext<TSettings = unknown> = {
   api: PluginLauncherApi
   storage: PluginPrivateStorageApi
   ai: PluginAiApi
+  /** Host-owned send confirmation for AI tools; absent on hosts without it. */
+  aiSend?: PluginToolAiSend
+  /** Aborted when the user leaves this run (Esc, closing the launcher). */
+  signal?: AbortSignal
   /** Plugin-scoped translate function. */
   t: (key: string, vars?: Record<string, string | number>) => string
+}
+
+/**
+ * Ask the host before sending text to AI. The host checks readiness (showing
+ * the unavailable view itself), confirms unless the user granted this command,
+ * and always confirms secret-shaped content. Resolves null when cancelled or
+ * unavailable: return without output, the host already told the user.
+ */
+export type PluginToolAiSend = {
+  request(send: AiSendRequest): Promise<AiSendApproval | null>
 }
 
 export type LauncherExecuteHandler<TSettings = unknown> = (
@@ -696,6 +711,10 @@ export type PluginToolContext<TSettings = unknown> = {
   api: PluginLauncherApi
   storage: PluginPrivateStorageApi
   ai: PluginAiApi
+  /** Send confirmation for AI tools; see {@link PluginToolAiSend}. */
+  aiSend: PluginToolAiSend
+  /** Aborted when the user leaves this run; pass it to `ai.stream`. */
+  signal: AbortSignal
   /**
    * Shell runtime when the plugin requested `shell.run`.
    * Unauthorized / missing → calls throw a permission error.

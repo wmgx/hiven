@@ -368,6 +368,11 @@ function OpenQuickEditorCommandOverlay() {
         onSecondaryAction={activateSecondaryAction}
         onHoverResultChoice={setResultSelectedIndex}
         onToggleResultChoice={toggleResultChoice}
+        aiSendActions={{
+          confirm: () => controllerRef.current?.confirmAiSend(),
+          toggleRemember: () => controllerRef.current?.toggleAiSendRemember(),
+          revoke: () => controllerRef.current?.revokeAiSendGrant(),
+        }}
         onSearchQueryChange={(value) => { setQuery(value); setSelectedIndex(0, { pin: false }) }}
         onSearchSelectItem={(item) => selectMixedItem(item)}
         onSearchHoverIndex={handleSearchHoverIndex}

@@ -14,6 +14,8 @@ import { LauncherController, type LauncherControllerState } from './controller'
 import { createPluginLauncherApi, createPluginLauncherStorage } from './pluginApi'
 import { createPluginNetwork } from '../pluginNetwork'
 import { createPluginAi } from '../ai/runtime'
+import { addAiSendGrant, removeAiSendGrant } from '../ai/sendGate'
+import { requestOpenLauncherHostSurface } from '../launcherHostSurfaceBridge'
 import { createPluginShell } from '../pluginShell'
 import { getPluginPermissionSnapshot, usePluginPermissionStore } from '../pluginPermissions'
 import { resolvePluginSettingsSource } from './pluginSource'
@@ -358,6 +360,20 @@ export function useLauncherSession({
       if (!controllerRef.current) {
         const nextController = new LauncherController({
           surfaceId: normalizedHostId,
+          aiSendGrants: {
+            has: (key) => (useAppStore.getState().settings.aiSendGrants ?? []).some((grant) => grant.key === key),
+            add: (grant) => {
+              const state = useAppStore.getState()
+              state.updateSetting('aiSendGrants', addAiSendGrant(state.settings.aiSendGrants ?? [], grant))
+            },
+            remove: (key) => {
+              const state = useAppStore.getState()
+              state.updateSetting('aiSendGrants', removeAiSendGrant(state.settings.aiSendGrants ?? [], key))
+            },
+          },
+          openAiSettings: normalizedHostId === 'global-launcher'
+            ? () => { void requestOpenLauncherHostSurface('system-ai-settings').catch(() => {}) }
+            : undefined,
           getMaterialGeneration: materialGenerationGetterRef.current ? () => materialGenerationGetterRef.current?.() : undefined,
           keepInputAsBlock: (text) => keepInputAsBlockRef.current?.(text),
           api: makeApi?.(createPluginLauncherApi()) ?? createPluginLauncherApi(),

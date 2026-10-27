@@ -133,6 +133,7 @@ export function GlobalLauncherCollectInputFrame({
   onBlockTextChange,
   onSyncBlock,
   onCopyAll,
+  onRevokeAiSend,
 }: {
   isImeComposingRef: RefObject<boolean>
   inputRef: RefObject<HTMLInputElement | HTMLTextAreaElement | null>
@@ -169,6 +170,8 @@ export function GlobalLauncherCollectInputFrame({
   onSyncBlock?: (text: string) => void
   /** ⌘↵ on a list of text results. */
   onCopyAll?: () => void
+  /** Revoke the AI grant shown by the "Sent to …" line. */
+  onRevokeAiSend?: () => void
 }) {
   const placeholder = frame.input.placeholderI18n?.[locale] ?? frame.input.placeholder ?? ''
   const showCaptureSelection = Boolean(!frame.item.metadataInput && onCaptureSelection && !frame.inputText && frame.blockText === undefined && frame.item.behavior.type === 'perform' && frame.item.inputPolicy && frame.item.inputPolicy.mode !== 'all')
@@ -205,8 +208,10 @@ export function GlobalLauncherCollectInputFrame({
     if (isExpanded) requestAnimationFrame(() => editorRef.current?.focus())
   }, [isExpanded])
   const filterText = materialText.trim()
-  // Tools with side effects and very large material wait for ↵ instead of previewing.
-  const explicitReason = showLivePreview && filterText ? explicitRunReason(frame.item, materialText) : undefined
+  // Tools with side effects and very large material wait for ↵; their result then shows until the input changes.
+  const explicitReason = showLivePreview && filterText && frame.previewInputText !== materialText
+    ? explicitRunReason(frame.item, materialText)
+    : undefined
   // Several text results: a list (↵ copies the selected row, ⌘↵ copies all).
   const isList = showLivePreview && !explicitReason && previewChoices.length > 1
   const listIndex = Math.min(Math.max(0, selectedIndex), previewChoices.length - 1)
@@ -401,6 +406,16 @@ export function GlobalLauncherCollectInputFrame({
         <div role="alert" className="px-3.5 py-2 text-[12px]" style={{ color: 'var(--color-error)' }}>
           {error}
         </div>
+      )}
+      {frame.aiDisclosure && frame.previewInputText === materialText && (
+        <p className="ai-send-disclosure launcher-ai-disclosure">
+          <span>{t(locale, 'aiSendGate.sentTo', { target: frame.aiDisclosure.target })}</span>
+          {onRevokeAiSend && (
+            <button type="button" title={t(locale, 'aiSendGate.revokeTitle')} onMouseDown={(event) => event.preventDefault()} onClick={onRevokeAiSend}>
+              {t(locale, 'aiSendGate.revoke')}
+            </button>
+          )}
+        </p>
       )}
       {showLivePreview && (
         <>

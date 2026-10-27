@@ -342,6 +342,12 @@ export function GlobalLauncherPanel({
           controllerRef.current?.removeBlockMaterial(frame)
         }}
         onCopyAllChoices={() => void controllerRef.current?.copyAllChoices()}
+        aiSendActions={{
+          confirm: () => controllerRef.current?.confirmAiSend(),
+          toggleRemember: () => controllerRef.current?.toggleAiSendRemember(),
+          openSettings: () => controllerRef.current?.openAiSettings(),
+          revoke: () => controllerRef.current?.revokeAiSendGrant(),
+        }}
         onCommandBlockChange={(change, text, frame) => {
           if (change === 'paste') controllerRef.current?.setBlockMaterial(text, frame)
           else if (change === 'edit') controllerRef.current?.setBlockText(text, frame)

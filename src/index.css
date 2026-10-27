@@ -9099,3 +9099,8 @@ html[data-window='launcher'] .flux-spatial-shell .recent-clipboard-hint {
 /* OutputActions: host-owned output buttons shared by plugin pages. */
 .hiven-output-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .hiven-output-actions kbd { margin-left: 6px; font: 12px var(--font-sans); opacity: .6; }
+
+/* Launcher AI send confirmation frame. */
+.launcher-ai-send { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; outline: none; }
+.launcher-ai-send-title { margin: 0; font-size: 13px; color: var(--foreground); }
+.launcher-ai-disclosure { padding: 6px 14px 0; }

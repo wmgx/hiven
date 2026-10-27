@@ -27,6 +27,7 @@ import type {
   LauncherItem,
   LauncherItemDisplay,
   PluginLauncherApi,
+  PluginToolAiSend,
   PluginToolContribution,
   PluginToolOutput,
   ResolvedTextInput,
@@ -137,6 +138,9 @@ function toolDisplay(tool: PluginToolContribution): LauncherItemDisplay {
   }
 }
 
+/** Hosts without a send confirmation never let a tool send. */
+const unavailableAiSend: PluginToolAiSend = { request: async () => null }
+
 export function adaptToolToLauncherItem(
   tool: PluginToolContribution,
   options: ToolAdaptOptions,
@@ -188,6 +192,8 @@ export function adaptToolToLauncherItem(
         api: ctx.api,
         storage: ctx.storage,
         ai: ctx.ai,
+        aiSend: ctx.aiSend ?? unavailableAiSend,
+        signal: ctx.signal ?? new AbortController().signal,
         shell,
         t: ctx.t,
         ...(tool.imageInput && ctx.image ? { image: ctx.image } : {}),

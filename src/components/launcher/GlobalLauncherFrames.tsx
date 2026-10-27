@@ -3,7 +3,7 @@ import { type MouseEvent as ReactMouseEvent, type MutableRefObject, type ReactNo
 import { t, type Locale } from '../../i18n'
 import { localized, type LauncherHostSurfaceTarget, type PluginSurfaceOpenTarget } from '../../store'
 import type { PluginSettingsDialogTarget } from '../../workspace/pluginSettingsStore'
-import type { CollectInputFrame, LauncherControllerState, ParamInputFrame, ResultFrame } from '../../workspace/launcher/controller'
+import type { AiSendFrame, CollectInputFrame, LauncherControllerState, ParamInputFrame, ResultFrame } from '../../workspace/launcher/controller'
 import type { LauncherResultChoice } from '../../workspace/launcher/types'
 import { LauncherParamStep, resolveParamValueLabel } from './LauncherParamStep'
 import type { LauncherMixedItem } from './LauncherMixedList'
@@ -16,6 +16,7 @@ import type { ClipboardObjectBlockState } from '../../launcher/clipboard/useClip
 import { GlobalLauncherResultFrame } from './GlobalLauncherResultFrame'
 import { GlobalLauncherPermissionFrame, type GlobalLauncherPermissionFrameState } from './GlobalLauncherPermissionFrame'
 import { GlobalLauncherCollectInputFrame } from './GlobalLauncherCollectInputFrame'
+import { GlobalLauncherAiSendFrame } from './GlobalLauncherAiSendFrame'
 import type { LauncherSurfaceUnsavedChangesReport } from './useLauncherSurfaceBackgroundIdle'
 import type { LauncherBrowseCategory } from '../../workspace/launcher/browseItems'
 
@@ -87,7 +88,10 @@ export function GlobalLauncherFrameSwitch({
   isKeyboardNavRef,
   clipboardBlock,
   clipboardHintSelected,
+  aiSendActions,
 }: {
+  /** Controller intents for the AI send confirmation and the disclosure line. */
+  aiSendActions?: { confirm: () => void; toggleRemember: () => void; openSettings?: () => void; revoke: () => void }
   hostSurfaceTarget: LauncherHostSurfaceTarget | null
   hostSurfaceHeight: number
   launcherSettingsTarget: PluginSettingsDialogTarget
@@ -248,6 +252,22 @@ export function GlobalLauncherFrameSwitch({
     )
   }
 
+  if (topFrame?.kind === 'ai-send' && aiSendActions) {
+    const frame = topFrame as AiSendFrame
+    return (
+      <LauncherFlowFrame frameKey={`ai-send:${frame.item.systemKey}`}>
+        <GlobalLauncherAiSendFrame
+          frame={frame}
+          locale={locale}
+          onConfirm={aiSendActions.confirm}
+          onToggleRemember={aiSendActions.toggleRemember}
+          onOpenSettings={aiSendActions.openSettings}
+          onBack={() => onFrameBack()}
+        />
+      </LauncherFlowFrame>
+    )
+  }
+
   if (topFrame?.kind === 'collect-input') {
     const frame = topFrame as CollectInputFrame
     const paramChips: { label: string; value: string }[] = []
@@ -288,6 +308,7 @@ export function GlobalLauncherFrameSwitch({
           onBlockTextChange={(text) => onCommandBlockChange?.('edit', text, frame)}
           onSyncBlock={(text) => onCommandBlockChange?.('sync', text, frame)}
           onCopyAll={onCopyAllChoices}
+          onRevokeAiSend={aiSendActions?.revoke}
         />
       </LauncherFlowFrame>
     )

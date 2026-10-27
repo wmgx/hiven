@@ -175,6 +175,7 @@ export const randomPlugin = definePlugin({
   tools: [
     {
       id: 'random.integer',
+      policy: { effect: 'pure' },
       title: 'integer.title',
       subtitle: 'integer.description',
       icon: 'Dices',
@@ -199,6 +200,7 @@ export const randomPlugin = definePlugin({
     },
     {
       id: 'random.float',
+      policy: { effect: 'pure' },
       title: 'float.title',
       subtitle: 'float.description',
       icon: 'Dices',
@@ -225,6 +227,7 @@ export const randomPlugin = definePlugin({
     },
     {
       id: 'random.string',
+      policy: { effect: 'pure' },
       title: 'string.title',
       subtitle: 'string.description',
       icon: 'Dices',
@@ -264,6 +267,7 @@ export const randomPlugin = definePlugin({
     },
     {
       id: 'random.uuid',
+      policy: { effect: 'pure' },
       title: 'uuid.title',
       subtitle: 'uuid.description',
       icon: 'Hash',
@@ -283,6 +287,7 @@ export const randomPlugin = definePlugin({
     },
     {
       id: 'random.password',
+      policy: { effect: 'pure' },
       title: 'password.title',
       subtitle: 'password.description',
       icon: 'KeyRound',
@@ -305,6 +310,7 @@ export const randomPlugin = definePlugin({
     },
     {
       id: 'random.hex',
+      policy: { effect: 'pure' },
       title: 'hex.title',
       subtitle: 'hex.description',
       icon: 'Binary',
@@ -327,6 +333,7 @@ export const randomPlugin = definePlugin({
     },
     {
       id: 'random.color',
+      policy: { effect: 'pure' },
       title: 'color.title',
       subtitle: 'color.description',
       icon: 'Palette',
@@ -346,6 +353,7 @@ export const randomPlugin = definePlugin({
     },
     {
       id: 'random.boolean',
+      policy: { effect: 'pure' },
       title: 'boolean.title',
       subtitle: 'boolean.description',
       icon: 'ToggleLeft',
