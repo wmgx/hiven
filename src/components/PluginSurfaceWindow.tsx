@@ -11,7 +11,8 @@ import { ConfirmDialog } from '../plugin-ui'
 import { invoke } from '@tauri-apps/api/core'
 import { PluginSettingsDialog } from './PluginSettingsDialog'
 import { ToastContainer } from './workspace/ToastContainer'
-import { PluginSurfaceRenderer, type PluginSurfaceLeaveOwner, usePluginSurfaceRendersTitlebar, usePluginSurfaceTitle } from './pluginSurface/PluginSurfaceRenderer'
+import { PluginSurfaceRenderer, type PluginSurfaceLeaveOwner, usePluginSurfaceTitle } from './pluginSurface/PluginSurfaceRenderer'
+import { SurfaceChrome } from './pluginSurface/SurfaceChrome'
 import './PluginSurfaceWindow.css'
 
 type WindowEntry = { id: string; target: PluginSurfaceOpenTarget }
@@ -53,7 +54,6 @@ export function PluginSurfaceWindow() {
   const [targetReady, setTargetReady] = useState(false)
   const target = active?.target ?? staged?.target ?? baseTarget
   const title = usePluginSurfaceTitle(target, locale)
-  const usesPluginTitlebar = usePluginSurfaceRendersTitlebar(target)
   const clearPending = useCallback(() => {
     pendingRef.current = null
     stagedRef.current = null
@@ -228,13 +228,7 @@ export function PluginSurfaceWindow() {
   return (
     <div className="flux-spatial-shell plugin-surface-window-shell" data-theme={theme}>
       <div className="plugin-surface-window-frame">
-        {!usesPluginTitlebar && (
-          <div className="plugin-surface-window-titlebar" data-tauri-drag-region>
-            <div className="plugin-surface-window-title" data-tauri-drag-region>{title || t('pluginSurface')}</div>
-            <button className="plugin-surface-window-close" type="button" aria-label={t('close')} title={t('close')} onClick={() => { void hide() }}><X size={14} /></button>
-          </div>
-        )}
-        <div ref={bodyRef} className="plugin-surface-window-body">
+        <div ref={bodyRef} className="plugin-surface-window-body" data-no-drag>
           {[active, staged].filter((entry): entry is Entry => Boolean(entry)).map((entry) => (
             <div key={entry.id} style={{ height: '100%', display: staged && entry !== staged ? 'none' : undefined }}>
               <DraftReportingSurface
@@ -279,8 +273,9 @@ function DraftReportingSurface({ entry, reportDraft, ...props }: {
   const onUnsavedChangesChange = useCallback((dirty: boolean, owner: PluginSurfaceLeaveOwner) => {
     reportDraft(entry, dirty, owner)
   }, [entry, reportDraft])
-  return <PluginSurfaceRenderer {...props} target={entry.target} presentation="plugin-surface-window"
-    contextSurfaceId="plugin-surface-window" onUnsavedChangesChange={onUnsavedChangesChange} />
+  const title = usePluginSurfaceTitle(entry.target, props.locale)
+  return <SurfaceChrome title={title} standalone onClose={props.onClose}><PluginSurfaceRenderer {...props} target={entry.target} presentation="plugin-surface-window"
+    contextSurfaceId="plugin-surface-window" onUnsavedChangesChange={onUnsavedChangesChange} /></SurfaceChrome>
 }
 
 function parseTargetFromUrl(): PluginSurfaceOpenTarget | null {

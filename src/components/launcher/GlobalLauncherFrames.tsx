@@ -191,9 +191,6 @@ export function GlobalLauncherFrameSwitch({
       return <div className="p-4 text-center text-[12px]" style={{ color: 'var(--color-text-tertiary)' }}>{t(locale, 'palette.surfaceNotFound')}</div>
     }
     const shell = activeSurfaceFrame.surface.shell
-    const breadcrumbTitle = shell?.breadcrumbTitle
-      ? localized(shell.breadcrumbTitle, shell.breadcrumbTitleI18n, locale)
-      : undefined
     return (
       <GlobalLauncherPluginSurfaceFrame
         target={surfaceFrame}
@@ -201,7 +198,7 @@ export function GlobalLauncherFrameSwitch({
         shellHeight={shell?.defaultHeight ?? 480}
         autoHeight={shell?.autoHeight}
         fillsWindow={surfaceFillsWindow}
-        breadcrumbTitle={breadcrumbTitle}
+        title={localized(activeSurfaceFrame.surface.title, activeSurfaceFrame.surface.titleI18n, locale)}
         onUnsavedChangesReport={onSurfaceUnsavedChangesReport}
         onBack={onSurfaceBack}
         onClose={onSurfaceClose}

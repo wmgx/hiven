@@ -1,0 +1,7 @@
+.surface-chrome { display: flex; flex-direction: column; min-width: 0; min-height: 0; height: 100%; position: relative; }
+.surface-chrome-header { display: flex; align-items: center; gap: 6px; height: 36px; flex: 0 0 36px; padding: 0 10px; border-bottom: 1px solid var(--border); background: var(--background); color: var(--foreground); user-select: none; }
+.surface-chrome-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sm); }
+.surface-chrome-header > button { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 0; border-radius: 4px; background: transparent; color: var(--muted-foreground); cursor: pointer; }
+.surface-chrome-header > button:hover { background: var(--muted); color: var(--foreground); }
+.surface-chrome-actions { display: flex; align-items: center; gap: 4px; }
+.surface-chrome-body { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }

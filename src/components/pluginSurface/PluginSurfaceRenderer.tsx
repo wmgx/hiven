@@ -844,14 +844,3 @@ export function usePluginSurfaceTitle(target: PluginSurfaceOpenTarget | null, lo
     return surface ? localized(surface.title, surface.titleI18n, locale) : ''
   }, [locale, pluginRegistryVersion, target])
 }
-
-export function usePluginSurfaceRendersTitlebar(target: PluginSurfaceOpenTarget | null): boolean {
-  const pluginRegistryVersion = usePluginRegistryVersion()
-  return useMemo(() => {
-    void pluginRegistryVersion
-    if (!target) return false
-    const definition = pluginRegistry.getPluginDefinition(target.pluginId, target.source) as PluginDefinition<unknown> | undefined
-    const surface = definition?.ui?.surfaces?.find((item) => item.id === target.surfaceId)
-    return surface?.shell?.rendersTitlebar === true
-  }, [pluginRegistryVersion, target])
-}

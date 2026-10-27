@@ -5,10 +5,10 @@ import type { PluginSurfaceOpenTarget } from '../../store'
 import { ConfirmDialog } from '../../plugin-ui'
 import { useLauncherEscapeInterceptor } from './launcherEscapeInterceptor'
 import { PluginSurfaceRenderer, type PluginSurfaceLeaveActions, type PluginSurfaceLeaveOwner } from '../pluginSurface/PluginSurfaceRenderer'
-import { SurfaceBreadcrumbHeader } from '../SurfaceBreadcrumbHeader'
+import { SurfaceChrome } from '../pluginSurface/SurfaceChrome'
 import type { LauncherSurfaceUnsavedChangesReport } from './useLauncherSurfaceBackgroundIdle'
 
-const BREADCRUMB_HEIGHT = 40
+const HEADER_HEIGHT = 36
 type LeaveAction = 'back' | 'close'
 type SurfaceChanges = { owner: PluginSurfaceLeaveOwner; dirty: boolean; actions: PluginSurfaceLeaveActions }
 type PendingLeave = { action: LeaveAction; target: PluginSurfaceOpenTarget; owner: PluginSurfaceLeaveOwner; perform: () => void }
@@ -19,7 +19,7 @@ export function GlobalLauncherPluginSurfaceFrame({
   shellHeight,
   autoHeight,
   fillsWindow = false,
-  breadcrumbTitle,
+  title,
   onBack,
   onClose,
   onUnsavedChangesReport,
@@ -29,13 +29,13 @@ export function GlobalLauncherPluginSurfaceFrame({
   shellHeight: number
   autoHeight?: boolean
   fillsWindow?: boolean
-  breadcrumbTitle?: string
+  title: string
   onBack: () => void
   onClose: () => void
   onUnsavedChangesReport?: (report: LauncherSurfaceUnsavedChangesReport) => void
 }) {
   const shellRef = useRef<HTMLDivElement>(null)
-  const bodyHeight = breadcrumbTitle ? shellHeight - BREADCRUMB_HEIGHT : shellHeight
+  const bodyHeight = shellHeight - HEADER_HEIGHT
   const activeTargetRef = useRef(target)
   activeTargetRef.current = target
   const mountedRef = useRef(false)
@@ -131,7 +131,10 @@ export function GlobalLauncherPluginSurfaceFrame({
   useLauncherEscapeInterceptor(escapeHandler)
 
   return (
-    <div
+    <SurfaceChrome
+      title={title}
+      onBack={() => requestLeave('back')}
+      onClose={() => requestLeave('close')}
       ref={shellRef}
       className="global-launcher-surface-shell flex flex-col min-h-0 outline-none"
       tabIndex={-1}
@@ -139,13 +142,6 @@ export function GlobalLauncherPluginSurfaceFrame({
         ? { height: '100%', flex: '1 1 0', minWidth: 0 }
         : autoHeight ? { maxHeight: shellHeight } : { height: shellHeight }}
     >
-      {breadcrumbTitle && (
-        <SurfaceBreadcrumbHeader
-          title={breadcrumbTitle}
-          onBack={() => requestLeave('back')}
-          onClose={() => requestLeave('close')}
-        />
-      )}
       <div
         className="global-launcher-body global-launcher-body--surface"
         data-no-drag
@@ -179,6 +175,6 @@ export function GlobalLauncherPluginSurfaceFrame({
         onConfirm={discardChanges}
         onCancel={cancelLeave}
       />
-    </div>
+    </SurfaceChrome>
   )
 }

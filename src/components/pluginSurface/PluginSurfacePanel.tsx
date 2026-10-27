@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { translate } from '../../i18n'
 import { useAppStore, type PluginSurfaceOpenTarget } from '../../store'
 import type { PanelPropsV2 } from '../../workspace/pluginTypes'
+import { SurfaceChrome } from './SurfaceChrome'
 import { PluginSettingsDialog } from '../PluginSettingsDialog'
 import { PluginSurfaceRenderer, usePluginSurfaceTitle } from './PluginSurfaceRenderer'
 
@@ -27,10 +28,7 @@ export function PluginSurfacePanel({ inputs, host }: PanelPropsV2<PluginSurfaceP
 
   return (
     <div className="plugin-surface-panel">
-      <div className="plugin-surface-panel-titlebar">
-        <div className="plugin-surface-panel-title">{title || target.surfaceId}</div>
-        <button className="plugin-surface-panel-close" type="button" onClick={host.close}>x</button>
-      </div>
+      <SurfaceChrome title={title || target.surfaceId} onClose={host.close}>
       <div className="plugin-surface-panel-body">
         <PluginSurfaceRenderer
           target={target}
@@ -42,6 +40,7 @@ export function PluginSurfacePanel({ inputs, host }: PanelPropsV2<PluginSurfaceP
         />
       </div>
       <PluginSettingsDialog />
+      </SurfaceChrome>
     </div>
   )
 }
