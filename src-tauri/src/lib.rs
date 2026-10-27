@@ -1953,7 +1953,7 @@ async fn show_plugin_surface_window(
     let started_at = Instant::now();
     paste_recovery::invalidate_all();
     #[cfg(not(target_os = "linux"))]
-    let _ = (&caller, paste_target);
+    let _ = &caller;
     let label = plugin_surface_window_label(&source, &plugin_id, &surface_id);
     let url = plugin_surface_window_url(&source, &plugin_id, &surface_id);
     let title = title.unwrap_or_else(|| surface_id.clone());
@@ -2007,7 +2007,10 @@ async fn show_plugin_surface_window(
             .find(|(window_label, window)| {
                 window_label != &label && window_label != "toast-hud" && window.is_focused().unwrap_or(false)
             })
-            .map(|(window_label, _)| window_label);
+            .map(|(window_label, _)| window_label)
+            // Opened from the root Launcher list: the paste target is the app the user
+            // was in before Launcher, never the Launcher panel that merely holds focus.
+            .filter(|window_label| !(window_label == "launcher" && matches!(paste_target, Some(PluginSurfacePasteTarget::Launcher))));
         remember_previous_key_window_label(previous_key_window_label);
     }
     let created = existing_window.is_none();
