@@ -19,6 +19,6 @@ export default definePlugin({
     aliases: ['edit URL parameters', 'URL query editor', '编辑 URL 参数'],
     component: UrlQuerySurface,
     entry: { launcher: { surfaces: ['global-launcher', 'quick-editor-command'] }, shortcutBindable: true },
-    shell: { defaultWidth: 728, defaultHeight: 640, minWidth: 560, minHeight: 360, resizable: true, closeOnBlur: false },
+    shell: { size: 'medium' as const, inlineHeight: 640, resizable: true, closeOnBlur: false },
   }] },
 })

@@ -4,7 +4,7 @@
   "displayNameI18n": {
     "zh": "剪贴板历史"
   },
-  "version": "2.1.14",
+  "version": "2.1.15",
   "capabilities": [
     "settings",
     "ui",

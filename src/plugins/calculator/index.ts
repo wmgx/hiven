@@ -465,10 +465,8 @@ const definition: PluginDefinition = {
         component: CalculatorWorkspace,
         entry: { launcher: { surfaces: ['global-launcher'] }, shortcutBindable: true },
         shell: {
-          defaultWidth: 680,
-          defaultHeight: 640,
-          minWidth: 500,
-          minHeight: 360,
+          size: 'small' as const,
+          inlineHeight: 640,
           closeOnBlur: false,
           resizable: true,
         },

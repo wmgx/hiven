@@ -18,10 +18,8 @@ import { getCachedIndex } from './storage/clipboardHistoryCache'
 const MB = 1024 * 1024
 
 const CLIPBOARD_HISTORY_SHELL = {
-  defaultWidth: 900,
-  defaultHeight: 640,
-  minWidth: 760,
-  minHeight: 360,
+  size: 'large' as const,
+  inlineHeight: 640,
   closeOnBlur: true,
   resizable: false,
   // 默认 2 分钟销毁对高频剪贴板场景太短，冷启动会反复加载 webview。

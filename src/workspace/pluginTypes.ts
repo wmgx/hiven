@@ -742,15 +742,14 @@ export type PluginSurfaceInstancePolicy = 'singleton' | 'multi'
 export type PluginSurfaceShortcutPresentation = 'launcher' | 'window'
 
 export type PluginSurfaceShell = {
-  defaultWidth?: number
-  defaultHeight?: number
-  minWidth?: number
-  minHeight?: number
+  size?: 'small' | 'medium' | 'large'
+  /** Inline height only; independent windows use size. */
+  inlineHeight?: number
   closeOnBlur?: boolean
   destroyTimeout?: number
   resizable?: boolean
   /**
-   * Inline 'launcher' presentation only: treat defaultHeight as a max-height
+   * Inline 'launcher' presentation only: treat inlineHeight as a max-height
    * cap and let the surface shrink-wrap its own content, instead of the
    * default behavior of always rendering a fixed-height box. Off by default
    * because most existing surfaces rely on a definite ancestor height to

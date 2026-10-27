@@ -103,10 +103,8 @@ export const textDiffPlugin = definePlugin({
         component: LazyTextDiffSurface,
         entry: { launcher: false, shortcutBindable: false },
         shell: {
-          defaultWidth: 960,
-          defaultHeight: 640,
-          minWidth: 720,
-          minHeight: 480,
+          size: 'large' as const,
+          inlineHeight: 640,
           closeOnBlur: false,
           resizable: true,
         },

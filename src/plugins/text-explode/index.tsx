@@ -17,14 +17,10 @@ export default definePlugin({
         entry: {
           launcher: { surfaces: ['global-launcher'] },
         },
-        // No defaultWidth: inline 'launcher' presentation, panel should keep
-        // the launcher's own natural width. autoHeight makes defaultHeight a
-        // max-height ceiling instead of the host default of a forced fixed
-        // height, so a short/empty explode doesn't render as an oversized
-        // box with empty space below it (see .text-explode-surface / .tx-canvas
-        // in style.css, which shrink-wrap content rather than stretch to fill).
+        // Inline content shrinks to fit, capped at 480px.
         shell: {
-          defaultHeight: 480,
+          size: 'medium' as const,
+          inlineHeight: 480,
           autoHeight: true,
           closeOnBlur: false,
         },

@@ -195,7 +195,7 @@ export function GlobalLauncherFrameSwitch({
       <GlobalLauncherPluginSurfaceFrame
         target={surfaceFrame}
         locale={locale}
-        shellHeight={shell?.defaultHeight ?? 480}
+        shellHeight={shell?.inlineHeight ?? 480}
         autoHeight={shell?.autoHeight}
         fillsWindow={surfaceFillsWindow}
         title={localized(activeSurfaceFrame.surface.title, activeSurfaceFrame.surface.titleI18n, locale)}

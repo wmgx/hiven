@@ -9,10 +9,8 @@ import { RegexTesterSurface } from './RegexTesterViews'
 import './style.css'
 
 const WORKSPACE_SHELL = {
-  defaultWidth: 900,
-  defaultHeight: 620,
-  minWidth: 680,
-  minHeight: 440,
+  size: 'large' as const,
+  inlineHeight: 620,
   closeOnBlur: false,
   resizable: true,
 }

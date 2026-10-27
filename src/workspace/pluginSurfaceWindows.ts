@@ -19,8 +19,11 @@ type WindowCapableSurface = PluginUiSurfaceContribution & {
   shell?: WindowSurfaceShell
 }
 
-const DEFAULT_WIDTH = 900
-const DEFAULT_HEIGHT = 640
+const WINDOW_SIZES = {
+  small: { width: 600, height: 520, minWidth: 480, minHeight: 400 },
+  medium: { width: 800, height: 600, minWidth: 600, minHeight: 440 },
+  large: { width: 960, height: 680, minWidth: 720, minHeight: 480 },
+}
 const DEFAULT_DESTROY_TIMEOUT_MS = 120_000
 
 export function getPluginSurfaceShortcutPresentation(target: PluginSurfaceOpenTarget): PluginSurfaceShortcutPresentation {
@@ -47,8 +50,7 @@ export async function requestOpenPluginSurfaceWindow(target: PluginSurfaceOpenTa
 
   const surface = resolvePluginSurface(target)
   const shell = surface?.shell
-  const width = shell?.defaultWidth ?? DEFAULT_WIDTH
-  const height = shell?.defaultHeight ?? DEFAULT_HEIGHT
+  const { width, height, minWidth, minHeight } = WINDOW_SIZES[shell?.size ?? 'medium'] ?? WINDOW_SIZES.medium
   const closeOnBlur = shell?.closeOnBlur !== false
   const destroyTimeoutMs = shell?.destroyTimeout ?? DEFAULT_DESTROY_TIMEOUT_MS
   const label = pluginSurfaceWindowLabel(target)
@@ -74,9 +76,9 @@ export async function requestOpenPluginSurfaceWindow(target: PluginSurfaceOpenTa
       title: surface?.title,
       width,
       height,
-      minWidth: shell?.minWidth,
-      minHeight: shell?.minHeight,
-      resizable: shell?.resizable,
+      minWidth,
+      minHeight,
+      resizable: shell?.resizable !== false,
       closeOnBlur,
       destroyTimeoutMs,
       pasteTarget: options?.pasteTarget,

@@ -4,7 +4,7 @@
   "displayNameI18n": {
     "zh": "CSV / TSV 转换"
   },
-  "version": "1.12.6",
+  "version": "1.12.7",
   "capabilities": [
     "command",
     "surface"

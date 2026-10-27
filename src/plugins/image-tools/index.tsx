@@ -10,10 +10,8 @@ import { saveClipboardImageAsPng } from './saveClipboardImage'
 import './style.css'
 
 const SHELL = {
-  defaultWidth: 860,
-  defaultHeight: 640,
-  minWidth: 640,
-  minHeight: 420,
+  size: 'medium' as const,
+  inlineHeight: 640,
   closeOnBlur: false,
   resizable: true,
 }

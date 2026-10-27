@@ -42,20 +42,11 @@ export function computeStandaloneLauncherGeometry({
     // Shell dimensions describe the plugin panel. Native constraints include
     // the transparent host gutter; the native monitor work area applies the
     // final screen bounds without making these defaults a live viewport cap.
-    const minWidth = Math.ceil(positiveDimension(surfaceShell.minWidth,
-      STANDALONE_LAUNCHER_WIDTH - STANDALONE_LAUNCHER_HORIZONTAL_PADDING,
-    ) + STANDALONE_LAUNCHER_HORIZONTAL_PADDING)
-    const minHeight = Math.ceil(positiveDimension(surfaceShell.minHeight,
-      STANDALONE_LAUNCHER_MIN_HEIGHT - STANDALONE_LAUNCHER_VERTICAL_PADDING,
-    ) + STANDALONE_LAUNCHER_VERTICAL_PADDING)
     return {
-      width: Math.max(minWidth, Math.ceil(positiveDimension(surfaceShell.defaultWidth,
-        positiveDimension(currentWindowWidth, STANDALONE_LAUNCHER_WIDTH) - STANDALONE_LAUNCHER_HORIZONTAL_PADDING,
-      ) + STANDALONE_LAUNCHER_HORIZONTAL_PADDING)),
-      height: Math.max(minHeight, Math.ceil(positiveDimension(surfaceShell.defaultHeight, 480)
-        + STANDALONE_LAUNCHER_VERTICAL_PADDING)),
-      minWidth,
-      minHeight,
+      width: STANDALONE_LAUNCHER_WIDTH,
+      height: Math.max(STANDALONE_LAUNCHER_MIN_HEIGHT, Math.ceil(positiveDimension(surfaceShell.inlineHeight, 480) + STANDALONE_LAUNCHER_VERTICAL_PADDING)),
+      minWidth: STANDALONE_LAUNCHER_WIDTH,
+      minHeight: STANDALONE_LAUNCHER_MIN_HEIGHT,
     }
   }
 
@@ -67,7 +58,7 @@ export function computeStandaloneLauncherGeometry({
         Math.ceil(
           (hostSurfaceTarget
             ? STANDALONE_SURFACE_MAX_HEIGHT
-            : surfaceShell?.defaultHeight
+            : surfaceShell?.inlineHeight
             ?? (launcherSettingsTarget ? GLOBAL_LAUNCHER_SETTINGS_HEIGHT : measured.panelHeight)
           ) + STANDALONE_LAUNCHER_VERTICAL_PADDING,
         ),
@@ -82,8 +73,8 @@ export function computeStandaloneLauncherGeometry({
 
   const desiredPanelWidth = hostSurfaceTarget
     ? STANDALONE_SURFACE_MAX_WIDTH + STANDALONE_LAUNCHER_HORIZONTAL_PADDING
-    : surfaceShell?.defaultWidth
-    ? surfaceShell.defaultWidth + STANDALONE_LAUNCHER_HORIZONTAL_PADDING
+    : surfaceShell
+    ? STANDALONE_LAUNCHER_WIDTH
     : launcherSettingsTarget
     ? GLOBAL_LAUNCHER_SETTINGS_WIDTH + STANDALONE_LAUNCHER_HORIZONTAL_PADDING
     : currentWindowWidth

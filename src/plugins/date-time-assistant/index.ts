@@ -431,10 +431,8 @@ function DateTimeWorkspace(props: PluginSurfaceProps) {
 }
 
 const WORKSPACE_SHELL = {
-  defaultWidth: 760,
-  defaultHeight: 540,
-  minWidth: 600,
-  minHeight: 400,
+  size: 'small' as const,
+  inlineHeight: 540,
   closeOnBlur: false,
   resizable: true,
 }

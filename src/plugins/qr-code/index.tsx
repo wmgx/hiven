@@ -13,10 +13,8 @@ function isHttpUrl(text: string): boolean {
 }
 
 const QR_SHELL = {
-  defaultWidth: 860,
-  defaultHeight: 560,
-  minWidth: 640,
-  minHeight: 420,
+  size: 'medium' as const,
+  inlineHeight: 560,
   closeOnBlur: false,
   resizable: true,
 }

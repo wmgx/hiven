@@ -314,10 +314,7 @@ export function useStandaloneLauncherResize({
   // to the user must not re-enter this effect on every keystroke or re-render.
   const contentResizeKey = resizableSurfaceKey ? '' : controllerResizeKey
   const contentVisibleLength = resizableSurfaceKey ? 0 : visibleFilteredLength
-  const defaultWidth = surfaceShell?.defaultWidth
-  const defaultHeight = surfaceShell?.defaultHeight
-  const minWidth = surfaceShell?.minWidth
-  const minHeight = surfaceShell?.minHeight
+  const inlineHeight = surfaceShell?.inlineHeight
   const shellPresent = surfaceShell != null
   const compactWidth = !hostSurfaceTarget && !launcherSettingsTarget && !surfaceKey && !shellPresent
 
@@ -365,7 +362,7 @@ export function useStandaloneLauncherResize({
         panel,
         hostSurfaceTarget,
         launcherSettingsTarget,
-        surfaceShell: shellPresent ? { defaultWidth, defaultHeight, minWidth, minHeight, resizable: Boolean(resizableSurfaceKey) } : undefined,
+        surfaceShell: shellPresent ? { inlineHeight, resizable: Boolean(resizableSurfaceKey) } : undefined,
         currentWindowWidth: initialWindowWidth,
       })
       applyStandaloneLauncherGeometry(panel, geometry)
@@ -416,10 +413,7 @@ export function useStandaloneLauncherResize({
     resizableSurfaceKey,
     shellPresent,
     compactWidth,
-    defaultWidth,
-    defaultHeight,
-    minWidth,
-    minHeight,
+    inlineHeight,
     hostSurfaceTarget,
     launcherSettingsTarget,
     panelRef,

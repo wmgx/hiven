@@ -61,10 +61,8 @@ function LazyCsvSurface(props: PluginSurfaceProps) {
 }
 
 const WORKSPACE_SHELL = {
-  defaultWidth: 920,
-  defaultHeight: 620,
-  minWidth: 680,
-  minHeight: 480,
+  size: 'large' as const,
+  inlineHeight: 620,
   closeOnBlur: false,
   resizable: true,
 }

@@ -345,7 +345,7 @@ export function GlobalLauncherHost() {
   const surfaceKey = surfaceFrame && activeSurfaceFrame && !hostSurfaceTarget && !launcherSettingsTarget
     ? `${surfaceFrame.source}:${surfaceFrame.pluginId}:${surfaceFrame.surfaceId}:${surfaceFocusVersion}`
     : null
-  const resizableSurface = standaloneLauncher && surfaceKey !== null
+  const resizableSurface = standaloneLauncher && !window.__HIVEN_SANDBOX__ && !window.__HIVEN_WEB_NATIVE_BRIDGE__ && surfaceKey !== null
     && activeSurfaceFrame?.surface.shell?.resizable === true
   const surfaceBackgroundIdle = useLauncherSurfaceBackgroundIdle(
     open && surfaceKey !== null ? surfaceFrame : null,

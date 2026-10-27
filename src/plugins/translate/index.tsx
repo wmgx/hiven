@@ -253,10 +253,8 @@ export default definePlugin<TranslateSettings>({
           shortcutInitialText: 'clipboard',
         },
         shell: {
-          defaultWidth: 960,
-          defaultHeight: 620,
-          minWidth: 760,
-          minHeight: 420,
+          size: 'large' as const,
+          inlineHeight: 620,
           closeOnBlur: false,
           resizable: true,
         },
