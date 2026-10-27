@@ -29,7 +29,8 @@ export function matchesClipboardHistorySearch(
   matchMode: ClipboardHistorySearchMatchMode = 'literal',
 ): boolean {
   if (!query.trim()) return true
-  if (item.favoriteTitle && clipboardHistorySearchFieldMatches(item.favoriteTitle, query, matchMode)) return true
+  if (item.isFavorite && item.favoriteTitle && clipboardHistorySearchFieldMatches(item.favoriteTitle, query, matchMode)) return true
+  if (item.isFavorite && clipboardHistorySearchFieldMatches((item.favoriteFields ?? []).map(({ name, value }) => `${name}\n${value}`).join('\n'), query, matchMode)) return true
   if (item.kind === 'text') {
     return clipboardHistorySearchFieldMatches(item.preview, query, matchMode)
       || clipboardHistorySearchFieldMatches(item.text, query, matchMode)

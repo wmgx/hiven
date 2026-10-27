@@ -64,8 +64,6 @@ const commands = [
   ['npm', ['run', 'test:clipboard-history-shortcuts']],
   ['npm', ['run', 'test:clipboard-history-search-presentation']],
   ['npm', ['run', 'test:clipboard-history-copy-lifecycle']],
-  ['npm', ['run', 'test:clipboard-history-image-save']],
-  ['npm', ['run', 'test:clipboard-history-quick-editor-open']],
   ['npm', ['run', 'test:clipboard-history-open-session']],
   ['npm', ['run', 'test:clipboard-history-time-range']],
   ['npm', ['run', 'test:clipboard-history-integration']],

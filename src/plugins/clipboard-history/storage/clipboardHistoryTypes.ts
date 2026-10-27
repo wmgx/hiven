@@ -4,6 +4,8 @@
 
 // ─── History Item Types ──────────────────────────────────────────────────────
 
+export type FavoriteField = { name: string; value: string }
+
 export type ClipboardHistoryBase = {
   id: string
   kind: 'text' | 'image' | 'files'
@@ -22,6 +24,7 @@ export type ClipboardHistoryBase = {
   isFavorite?: boolean
   /** User title for favorites; empty falls back to preview. */
   favoriteTitle?: string
+  favoriteFields?: FavoriteField[]
   favoritedAt?: number
 }
 
@@ -75,6 +78,8 @@ export type ClipboardHistoryIndexEntry = {
   lastPastedAt?: number
   isFavorite?: boolean
   favoriteTitle?: string
+  favoriteFields?: FavoriteField[]
+  favoriteFieldsText?: string
   favoritedAt?: number
 }
 

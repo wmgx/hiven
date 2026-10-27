@@ -25,8 +25,9 @@ export const trashKey = (row: TrashRecord) => `${TRASH}${String(row.purgeAfter).
 export const blobKey = (id: string) => `${BLOB}${encodeURIComponent(id)}`
 export const blobIds = (meta: HistoryMetadata) => meta.kind === 'image' ? [...new Set([meta.blobId, meta.previewBlobId].filter((id): id is string => Boolean(id)))] : []
 export function metadata(item: ClipboardHistoryItem, extra: Partial<HistoryMetadata> = {}): HistoryMetadata {
-  const { id, kind, hash, lastCopiedAt, byteSize, sourceApp, firstCopiedAt, copyCount, pasteCount, lastPastedAt, isFavorite, favoriteTitle, favoritedAt } = item
-  return { id, kind, hash, lastCopiedAt, byteSize, sourceApp, firstCopiedAt, copyCount, pasteCount, lastPastedAt, isFavorite, favoriteTitle, favoritedAt,
+  const { id, kind, hash, lastCopiedAt, byteSize, sourceApp, firstCopiedAt, copyCount, pasteCount, lastPastedAt, isFavorite, favoriteTitle, favoriteFields, favoritedAt } = item
+  return { id, kind, hash, lastCopiedAt, byteSize, sourceApp, firstCopiedAt, copyCount, pasteCount, lastPastedAt, isFavorite, favoriteTitle, favoriteFields, favoritedAt,
+    favoriteFieldsText: isFavorite ? favoriteFields?.map(({ name, value }) => `${name}\n${value}`).join('\n') : undefined,
     ...(item.kind === 'text' ? { preview: item.preview } : item.kind === 'image' ? { blobId: item.blobId, previewBlobId: item.previewBlobId, contentType: item.contentType, width: item.width, height: item.height } : { fileNames: item.fileNames }), ...extra }
 }
 export function putMetadata(meta: HistoryMetadata): Operation[] {

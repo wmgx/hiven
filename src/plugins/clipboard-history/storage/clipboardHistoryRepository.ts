@@ -3,7 +3,7 @@ import { getCachedIndex, setCachedIndex, clearCachedIndex } from './clipboardHis
 import { matchesClipboardHistorySearch, type ClipboardHistorySearchMatchMode } from './clipboardHistorySearch'
 import { resolveClipboardHistoryRetentionMonths } from '../settings/model'
 import { createPagedHistoryStore, ROOT, ITEM, META, ORDER, FREQUENT, TRASH, TRASH_ID, GC, metadata, putMetadata, removeMetadata, hashKey, trashKey, blobIds, invert, type HistoryMetadata, type TrashRecord, type Operation } from './clipboardHistoryPagedStore'
-import type { AddItemInput, ClipboardHistoryItem, ClipboardHistoryIndex, ClipboardHistoryPrunePolicy, PruneResult, ClipboardTextHistoryItem, ClipboardImageHistoryItem, ClipboardFilesHistoryItem } from './clipboardHistoryTypes'
+import type { AddItemInput, ClipboardHistoryItem, ClipboardHistoryIndex, ClipboardHistoryPrunePolicy, PruneResult, ClipboardTextHistoryItem, ClipboardImageHistoryItem, ClipboardFilesHistoryItem, FavoriteField } from './clipboardHistoryTypes'
 
 export type HistoryPageRequest = { query?: string; matchMode?: ClipboardHistorySearchMatchMode; filter?: 'all' | 'text' | 'image' | 'files' | 'favorites' | 'frequent' | 'trash'; frequentThreshold?: number; copiedSince?: number; cursor?: string; limit?: number; signal?: AbortSignal }
 export type HistoryPage = { items: ClipboardHistoryItem[]; nextCursor?: string; scanned: number }
@@ -30,10 +30,21 @@ export type ClipboardHistoryRepository = {
   findByHash(hash: string): Promise<ClipboardHistoryItem | undefined>
   recordPaste(id: string): Promise<ClipboardHistoryItem | undefined>
   toggleFavorite(id: string): Promise<ClipboardHistoryItem | undefined>
-  setFavorite(id: string, favorite: boolean, title?: string): Promise<ClipboardHistoryItem | undefined>
-  updateFavoriteTitle(id: string, title: string): Promise<ClipboardHistoryItem | undefined>
+  setFavorite(id: string, favorite: boolean, title?: string, fields?: FavoriteField[]): Promise<ClipboardHistoryItem | undefined>
+  updateFavoriteInfo(id: string, title: string, fields: FavoriteField[]): Promise<ClipboardHistoryItem | undefined>
+  getFavoriteFieldNames(): Promise<string[]>
 }
 const DAY = 86_400_000
+const FAVORITE_FIELD_NAMES = ROOT + 'favorite-field-names'
+function normalizeFavoriteFields(fields: FavoriteField[]): FavoriteField[] {
+  const normalized = fields.map(({ name, value }) => ({
+    name: Array.from(name.trim()).slice(0, 20).join('').trimEnd(),
+    value: Array.from(value.trim()).slice(0, 500).join('').trimEnd(),
+  })).filter(({ name, value }) => name || value)
+  if (normalized.some(({ name }) => !name)) throw new Error('favorite.nameRequired')
+  if (normalized.length > 12) throw new Error('favorite.tooManyFields')
+  return normalized
+}
 const makeTextPreview = (text: string) => { const line = text.replace(/\n/g, ' ').trim(); return line.length > 200 ? `${line.slice(0, 200)}…` : line }
 const emptyPrune = (): PruneResult => ({ removedCount: 0, removedBytes: 0, removedBlobIds: [] })
 function requireCurrent(signal?: AbortSignal) { if (signal?.aborted) throw new Error('cancelled') }
@@ -62,6 +73,7 @@ export function indexToListItems(index: ClipboardHistoryIndex): ClipboardHistory
       lastPastedAt: entry.lastPastedAt,
       isFavorite: entry.isFavorite ?? false,
       favoriteTitle: entry.favoriteTitle,
+      favoriteFields: entry.favoriteFields ?? [],
       favoritedAt: entry.favoritedAt,
     }
     switch (entry.kind) {
@@ -85,12 +97,13 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
     const meta = await storage.kv.get<HistoryMetadata>(META + id)
     if (!meta) return undefined
     const body = await storage.kv.get<ClipboardHistoryItem>(ITEM + id)
-    return body ? { ...body, isFavorite: meta.isFavorite, favoriteTitle: meta.favoriteTitle, favoritedAt: meta.favoritedAt } : undefined
+    return body ? { ...body, isFavorite: meta.isFavorite, favoriteTitle: meta.favoriteTitle, favoriteFields: meta.favoriteFields ?? [], favoritedAt: meta.favoritedAt } : undefined
   }
   async function getTrashItem(id: string) {
     await store.ready()
     if (!await storage.kv.get<string>(TRASH_ID + id)) return undefined
-    return storage.kv.get<ClipboardHistoryItem>(ITEM + id)
+    const body = await storage.kv.get<ClipboardHistoryItem>(ITEM + id)
+    return body ? { ...body, favoriteFields: body.favoriteFields ?? [] } : undefined
   }
   async function getPage(request: HistoryPageRequest = {}): Promise<HistoryPage> {
     await store.ready()
@@ -122,7 +135,7 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
             indexPrefix: prefix, valuePrefix: ITEM, after: cursor,
             limit: Math.min(100, Math.max(32, limit - items.length)), scanLimit: 2048 - scanned,
             query: query.toLowerCase(), matchMode, idPath: '$.id',
-            indexPaths: ['$.favoriteTitle', '$.preview', '$.contentType', '$.width', '$.height', '$.fileNames'],
+            indexPaths: ['$.favoriteTitle', '$.favoriteFieldsText', '$.preview', '$.contentType', '$.width', '$.height', '$.fileNames'],
             indexPathGroups: [['$.contentType', '$.width', '$.height']],
             valuePaths: ['$.text'],
           })
@@ -239,7 +252,7 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
       const existing = prior ? await storage.kv.get<ClipboardHistoryItem>(ITEM + prior.id) : undefined
       const now = Date.now()
       if (prior && existing) {
-        const item = { ...existing, isFavorite: prior.isFavorite, favoriteTitle: prior.favoriteTitle, favoritedAt: prior.favoritedAt, lastCopiedAt: now, copyCount: existing.copyCount + 1, sourceApp: input.sourceApp ?? existing.sourceApp }
+        const item = { ...existing, isFavorite: prior.isFavorite, favoriteTitle: prior.favoriteTitle, favoriteFields: prior.favoriteFields ?? [], favoritedAt: prior.favoritedAt, lastCopiedAt: now, copyCount: existing.copyCount + 1, sourceApp: input.sourceApp ?? existing.sourceApp }
         const meta = metadata(item, { legacy: prior.legacy, retentionStartedAt: prior.retentionStartedAt })
         const unusedCapture = input.kind === 'image'
           ? await store.discardUnusedCaptureBlobs([input.blobId, input.previewBlobId], blobIds(prior)) : []
@@ -253,20 +266,25 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
     })
     notify(); return result
   }
-  async function update(id: string, mutate: (item: ClipboardHistoryItem) => ClipboardHistoryItem, current = () => true) {
+  async function update(id: string, mutate: (item: ClipboardHistoryItem) => ClipboardHistoryItem, rememberFields = false) {
     const result = await store.mutate(async () => {
       const prior = await storage.kv.get<HistoryMetadata>(META + id)
       const item = prior ? await storage.kv.get<ClipboardHistoryItem>(ITEM + id) : undefined
-      if (!current()) throw new Error('cancelled')
       if (!item || !prior) return { operations: [], result: undefined }
-      const changed = mutate({ ...item, isFavorite: prior.isFavorite, favoriteTitle: prior.favoriteTitle, favoritedAt: prior.favoritedAt })
+      const changed = mutate({ ...item, isFavorite: prior.isFavorite, favoriteTitle: prior.favoriteTitle, favoriteFields: prior.favoriteFields ?? [], favoritedAt: prior.favoritedAt })
       if (changed.hash !== prior.hash) {
         const duplicate = await storage.kv.get<string>(hashKey(changed.hash))
         if (duplicate && duplicate !== id) throw new Error('duplicate')
       }
       const meta = metadata(changed, { legacy: prior.legacy, retentionStartedAt: prior.retentionStartedAt })
-      return { result: changed, operations: [...removeMetadata(prior), { type: 'set', key: ITEM + id, value: changed }, ...putMetadata(meta)] }
-    }, () => { if (!current()) throw new Error('cancelled') })
+      const operations: Operation[] = [...removeMetadata(prior), { type: 'set', key: ITEM + id, value: changed }, ...putMetadata(meta)]
+      if (rememberFields && changed.isFavorite) {
+        const recent = await getFavoriteFieldNames()
+        const names = [...new Set([...(changed.favoriteFields ?? []).map(({ name }) => name), ...recent])].slice(0, 20)
+        operations.push({ type: 'set', key: FAVORITE_FIELD_NAMES, value: names })
+      }
+      return { result: changed, operations }
+    })
     notify(); return result
   }
   async function softDelete(id: string, reason: 'manual' | 'expired', cutoff?: number, signal?: AbortSignal) {
@@ -292,7 +310,7 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
       const duplicate = await storage.kv.get<string>(hashKey(body.hash))
       if (duplicate && duplicate !== id) throw new Error('duplicate')
       const meta = { ...trash.metadata, retentionStartedAt: Date.now() }
-      return { result: body, next: { ...state, active: state.active + 1, trash: state.trash - 1, legacy: state.legacy + (meta.legacy ? 1 : 0) },
+      return { result: { ...body, favoriteFields: body.favoriteFields ?? [] }, next: { ...state, active: state.active + 1, trash: state.trash - 1, legacy: state.legacy + (meta.legacy ? 1 : 0) },
         operations: [{ type: 'delete', key }, { type: 'delete', key: TRASH_ID + id }, ...putMetadata(meta)] }
     })
     notify(); return result
@@ -394,8 +412,14 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
     result.hasMore = Boolean(page.nextCursor)
     return result
   }
-  async function setFavorite(id: string, favorite: boolean, title?: string) {
-    return update(id, (item) => ({ ...item, isFavorite: favorite, favoriteTitle: favorite ? title?.trim() || item.favoriteTitle : undefined, favoritedAt: favorite ? item.favoritedAt ?? Date.now() : undefined }))
+  async function getFavoriteFieldNames() { return await storage.kv.get<string[]>(FAVORITE_FIELD_NAMES) ?? [] }
+  async function setFavorite(id: string, favorite: boolean, title?: string, fields?: FavoriteField[]) {
+    const normalized = favorite && fields !== undefined ? normalizeFavoriteFields(fields) : undefined
+    return update(id, (item) => ({ ...item, isFavorite: favorite,
+      favoriteTitle: favorite && title !== undefined ? title.trim() || undefined : item.favoriteTitle,
+      favoriteFields: normalized ?? item.favoriteFields,
+      favoritedAt: favorite ? item.favoritedAt ?? Date.now() : undefined,
+    }), favorite && fields !== undefined)
   }
   return {
     addItem, getItem, getTrashItem, getPage, getRetentionStatus, enableLegacyRetention, restoreItem, purgeExpiredTrash, purgeTrashItem, emptyTrash,
@@ -405,8 +429,11 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
     getListItemsSync: () => { const cached = getCachedIndex(); return cached ? indexToListItems(cached) : null },
     deleteItem, pruneItems, findByHash,
     recordPaste: (id) => update(id, (item) => ({ ...item, pasteCount: (item.pasteCount ?? 0) + 1, lastPastedAt: Date.now() })),
-    setFavorite,
-    toggleFavorite: (id) => update(id, (item) => ({ ...item, isFavorite: !item.isFavorite, favoritedAt: !item.isFavorite ? Date.now() : undefined, favoriteTitle: !item.isFavorite ? item.favoriteTitle : undefined })),
-    updateFavoriteTitle: (id, title) => update(id, (item) => item.isFavorite ? { ...item, favoriteTitle: title.trim() || undefined } : item),
+    setFavorite, getFavoriteFieldNames,
+    toggleFavorite: (id) => update(id, (item) => ({ ...item, isFavorite: !item.isFavorite, favoritedAt: !item.isFavorite ? Date.now() : undefined })),
+    updateFavoriteInfo: async (id, title, fields) => {
+      const normalized = normalizeFavoriteFields(fields)
+      return update(id, (item) => item.isFavorite ? { ...item, favoriteTitle: title.trim() || undefined, favoriteFields: normalized } : item, true)
+    },
   }
 }

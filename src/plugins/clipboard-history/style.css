@@ -266,6 +266,56 @@
   border-bottom: 1px solid var(--border, var(--hiven-color-border));
 }
 
+.clipboard-history-favorite-info {
+  flex: 0 1 auto;
+  max-height: 40%;
+  overflow: auto;
+}
+
+.clipboard-history-favorite-fields {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.clipboard-history-favorite-fields:empty { display: none; }
+.clipboard-history-favorite-fields > div {
+  display: grid;
+  grid-template-columns: minmax(64px, 1fr) minmax(0, 2fr);
+  gap: 12px;
+  overflow-wrap: anywhere;
+}
+.clipboard-history-favorite-fields dt { color: var(--hiven-color-text-secondary); }
+.clipboard-history-favorite-fields dd { margin: 0; }
+.clipboard-history-favorite-fields button {
+  width: 100%;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--hiven-color-text-primary);
+  font: inherit;
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.clipboard-history-favorite-fields button:hover { background: var(--hiven-color-bg-secondary); }
+.clipboard-history-favorite-fields button:focus-visible { outline: 2px solid var(--hiven-color-accent); }
+
+.clipboard-history-favorite-form,
+.clipboard-history-field-rows { display: grid; gap: 10px; }
+.clipboard-history-field-rows { max-height: 45vh; overflow-y: auto; }
+.clipboard-history-field-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto;
+  gap: 6px;
+  align-items: start;
+}
+.clipboard-history-favorite-form [role="alert"] { margin: 0; color: var(--hiven-color-danger); }
+
 .clipboard-history-favorite-title-label {
   min-width: 0;
   overflow: hidden;
@@ -277,6 +327,7 @@
 }
 
 .clipboard-history-title-dialog-input {
+  min-width: 0;
   min-height: 32px;
   padding: 6px 10px;
   border: 1px solid var(--border, var(--hiven-color-border));

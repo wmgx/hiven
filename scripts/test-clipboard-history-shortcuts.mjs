@@ -149,8 +149,8 @@ function dispatch(key, target, options = {}) {
     titleDialog: null, legacyDialog: null, selectedIds: [], multiple: false, filter: 'all', resultsActionBlocked: false, settings: { enabled: true },
     selectedItem, selectedId: 'selected', filteredItems: [selectedItem], flatRows: [],
     imeKeyDown: { shouldIgnoreKeyDown: () => false },
-    handlePaste: (_item, plain) => calls.push(plain ? 'plainPaste' : 'paste'), toggleQuickFavorite: () => calls.push('favorite'), handleReturnToLauncher: () => calls.push('return'),
-    handleDelete: () => calls.push('delete'), handleCopy: () => calls.push('copy'), handleSaveImage: () => calls.push('save-image'),
+    handlePaste: (_item, plain) => calls.push(plain ? 'plainPaste' : 'paste'), handleFavoriteClick: () => calls.push('favorite'), handleReturnToLauncher: () => calls.push('return'),
+    handleDelete: () => calls.push('delete'), handleCopy: () => calls.push('copy'),
     readDomSelectedText: () => '', setSelectedId: () => calls.push('selection'),
     virtualizer: { scrollToIndex() {} }, host: {}, t: (value) => value,
     ...options.context,
@@ -194,22 +194,6 @@ assert.deepEqual(dispatch('a', search), untouched, 'ordinary input characters ar
 assert.deepEqual(dispatch('c', row, { event: { ctrlKey: true } }).calls, ['copy'], 'copy behavior is unchanged')
 assert.deepEqual(dispatch('c', search, { event: { ctrlKey: true } }), untouched, 'the focused query keeps native text copy ownership')
 assert.deepEqual(dispatch('c', search, { event: { ctrlKey: true }, context: { resultsActionBlocked: true } }), untouched, 'pending search keeps input copy native and never copies the stale row')
-for (const target of [search, row, list]) {
-  for (const modifier of ['metaKey', 'ctrlKey']) {
-    assert.deepEqual(dispatch('s', target, {
-      event: { [modifier]: true },
-      context: { selectedItem: { id: 'image', kind: 'image' } },
-    }), { calls: ['save-image'], prevented: true, stopped: false }, 'image save is keyboard reachable')
-  }
-}
-assert.deepEqual(dispatch('s', row, { event: { ctrlKey: true } }), untouched, 'text items do not expose image save')
-assert.deepEqual(dispatch('s', settings, {
-  event: { ctrlKey: true }, context: { selectedItem: { id: 'image', kind: 'image' } },
-}), untouched, 'focused native controls retain their shortcuts')
-assert.deepEqual(dispatch('s', row, {
-  event: { ctrlKey: true, shiftKey: true }, context: { selectedItem: { id: 'image', kind: 'image' } },
-}), untouched, 'modified save chords do not trigger image save')
-
 console.log('✓ Clipboard history shortcut eligibility, focus lifecycle and production handler passed')
 
 for (const target of [search, row, list]) {
