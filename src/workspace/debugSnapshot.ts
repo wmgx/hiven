@@ -25,7 +25,7 @@ export function createNativeDiagnostics() {
 export const nativeDiagnostics = createNativeDiagnostics()
 
 export async function installNativeDebugSnapshot(): Promise<void> {
-  if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ || window.__HIVEN_WEB_NATIVE_BRIDGE__) return
+  if (!(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ || window.__HIVEN_WEB_NATIVE_BRIDGE__ || window.__HIVEN_SANDBOX__) return
   const { emit, listen } = await import('@tauri-apps/api/event')
   const diagnostics = nativeDiagnostics
   await listen<number>('hiven://debug-snapshot-request', async ({ payload: requestId }) => {

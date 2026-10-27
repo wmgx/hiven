@@ -101,6 +101,10 @@ async function shareDesktopLocalStorage(): Promise<void> {
 
 export async function installWebNativeBridge(): Promise<boolean> {
   if (!import.meta.env.DEV || (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return false
+  if (new URLSearchParams(location.search).get('sandbox') === '1') {
+    ;(await import('./sandbox/native')).installSandbox()
+    return true
+  }
   try {
     const response = await fetch(`${BRIDGE_BASE}/session`, { signal: AbortSignal.timeout(300) })
     if (!response.ok) return false
@@ -163,7 +167,7 @@ function mapChannels(
 }
 
 export function startNativeValidationRelay(): () => void {
-  if (!import.meta.env.DEV || !(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ || window.__HIVEN_WEB_NATIVE_BRIDGE__) {
+  if (!import.meta.env.DEV || window.__HIVEN_SANDBOX__ || !(window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ || window.__HIVEN_WEB_NATIVE_BRIDGE__) {
     return () => undefined
   }
   let stopped = false
