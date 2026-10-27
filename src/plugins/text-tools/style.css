@@ -1,9 +1,9 @@
 .url-query-surface { display: flex; flex-direction: column; gap: 12px; padding: 16px; height: 100%; min-height: 0; }
-.jt-url-query { flex: 0 0 auto; max-height: none; flex: 1; overflow: auto; padding: 8px 12px; border-top: 1px solid var(--color-border); font-size: 11px; line-height: 1.5; }
-.jt-url-query p { margin: 0 0 6px; color: var(--color-text-secondary); }
+.jt-url-query { flex: 0 0 auto; max-height: none; flex: 1; overflow: auto; padding: 8px 12px; border-top: 1px solid var(--border); font-size: var(--text-sm); line-height: 1.5; }
+.jt-url-query p { margin: 0 0 6px; color: var(--muted-foreground); }
 .jt-url-query summary { cursor: pointer; margin-bottom: 6px; }
 .jt-url-query-rows { display: flex; flex-direction: column; gap: 6px; }
 .jt-url-query-row { display: grid; grid-template-columns: 20px minmax(0, 1fr) minmax(0, 1.5fr) auto; gap: 4px; align-items: center; }
 .jt-url-query-row input { min-width: 0; width: 100%; }
-.jt-url-query-index { color: var(--color-text-tertiary); }
-.jt-url-query-encoding { grid-column: 2 / -1; color: var(--color-text-secondary); }
+.jt-url-query-index { color: var(--faint-foreground); }
+.jt-url-query-encoding { grid-column: 2 / -1; color: var(--muted-foreground); }
