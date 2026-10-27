@@ -1,5 +1,5 @@
 {
-  "version": 202,
+  "version": 203,
   "packages": [
     {
       "pluginId": "image-tools",
@@ -49,7 +49,7 @@
     {
       "pluginId": "web-open",
       "dir": "web-open",
-      "version": "1.13.5"
+      "version": "1.13.6"
     },
     {
       "pluginId": "qr-code",

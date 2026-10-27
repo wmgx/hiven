@@ -89,7 +89,7 @@ export function FaviconCacheModal({
   return (
     <div className="web-open-favicon-cache">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+        <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-tertiary)' }}>
           {loading ? t('faviconCache.loading') : t('faviconCache.count', { count: entries.length })}
         </span>
         <button
@@ -103,7 +103,7 @@ export function FaviconCacheModal({
       </div>
 
       {entries.length === 0 && !loading ? (
-        <div style={{ fontSize: 13, color: 'var(--color-text-tertiary)', padding: '16px 0' }}>
+        <div style={{ fontSize: 'var(--text-base)', color: 'var(--color-text-tertiary)', padding: '16px 0' }}>
           {t('faviconCache.empty')}
         </div>
       ) : (
@@ -133,10 +133,10 @@ export function FaviconCacheModal({
                 <Globe2 size={16} style={{ flexShrink: 0, opacity: 0.55 }} aria-hidden="true" />
               )}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ fontSize: 'var(--text-base)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {entry.domain}
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+                <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-tertiary)' }}>
                   {formatAge(entry.fetchedAt, locale)}
                 </div>
               </div>

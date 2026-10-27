@@ -2,6 +2,7 @@
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, normalize, relative } from 'node:path'
+import ts from 'typescript'
 
 const root = new URL('..', import.meta.url).pathname.replace(/\/$/, '')
 const failures = []
@@ -370,6 +371,48 @@ for (const [metric, ceiling] of Object.entries(STYLE_CEILINGS)) {
   }
 }
 console.log('CSS style counts:', styleCounts)
+
+function checkPluginStyleValue(file, property, value) {
+  const fontValue = property === 'font' ? String(value).split('/')[0] : String(value)
+  for (const [invalid, label] of [
+    [/#(?:[0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{4}|[0-9a-f]{3})\b|\b(?:rgba?|hsla?)\(/i.test(String(value)), 'literal colour'],
+    [/(?:font-size|fontSize|^font)$/.test(property) && (typeof value === 'number' || /\d(?:\.\d+)?px\b/i.test(fontValue)), 'px font size'],
+    [/!\s*important\b/i.test(String(value)), '!important'],
+    [/^(?:text-transform|textTransform)$/.test(property) && /\buppercase\b/i.test(String(value)), 'uppercase text transform'],
+  ]) {
+    if (invalid) addFailure(`${rel(file)} uses ${label} in ${property}; use theme tokens`)
+  }
+}
+
+for (const file of walkWithExtensions(join(root, 'src/plugins'), new Set(['.css', '.tsx']))) {
+  const source = read(file)
+  if (file.endsWith('.css')) {
+    const css = source.replace(/\/\*[\s\S]*?\*\//g, '')
+    for (const [, property, value] of css.matchAll(/([\w-]+)\s*:\s*([^;{}]+)/g)) {
+      checkPluginStyleValue(file, property, value)
+    }
+    continue
+  }
+  const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+  // Only JSX styles: canvas drawing colours and QR pixels are functional data.
+  function visitStyle(node, property = 'style') {
+    if (ts.isPropertyAssignment(node)) property = node.name.getText(ast).replace(/^['"]|['"]$/g, '')
+    if (ts.isNumericLiteral(node)) checkPluginStyleValue(file, property, Number(node.text))
+    if (ts.isStringLiteralLike(node) || ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) {
+      checkPluginStyleValue(file, property, node.text)
+    }
+    ts.forEachChild(node, (child) => visitStyle(child, property))
+  }
+  function visit(node) {
+    if (ts.isJsxAttribute(node) && node.name.getText(ast) === 'style' && node.initializer) {
+      visitStyle(node.initializer)
+    } else {
+      ts.forEachChild(node, visit)
+    }
+  }
+  visit(ast)
+}
+
 // shadcn components and the plugin UI kit use tokens only: no literal colours, px font sizes or ad-hoc shadows.
 for (const file of [...walk(join(root, 'src/components/ui')), join(root, 'src/plugin-ui.tsx')]) {
   const source = read(file)

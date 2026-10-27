@@ -36,7 +36,7 @@ type BridgeLine = {
 }
 
 function StatusChip({ label, tone }: { label: string; tone: 'on' | 'off' | 'muted' }) {
-  const color = tone === 'on' ? 'var(--color-success, #3d9a5f)' : tone === 'off' ? 'var(--text-2)' : 'var(--text-3)'
+  const color = tone === 'on' ? 'var(--success)' : tone === 'off' ? 'var(--text-2)' : 'var(--text-3)'
   return (
     <span
       style={{
@@ -47,7 +47,7 @@ function StatusChip({ label, tone }: { label: string; tone: 'on' | 'off' | 'mute
         borderRadius: 999,
         background: tone === 'on' ? 'var(--accent-soft)' : 'var(--bg-surface-2, transparent)',
         border: `1px solid ${tone === 'on' ? 'var(--accent-border-soft, var(--border-subtle))' : 'var(--border-subtle)'}`,
-        fontSize: 11.5,
+        fontSize: 'var(--text-sm)',
         fontWeight: 500,
         color,
         width: 'fit-content',
@@ -145,19 +145,19 @@ export function BrowserTabsConnectionModal(props: PluginSettingsModalBodyProps<W
     <ui.Stack gap={10}>
       <Card>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <ui.Text style={{ fontSize: 12.5, fontWeight: 600 }}>{t('settings.connection')}</ui.Text>
+          <ui.Text style={{ fontSize: 'var(--text-base)', fontWeight: 600 }}>{t('settings.connection')}</ui.Text>
           <StatusChip label={statusLabel} tone={statusTone} />
         </div>
         {statusDetail && (
-          <ui.Text style={{ fontSize: 11.5, color: 'var(--text-2)' }}>{statusDetail}</ui.Text>
+          <ui.Text style={{ fontSize: 'var(--text-sm)', color: 'var(--text-2)' }}>{statusDetail}</ui.Text>
         )}
         {bridge?.needsUpgrade && (
-          <ui.Text style={{ fontSize: 11.5, color: 'var(--color-warning)', lineHeight: 1.5 }}>
+          <ui.Text style={{ fontSize: 'var(--text-sm)', color: 'var(--color-warning)', lineHeight: 1.5 }}>
             {t('settings.extensionUpgrade')}
           </ui.Text>
         )}
         {!bridge?.needsUpgrade && extensionOutdated && bridge && (
-          <ui.Text style={{ fontSize: 11.5, color: 'var(--color-warning)', lineHeight: 1.5 }}>
+          <ui.Text style={{ fontSize: 'var(--text-sm)', color: 'var(--color-warning)', lineHeight: 1.5 }}>
             {t('settings.extensionOutdated', {
               current: bridge.extensionVersion ?? t('settings.extensionVersionUnknown'),
               bundled: bridge.bundledExtensionVersion ?? '',
@@ -178,8 +178,8 @@ export function BrowserTabsConnectionModal(props: PluginSettingsModalBodyProps<W
       <Card>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
-            <ui.Text style={{ fontSize: 12.5, fontWeight: 600 }}>{t('settings.history')}</ui.Text>
-            <ui.Text style={{ fontSize: 11.5, color: 'var(--text-2)', lineHeight: 1.5 }}>
+            <ui.Text style={{ fontSize: 'var(--text-base)', fontWeight: 600 }}>{t('settings.history')}</ui.Text>
+            <ui.Text style={{ fontSize: 'var(--text-sm)', color: 'var(--text-2)', lineHeight: 1.5 }}>
               {t('settings.historyHelp')}
             </ui.Text>
           </div>
@@ -189,8 +189,8 @@ export function BrowserTabsConnectionModal(props: PluginSettingsModalBodyProps<W
             onCheckedChange={(checked) => setValue({ ...value, historyEnabled: checked })}
           />
         </div>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginTop: 2 }}>
-          <ui.Text style={{ fontSize: 11.5, color: 'var(--text-2)' }}>{t('settings.historySearchRange')}</ui.Text>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--text-sm)', marginTop: 2 }}>
+          <ui.Text style={{ fontSize: 'var(--text-sm)', color: 'var(--text-2)' }}>{t('settings.historySearchRange')}</ui.Text>
           <Select
             disabled={value.historyEnabled === false}
             value={String(value.historySearchDays)}
@@ -211,8 +211,8 @@ export function BrowserTabsConnectionModal(props: PluginSettingsModalBodyProps<W
       <Card>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
-            <ui.Text style={{ fontSize: 12.5, fontWeight: 600 }}>{t('settings.idle')}</ui.Text>
-            <ui.Text style={{ fontSize: 11.5, color: 'var(--text-2)', lineHeight: 1.5 }}>
+            <ui.Text style={{ fontSize: 'var(--text-base)', fontWeight: 600 }}>{t('settings.idle')}</ui.Text>
+            <ui.Text style={{ fontSize: 'var(--text-sm)', color: 'var(--text-2)', lineHeight: 1.5 }}>
               {t('settings.idleHelp')}
             </ui.Text>
           </div>
@@ -222,8 +222,8 @@ export function BrowserTabsConnectionModal(props: PluginSettingsModalBodyProps<W
             onCheckedChange={(checked) => setValue({ ...value, autoCloseIdleTabs: checked })}
           />
         </div>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginTop: 2 }}>
-          <ui.Text style={{ fontSize: 11.5, color: 'var(--text-2)' }}>{t('settings.idleTimeout')}</ui.Text>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--text-sm)', marginTop: 2 }}>
+          <ui.Text style={{ fontSize: 'var(--text-sm)', color: 'var(--text-2)' }}>{t('settings.idleTimeout')}</ui.Text>
           <Select
             disabled={value.autoCloseIdleTabs !== true}
             value={String(clampIdleTimeoutMinutes(value.idleTimeoutMinutes))}
@@ -251,7 +251,7 @@ export function BrowserTabsConnectionModal(props: PluginSettingsModalBodyProps<W
       <Card>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
-            <ui.Text style={{ fontSize: 12.5, fontWeight: 600 }}>{t('settings.enableSearch')}</ui.Text>
+            <ui.Text style={{ fontSize: 'var(--text-base)', fontWeight: 600 }}>{t('settings.enableSearch')}</ui.Text>
           </div>
           <Switch
             className="is-compact"
@@ -262,8 +262,8 @@ export function BrowserTabsConnectionModal(props: PluginSettingsModalBodyProps<W
       </Card>
 
       <ui.Stack gap={8} style={{ marginTop: 4 }}>
-        <ui.Text style={{ fontSize: 12.5, fontWeight: 600 }}>{t('settings.install')}</ui.Text>
-        <ui.Text style={{ fontSize: 11.5, color: 'var(--text-2)', lineHeight: 1.55, whiteSpace: 'pre-line' }}>
+        <ui.Text style={{ fontSize: 'var(--text-base)', fontWeight: 600 }}>{t('settings.install')}</ui.Text>
+        <ui.Text style={{ fontSize: 'var(--text-sm)', color: 'var(--text-2)', lineHeight: 1.55, whiteSpace: 'pre-line' }}>
           {t('settings.installSteps')}
         </ui.Text>
         <ui.Stack gap={8} style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
@@ -301,11 +301,11 @@ export function BrowserTabsConnectionModal(props: PluginSettingsModalBodyProps<W
           </ui.Button>
         </ui.Stack>
         {lastPath && (
-          <ui.Text style={{ fontSize: 11, color: 'var(--text-3)', wordBreak: 'break-all' }}>
+          <ui.Text style={{ fontSize: 'var(--text-sm)', color: 'var(--text-3)', wordBreak: 'break-all' }}>
             {lastPath}
           </ui.Text>
         )}
-        {message && <ui.Text style={{ fontSize: 12, color: 'var(--text-2)' }}>{message}</ui.Text>}
+        {message && <ui.Text style={{ fontSize: 'var(--text-sm)', color: 'var(--text-2)' }}>{message}</ui.Text>}
       </ui.Stack>
     </ui.Stack>
   )
