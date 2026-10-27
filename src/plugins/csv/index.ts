@@ -67,18 +67,6 @@ const WORKSPACE_SHELL = {
   resizable: true,
 }
 
-const OPERATION_ROUTES = [
-  { id: 'to-json', title: 'route.csvToJson', subtitle: 'route.toJson.hint', aliases: ['csv to json', 'tsv to json', 'csv2json', 'csv转json', 'csv 转 json'] },
-  { id: 'to-array', title: 'route.toArray', subtitle: 'route.toArray.hint', aliases: ['csv to array', 'csv to json array', 'csv二维数组', 'csv转数组'] },
-  { id: 'to-columns', title: 'route.toColumns', subtitle: 'route.toColumns.hint', aliases: ['csv to columns', 'csv column arrays', 'csv列数组', 'csv转列数组'] },
-  { id: 'to-keyed', title: 'route.toKeyed', subtitle: 'route.toKeyed.hint', aliases: ['csv to keyed object', 'csv keyed json', 'csv键值对象', 'csv转键值对象'] },
-  { id: 'to-ndjson', title: 'route.toNdjson', subtitle: 'route.toNdjson.hint', aliases: ['csv to ndjson', 'csv to jsonl', 'csv to json lines', 'csv转jsonl', 'csv转json行'] },
-  { id: 'to-csv', title: 'route.jsonToCsv', subtitle: 'route.toCsv.hint', aliases: ['json to csv', 'json2csv', 'json转csv', 'json 转 csv'] },
-  { id: 'to-tsv', title: 'route.toTsv', subtitle: 'route.toTsv.hint', aliases: ['csv to tsv', 'json to tsv', 'table to tsv', 'csv转tsv', '转tsv'] },
-  { id: 'to-markdown', title: 'route.toMarkdown', subtitle: 'route.toMarkdown.hint', aliases: ['csv to markdown', 'json to markdown', 'json markdown table', 'json转markdown', 'json 转 markdown', 'JSON转表格', 'table to markdown', 'csv table', 'csv转markdown', '转markdown表格'] },
-  { id: 'to-sql', title: 'route.toSql', subtitle: 'route.toSql.hint', aliases: ['csv to sql', 'csv sql insert', 'table to sql', 'csv转sql', '生成sql insert'] },
-] as const
-
 /** Boost CSV Tools when clipboard is table content or a .csv/.tsv path. */
 function csvSurfaceTextMatch(text: string): boolean {
   const trimmed = text.trim()
@@ -124,8 +112,7 @@ export const csvPlugin = definePlugin({
       {
         id: 'main',
         kind: 'custom-view',
-        title: 'CSV Tools',
-        titleI18n: { zh: 'CSV Tools' },
+        title: 'surface.title',
         icon: 'Table',
         aliases: ['csv', 'tsv', 'table convert', '表格转换'],
         textMatch: csvSurfaceTextMatch,
@@ -133,35 +120,7 @@ export const csvPlugin = definePlugin({
         entry: { launcher: { surfaces: ['global-launcher'] }, shortcutBindable: true },
         shell: WORKSPACE_SHELL,
       },
-      ...OPERATION_ROUTES.map((route) => ({
-        id: route.id,
-        kind: 'custom-view' as const,
-        title: 'CSV Tools',
-        titleI18n: { zh: 'CSV Tools' },
-        component: LazyCsvSurface,
-        entry: { launcher: false },
-        shell: WORKSPACE_SHELL,
-      })),
     ],
-  },
-  launcher: {
-    items: OPERATION_ROUTES.map((route) => ({
-      id: `open-${route.id}`,
-      display: {
-        title: route.title,
-        subtitle: route.subtitle,
-        icon: 'Table',
-        aliases: [...route.aliases],
-      },
-      // Tabular input routes take copied CSV/TSV; JSON → CSV does not.
-      ...(route.id === 'to-csv' ? {} : { accepts: { kinds: ['csv' as const, 'tsv' as const] } }),
-      behavior: { type: 'perform' as const },
-      surfaces: ['global-launcher' as const],
-      execute(execution) {
-        execution.api.openSurface(route.id, { initialText: execution.input?.text })
-        return { ok: true as const, keepOpen: true }
-      },
-    })),
   },
 })
 

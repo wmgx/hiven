@@ -1,5 +1,5 @@
 {
-  "version": 181,
+  "version": 182,
   "packages": [
     {
       "pluginId": "image-tools",
@@ -9,7 +9,7 @@
     {
       "pluginId": "csv",
       "dir": "csv",
-      "version": "1.12.2"
+      "version": "1.12.3"
     },
     {
       "pluginId": "calculator",
@@ -59,7 +59,7 @@
     {
       "pluginId": "random",
       "dir": "random",
-      "version": "1.2.6"
+      "version": "1.2.7"
     },
     {
       "pluginId": "text-explode",
@@ -75,11 +75,6 @@
       "pluginId": "color-tools",
       "dir": "color-tools",
       "version": "1.0.2"
-    },
-    {
-      "pluginId": "curl-inspector",
-      "dir": "curl-inspector",
-      "version": "1.1.2"
     },
     {
       "pluginId": "unix-permissions",

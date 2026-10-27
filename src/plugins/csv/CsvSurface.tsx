@@ -223,19 +223,6 @@ function resolveInitialSource(text: string | undefined): { source: string; fileL
   return { source: text }
 }
 
-function initialOutput(surfaceId: string): OutputMode {
-  if (surfaceId === 'to-json') return 'objects'
-  if (surfaceId === 'to-array') return 'array'
-  if (surfaceId === 'to-columns') return 'columns'
-  if (surfaceId === 'to-keyed') return 'keyed'
-  if (surfaceId === 'to-ndjson') return 'ndjson'
-  if (surfaceId === 'to-csv') return 'csv'
-  if (surfaceId === 'to-tsv') return 'tsv'
-  if (surfaceId === 'to-markdown') return 'markdown'
-  if (surfaceId === 'to-sql') return 'sql'
-  return 'objects'
-}
-
 export function CsvSurface(props: PluginSurfaceProps) {
   const { host, t } = props
   // Draft lifetime survives a renewed delivery lease (cancelled exit or handoff).
@@ -247,7 +234,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
   const [fileError, setFileError] = useState<string | null>(null)
   const [delimiter, setDelimiter] = useState<DelimiterMode>('auto')
   const [header, setHeader] = useState<HeaderMode>('auto')
-  const [output, setOutput] = useState<OutputMode>(() => initialOutput(props.surfaceId))
+  const [output, setOutput] = useState<OutputMode>('objects')
   const [minify, setMinify] = useState(false)
   const [inferTypes, setInferTypes] = useState(false)
   const [indent, setIndent] = useState<2 | 4>(2)
@@ -267,9 +254,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
   const [sqlCursor, setSqlCursor] = useState(0)
   const [sqlSuggestOpen, setSqlSuggestOpen] = useState(false)
   const [sqlSuggestIndex, setSqlSuggestIndex] = useState(0)
-  const [mainView, setMainView] = useState<MainView>(() => props.surfaceId === 'main'
-    ? 'table'
-    : initial.source ? 'output' : 'source')
+  const [mainView, setMainView] = useState<MainView>('table')
   const sqlIme = useImeKeyboard()
   const sqlInputRef = useRef<HTMLInputElement>(null)
   const sqlPopupRef = useRef<HTMLUListElement>(null)

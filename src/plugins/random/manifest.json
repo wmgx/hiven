@@ -1,8 +1,14 @@
 {
   "pluginId": "random",
   "displayName": "Random",
-  "displayNameI18n": { "zh": "随机生成" },
-  "version": "1.2.6",
-  "capabilities": ["command", "surface"],
-  "permissions": ["clipboard.write"]
+  "displayNameI18n": {
+    "zh": "随机生成"
+  },
+  "version": "1.2.7",
+  "capabilities": [
+    "command"
+  ],
+  "permissions": [
+    "clipboard.write"
+  ]
 }

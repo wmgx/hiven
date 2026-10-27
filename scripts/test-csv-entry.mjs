@@ -45,10 +45,8 @@ vm.runInNewContext(compiled, {
   },
 }, { filename: 'csv/index.ts' })
 const plugin = module.exports.csvPlugin
-const routeIds = ['to-json', 'to-array', 'to-columns', 'to-keyed', 'to-ndjson', 'to-csv', 'to-tsv', 'to-markdown', 'to-sql']
 const surfaces = plugin.ui.surfaces
-assert.deepEqual(Array.from(surfaces, surface => surface.id), ['main', ...routeIds])
-assert.deepEqual(Array.from(plugin.launcher.items, item => item.id), routeIds.map(id => `open-${id}`))
+assert.deepEqual(Array.from(surfaces, surface => surface.id), ['main'])
 assert.equal(factories.length, 0)
 assert.equal(imports.length, 0, 'Registering CSV must not load the table implementation')
 
@@ -62,22 +60,6 @@ for (const input of ['', 'hello', 'a,b', 'a\nb', 'not a table\nplain text']) {
 assert.deepEqual(Array.from(main.entry.launcher.surfaces), ['global-launcher'])
 assert.equal(main.entry.shortcutBindable, true)
 const material = 'name,age\nAda,37'
-for (const [index, item] of plugin.launcher.items.entries()) {
-  const calls = []
-  const api = { openSurface: (...args) => calls.push(args) }
-  for (const text of [material, '', undefined]) {
-    const result = item.execute({ api, input: text === undefined ? undefined : { text } })
-    assert.equal(result.ok, true)
-    assert.equal(result.keepOpen, true)
-    const call = calls.at(-1)
-    assert.equal(call[0], routeIds[index])
-    assert.equal(call[1].initialText, text)
-  }
-  assert.equal(surfaces[index + 1].entry.launcher, false)
-  assert.equal(surfaces[index + 1].shell, main.shell)
-}
-assert.equal(imports.length, 0, 'Matching and executing routes must leave loading to the surface host')
-
 // A component adapter must preserve host API identity and every route/context
 // field. This inspects passed arguments only, not rendered DOM or UI structure.
 for (const locale of ['en', 'zh']) {
@@ -100,4 +82,4 @@ assert.equal(imports.length, 0)
 const loaded = await factories[0]()
 assert.equal(loaded.default, surfaceImplementation)
 assert.deepEqual(imports, ['./CsvSurface'])
-console.log('PASS CSV registration, matcher, all nine operation routes, and lazy surface context forwarding')
+console.log('PASS CSV registration, matcher, lazy surface context forwarding')

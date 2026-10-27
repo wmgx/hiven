@@ -61,7 +61,7 @@ await f.intervals[0]()
 await Promise.resolve()
 assert.equal(f.changes[0].text, 'external copy')
 assert.ok(f.permissions.includes('clipboard.write'))
-await f.create('curl-inspector', true).writeText('synthetic-header', { recordInHistory: false })
+await f.create('synthetic-tool', true).writeText('synthetic-header', { recordInHistory: false })
 const count = f.calls.length
 await assert.rejects(() => f.create('unrelated-plugin').writeText('blocked', { recordInHistory: false }), /restricted/)
 await assert.rejects(() => history.writeText('blocked', { recordInHistory: false, sensitive: true }), /restricted/)

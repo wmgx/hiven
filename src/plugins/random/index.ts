@@ -6,29 +6,7 @@
  * launcher can quick-run; users can still customize via param flow.
  */
 
-import { definePlugin, getPluginHostSdk, type PluginSurfaceProps } from '@hiven/plugin'
-import { RandomSurface, type RandomSurfaceConfig, type RandomSurfaceMode } from './RandomSurface'
-import './style.css'
-
-const WORKSPACE_SHELL = {
-  defaultWidth: 820,
-  defaultHeight: 590,
-  minWidth: 560,
-  minHeight: 440,
-  closeOnBlur: false,
-  resizable: true,
-}
-
-const OPERATION_ROUTES = [
-  { id: 'integer', title: 'integer.title', icon: 'Dices', aliases: ['random integer', 'random int', 'rand int', '随机整数', '随机数'] },
-  { id: 'float', title: 'float.title', icon: 'Dices', aliases: ['random float', 'random decimal', '随机小数', '随机浮点数'] },
-  { id: 'string', title: 'string.title', icon: 'Dices', aliases: ['random string', 'rand str', '随机字符串', '随机串'] },
-  { id: 'uuid', title: 'uuid.title', icon: 'Hash', aliases: ['random uuid', 'uuid', 'guid', 'uuidv4', '生成uuid', '随机uuid'] },
-  { id: 'password', title: 'password.title', icon: 'KeyRound', aliases: ['random password', 'password generator', 'passwd', '随机密码', '生成密码'] },
-  { id: 'hex', title: 'hex.title', icon: 'Binary', aliases: ['random hex', 'random bytes', '随机hex', '随机字节'] },
-  { id: 'color', title: 'color.title', icon: 'Palette', aliases: ['random color', 'random hex color', '随机颜色', '随机色值'] },
-  { id: 'boolean', title: 'boolean.title', icon: 'ToggleLeft', aliases: ['random boolean', 'random bool', 'random true false', '随机布尔', '随机真假'] },
-] as const
+import { definePlugin } from '@hiven/plugin'
 
 // ─── Crypto helpers ───────────────────────────────────────────────────────────
 
@@ -191,126 +169,9 @@ function multi(count: number, gen: () => string): string {
   return lines.join('\n')
 }
 
-function normalizeSurfaceParameters(mode: RandomSurfaceMode, config: RandomSurfaceConfig) {
-  const count = parseCount(config.count)
-  switch (mode) {
-    case 'integer': {
-      if (config.max < config.min) throw new Error('RANGE')
-      const min = asInt(config.min, 0)
-      const max = asInt(config.max, 100)
-      return { mode, count, min: Math.min(min, max), max: Math.max(min, max) }
-    }
-    case 'float':
-      if (config.max < config.min) throw new Error('RANGE')
-      if (!Number.isFinite(config.min) || !Number.isFinite(config.max)) throw new Error('RANGE')
-      return {
-        mode, count, min: config.min, max: config.max,
-        decimals: Math.max(0, Math.min(12, Math.floor(config.decimals))) || 0,
-      }
-    case 'string':
-      if (config.length < 1 || config.length > 1024) throw new Error('LENGTH')
-      return {
-        mode, count, length: asInt(config.length, 16),
-        charset: CHARSETS[config.charset] === undefined ? 'alphanumeric' : config.charset,
-      }
-    case 'uuid':
-      return { mode, count }
-    case 'password':
-      if (config.length < 1 || config.length > 1024) throw new Error('LENGTH')
-      return { mode, count, length: asInt(config.length, 16) }
-    case 'hex':
-      if (config.bytes < 1 || config.bytes > 1024) throw new Error('BYTES')
-      return { mode, count, bytes: asInt(config.bytes, 16) }
-    case 'color':
-    case 'boolean':
-      return { mode, count }
-  }
-}
-
-export function getSurfaceGenerationKey(mode: RandomSurfaceMode, config: RandomSurfaceConfig): string {
-  return JSON.stringify(normalizeSurfaceParameters(mode, config))
-}
-
-export function generateSurfaceValues(mode: RandomSurfaceMode, config: RandomSurfaceConfig): string[] {
-  const params = normalizeSurfaceParameters(mode, config)
-  let generate: () => string
-  switch (params.mode) {
-    case 'integer':
-      generate = () => String(randomInt(params.min, params.max))
-      break
-    case 'float':
-      generate = () => randomFloat(params.min, params.max, params.decimals)
-      break
-    case 'string':
-      generate = () => randomString(params.length, params.charset)
-      break
-    case 'uuid':
-      generate = randomUuid
-      break
-    case 'password':
-      generate = () => randomPassword(params.length)
-      break
-    case 'hex':
-      generate = () => randomHex(params.bytes)
-      break
-    case 'color':
-      generate = randomColor
-      break
-    case 'boolean':
-      generate = randomBoolean
-      break
-  }
-  return Array.from({ length: params.count }, generate)
-}
-
-function RandomWorkspace(props: PluginSurfaceProps) {
-  const { react: React } = getPluginHostSdk()
-  return React.createElement(RandomSurface, { ...props, generate: generateSurfaceValues, getGenerationKey: getSurfaceGenerationKey })
-}
-
 // ─── Plugin Definition ────────────────────────────────────────────────────────
 
 export const randomPlugin = definePlugin({
-  ui: {
-    surfaces: [
-      {
-        id: 'main',
-        kind: 'custom-view',
-        title: 'Random Generator',
-        titleI18n: { zh: '随机生成器', en: 'Random Generator' },
-        icon: 'Dices',
-        aliases: ['random', 'generator', '随机', '随机生成'],
-        component: RandomWorkspace,
-        entry: { launcher: { surfaces: ['global-launcher'] }, shortcutBindable: true },
-        shell: WORKSPACE_SHELL,
-      },
-      ...OPERATION_ROUTES.map((route) => ({
-        id: route.id,
-        kind: 'custom-view' as const,
-        title: 'Random Generator',
-        titleI18n: { zh: '随机生成器', en: 'Random Generator' },
-        component: RandomWorkspace,
-        entry: { launcher: false },
-        shell: WORKSPACE_SHELL,
-      })),
-    ],
-  },
-  launcher: {
-    items: OPERATION_ROUTES.map((route) => ({
-      id: `open-${route.id}`,
-      display: {
-        title: route.title,
-        icon: route.icon,
-        aliases: [...route.aliases],
-      },
-      behavior: { type: 'perform' as const },
-      surfaces: ['global-launcher' as const],
-      execute(execution) {
-        execution.api.openSurface(route.id, { initialText: execution.input?.text })
-        return { ok: true as const, keepOpen: true }
-      },
-    })),
-  },
   tools: [
     {
       id: 'random.integer',
@@ -334,7 +195,7 @@ export const randomPlugin = definePlugin({
           return ctx.output.error(toolErrorMessage(ctx.t, e))
         }
       },
-      surfaces: { launcher: { surfaces: ['quick-editor-command'] }, panel: true },
+      surfaces: { launcher: { surfaces: ['global-launcher', 'quick-editor-command'] }, panel: true },
     },
     {
       id: 'random.float',
@@ -360,7 +221,7 @@ export const randomPlugin = definePlugin({
           return ctx.output.error(toolErrorMessage(ctx.t, e))
         }
       },
-      surfaces: { launcher: { surfaces: ['quick-editor-command'] }, panel: true },
+      surfaces: { launcher: { surfaces: ['global-launcher', 'quick-editor-command'] }, panel: true },
     },
     {
       id: 'random.string',
@@ -399,7 +260,7 @@ export const randomPlugin = definePlugin({
           return ctx.output.error(toolErrorMessage(ctx.t, e))
         }
       },
-      surfaces: { launcher: { surfaces: ['quick-editor-command'] }, panel: true },
+      surfaces: { launcher: { surfaces: ['global-launcher', 'quick-editor-command'] }, panel: true },
     },
     {
       id: 'random.uuid',
@@ -418,7 +279,7 @@ export const randomPlugin = definePlugin({
           return ctx.output.error(toolErrorMessage(ctx.t, e))
         }
       },
-      surfaces: { launcher: { surfaces: ['quick-editor-command'] }, panel: true },
+      surfaces: { launcher: { surfaces: ['global-launcher', 'quick-editor-command'] }, panel: true },
     },
     {
       id: 'random.password',
@@ -440,7 +301,7 @@ export const randomPlugin = definePlugin({
           return ctx.output.error(toolErrorMessage(ctx.t, e))
         }
       },
-      surfaces: { launcher: { surfaces: ['quick-editor-command'] }, panel: true },
+      surfaces: { launcher: { surfaces: ['global-launcher', 'quick-editor-command'] }, panel: true },
     },
     {
       id: 'random.hex',
@@ -462,7 +323,7 @@ export const randomPlugin = definePlugin({
           return ctx.output.error(toolErrorMessage(ctx.t, e))
         }
       },
-      surfaces: { launcher: { surfaces: ['quick-editor-command'] }, panel: true },
+      surfaces: { launcher: { surfaces: ['global-launcher', 'quick-editor-command'] }, panel: true },
     },
     {
       id: 'random.color',
@@ -481,7 +342,7 @@ export const randomPlugin = definePlugin({
           return ctx.output.error(toolErrorMessage(ctx.t, e))
         }
       },
-      surfaces: { launcher: { surfaces: ['quick-editor-command'] }, panel: true },
+      surfaces: { launcher: { surfaces: ['global-launcher', 'quick-editor-command'] }, panel: true },
     },
     {
       id: 'random.boolean',
@@ -500,7 +361,7 @@ export const randomPlugin = definePlugin({
           return ctx.output.error(toolErrorMessage(ctx.t, e))
         }
       },
-      surfaces: { launcher: { surfaces: ['quick-editor-command'] }, panel: true },
+      surfaces: { launcher: { surfaces: ['global-launcher', 'quick-editor-command'] }, panel: true },
     },
   ],
 })
