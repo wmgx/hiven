@@ -42,7 +42,7 @@ export function buildGlobalLauncherPanelStyle({
   surfaceShell?: LauncherSurfaceShell
   standaloneLauncher: boolean
 }): GlobalLauncherPanelStyle {
-  const validationBrowser = typeof window !== 'undefined' && window.__HIVEN_WEB_NATIVE_BRIDGE__ === true
+  const validationBrowser = typeof window !== 'undefined' && (window.__HIVEN_WEB_NATIVE_BRIDGE__ === true || window.__HIVEN_SANDBOX__ === true)
   // In standalone window mode, the Tauri window is already sized to 1/3 screen
   // width, so the panel fills the window. In overlay mode, use calc(100vw / 3)
   // to occupy 1/3 of the host window.

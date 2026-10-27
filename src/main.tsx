@@ -25,6 +25,7 @@ if (isNativeTauriRuntime) {
 }
 
 async function loadRootComponent(): Promise<ComponentType> {
+  if (import.meta.env.DEV && window.__HIVEN_SANDBOX__) return (await import('./workspace/sandbox/Sandbox')).default
   if (windowType === 'toast-hud') return (await import('./components/ToastHud.tsx')).ToastHud
   if (windowType === 'plugin-surface') {
     const mod = await import('./components/PluginSurfaceWindow.tsx')

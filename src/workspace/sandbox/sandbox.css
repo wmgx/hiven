@@ -1,0 +1,22 @@
+.sandbox-panel {
+  position: fixed;
+  top: 24px;
+  right: 20px;
+  bottom: 24px;
+  width: 320px;
+  padding: 20px;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.sandbox-panel p { color: var(--text-secondary); }
+.sandbox-panel textarea { min-height: 220px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); resize: vertical; }
+.sandbox-panel button { padding: 8px; border: 1px solid var(--border); border-radius: var(--radius); }
+.sandbox-hud { margin-top: auto; }
+html[data-sandbox] .global-launcher-overlay { right: 360px; }
+html[data-sandbox] .global-launcher-panel { max-width: calc(100vw - 400px); }
