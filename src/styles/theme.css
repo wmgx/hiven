@@ -97,6 +97,8 @@
   --border-strong: var(--slate-7);
   --input: var(--slate-7);
   --ring: var(--blue-8);
+  /* Text fields on focus: one neutral step darker, no glow. */
+  --field-focus-border: var(--slate-9);
   --radius: 8px;
   --shadow-none: none;
 }

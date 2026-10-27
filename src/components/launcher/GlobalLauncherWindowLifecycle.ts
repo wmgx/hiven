@@ -1,4 +1,5 @@
 import { focusInitialSurfaceTarget } from './surfaceInitialFocus'
+import { keepSoleFieldFocus } from './soleFieldFocus'
 import { useCallback, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
 import type { LauncherHostSurfaceTarget } from '../../store'
 import { configureCurrentLauncherWindow, invalidateCurrentLauncherWindowResize, onCurrentLauncherWindowFocusChanged, startCurrentLauncherWindowDrag } from '../../workspace/windowManager/launcherWindow'
@@ -453,7 +454,9 @@ export function useFocusGlobalLauncherSurfaceShell({
     if (!surfaceFrame && !launcherSettingsTarget && !hostSurfaceTarget) return
     const panel = panelRef.current
     if (!panel) return
-    return focusInitialSurfaceTarget(panel, Boolean(launcherSettingsTarget))
+    const stopInitial = focusInitialSurfaceTarget(panel, Boolean(launcherSettingsTarget))
+    const stopSole = keepSoleFieldFocus(panel)
+    return () => { stopInitial(); stopSole() }
   }, [hostSurfaceTarget, launcherSettingsTarget, panelRef, surfaceFrame, surfaceFocusVersion])
 }
 

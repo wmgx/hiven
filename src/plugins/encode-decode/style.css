@@ -182,7 +182,7 @@
 
 .encode-pane > textarea:focus-visible,
 .encode-output-wrap textarea:focus-visible {
-  box-shadow: inset 2px 0 0 var(--hiven-color-accent);
+  outline: none;
 }
 
 .encode-pane > textarea::placeholder,

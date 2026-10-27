@@ -50,7 +50,7 @@ function fixture() {
       },
     },
     '../../workspace/launcherBlurGuard': guard,
-    './GlobalLauncherLayout': {}, '../../workspace/launcher/perf': {}, './surfaceInitialFocus': { focusInitialSurfaceTarget: () => () => {} },
+    './GlobalLauncherLayout': {}, '../../workspace/launcher/perf': {}, './surfaceInitialFocus': { focusInitialSurfaceTarget: () => () => {} }, './soleFieldFocus': { keepSoleFieldFocus: () => () => {} },
     '@tauri-apps/api/window': nativeWindow,
     '../../workspace/pasteRecovery': recovery,
     '../../workspace/launcherWindowEvents': { LAUNCHER_NEW_SESSION_EVENT: 'hiven:launcher-new-session' },

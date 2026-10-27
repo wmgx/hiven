@@ -42,7 +42,7 @@
 }
 
 .calculator-surface__expression:focus-within {
-  border-color: var(--hiven-color-accent, var(--accent));
+  border-color: var(--field-focus-border);
 }
 
 .calculator-surface__expression label,

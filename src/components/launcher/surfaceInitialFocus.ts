@@ -1,3 +1,5 @@
+import { SURFACE_SHELL_SELECTOR, soleField } from './soleFieldFocus'
+
 /** One opening owns one handoff to its explicitly marked, ready control. */
 export function focusInitialSurfaceTarget(panel: HTMLElement, settingsOwnFocus = false): () => void {
   const document = panel.ownerDocument
@@ -36,7 +38,7 @@ export function focusInitialSurfaceTarget(panel: HTMLElement, settingsOwnFocus =
   function attempt() {
     frame = null
     if (!active || !panel.isConnected) return stop()
-    const current = panel.querySelector<HTMLElement>('.global-launcher-surface-shell, .global-launcher-settings-shell, .global-launcher-host-surface-shell')
+    const current = panel.querySelector<HTMLElement>(SURFACE_SHELL_SELECTOR)
     if (shell && current !== shell) return stop()
     shell = current
     if (!shell) return
@@ -49,6 +51,12 @@ export function focusInitialSurfaceTarget(panel: HTMLElement, settingsOwnFocus =
       && !target.closest('[inert], [hidden], [aria-hidden="true"], [aria-disabled="true"]')
       && view!.getComputedStyle(target).visibility === 'visible') {
       if (document.activeElement !== target) focus(target)
+      return stop()
+    }
+    // Unmarked page with a single text field: that field is the typing target.
+    const sole = soleField(shell)
+    if (sole) {
+      if (document.activeElement !== sole) focus(sole)
       return stop()
     }
     if (!fallbackFocused) {

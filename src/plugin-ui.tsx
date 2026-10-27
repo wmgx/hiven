@@ -394,7 +394,7 @@ export function Combobox({ options, filter, value = '', disabled, className, pla
         <BaseCombobox.Trigger
           className={cn(
             'flex items-center justify-between gap-1.5 rounded-md border border-input px-2.5 text-base outline-none',
-            'focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 dark:bg-input/30',
+            'focus-visible:border-[var(--field-focus-border)] disabled:opacity-50 dark:bg-input/30',
             TRIGGER,
           )}
           aria-label={ariaLabel}

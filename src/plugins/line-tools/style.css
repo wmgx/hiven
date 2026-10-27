@@ -220,7 +220,7 @@
 }
 
 .text-tools-pane > textarea:focus-visible {
-  box-shadow: inset 0 0 0 2px var(--hiven-color-accent);
+  outline: none;
 }
 
 .text-tools-pane > textarea::placeholder {
