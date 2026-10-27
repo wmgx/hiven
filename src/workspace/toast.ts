@@ -11,7 +11,7 @@ export type ToastLevel = 'info' | 'success' | 'error' | 'warning'
 /** Anti-replay identity for one output operation; never carries text. */
 export type HudReceipt = { operation: string; revision: number; target?: string }
 /** Present only on `notify` items: their localized status text may reach the desktop HUD. */
-export type ToastNotify = { slot: 'flash' | 'status'; detail?: string; controls?: { owner?: string; collapsed?: boolean } }
+export type ToastNotify = { slot: 'flash' | 'status'; detail?: string; controls?: { owner?: string } }
 
 export interface ToastAction {
   label: string

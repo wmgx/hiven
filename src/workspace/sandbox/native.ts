@@ -112,7 +112,7 @@ async function invoke(command: string, args: Args = {}, options?: Args): Promise
     case 'hud_ready': return hudUpdate()
     case 'hud_status_action': {
       const toast = [...toasts.values()].find(toast => toast.id === args.id && toast.interactive)
-      if (!toast || !['cancel', 'expand'].includes(args.action)) throw new Error('hud-unavailable')
+      if (!toast || args.action !== 'cancel') throw new Error('hud-unavailable')
       emit('hiven://toast-control', { id: args.id, action: args.action }); return
     }
     case 'capture_hud_target': return null

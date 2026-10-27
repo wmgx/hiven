@@ -114,7 +114,6 @@ export function ToastContainer() {
     <div className="fixed bottom-12 right-4 z-[9999] flex flex-col gap-2 pointer-events-none">
       {items.map((toast) => {
         const controls = toast.notify?.controls
-        if (controls?.collapsed) return <button key={toast.id} className="hiven-toast-dot pointer-events-auto" aria-label={translate(locale, 'hud', 'queue.expand')} onClick={() => requestToastControl(toast.id, controls.owner, 'expand')}>•</button>
         const style = levelStyles[toast.level]
         const phaseClass =
           toast.phase === 'shown' ? ' is-visible' : toast.phase === 'exit' ? ' is-exiting' : ''

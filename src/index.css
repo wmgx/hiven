@@ -8958,5 +8958,3 @@ html[data-window='launcher'] .flux-spatial-shell .recent-clipboard-hint {
 .launcher-markdown-link { text-decoration: underline; text-underline-offset: 2px; }
 .launcher-ai-send-title { margin: 0; font-size: 13px; color: var(--foreground); }
 .launcher-ai-disclosure { padding: 6px 14px 0; }
-
-.hiven-toast-dot { align-self: flex-end; width: 28px; height: 28px; border-radius: 50%; background: var(--color-background-tertiary); color: var(--accent); border: 1px solid var(--color-border); cursor: pointer; }

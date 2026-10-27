@@ -9,7 +9,7 @@ import { isLauncherNativeRuntime } from './bundledSurfaces'
 import { trackBehavior } from '../workspace/telemetry'
 
 export type PasteQueueNotice = 'ready' | 'delivered' | 'failed' | 'cancelled' | 'empty'
-type NoticeDetails = { full: boolean; copiedAt: number; shortcut: string; cancel(): void }
+type NoticeDetails = { full: boolean; shortcut: string; cancel(): void }
 type Notify = (status: PasteQueueStatus, outcome: PasteQueueNotice, hud: { operation: string }, details: NoticeDetails) => void
 let notify: Notify | undefined
 let owner: symbol | undefined
@@ -17,7 +17,6 @@ let sessionId = ''
 let operation = crypto.randomUUID()
 let revision = 0
 let full = false
-let copiedAt = 0
 const listeners = new Set<(status: PasteQueueStatus) => void>()
 let syncShortcut = () => {}
 const queue = createClipboardPasteQueue({
@@ -57,7 +56,7 @@ function publish(outcome: PasteQueueNotice = 'ready') {
   const current = status()
   for (const listener of listeners) listener(current)
   notify?.(current, outcome, { operation }, {
-    full, copiedAt, shortcut: shortcut.kind === 'accelerator' ? formatPluginShortcutLabel(shortcut.accelerator) : '',
+    full, shortcut: shortcut.kind === 'accelerator' ? formatPluginShortcutLabel(shortcut.accelerator) : '',
     cancel: () => { if (current.sessionId === sessionId) queue.cancel() },
   })
 }
@@ -80,7 +79,6 @@ export function createBackgroundPasteQueue(signal: AbortSignal, isCurrent: () =>
       if (typeof id !== 'string' || !id || id.length > 160) throw new Error('QueueSnapshotError')
       const validated = validateQueueSnapshots(snapshots)
       full = options?.full === true
-      copiedAt = Date.now()
       if (sessionId === id) queue.appendRound(validated)
       else { sessionId = id; operation = crypto.randomUUID(); queue.replace(validated) }
     },

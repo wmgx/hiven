@@ -107,9 +107,8 @@ def s4(page):
 def s5(page):
     copy(page, 'one', 'two')
     page.clock.fast_forward(8500)
-    page.locator('.sandbox-hud .toast-hud-dot').click()
+    # The queue notice stays a full card with its cancel button; it never collapses.
     expect(page.locator('.sandbox-hud .toast-hud-cancel')).to_be_visible()
-    assert snapshot(page)['toasts'][0]['collapsed'] is False
 
 
 def s6(page):

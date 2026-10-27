@@ -63,7 +63,6 @@ pub(crate) struct Snapshot {
     message: Option<String>,
     detail: Option<String>,
     interactive: bool,
-    collapsed: bool,
     expires_at: u64,
     locale: Locale,
     theme: Theme,
@@ -230,7 +229,7 @@ pub(crate) async fn debug_snapshot(app: tauri::AppHandle) -> Result<serde_json::
         let state = registry().lock().map_err(|_| "hud-unavailable")?;
         let slots: Vec<_> = state.slots.iter().flatten().map(|pending| serde_json::json!({
             "id": pending.snapshot.id, "slot": pending.snapshot.slot,
-            "interactive": pending.snapshot.interactive, "collapsed": pending.snapshot.collapsed,
+            "interactive": pending.snapshot.interactive,
             "visible": visible, "ignoresMouseEvents": ignores_mouse_events,
         })).collect();
         Ok(serde_json::json!({ "exists": window.is_some(), "visible": visible, "ignoresMouseEvents": ignores_mouse_events, "slots": slots }))
@@ -306,7 +305,6 @@ fn current_update() -> Result<HudUpdate, String> {
 }
 /// Logical card height; a detail, progress or generic "review" line adds a second row.
 fn card_height(snapshot: &Snapshot) -> f64 {
-    if snapshot.collapsed { return 28.0; }
     if snapshot.message.is_none() || snapshot.detail.is_some() || snapshot.progress.is_some() { 56.0 } else { 40.0 }
 }
 /// Render whatever slots remain valid; hides the window when none do.
@@ -341,8 +339,7 @@ fn show_current(app: &tauri::AppHandle) -> Result<HudUpdate, String> {
     if let Some(monitor) = target_monitor(&window, target.as_ref()).or_else(|| super::monitor_under_cursor(&window)).or_else(|| window.primary_monitor().ok().flatten()) {
         let scale = monitor.scale_factor();
         let area = monitor.work_area();
-        let logical_width = if update.toasts.iter().all(|t| t.collapsed) { 32.0 } else { 360.0 };
-        let width = (logical_width * scale).min(area.size.width as f64).max(1.0);
+        let width = (360.0 * scale).min(area.size.width as f64).max(1.0);
         // Stacked cards plus an 8px gap and the transparent antialiasing edge.
         let cards: f64 = update.toasts.iter().map(card_height).sum();
         let logical_height = cards + 8.0 * (update.toasts.len().saturating_sub(1)) as f64 + 4.0;
@@ -437,7 +434,7 @@ fn spawn_pending_monitor(app: tauri::AppHandle, slot: Slot, owner: String, seque
     });
 }
 #[tauri::command]
-pub(crate) async fn route_toast(app: tauri::AppHandle, window: tauri::WebviewWindow, id: String, sequence: u64, level: Level, expires_at: u64, locale: Locale, theme: Theme, progress: Option<Progress>, receipt: Option<Receipt>, slot: Option<Slot>, message: Option<String>, detail: Option<String>, interactive: Option<bool>, collapsed: Option<bool>) -> Result<Option<String>, String> {
+pub(crate) async fn route_toast(app: tauri::AppHandle, window: tauri::WebviewWindow, id: String, sequence: u64, level: Level, expires_at: u64, locale: Locale, theme: Theme, progress: Option<Progress>, receipt: Option<Receipt>, slot: Option<Slot>, message: Option<String>, detail: Option<String>, interactive: Option<bool>) -> Result<Option<String>, String> {
     trace("route-enter");
     let owner = window.label().to_owned();
     let slot = slot.unwrap_or(Slot::Flash);
@@ -453,7 +450,7 @@ pub(crate) async fn route_toast(app: tauri::AppHandle, window: tauri::WebviewWin
         if !state.accept_receipt(&owner, receipt.as_ref(), now()) { return Ok((None, false)); }
         if slot == Slot::Flash && state.protects_failure(&owner, receipt.as_ref(), &level, now()) { return Ok((None, false)); }
         let interactive = interactive == Some(true) && slot == Slot::Status && owner == "launcher";
-        let snapshot = Snapshot { id, slot, level, message, detail, interactive, collapsed: interactive && collapsed == Some(true), expires_at, locale, theme, progress, receipt };
+        let snapshot = Snapshot { id, slot, level, message, detail, interactive, expires_at, locale, theme, progress, receipt };
         let replacing = state.slots[slot.index()].is_some();
         state.slots[slot.index()] = None;
         let empty = state.is_empty();
@@ -503,7 +500,7 @@ pub(crate) async fn route_toast(app: tauri::AppHandle, window: tauri::WebviewWin
 }
 #[tauri::command]
 pub(crate) async fn hud_status_action(app: tauri::AppHandle, window: tauri::WebviewWindow, id: String, action: String) -> Result<(), String> {
-    if window.label() != LABEL || !["cancel", "expand"].contains(&action.as_str()) { return Err("hud-unavailable".into()); }
+    if window.label() != LABEL || action != "cancel" { return Err("hud-unavailable".into()); }
     let owner = {
         let state = registry().lock().map_err(|_| "hud-unavailable")?;
         state.slots.iter().flatten().find(|p| p.snapshot.id == id && p.snapshot.interactive && p.snapshot.expires_at > now()).map(|p| p.owner.clone())
@@ -544,7 +541,7 @@ pub(crate) fn invalidate_owner(app: &tauri::AppHandle, owner: &str) {
 mod tests {
     use super::*;
     fn snapshot(id: &str, slot: Slot, level: Level, receipt: Option<Receipt>) -> Snapshot {
-        Snapshot { id: id.into(), slot, level, message: None, detail: None, interactive: false, collapsed: false, expires_at: 1000, locale: Locale::En, theme: Theme::Dark, progress: None, receipt }
+        Snapshot { id: id.into(), slot, level, message: None, detail: None, interactive: false, expires_at: 1000, locale: Locale::En, theme: Theme::Dark, progress: None, receipt }
     }
     fn pending(owner: &str, sequence: u64, snapshot: Snapshot) -> Option<Pending> {
         Some(Pending { owner: owner.into(), sequence, target: None, snapshot })

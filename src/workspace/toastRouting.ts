@@ -35,7 +35,7 @@ export async function routeToast(item: ToastItem, removeLocal: (id: string) => v
     const target = await invoke<string | null>('route_toast', {
       id: item.id, level: item.level, expiresAt: item.expiresAt,
       progress: item.progress, receipt: item.hud, sequence: issuedSequence, locale: locale === 'zh' ? 'zh' : 'en', theme,
-      slot: item.notify?.slot ?? 'flash', interactive: !!item.notify?.controls, collapsed: item.notify?.controls?.collapsed ?? false, ...(item.notify ? { message: item.message, detail: item.notify.detail } : {}),
+      slot: item.notify?.slot ?? 'flash', interactive: !!item.notify?.controls, ...(item.notify ? { message: item.message, detail: item.notify.detail } : {}),
     })
     if (!target || target === getCurrentWindow().label) return
     ticket.target = target
@@ -81,21 +81,19 @@ export async function listenForRoutedToasts(add: (item: ToastItem) => void, remo
   return () => { stopDismiss(); stopDelivery(); timers.forEach(clearTimeout) }
 }
 
-export type StatusControls = { collapsed?: boolean; cancel(): void; expand(): void }
+export type StatusControls = { cancel(): void }
 const statusControls = new Map<string, StatusControls>()
 let stopControls: Promise<() => void> | undefined
 export function setStatusControls(id: string, controls?: StatusControls) {
   if (controls) statusControls.set(id, controls)
   else statusControls.delete(id)
   if (!stopControls && nativeToastRoutingAvailable()) {
-    stopControls = listen<{ id: string; action: 'cancel' | 'expand' }>('hiven://toast-control', ({ payload }) => {
-      const current = statusControls.get(payload.id)
-      if (payload.action === 'cancel') current?.cancel()
-      if (payload.action === 'expand') current?.expand()
+    stopControls = listen<{ id: string; action: 'cancel' }>('hiven://toast-control', ({ payload }) => {
+      if (payload.action === 'cancel') statusControls.get(payload.id)?.cancel()
     }).catch(() => { stopControls = undefined; return () => {} })
   }
 }
-export function requestToastControl(id: string, owner: string | undefined, action: 'cancel' | 'expand') {
+export function requestToastControl(id: string, owner: string | undefined, action: 'cancel') {
   const controls = statusControls.get(id)
   if (controls) { controls[action](); return }
   if (owner && nativeToastRoutingAvailable()) void emitTo(owner, 'hiven://toast-control', { id, action }).catch(() => {})

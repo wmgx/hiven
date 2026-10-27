@@ -49,7 +49,7 @@ export function status(notice: NotifyStatus, receipt?: HudReceipt, controls?: St
   statusToastIds.set(notice.id, toastId)
   const detail = notice.detail === undefined ? undefined : statusText(notice.detail) || undefined
   setStatusControls(toastId, controls)
-  showToast(title, 'info', { id: toastId, persistent: true, progress: notice.progress, hud: receipt, notify: { slot: 'status', detail, controls: controls ? { collapsed: controls.collapsed, owner: nativeToastRoutingAvailable() ? getCurrentWindow().label : undefined } : undefined } })
+  showToast(title, 'info', { id: toastId, persistent: true, progress: notice.progress, hud: receipt, notify: { slot: 'status', detail, controls: controls ? { owner: nativeToastRoutingAvailable() ? getCurrentWindow().label : undefined } : undefined } })
 }
 
 export function end(id: string): void {

@@ -7,7 +7,6 @@ export default {
     'queue.complete': 'All items pasted',
     'queue.empty': 'No consecutive copies',
     'queue.cancel': 'Cancel paste queue',
-    'queue.expand': 'Expand paste queue',
     'queue.shortcutFailed': 'Shortcut unavailable; choose another key',
 
     'result.image-saved': 'PNG saved; path copied',
@@ -45,7 +44,6 @@ export default {
     'queue.complete': '已全部粘贴',
     'queue.empty': '没有连续复制的内容',
     'queue.cancel': '取消粘贴队列',
-    'queue.expand': '展开粘贴队列',
     'queue.shortcutFailed': '快捷键不可用，请更换按键',
 
     'result.image-saved': 'PNG 已保存，路径已复制',
