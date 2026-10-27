@@ -224,6 +224,7 @@ function OpenQuickEditorCommandOverlay() {
       handleGlobalLauncherKeyDown({
         event: synthetic,
         isImeComposingRef,
+        customizeOnModEnter: true,
         launcherSettingsTarget: null,
         hostSurfaceTarget: null,
         surfaceFrame: null,
@@ -291,6 +292,7 @@ function OpenQuickEditorCommandOverlay() {
     handleGlobalLauncherKeyDown({
       event,
       isImeComposingRef,
+      customizeOnModEnter: true,
       launcherSettingsTarget: null,
       hostSurfaceTarget: null,
       surfaceFrame: null,
@@ -348,8 +350,6 @@ function OpenQuickEditorCommandOverlay() {
         locale={locale}
         resultSelectedIndex={resultSelectedIndex}
         selectedResultChoiceIds={selectedResultChoiceIds}
-        showCustomizeHint={false}
-        customizeShortcutLabel="⌘↵"
         onSettingsClose={closeCommandAndRestoreFocus}
         onSurfaceBack={closeCommandAndRestoreFocus}
         onSurfaceClose={closeCommandAndRestoreFocus}

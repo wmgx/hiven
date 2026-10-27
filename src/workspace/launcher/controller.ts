@@ -85,6 +85,8 @@ export type ParamInputFrame = {
   paramDrafts?: Record<string, string>
   /** One parameter of an existing preview; Back restores this run without executing it. */
   previewEdit?: { originalResult: ResultFrame; generation: number }
+  /** Parameters edited over the command frame below; `required` leaves the command on cancel. */
+  sublayer?: 'optional' | 'required'
   recordUsage: boolean
 }
 
@@ -646,6 +648,50 @@ export class LauncherController {
     return text !== undefined
   }
 
+  /** Text tools run as a command frame with live preview. */
+  private isCommandTool(item: LauncherItem): boolean {
+    return !item.imageInput && this.shouldPreviewInput(this.collectInputFrameFor(item))
+  }
+
+  /** ⇥ in the command frame: edit its parameters in a sublayer. */
+  openParams(expectedFrame?: CollectInputFrame): boolean {
+    const top = this.topFrame()
+    if (top.kind !== 'collect-input' || (expectedFrame && top.item !== expectedFrame.item) || !this.hasCustomizableParams(top.item)) return false
+    this.setState({
+      frames: [...this.state.frames, { ...this.paramFrameFor(top.item, this.copyParams(top.params ?? this.defaultParamsFor(top.item)), 0, undefined, top.recordUsage), sublayer: 'optional' }],
+      error: null,
+    })
+    return true
+  }
+
+  /** ⇥ in the parameter sublayer: keep a typed value and move to the next parameter. */
+  nextParam(expectedFrame?: ParamInputFrame): void {
+    const top = this.topFrame()
+    if (top.kind !== 'param-input' || !top.sublayer || !this.matchesParamFrame(top, expectedFrame)) return
+    const param = this.currentParam(top)
+    const count = top.item.params?.length ?? 0
+    if (!param || count === 0) return
+    let params = top.params
+    if ((param.type === 'text' || param.type === 'number') && top.query !== this.queryFor(param, top.params)) {
+      params = { ...top.params, [param.key]: this.normalizeParamValue(param, top.query) }
+      const error = this.validateParam(param, params)
+      if (error) { this.setState({ error }); return }
+    }
+    const frames = this.state.frames.slice(0, -1)
+    frames.push({ ...this.paramFrameFor(top.item, params, (top.paramIndex + 1) % count, undefined, top.recordUsage), sublayer: top.sublayer })
+    this.setState({ frames, error: null })
+  }
+
+  /** Return the edited parameters to the command frame; its preview refreshes, nothing runs. */
+  private applySublayerParams(params: Record<string, unknown>): void {
+    const frames = this.state.frames.slice(0, -1)
+    const command = frames.at(-1)
+    if (command?.kind !== 'collect-input') return
+    this.invalidatePendingActions()
+    frames[frames.length - 1] = { ...command, params, previewInputText: undefined, selectedSuggestionIndex: -1 }
+    this.setState({ frames, error: null })
+  }
+
   private materialText(frame: CollectInputFrame): string {
     return frame.blockText ?? frame.inputText
   }
@@ -752,7 +798,19 @@ export class LauncherController {
     })
     const recordUsage = this.shouldRecord(item, options)
 
-    // Enter runs with default params; only the explicit customize gesture (⌘↵) opens the param page.
+    // Text tools open the command frame; parameters that must be chosen open over it.
+    if (item.initialInputText === undefined && this.isCommandTool(item)) {
+      trackBehavior(TelemetryEvents.launcherEnterCollectInput, itemTelemetryProps(item))
+      const frames: LauncherFrame[] = [...this.state.frames, { ...this.collectInputFrameFor(item, undefined, recordUsage), blockText: options.objectBlockText }]
+      if (options.customizeParams && this.hasCustomizableParams(item)) {
+        frames.push({ ...this.paramFrameFor(item, undefined, 0, undefined, recordUsage), sublayer: 'required' })
+      }
+      this.setState({ frames })
+      if (item.suggest) void this.refreshSuggestions()
+      return
+    }
+
+    // Other commands: the customize gesture opens the param page before running.
     if (options.customizeParams && this.hasCustomizableParams(item)) {
       trackBehavior(TelemetryEvents.launcherEnterParamInput, itemTelemetryProps(item))
       this.setState({
@@ -784,14 +842,6 @@ export class LauncherController {
     }
 
     if (this.shouldCollectTextInput(item)) {
-      // Block material opens the command with a live preview instead of running it.
-      if (item.initialInputText === undefined && this.hasObjectBlockText(options.objectBlockText) && !item.imageInput && this.shouldPreviewInput(this.collectInputFrameFor(item))) {
-        trackBehavior(TelemetryEvents.launcherEnterCollectInput, itemTelemetryProps(item))
-        this.setState({
-          frames: [...this.state.frames, { ...this.collectInputFrameFor(item, undefined, recordUsage), blockText: options.objectBlockText }],
-        })
-        return
-      }
       if (item.initialInputText === undefined && this.hasObjectBlockText(options.objectBlockText)) {
         await this.commitResolvedAction({
           item,
@@ -950,6 +1000,12 @@ export class LauncherController {
 
     if (top.previewEdit) {
       await this.commitPreviewParamEdit(top, params)
+      return
+    }
+    if (top.sublayer) {
+      const all = this.validateParams(top.item, params)
+      if (all) { this.setState({ error: all }); return }
+      this.applySublayerParams(params)
       return
     }
 
@@ -1432,6 +1488,12 @@ export class LauncherController {
       this.cancelPreviewParamEdit(current)
       return true
     }
+    if (current.kind === 'param-input' && current.sublayer) {
+      // Cancel edits; a required choice that was never made leaves the command.
+      const frames = this.state.frames.slice(0, current.sublayer === 'required' ? -2 : -1)
+      this.setState({ frames: frames.length ? frames : this.state.frames.slice(0, 1), error: null })
+      return true
+    }
     this.invalidatePendingActions()
     this.prepareGeneration += 1
     if (this.state.frames.length <= 1) return false
@@ -1476,7 +1538,8 @@ export class LauncherController {
     this.invalidatePendingActions()
     this.prepareGeneration += 1
     if (this.state.frames.length <= 1) return false
-    if (current.kind === 'collect-input') this.keepTypedInput(current)
+    const command = [...this.state.frames].reverse().find((frame): frame is CollectInputFrame => frame.kind === 'collect-input')
+    if (command) this.keepTypedInput(command)
     const base = this.state.frames[0]
     this.activePluginLifetime = undefined
     this.pluginUnavailable = false

@@ -25,6 +25,8 @@ type LauncherParamStepProps = {
   onBack: () => void
   /** Command-tag ×: exit whole command to search list. */
   onExitCommand?: () => void
+  /** ⇥ in the command's parameter sublayer. */
+  onNextParam?: () => void
 }
 
 type ParamOption = {
@@ -104,7 +106,9 @@ export function LauncherParamStep({
   onMultiToggle,
   onBack,
   onExitCommand,
+  onNextParam,
 }: LauncherParamStepProps) {
+  const isSublayer = Boolean(frame.sublayer)
   const inputRef = useRef<HTMLInputElement>(null)
   const isImeComposingRef = useRef(false)
   const params = frame.item.params ?? []
@@ -165,7 +169,7 @@ export function LauncherParamStep({
   }
 
   const breadcrumbChips: { label: string; value: string }[] = []
-  for (let i = 0; !isPreviewEdit && i < frame.paramIndex; i++) {
+  for (let i = 0; !isPreviewEdit && !isSublayer && i < frame.paramIndex; i++) {
     const p = params[i]
     if (!p) break
     const val = frame.params[p.key]
@@ -174,12 +178,12 @@ export function LauncherParamStep({
 
   if (!param) return null
   const hint = param.hint ? localized(param.hint, param.hintI18n, locale) : ''
-  const stepTag = !isPreviewEdit && params.length > 1 ? `${frame.paramIndex + 1}/${params.length}` : ''
+  const stepTag = !isPreviewEdit && !isSublayer && params.length > 1 ? `${frame.paramIndex + 1}/${params.length}` : ''
   const placeholder = isTextParam
-    ? [label, hint || (param.type === 'number' ? t(locale, 'palette.inputNumber') : t(locale, 'palette.inputText'))]
+    ? [isSublayer ? '' : label, hint || (param.type === 'number' ? t(locale, 'palette.inputNumber') : t(locale, 'palette.inputText'))]
         .filter(Boolean)
         .join(' — ')
-    : [label, t(locale, 'palette.filterOptions')].filter(Boolean).join(' — ')
+    : [isSublayer ? '' : label, t(locale, 'palette.filterOptions')].filter(Boolean).join(' — ')
   const countLabel = isPreviewEdit
     ? isMultiParam
       ? `${editingLabel} · ${t(locale, 'palette.selectedCountMax', { count: selectedCount, max: maxSelect })}`
@@ -202,6 +206,7 @@ export function LauncherParamStep({
           onRemove={onExitCommand ?? onBack}
         />
         <LauncherParamChipTrail chips={breadcrumbChips} />
+        {isSublayer && <span className="launcher-param-chip"><span className="launcher-param-chip-label">{label}</span></span>}
         <input
           ref={inputRef}
           className={[isTextParam ? 'mono' : '', param.type === 'number' ? 'l-number-input' : ''].filter(Boolean).join(' ')}
@@ -222,6 +227,12 @@ export function LauncherParamStep({
               return
             }
             if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
+            if (event.key === 'Tab' && isSublayer && !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) {
+              event.preventDefault()
+              event.stopPropagation()
+              if (!busy) onNextParam?.()
+              return
+            }
             if (event.key === 'Enter') {
               event.preventDefault()
               event.stopPropagation()
@@ -257,7 +268,7 @@ export function LauncherParamStep({
         />
         {busy ? (
           <span className="meta anim-running-pulse" aria-live="polite">...</span>
-        ) : (
+        ) : isSublayer && !isMultiParam ? null : (
           <span className="meta">{countLabel}</span>
         )}
       </div>
@@ -320,6 +331,12 @@ export function LauncherParamStep({
             >
               <HintKey keys="esc" label={cancelPreviewLabel} />
             </button>
+          </>
+        ) : isSublayer ? (
+          <>
+            <HintKey keys="↵" label={isMultiParam ? t(locale, 'palette.submit') : t(locale, 'palette.select')} />
+            {params.length > 1 && <HintKey keys="⇥" label={t(locale, 'palette.nextParam')} />}
+            <HintKey keys="esc" label={t(locale, 'palette.cancelParams')} />
           </>
         ) : (
           <>

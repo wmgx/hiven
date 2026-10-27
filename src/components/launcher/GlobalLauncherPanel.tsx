@@ -10,7 +10,6 @@ import { GlobalLauncherFrameSwitch } from './GlobalLauncherFrames'
 import type { LauncherSurfaceUnsavedChangesReport } from './useLauncherSurfaceBackgroundIdle'
 import type { GlobalLauncherPermissionFrameState } from './GlobalLauncherPermissionFrame'
 import { LauncherView } from './LauncherView'
-import { getPlatformShortcutMeta, supportsParamCustomization } from './launcherParamShortcuts'
 import { handleGlobalLauncherKeyDown } from './GlobalLauncherKeyboard'
 import type { GlobalLauncherItem } from './GlobalLauncherItems'
 import type { ClipboardObjectBlockState } from '../../launcher/clipboard/useClipboardObjectBlock'
@@ -302,8 +301,6 @@ export function GlobalLauncherPanel({
         locale={locale}
         resultSelectedIndex={resultSelectedIndex}
         selectedResultChoiceIds={selectedResultChoiceIds}
-        showCustomizeHint={selectedItem?.kind === 'domain' && supportsParamCustomization(selectedItem.domainItem)}
-        customizeShortcutLabel={getPlatformShortcutMeta().label}
         isFavoriteSelected={isFavoriteSelected}
         isImeComposingRef={isImeComposingRef}
         browsingActions={browsingActions}
@@ -338,6 +335,8 @@ export function GlobalLauncherPanel({
           if (handled || !frame) focusSearchInputAfterBack()
         }}
         onCollectInputChange={(value, frame) => controllerRef.current?.setInputText(value, frame)}
+        onOpenCommandParams={(frame) => controllerRef.current?.openParams(frame)}
+        onNextParam={(frame) => controllerRef.current?.nextParam(frame)}
         onRemoveCommandBlock={(frame) => {
           if (clipboardBlock?.block?.payloadText === frame.blockText) clipboardBlock?.removeBlock()
           controllerRef.current?.removeBlockMaterial(frame)

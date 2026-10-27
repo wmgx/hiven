@@ -46,8 +46,6 @@ export function GlobalLauncherSearchFrame({
   busy = false,
   selectedItem,
   locale,
-  showCustomizeHint,
-  customizeShortcutLabel,
   clipboardBlock,
   clipboardHintSelected,
   isFavoriteSelected,
@@ -77,8 +75,6 @@ export function GlobalLauncherSearchFrame({
   busy?: boolean
   selectedItem?: LauncherMixedItem
   locale: Locale
-  showCustomizeHint: boolean
-  customizeShortcutLabel: string
   clipboardBlock?: ClipboardObjectBlockState
   clipboardHintSelected?: boolean
   /** Whether the focused row is currently pinned. */
@@ -357,9 +353,6 @@ export function GlobalLauncherSearchFrame({
               keys={`${getPlatformShortcutMeta().label}P`}
               label={isFavoriteSelected ? t(locale, 'palette.actionUnpin') : t(locale, 'palette.actionPin')}
             />
-          )}
-          {showListHints && showCustomizeHint && (
-            <LauncherHintKey keys={`${customizeShortcutLabel}↵`} label={t(locale, 'palette.customizeParamsLabel')} />
           )}
           <LauncherHintKey keys="esc" label={t(locale, browsingActions ? 'palette.back' : 'palette.close')} />
           {focusedControl && focusedControl.action !== 'primary' &&

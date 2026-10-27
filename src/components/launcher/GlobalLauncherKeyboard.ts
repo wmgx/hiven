@@ -1,9 +1,9 @@
+import { shouldCustomizeParams } from './launcherParamShortcuts'
 import type { KeyboardEvent as ReactKeyboardEvent, MutableRefObject } from 'react'
 import { getHostOutputIntent } from '../../workspace/launcher/output'
 import type { LauncherResultChoice } from '../../workspace/launcher/types'
 import type { CollectInputFrame, ResultFrame } from '../../workspace/launcher/controller'
 import type { LauncherMixedItem } from './LauncherMixedList'
-import { shouldCustomizeParams } from './launcherParamShortcuts'
 import { shouldIgnoreImeKeyDown } from '../../utils/imeKeyboard'
 
 export function handleGlobalLauncherKeyDown({
@@ -26,6 +26,7 @@ export function handleGlobalLauncherKeyDown({
   selectedItem,
   visibleItems,
   selectItem,
+  customizeOnModEnter,
   handleClipboardBackspace,
   hasClipboardHint,
   attachHintAsBlock,
@@ -63,6 +64,8 @@ export function handleGlobalLauncherKeyDown({
   /** Visible list rows for ⌘1–8 quick-run (same order as rendered). */
   visibleItems?: LauncherMixedItem[]
   selectItem: (item: LauncherMixedItem | undefined, customizeParams?: boolean) => void
+  /** Quick editor keeps ⌘↵ as "choose parameters first"; elsewhere ⌘↵ equals ↵. */
+  customizeOnModEnter?: boolean
   handleClipboardBackspace?: (queryEmpty: boolean) => boolean
   hasClipboardHint?: boolean
   attachHintAsBlock?: () => void
@@ -259,6 +262,6 @@ export function handleGlobalLauncherKeyDown({
   }
   if (event.key === 'Enter') {
     event.preventDefault()
-    selectItem(selectedItem, shouldCustomizeParams(event.metaKey, event.ctrlKey))
+    selectItem(selectedItem, Boolean(customizeOnModEnter) && shouldCustomizeParams(event.metaKey, event.ctrlKey))
   }
 }

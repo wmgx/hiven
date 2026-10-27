@@ -44,8 +44,6 @@ export function GlobalLauncherFrameSwitch({
   locale,
   resultSelectedIndex,
   selectedResultChoiceIds,
-  showCustomizeHint,
-  customizeShortcutLabel,
   isFavoriteSelected,
   isImeComposingRef,
   browsingActions,
@@ -71,6 +69,8 @@ export function GlobalLauncherFrameSwitch({
   onExitCommand,
   onCollectInputChange,
   onRemoveCommandBlock,
+  onOpenCommandParams,
+  onNextParam,
   onActivateResultChoice,
   onSecondaryAction,
   onPastePreviewText,
@@ -108,8 +108,6 @@ export function GlobalLauncherFrameSwitch({
   locale: Locale
   resultSelectedIndex: number
   selectedResultChoiceIds: Set<string>
-  showCustomizeHint: boolean
-  customizeShortcutLabel: string
   /** Focused row is in launcher favorites. */
   isFavoriteSelected?: boolean
   isImeComposingRef: RefObject<boolean>
@@ -137,6 +135,8 @@ export function GlobalLauncherFrameSwitch({
   onExitCommand?: (frame?: CollectInputFrame | ParamInputFrame) => void
   onCollectInputChange: (value: string, frame?: CollectInputFrame) => void
   onRemoveCommandBlock?: (frame: CollectInputFrame) => void
+  onOpenCommandParams?: (frame: CollectInputFrame) => void
+  onNextParam?: (frame: ParamInputFrame) => void
   onActivateResultChoice: (choice: LauncherResultChoice) => void
   /** Collect-input / result secondary actions (id is plugin-defined). */
   onSecondaryAction?: (choice: LauncherResultChoice, actionId: string) => void
@@ -240,6 +240,7 @@ export function GlobalLauncherFrameSwitch({
           onMultiToggle={(value) => onParamMultiToggle(value, frame)}
           onBack={() => onFrameBack(frame)}
           onExitCommand={onExitCommand ? () => onExitCommand(frame) : undefined}
+          onNextParam={() => onNextParam?.(frame)}
         />
       </LauncherFlowFrame>
     )
@@ -280,6 +281,7 @@ export function GlobalLauncherFrameSwitch({
           onCaptureSelection={onCaptureSelection}
           attachedBlock={clipboardBlock?.block}
           onRemoveBlock={() => onRemoveCommandBlock?.(frame)}
+          onOpenParams={frame.item.executeWithParams && frame.item.params?.length ? () => onOpenCommandParams?.(frame) : undefined}
         />
       </LauncherFlowFrame>
     )
@@ -328,8 +330,6 @@ export function GlobalLauncherFrameSwitch({
       busy={controllerState?.busy ?? false}
       selectedItem={selectedItem}
       locale={locale}
-      showCustomizeHint={showCustomizeHint}
-      customizeShortcutLabel={customizeShortcutLabel}
       isFavoriteSelected={isFavoriteSelected}
       browsingActions={browsingActions}
       browseCategory={browseCategory}

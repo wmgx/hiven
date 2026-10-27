@@ -132,6 +132,7 @@ export function GlobalLauncherCollectInputFrame({
   onCaptureSelection,
   attachedBlock,
   onRemoveBlock,
+  onOpenParams,
 }: {
   isImeComposingRef: RefObject<boolean>
   inputRef: RefObject<HTMLInputElement | HTMLTextAreaElement | null>
@@ -158,6 +159,8 @@ export function GlobalLauncherCollectInputFrame({
   /** Host Block backing frame.blockText, used for its label. */
   attachedBlock?: LauncherObjectBlock | null
   onRemoveBlock?: () => void
+  /** ⇥: edit parameters; absent when the command has none. */
+  onOpenParams?: () => void
 }) {
   const placeholder = frame.input.placeholderI18n?.[locale] ?? frame.input.placeholder ?? ''
   const explicitPreview = frame.item.executionMode === 'explicit-text-preview'
@@ -258,6 +261,12 @@ export function GlobalLauncherCollectInputFrame({
       else onBack()
       return
     }
+    if (onOpenParams && event.key === 'Tab' && !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      event.preventDefault()
+      event.stopPropagation()
+      if (!busy) onOpenParams()
+      return
+    }
     if (showLivePreview && displayPreviewText && event.key === 'Tab' && !event.metaKey && !event.ctrlKey && !event.altKey) {
       event.preventDefault()
       event.stopPropagation()
@@ -295,11 +304,12 @@ export function GlobalLauncherCollectInputFrame({
           readOnly={hasBlock}
           onChange={(event) => { if (!hasBlock) onInputChange(event.target.value) }}
           onKeyDown={handleInputKeyDown}
-          placeholder={hasBlock ? '' : placeholder}
+          placeholder={hasBlock ? t(locale, 'palette.blockInputHint') : placeholder}
           className="mono"
           style={{ caretColor: 'var(--text, currentColor)' }}
         />}
         <LauncherParamChipTrail chips={paramChips} />
+        {onOpenParams && paramChips.length > 0 && <kbd className="r-kbd" title={t(locale, 'palette.customizeParamsLabel')}>⇥</kbd>}
         {busy && (
           <span className="meta anim-running-pulse" role="status" aria-live="polite">{t(locale, deliveryIntent === 'copy' ? 'palette.outputCopying' : deliveryIntent ? 'palette.outputDelivering' : 'palette.outputRunning')}</span>
         )}
