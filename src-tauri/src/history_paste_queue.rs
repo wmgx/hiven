@@ -113,7 +113,9 @@ unsafe fn capture() -> Result<Snapshot, String> {
             if name.is_null() { return Err("QueueClipboardError".into()); }
             let name = std::ffi::CStr::from_ptr(name).to_string_lossy().into_owned();
             let data: *mut AnyObject = msg_send![item, dataForType: kind];
-            if data.is_null() { return Err("QueueClipboardError".into()); }
+            // Promised/lazy flavors can be unreadable after the source app moves on;
+            // keep every readable flavor instead of refusing the whole delivery.
+            if data.is_null() { continue; }
             let size: usize = msg_send![data, length];
             bytes = bytes.checked_add(size).ok_or("QueueClipboardError")?;
             if bytes > 64 * 1024 * 1024 { return Err("QueueClipboardError".into()); }
@@ -121,7 +123,7 @@ unsafe fn capture() -> Result<Snapshot, String> {
             if size != 0 && data.is_null() { return Err("QueueClipboardError".into()); }
             contents.push((name, if size == 0 { Vec::new() } else { std::slice::from_raw_parts(data, size).to_vec() }));
         }
-        snapshot.push(contents);
+        if !contents.is_empty() { snapshot.push(contents); }
     }
     if revision != change_count() { return Err("QueueClipboardError".into()); }
     Ok(snapshot)
@@ -129,6 +131,8 @@ unsafe fn capture() -> Result<Snapshot, String> {
 #[cfg(target_os = "macos")]
 unsafe fn restore(snapshot: Snapshot) -> Result<(), String> {
     use objc2::{class, msg_send, runtime::AnyObject};
+    // Nothing readable was captured: leave the board alone rather than clear it.
+    if snapshot.is_empty() { return Ok(()); }
     let items: *mut AnyObject = msg_send![class!(NSMutableArray), array];
     for contents in snapshot {
         let item: *mut AnyObject = msg_send![class!(NSPasteboardItem), new];

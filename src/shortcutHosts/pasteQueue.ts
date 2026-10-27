@@ -6,6 +6,7 @@ import { useAppStore } from '../store'
 import { translate } from '../i18n'
 import { formatPluginShortcutLabel } from '../utils/formatPluginShortcutLabel'
 import { isLauncherNativeRuntime } from './bundledSurfaces'
+import { trackBehavior } from '../workspace/telemetry'
 
 export type PasteQueueNotice = 'ready' | 'delivered' | 'failed' | 'cancelled' | 'empty'
 type NoticeDetails = { full: boolean; copiedAt: number; shortcut: string; cancel(): void }
@@ -31,8 +32,13 @@ const queue = createClipboardPasteQueue({
       attemptId = await invoke<string>('begin_history_queue_paste')
       if (!isCurrent()) return { ok: false }
       await invoke('paste_history_queue_text', { attemptId, text: snapshot.text })
+      trackBehavior('paste_queue.deliver', { ok: true })
       return { ok: isCurrent() }
-    } catch { return { ok: false } }
+    } catch (error) {
+      // Native errors are fixed reason codes (QueueTargetError, …), never clipboard text.
+      trackBehavior('paste_queue.deliver', { ok: false, error: String(error).slice(0, 80) })
+      return { ok: false }
+    }
     finally { signal.removeEventListener('abort', cancel); cancel() }
   },
 })

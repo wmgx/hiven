@@ -359,6 +359,9 @@ fn ensure_window(app: &tauri::AppHandle) -> Result<(), String> {
     let window = tauri::WebviewWindowBuilder::new(app, LABEL, tauri::WebviewUrl::App("index.html?window=toast-hud".into()))
         .title("Hiven").inner_size(360.0, 84.0).decorations(false).transparent(true)
         .shadow(false).resizable(false).visible(false).focused(false).focusable(false)
+        // The queue status dot and × must act on the first click: this window never
+        // becomes key, so without first-mouse the click is spent activating the app.
+        .accept_first_mouse(true)
         .always_on_top(true).skip_taskbar(true).build().map_err(|_| "hud-unavailable")?;
     // The global Edit menu belongs to editable windows, not this passive HUD.
     // Remove only this hidden window's inherited menu before its first map.
