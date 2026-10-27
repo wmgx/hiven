@@ -68,6 +68,8 @@ export const LauncherAutoGrowInput = forwardRef<HTMLTextAreaElement, Props>(func
       ref={setRef}
       rows={1}
       wrap="soft"
+      // Wrapped lines past 4 scroll inside the field; the launcher wheel guard must let them.
+      data-launcher-scrollable
       value={value}
       className={['l-search-field', className].filter(Boolean).join(' ')}
       onChange={(event) => onChange?.(event.target.value.replace(/[\r\n]+/g, ''))}

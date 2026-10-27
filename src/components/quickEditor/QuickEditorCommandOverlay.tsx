@@ -172,7 +172,8 @@ function OpenQuickEditorCommandOverlay() {
     return () => quickEditorImperative.unregisterOverlayEscape()
   }, [overlayEscapeHandler])
 
-  useEffect(() => () => commandTarget.dispose(), [commandTarget])
+  // activate() survives StrictMode's mount → cleanup → mount; a bare dispose cleanup did not.
+  useEffect(() => commandTarget.activate(), [commandTarget])
 
   useEffect(() => {
     if (initialQuery) {

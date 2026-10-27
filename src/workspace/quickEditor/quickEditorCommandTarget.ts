@@ -21,6 +21,8 @@ export type QuickEditorCommandTarget = {
   cursorRange?: IRange
   editor?: MonacoEditor.IStandaloneCodeEditor
   model?: MonacoEditor.ITextModel
+  /** (Re)start watching; returns `dispose`. Safe to call again after a dispose (StrictMode remount). */
+  activate: () => () => void
   dispose: () => void
 }
 
@@ -28,8 +30,8 @@ export function createQuickEditorCommandOwner(): QuickEditorCommandOwner {
   return { active: true, invalidated: false }
 }
 
-function observeTarget(target: Omit<QuickEditorCommandTarget, 'dispose'>): QuickEditorCommandTarget {
-  const unsubscribe = useQuickEditorStore.subscribe((state) => {
+function observeTarget(target: Omit<QuickEditorCommandTarget, 'activate' | 'dispose'>): QuickEditorCommandTarget {
+  const check = (state: ReturnType<typeof useQuickEditorStore.getState>) => {
     const pane = state.panes[target.paneId]
     if (
       state.activePaneId !== target.paneId ||
@@ -39,13 +41,25 @@ function observeTarget(target: Omit<QuickEditorCommandTarget, 'dispose'>): Quick
     ) {
       target.owner.invalidated = true
     }
-  })
+  }
+  let unsubscribe: (() => void) | undefined = useQuickEditorStore.subscribe(check)
+  const dispose = () => {
+    target.owner.active = false
+    unsubscribe?.()
+    unsubscribe = undefined
+  }
   return {
     ...target,
-    dispose: () => {
-      target.owner.active = false
-      unsubscribe()
+    activate: () => {
+      if (!unsubscribe) {
+        // A change while unwatched still invalidates the snapshot.
+        target.owner.active = true
+        check(useQuickEditorStore.getState())
+        unsubscribe = useQuickEditorStore.subscribe(check)
+      }
+      return dispose
     },
+    dispose,
   }
 }
 

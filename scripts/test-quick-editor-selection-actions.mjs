@@ -205,9 +205,23 @@ const wholeTarget = captureQuickEditorCommandTarget(createQuickEditorCommandOwne
 assert.equal(wholeTarget.mode, 'full-text')
 assert.equal(quickEditorCommandApiText(wholeTarget).getSelectionText(), '')
 assert.equal(quickEditorCommandApiText(wholeTarget).getActiveText(), wholeBody)
+// StrictMode runs the overlay effect's cleanup once before remounting; the target must stay usable.
+wholeTarget.activate()()
+wholeTarget.activate()
 replaceQuickEditorCommandTarget(wholeTarget, 'WHOLE', 'changed', 'multiple')
 assert.equal(wholeEditor.value(), 'WHOLE')
 wholeTarget.dispose()
+
+// While unwatched, a real edit still invalidates the snapshot on reactivation.
+const gapBody = '{"gap":1}'
+const gapPane = resetWithText(gapBody)
+const gapEditor = fakeEditor(gapBody, [fakeSelection(caret)])
+const gapTarget = captureQuickEditorCommandTarget(createQuickEditorCommandOwner(), gapEditor, gapPane)
+gapTarget.dispose()
+state.setPaneText(gapPane, '{"gap":2}')
+gapTarget.activate()
+assert.throws(() => replaceQuickEditorCommandTarget(gapTarget, 'X', 'changed', 'multiple'), /changed/)
+gapTarget.dispose()
 
 // Multiple selections never fall through to the whole document and only local pure text rows survive.
 const multiPane = resetWithText('one two')
