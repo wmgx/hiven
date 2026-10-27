@@ -225,14 +225,146 @@ def s13(page):
 
 
 
-CASES = [s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13]
+SCREENSHOTS = None
+
+
+def open_surface(page, target, presentation='inline'):
+    if presentation == 'inline':
+        page.set_viewport_size({'width':1440,'height':900})
+    page.evaluate('([target, presentation]) => __hivenSandbox.openSurface(target, presentation)', [target, presentation])
+    if presentation == 'window':
+        size = page.evaluate('__hivenSandbox.surfaceWindow()')
+        page.set_viewport_size({'width':size['width'], 'height':size['height']})
+    chrome = page.locator('.surface-chrome:visible')
+    expect(chrome).to_have_count(1)
+    expect(chrome.locator('.surface-chrome-title')).not_to_be_empty()
+    roots = {'calculator':'.calculator-surface', 'clipboard-history':'.clipboard-history-surface', 'csv':'.csv-tools-surface__header', 'date-time-assistant':'.date-time-surface__inputs', 'image-tools':'.image-tools-surface', 'qr-code':'.qr-surface', 'regex-tester':'.regex-tester-surface', 'text-explode':'.text-explode-surface', 'text-tools':'.url-query-surface', 'text-diff':'.td-surface', 'translate':'.translate-surface'}
+    expect(chrome.locator(roots[target['pluginId']])).to_be_visible()
+    return chrome
+
+
+def surfaces(page):
+    page.wait_for_function('document.querySelector(".global-launcher-panel")')
+    return page.evaluate('__hivenSandbox.surfaces()')
+
+
+def s14(page):
+    targets = surfaces(page)
+    assert len(targets) >= 18, targets
+    for language, theme in [('en', 'light'), ('zh', 'dark')]:
+        page.evaluate('([theme, locale]) => __hivenSandbox.appearance(theme, locale)', [theme, language])
+        for target in targets:
+            for presentation in ['inline', 'window']:
+                chrome = open_surface(page, target, presentation)
+                title = target.get('titleI18n', {}).get(language, target['title'])
+                expect(chrome.locator('.surface-chrome-title')).to_have_text(title)
+                header = chrome.locator('.surface-chrome-header')
+                assert round(header.bounding_box()['height']) == 36, target
+                assert header.locator('button[data-tauri-drag-region]').count() == 0
+                assert chrome.locator('.surface-chrome-body').get_attribute('data-no-drag') is not None
+                assert chrome.locator('.surface-chrome-body [data-tauri-drag-region]').count() == 0
+                assert chrome.locator('.surface-chrome-actions > *').count() <= 3
+                if presentation == 'window':
+                    assert header.get_attribute('data-tauri-drag-region') is not None
+                else:
+                    before = page.evaluate('__hivenSandbox.dragCount()')
+                    chrome.locator('.surface-chrome-title').dispatch_event('pointerdown', {'button': 0})
+                    page.wait_for_timeout(50)
+                    assert page.evaluate('__hivenSandbox.dragCount()') == before + 1, target
+                    header.locator('button').first.dispatch_event('pointerdown', {'button': 0})
+                    chrome.locator('.surface-chrome-body').dispatch_event('pointerdown', {'button': 0})
+                    page.wait_for_timeout(50)
+                    assert page.evaluate('__hivenSandbox.dragCount()') == before + 1, target
+                if SCREENSHOTS and target['pluginId'] != 'clipboard-history':
+                    chrome.screenshot(path=str(SCREENSHOTS / f"{target['pluginId']}-{target['surfaceId']}-{presentation}-{theme}.png"))
+    print(f'S14 checked {len(targets)} surfaces × 2 presentations × 2 locales/themes', flush=True)
+
+
+def s15(page):
+    target = next(item for item in surfaces(page) if item['pluginId'] == 'calculator')
+    for method in ['escape', 'back']:
+        chrome = open_surface(page, target)
+        expect(page.locator('.global-launcher-header')).to_have_count(0)
+        if method == 'escape':
+            chrome.focus()
+            page.keyboard.press('Escape')
+        else:
+            chrome.locator('.surface-chrome-header').get_by_role('button', name='back', exact=True).click()
+        expect(page.get_by_placeholder(re.compile('Search (commands|actions)'))).to_be_visible()
+        expect(page.locator('.surface-chrome:visible')).to_have_count(0)
+
+
+def s16(page):
+    copy(page, 'undo-a', 'undo-b')
+    for presentation in ['inline', 'window']:
+        target = next(item for item in surfaces(page) if item['pluginId'] == 'clipboard-history')
+        chrome = open_surface(page, target, presentation)
+        rows = chrome.locator('.clipboard-history-item')
+        expect(rows).to_have_count(2)
+        rows.first.click()
+        page.keyboard.press('Backspace')
+        toast = chrome.locator('.surface-toast')
+        expect(toast).to_contain_text('Deleted')
+        assert page.evaluate('__hivenSandbox.surfaceToasts()')[0]['level'] == 'success'
+        toast.hover()
+        page.clock.fast_forward(6000)
+        expect(toast).to_be_visible()
+        toast.get_by_role('button', name='Undo', exact=True).click()
+        expect(rows).to_have_count(2)
+        expect(toast).to_have_count(0)
+    rows.first.click()
+    page.keyboard.press('Backspace')
+    page.mouse.move(1, 1)
+    page.clock.fast_forward(5500)
+    expect(chrome.locator('.surface-toast')).to_have_count(0)
+    expect(rows).to_have_count(1)
+
+
+def s17(page):
+    copy(page, 'synthetic text')
+    page.evaluate('__hivenSandbox.copyImage()')
+    page.wait_for_timeout(500)
+    chrome = open_surface(page, {'pluginId':'clipboard-history', 'surfaceId':'main', 'source':'builtin'})
+    rows = chrome.locator('.clipboard-history-item')
+    expect(rows).to_have_count(2)
+    rows.first.click()
+    page.keyboard.press('Shift+ArrowDown')
+    page.keyboard.press('Enter')
+    # Existing mixed-selection policy rejects concatenation; V3a changes feedback only.
+    expect(page.locator('.surface-toast')).to_contain_text('Selection contains images or files')
+    editor(page, '')
+    page.mouse.move(1, 1)
+    page.clock.fast_forward(2700)
+    expect(page.locator('.surface-toast')).to_have_count(0)
+
+
+def s18(page):
+    sizes = {'small': [600, 520, 480, 400], 'medium': [800, 600, 600, 440], 'large': [960, 680, 720, 480]}
+    for target in surfaces(page):
+        chrome = open_surface(page, target, 'window')
+        actual = page.evaluate('__hivenSandbox.surfaceWindow()')
+        expected = sizes[target.get('shell', {}).get('size', 'medium')]
+        assert [actual[key] for key in ['width', 'height', 'minWidth', 'minHeight']] == expected, actual
+        frame = page.locator('.sandbox-surface .plugin-surface-window-frame')
+        rect = frame.bounding_box()
+        assert [round(rect['width']), round(rect['height'])] == expected[:2], (target, rect)
+        overflow = chrome.evaluate('root => [root, ...root.querySelectorAll("*")].filter(el => el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 1 && ["auto", "scroll"].includes(getComputedStyle(el).overflowX)).map(el => el.className)')
+        assert not overflow, (target, overflow)
+
+
+CASES = [s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15,s16,s17,s18]
 
 
 def main():
+    global SCREENSHOTS
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--case', nargs='*', choices=[case.__name__.upper() for case in CASES], help='例如 S1 S2；默认全部')
     parser.add_argument('--output', help='可选 JSON 结果路径（建议 temp/）')
+    parser.add_argument('--screenshots', help='S14 截图目录；不截图剪贴板历史')
     args = parser.parse_args()
+    if args.screenshots:
+        SCREENSHOTS = Path(args.screenshots)
+        SCREENSHOTS.mkdir(parents=True, exist_ok=True)
     results = []
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=True)

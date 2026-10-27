@@ -19,3 +19,9 @@
 .sandbox-panel button { padding: 8px; border: 1px solid var(--border); border-radius: var(--radius); }
 .sandbox-hud { margin-top: auto; }
 html[data-sandbox] .global-launcher-panel { translate: -180px 0; max-width: calc(100vw - 400px); }
+
+.sandbox-surface { position: fixed; top: 0; left: 0; }
+html[data-sandbox] .sandbox-surface .flux-spatial-shell.plugin-surface-window-shell { min-width: 0; min-height: 0; height: 100%; width: 100%; }
+.sandbox-surface .plugin-surface-window-frame { width: 100%; height: 100%; }
+
+.sandbox-surface ~ .sandbox-panel { display: none; }

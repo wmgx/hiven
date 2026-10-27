@@ -228,7 +228,7 @@ export function PluginSurfaceWindow() {
   return (
     <div className="flux-spatial-shell plugin-surface-window-shell" data-theme={theme}>
       <div className="plugin-surface-window-frame">
-        <div ref={bodyRef} className="plugin-surface-window-body" data-no-drag>
+        <div ref={bodyRef} className="plugin-surface-window-body">
           {[active, staged].filter((entry): entry is Entry => Boolean(entry)).map((entry) => (
             <div key={entry.id} style={{ height: '100%', display: staged && entry !== staged ? 'none' : undefined }}>
               <DraftReportingSurface

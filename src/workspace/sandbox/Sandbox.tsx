@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import App from '../../App'
+import { PluginSurfaceWindow } from '../../components/PluginSurfaceWindow'
 import { useAppStore } from '../../store'
 import { t } from '../../i18n'
 import { ToastHud } from '../../components/ToastHud'
@@ -11,8 +12,9 @@ export default function Sandbox() {
   const locale = useAppStore(state => state.settings.locale)
   const [editor, setEditor] = useState(sandbox.editor)
   const [visible, setVisible] = useState(sandbox.launcherVisible)
+  const [surface, setSurface] = useState(sandbox.surfaceWindow)
   const field = useRef<HTMLTextAreaElement>(null)
-  useEffect(() => sandbox.subscribe(() => { setEditor(sandbox.editor()); setVisible(sandbox.launcherVisible()) }), [])
+  useEffect(() => sandbox.subscribe(() => { setEditor(sandbox.editor()); setVisible(sandbox.launcherVisible()); setSurface(sandbox.surfaceWindow()) }), [])
   useEffect(() => { sandbox.setLocale(locale) }, [locale])
   useEffect(() => { field.current?.setSelectionRange(editor.selection.start, editor.selection.end) }, [editor])
   useEffect(() => registerAiProvider({
@@ -30,7 +32,8 @@ export default function Sandbox() {
     async cancel() {},
   }), [locale])
   return <>
-    <div className="sandbox-launcher" hidden={!visible}><App /></div>
+    <div className="sandbox-launcher" hidden={!visible || Boolean(surface)}><App /></div>
+    {surface && <div className="sandbox-surface" style={{ width: surface.width, height: surface.height }}><PluginSurfaceWindow key={surface.key} /></div>}
     <aside className="sandbox-panel" aria-label={t(locale, 'sandbox.title')}>
       <strong>{t(locale, 'sandbox.title')}</strong>
       <p>{t(locale, 'sandbox.isolation')}</p>

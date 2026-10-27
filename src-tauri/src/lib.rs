@@ -1926,7 +1926,9 @@ async fn show_plugin_surface_window(
     let window = if let Some(window) = existing_window {
         // Reopening/replacing the surface starts a new host ownership lifetime.
         host_text_export::invalidate_window(&window);
-        let _ = window.set_size(LogicalSize::new(width, height));
+        window.set_min_size(Some(LogicalSize::new(min_width, min_height))).map_err(|error| error.to_string())?;
+        window.set_resizable(resizable).map_err(|error| error.to_string())?;
+        window.set_size(LogicalSize::new(width, height)).map_err(|error| error.to_string())?;
         window
     } else {
         let window =

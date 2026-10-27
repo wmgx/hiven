@@ -7,6 +7,8 @@ const changed = () => window.dispatchEvent(new Event(changeEvent))
 let clipboard: Clipboard = { kind: 'empty', text: '', files: [], changeCount: 0, origin: null, concealed: false, transient: false, recordInHistory: true }
 let editor = { text: '', selection: { start: 0, end: 0 } }
 let visible = true
+let surfaceWindow: Args | null = null
+let dragCount = 0
 let serial = 0
 let revision = 0
 let modifier = ''
@@ -98,13 +100,19 @@ async function invoke(command: string, args: Args = {}, options?: Args): Promise
     case 'unregister_double_modifier_hotkey': modifier = ''; return
     case 'current_foreground_app_name': return appName()
     case 'current_foreground_app_context': return { appName: await appName(), processId: 1 }
-    case 'show_launcher_window': visible = true; emit('hiven://launcher-open', {}); changed(); return
+    case 'show_launcher_window': surfaceWindow = null; visible = true; emit('hiven://launcher-open', {}); changed(); return
     case 'hide_launcher_window': visible = false; changed(); return
     case 'show_plugin_surface_window': {
-      const { useAppStore } = await import('../../store')
-      useAppStore.getState().openPluginSurfaceTool({ pluginId: args.pluginId, surfaceId: args.surfaceId, source: args.source })
-      useAppStore.getState().openGlobalLauncherOverlay(); visible = true; changed(); return
+      surfaceWindow = { ...args, key: ++serial }
+      const url = new URL(location.href)
+      for (const key of ['pluginId', 'surfaceId', 'source']) url.searchParams.set(key, args[key])
+      history.replaceState(null, '', url)
+      visible = true; changed(); return
     }
+    case 'hide_plugin_surface_window': surfaceWindow = null; visible = false; changed(); return
+    case 'plugin_surface_handoff_peek': return null
+    case 'plugin_surface_draft_report': return
+    case 'plugin:window|start_dragging': dragCount++; return
     case 'route_toast':
       if (visible) return 'launcher'
       toasts.set(args.slot ?? 'flash', { ...args, owner: 'launcher' }); publishHud(); return null
@@ -157,6 +165,30 @@ export const sandbox = {
   },
   occupyShortcut(accelerator: string) { occupied.add(normalize(accelerator)) },
   toasts: () => structuredClone(hudUpdate().toasts),
+  surfaceWindow: () => surfaceWindow,
+  dragCount: () => dragCount,
+  async surfaces() {
+    const { pluginRegistry } = await import('../pluginRegistry')
+    return pluginRegistry.getAllPluginDefinitions().flatMap(({ definition, pluginId }) => (definition.ui?.surfaces ?? []).map(surface => ({ pluginId, surfaceId: surface.id, source: 'builtin', title: surface.title, titleI18n: surface.titleI18n, shell: surface.shell })))
+  },
+  async openSurface(target: { pluginId: string; surfaceId: string; source: 'builtin'; initialText?: string }, presentation: 'inline' | 'window' = 'inline') {
+    if (presentation === 'window') {
+      const { requestOpenPluginSurfaceWindow } = await import('../pluginSurfaceWindows')
+      await requestOpenPluginSurfaceWindow(target)
+    } else {
+      surfaceWindow = null
+      const { useAppStore } = await import('../../store')
+      await sandbox.open()
+      useAppStore.getState().openPluginSurfaceTool(target)
+    }
+    changed()
+  },
+  async appearance(theme: 'light' | 'dark', language: 'en' | 'zh') {
+    const { useAppStore } = await import('../../store')
+    useAppStore.getState().setLocale(language)
+    useAppStore.getState().updateSetting('theme', theme)
+  },
+  copyImage() { const id = ++serial; images.set(id, { rgba: new Uint8Array([64, 128, 192, 255]), width: 1, height: 1 }); updateClipboard({ kind: 'image', image: id, origin: null }) },
   surfaceToasts: () => [...document.querySelectorAll('.surface-toast')].map(node => ({ message: node.querySelector('span')?.textContent, level: (node as HTMLElement).dataset.level, actions: [...node.querySelectorAll('button')].map(button => button.textContent || button.getAttribute('aria-label')) })),
   async snapshot() {
     const { getPasteQueueDebugSnapshot } = await import('../../shortcutHosts/pasteQueue')

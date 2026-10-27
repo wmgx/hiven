@@ -67,7 +67,7 @@ async function harness(presentation = 'plugin-surface-window') {
     pasteScope: scope, ...recoveryExports,
     pluginRegistry: { getPluginLifetime: () => lifetime, subscribe: subscribe(registryListeners) },
     usePluginPermissionStore: { subscribe: subscribe(permissionListeners) },
-    closeOwnedSettings() {}, finishAppSettings() {},
+    closeOwnedSettings() {}, finishAppSettings() {}, clearSurfaceToasts() {},
     refreshPasteOwner(update) { context.pasteOwnerVersion = update(context.pasteOwnerVersion) },
     pluginSurfaceInstanceId: () => 'synthetic-instance',
     useCallback: (callback) => callback,
