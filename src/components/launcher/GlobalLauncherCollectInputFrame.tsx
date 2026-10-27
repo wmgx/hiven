@@ -1,4 +1,4 @@
-import { useEffect, useRef, type KeyboardEvent, type RefObject } from 'react'
+import { useEffect, useMemo, useRef, type KeyboardEvent, type RefObject } from 'react'
 import { CornerDownLeft, History } from 'lucide-react'
 // note: lastPreviewRef keeps display text across brief controller gaps
 import type { Locale } from '../../i18n'
@@ -14,6 +14,8 @@ import { useSelectionCaptureAvailability } from '../useSelectionCaptureAvailabil
 import { LauncherHintKey, LauncherHintText } from './LauncherFooterHints'
 import { LauncherCommandTag, LauncherParamChipTrail } from './LauncherCommandTag'
 import { LauncherEmptyWell } from './LauncherEmptyWell'
+import { ObjectBlockToken } from './ObjectBlockToken'
+import { createQueryObjectBlock, type LauncherObjectBlock } from '../../launcher/clipboard/objectBlock'
 import { shouldIgnoreImeKeyDown } from '../../utils/imeKeyboard'
 import { reconcileMaterialTextInput } from '../../launcher/clipboard/currentMaterial'
 import { getPlatformShortcutMeta } from './launcherParamShortcuts'
@@ -128,6 +130,8 @@ export function GlobalLauncherCollectInputFrame({
   onPastePreviewText,
   onSubmitPrimary,
   onCaptureSelection,
+  attachedBlock,
+  onRemoveBlock,
 }: {
   isImeComposingRef: RefObject<boolean>
   inputRef: RefObject<HTMLInputElement | HTMLTextAreaElement | null>
@@ -151,10 +155,13 @@ export function GlobalLauncherCollectInputFrame({
   /** Enter when no destination chrome — default submit path. */
   onSubmitPrimary?: () => void
   onCaptureSelection?: () => void
+  /** Host Block backing frame.blockText, used for its label. */
+  attachedBlock?: LauncherObjectBlock | null
+  onRemoveBlock?: () => void
 }) {
   const placeholder = frame.input.placeholderI18n?.[locale] ?? frame.input.placeholder ?? ''
   const explicitPreview = frame.item.executionMode === 'explicit-text-preview'
-  const showCaptureSelection = Boolean(!explicitPreview && !frame.item.metadataInput && onCaptureSelection && !frame.inputText && frame.item.behavior.type === 'perform' && frame.item.inputPolicy && frame.item.inputPolicy.mode !== 'all')
+  const showCaptureSelection = Boolean(!explicitPreview && !frame.item.metadataInput && onCaptureSelection && !frame.inputText && frame.blockText === undefined && frame.item.behavior.type === 'perform' && frame.item.inputPolicy && frame.item.inputPolicy.mode !== 'all')
   const captureAvailability = useSelectionCaptureAvailability(showCaptureSelection)
   const multilineInput = explicitPreview
   const previewChoices = frame.previewOutput?.choices ?? []
@@ -163,7 +170,13 @@ export function GlobalLauncherCollectInputFrame({
   const isSuggestMode = Boolean(frame.item.suggest)
   const livePreviewText = !isSuggestMode ? extractLivePreviewText(frame.previewOutput) : null
   const showLivePreview = !isSuggestMode && !explicitPreview && !frame.item.metadataInput
-  const filterText = frame.inputText.trim()
+  const hasBlock = frame.blockText !== undefined
+  const block = useMemo(() => {
+    if (frame.blockText === undefined) return null
+    return attachedBlock?.payloadText === frame.blockText ? attachedBlock : createQueryObjectBlock({ query: frame.blockText })
+  }, [attachedBlock, frame.blockText])
+  const materialText = frame.blockText ?? frame.inputText
+  const filterText = materialText.trim()
   // Local latch: never blank the well while typing — only replace when a new text arrives.
   const lastPreviewRef = useRef<string | null>(null)
   if (!filterText) {
@@ -176,7 +189,7 @@ export function GlobalLauncherCollectInputFrame({
   const previewFresh = Boolean(
     livePreviewText
     && frame.previewInputText !== undefined
-    && frame.previewInputText === frame.inputText,
+    && frame.previewInputText === materialText,
   )
   // Empty well only when input is empty.
   const showLiveEmpty = showLivePreview && !filterText
@@ -240,7 +253,9 @@ export function GlobalLauncherCollectInputFrame({
     if (event.key === 'Backspace' && !frame.inputText) {
       event.preventDefault()
       event.stopPropagation()
-      onBack()
+      // Right to left: the Block first, then the command token.
+      if (hasBlock) onRemoveBlock?.()
+      else onBack()
       return
     }
     if (showLivePreview && displayPreviewText && event.key === 'Tab' && !event.metaKey && !event.ctrlKey && !event.altKey) {
@@ -272,17 +287,19 @@ export function GlobalLauncherCollectInputFrame({
           locale={locale}
           onRemove={onExitCommand ?? onBack}
         />
-        <LauncherParamChipTrail chips={paramChips} />
+        {block && <ObjectBlockToken block={block} locale={locale} onRemove={() => onRemoveBlock?.()} />}
         {!multilineInput && <input
           ref={bindSearchInputRef ?? (inputRef as RefObject<HTMLInputElement | null>)}
           value={frame.inputText}
           autoFocus
-          onChange={(event) => onInputChange(event.target.value)}
+          readOnly={hasBlock}
+          onChange={(event) => { if (!hasBlock) onInputChange(event.target.value) }}
           onKeyDown={handleInputKeyDown}
-          placeholder={placeholder}
+          placeholder={hasBlock ? '' : placeholder}
           className="mono"
           style={{ caretColor: 'var(--text, currentColor)' }}
         />}
+        <LauncherParamChipTrail chips={paramChips} />
         {busy && (
           <span className="meta anim-running-pulse" role="status" aria-live="polite">{t(locale, deliveryIntent === 'copy' ? 'palette.outputCopying' : deliveryIntent ? 'palette.outputDelivering' : 'palette.outputRunning')}</span>
         )}

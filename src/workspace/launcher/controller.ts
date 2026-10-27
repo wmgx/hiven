@@ -54,6 +54,8 @@ export type CollectInputFrame = {
   kind: 'collect-input'
   item: LauncherItem
   inputText: string
+  /** Attached Block material; while present it is the command input instead of inputText. */
+  blockText?: string
   input: LauncherInputSpec
   params?: Record<string, unknown>
   recordUsage: boolean
@@ -148,6 +150,8 @@ export type LauncherControllerDeps = {
   onReturnToRoot?: () => void
   /** Synchronous attached-material epoch. An installed getter returning undefined is inactive. */
   getMaterialGeneration?: () => number | undefined
+  /** Keep typed command input as a Block when leaving the command for the list. */
+  keepInputAsBlock?: (text: string) => void
   /** Notify subscribers of a state change. */
   onChange: (state: LauncherControllerState) => void
   /** Test/alternate sink injection; production defaults to the native journal. */
@@ -642,6 +646,21 @@ export class LauncherController {
     return text !== undefined
   }
 
+  private materialText(frame: CollectInputFrame): string {
+    return frame.blockText ?? frame.inputText
+  }
+
+  /** Drop the Block material; typing becomes the command input again. */
+  removeBlockMaterial(expectedFrame?: CollectInputFrame): boolean {
+    const top = this.topFrame()
+    if (top.kind !== 'collect-input' || top.blockText === undefined || (expectedFrame && top.item !== expectedFrame.item)) return false
+    this.invalidatePendingActions()
+    const frames = this.state.frames.slice(0, -1)
+    frames.push({ ...top, blockText: undefined, inputText: '', previewOutput: undefined, previewInputText: undefined, selectedSuggestionIndex: -1 })
+    this.setState({ frames, error: null })
+    return true
+  }
+
   private shouldPreviewInput(frame: CollectInputFrame): boolean {
     return !this.isExplicitTextPreview(frame.item) && !frame.item.metadataInput && this.shouldCollectTextInput(frame.item)
   }
@@ -765,7 +784,14 @@ export class LauncherController {
     }
 
     if (this.shouldCollectTextInput(item)) {
-      // If Object Block text is available, skip collect-input and execute directly.
+      // Block material opens the command with a live preview instead of running it.
+      if (item.initialInputText === undefined && this.hasObjectBlockText(options.objectBlockText) && !item.imageInput && this.shouldPreviewInput(this.collectInputFrameFor(item))) {
+        trackBehavior(TelemetryEvents.launcherEnterCollectInput, itemTelemetryProps(item))
+        this.setState({
+          frames: [...this.state.frames, { ...this.collectInputFrameFor(item, undefined, recordUsage), blockText: options.objectBlockText }],
+        })
+        return
+      }
       if (item.initialInputText === undefined && this.hasObjectBlockText(options.objectBlockText)) {
         await this.commitResolvedAction({
           item,
@@ -961,7 +987,14 @@ export class LauncherController {
     }
 
     if (top.inputText !== undefined || top.item.behavior.type === 'collect-input' || this.shouldCollectTextInput(top.item)) {
-      // If Object Block text is available, skip collect-input and execute directly with params.
+      const blockFrame = { ...this.collectInputFrameFor(top.item, top.params, top.recordUsage), blockText: top.objectBlockText }
+      if (top.inputText === undefined && top.item.initialInputText === undefined && this.hasObjectBlockText(top.objectBlockText) && !top.item.imageInput && this.shouldPreviewInput(blockFrame)) {
+        const frames = this.state.frames.slice(0, -1)
+        frames.push(blockFrame)
+        this.setState({ frames, error: null })
+        return
+      }
+      // Non-previewable commands still run directly with the Block text.
       if (top.inputText === undefined && top.item.initialInputText === undefined && this.hasObjectBlockText(top.objectBlockText)) {
         await this.commitResolvedAction({
           item: top.item,
@@ -1147,7 +1180,8 @@ export class LauncherController {
       return
     }
 
-    const { item, inputText } = top
+    const { item } = top
+    const inputText = this.materialText(top)
     if (!inputText.trim() && !top.input.allowEmptyInput) {
       this.clearCollectInputPreview(top)
       return
@@ -1172,7 +1206,7 @@ export class LauncherController {
 
     if (runId !== this.previewRunId || this.invalidateUnavailablePlugin()) return
     const latestTop = this.topFrame()
-    if (latestTop.kind !== 'collect-input' || latestTop.item.systemKey !== item.systemKey || latestTop.inputText !== inputText) {
+    if (latestTop.kind !== 'collect-input' || latestTop.item.systemKey !== item.systemKey || this.materialText(latestTop) !== inputText) {
       return
     }
 
@@ -1203,7 +1237,7 @@ export class LauncherController {
     const top = this.topFrame()
     if (top.kind !== 'collect-input' || top.item.systemKey !== frame.item.systemKey) return
     // Only clear when input is empty. Non-empty keeps last result (replace-on-success only).
-    if (top.inputText.trim()) {
+    if (this.materialText(top).trim()) {
       this.setState({ busy: false, error })
       return
     }
@@ -1232,7 +1266,8 @@ export class LauncherController {
       this.setState({ error: paramError })
       return
     }
-    const { item, inputText } = top
+    const { item } = top
+    const inputText = this.materialText(top)
     trackBehavior(TelemetryEvents.launcherSubmitInput, {
       ...itemTelemetryProps(item),
       inputLength: inputText.length,
@@ -1306,7 +1341,7 @@ export class LauncherController {
     if (this.invalidateUnavailablePlugin() || this.choiceGenerations.get(choice) !== this.flowGeneration) return false
     if (top.kind === 'result') return top.output.choices.includes(choice)
     return top.kind === 'collect-input' && Boolean(top.previewOutput?.choices.includes(choice)) &&
-      (Boolean(top.item.suggest) || top.previewInputText === top.inputText)
+      (Boolean(top.item.suggest) || top.previewInputText === this.materialText(top))
   }
 
   /** Keep the legacy host paste destination under the same output guard. */
@@ -1420,15 +1455,7 @@ export class LauncherController {
       return true
     }
 
-    if (top.kind === 'collect-input' && top.item.params && top.item.params.length > 0) {
-      const lastIndex = top.item.params.length - 1
-      const nextParams = top.params ?? this.defaultParamsFor(top.item)
-      const frames = this.state.frames.slice(0, -1)
-      frames.push(this.paramFrameFor(top.item, nextParams, lastIndex, undefined, top.recordUsage, top.inputText))
-      this.setState({ frames, error: null })
-      return true
-    }
-
+    if (top.kind === 'collect-input') this.keepTypedInput(top)
     if (this.state.frames.length === 2) {
       this.activePluginLifetime = undefined
       this.pluginUnavailable = false
@@ -1449,6 +1476,7 @@ export class LauncherController {
     this.invalidatePendingActions()
     this.prepareGeneration += 1
     if (this.state.frames.length <= 1) return false
+    if (current.kind === 'collect-input') this.keepTypedInput(current)
     const base = this.state.frames[0]
     this.activePluginLifetime = undefined
     this.pluginUnavailable = false
@@ -1458,6 +1486,12 @@ export class LauncherController {
     }
     this.setState({ frames: [base], error: null })
     return true
+  }
+
+  /** Leaving a command keeps its typed material as a Block on the list. */
+  private keepTypedInput(frame: CollectInputFrame): void {
+    if (frame.blockText !== undefined || !frame.inputText.trim() || frame.item.suggest || !this.shouldPreviewInput(frame)) return
+    this.deps.keepInputAsBlock?.(frame.inputText)
   }
 
   // ─── Execution plumbing ────────────────────────────────────────────────────

@@ -185,10 +185,10 @@ export function useGlobalLauncherCollectInputPreview({
     const topFrame = controllerState.frames[controllerState.frames.length - 1]
     if (topFrame.kind !== 'collect-input') return
     if (topFrame.item.behavior.type !== 'perform' || topFrame.item.inputPolicy == null) return
-    if (topFrame.previewInputText === topFrame.inputText) return
+    if (topFrame.previewInputText === (topFrame.blockText ?? topFrame.inputText)) return
     const timer = window.setTimeout(() => {
       void controllerRef.current?.previewInput?.()
-    }, 180)
+    }, 150)
     return () => window.clearTimeout(timer)
   }, [controllerRef, controllerState, open])
 }

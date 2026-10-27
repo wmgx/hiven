@@ -338,6 +338,10 @@ export function GlobalLauncherPanel({
           if (handled || !frame) focusSearchInputAfterBack()
         }}
         onCollectInputChange={(value, frame) => controllerRef.current?.setInputText(value, frame)}
+        onRemoveCommandBlock={(frame) => {
+          if (clipboardBlock?.block?.payloadText === frame.blockText) clipboardBlock?.removeBlock()
+          controllerRef.current?.removeBlockMaterial(frame)
+        }}
         onActivateResultChoice={activateResultChoice}
         onSecondaryAction={activateSecondaryAction}
         onPastePreviewText={activatePreviewPaste}

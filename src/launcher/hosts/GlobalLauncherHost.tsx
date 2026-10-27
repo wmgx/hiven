@@ -192,6 +192,7 @@ export function GlobalLauncherHost() {
     collectDynamicWhenEmpty: true,
     objectBlockText,
     getMaterialGeneration: clipboardBlock.getMaterialGeneration,
+    keepInputAsBlock: clipboardBlock.attachQueryAsBlock,
     foregroundApp,
     makeApi: makeLauncherApi,
     visibleSelectionItemsRef,

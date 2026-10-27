@@ -33,7 +33,7 @@ import type {
 } from './types'
 import { DEFAULT_TOOL_ACTION_POLICY } from './types'
 import { normalizeLauncherSurfaceId } from './types'
-import { emptyResult, textResult, explicitTextPreviewResult, foregroundPasteResult, replaceActiveTextResult, errorResult, choicesResult, REPLACE_ACTIVE_TEXT_OUTPUT_CHOICE_ID } from './output'
+import { emptyResult, textResult, foregroundPasteResult, replaceActiveTextResult, errorResult, choicesResult, REPLACE_ACTIVE_TEXT_OUTPUT_CHOICE_ID } from './output'
 import { toDirectAnswer } from './normalizeContribution'
 import { computeContractFingerprint } from './contractFingerprint'
 import { captureForegroundSelectionText } from './foregroundSelectionCapture'
@@ -42,7 +42,6 @@ import { getPluginPermissionSnapshot } from '../pluginPermissions'
 import { createPluginShell } from '../pluginShell'
 import { pluginRegistry } from '../pluginRegistry'
 import type { PluginDefinition } from '../pluginTypes'
-import { resolveBundledTextPreviewRunner } from '../bundledPluginIdentity'
 
 export type ToolAdaptOptions = {
   pluginId: string
@@ -144,31 +143,11 @@ export function adaptToolToLauncherItem(
   const launcherOpt = tool.surfaces?.launcher
   const launcherOptions = typeof launcherOpt === 'object' ? launcherOpt : undefined
   const mode: TextInputMode = tool.inputPolicy?.mode ?? 'auto'
-  const hasPreviewDeclaration = tool.explicitTextPreview !== undefined
-  const previewRunner = resolveBundledTextPreviewRunner(options.pluginId, options.source, options.definition, tool)
-  const executionMode = previewRunner ? 'explicit-text-preview' as const : undefined
   const contractFingerprint = computeContractFingerprint({
     systemKey: options.systemKey,
     inputPolicy: tool.inputPolicy,
-    executionMode,
     params: tool.params,
   })
-  // Runtime edit/cancel must also reject policy and validation changes,
-  // which intentionally do not alter the persisted behavior fingerprint.
-  const currentPreviewContract = () => JSON.stringify({
-    policy: tool.policy,
-    defaults: tool.defaultParams,
-    params: tool.params?.map(({ key, type, required, default: value, options, minSelect, maxSelect }) => ({
-      key, type, required, default: value,
-      options: options?.map((option) => typeof option === 'string' ? option : option.value),
-      minSelect, maxSelect,
-    })),
-  })
-  const previewContract = currentPreviewContract()
-  const isExplicitTextPreviewAvailable = () => Boolean(previewRunner &&
-    resolveBundledTextPreviewRunner(options.pluginId, options.source, options.definition, tool) === previewRunner &&
-    computeContractFingerprint({ systemKey: options.systemKey, inputPolicy: tool.inputPolicy, executionMode, params: tool.params }) === contractFingerprint &&
-    currentPreviewContract() === previewContract)
   const defaultParams = { ...(tool.defaultParams ?? {}) }
   for (const param of tool.params ?? []) {
     if (defaultParams[param.key] === undefined && param.default !== undefined) {
@@ -183,26 +162,6 @@ export function adaptToolToLauncherItem(
     const normalizedSurfaceId = normalizeLauncherSurfaceId(ctx.surfaceId)
     const isEditorLike = normalizedSurfaceId === 'quick-editor-command'
     const isGlobalLauncher = normalizedSurfaceId === 'global-launcher'
-    if (isGlobalLauncher && hasPreviewDeclaration) {
-      // No fallback to the full tool context: a replaced/unregistered bundle
-      // invalidates already collected items as well as future discovery.
-      if (!previewRunner || !isExplicitTextPreviewAvailable()) {
-        return errorResult(translate(ctx.locale, 'palette', 'actionUnavailable'))
-      }
-      const text = ctx.input?.text
-      if (typeof text !== 'string' || text.length === 0) {
-        return errorResult(translate(ctx.locale, 'palette', 'inputRequired'))
-      }
-      const result = await previewRunner({ input: { text }, params, locale: ctx.locale, t: ctx.t })
-      // A registration change while an async pure runner was pending also
-      // invalidates its output before any delivery actions can be produced.
-      if (!isExplicitTextPreviewAvailable()) {
-        return errorResult(translate(ctx.locale, 'palette', 'actionUnavailable'))
-      }
-      return result.ok
-        ? explicitTextPreviewResult(result.text, ctx.api, ctx.locale)
-        : errorResult(result.message)
-    }
     if (tool.imageInput) {
       if (!ctx.image) return errorResult(translate(ctx.locale, 'palette', 'inputRequired'))
       ctx = { ...ctx, input: { text: '' } }
@@ -256,14 +215,9 @@ export function adaptToolToLauncherItem(
     source: options.source,
     display: toolDisplay(tool),
     behavior: { type: 'perform' },
-    // Global Launcher only lists preview tools whose trusted bundled runner resolved.
-    surfaces: hasPreviewDeclaration && !previewRunner
-      ? launcherOptions?.surfaces?.filter((surface) => surface !== 'global-launcher')
-      : launcherOptions?.surfaces,
+    surfaces: launcherOptions?.surfaces,
     inputPolicy: tool.inputPolicy,
     ...(tool.imageInput ? { imageInput: true } : {}),
-    executionMode,
-    isExplicitTextPreviewAvailable: previewRunner ? isExplicitTextPreviewAvailable : undefined,
     actionPolicy: tool.policy ?? DEFAULT_TOOL_ACTION_POLICY,
     contractFingerprint,
     params: tool.params,

@@ -70,6 +70,7 @@ export function GlobalLauncherFrameSwitch({
   onFrameBack,
   onExitCommand,
   onCollectInputChange,
+  onRemoveCommandBlock,
   onActivateResultChoice,
   onSecondaryAction,
   onPastePreviewText,
@@ -135,6 +136,7 @@ export function GlobalLauncherFrameSwitch({
   /** Command-tag × — pop entire command stack to list. */
   onExitCommand?: (frame?: CollectInputFrame | ParamInputFrame) => void
   onCollectInputChange: (value: string, frame?: CollectInputFrame) => void
+  onRemoveCommandBlock?: (frame: CollectInputFrame) => void
   onActivateResultChoice: (choice: LauncherResultChoice) => void
   /** Collect-input / result secondary actions (id is plugin-defined). */
   onSecondaryAction?: (choice: LauncherResultChoice, actionId: string) => void
@@ -246,9 +248,11 @@ export function GlobalLauncherFrameSwitch({
   if (topFrame?.kind === 'collect-input') {
     const frame = topFrame as CollectInputFrame
     const paramChips: { label: string; value: string }[] = []
-    if (frame.params && frame.item.params) {
+    // Gray values always show the parameters this run will use.
+    const params = frame.params ?? frame.item.defaultParams
+    if (params && frame.item.params) {
       for (const p of frame.item.params) {
-        const val = frame.params[p.key]
+        const val = params[p.key]
         if (val !== undefined && val !== null) {
           paramChips.push({ label: localizedParamLabel(p.label, p.labelI18n, locale), value: resolveParamValueLabel(p, val, locale) })
         }
@@ -274,6 +278,8 @@ export function GlobalLauncherFrameSwitch({
           onPastePreviewText={onPastePreviewText}
           onSubmitPrimary={() => onSubmitCollectInput?.(frame)}
           onCaptureSelection={onCaptureSelection}
+          attachedBlock={clipboardBlock?.block}
+          onRemoveBlock={() => onRemoveCommandBlock?.(frame)}
         />
       </LauncherFlowFrame>
     )

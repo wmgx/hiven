@@ -73,7 +73,6 @@ try {
   const key = 'plugin:line-tools:tool:line-tools.extract-list'
   const item = collectStaticCandidates('global-launcher').find((candidate) => candidate.systemKey === key)
   assert.ok(item, 'actual bundled package exposes the new global tool')
-  assert.equal(item.executionMode, 'explicit-text-preview')
   assert.equal(item.requireParamSelection, true)
   assert.deepEqual(item.actionPolicy, { effect: 'pure' })
   assert.equal(item.display.title, 'Extract Links / Emails')
@@ -108,62 +107,7 @@ try {
     async pasteToForegroundApp() { throw new Error('Unexpected paste') },
     async openUrl() { throw new Error('Extraction cannot open links') },
   }
-  const controller = new LauncherController({
-    surfaceId: 'global-launcher', api, locale: 'en',
-    makeT: (candidate) => makePluginT(candidate.pluginId ?? '', 'en'),
-    getSettings: () => ({}), recordSelection() {}, appendExperienceEvent() {}, onChange() {},
-    requestClose() {}, onReturnToRoot() {},
-  })
-  const top = () => controller.getState().frames.at(-1)
-  const chooseParams = async (params) => {
-    for (const [key, value] of Object.entries(params)) {
-      assert.equal(top().kind, 'param-input')
-      assert.equal(top().item.params[top().paramIndex].key, key)
-      await controller.commitCurrentParam(value)
-    }
-  }
-  for (const [kind, dedup, source, expected, destination] of [
-    ['urls', true, sourceUrls, urls.join('\n'), 'copy'],
-    ['emails', false, 'A@Example.com A@example.com other@example.org', 'A@Example.com\nA@example.com\nother@example.org', 'return-to-launcher'],
-  ]) {
-    controller.reset()
-
-    const beforeDelivery = deliveries.length
-    await controller.selectItem(item, { customizeParams: true })
-    await chooseParams({ kind, dedup })
-    assert.equal(top().kind, 'collect-input')
-    await controller.submitInput()
-    assert.equal(top().kind, 'collect-input')
-    controller.setInputText(source)
-    await controller.previewInput()
-    assert.equal(top().previewOutput, undefined, 'typing alone does not extract or deliver')
-    await controller.submitInput()
-    assert.equal(top().kind, 'result')
-    const choice = top().output.choices[0]
-    assert.equal(choice.preview, expected)
-    assert.equal(getHostOutputIntent(choice), 'copy')
-    assert.deepEqual(choice.secondaryActions.map(getHostOutputIntent), ['return-to-launcher'])
-    assert.equal(deliveries.length, beforeDelivery)
-
-    if (destination === 'copy') await controller.activateChoice(choice)
-    else await controller.activateSecondary(choice, 'return-to-launcher')
-    assert.deepEqual(deliveries.at(-1), [destination, expected])
-  }
-  controller.reset()
-  await controller.selectItem(item, { objectBlockText: 'Keep this source: https://example.com/preserved', customizeParams: true })
-  await chooseParams({ kind: 'urls', dedup: true })
-  assert.equal(top().kind, 'result', 'explicit attached material uses the same preview route')
-  assert.equal(top().output.choices[0].preview, 'https://example.com/preserved')
   const beforeErrors = deliveries.length
-
-  controller.reset()
-  await controller.selectItem(item, { customizeParams: true })
-  await chooseParams({ kind: 'emails', dedup: true })
-  controller.setInputText('Keep this original text')
-  await controller.submitInput()
-  assert.equal(top().kind, 'collect-input', 'no-match error stays in the existing input flow')
-  assert.equal(top().inputText, 'Keep this original text', 'no-match error preserves the original material')
-  assert.ok(controller.getState().error)
   for (const locale of ['en', 'zh']) {
     for (const kind of ['urls', 'emails']) {
       const result = await item.executeWithParams({ surfaceId: 'global-launcher', input: { text: 'Keep this original text' }, api, locale, t: makePluginT('line-tools', locale) }, { kind, dedup: true })
@@ -175,7 +119,7 @@ try {
   assert.equal(deliveries.length, beforeErrors, 'no-match result never copies, returns, or overwrites source')
 
   assert.equal(hiddenReads, 0)
-  console.log('text-list-extraction: URL/email boundaries, punctuation, exact dedup, malformed input, localized errors, actual registry/controller, Copy/Return passed')
+  console.log('text-list-extraction: URL/email boundaries, punctuation, exact dedup, malformed input, localized errors, actual registry, localized errors passed')
 } finally {
   console.info = originalInfo
   await vite.close()

@@ -74,6 +74,8 @@ type UseLauncherSessionOptions = {
   allowDynamicItems?: boolean
   objectBlockText?: string
   getMaterialGeneration?: () => number | undefined
+  /** Leaving a command keeps its typed input as a Block. */
+  keepInputAsBlock?: (text: string) => void
   /** Rendered list identity when the host prepends rows outside ranking. */
   visibleSelectionItemsRef?: MutableRefObject<readonly LauncherItem[]>
   /** Host-owned rows outside the visible item array (for example, index -1). */
@@ -178,6 +180,7 @@ export function useLauncherSession({
   allowDynamicItems = true,
   objectBlockText,
   getMaterialGeneration,
+  keepInputAsBlock,
   visibleSelectionItemsRef,
   extraSelectionRowsRef,
   foregroundApp,
@@ -186,6 +189,8 @@ export function useLauncherSession({
   const normalizedHostId = normalizeLauncherSurfaceId(hostId)
   const materialGenerationGetterRef = useRef(getMaterialGeneration)
   materialGenerationGetterRef.current = getMaterialGeneration
+  const keepInputAsBlockRef = useRef(keepInputAsBlock)
+  keepInputAsBlockRef.current = keepInputAsBlock
   const locale = useAppStore((s) => s.locale)
   const appSearchAliases = useAppStore((s) => s.settings.appSearchAliases)
   const appSearchAliasesRef = useRef(appSearchAliases)
@@ -354,6 +359,7 @@ export function useLauncherSession({
         const nextController = new LauncherController({
           surfaceId: normalizedHostId,
           getMaterialGeneration: materialGenerationGetterRef.current ? () => materialGenerationGetterRef.current?.() : undefined,
+          keepInputAsBlock: (text) => keepInputAsBlockRef.current?.(text),
           api: makeApi?.(createPluginLauncherApi()) ?? createPluginLauncherApi(),
           makeApi: (item, isPasteCurrent) => {
             const materialGeneration = materialGenerationGetterRef.current?.()

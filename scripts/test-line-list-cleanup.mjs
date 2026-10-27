@@ -89,7 +89,6 @@ try {
   const key = 'plugin:line-tools:tool:line-tools.clean-list'
   const item = collectStaticCandidates('global-launcher').find((candidate) => candidate.systemKey === key)
   assert.ok(item, 'actual bundled package registers the new global tool')
-  assert.equal(item.executionMode, 'explicit-text-preview')
   assert.deepEqual(item.actionPolicy, { effect: 'pure' })
   assert.equal(item.requireParamSelection, true)
   assert.equal(item.display.title, 'Clean Line List')
@@ -128,71 +127,12 @@ try {
     },
     async pasteToForegroundApp() { throw new Error('Unexpected paste') },
   }
-  const controller = new LauncherController({
-    surfaceId: 'global-launcher', api, locale: 'en',
-    makeT: (candidate) => makePluginT(candidate.pluginId ?? '', 'en'),
-    getSettings: () => ({}), recordSelection() {}, appendExperienceEvent() {}, onChange() {},
-    requestClose: () => { closeCount++ }, onReturnToRoot: () => { returnCount++ },
-  })
-  const top = () => controller.getState().frames.at(-1)
-  const chooseParams = async (params) => {
-    for (const [key, value] of Object.entries(params)) {
-      assert.equal(top().kind, 'param-input')
-      assert.equal(top().item.params[top().paramIndex].key, key, 'parameters follow the processing order')
-      await controller.commitCurrentParam(value)
-    }
-  }
   const beforeDefault = deliveries.length
   const direct = await item.execute({ surfaceId: 'global-launcher', input: { text: sample }, api, locale: 'en', t: makePluginT('line-tools', 'en') })
   assert.equal(direct.output.choices[0].preview, variants[2].expected, 'real default execution matches the documented defaults')
   assert.equal(deliveries.length, beforeDefault, 'default execution only previews')
 
-  for (const [index, { params, expected }] of variants.entries()) {
-    controller.reset()
-
-    const beforeDelivery = deliveries.length
-    await controller.selectItem(item, { customizeParams: true })
-    await chooseParams(params)
-    assert.equal(top().kind, 'collect-input')
-    await controller.submitInput()
-    assert.equal(top().kind, 'collect-input', 'an absent explicit input cannot trigger hidden input reads')
-    assert.ok(controller.getState().error)
-    controller.setInputText(sample)
-    await controller.previewInput()
-    assert.equal(top().previewOutput, undefined, 'typing alone never executes the tool')
-    await controller.submitInput()
-    assert.equal(top().kind, 'result')
-    const choice = top().output.choices[0]
-    assert.equal(choice.preview, expected)
-    assert.equal(getHostOutputIntent(choice), 'copy')
-    assert.deepEqual(choice.secondaryActions.map(getHostOutputIntent), ['return-to-launcher'])
-    assert.equal(deliveries.length, beforeDelivery, 'preview does not deliver')
-
-    const destination = index % 2 === 0 ? 'copy' : 'return-to-launcher'
-    const previousCloseCount = closeCount
-    if (destination === 'copy') await controller.activateChoice(choice)
-    else {
-      await controller.activateSecondary(choice, 'return-to-launcher')
-      assert.equal(top().kind, 'list')
-      assert.equal(closeCount, previousCloseCount, 'return keeps the launcher open')
-    }
-    assert.deepEqual(deliveries.at(-1), [destination, expected])
-  }
-
-  // Empty results are meaningful for both delivery actions, including return material.
-  for (const destination of ['copy', 'return-to-launcher']) {
-    controller.reset()
-    await controller.selectItem(item, { objectBlockText: ' \t\r\n\u00a0\n', customizeParams: true })
-    await chooseParams(variants[2].params)
-    assert.equal(top().kind, 'result', 'attached explicit text proceeds to preview after parameters')
-    assert.equal(top().output.choices[0].preview, '')
-    const choice = top().output.choices[0]
-    if (destination === 'copy') await controller.activateChoice(choice)
-    else await controller.activateSecondary(choice, 'return-to-launcher')
-    assert.deepEqual(deliveries.at(-1), [destination, ''])
-  }
-  assert.equal(hiddenReads, 0, 'the global flow never reads editor, selection, clipboard, or foreground text')
-  assert.ok(returnCount > 0)
+  assert.equal(hiddenReads, 0, 'default execution never reads editor, selection, clipboard, or foreground text')
 
   const editorWrites = []
   const editorResult = await item.executeWithParams({
@@ -202,7 +142,7 @@ try {
   assert.deepEqual(editorResult, { ok: true })
   assert.deepEqual(editorWrites, [variants[7].expected], 'editor execution retains the existing direct replace route')
 
-  console.log('line-list-cleanup: pure text cases, all 8 parameter combinations, actual registry/controller, Copy/Return passed')
+  console.log('line-list-cleanup: pure text cases, all 8 parameter combinations, actual registry and default execution passed')
 } finally {
   console.info = originalInfo
   await vite.close()

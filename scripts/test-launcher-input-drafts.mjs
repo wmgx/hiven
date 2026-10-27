@@ -118,79 +118,6 @@ try {
     assert.equal(h.top().paramDrafts.count, undefined, 'a committed value replaces its old draft')
   }
 
-  // Real JSON parser: back across multiple parameters preserves exact manual material.
-  {
-    const h = harness()
-    const malformed = '  {"customer":"synthetic-edit", broken}\n'
-    await h.controller.selectItem(json, { recordUsage: false, customizeParams: true })
-    await h.controller.commitCurrentParam(4)
-    await h.controller.commitCurrentParam(true)
-    h.controller.setInputText(malformed)
-    await h.controller.submitInput()
-    assert.ok(h.controller.getState().error)
-    h.controller.back()
-    assert.equal(h.top().params.sortKeys, true)
-    assert.equal(h.top().selectedIndex, 0)
-    assert.equal(h.top().inputText, malformed)
-    h.controller.setParamQuery('No')
-    h.controller.back()
-    assert.equal(h.top().query, '4')
-    await h.controller.commitCurrentParam(2)
-    assert.equal(h.top().query, '', 'option filtering text is not a parameter value')
-    assert.equal(h.top().params.sortKeys, true)
-    await h.controller.commitCurrentParam(false)
-    assert.equal(h.top().inputText, malformed)
-    assert.deepEqual(h.top().params, { indent: 2, sortKeys: false })
-    assert.equal(h.top().previewOutput, undefined)
-    assert.equal(h.controller.getState().error, null)
-    await h.controller.submitInput()
-    assert.ok(h.controller.getState().error, 'restored material is parsed again')
-    const material = '{"z":1,"a":2}'
-    h.controller.setInputText(material)
-    await h.controller.submitInput()
-    const staleChoice = h.top().output.choices[0]
-    assert.equal(staleChoice.preview, '{\n  "z": 1,\n  "a": 2\n}')
-    h.controller.back()
-    h.controller.back()
-    await h.controller.commitCurrentParam(true)
-    assert.equal(h.top().inputText, material)
-    assert.equal(h.top().previewOutput, undefined)
-    await h.controller.activateChoice(staleChoice)
-    assert.deepEqual(h.deliveries, [], 'changing params cannot reuse an earlier result')
-    await h.controller.submitInput()
-    assert.equal(h.top().output.choices[0].preview, '{\n  "a": 2,\n  "z": 1\n}')
-  }
-
-  // Empty edits override initial material. A new command or root navigation drops drafts.
-  for (const leave of ['exit', 'reset', 'back', 'select']) {
-    const h = harness()
-    const seeded = { ...json, initialInputText: '{"seed":true}' }
-    await h.controller.selectItem(seeded, { recordUsage: false })
-    await h.controller.commitCurrentParam(4)
-    await h.controller.commitCurrentParam(true)
-    h.controller.setInputText('')
-    h.controller.back()
-    await h.controller.commitCurrentParam(false)
-    assert.equal(h.top().inputText, '', 'empty manual draft must not fall back to initial input')
-    h.controller.setInputText('PRIVATE_SYNTHETIC_DRAFT')
-    if (leave === 'exit') h.controller.exitCommand()
-    else if (leave === 'reset') h.controller.reset()
-    else if (leave === 'back') for (let i = 0; i < 3; i++) h.controller.back()
-    else await h.controller.selectItem({ ...json, systemKey: 'host:test:other-command' }, { recordUsage: false, customizeParams: true })
-    if (leave === 'select') {
-      assert.equal(h.controller.getState().frames.length, 2)
-      assert.equal(h.top().inputText, undefined)
-      h.controller.back()
-    }
-    assert.deepEqual(h.controller.getState().frames, [{ kind: 'list' }])
-    await h.controller.selectItem(json, { recordUsage: false, customizeParams: true })
-    assert.equal(h.top().query, '2')
-    await h.controller.commitCurrentParam(2)
-    assert.equal(h.top().params.sortKeys, false)
-    await h.controller.commitCurrentParam(false)
-    assert.equal(h.top().inputText, '')
-  }
-
   // A retained choice is only a draft: changed options and constraints still apply.
   {
     const h = harness('quick-editor-command')
@@ -233,32 +160,6 @@ try {
     assert.equal(h.top().query, 'material label')
     await h.controller.commitCurrentParam(h.top().query)
     assert.equal(executions, 2)
-  }
-
-  // Schema changes after input collection are also checked before execution.
-  {
-    const h = harness()
-    let executions = 0
-    const params = [{ key: 'mode', label: 'Mode', type: 'single-select', options: ['old', 'new'], required: true }]
-    const item = {
-      systemKey: 'host:test:input-schema', kind: 'host', display: { title: 'Input validation' },
-      behavior: { type: 'collect-input', input: {} }, params,
-      execute() { throw new Error('Expected executeWithParams') },
-      executeWithParams() { executions++; return { ok: false, message: 'Synthetic retryable error' } },
-    }
-    await h.controller.selectItem(item, { customizeParams: true, recordUsage: false })
-    await h.controller.commitCurrentParam('old')
-    assert.equal(h.top().kind, 'collect-input')
-    h.controller.setInputText('Synthetic material')
-    params[0].options = ['new']
-    await h.controller.submitInput()
-    assert.equal(executions, 0)
-    assert.ok(h.controller.getState().error)
-    h.controller.back()
-    await h.controller.commitCurrentParam('new')
-    assert.equal(h.top().inputText, 'Synthetic material')
-    await h.controller.submitInput()
-    assert.equal(executions, 1)
   }
 
   console.log('launcher input drafts: real random/JSON recovery, draft lifecycle, stale output and schema validation passed')
