@@ -598,6 +598,11 @@ def s32(page):
         page.wait_for_function('document.activeElement?.hasAttribute("data-clipboard-history-search")')
         expect(chrome.get_by_text('Loading', exact=True)).to_have_count(0)
         expect(chrome.get_by_text('No preview', exact=True)).to_have_count(0)
+        # Reshowing a retained window: focus left on a row goes back to the search.
+        chrome.locator('.clipboard-history-item').first.click()
+        page.wait_for_function('!document.activeElement?.hasAttribute("data-clipboard-history-search")')
+        page.evaluate('window.dispatchEvent(new Event("focus"))')
+        page.wait_for_function('document.activeElement?.hasAttribute("data-clipboard-history-search")')
 
 
 CASES = [s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15,s16,s17,s18,s19,s20,s21,s22,s23,s24,s25,s26,s27,s28,s29,s30,s31,s32]

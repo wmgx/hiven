@@ -401,9 +401,14 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     // WKWebView does not always flip visibilityState when the window is hidden and
     // shown again, so also recover focus whenever the window becomes key with
     // nothing focused (dialogs and editors keep their own focus).
+    // A retained window is shown again without remounting: whatever held focus
+    // last time (a row, the list) must not keep it. Only another text field
+    // (favorite editor) or an open dialog keeps its own focus.
     const onWindowFocus = () => {
       const active = document.activeElement
-      if (!active || active === document.body) searchRef.current?.focus()
+      if (active instanceof HTMLElement && active !== searchRef.current
+        && (active.closest('[role="dialog"]') || active.matches('input, textarea, select, [contenteditable="true"]'))) return
+      searchRef.current?.focus()
     }
     window.addEventListener('focus', onWindowFocus)
     return () => {
