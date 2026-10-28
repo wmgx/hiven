@@ -38,7 +38,6 @@
   "action.delete": "Delete",
   "action.favorite": "Favorite",
   "action.unfavorite": "Remove favorite",
-  "action.confirmFavorite": "Save favorite",
   "action.cancel": "Cancel",
   "meta.contentType": "Content type",
   "meta.characters": "Characters",
@@ -81,7 +80,6 @@
   "selection.count": "{count} selected",
   "settings.automaticQueue": "Automatically queue consecutive copies",
   "favorite.info": "Favorite information",
-  "action.saveFavoriteInfo": "Save",
   "action.editFavoriteInfo": "Edit favorite information",
   "favorite.fieldName": "Field name",
   "favorite.fieldValue": "Value",
@@ -89,5 +87,7 @@
   "favorite.removeField": "Remove",
   "favorite.nameRequired": "Enter a name for each field with a value.",
   "favorite.tooManyFields": "Use no more than 12 fields.",
-  "favorite.copyValue": "Copy field value"
+  "favorite.copyValue": "Copy field value",
+  "message.favorited": "Favorited",
+  "action.edit": "Edit"
 }

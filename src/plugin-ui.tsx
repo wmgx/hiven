@@ -81,6 +81,8 @@ type SelectProps = {
 }
 
 type ComboboxProps = {
+  allowCustomValue?: boolean
+  maxLength?: number
   options: SelectOption[]
   filter?: (option: SelectOption, query: string) => boolean
   value?: string
@@ -378,12 +380,15 @@ export const Select = forwardRef<HTMLDivElement, SelectProps>(function Select(
   )
 })
 
-export function Combobox({ options, filter, value = '', disabled, className, placeholder, emptyLabel = '', 'aria-label': ariaLabel, onChange }: ComboboxProps) {
+export function Combobox({ allowCustomValue = false, maxLength, options, filter, value = '', disabled, className, placeholder, emptyLabel = '', 'aria-label': ariaLabel, onChange }: ComboboxProps) {
   const selected = options.find((option) => option.value === value) ?? null
   const [open, setOpen] = useState(false)
   return (
     <BaseCombobox.Root
       items={options}
+      open={allowCustomValue ? open : undefined}
+      inputValue={allowCustomValue ? value : undefined}
+      onInputValueChange={allowCustomValue ? (text, details) => { if (details.reason === 'input-change') onChange(text) } : undefined}
       filter={filter}
       value={selected}
       disabled={disabled}
@@ -392,7 +397,11 @@ export function Combobox({ options, filter, value = '', disabled, className, pla
       isItemEqualToValue={(item, candidate) => item.value === candidate.value}
     >
       <div className={cn('hiven-ui-select inline-flex min-w-0', open && 'is-open', disabled && 'is-disabled', className)}>
-        <BaseCombobox.Trigger
+        {allowCustomValue ? <BaseCombobox.Input
+          className="hiven-ui-input min-w-0 w-full rounded-md border border-input bg-transparent px-2.5 text-base"
+          placeholder={placeholder} aria-label={ariaLabel} maxLength={maxLength}
+          onBlur={event => { if (!(event.relatedTarget instanceof Element) || !event.relatedTarget.closest('.hiven-ui-combobox-menu')) setOpen(false) }}
+        /> : <BaseCombobox.Trigger
           className={cn(
             'flex items-center justify-between gap-1.5 rounded-md border border-input px-2.5 text-base outline-none',
             'focus-visible:border-[var(--field-focus-border)] disabled:opacity-50 dark:bg-input/30',
@@ -402,14 +411,14 @@ export function Combobox({ options, filter, value = '', disabled, className, pla
         >
           <span className="hiven-ui-select-label min-w-0 flex-1 truncate text-left">{selected?.label ?? placeholder ?? emptyLabel ?? ''}</span>
           <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" />
-        </BaseCombobox.Trigger>
+        </BaseCombobox.Trigger>}
       </div>
       <ComboboxContent className="hiven-ui-combobox-menu">
-        <BaseCombobox.Input
+        {!allowCustomValue && <BaseCombobox.Input
           className="hiven-ui-combobox-search m-1 h-7 w-[calc(100%-0.5rem)] rounded-md border border-input bg-transparent px-2 text-base outline-none placeholder:text-muted-foreground focus-visible:border-ring"
           placeholder={placeholder}
           aria-label={ariaLabel}
-        />
+        />}
         <ComboboxEmpty className="hiven-ui-combobox-empty">{emptyLabel}</ComboboxEmpty>
         <ComboboxList className="hiven-ui-combobox-list">
           {(option: SelectOption) => (

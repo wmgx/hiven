@@ -183,11 +183,15 @@ def s11(page):
     copy(page, 'saved-text')
     history(page)
     page.get_by_role('button', name='Favorite', exact=True).first.click()
+    page.get_by_role('button', name='Edit', exact=True).click()
     for i, (name, value) in enumerate([('Team','cedar'),('Stage','violet')]):
         page.get_by_role('button', name='Add field', exact=True).click()
         page.get_by_placeholder('Field name', exact=True).nth(i).fill(name)
         page.get_by_placeholder('Value', exact=True).nth(i).fill(value)
-    page.get_by_role('button', name='Save favorite', exact=True).click()
+    page.get_by_placeholder('Value', exact=True).last.press('Escape')
+    # A combobox's pending dismissal may consume the first Escape.
+    if page.locator('.clipboard-history-favorite-form').count():
+        page.keyboard.press('Escape')
     expect(page.locator('.clipboard-history-item-subtitle')).to_contain_text('cedar · violet')
     page.get_by_placeholder('Search history').fill('violet')
     expect(page.locator('.clipboard-history-item')).to_have_count(1)
@@ -438,7 +442,43 @@ def s24(page):
             expect(chrome.locator('.surface-chrome-body').get_by_text(title, exact=True)).to_have_count(0)
 
 
-CASES = [s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15,s16,s17,s18,s19,s20,s21,s22,s23,s24]
+def s25(page):
+    copy(page, 'synthetic-favorite')
+    rows = history(page)
+    rows.first.click()
+    page.keyboard.press('Alt+p')
+    expect(page.get_by_role('dialog')).to_have_count(0)
+    expect(page.locator('.clipboard-history-item-row').first.get_by_role('button', name='Remove favorite', exact=True)).to_be_visible()
+    expect(page.locator('.surface-toast')).to_contain_text('Favorited')
+    rows.first.click()
+    page.keyboard.press('Alt+p')
+    expect(page.locator('.clipboard-history-item-row').first.get_by_role('button', name='Favorite', exact=True)).to_be_visible()
+
+
+def s26(page):
+    copy(page, 'other-item', 'editable-item')
+    rows = history(page)
+    rows.first.click()
+    page.keyboard.press('Alt+p')
+    expect(page.locator('.clipboard-history-item-row').first.get_by_role('button', name='Remove favorite', exact=True)).to_be_visible()
+    page.keyboard.press('Meta+e')
+    page.get_by_placeholder('Title', exact=True).fill('Saved title')
+    for i, (name, value) in enumerate([('Team', 'cedar'), ('Stage', 'violet')]):
+        page.get_by_role('button', name='Add field', exact=True).click()
+        page.get_by_placeholder('Field name', exact=True).nth(i).fill(name)
+        page.get_by_placeholder('Value', exact=True).nth(i).fill(value)
+    expect(page.get_by_role('button', name='Save', exact=True)).to_have_count(0)
+    rows.filter(has_text='other-item').click()
+    rows.filter(has_text='Saved title').click()
+    table = page.locator('table.clipboard-history-favorite-fields')
+    expect(table).to_contain_text('cedar')
+    expect(table).to_contain_text('violet')
+    expect(page.locator('.clipboard-history-item-subtitle').filter(has_text='cedar · violet')).to_be_visible()
+    page.get_by_placeholder('Search history').fill('violet')
+    expect(rows).to_have_count(1)
+
+
+CASES = [s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15,s16,s17,s18,s19,s20,s21,s22,s23,s24,s25,s26]
 
 
 def main():

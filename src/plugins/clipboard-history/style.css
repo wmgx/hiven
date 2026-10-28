@@ -218,23 +218,11 @@
   overflow: auto;
 }
 
-.clipboard-history-favorite-fields {
-  display: grid;
-  gap: 6px;
-  margin: 0;
-  padding: 8px 12px;
-  font-size: var(--text-sm);
-}
-
-.clipboard-history-favorite-fields:empty { display: none; }
-.clipboard-history-favorite-fields > div {
-  display: grid;
-  grid-template-columns: minmax(64px, 1fr) minmax(0, 2fr);
-  gap: 12px;
-  overflow-wrap: anywhere;
-}
-.clipboard-history-favorite-fields dt { color: var(--muted-foreground); }
-.clipboard-history-favorite-fields dd { margin: 0; }
+.clipboard-history-favorite-fields { width: 100%; border-collapse: collapse; font-size: var(--text-sm); table-layout: fixed; }
+.clipboard-history-favorite-fields th, .clipboard-history-favorite-fields td { padding: 6px 12px; text-align: left; overflow-wrap: anywhere; border-bottom: 1px solid var(--border); }
+.clipboard-history-favorite-fields th { color: var(--muted-foreground); font-weight: 500; }
+.clipboard-history-favorite-fields th:first-child { width: 35%; }
+.clipboard-history-favorite-form { padding: 10px 12px; }
 
 .clipboard-history-favorite-fields button { width: 100%; height: auto; justify-content: flex-start; padding: 2px 4px; text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; }
 

@@ -26,14 +26,13 @@ import {
   SurfaceListItem,
   SurfacePreview,
   ToolbarButton,
-  TextInput,
   useImeKeyboard,
   type MenuItemSpec,
 } from '@hiven/plugin-ui'
 import { ClipboardIcon, CloseIcon, FileTextIcon, ImageIcon, SettingsIcon, StarIcon } from '@hiven/plugin-ui/icons'
 import { ArrowDown, ArrowUp, Check, ListFilter } from 'lucide-react'
 import { resolveClipboardHistoryRetentionMonths, type ClipboardHistorySettings } from '../settings/model'
-import type { ClipboardHistoryItem, FavoriteField } from '../storage/clipboardHistoryTypes'
+import type { ClipboardHistoryItem } from '../storage/clipboardHistoryTypes'
 import type { ClipboardHistorySearchMatchMode } from '../storage/clipboardHistorySearch'
 import {
   getClipboardHistoryCopiedSince,
@@ -63,6 +62,8 @@ import {
   type ClipboardHistoryShortcutFocus,
 } from './clipboardHistoryShortcuts'
 
+import { FavoriteEditor, useFavoriteEditor } from './FavoriteEditor'
+
 const HISTORY_PAGE_SIZE = 100
 const LOAD_MORE_THRESHOLD_ROWS = 12
 
@@ -84,15 +85,6 @@ type ImageHistoryItem = Extract<ClipboardHistoryItem, { kind: 'image' }>
 type MetaRow = {
   label: string
   value: string
-}
-
-type FavoriteInfoDialogState = {
-  id: string
-  draft: string
-  mode: 'create' | 'edit'
-  fields: FavoriteField[]
-  saving?: boolean
-  error?: string
 }
 
 type AppliedHistorySearch = {
@@ -149,9 +141,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       unsubscribeLeave?.()
     }
   }, [copyLifecycle, host.deliveryFeedbackOwner, host.subscribeLeaveIntent])
-  const [titleDialog, setTitleDialog] = useState<FavoriteInfoDialogState | null>(null)
-  const [recentFieldNames, setRecentFieldNames] = useState<string[]>([])
-  const fieldNamesId = useId()
   const [shortcutFocus, setShortcutFocus] = useState<ClipboardHistoryShortcutFocus>({
     withinSurface: false, nativeButton: false, editing: false,
   })
@@ -172,7 +161,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     }
   }, [suspendPointerHover])
   const searchRef = useRef<HTMLInputElement>(null)
-  const titleInputRef = useRef<HTMLInputElement>(null)
   const imeKeyDown = useImeKeyboard()
   const pendingDeletesRef = useRef(new Set<string>())
   const frequentThreshold = settings.frequentPasteThreshold ?? 3
@@ -452,7 +440,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     hasSelection: Boolean(selectedItem),
     loading: resultsActionBlocked,
     enabled: true,
-    blocked: legacyDialog || Boolean(titleDialog),
+    blocked: legacyDialog,
     focus: shortcutFocus,
   })
 
@@ -705,47 +693,23 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     setSelectedFullItem((current) => (current?.id === updated.id ? updated : current))
   }, [])
 
-  const openFavoriteInfoDialog = useCallback((item: ClipboardHistoryItem, mode: 'create' | 'edit') => {
+  const favoriteEditor = useFavoriteEditor(repository, host, t, applyItemUpdate, selectedId)
+  const openFavoriteEditor = (item: ClipboardHistoryItem) => {
     if (!resultsActionableRef.current) return
-    const fallback =
-      item.favoriteTitle
-      || (item.kind === 'text' ? item.preview : item.kind === 'files' ? item.fileNames.join(', ') : '')
-    setTitleDialog({ id: item.id, draft: mode === 'edit' ? (item.favoriteTitle ?? '') : fallback.slice(0, 80), fields: (item.favoriteFields ?? []).map((field) => ({ ...field })), mode })
-    void repository.getFavoriteFieldNames().then(setRecentFieldNames).catch(() => setRecentFieldNames([]))
-  }, [repository])
-
+    setSelectedId(item.id)
+    favoriteEditor.open(item)
+  }
   const handleFavoriteClick = useCallback((item: ClipboardHistoryItem) => {
     if (!resultsActionableRef.current) return
-    if (item.isFavorite) {
-      void repository.setFavorite(item.id, false)
-        .then((updated) => {
-          if (updated) applyItemUpdate(updated)
-        })
-        .catch(() => host.showMessage(t('error.favoriteFailed'), 'error'))
-      return
-    }
-    openFavoriteInfoDialog(item, 'create')
-  }, [repository, applyItemUpdate, openFavoriteInfoDialog, host, t])
-
-  const confirmFavoriteInfoDialog = useCallback(() => {
-    if (!titleDialog || titleDialog.saving) return
-    const { id, draft, fields, mode } = titleDialog
-    setTitleDialog({ ...titleDialog, saving: true, error: undefined })
-    const action =
-      mode === 'create'
-        ? repository.setFavorite(id, true, draft, fields)
-        : repository.updateFavoriteInfo(id, draft, fields)
-    void action
-      .then((updated) => {
-        if (!updated?.isFavorite) throw new Error('error.favoriteFailed')
-        applyItemUpdate(updated)
-        setTitleDialog(null)
+    favoriteEditor.flush()
+    void repository.setFavorite(item.id, !item.isFavorite).then(updated => {
+      if (!updated) throw new Error('unavailable')
+      applyItemUpdate(updated)
+      if (updated.isFavorite) void host.notify?.toast({ level: 'success', message: t('message.favorited'),
+        action: { label: t('action.edit'), run: () => openFavoriteEditor(updated) },
       })
-      .catch((error) => {
-        const key = error instanceof Error && ['favorite.nameRequired', 'favorite.tooManyFields'].includes(error.message) ? error.message : 'error.favoriteFailed'
-        setTitleDialog((current) => current?.id === id ? { ...current, saving: false, error: t(key) } : current)
-      })
-  }, [titleDialog, repository, applyItemUpdate, t])
+    }).catch(() => host.showMessage(t('error.favoriteFailed'), 'error'))
+  }, [repository, applyItemUpdate, host, t, favoriteEditor])
 
   const handleCopyField = async (value: string) => {
     if (!resultsActionableRef.current) return
@@ -788,9 +752,9 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       { key: 'plainPaste', label: t('action.pastePlain'), onSelect: () => void handlePaste(item, true) },
     ] : []),
     { key: 'copy', label: t('action.copy'), onSelect: () => void handleCopy(item) },
-    ...(item.isFavorite ? [{ key: 'editFavorite', label: t('action.editFavoriteInfo'), onSelect: () => openFavoriteInfoDialog(item, 'edit') }] : []),
+    ...(item.isFavorite ? [{ key: 'editFavorite', label: t('action.editFavoriteInfo'), onSelect: () => openFavoriteEditor(item) }] : []),
     { key: 'delete', label: t('action.delete'), danger: true, onSelect: () => handleDelete(item.id) },
-  ], [handlePaste, handleCopy, handleDelete, openFavoriteInfoDialog, t])
+  ], [handlePaste, handleCopy, handleDelete, openFavoriteEditor, t])
 
   const handleReturnToLauncher = useCallback(async (item: ClipboardHistoryItem) => {
     if (!resultsActionableRef.current) return
@@ -808,7 +772,10 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     }
   }, [host, readActionItems, t])
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.defaultPrevented || titleDialog || legacyDialog || imeKeyDown.shouldIgnoreKeyDown(e)) return
+    if (e.defaultPrevented || legacyDialog || imeKeyDown.shouldIgnoreKeyDown(e)) return
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'e' && selectedItem?.isFavorite) {
+      e.preventDefault(); e.stopPropagation(); openFavoriteEditor(selectedItem); return
+    }
     if (e.key === 'Escape' && selectedIds.length) {
       e.preventDefault()
       e.stopPropagation()
@@ -835,7 +802,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       hasSelection: true,
       loading: resultsActionBlocked,
       enabled: true,
-      blocked: legacyDialog || Boolean(titleDialog),
+      blocked: legacyDialog,
       focus,
     })
     if (e.key === 'Tab' && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
@@ -876,7 +843,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       const row = flatRows.findIndex((entry) => entry.type === 'item' && entry.item.id === next.id)
       if (row >= 0) virtualizer.scrollToIndex(row, { align: 'auto' })
     }
-  }, [selectedItem, selectedId, filteredItems, flatRows, virtualizer, handlePaste, handleReturnToLauncher, handleDelete, handleCopy, host, t, imeKeyDown, titleDialog, handleFavoriteClick, resultsActionBlocked, settings.enabled, filter, legacyDialog, selectedIds, multiple, selectionHasNonText, selectRange])
+  }, [selectedItem, selectedId, filteredItems, flatRows, virtualizer, handlePaste, handleReturnToLauncher, handleDelete, handleCopy, host, t, imeKeyDown, favoriteEditor, handleFavoriteClick, resultsActionBlocked, settings.enabled, filter, legacyDialog, selectedIds, multiple, selectionHasNonText, selectRange])
 
   const filterOptionLabel = (checked: boolean, text: string) => (
     <span className="clipboard-history-filter-option">
@@ -1057,6 +1024,8 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                     />
                     {previewItem.isFavorite && (
                       <div className="clipboard-history-favorite-info" aria-label={t('favorite.info')}>
+                        {favoriteEditor.draft ? <FavoriteEditor key={previewItem.id} draft={favoriteEditor.draft} names={favoriteEditor.names}
+                          onChange={draft => favoriteEditor.change(previewItem.id, draft)} onBlur={favoriteEditor.flush} onExit={favoriteEditor.close} host={host} t={t} /> : <>
                         <div className="clipboard-history-favorite-title-bar">
                           <span className="clipboard-history-favorite-title-label">
                             {previewItem.favoriteTitle || t('favorite.untitled')}
@@ -1064,17 +1033,17 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                           <ToolbarButton
                             type="button"
                             disabled={resultsActionBlocked}
-                            onClick={() => openFavoriteInfoDialog(previewItem, 'edit')}
+                            onClick={() => openFavoriteEditor(previewItem)}
                           >
                             {t('action.editFavoriteInfo')}
                           </ToolbarButton>
                         </div>
-                        <dl className="clipboard-history-favorite-fields">
-                          {(previewItem.favoriteFields ?? []).map((field, index) => <div key={index}>
-                            <dt>{field.name}</dt>
-                            <dd><Button variant="ghost" type="button" disabled={resultsActionBlocked} title={t('favorite.copyValue')} onClick={() => void handleCopyField(field.value)}>{field.value}</Button></dd>
-                          </div>)}
-                        </dl>
+                        <table className="clipboard-history-favorite-fields"><thead><tr><th>{t('favorite.fieldName')}</th><th>{t('favorite.fieldValue')}</th></tr></thead><tbody>
+                          {(previewItem.favoriteFields ?? []).map((field, index) => <tr key={index}>
+                            <td>{field.name}</td>
+                            <td><Button variant="ghost" type="button" disabled={resultsActionBlocked} title={t('favorite.copyValue')} onClick={() => void handleCopyField(field.value)}>{field.value}</Button></td>
+                          </tr>)}
+                        </tbody></table></> }
                       </div>
                     )}
                     <ClipboardHistoryMetadata key={previewItem.id} item={previewItem} locale={locale} t={t} />
@@ -1100,12 +1069,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       </>
     )
   }
-
-  useEffect(() => {
-    if (!titleDialog) return
-    const frame = requestAnimationFrame(() => titleInputRef.current?.focus())
-    return () => cancelAnimationFrame(frame)
-  }, [titleDialog?.id])
 
   const surfaceContent = (
     <div
@@ -1170,71 +1133,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         </div>
       </Dialog>
 
-      <Dialog
-        open={Boolean(titleDialog)}
-        onOpenChange={(open) => { if (!open && !titleDialog?.saving) setTitleDialog(null) }}
-        title={t('favorite.info')}
-      >
-        {titleDialog && (
-          <form
-            className="clipboard-history-favorite-form"
-            onSubmit={(event) => { event.preventDefault(); confirmFavoriteInfoDialog() }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && imeKeyDown.shouldIgnoreKeyDown(event as unknown as KeyboardEvent)) event.preventDefault()
-            }}
-            onCompositionStart={imeKeyDown.onCompositionStart}
-            onCompositionEnd={imeKeyDown.onCompositionEnd}
-          >
-            <label htmlFor={`${fieldNamesId}-title`}>{t('favorite.titlePlaceholder')}</label>
-            <TextInput
-              id={`${fieldNamesId}-title`}
-              ref={titleInputRef}
-              className="clipboard-history-title-dialog-input"
-              value={titleDialog.draft}
-              onChange={(event) => setTitleDialog({ ...titleDialog, draft: event.target.value })}
-              disabled={titleDialog.saving}
-              placeholder={t('favorite.titlePlaceholder')}
-              maxLength={80}
-            />
-            <div className="clipboard-history-field-rows">
-              {titleDialog.fields.map((field, index) => <div className="clipboard-history-field-row" key={index}>
-                <TextInput
-                  className="clipboard-history-title-dialog-input clipboard-history-field-name"
-                  aria-label={t('favorite.fieldName')}
-                  placeholder={t('favorite.fieldName')}
-                  value={field.name}
-                  maxLength={20}
-                  list={fieldNamesId}
-                  autoComplete="off"
-                  disabled={titleDialog.saving}
-                  onChange={(event) => setTitleDialog({ ...titleDialog, fields: titleDialog.fields.map((entry, i) => i === index ? { ...entry, name: event.target.value } : entry) })}
-                />
-                <TextInput
-                  className="clipboard-history-title-dialog-input"
-                  aria-label={t('favorite.fieldValue')}
-                  placeholder={t('favorite.fieldValue')}
-                  value={field.value}
-                  maxLength={500}
-                  disabled={titleDialog.saving}
-                  onChange={(event) => setTitleDialog({ ...titleDialog, fields: titleDialog.fields.map((entry, i) => i === index ? { ...entry, value: event.target.value } : entry) })}
-                />
-                <Button type="button" disabled={titleDialog.saving} onClick={() => setTitleDialog({ ...titleDialog, fields: titleDialog.fields.filter((_, i) => i !== index) })}>{t('favorite.removeField')}</Button>
-              </div>)}
-            </div>
-            <datalist id={fieldNamesId}>{recentFieldNames.map((name) => <option key={name} value={name} />)}</datalist>
-            <Button type="button" disabled={titleDialog.saving || titleDialog.fields.length >= 12} onClick={() => setTitleDialog({ ...titleDialog, fields: [...titleDialog.fields, { name: '', value: '' }] })}>{t('favorite.addField')}</Button>
-            {titleDialog.error && <p role="alert">{titleDialog.error}</p>}
-            <div className="clipboard-history-title-dialog-actions">
-              <ToolbarButton type="submit" disabled={titleDialog.saving}>
-                {titleDialog.mode === 'create' ? t('action.confirmFavorite') : t('action.saveFavoriteInfo')}
-              </ToolbarButton>
-              <ToolbarButton type="button" disabled={titleDialog.saving} onClick={() => setTitleDialog(null)}>
-                {t('action.cancel')}
-              </ToolbarButton>
-            </div>
-          </form>
-        )}
-      </Dialog>
+
     </div>
   )
 
