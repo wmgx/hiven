@@ -6,8 +6,9 @@
 .surface-chrome-field:empty { display: none; }
 .surface-chrome-field { flex: 1; min-width: 0; display: flex; align-items: center; height: 100%; }
 .surface-chrome-field:not(:empty) + .surface-chrome-title { display: none; }
-.surface-chrome-header:has(.surface-chrome-field:not(:empty)) { height: 48px; flex-basis: 48px; gap: 8px; }
-.surface-chrome-field input { flex: 1; min-width: 0; height: 32px; -webkit-user-select: text; user-select: text; }
+.surface-chrome-header:has(.surface-chrome-field:not(:empty)) { height: 48px; flex-basis: 48px; gap: 8px; padding: 0 12px; }
+.surface-chrome-field input { flex: 1; min-width: 0; height: 32px; padding: 0 4px; border: 0; border-radius: 0; outline: 0; box-shadow: none; background: transparent; color: var(--foreground); caret-color: var(--foreground); font-size: 15px; -webkit-user-select: text; user-select: text; }
+.surface-chrome-field input::-webkit-search-cancel-button { display: none; }
 .surface-chrome-actions { display: flex; align-items: center; gap: 4px; }
 .surface-chrome-body { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 
