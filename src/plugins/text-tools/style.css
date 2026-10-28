@@ -12,3 +12,5 @@
 .text-tools-converter-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; flex: 1; min-height: 0; }
 .text-tools-converter-columns > label { display: flex; flex-direction: column; gap: 6px; min-height: 0; color: var(--muted-foreground); }
 .text-tools-converter-columns textarea { flex: 1; min-height: 100px; resize: none; }
+
+.base64-preview { max-height: 120px; max-width: 100%; object-fit: contain; align-self: flex-start; }

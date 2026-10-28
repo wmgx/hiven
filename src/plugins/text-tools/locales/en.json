@@ -99,8 +99,6 @@
   "error.typeInvalidJson": "Invalid JSON. Can't generate types.",
   "error.typeLimit": "Over the limit: input 128 KiB, 64 levels, 20,000 nodes; output 512 KiB.",
   "json.error.convert": "Failed to process: {message}",
-  "base64.encode.title": "Base64 Encode",
-  "base64.decode.title": "Base64 Decode",
   "url.encode.title": "URL Encode",
   "url.decode.title": "URL Decode",
   "html.encode.title": "HTML Entity Encode",
@@ -187,5 +185,17 @@
   "expression.placeholder": "Expression, e.g. .items[0]",
   "expression.copied": "Copied",
   "expression.readFailed": "Could not read the clipboard",
-  "expression.copyFailed": "Could not copy the result"
+  "expression.copyFailed": "Could not copy the result",
+  "base64.title": "Base64",
+  "base64.auto": "Auto",
+  "base64.encode": "Encode text",
+  "base64.decode": "Decode text",
+  "base64.input": "Input",
+  "base64.output": "Result",
+  "base64.preview": "Image preview",
+  "base64.copyImage": "Copy image",
+  "base64.copied": "Copied",
+  "base64.invalid": "Invalid Base64 or unsupported image (PNG, JPEG, WebP; up to 10 MiB and 16 megapixels).",
+  "base64.readFailed": "Could not read the clipboard",
+  "base64.copyFailed": "Could not copy the image"
 }

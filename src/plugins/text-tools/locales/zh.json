@@ -99,8 +99,6 @@
   "error.typeInvalidJson": "JSON 无效，无法生成类型。",
   "error.typeLimit": "超出上限：输入 128 KiB、64 层、20,000 节点，输出 512 KiB。",
   "json.error.convert": "处理失败：{message}",
-  "base64.encode.title": "Base64 编码",
-  "base64.decode.title": "Base64 解码",
   "url.encode.title": "URL 编码",
   "url.decode.title": "URL 解码",
   "html.encode.title": "HTML 实体编码",
@@ -187,5 +185,17 @@
   "expression.placeholder": "表达式，例如 .items[0]",
   "expression.copied": "已复制",
   "expression.readFailed": "读取剪贴板失败",
-  "expression.copyFailed": "复制结果失败"
+  "expression.copyFailed": "复制结果失败",
+  "base64.title": "Base64",
+  "base64.auto": "自动",
+  "base64.encode": "文本编码",
+  "base64.decode": "文本解码",
+  "base64.input": "输入",
+  "base64.output": "结果",
+  "base64.preview": "图片预览",
+  "base64.copyImage": "复制图片",
+  "base64.copied": "已复制",
+  "base64.invalid": "Base64 无效或图片不受支持（PNG、JPEG、WebP；最大 10 MiB、1600 万像素）。",
+  "base64.readFailed": "读取剪贴板失败",
+  "base64.copyFailed": "复制图片失败"
 }

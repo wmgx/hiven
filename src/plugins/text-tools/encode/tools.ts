@@ -1,7 +1,5 @@
-import { type PluginToolContribution, type PluginToolContext, type PluginToolSurfaces } from '@hiven/plugin'
+import { type PluginToolContribution, type PluginToolSurfaces } from '@hiven/plugin'
 import {
-  base64Decode,
-  base64Encode,
   conversionErrorKey,
   decodeJwt,
   escapeSlashes,
@@ -9,7 +7,6 @@ import {
   hasHtmlEntities,
   htmlDecode,
   htmlEncode,
-  isBase64,
   isJwt,
   isUrlEncoded,
   unescapeSlashes,
@@ -23,45 +20,9 @@ const TEXT_TOOL_SURFACES: PluginToolSurfaces = {
   panel: true,
 }
 
-type TextResult = { ok: true; text: string } | { ok: false; message: string }
-
-function decodeBase64Text(ctx: PluginToolContext): TextResult {
-  try { return { ok: true, text: base64Decode(ctx.input.text) } }
-  catch (error) { return { ok: false, message: ctx.t(conversionErrorKey(error)) } }
-}
-
 // ─── Plugin Definition ────────────────────────────────────────────────────────
 
 export const encodeTools: PluginToolContribution[] = [
-    {
-      id: 'base64.encode',
-      title: 'base64.encode.title',
-      icon: 'Binary',
-      aliases: ['base64 encode', 'base64编码', 'b64 encode', 'btoa', 'encode base64', '编码'],
-      inputPolicy: { mode: 'auto' },
-      policy: PURE_ACTION_POLICY,
-      textMatch: (text) => !isBase64(text), // text is NOT base64 → offer to encode
-      run(ctx) {
-        try { return ctx.output.text(base64Encode(ctx.input.text)) }
-        catch (e) { return ctx.output.error(ctx.t(conversionErrorKey(e))) }
-      },
-      surfaces: TEXT_TOOL_SURFACES,
-    },
-    {
-      id: 'base64.decode',
-      title: 'base64.decode.title',
-      icon: 'Binary',
-      aliases: ['b64', 'base64', 'base64 decode', 'base64解码', 'b64 decode', 'atob', 'decode base64', '解码'],
-      inputPolicy: { mode: 'auto' },
-      policy: PURE_ACTION_POLICY,
-      accepts: { kinds: ['base64'], aliases: ['b64', 'base64', 'base64 decode', 'base64解码'] },
-      textMatch: isBase64,
-      run(ctx) {
-        const result = decodeBase64Text(ctx)
-        return result.ok ? ctx.output.text(result.text) : ctx.output.error(result.message)
-      },
-      surfaces: { launcher: { surfaces: ['global-launcher', 'quick-editor-command'] }, panel: true },
-    },
     {
       id: 'url.encode',
       title: 'url.encode.title',

@@ -200,11 +200,11 @@ def s11(page):
 
 
 def s12(page):
-    command(page, 'base64 decode')
-    field = page.locator('.global-launcher-panel textarea').first
-    field.fill('c2FuZGJveC1yZXN1bHQ=')
-    page.wait_for_timeout(400)
-    field.press('Shift+Enter')
+    copy(page, 'c2FuZGJveC1yZXN1bHQ=')
+    command(page, 'base64')
+    surface = page.locator('.base64-surface')
+    expect(surface.get_by_role('textbox', name='Result', exact=True)).to_have_value('sandbox-result')
+    surface.get_by_role('button', name=re.compile('Paste to')).click()
     editor(page, 'sandbox-result')
 
 
@@ -242,7 +242,7 @@ def open_surface(page, target, presentation='inline'):
     chrome = page.locator('.surface-chrome:visible')
     expect(chrome).to_have_count(1)
     expect(chrome.locator('.surface-chrome-title')).not_to_be_empty()
-    roots = {'calculator':'.calculator-surface', 'clipboard-history':'.clipboard-history-surface', 'csv':'.csv-tools-surface__header', 'date-time-assistant':'.date-time-surface__inputs', 'image-tools':'.image-tools-surface', 'qr-code':'.qr-surface', 'regex-tester':'.regex-tester-surface', 'text-explode':'.text-explode-surface', 'text-tools':'.url-query-surface, .json-expression-surface', 'text-diff':'.td-surface', 'translate':'.translate-surface'}
+    roots = {'calculator':'.calculator-surface', 'clipboard-history':'.clipboard-history-surface', 'csv':'.csv-tools-surface__header', 'date-time-assistant':'.date-time-surface__inputs', 'image-tools':'.image-tools-surface', 'qr-code':'.qr-surface', 'regex-tester':'.regex-tester-surface', 'text-explode':'.text-explode-surface', 'text-tools':'.url-query-surface, .json-expression-surface, .base64-surface', 'text-diff':'.td-surface', 'translate':'.translate-surface'}
     expect(chrome.locator(roots[target['pluginId']])).to_be_visible()
     return chrome
 
@@ -530,7 +530,32 @@ def s29(page):
     expect(surface.get_by_role('alert')).to_be_visible()
 
 
-CASES = [s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15,s16,s17,s18,s19,s20,s21,s22,s23,s24,s25,s26,s27,s28,s29]
+def s30(page):
+    page.evaluate('__hivenSandbox.copyImage()')
+    command(page, 'base64')
+    surface = page.locator('.base64-surface')
+    output = surface.get_by_role('textbox', name='Result', exact=True)
+    expect(output).to_have_value(re.compile('^data:image/png;base64,'))
+    expect(surface.get_by_role('img', name='Image preview')).to_be_visible()
+    uri = output.input_value()
+    surface.get_by_role('textbox', name='Input', exact=True).fill(uri)
+    expect(surface.get_by_role('img', name='Image preview')).to_be_visible()
+    before = page.evaluate('__hivenSandbox.clipboard().changeCount')
+    page.get_by_role('button', name='Copy image', exact=True).click()
+    page.wait_for_function('before => __hivenSandbox.clipboard().kind === "image" && __hivenSandbox.clipboard().changeCount > before', arg=before)
+    surface.get_by_role('textbox', name='Input', exact=True).fill('hello world')
+    expect(output).to_have_value('aGVsbG8gd29ybGQ=')
+    surface.get_by_role('textbox', name='Input', exact=True).fill('aGVsbG8gd29ybGQ=')
+    expect(output).to_have_value('hello world')
+    page.keyboard.press('Escape')
+    page.evaluate('__hivenSandbox.open()')
+    page.locator('.global-launcher-panel textarea').first.fill('base64')
+    page.wait_for_timeout(250)
+    expect(page.locator('.launcher-item-title').filter(has_text=re.compile('^Base64$'))).to_have_count(1)
+    assert not any(item['surfaceId'] == 'image-base64' for item in surfaces(page))
+
+
+CASES = [s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15,s16,s17,s18,s19,s20,s21,s22,s23,s24,s25,s26,s27,s28,s29,s30]
 
 
 def main():

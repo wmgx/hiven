@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import ts from 'typescript'
-const code = ts.transpileModule(await readFile(new URL('../src/plugins/image-tools/imageBase64.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
+const code = ts.transpileModule(await readFile(new URL('../src/plugins/text-tools/encode/imageBase64.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
 const { inspectRaster, imageDataUri, parseImageBase64, MAX_IMAGE_BYTES } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`)
 const png = Uint8Array.from(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aT1sAAAAASUVORK5CYII=', 'base64'))
 assert.deepEqual(inspectRaster(png), { mime: 'image/png', width: 1, height: 1 })

@@ -9,6 +9,7 @@ import { encodeTools } from './encode/tools'
 import { formatTools } from './format/tools'
 import { hashTools } from './hash/tools'
 import { pathTools } from './paths/tools'
+import { Base64Surface } from './encode/Base64Surface'
 import { JsonExpressionSurface } from './json/JsonExpressionSurface'
 import { UrlQuerySurface } from './json/UrlQuerySurface'
 import './style.css'
@@ -16,6 +17,11 @@ import './style.css'
 export default definePlugin({
   tools: [...lineTools, ...jsonTools, ...encodeTools, ...formatTools, ...hashTools, ...pathTools, ...additionalTools, ...cursorTools],
   ui: { surfaces: [{
+    id: 'base64', kind: 'custom-view', title: en['base64.title'], titleI18n: { zh: zh['base64.title'] }, icon: 'Binary',
+    aliases: ['base64 encode', 'base64 decode', 'b64', '图片 Base64', 'Base64 编码', 'Base64 解码'], component: Base64Surface,
+    entry: { launcher: { surfaces: ['global-launcher'] }, shortcutBindable: true },
+    shell: { size: 'large' as const, inlineHeight: 620, resizable: true, closeOnBlur: false },
+  }, {
     id: 'json-expression', kind: 'custom-view', title: en['expression.title'], titleI18n: { zh: zh['expression.title'] }, icon: 'Braces',
     aliases: ['json expression', 'JSON 表达式'], component: JsonExpressionSurface,
     entry: { launcher: { surfaces: ['global-launcher'] }, shortcutBindable: true },
