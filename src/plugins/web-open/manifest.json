@@ -1,8 +1,17 @@
 {
   "pluginId": "web-open",
   "displayName": "Browser",
-  "displayNameI18n": { "zh": "浏览器" },
-  "version": "1.13.7",
-  "capabilities": ["settings", "launcher-quick-entry"],
-  "permissions": ["storage.private", "storage.blob", "network.request"]
+  "displayNameI18n": {
+    "zh": "浏览器"
+  },
+  "version": "1.13.8",
+  "capabilities": [
+    "settings",
+    "launcher-quick-entry"
+  ],
+  "permissions": [
+    "storage.private",
+    "storage.blob",
+    "network.request"
+  ]
 }
