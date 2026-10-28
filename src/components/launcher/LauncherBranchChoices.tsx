@@ -9,7 +9,7 @@ import { resolveDisplayTitle } from '../../workspace/launcher/display'
 import { LauncherCommandTag, LauncherParamChipTrail } from './LauncherCommandTag'
 import { LauncherEmptyWell } from './LauncherEmptyWell'
 
-type LauncherParamStepProps = {
+type LauncherBranchChoicesProps = {
   frame: ParamInputFrame
   error: string | null
   busy: boolean
@@ -37,7 +37,7 @@ type ParamOption = {
   value: unknown
 }
 
-function paramOptions(param: LauncherParamSpec, locale: Locale): ParamOption[] {
+export function paramOptions(param: LauncherParamSpec, locale: Locale): ParamOption[] {
   if (param.type === 'boolean') {
     return [
       { label: t(locale, 'palette.boolYes'), value: true },
@@ -92,7 +92,7 @@ function filterParamOptions(options: ParamOption[], query: string, locale: Local
   return options.filter((option) => searchableFieldsMatch(paramOptionSearchFields(option), q, locale))
 }
 
-export function LauncherParamStep({
+export function LauncherBranchChoices({
   frame,
   error,
   busy,
@@ -107,7 +107,7 @@ export function LauncherParamStep({
   onBack,
   onExitCommand,
   onNextParam,
-}: LauncherParamStepProps) {
+}: LauncherBranchChoicesProps) {
   const isSublayer = Boolean(frame.sublayer)
   const inputRef = useRef<HTMLInputElement>(null)
   const isImeComposingRef = useRef(false)

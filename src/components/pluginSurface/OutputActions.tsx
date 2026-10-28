@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { ChevronDownIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { SurfaceError } from '../../ui/SurfaceHeaderActions'
 import { useT } from '../../i18n'
 import { flash } from '../../workspace/notify'
 import { useAppStore } from '../../store'
@@ -42,7 +43,15 @@ function HostOutputActions({ deps, text, primary = 'copy', copy, more = [], disa
   const t = useT('outputActions')
   const [app, setApp] = useState<string>()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [error, setError] = useState('')
+  const [editing, setEditing] = useState(false)
   const busy = useRef(false)
+  useEffect(() => {
+    if (!error) return
+    const clear = () => setError('')
+    for (const name of ['input', 'pointerdown', 'keydown']) document.addEventListener(name, clear, true)
+    return () => { for (const name of ['input', 'pointerdown', 'keydown']) document.removeEventListener(name, clear, true) }
+  }, [error])
   useEffect(() => { let live = true; void foregroundAppName().then(name => { if (live) setApp(name) }); return () => { live = false } }, [])
 
   const hasText = typeof text === 'function' || Boolean(text)
@@ -52,6 +61,7 @@ function HostOutputActions({ deps, text, primary = 'copy', copy, more = [], disa
   const once = (work: () => Promise<void>) => async () => {
     if (busy.current || !deps.current.isCurrent()) return
     busy.current = true
+    setError('')
     try { await work() } finally { busy.current = false }
   }
   const doCopy = once(async () => {
@@ -63,7 +73,7 @@ function HostOutputActions({ deps, text, primary = 'copy', copy, more = [], disa
         await deps.current.writeText(value)
       }
     } catch {
-      flash({ level: 'error', message: t('copyFailed') })
+      setError(t('copyFailed'))
       return
     }
     completeThenNotify(deps.current.complete, { level: 'success', message: t('copied') })
@@ -74,7 +84,7 @@ function HostOutputActions({ deps, text, primary = 'copy', copy, more = [], disa
     const result = await deps.current.pasteText(value).catch((): PluginPasteResult => ({ ok: false, fallback: 'none', message: '' }))
     if (result.ok) { deps.current.complete(); return }
     if (result.fallback !== 'copied') {
-      try { await deps.current.writeText(value) } catch { flash({ level: 'error', message: t('copyFailed') }); return }
+      try { await deps.current.writeText(value) } catch { setError(t('copyFailed')); return }
     }
     completeThenNotify(deps.current.complete, { level: 'info', message: t('pasteCopied') })
   })
@@ -82,11 +92,11 @@ function HostOutputActions({ deps, text, primary = 'copy', copy, more = [], disa
     const value = resolveText()
     if (value === null) return
     if (value.length > CONTINUE_MAX_BYTES || new TextEncoder().encode(value).byteLength > CONTINUE_MAX_BYTES) {
-      flash({ level: 'error', message: t('continueTooLarge') })
+      setError(t('continueTooLarge'))
       return
     }
     const accepted = await deps.current.returnToLauncher?.({ kind: 'text', text: value, source: 'tool-result' })
-    if (accepted === false) flash({ level: 'error', message: t('continueFailed') })
+    if (accepted === false) setError(t('continueFailed'))
   })
   const doOpenEditor = once(async () => {
     const value = resolveText()
@@ -102,8 +112,8 @@ function HostOutputActions({ deps, text, primary = 'copy', copy, more = [], disa
     : canTextAct ? { id: 'paste', label: pasteLabel, run: doPaste } : undefined
   const menu: Action[] = [
     ...(canTextAct && deps.current.returnToLauncher ? [{ id: 'continue', label: t('continue'), run: doContinue }] : []),
-    ...more.map(item => ({ ...item, run: () => { if (deps.current.isCurrent()) return item.run() } })),
     ...(canTextAct && deps.current.openInQuickEditor ? [{ id: 'open-editor', label: t('openEditor'), run: doOpenEditor }] : []),
+    ...more.map(item => ({ ...item, run: () => { if (deps.current.isCurrent()) return item.run() } })),
   ]
   const canPrimary = primaryAction.id === 'copy' ? canCopy : canTextAct
 
@@ -112,18 +122,25 @@ function HostOutputActions({ deps, text, primary = 'copy', copy, more = [], disa
   keys.current = { primaryAction, canPrimary, canTextAct, doPaste, hasMenu: menu.length > 0 }
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.isComposing || !(event.metaKey || event.ctrlKey) || event.altKey || !deps.current.isCurrent()) return
+      if (event.defaultPrevented || event.isComposing || event.keyCode === 229 || event.altKey || !deps.current.isCurrent()) return
+      if (event.target instanceof Element && event.target.closest('.hiven-value-menu, [role="menu"], [role="listbox"]')) return
+      const modified = event.metaKey || event.ctrlKey
+      const inEditor = event.target instanceof Element && Boolean(event.target.closest('input, textarea, [contenteditable="true"], .monaco-editor'))
+      if (inEditor && !modified) return
+      if (!modified && event.target instanceof Element && event.target.closest('button')) return
       const current = keys.current
       if (event.key === 'Enter' && event.shiftKey && current.canTextAct) { event.preventDefault(); void current.doPaste() }
       else if (event.key === 'Enter' && !event.shiftKey && current.canPrimary) { event.preventDefault(); void current.primaryAction.run() }
-      else if (event.key.toLowerCase() === 'k' && !event.shiftKey && current.hasMenu) { event.preventDefault(); setMenuOpen(open => !open) }
+      else if (modified && event.key.toLowerCase() === 'k' && !event.shiftKey && current.hasMenu) { event.preventDefault(); setMenuOpen(open => !open) }
     }
+    const focus = (event: FocusEvent) => setEditing(event.target instanceof Element && Boolean(event.target.closest('input, textarea, [contenteditable="true"], .monaco-editor')))
+    window.addEventListener('focusin', focus)
     window.addEventListener('keydown', onKey, true)
-    return () => window.removeEventListener('keydown', onKey, true)
+    return () => { window.removeEventListener('keydown', onKey, true); window.removeEventListener('focusin', focus) }
   }, [deps])
 
-  return <div className="hiven-output-actions">
-    {secondary && <Button variant="ghost" size="sm" disabled={secondary.id === 'copy' ? !canCopy : !canTextAct} onClick={() => void secondary.run()}>{secondary.label}<kbd>{secondary.id === 'paste' ? '⌘⇧↵' : '⌘C'}</kbd></Button>}
+  return <><SurfaceError>{error}</SurfaceError><div className="hiven-output-actions">
+    {secondary && <Button variant="ghost" size="sm" disabled={secondary.id === 'copy' ? !canCopy : !canTextAct} onClick={() => void secondary.run()}>{secondary.label}<kbd>{secondary.id === 'paste' ? (editing ? '⌘⇧↵' : '⇧↵') : '⌘C'}</kbd></Button>}
     {menu.length > 0 && <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
       <DropdownMenuTrigger render={<Button variant="ghost" size="sm" disabled={disabled} />}>
         {t('more')}<kbd>⌘K</kbd><ChevronDownIcon size={14} />
@@ -132,8 +149,8 @@ function HostOutputActions({ deps, text, primary = 'copy', copy, more = [], disa
         {menu.map(item => <DropdownMenuItem key={item.id} onClick={() => void item.run()}>{item.label}</DropdownMenuItem>)}
       </DropdownMenuContent>
     </DropdownMenu>}
-    <Button variant="ghost" size="sm" disabled={!canPrimary} onClick={() => void primaryAction.run()}>{primaryAction.label}<kbd>⌘↵</kbd></Button>
-  </div>
+    <Button variant="ghost" size="sm" disabled={!canPrimary} onClick={() => void primaryAction.run()}>{primaryAction.label}<kbd>{editing ? '⌘↵' : '↵'}</kbd></Button>
+  </div></>
 }
 
 /** Derive the output capabilities from the host object handed to the plugin. */

@@ -50,7 +50,7 @@ export function LauncherResultChoiceRow({
       type="button"
       tabIndex={-1}
       className={className}
-      onMouseEnter={onHover}
+      onPointerMove={event => { if (event.movementX || event.movementY) onHover?.() }}
       onMouseDown={(event) => event.preventDefault()}
       onClick={onSelect}
       disabled={disabled}

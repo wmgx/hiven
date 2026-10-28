@@ -284,7 +284,7 @@ function OpenQuickEditorCommandOverlay() {
       if (Date.now() < suppressBlurCloseUntilRef.current) return
       const activeElement = document.activeElement
       if (internalPointerDownRef.current) return
-      if (activeElement && panel.contains(activeElement)) return
+      if (activeElement && (panel.contains(activeElement) || activeElement.closest('.hiven-value-menu'))) return
       closeCommandAndRestoreFocus()
     })
   }
@@ -364,6 +364,7 @@ function OpenQuickEditorCommandOverlay() {
           else closeCommandAndRestoreFocus()
         }}
         onCollectInputChange={(value) => controllerRef.current?.setInputText(value)}
+        onCommandParamChange={(key, value, frame) => controllerRef.current?.setCommandParam(key, value, frame)}
         onActivateResultChoice={activateResultChoice}
         onSecondaryAction={activateSecondaryAction}
         onHoverResultChoice={setResultSelectedIndex}

@@ -7,6 +7,7 @@ import sys
 import time
 from pathlib import Path
 from playwright.sync_api import sync_playwright, expect
+from v4_cases import s33, s34
 
 URL = 'http://localhost:1420/?window=launcher&sandbox=1'
 
@@ -49,8 +50,10 @@ def editor(page, text):
 def command(page, query):
     page.evaluate('__hivenSandbox.open()')
     field = page.locator('.global-launcher-panel textarea').first
+    page.wait_for_timeout(250)
+    field.click()
     field.fill(query)
-    page.wait_for_timeout(200)
+    expect(page.locator('[data-launcher-row-index]').first).to_be_visible()
     field.press('Enter')
 
 
@@ -315,11 +318,11 @@ def s16(page):
         expect(rows).to_have_count(2)
         rows.first.click()
         page.keyboard.press('Backspace')
-        toast = chrome.locator('.surface-toast')
+        toast = chrome.locator('.surface-feedback-inline')
         expect(toast).to_contain_text('Deleted')
-        assert page.evaluate('__hivenSandbox.surfaceToasts()')[0]['level'] == 'success'
+        assert page.evaluate('__hivenSandbox.surfaceFeedback()')[0]['level'] == 'success'
         toast.hover()
-        page.clock.fast_forward(6000)
+        page.clock.fast_forward(1000)
         expect(toast).to_be_visible()
         toast.get_by_role('button', name='Undo', exact=True).click()
         expect(rows).to_have_count(2)
@@ -328,7 +331,7 @@ def s16(page):
     page.keyboard.press('Backspace')
     page.mouse.move(1, 1)
     page.clock.fast_forward(5500)
-    expect(chrome.locator('.surface-toast')).to_have_count(0)
+    expect(chrome.locator('.surface-feedback-inline')).to_have_count(0)
     expect(rows).to_have_count(1)
 
 
@@ -457,7 +460,7 @@ def s25(page):
     page.keyboard.press('Alt+p')
     expect(page.get_by_role('dialog')).to_have_count(0)
     expect(page.locator('.clipboard-history-item-row').first.get_by_role('button', name='Remove favorite', exact=True)).to_be_visible()
-    expect(page.locator('.surface-toast')).to_contain_text('Favorited')
+    expect(page.locator('.surface-feedback-inline')).to_contain_text('Favorited')
     rows.first.click()
     page.keyboard.press('Alt+p')
     expect(page.locator('.clipboard-history-item-row').first.get_by_role('button', name='Favorite', exact=True)).to_be_visible()
@@ -605,7 +608,7 @@ def s32(page):
         page.wait_for_function('document.activeElement?.hasAttribute("data-clipboard-history-search")')
 
 
-CASES = [s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15,s16,s17,s18,s19,s20,s21,s22,s23,s24,s25,s26,s27,s28,s29,s30,s31,s32]
+CASES = [s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15,s16,s17,s18,s19,s20,s21,s22,s23,s24,s25,s26,s27,s28,s29,s30,s31,s32,s33,s34]
 
 
 def main():

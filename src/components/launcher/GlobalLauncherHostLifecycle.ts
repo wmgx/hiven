@@ -176,7 +176,7 @@ export function useGlobalLauncherCollectInputPreview({
     if (!open || !controllerState || controllerState.frames.length <= 1) return
     const topFrame = controllerState.frames[controllerState.frames.length - 1]
     if (topFrame.kind !== 'collect-input') return
-    requestAnimationFrame(() => inputRef.current?.focus())
+    requestAnimationFrame(() => { if (!document.querySelector('.hiven-value-menu')) inputRef.current?.focus() })
   }, [controllerState, inputRef, open])
 
   useEffect(() => {
@@ -184,7 +184,7 @@ export function useGlobalLauncherCollectInputPreview({
     if (controllerState.busy) return
     const topFrame = controllerState.frames[controllerState.frames.length - 1]
     if (topFrame.kind !== 'collect-input') return
-    if (topFrame.item.behavior.type !== 'perform' || topFrame.item.inputPolicy == null) return
+    if (topFrame.item.behavior.type !== 'perform' || (topFrame.item.inputPolicy == null && !topFrame.input.allowEmptyInput)) return
     if (topFrame.previewInputText === (topFrame.blockText ?? topFrame.inputText)) return
     const timer = window.setTimeout(() => {
       void controllerRef.current?.previewInput?.()
@@ -229,7 +229,7 @@ export function useGlobalLauncherHostEscape({
     // A visible Select or Combobox portal owns Escape before its containing surface.
     const openSelect = Array.from(document.querySelectorAll('.hiven-ui-select-menu[data-open], .hiven-ui-combobox-menu[data-open]'))
       .some((popup) => popup.getClientRects().length > 0 && getComputedStyle(popup).visibility === 'visible')
-    if (openSelect) return
+    if (openSelect || document.querySelector('.hiven-value-menu')) return
 
     // Clear any stuck IME composition flag so Esc can never be permanently dead.
     // (compositionend can be missed after remount / webview rekey / focus thrash.)

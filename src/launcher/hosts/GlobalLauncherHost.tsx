@@ -59,7 +59,7 @@ import {
   trackLatencyFrom,
   telemetryNow,
 } from '../../workspace/telemetry'
-import type { LauncherItem } from '../../workspace/launcher/types'
+import type { LauncherItem, OutputIntent } from '../../workspace/launcher/types'
 import { getPluginPermissionSnapshot } from '../../workspace/pluginPermissions'
 import { selectLauncherVisibleItems } from '../../workspace/launcher/visibleItems'
 import type { LauncherBrowseCategory } from '../../workspace/launcher/browseItems'
@@ -101,7 +101,7 @@ export function GlobalLauncherHost() {
   const grantPluginPermissions = usePluginPermissionStore((s) => s.grantPermissions)
   const settingsDialogTarget = usePluginSettingsStore((s) => s.settingsDialogTarget)
   const closeSettingsDialog = usePluginSettingsStore((s) => s.closeSettingsDialog)
-  const closeAfterActionRef = useRef<() => void>(() => {})
+  const closeAfterActionRef = useRef<(intent?: OutputIntent) => void>(() => {})
   const focusSearchInputAfterBackRef = useRef<() => void>(() => {})
   const isKeyboardNavRef = useRef(false)
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null)
@@ -193,7 +193,7 @@ export function GlobalLauncherHost() {
   } = useLauncherSession({
     hostId: 'global-launcher',
     open,
-    requestClose: () => closeAfterActionRef.current(),
+    requestClose: intent => closeAfterActionRef.current(intent),
     collectDynamicWhenEmpty: true,
     objectBlockText,
     getMaterialGeneration: clipboardBlock.getMaterialGeneration,
@@ -720,7 +720,13 @@ export function GlobalLauncherHost() {
 
   const closeLauncher = useCallback(() => closeSession('esc-or-overlay'), [closeSession])
   const closeLauncherOnBlur = useCallback(() => closeSession('blur'), [closeSession])
-  const closeLauncherAfterAction = useCallback(() => closeSession('after-action'), [closeSession])
+  const closeLauncherAfterAction = useCallback((intent?: OutputIntent) => {
+    const closing = closeSession('after-action')
+    if (intent === 'copy') void closing?.then(() => {
+      if (!useAppStore.getState().globalLauncherOpen) flashNotice({ level: 'success', message: t(locale, 'outputActions.copied') })
+    })
+    return closing
+  }, [closeSession, locale])
 
   const leaveHostSurface = useCallback(() => {
     clearLauncherHostSurface()

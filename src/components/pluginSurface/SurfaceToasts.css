@@ -1,6 +1,0 @@
-.surface-toasts { position: absolute; bottom: 42px; left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100% - 24px); display: flex; flex-direction: column; gap: 8px; z-index: 50; pointer-events: none; }
-.surface-toast { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--background); color: var(--foreground); box-shadow: var(--shadow-md); font-size: var(--text-sm); pointer-events: auto; }
-.surface-toast > span { min-width: 0; overflow-wrap: anywhere; }
-.surface-toast[data-level=error] { color: var(--destructive); }
-.surface-toast button { flex-shrink: 0; background: transparent; border: 0; color: inherit; cursor: pointer; }
-.surface-toast button:disabled { opacity: .5; cursor: default; }

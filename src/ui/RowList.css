@@ -1,0 +1,11 @@
+.hiven-row-list { min-height:0; overflow:auto; padding:7px; outline:none; }
+.hiven-row { width:100%; min-height:52px; display:flex; align-items:center; gap:12px; padding:9px 11px; border:0; border-radius:8px; background:transparent; color:var(--foreground); text-align:left; cursor:pointer; }
+.hiven-row.is-selected { background:var(--accent); }
+.hiven-row:disabled { opacity:.5; cursor:default; }
+.hiven-row-text { flex:1; min-width:0; font-size:14px; }
+.hiven-row-text > span, .hiven-row-text small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.hiven-row-text small { margin-top:4px; color:var(--muted-foreground); font-size:12px; }
+.hiven-row-group { padding:10px 11px 4px; font-size:var(--text-xs); color:var(--faint-foreground); }
+.hiven-empty-state { display:flex; flex:1; flex-direction:column; align-items:center; justify-content:center; gap:8px; min-height:100px; padding:24px; color:var(--muted-foreground); font-size:13px; text-align:center; }
+.hiven-empty-state p { margin:0; }
+.hiven-empty-state small { color:var(--faint-foreground); font-size:12px; }

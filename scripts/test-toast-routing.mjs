@@ -108,12 +108,9 @@ for (const target of ['launcher', 'editor:1']) {
   h.target = target
   h.toast.showToast('synthetic', 'info')
   await flush()
-  assert.equal(h.events.length, target === 'launcher' ? 0 : 1)
-  assert.equal(h.items().length, target === 'launcher' ? 1 : 0, 'Successful transfer has only one owner')
-  if (h.events.length) {
-    assert.equal(h.events[0].target, 'editor:1')
-    assert.equal(h.events[0].payload.action, undefined)
-  }
+  assert.equal(h.events.length, 0, 'Feedback is never sent to another app window')
+  assert.equal(h.items().length, 1, 'Inline feedback stays with its owner')
+
 }
 {
   const h = fixture(), gate = deferred()
@@ -123,28 +120,16 @@ for (const target of ['launcher', 'editor:1']) {
   h.toast.dismissToast(id)
   gate.resolve()
   await flush()
-  assert.equal(h.events.filter(({ event }) => event === 'hiven://toast-delivery').length, 1)
-  assert.equal(h.events.at(-1).event, 'hiven://toast-dismiss', 'Dismiss during emit wins even if IPC delivery finishes later')
+  assert.equal(h.events.length, 0, 'Dismiss does not create cross-window UI')
+  assert.equal(h.items().length, 0)
 }
 {
-  const h = fixture(), added = [], removed = []
-  const stop = await h.routing.listenForRoutedToasts((item) => added.push(item), (id) => removed.push(id))
-  h.receive('hiven://toast-dismiss', { id: 'cancelled' })
-  h.receive('hiven://toast-delivery', h.item('cancelled'))
-  h.receive('hiven://toast-delivery', { ...h.item('expired'), expiresAt: 999 })
-  assert.equal(added.length, 0)
-  h.receive('hiven://toast-delivery', { ...h.item('valid'), persistent: true, action: { label: 'not transferable' } })
-  assert.equal(added.length, 1)
-  assert.equal(added[0].persistent, false)
-  assert.equal(added[0].action, undefined)
-  h.tick(3500)
-  assert.ok(removed.includes('valid'), 'Transferred toast expires at original absolute deadline')
-  stop()
-  assert.equal(h.listenerCount(), 0)
-  assert.equal(h.timers.size, 0, 'Unmount releases receiver timers and listeners')
-  h.receive('hiven://toast-delivery', h.item('after-stop'))
-  assert.equal(added.length, 1)
+  const h = fixture()
+  h.receive('hiven://toast-delivery', h.item('ignored'))
+  assert.equal(h.items().length, 0)
+  assert.equal(h.listenerCount(), 0, 'No in-window delivery listeners remain')
 }
+
 console.log('Toast routing passed: privacy, issue epoch, late dismissal, expiry, single destination and cleanup')
 
 {

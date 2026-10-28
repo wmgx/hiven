@@ -10,7 +10,7 @@ import { restartPluginBackground } from '../../workspace/pluginBackgroundManager
 import { createPluginPrivateStorage } from '../../workspace/pluginStorage'
 import { createPluginClipboard } from '../../workspace/pluginClipboard'
 import { showToast, dismissToast } from '../../workspace/toast'
-import { useSurfaceToasts } from './SurfaceToasts'
+import { useSurfaceFeedback } from './SurfaceFeedback'
 import { hostNotify } from '../../workspace/notify'
 import { useAiSendGate } from './AiSendGateLayer'
 import { useOutputActionsComponent } from './OutputActions'
@@ -100,8 +100,8 @@ export function PluginSurfaceRenderer({
   suspended = false,
   onHandoffReady,
 }: PluginSurfaceRendererProps) {
-  const surfaceToasts = useSurfaceToasts()
-  const clearSurfaceToasts = surfaceToasts.clear
+  const surfaceFeedback = useSurfaceFeedback()
+  const clearSurfaceFeedback = surfaceFeedback.clear
   const suspensionOwner = useMemo(() => ({}), [suspended])
   const suspensionOwnerRef = useRef(suspensionOwner)
   suspensionOwnerRef.current = suspensionOwner
@@ -187,7 +187,7 @@ export function PluginSurfaceRenderer({
     if (ownedTarget && store.settingsDialogTarget === ownedTarget) store.closeSettingsDialog()
   }, [])
   const interruptSettings = useCallback(() => {
-    clearSurfaceToasts()
+    clearSurfaceFeedback()
     pasteScope.invalidate()
     // A closed/replaced surface cannot resume an old native save dialog after reopening.
     exportSessionRef.current += 1
@@ -197,7 +197,7 @@ export function PluginSurfaceRenderer({
     deliveredHandoffRef.current = null
     closeOwnedSettings()
     finishAppSettings(sessionRef.current)
-  }, [closeOwnedSettings, finishAppSettings, pasteScope, clearSurfaceToasts])
+  }, [closeOwnedSettings, finishAppSettings, pasteScope, clearSurfaceFeedback])
 
   useLayoutEffect(() => {
     // Revoke synchronously on registry/permission changes, before React can
@@ -612,7 +612,7 @@ export function PluginSurfaceRenderer({
             },
             showMessage: (message, level) => {
               if (!surfaceOwner.isCurrent() || (presentation === 'global-launcher' && launcherPasteOwner?.isCurrent() !== true)) return
-              showToast(message, level ?? 'info')
+              void surfaceFeedback.notify({ message, level: level === 'warning' ? 'info' : level ?? 'info' })
             },
             showToast: (message, level, options) => {
               if (!surfaceOwner.isCurrent() || (presentation === 'global-launcher' && launcherPasteOwner?.isCurrent() !== true)) return ''
@@ -621,7 +621,7 @@ export function PluginSurfaceRenderer({
             dismissToast,
             // Only a current surface may notify; this is a user-action gate, not delivery ownership.
             notify: {
-              toast: (notice) => surfaceOwner.isCurrent() ? surfaceToasts.toast({ ...notice,
+              toast: (notice) => surfaceOwner.isCurrent() ? surfaceFeedback.notify({ ...notice,
                 action: notice.action ? { ...notice.action, run: () => { if (surfaceOwner.isCurrent()) return notice.action!.run() } } : undefined,
               }) : Promise.resolve(),
               flash: (notice) => { if (surfaceOwner.isCurrent()) hostNotify.flash(notice) },
@@ -739,7 +739,7 @@ export function PluginSurfaceRenderer({
         {onHandoffReady && <PluginSurfaceCommitted onCommit={() => { if (!crashedRef.current && activeStateRef.current === surfaceState) onHandoffReady(true) }} />}
         </div>
       )}
-      {surfaceToasts.layer}
+      {surfaceFeedback.layer}
       {aiSendGate.layer}
       {appSettingsSession && appSettingsSession.target === target && appSettingsSession.owner === surfaceState && (
         <PluginAppSettingsDialog locale={locale} onClose={() => finishAppSettings(appSettingsSession, isCurrentSurface() && document.visibilityState !== 'hidden')} />

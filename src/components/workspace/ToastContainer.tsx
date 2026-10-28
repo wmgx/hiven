@@ -8,7 +8,7 @@ import { Copy, X } from 'lucide-react'
 import { useAppStore } from '../../store'
 import { translate } from '../../i18n'
 import { writeClipboardText } from '../../workspace/pluginClipboard'
-import { listenForRoutedToasts, requestToastControl } from '../../workspace/toastRouting'
+import { requestToastControl } from '../../workspace/toastRouting'
 import { dismissToast, showToast, useToastStore, type ToastItem, type ToastLevel } from '../../workspace/toast'
 
 const levelStyles: Record<ToastLevel, { bg: string; color: string }> = {
@@ -30,15 +30,6 @@ type RenderedToast = ToastItem & { phase: 'enter' | 'shown' | 'exit' }
 
 export function ToastContainer() {
   const storeToasts = useToastStore((s) => s.toasts)
-  useEffect(() => {
-    let disposed = false
-    let stop: (() => void) | undefined
-    void listenForRoutedToasts(
-      (item) => useToastStore.getState().addToast(item),
-      (id) => useToastStore.getState().removeToast(id),
-    ).then((cleanup) => { if (disposed) cleanup(); else stop = cleanup }).catch(() => {})
-    return () => { disposed = true; stop?.() }
-  }, [])
   const locale = useAppStore((s) => s.settings.locale)
   const [items, setItems] = useState<RenderedToast[]>([])
   const timersRef = useRef<Map<string, number>>(new Map())
@@ -108,7 +99,8 @@ export function ToastContainer() {
     window.setTimeout(() => dismissToast(id), EXIT_MS)
   }
 
-  if (items.length === 0) return null
+  const launcherOpen = useAppStore(s => s.globalLauncherOpen)
+  if (items.length === 0 || launcherOpen || ['launcher', 'plugin-surface'].includes(new URLSearchParams(window.location.search).get('window') ?? '')) return null
 
   return (
     <div className="fixed bottom-12 right-4 z-[9999] flex flex-col gap-2 pointer-events-none">

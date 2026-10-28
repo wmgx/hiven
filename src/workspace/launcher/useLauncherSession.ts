@@ -48,6 +48,7 @@ import {
 } from './perf'
 import type {
   LauncherHostId,
+  OutputIntent,
   LauncherItem,
   LauncherSurfaceId,
   PluginLauncherApi,
@@ -68,7 +69,7 @@ const EMPTY_DYNAMIC_ITEMS: readonly LauncherItem[] = []
 type UseLauncherSessionOptions = {
   hostId: LauncherSurfaceId
   open: boolean
-  requestClose: () => void
+  requestClose: (intent?: OutputIntent) => void
   staticItemFilter?: (items: LauncherItem[]) => LauncherItem[]
   mapCandidate?: (item: LauncherItem) => LauncherItem
   collectDynamicWhenEmpty?: boolean
@@ -448,7 +449,7 @@ export function useLauncherSession({
               recordPersistableLauncherSelection(payload)
             }
           },
-          requestClose: () => requestCloseRef.current(),
+          requestClose: intent => requestCloseRef.current(intent),
           onReturnToRoot: () => {
             queryRef.current = ''
             setQueryState('')

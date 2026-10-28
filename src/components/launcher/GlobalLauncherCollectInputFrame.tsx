@@ -1,3 +1,5 @@
+import { useCommandMenuActions } from './useCommandMenuActions'
+import { WindowFeedback } from '../../ui/WindowFeedback'
 import { useCallback, useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type RefObject } from 'react'
 import { CornerDownLeft, History } from 'lucide-react'
 // note: lastPreviewRef keeps display text across brief controller gaps
@@ -12,6 +14,7 @@ import { resolveIcon } from '../../utils/resolveIcon'
 import { Tooltip } from '../Tooltip'
 import { LauncherHintKey, LauncherHintText } from './LauncherFooterHints'
 import { LauncherCommandTag, LauncherParamChipTrail } from './LauncherCommandTag'
+import { LauncherValueChips } from './LauncherValueChips'
 import { LauncherEmptyWell } from './LauncherEmptyWell'
 import { ObjectBlockToken } from './ObjectBlockToken'
 import { createQueryObjectBlock, type LauncherObjectBlock } from '../../launcher/clipboard/objectBlock'
@@ -156,7 +159,7 @@ export function GlobalLauncherCollectInputFrame({
   onSubmitPrimary,
   attachedBlock,
   onRemoveBlock,
-  onOpenParams,
+  onParamChange,
   onPasteAsBlock,
   onBlockTextChange,
   onSyncBlock,
@@ -188,7 +191,7 @@ export function GlobalLauncherCollectInputFrame({
   attachedBlock?: LauncherObjectBlock | null
   onRemoveBlock?: () => void
   /** ⇥: edit parameters; absent when the command has none. */
-  onOpenParams?: () => void
+  onParamChange?: (key: string, value: unknown) => boolean | undefined
   /** A paste that does not fit the input line becomes the Block. */
   onPasteAsBlock?: (text: string) => void
   /** ⌘E editing of the Block text. */
@@ -236,8 +239,9 @@ export function GlobalLauncherCollectInputFrame({
     if (isExpanded) requestAnimationFrame(() => editorRef.current?.focus())
   }, [isExpanded])
   const filterText = materialText.trim()
+  const hasInput = Boolean(filterText || frame.input.allowEmptyInput)
   // Tools with side effects and very large material wait for ↵; their result then shows until the input changes.
-  const explicitReason = showLivePreview && filterText && frame.previewInputText !== materialText
+  const explicitReason = showLivePreview && hasInput && frame.previewInputText !== materialText
     ? explicitRunReason(frame.item, materialText)
     : undefined
   // Several text results: a list (↵ copies the selected row, ⌘↵ copies all).
@@ -245,12 +249,12 @@ export function GlobalLauncherCollectInputFrame({
   const listIndex = Math.min(Math.max(0, selectedIndex), previewChoices.length - 1)
   // Local latch: never blank the well while typing — only replace when a new text arrives.
   const lastPreviewRef = useRef<string | null>(null)
-  if (!filterText) {
+  if (!hasInput) {
     lastPreviewRef.current = null
   } else if (livePreviewText) {
     lastPreviewRef.current = livePreviewText
   }
-  const displayPreviewText = filterText && !isList ? (livePreviewText ?? lastPreviewRef.current) : null
+  const displayPreviewText = hasInput && !isList ? (livePreviewText ?? lastPreviewRef.current) : null
   // Preview is fresh only when it was computed for the current inputText.
   const previewFresh = Boolean(
     (livePreviewText || isList)
@@ -258,7 +262,7 @@ export function GlobalLauncherCollectInputFrame({
     && frame.previewInputText === materialText,
   )
   // Empty well only when input is empty.
-  const showLiveEmpty = showLivePreview && !filterText
+  const showLiveEmpty = showLivePreview && !hasInput
   // Suggest-backed collect-input: empty choices after load = true empty state (not a fake row).
   const showEmptyState = isSuggestMode && !busy && !hasSuggestions && frame.previewInputText !== undefined
   const commandTitle = resolveDisplayTitle(frame.item.display, locale)
@@ -284,6 +288,7 @@ export function GlobalLauncherCollectInputFrame({
     if (!freshChoice) { onSubmitPrimary?.(); return }
     await onActivateChoice(freshChoice)
   }
+  const extraMenu = useCommandMenuActions(freshChoice ? displayPreviewText : null, frame.item.systemKey, locale)
   const menu: LauncherCommandMenuAction[] = [
     ...(freshChoice && hasReturn
       ? [{ id: 'continue', label: t(locale, 'outputActions.continue'), run: () => onSecondaryAction?.(freshChoice, 'return-to-launcher') }]
@@ -294,8 +299,9 @@ export function GlobalLauncherCollectInputFrame({
           await overwriteQuickEditorText(displayPreviewText, { source: 'tool-result' })
         } }]
       : []),
+    ...extraMenu,
   ]
-  const primaryLabel = !filterText
+  const primaryLabel = !hasInput
     ? undefined
     : error && !freshChoice
       ? t(locale, 'palette.outputRetry')
@@ -321,7 +327,9 @@ export function GlobalLauncherCollectInputFrame({
       // ⇥ only opens parameters; it never moves focus out to icon buttons.
       event.preventDefault()
       event.stopPropagation()
-      if (onOpenParams && !busy && !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) onOpenParams()
+      if (onParamChange && !busy && !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        event.currentTarget.closest('.l-search')?.querySelector<HTMLButtonElement>('[data-value-chip]')?.click()
+      }
       return
     }
     if (event.key === 'Enter') {
@@ -418,12 +426,12 @@ export function GlobalLauncherCollectInputFrame({
           className="mono"
           style={{ caretColor: 'var(--text, currentColor)' }}
         />
-        <LauncherParamChipTrail chips={paramChips} />
-        {onOpenParams && paramChips.length > 0 && <kbd className="r-kbd" title={t(locale, 'palette.customizeParamsLabel')}>⇥</kbd>}
+        {onParamChange ? <LauncherValueChips frame={frame} locale={locale} disabled={busy} onChange={onParamChange} /> : <LauncherParamChipTrail chips={paramChips} />}
         {busy && !showLivePreview && (
           <span className="meta anim-running-pulse" role="status">{t(locale, deliveryIntent === 'copy' ? 'palette.outputCopying' : deliveryIntent ? 'palette.outputDelivering' : 'palette.outputRunning')}</span>
         )}
       </div>
+      <WindowFeedback mode="error" />
       {error && (
         <div role="alert" className="px-3.5 py-2 text-[12px]" style={{ color: 'var(--color-error)' }}>
           {error}

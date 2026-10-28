@@ -1,0 +1,12 @@
+.hiven-value-chip { display:inline-flex; align-items:center; gap:5px; flex:none; max-width:200px; min-height:26px; border:1px solid var(--border); border-radius:6px; padding:3px 7px; background:var(--subtle); color:var(--muted-foreground); font:12px var(--font-sans); cursor:pointer; }
+.hiven-value-chip strong { color:var(--foreground); font-weight:500; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.hiven-value-chip:focus-visible { outline:2px solid var(--ring); outline-offset:2px; }
+.hiven-value-chip:disabled { opacity:.5; cursor:default; }
+.hiven-value-menu { position:fixed; z-index:10000; width:260px; max-height:320px; padding:5px; border:1px solid var(--border); border-radius:10px; background:var(--popover); color:var(--foreground); box-shadow:var(--shadow-float); font:13px var(--font-sans); }
+.hiven-value-menu input { width:100%; height:30px; padding:0 8px; border:0; border-bottom:1px solid var(--border); outline:0; background:transparent; color:inherit; }
+.hiven-value-menu [role=listbox] { max-height:270px; overflow:auto; }
+.hiven-value-menu button { width:100%; display:flex; align-items:center; justify-content:space-between; min-height:32px; padding:7px 9px; border:0; border-radius:6px; background:transparent; color:inherit; text-align:left; cursor:pointer; }
+.hiven-value-menu button.is-highlighted { background:var(--accent); }
+.hiven-value-menu small { display:block; margin-top:3px; color:var(--muted-foreground); font-size:var(--text-xs); }
+.hiven-value-menu p { padding:8px; color:var(--muted-foreground); }
+.launcher-value-chips { display:flex; align-items:center; gap:6px; flex:none; max-width:55%; overflow-x:auto; }

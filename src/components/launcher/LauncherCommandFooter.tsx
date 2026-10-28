@@ -1,3 +1,4 @@
+import { WindowFeedback } from '../../ui/WindowFeedback'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { t, type Locale } from '../../i18n'
@@ -70,6 +71,7 @@ export function LauncherCommandFooter({
 
   return (
     <div className="global-launcher-footer l-foot launcher-command-footer">
+      <WindowFeedback mode="status" />
       <button type="button" className="launcher-footer-back-btn" data-no-drag
         onMouseDown={(event) => event.preventDefault()} onClick={onBack}>
         <LauncherHintKey keys="esc" label={t(locale, 'palette.changeAction')} />

@@ -161,7 +161,7 @@ export function adaptToolToLauncherItem(
       }),
     )
     if (
-      isEditorLike &&
+      isEditorLike && !hasManualInput &&
       !(normalizedSurfaceId === 'quick-editor-command' && input.source === 'selection') &&
       result.ok &&
       result.output?.choices.length === 1 &&

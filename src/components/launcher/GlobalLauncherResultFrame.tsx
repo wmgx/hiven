@@ -1,3 +1,5 @@
+import { useCommandMenuActions } from './useCommandMenuActions'
+import { WindowFeedback } from '../../ui/WindowFeedback'
 import type { Locale } from '../../i18n'
 import { t } from '../../i18n'
 import type { LauncherControllerState, ResultFrame } from '../../workspace/launcher/controller'
@@ -70,6 +72,8 @@ export function GlobalLauncherResultFrame({
   const returnAction = textChoice?.secondaryActions?.find((action) => getHostOutputIntent(action) === 'return-to-launcher' || action.id === 'return-to-launcher')
   const canPaste = !frame.retryOnly && !primaryIsReturn && Boolean(onPastePreviewText)
 
+  const extraMenu = useCommandMenuActions(previewText || null, frame.pendingUsage?.item.systemKey, locale)
+
   if (singleText && textChoice) {
     const runPrimary = () => { if (!busy) onToggleChoice(textChoice, frame) }
     const paste = () => { if (!busy && canPaste) void onPastePreviewText?.(textChoice) }
@@ -79,6 +83,7 @@ export function GlobalLauncherResultFrame({
         const { overwriteQuickEditorText } = await import('../../workspace/quickEditor/quickEditorRequests')
         await overwriteQuickEditorText(previewText, { source: 'tool-result' })
       } }] : []),
+      ...extraMenu,
     ]
     return (
       <div
@@ -106,6 +111,12 @@ export function GlobalLauncherResultFrame({
             onRemove={onBack}
           />
         </div>
+        <WindowFeedback mode="error" />
+        {error && (
+          <div role="alert" className="px-3.5 py-2 text-[12px]" style={{ color: 'var(--color-error)' }}>
+            {error}
+          </div>
+        )}
         <div
           className="launcher-preview-well"
           data-testid="launcher-result-preview-well"
@@ -136,11 +147,7 @@ export function GlobalLauncherResultFrame({
             <span className="launcher-preview-text">{previewText}</span>
           </pre>
         </div>
-        {error && (
-          <div role="alert" className="px-3.5 py-2 text-[12px]" style={{ color: 'var(--color-error)' }}>
-            {error}
-          </div>
-        )}
+
         {frame.retryOnly ? (
           <div className="global-launcher-footer l-foot launcher-output-actionbar">
             <LauncherHintKey keys="esc" label={t(locale, 'palette.back')} />
@@ -197,6 +204,7 @@ export function GlobalLauncherResultFrame({
           onRemove={onBack}
         />
       </div>
+      <WindowFeedback mode="error" />
       <div className={`global-launcher-body l-results ${isConfirmDialog ? 'l-results-confirm' : ''}`}>
         {choices.map((choice, index) => {
           const checked = selectedChoiceIds.has(choice.id)

@@ -9007,3 +9007,7 @@ html[data-window='launcher'] .flux-spatial-shell .recent-clipboard-hint {
 .launcher-markdown-link { text-decoration: underline; text-underline-offset: 2px; }
 .launcher-ai-send-title { margin: 0; font-size: 13px; color: var(--foreground); }
 .launcher-ai-disclosure { padding: 6px 14px 0; }
+
+.window-feedback { flex:none; padding:7px 14px; color:var(--muted-foreground); font-size:12px; }
+.window-feedback.is-error { color:var(--destructive-text); border-bottom:1px solid var(--border); }
+.surface-shell-status .window-feedback, .surface-shell-error .window-feedback { padding:0; border:0; }

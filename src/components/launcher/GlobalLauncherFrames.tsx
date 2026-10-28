@@ -5,7 +5,7 @@ import { localized, type LauncherHostSurfaceTarget, type PluginSurfaceOpenTarget
 import type { PluginSettingsDialogTarget } from '../../workspace/pluginSettingsStore'
 import type { AiSendFrame, CollectInputFrame, LauncherControllerState, ParamInputFrame, ResultFrame } from '../../workspace/launcher/controller'
 import type { LauncherResultChoice } from '../../workspace/launcher/types'
-import { LauncherParamStep, resolveParamValueLabel } from './LauncherParamStep'
+import { LauncherBranchChoices, resolveParamValueLabel } from './LauncherBranchChoices'
 import type { LauncherMixedItem } from './LauncherMixedList'
 import type { PluginUiSurfaceContribution } from '../../workspace/pluginTypes'
 import { GlobalLauncherSystemSurfaceFrame } from './GlobalLauncherSystemSurfaceFrame'
@@ -71,7 +71,7 @@ export function GlobalLauncherFrameSwitch({
   onExitCommand,
   onCollectInputChange,
   onRemoveCommandBlock,
-  onOpenCommandParams,
+  onCommandParamChange,
   onCommandBlockChange,
   onCopyAllChoices,
   onNextParam,
@@ -139,7 +139,7 @@ export function GlobalLauncherFrameSwitch({
   onExitCommand?: (frame?: CollectInputFrame | ParamInputFrame) => void
   onCollectInputChange: (value: string, frame?: CollectInputFrame) => void
   onRemoveCommandBlock?: (frame: CollectInputFrame) => void
-  onOpenCommandParams?: (frame: CollectInputFrame) => void
+  onCommandParamChange?: (key: string, value: unknown, frame: CollectInputFrame) => boolean | undefined
   /** paste: material becomes a Block · edit: ⌘E editor text · sync: replace the list Block */
   onCommandBlockChange?: (change: 'paste' | 'edit' | 'sync', text: string, frame: CollectInputFrame) => void
   /** ⌘↵ on a list of text results. */
@@ -228,7 +228,7 @@ export function GlobalLauncherFrameSwitch({
     const frame = topFrame as ParamInputFrame
     return (
       <LauncherFlowFrame frameKey={`param:${frame.item.systemKey}:${frame.paramIndex}`}>
-        <LauncherParamStep
+        <LauncherBranchChoices
           frame={frame}
           error={controllerState?.error ?? null}
           busy={controllerState?.busy ?? false}
@@ -298,7 +298,7 @@ export function GlobalLauncherFrameSwitch({
           onSubmitPrimary={() => onSubmitCollectInput?.(frame)}
           attachedBlock={clipboardBlock?.block}
           onRemoveBlock={() => onRemoveCommandBlock?.(frame)}
-          onOpenParams={frame.item.executeWithParams && frame.item.params?.length ? () => onOpenCommandParams?.(frame) : undefined}
+          onParamChange={onCommandParamChange ? (key, value) => onCommandParamChange(key, value, frame) : undefined}
           onPasteAsBlock={(text) => onCommandBlockChange?.('paste', text, frame)}
           onBlockTextChange={(text) => onCommandBlockChange?.('edit', text, frame)}
           onSyncBlock={(text) => onCommandBlockChange?.('sync', text, frame)}

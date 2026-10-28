@@ -234,6 +234,7 @@ try {
       const callback = vm.runInNewContext(callbackCode, {
         surfaceOwner: { isCurrent: () => true }, presentation: 'global-launcher',
         launcherPasteOwner: { isCurrent: () => currentLauncher }, showToast: () => { shown++; return 'toast-id' },
+        surfaceFeedback: { notify: () => { shown++; return Promise.resolve() } },
       })
       callback('saved', 'success')
       assert.equal(shown, 1)

@@ -1,5 +1,6 @@
 import { forwardRef, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { SurfaceHeaderActionsContext } from '../../ui/SurfaceHeaderActions'
+import { WindowFeedback } from '../../ui/WindowFeedback'
 import { PluginIcon } from '../../ui/PluginIcon'
 import './SurfaceShell.css'
 
@@ -32,6 +33,7 @@ export const SurfaceShell = forwardRef<HTMLDivElement, {
     </div>
     <div ref={setError} className="surface-shell-error" role="alert" />
     <SurfaceHeaderActionsContext.Provider value={slots}>
+      <WindowFeedback />
       <div className="surface-chrome-body" data-no-drag>{children}</div>
       <footer className="surface-shell-footer" data-no-drag><div ref={setStatus} className="surface-shell-status" role="status" /><div ref={setFooter} className="surface-shell-footer-actions" /></footer>
     </SurfaceHeaderActionsContext.Provider>

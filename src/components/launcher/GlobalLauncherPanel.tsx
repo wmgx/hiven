@@ -251,6 +251,7 @@ export function GlobalLauncherPanel({
       onContextMenu={(event) => {
         if (event.target instanceof HTMLElement && event.target.closest('input, textarea')) return
         event.preventDefault()
+        panelRef.current?.querySelector<HTMLButtonElement>('.launcher-command-footer [aria-haspopup="menu"]')?.click()
       }}
       onKeyDown={(event) => handleGlobalLauncherKeyDown({
         event,
@@ -336,7 +337,7 @@ export function GlobalLauncherPanel({
           if (handled || !frame) focusSearchInputAfterBack()
         }}
         onCollectInputChange={(value, frame) => controllerRef.current?.setInputText(value, frame)}
-        onOpenCommandParams={(frame) => controllerRef.current?.openParams(frame)}
+        onCommandParamChange={(key, value, frame) => controllerRef.current?.setCommandParam(key, value, frame)}
         onNextParam={(frame) => controllerRef.current?.nextParam(frame)}
         onRemoveCommandBlock={(frame) => {
           // The command's Block is the list Block (selected with it, pasted or synced after editing).

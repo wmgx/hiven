@@ -38,6 +38,9 @@ import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } fro
 export { getFluxMonacoTheme as getEditorTheme } from './utils/monacoTheme'
 export { SurfaceHeaderActions, SurfaceHeaderField, SurfaceBreadcrumbs, SurfaceStatus, SurfaceError } from './ui/SurfaceHeaderActions'
 export { ActionBar, ActionBar as SurfaceActionBar } from './ui/ActionBar'
+export { Row, RowList } from './ui/RowList'
+export { EmptyState } from './ui/EmptyState'
+export { ValueChip } from './ui/ValueChip'
 export { PluginIcon } from './ui/PluginIcon'
 export { Tooltip } from '@base-ui/react/tooltip'
 export { useToolDeliveryFeedback } from './ui/useToolDeliveryFeedback'
@@ -658,4 +661,16 @@ export function ConfirmDialog({ open, title, message, confirmLabel = 'Confirm', 
       </AlertDialogContent>
     </AlertDialog>
   )
+}
+
+export { SegmentedControl as Segmented }
+export function ToggleGroup({ options, value, onChange, disabled, 'aria-label': label }: Omit<SegmentedControlProps, 'value' | 'onChange'> & {
+  value: string[]; onChange(value: string[]): void
+}) {
+  return <div className="hiven-ui-segmented" role="group" aria-label={label}>
+    {options.map(option => <button key={option.value} type="button" className="hiven-ui-segmented-item" disabled={disabled}
+      aria-pressed={value.includes(option.value)} onClick={() => onChange(value.includes(option.value) ? value.filter(item => item !== option.value) : [...value, option.value])}>
+      {option.label}
+    </button>)}
+  </div>
 }

@@ -223,7 +223,7 @@ export const sandbox = {
     useAppStore.getState().updateSetting('theme', theme)
   },
   copyImage() { const id = ++serial; images.set(id, { rgba: new Uint8Array([64, 128, 192, 255]), width: 1, height: 1 }); updateClipboard({ kind: 'image', image: id, origin: null }) },
-  surfaceToasts: () => [...document.querySelectorAll('.surface-toast')].map(node => ({ message: node.querySelector('span')?.textContent, level: (node as HTMLElement).dataset.level, actions: [...node.querySelectorAll('button')].map(button => button.textContent || button.getAttribute('aria-label')) })),
+  surfaceFeedback: () => [...document.querySelectorAll('.surface-feedback-inline')].map(node => ({ message: node.querySelector('span')?.textContent, level: (node as HTMLElement).dataset.level, actions: [...node.querySelectorAll('button')].map(button => button.textContent || button.getAttribute('aria-label')) })),
   async snapshot() {
     const { getPasteQueueDebugSnapshot } = await import('../../shortcutHosts/pasteQueue')
     return { queue: getPasteQueueDebugSnapshot(), shortcuts: [...shortcuts.values()].map(({ key }) => key), toasts: sandbox.toasts(), commands: [...commands].sort(), blocked: [...blocked].sort(), visible }

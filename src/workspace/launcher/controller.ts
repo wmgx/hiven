@@ -160,7 +160,7 @@ export type LauncherControllerDeps = {
   /** Capture optional local metadata attribution before any async preparation. */
   captureSuccessfulSelection?: () => (item: LauncherItem) => void
   /** Notify the host that the launcher should close (success, no output). */
-  requestClose: () => void
+  requestClose: (intent?: OutputIntent) => void
   /** Clear search after a successful host return/save, preserving attached material. */
   onReturnToRoot?: () => void
   /** Synchronous attached-material epoch. An installed getter returning undefined is inactive. */
@@ -657,6 +657,21 @@ export class LauncherController {
     return !item.imageInput && this.shouldPreviewInput(this.collectInputFrameFor(item))
   }
 
+  setCommandParam(key: string, value: unknown, expectedFrame?: CollectInputFrame): boolean {
+    const top = this.topFrame()
+    if (this.state.busy || top.kind !== 'collect-input' || (expectedFrame && top.item !== expectedFrame.item)) return false
+    const param = top.item.params?.find(param => param.key === key)
+    if (!param) return false
+    const previous = { ...this.defaultParamsFor(top.item), ...top.params }
+    const params = { ...previous, [key]: this.normalizeParamValue(param, value) }
+    const error = this.validateParam(param, params)
+    if (error) { this.setState({ error }); return false }
+    if (JSON.stringify(previous[key]) === JSON.stringify(params[key])) { this.setState({ error: null }); return true }
+    this.invalidatePendingActions()
+    this.setState({ frames: [...this.state.frames.slice(0, -1), { ...top, params, previewInputText: undefined }], error: null })
+    return true
+  }
+
   /** ⇥ in the command frame: edit its parameters in a sublayer. */
   openParams(expectedFrame?: CollectInputFrame): boolean {
     const top = this.topFrame()
@@ -734,7 +749,7 @@ export class LauncherController {
   }
 
   private shouldPreviewInput(frame: CollectInputFrame): boolean {
-    return !frame.item.metadataInput && this.shouldCollectTextInput(frame.item)
+    return !frame.item.metadataInput && (this.shouldCollectTextInput(frame.item) || (frame.input.allowEmptyInput === true && this.hasCustomizableParams(frame.item) && frame.item.actionPolicy?.effect === 'pure'))
   }
 
   private collectInputFrameFor(
@@ -828,7 +843,7 @@ export class LauncherController {
     if (item.initialInputText === undefined && this.isCommandTool(item)) {
       trackBehavior(TelemetryEvents.launcherEnterCollectInput, itemTelemetryProps(item))
       const frames: LauncherFrame[] = [...this.state.frames, { ...this.collectInputFrameFor(item, undefined, recordUsage), blockText: options.objectBlockText }]
-      if (options.customizeParams && this.hasCustomizableParams(item)) {
+      if (options.customizeParams && this.hasCustomizableParams(item) && item.requireParamSelection) {
         frames.push({ ...this.paramFrameFor(item, undefined, 0, undefined, recordUsage), sublayer: 'required' })
       }
       this.setState({ frames })
@@ -836,7 +851,13 @@ export class LauncherController {
       return
     }
 
-    // Other commands: the customize gesture opens the param page before running.
+    if (options.customizeParams && this.hasCustomizableParams(item) && !item.requireParamSelection && item.actionPolicy?.effect === 'pure') {
+      const frame = this.collectInputFrameFor(item, this.defaultParamsFor(item), recordUsage)
+      this.setState({ frames: [...this.state.frames, { ...frame, input: { ...frame.input, allowEmptyInput: !item.inputPolicy } }], error: null })
+      return
+    }
+
+    // Required branches remain explicit result choices before running.
     if (options.customizeParams && this.hasCustomizableParams(item)) {
       trackBehavior(TelemetryEvents.launcherEnterParamInput, itemTelemetryProps(item))
       this.setState({
@@ -1789,6 +1810,7 @@ export class LauncherController {
       this.failDelivery(launcherResult.message, options.retryFrame)
       return
     }
+    const deliveredIntent = options.intent ?? (actionNode ? getHostOutputIntent(actionNode) ?? undefined : undefined)
     this.activeDelivery = null
     this.setState({ deliveryIntent: null })
     const usageToCommit = actionNode && 'tone' in actionNode && actionNode.tone === 'muted'
@@ -1800,7 +1822,7 @@ export class LauncherController {
       this.flowGeneration += 1
       if (usageToCommit) this.recordSuccessfulSelection(usageToCommit.item, { recordUsage: usageToCommit.recordUsage })
       this.setState({ busy: false })
-      this.deps.requestClose()
+      this.deps.requestClose(deliveredIntent)
     }
   }
 
@@ -1897,7 +1919,7 @@ export class LauncherController {
     // Success with no output: close.
     this.flowGeneration += 1
     this.setState({ busy: false, error: null })
-    this.deps.requestClose()
+    this.deps.requestClose(appliedOutputIntent)
   }
 
   private itemTitle(item: LauncherItem): string {

@@ -86,41 +86,32 @@ try {
   {
     const h = harness('quick-editor-command')
     await h.controller.selectItem(random, { customizeParams: true, recordUsage: false })
-    for (const value of [10, 5, 7]) await h.controller.commitCurrentParam(value)
+    assert.equal(h.top().kind, 'collect-input')
+    for (const [key, value] of Object.entries({ min: 10, max: 5, count: 7 })) h.controller.setCommandParam(key, value)
+    await h.controller.previewInput()
     assert.match(h.controller.getState().error, /Max can't be less than min/)
     assert.deepEqual(h.deliveries, [])
-    h.controller.back()
-    assert.equal(h.top().query, '5')
-    await h.controller.commitCurrentParam(20)
-    assert.equal(h.top().query, '7')
+    h.controller.setCommandParam('max', 20)
     assert.deepEqual(h.top().params, { min: 10, max: 20, count: 7 })
-    await h.controller.commitCurrentParam(h.top().query)
+    await h.controller.previewInput()
     assert.equal(h.controller.getState().error, null)
+    assert.deepEqual(h.deliveries, [], 'preview does not deliver')
+    await h.controller.submitInput()
     const numbers = h.deliveries[0][1].split('\n').map(Number)
     assert.equal(numbers.length, 7)
-    assert.ok(numbers.every((value) => Number.isInteger(value) && value >= 10 && value <= 20))
+    assert.ok(numbers.every(value => Number.isInteger(value) && value >= 10 && value <= 20))
   }
 
-  // An unsubmitted edit is a draft too, including an intentionally empty field.
+  // A value chip rejects invalid custom numbers without replacing the committed value.
   {
     const h = harness('quick-editor-command')
     await h.controller.selectItem(random, { customizeParams: true, recordUsage: false })
-    await h.controller.commitCurrentParam(10)
-    await h.controller.commitCurrentParam(20)
-    for (const query of ['9', '', '1.', '01', '1e2', '2.00', '  ', 'invalid-number']) {
-      h.controller.setParamQuery(query)
-      h.controller.back()
-      assert.equal(h.top().params.count, 1, 'unsubmitted draft does not replace the committed value')
-      await h.controller.commitCurrentParam(20)
-      assert.equal(h.top().query, query)
-    }
-    await h.controller.commitCurrentParam(h.top().query)
+    assert.equal(h.controller.setCommandParam('count', 'invalid-number'), false)
     assert.match(h.controller.getState().error, /valid number/)
-    assert.deepEqual(h.deliveries, [], 'restoring an invalid numeric draft cannot execute it')
-    h.controller.setParamQuery('03')
-    await h.controller.commitCurrentParam(h.top().query)
-    assert.equal(h.top().params.count, 3, 'committing performs number normalization')
-    assert.equal(h.top().paramDrafts.count, undefined, 'a committed value replaces its old draft')
+    assert.equal(h.top().params.count, 1)
+    assert.deepEqual(h.deliveries, [])
+    assert.equal(h.controller.setCommandParam('count', '03'), true)
+    assert.equal(h.top().params.count, 3)
   }
 
   // A retained choice is only a draft: changed options and constraints still apply.

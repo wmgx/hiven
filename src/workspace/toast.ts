@@ -72,16 +72,18 @@ export function showToast(
   const notify = typeof options === 'object' ? options.notify : undefined
 
   let persistent = false
-  let durationMs = 3500
+  let durationMs = 1500
   let action: ToastAction | undefined
 
   if (typeof options === 'number') {
     durationMs = options
   } else if (options) {
     persistent = options.persistent ?? false
-    durationMs = options.durationMs ?? 3500
+    durationMs = options.durationMs ?? 1500
     action = options.action
   }
+
+  if (!notify && level === 'error' && typeof document !== 'undefined' && document.querySelector('.surface-chrome, .global-launcher-panel')) persistent = true
 
   const createdAt = Date.now()
   // A status lives until its session ends; the native bound only stops leaks.

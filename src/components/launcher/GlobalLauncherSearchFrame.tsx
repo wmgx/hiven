@@ -1,3 +1,4 @@
+import { WindowFeedback } from '../../ui/WindowFeedback'
 import type { LauncherSearchRecovery } from '../../workspace/launcher/searchRecovery'
 import { useLayoutEffect, useState, type FocusEvent as ReactFocusEvent, type MouseEvent as ReactMouseEvent, type MutableRefObject, type RefObject } from 'react'
 import { ArrowLeft, Search, X } from 'lucide-react'
@@ -202,6 +203,7 @@ export function GlobalLauncherSearchFrame({
           </button>
         )}
       </div>
+      <WindowFeedback mode="error" />
       <div
         className="global-launcher-body l-list"
         data-no-drag
@@ -341,6 +343,7 @@ export function GlobalLauncherSearchFrame({
       )}
       <div className="global-launcher-footer l-foot" onFocusCapture={handleFocus} onBlurCapture={handleBlur}>
         <div className="l-foot-hints">
+          <WindowFeedback mode="status" />
           {showListHints && selectedItem?.domainItem.executeWithParams && selectedItem.domainItem.params?.length ? (
             <LauncherHintKey keys="⇥" label={t(locale, 'palette.customizeParamsLabel')} />
           ) : null}
