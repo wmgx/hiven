@@ -199,7 +199,7 @@ test('disconnected and visually hidden roots never steal focus', () => {
 // This checks the important no-write-on-blur behavior, not styles or snapshots.
 const react = require('react')
 const renderer = load('src/components/PluginSettingsSchemaRenderer.tsx', {
-  react: { ...react, useState: (initial) => [typeof initial === 'function' ? initial() : initial, () => {}] },
+  react: { ...react, useState: (initial) => [typeof initial === 'function' ? initial() : initial, () => {}], useRef: (current) => ({ current }), useEffect() {} },
   'react/jsx-runtime': require('react/jsx-runtime'),
   'lucide-react': require('lucide-react'),
   '../workspace/pluginPermissions': { describePluginPermission: () => 'permission' },

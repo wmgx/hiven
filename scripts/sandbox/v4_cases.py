@@ -304,12 +304,12 @@ def s43(page):
 
 def s44(page):
     page.evaluate('__hivenSandbox.openSurface({pluginId:"csv",surfaceId:"main",source:"builtin",initialText:"name,score\\nAda,3\\nBob,7"})')
-    expect(page.locator('.csv-tools-surface')).to_be_visible()
-    page.locator('.csv-tools-surface').click(position={"x": 4, "y": 4})
+    expect(page.get_by_role('grid')).to_be_visible()
+    page.get_by_role('gridcell', name='Ada', exact=True).click()
+    page.clock.run_for(100)
     with page.expect_file_chooser() as chooser:
         page.keyboard.press('Meta+o')
     chooser.value.set_files([])
-    expect(page.get_by_role('grid')).to_be_visible()
     chips = page.locator('[data-value-chip]')
     expect(chips).to_have_count(3)
     chips.nth(2).click()

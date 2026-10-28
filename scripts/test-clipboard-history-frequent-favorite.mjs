@@ -20,7 +20,6 @@ const requiredKeys = [
   'state.emptyFavorite',
   'favorite.info',
   'favorite.titlePlaceholder',
-  'favorite.untitled',
   'action.favorite',
   'action.unfavorite',
   'message.favorited',
@@ -28,7 +27,6 @@ const requiredKeys = [
   'action.editFavoriteInfo',
   'action.cancel',
   'meta.timesPasted',
-  'meta.favorite',
   'error.favoriteFailed',
 ]
 

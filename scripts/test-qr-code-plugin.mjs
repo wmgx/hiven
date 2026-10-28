@@ -79,7 +79,6 @@ for (const key of [
   'qr.generate.title',
   'qr.decode.title',
   'surface.title',
-  'mode.generate',
   'mode.scan',
   'error.noQr',
 ]) {
