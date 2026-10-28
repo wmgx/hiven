@@ -63,7 +63,7 @@ const qrCodePlugin = definePlugin({
         textMatch: isImageDataUrl,
         component: QrSurface,
         entry: { launcher: { surfaces: ['global-launcher'] }, shortcutBindable: true },
-        shell: QR_SHELL,
+        shell: { ...QR_SHELL, mode: 'command', inlineHeight: 640, resizable: false },
       },
     ],
   },

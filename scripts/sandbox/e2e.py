@@ -7,7 +7,7 @@ import sys
 import time
 from pathlib import Path
 from playwright.sync_api import sync_playwright, expect
-from v4_cases import s33, s34, s35, s36, s37, s38
+from v4_cases import s33, s34, s35, s36, s37, s38, s39
 
 URL = 'http://localhost:1420/?window=launcher&sandbox=1'
 
@@ -251,7 +251,7 @@ def open_surface(page, target, presentation='inline'):
     chrome = page.locator('.surface-chrome:visible')
     expect(chrome).to_have_count(1)
     expect(chrome.locator('.surface-shell-tag')).not_to_be_empty()
-    roots = {'calculator':'.calculator-surface', 'clipboard-history':'.clipboard-history-surface', 'csv':'.csv-tools-surface__header', 'date-time-assistant':'.date-time-surface__inputs', 'image-tools':'.image-tools-surface', 'qr-code':'.qr-surface', 'regex-tester':'.regex-tester-surface', 'text-explode':'.text-explode-surface', 'text-tools':'.url-query-surface, .json-expression-surface, .base64-surface', 'text-diff':'.td-surface', 'translate':'.translate-surface'}
+    roots = {'calculator':'.calculator-surface', 'clipboard-history':'.clipboard-history-surface', 'csv':'.csv-tools-surface__header', 'date-time-assistant':'.date-time-surface', 'image-tools':'.image-tools-surface', 'qr-code':'.qr-surface', 'regex-tester':'.regex-tester-surface', 'text-explode':'.text-explode-surface', 'text-tools':'.url-query-surface, .json-expression-surface, .base64-surface', 'text-diff':'.td-surface', 'translate':'.translate-surface'}
     expect(chrome.locator(roots[target['pluginId']])).to_be_visible()
     return chrome
 
@@ -604,7 +604,7 @@ def s32(page):
         page.wait_for_function('document.activeElement?.hasAttribute("data-clipboard-history-search")')
 
 
-CASES = [s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15,s16,s17,s18,s19,s20,s21,s22,s23,s24,s25,s26,s27,s28,s29,s30,s31,s32,s33,s34,s35,s36,s37,s38]
+CASES = [s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15,s16,s17,s18,s19,s20,s21,s22,s23,s24,s25,s26,s27,s28,s29,s30,s31,s32,s33,s34,s35,s36,s37,s38,s39]
 
 
 def main():

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, SegmentedControl, Select, TextArea, TextInput } from '@hiven/plugin-ui'
+import { Button, TextArea, TextInput, ValueChip, SurfaceHeaderActions, SurfaceError, SurfaceStatus, ActionBar } from '@hiven/plugin-ui'
 import { saveQrImage } from './saveQrImage'
 import { createQrPasteHandlers } from './qrPaste'
 import { createQrScanSession, EMPTY_QR_SCAN } from './qrScanSession'
@@ -33,8 +33,9 @@ export function QrSurface(props: PluginSurfaceProps) {
   const { host, t, initialText, surfaceId } = props
   const startMode = initialMode(surfaceId, initialText)
   const initialIsImage = Boolean(initialText && isImageDataUrl(initialText))
+  const edited = useRef(false)
   const baselineText = useRef(startMode === 'generate' && !initialIsImage ? (initialText ?? '') : '')
-  const [mode, setMode] = useState<Mode>(startMode)
+  const [mode] = useState<Mode>(startMode)
   const [text, setText] = useState(baselineText.current)
   const [ecc, setEcc] = useState<QrErrorCorrection>(DEFAULT_QR_ERROR_LEVEL)
   const [size, setSize] = useState(DEFAULT_QR_SIZE)
@@ -89,6 +90,15 @@ export function QrSurface(props: PluginSurfaceProps) {
       cancelled = true
     }
   }, [ecc, size, t, text])
+
+  useEffect(() => {
+    let live = true
+    if (mode === 'generate' && !initialText) void host.clipboard.readText().then(value => { if (live && !edited.current) setText(value) }).catch(() => {})
+    if (mode === 'scan' && !initialIsImage) void host.clipboard.readImage?.().then(image => {
+      if (live) void scanRef.current?.blob(new Blob([Uint8Array.from(image.bytes)], { type: image.contentType || 'image/png' }))
+    }).catch(() => {})
+    return () => { live = false }
+  }, [])
 
   const decodeBlob = useCallback((blob: Blob) => scanRef.current?.blob(blob), [])
 
@@ -159,58 +169,33 @@ export function QrSurface(props: PluginSurfaceProps) {
   }, [dataUrl, host, t])
 
   return (
-    <section className="qr-surface" aria-label={t('surface.title')}>
-      <header className="qr-surface__header">
-        <SegmentedControl
-          aria-label={t('surface.title')}
-          value={mode}
-          onChange={(next) => {
-            if (next === mode) return
-            scanRef.current?.reset()
-            setMode(next as Mode)
-          }}
-          options={[
-            { value: 'generate', label: t('mode.generate') },
-            { value: 'scan', label: t('mode.scan') },
-          ]}
-        />
-        <div className="qr-surface__header-spacer" />
+    <section className={`qr-surface ${mode === 'scan' ? 'qr-surface--scan' : ''}`} data-command-content={mode === 'scan' ? '' : undefined} aria-label={t('surface.title')}>
+      {mode === 'generate' && <SurfaceHeaderActions>
+        <ValueChip label={t('param.ecc')} value={ecc} options={QR_ERROR_LEVELS.map(value => ({ value, label: t(`ecc.${value}`) }))} onChange={value => setEcc(normalizeQrErrorCorrection(String(value)))} onPreview={value => setEcc(normalizeQrErrorCorrection(String(value)))} />
+        <ValueChip label={t('param.size')} value={String(size)} options={QR_SIZES.map(value => ({ value: String(value), label: t(`param.size.option.${value}`) }))} onChange={value => setSize(normalizeQrSize(String(value)))} onPreview={value => setSize(normalizeQrSize(String(value)))} />
+      </SurfaceHeaderActions>}
+      <SurfaceError>{mode === 'generate' ? genError : scanError}</SurfaceError>
+      <SurfaceStatus>{scan.busy ? t('scan.working') : saving ? t('action.saving') : ''}</SurfaceStatus>
+      <ActionBar>
         {host.OutputActions && (mode === 'generate'
           ? <host.OutputActions copy={writeImage} disabled={!dataUrl} more={[
             { id: 'copy-data-url', label: t('action.copyDataUrl'), run: () => host.clipboard.writeText(dataUrl) },
             { id: 'save-image', label: t(saving ? 'action.saving' : 'action.saveImage'), run: saveImage },
           ]} />
           : <host.OutputActions text={scan.busy ? '' : scanResult} />)}
-      </header>
+      </ActionBar>
 
       {mode === 'generate' ? (
         <div className="qr-surface__body">
           <div className="qr-surface__pane">
-            <div className="qr-surface__toolbar">
-              <span className="qr-surface__label">{t('param.ecc')}</span>
-              <Select
-                aria-label={t('param.ecc')}
-                value={ecc}
-                options={QR_ERROR_LEVELS.map((level) => ({ value: level, label: t(`ecc.${level}`) }))}
-                onChange={(event) => setEcc(normalizeQrErrorCorrection(event.target.value))}
-              />
-              <span className="qr-surface__label">{t('param.size')}</span>
-              <Select
-                aria-label={t('param.size')}
-                value={String(size)}
-                options={QR_SIZES.map((value) => ({
-                  value: String(value),
-                  label: t(`param.size.option.${value}`),
-                }))}
-                onChange={(event) => setSize(normalizeQrSize(event.target.value))}
-              />
-            </div>
             <TextArea
               className="qr-surface__input"
+              data-plugin-surface-autofocus
+              aria-label={t('generate.placeholder')}
               value={text}
               spellCheck={false}
               placeholder={t('generate.placeholder')}
-              onChange={(event) => setText(event.target.value)}
+              onChange={(event) => { edited.current = true; setText(event.target.value) }}
             />
           </div>
           <div className="qr-surface__pane qr-surface__pane--preview">
@@ -219,7 +204,7 @@ export function QrSurface(props: PluginSurfaceProps) {
                 <img src={dataUrl} alt={t('surface.title')} draggable={false} />
               ) : (
                 <div className={genError ? 'qr-surface__error' : 'qr-surface__placeholder'}>
-                  {genError || t('generate.empty')}
+                  {!genError && t('generate.empty')}
                 </div>
               )}
             </div>
@@ -250,7 +235,7 @@ export function QrSurface(props: PluginSurfaceProps) {
               onClick={() => fileRef.current?.click()}
             >
               {scanPreview ? <img src={scanPreview} alt={t('mode.scan')} /> : null}
-              <div className="qr-surface__drop-title">{t('scan.drop')}</div>
+              {!scanPreview && <div className="qr-surface__drop-title">{t('scan.drop')} · ⌘V</div>}
               <Button
                 type="button"
                 onClick={(event) => {
@@ -263,16 +248,7 @@ export function QrSurface(props: PluginSurfaceProps) {
             </div>
           </div>
           <div className="qr-surface__pane qr-surface__pane--preview">
-            <div className="qr-surface__toolbar">
-              <span className="qr-surface__label">{t('scan.result')}</span>
-            </div>
-            {scanError ? (
-              <div className="qr-surface__error">{scanError}</div>
-            ) : (
-              <pre className="qr-surface__result">
-                {scan.busy ? t('scan.working') : (scanResult || t('scan.drop'))}
-              </pre>
-            )}
+            <pre className="qr-surface__result">{scanResult}</pre>
           </div>
         </div>
       )}
