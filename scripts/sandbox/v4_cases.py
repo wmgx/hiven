@@ -197,6 +197,9 @@ def s38(page):
     expect(page.locator('.surface-shell-status')).to_contain_text('1 redactions')
     canvas.press('Meta+z')
     expect(page.locator('.surface-shell-status')).to_contain_text('0 redactions')
+    page.evaluate('__hivenSandbox.openSurface({pluginId:"image-tools",surfaceId:"image-resize",source:"builtin"})')
+    page.locator('.image-resize .hiven-row').click()
+    expect(page.locator('.image-resize')).to_have_count(0)
 
 
 def s39(page):

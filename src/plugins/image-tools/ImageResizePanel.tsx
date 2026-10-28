@@ -9,6 +9,7 @@ import './imageCrop.css'
 
 type Props = PluginSurfaceProps & { onDirtyChange(dirty: boolean): void; invalidateRef: { current: (() => void) | null } }
 export function ImageResizePanel({ host, t, onDirtyChange, invalidateRef }: Props) {
+  const primary = useRef<HTMLButtonElement>(null)
   const [original, setOriginal] = useState<HTMLCanvasElement | null>(null)
   const [width, setWidth] = useState('')
   const readyRef = useRef(false)
@@ -115,12 +116,12 @@ export function ImageResizePanel({ host, t, onDirtyChange, invalidateRef }: Prop
       if (pending.current) return
       invalidate(); setWidth(event.target.value); setDirty(true); setStatus('')
     }} /></SurfaceHeaderField>
-    {original && <RowList label={t('resize.title')} selectedId="result" onSelect={() => {}} onActivate={() => { if (size && ready && !busy) void run(async (signal, current) => { const bytes = await exportResizedImage(original, width, signal); if (current()) { await copyPng(host, bytes); if (current()) host.showMessage(t('image.copied'), 'success') } }) }}
+    {original && <RowList label={t('resize.title')} selectedId="result" onSelect={() => {}} onActivate={() => primary.current?.click()}
       items={[{ id: 'result', title: size ? `${original.width} × ${original.height} → ${size.width} × ${size.height}` : t('resize.invalid'), description: t('image.copyImage'), disabled: busy || !size || !ready, icon: <canvas ref={canvas} className="image-resize-thumbnail" aria-label={t('resize.preview')} /> }]} />}
     <SurfaceError>{status && status !== 'image.busy' && status !== 'image.saved' ? t(status) : original && !size ? t('resize.invalid') : null}</SurfaceError>
     <SurfaceStatus>{status === 'image.busy' || status === 'image.saved' ? t(status) : ''}</SurfaceStatus>
     <ActionBar>
-      {host.OutputActions && <host.OutputActions disabled={busy || !ready || !size}
+      {host.OutputActions && <host.OutputActions primaryRef={primary} disabled={busy || !ready || !size}
         copy={async () => copyPng(host, await exportResizedImage(original!, width, new AbortController().signal))}
         more={[{ id: 'file', label: t('image.chooseFile'), run: () => choose('file') }, { id: 'clipboard', label: t('image.readClipboard'), run: () => choose('clipboard') }, { id: 'save', label: t('image.save'), run: save }]} />}
     </ActionBar>

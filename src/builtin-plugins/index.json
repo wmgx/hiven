@@ -1,10 +1,10 @@
 {
-  "version": 238,
+  "version": 239,
   "packages": [
     {
       "pluginId": "image-tools",
       "dir": "image-tools",
-      "version": "1.0.9"
+      "version": "1.0.10"
     },
     {
       "pluginId": "csv",
