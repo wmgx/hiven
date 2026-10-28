@@ -1,3 +1,4 @@
+import { usePluginSurfaceIcon } from './pluginSurface/usePluginSurfaceIcon'
 import { consumeLocalEscapeLayer } from '../utils/localEscapeLayer'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore, type PluginSurfaceOpenTarget } from '../store'
@@ -12,7 +13,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { PluginSettingsDialog } from './PluginSettingsDialog'
 import { ToastContainer } from './workspace/ToastContainer'
 import { PluginSurfaceRenderer, type PluginSurfaceLeaveOwner, usePluginSurfaceTitle } from './pluginSurface/PluginSurfaceRenderer'
-import { SurfaceChrome } from './pluginSurface/SurfaceChrome'
+import { SurfaceShell } from './pluginSurface/SurfaceShell'
 import './PluginSurfaceWindow.css'
 
 type WindowEntry = { id: string; target: PluginSurfaceOpenTarget }
@@ -273,9 +274,10 @@ function DraftReportingSurface({ entry, reportDraft, ...props }: {
   const onUnsavedChangesChange = useCallback((dirty: boolean, owner: PluginSurfaceLeaveOwner) => {
     reportDraft(entry, dirty, owner)
   }, [entry, reportDraft])
+  const icon = usePluginSurfaceIcon(entry.target)
   const title = usePluginSurfaceTitle(entry.target, props.locale)
-  return <SurfaceChrome title={title} standalone onClose={props.onClose}><PluginSurfaceRenderer {...props} target={entry.target} presentation="plugin-surface-window"
-    contextSurfaceId="plugin-surface-window" onUnsavedChangesChange={onUnsavedChangesChange} /></SurfaceChrome>
+  return <SurfaceShell title={title} icon={icon} standalone onClose={props.onClose}><PluginSurfaceRenderer {...props} target={entry.target} presentation="plugin-surface-window"
+    contextSurfaceId="plugin-surface-window" onUnsavedChangesChange={onUnsavedChangesChange} /></SurfaceShell>
 }
 
 function parseTargetFromUrl(): PluginSurfaceOpenTarget | null {

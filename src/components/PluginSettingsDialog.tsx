@@ -8,6 +8,7 @@
 import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from 'react'
 import { Dialog } from '@base-ui/react/dialog'
 import { X } from 'lucide-react'
+import { SurfaceShell } from './pluginSurface/SurfaceShell'
 import { t } from '../i18n'
 import { makePluginT } from '../i18n/pluginI18nRegistry'
 import { useAppStore } from '../store'
@@ -95,7 +96,7 @@ export function PluginSettingsDialog() {
         <Dialog.Backdrop className={`plugin-settings-dialog-backdrop fixed inset-0 z-[1200]${fillsPluginWindow ? '' : ' bg-black/40'}${isClosing ? ' is-closing' : ''}`} />
         <Dialog.Popup
           aria-labelledby={titleId}
-          initialFocus={activeTarget.target ? false : () => document.querySelector<HTMLElement>('[data-settings-dialog-close]')}
+          initialFocus={activeTarget.target ? false : () => document.querySelector<HTMLElement>('.surface-shell-tag')}
           className={`fixed left-1/2 top-1/2 z-[1201] -translate-x-1/2 -translate-y-1/2 flex flex-col overflow-hidden plugin-settings-dialog-panel${isClosing ? ' is-closing' : ''}`}
           style={{
             width: fillsPluginWindow ? '100vw' : 'min(780px, calc(100vw - 40px))',
@@ -351,31 +352,7 @@ function SettingsDialogBody({
   }
 
   return (
-    <>
-      {/* Header */}
-      <div
-        className="flex items-center justify-between px-5 py-3.5 shrink-0"
-        style={{ borderBottom: 'var(--hairline) solid var(--color-border-tertiary)' }}
-      >
-        <h2
-          id={titleId}
-          className="text-[15px] font-semibold m-0"
-          style={{ color: 'var(--color-text-primary)' }}
-        >
-          {title}
-        </h2>
-        <button
-          className="flex items-center justify-center w-7 h-7 rounded-md"
-          style={{ color: 'var(--color-text-tertiary)', background: 'transparent' }}
-          onClick={onClose}
-          title={t(locale, 'scripts.settingsClose')}
-          aria-label={t(locale, 'scripts.settingsClose')}
-          data-settings-dialog-close
-        >
-          <X size={16} />
-        </button>
-      </div>
-
+    <SurfaceShell title={title} titleId={titleId} icon="Settings" onClose={onClose}>
       {/* Migration warning */}
       {migrationError && (
         <div
@@ -463,6 +440,6 @@ function SettingsDialogBody({
           </Dialog.Portal>
         </Dialog.Root>
       )}
-    </>
+    </SurfaceShell>
   )
 }

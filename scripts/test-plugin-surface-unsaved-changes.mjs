@@ -46,7 +46,8 @@ function frameHarness() {
     react, 'react/jsx-runtime': {}, '../../i18n': {}, '../../plugin-ui': {},
     '../../utils/localEscapeLayer': { consumeLocalEscapeLayer: () => false },
     './launcherEscapeInterceptor': { useLauncherEscapeInterceptor() {} },
-    '../pluginSurface/PluginSurfaceRenderer': {}, '../pluginSurface/SurfaceChrome': {},
+    '../pluginSurface/usePluginSurfaceIcon': { usePluginSurfaceIcon: () => 'Puzzle' },
+    '../pluginSurface/PluginSurfaceRenderer': {}, '../pluginSurface/SurfaceShell': {},
   }
   const context = { exports: {}, Element: class {}, require(name) { assert.ok(Object.hasOwn(modules, name), name); return modules[name] } }
   vm.runInNewContext(frameCode, context, { filename: framePath })

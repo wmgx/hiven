@@ -96,7 +96,8 @@ function fixture({ initiallyFocused = true } = {}) {
     'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) },
     '../../i18n': { t: (_, key) => key }, '../../plugin-ui': { ConfirmDialog: () => null },
     './launcherEscapeInterceptor': { useLauncherEscapeInterceptor() {} },
-    '../pluginSurface/PluginSurfaceRenderer': { PluginSurfaceRenderer }, '../pluginSurface/SurfaceChrome': {},
+    '../pluginSurface/usePluginSurfaceIcon': { usePluginSurfaceIcon: () => 'Puzzle' },
+    '../pluginSurface/PluginSurfaceRenderer': { PluginSurfaceRenderer }, '../pluginSurface/SurfaceShell': {},
   })
   function findRenderer(node) {
     if (!node || typeof node !== 'object') return null

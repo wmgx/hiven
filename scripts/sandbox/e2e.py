@@ -247,7 +247,7 @@ def open_surface(page, target, presentation='inline'):
         page.set_viewport_size({'width':size['width'], 'height':size['height']})
     chrome = page.locator('.surface-chrome:visible')
     expect(chrome).to_have_count(1)
-    expect(chrome.locator('.surface-chrome-title')).not_to_be_empty()
+    expect(chrome.locator('.surface-shell-tag')).not_to_be_empty()
     roots = {'calculator':'.calculator-surface', 'clipboard-history':'.clipboard-history-surface', 'csv':'.csv-tools-surface__header', 'date-time-assistant':'.date-time-surface__inputs', 'image-tools':'.image-tools-surface', 'qr-code':'.qr-surface', 'regex-tester':'.regex-tester-surface', 'text-explode':'.text-explode-surface', 'text-tools':'.url-query-surface, .json-expression-surface, .base64-surface', 'text-diff':'.td-surface', 'translate':'.translate-surface'}
     expect(chrome.locator(roots[target['pluginId']])).to_be_visible()
     return chrome
@@ -267,10 +267,10 @@ def s14(page):
             for presentation in ['inline', 'window']:
                 chrome = open_surface(page, target, presentation)
                 title = target.get('titleI18n', {}).get(language, target['title'])
-                expect(chrome.locator('.surface-chrome-title')).to_have_text(title)
+                expect(chrome.locator('.surface-shell-title')).to_have_text(title)
                 header = chrome.locator('.surface-chrome-header')
                 # A header that hosts the surface's input grows to fit a bordered field.
-                expected = 48 if header.locator('.surface-chrome-field input').count() else 36
+                expected = 56
                 assert round(header.bounding_box()['height']) == expected, target
                 assert header.locator('button[data-tauri-drag-region]').count() == 0
                 assert chrome.locator('.surface-chrome-body').get_attribute('data-no-drag') is not None
@@ -280,7 +280,7 @@ def s14(page):
                     assert header.get_attribute('data-tauri-drag-region') is not None
                 else:
                     before = page.evaluate('__hivenSandbox.dragCount()')
-                    chrome.locator('.surface-chrome-title').dispatch_event('pointerdown', {'button': 0})
+                    header.dispatch_event('pointerdown', {'button': 0})
                     page.wait_for_timeout(50)
                     assert page.evaluate('__hivenSandbox.dragCount()') == before + 1, target
                     header.locator('button').first.dispatch_event('pointerdown', {'button': 0})
@@ -301,7 +301,7 @@ def s15(page):
             chrome.focus()
             page.keyboard.press('Escape')
         else:
-            chrome.locator('.surface-chrome-header').get_by_role('button', name='back', exact=True).click()
+            chrome.locator('.surface-shell-tag').click()
         expect(page.get_by_placeholder(re.compile('Search (commands|actions)'))).to_be_visible()
         expect(page.locator('.surface-chrome:visible')).to_have_count(0)
 
@@ -446,7 +446,7 @@ def s24(page):
             continue
         for presentation in ['inline', 'window']:
             chrome = open_surface(page, target, presentation)
-            title = chrome.locator('.surface-chrome-title').inner_text()
+            title = chrome.locator('.surface-shell-tag').inner_text()
             expect(chrome.locator('.surface-chrome-body').get_by_text(title, exact=True)).to_have_count(0)
 
 
@@ -502,15 +502,15 @@ def s27(page):
     expect(page.locator('[data-ai-send-summary]')).to_have_text('1 commands can send directly')
     page.locator('[data-ai-send-summary]').click()
     grants = page.locator('[data-ai-send-grants="ai-writing"]')
-    expect(page.get_by_role('dialog').get_by_role('heading', name='AI Writing', exact=True)).to_be_visible()
+    expect(page.get_by_role('dialog').get_by_role('button', name='AI Writing', exact=True)).to_be_visible()
     page.evaluate('__hivenSandbox.appearance("dark", "zh")')
-    expect(page.get_by_role('dialog').get_by_role('heading', name='AI 写作', exact=True)).to_be_visible()
+    expect(page.get_by_role('dialog').get_by_role('button', name='AI 写作', exact=True)).to_be_visible()
     page.evaluate('__hivenSandbox.appearance("light", "en")')
     expect(grants.get_by_role('switch')).to_be_checked()
     capture_themes(page, 'ai-grants', page.get_by_role('dialog'))
     grants.get_by_role('switch').click()
     expect(grants).to_contain_text('Choose “Send directly next time”')
-    page.get_by_role('dialog').get_by_role('button', name='Close', exact=True).click()
+    page.get_by_role('dialog').get_by_role('button', name='AI Writing', exact=True).click()
     expect(page.locator('[data-ai-send-summary]')).to_have_text('No commands send directly')
     page.keyboard.press('Escape')
     command(page, 'summarize')
@@ -654,9 +654,11 @@ def main():
                 assert page.evaluate("localStorage !== __sandboxOriginalStorage && __sandboxOriginalStorage.length === 1 && __sandboxOriginalStorage.getItem('isolation-sentinel') === 'unchanged'"), '真实浏览器存储被修改'
                 assert not errors, errors
                 assert not external, external
+                assert not console_errors, console_errors
                 result.update(status='PASS', reason='行为断言通过；无页面异常或外部请求')
             except Exception as error:
                 result.update(status='FAIL', reason=str(error).strip()[:1400])
+                result['geometry'] = page.evaluate('({size:window.__hivenSandbox?.launcherSize(), parts: [...document.querySelectorAll(".global-launcher-panel,.launcher-result-text-frame,.launcher-preview-well,.launcher-preview-well pre")].map(el=>({class:el.className,height:el.clientHeight,scroll:el.scrollHeight}))})')
             result.update(pageErrors=errors, externalRequests=external, consoleErrors=console_errors)
             if page.evaluate('!!window.__hivenSandbox'):
                 result['snapshot'] = snapshot(page)

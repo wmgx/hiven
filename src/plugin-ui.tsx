@@ -37,7 +37,7 @@ import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } fro
 
 export { getFluxMonacoTheme as getEditorTheme } from './utils/monacoTheme'
 export { PluginIcon } from './ui/PluginIcon'
-export { SurfaceHeaderActions, SurfaceHeaderField } from './ui/SurfaceHeaderActions'
+export { SurfaceHeaderActions, SurfaceHeaderField, SurfaceBreadcrumbs, SurfaceStatus, SurfaceError } from './ui/SurfaceHeaderActions'
 export { Tooltip } from '@base-ui/react/tooltip'
 export { useToolDeliveryFeedback } from './ui/useToolDeliveryFeedback'
 export type { ToolDeliveryFeedback, ToolDeliveryFeedbackAttempt, ToolDeliveryFeedbackOwner } from './ui/toolDeliveryFeedback'

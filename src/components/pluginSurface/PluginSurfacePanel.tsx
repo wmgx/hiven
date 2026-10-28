@@ -1,8 +1,9 @@
+import { usePluginSurfaceIcon } from './usePluginSurfaceIcon'
 import { useMemo } from 'react'
 import { translate } from '../../i18n'
 import { useAppStore, type PluginSurfaceOpenTarget } from '../../store'
 import type { PanelPropsV2 } from '../../workspace/pluginTypes'
-import { SurfaceChrome } from './SurfaceChrome'
+import { SurfaceShell } from './SurfaceShell'
 import { PluginSettingsDialog } from '../PluginSettingsDialog'
 import { PluginSurfaceRenderer, usePluginSurfaceTitle } from './PluginSurfaceRenderer'
 
@@ -16,6 +17,7 @@ type PluginSurfacePanelInputs = {
 export function PluginSurfacePanel({ inputs, host }: PanelPropsV2<PluginSurfacePanelInputs>) {
   const locale = useAppStore((s) => s.locale)
   const target = useMemo(() => normalizeTarget(inputs?.target, inputs), [inputs])
+  const icon = usePluginSurfaceIcon(target)
   const title = usePluginSurfaceTitle(target, locale)
 
   if (!target) {
@@ -28,7 +30,7 @@ export function PluginSurfacePanel({ inputs, host }: PanelPropsV2<PluginSurfaceP
 
   return (
     <div className="plugin-surface-panel">
-      <SurfaceChrome title={title || target.surfaceId} onClose={host.close}>
+      <SurfaceShell icon={icon} title={title || target.surfaceId} onClose={host.close}>
       <div className="plugin-surface-panel-body">
         <PluginSurfaceRenderer
           target={target}
@@ -40,7 +42,7 @@ export function PluginSurfacePanel({ inputs, host }: PanelPropsV2<PluginSurfaceP
         />
       </div>
       <PluginSettingsDialog />
-      </SurfaceChrome>
+      </SurfaceShell>
     </div>
   )
 }

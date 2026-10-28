@@ -1,0 +1,18 @@
+.surface-chrome { display: flex; flex-direction: column; min-width: 0; min-height: 0; height: 100%; position: relative; }
+.surface-chrome-header { display: flex; align-items: center; gap: 10px; min-height: var(--surface-input-height); flex: 0 0 auto; padding: 0 14px 0 18px; border-bottom: 1px solid var(--border); background: var(--background); color: var(--foreground); user-select: none; }
+.surface-shell-tag { display: inline-flex; align-items: center; flex: none; gap: 6px; min-height: 26px; padding: 0 9px; border: 0; border-radius: 7px; background: var(--primary); color: var(--primary-foreground); font-size: 13px; font-weight: 500; cursor: pointer; }
+.surface-shell-tag:focus-visible, .surface-shell-crumb button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.surface-shell-breadcrumbs, .surface-shell-crumb { display: flex; align-items: center; gap: 6px; }
+.surface-shell-crumb { color: var(--faint-foreground); }
+.surface-shell-crumb button { border: 0; background: none; color: var(--muted-foreground); font-size: 15px; cursor: pointer; }
+.surface-chrome-field { flex: 1; min-width: 0; display: flex; align-items: center; align-self: stretch; }
+.surface-chrome-field input { flex: 1; min-width: 0; width: 100%; height: 36px; padding: 0; border: 0; border-radius: 0; outline: 0; box-shadow: none; background: transparent; color: var(--foreground); caret-color: var(--primary); font-size: var(--text-input); -webkit-user-select: text; user-select: text; }
+.surface-chrome-field input::-webkit-search-cancel-button { display: none; }
+.surface-chrome-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.surface-chrome-body { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.surface-shell-error { flex: none; padding: 7px 18px; border-bottom: 1px solid var(--border); color: var(--destructive-text); font-size: 12px; overflow-wrap: anywhere; }
+.surface-shell-error:empty, .surface-shell-breadcrumbs:empty { display: none; }
+.surface-shell-footer { flex: none; min-height: var(--surface-footer-height); display: flex; align-items: center; gap: 14px; padding: 0 14px; border-top: 1px solid var(--border); background: var(--subtle); font-size: 12px; }
+.surface-shell-status { flex: 1; min-width: 0; color: var(--faint-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.surface-shell-footer-actions { margin-left: auto; }
+.surface-shell-footer:not(:has(.surface-shell-status:not(:empty), .surface-shell-footer-actions:not(:empty))) { display: none; }

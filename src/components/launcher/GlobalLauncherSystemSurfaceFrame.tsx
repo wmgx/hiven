@@ -3,12 +3,12 @@ import type { LauncherHostSurfaceTarget } from '../../store'
 import { useAppStore } from '../../store'
 import { t } from '../../i18n'
 import { useLauncherEscapeInterceptor } from './launcherEscapeInterceptor'
-import { SurfaceBreadcrumbHeader } from '../SurfaceBreadcrumbHeader'
+import { SurfaceShell } from '../pluginSurface/SurfaceShell'
 import { SystemSettingsSurface } from '../SystemSettingsSurface'
 import { QuickEditorBreadcrumbActions } from '../quickEditor/QuickEditorBreadcrumbActions'
 import { loadMonacoNls } from '../../kits/editor/monacoNls'
 
-const BREADCRUMB_HEIGHT = 40
+const BREADCRUMB_HEIGHT = 56
 const QuickEditorPanel = lazy(async () => {
   await loadMonacoNls()
   const module = await import('../quickEditor/QuickEditorPanel')
@@ -41,41 +41,32 @@ export function GlobalLauncherSystemSurfaceFrame({
 
   if (target === 'quick-editor') {
     return (
-      <div
+      <SurfaceShell
+        title={t(locale, 'quickEditor.title')} onBack={onBack} onClose={onClose} actions={<QuickEditorBreadcrumbActions />}
         className={shellClassName}
         tabIndex={-1}
         style={{ height }}
       >
-        <SurfaceBreadcrumbHeader
-          title={t(locale, 'quickEditor.title')}
-          onBack={onBack}
-          onClose={onClose}
-          actions={<QuickEditorBreadcrumbActions />}
-        />
         <div className="global-launcher-body" style={{ height: bodyHeight, maxHeight: bodyHeight, overflow: 'hidden' }}>
           <Suspense fallback={<div className="quick-editor-loading-skeleton" role="status"><div className="plugin-surface-window-message__indicator" />{t(locale, 'quickEditor.loading')}</div>}>
             <QuickEditorPanel onRequestExit={onBack} />
           </Suspense>
         </div>
-      </div>
+      </SurfaceShell>
     )
   }
 
 
   return (
-    <div
+    <SurfaceShell
+      title={t(locale, 'systemSettings.title')} onBack={onBack} onClose={onClose}
       className={shellClassName}
       tabIndex={-1}
       style={{ height }}
     >
-      <SurfaceBreadcrumbHeader
-        title={t(locale, 'systemSettings.title')}
-        onBack={onBack}
-        onClose={onClose}
-      />
       <div className="global-launcher-body" style={{ height: bodyHeight, maxHeight: bodyHeight, overflow: 'hidden' }}>
         <SystemSettingsSurface key={target} initialTab={target === 'system-plugins' ? 'plugins' : target === 'system-ai-settings' ? 'ai' : 'settings'} />
       </div>
-    </div>
+    </SurfaceShell>
   )
 }

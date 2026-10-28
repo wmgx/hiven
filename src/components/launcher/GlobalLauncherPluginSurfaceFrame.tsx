@@ -1,3 +1,4 @@
+import { usePluginSurfaceIcon } from '../pluginSurface/usePluginSurfaceIcon'
 import { consumeLocalEscapeLayer } from '../../utils/localEscapeLayer'
 import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import { t, type Locale } from '../../i18n'
@@ -5,10 +6,10 @@ import type { PluginSurfaceOpenTarget } from '../../store'
 import { ConfirmDialog } from '../../plugin-ui'
 import { useLauncherEscapeInterceptor } from './launcherEscapeInterceptor'
 import { PluginSurfaceRenderer, type PluginSurfaceLeaveActions, type PluginSurfaceLeaveOwner } from '../pluginSurface/PluginSurfaceRenderer'
-import { SurfaceChrome } from '../pluginSurface/SurfaceChrome'
+import { SurfaceShell } from '../pluginSurface/SurfaceShell'
 import type { LauncherSurfaceUnsavedChangesReport } from './useLauncherSurfaceBackgroundIdle'
 
-const HEADER_HEIGHT = 36
+const HEADER_HEIGHT = 56
 type LeaveAction = 'back' | 'close'
 type SurfaceChanges = { owner: PluginSurfaceLeaveOwner; dirty: boolean; actions: PluginSurfaceLeaveActions }
 type PendingLeave = { action: LeaveAction; target: PluginSurfaceOpenTarget; owner: PluginSurfaceLeaveOwner; perform: () => void }
@@ -34,6 +35,7 @@ export function GlobalLauncherPluginSurfaceFrame({
   onClose: () => void
   onUnsavedChangesReport?: (report: LauncherSurfaceUnsavedChangesReport) => void
 }) {
+  const icon = usePluginSurfaceIcon(target)
   const shellRef = useRef<HTMLDivElement>(null)
   const bodyHeight = shellHeight - HEADER_HEIGHT
   const activeTargetRef = useRef(target)
@@ -131,8 +133,9 @@ export function GlobalLauncherPluginSurfaceFrame({
   useLauncherEscapeInterceptor(escapeHandler)
 
   return (
-    <SurfaceChrome
+    <SurfaceShell
       title={title}
+      icon={icon}
       onBack={() => requestLeave('back')}
       onClose={() => requestLeave('close')}
       ref={shellRef}
@@ -175,6 +178,6 @@ export function GlobalLauncherPluginSurfaceFrame({
         onConfirm={discardChanges}
         onCancel={cancelLeave}
       />
-    </SurfaceChrome>
+    </SurfaceShell>
   )
 }
