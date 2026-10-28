@@ -4,7 +4,7 @@
  * PanelContribution, PluginDefinition, and related types.
  */
 
-import type { ComponentType, ReactNode } from 'react'
+import type { ComponentType, ReactNode, Ref } from 'react'
 import type { Locale } from '../i18n'
 import type { FluxEffect, PaneId } from './types'
 import type { PluginAiApi } from './ai/types'
@@ -850,6 +850,8 @@ export type PluginAiSendGate = {
 }
 
 export type PluginOutputActionsProps = {
+  /** Let a result row invoke the same primary action as the footer. */
+  primaryRef?: Ref<HTMLButtonElement>
   /**
    * Main text result. Empty disables the text actions. A function is resolved
    * only when an action runs (large results); returning null cancels it.

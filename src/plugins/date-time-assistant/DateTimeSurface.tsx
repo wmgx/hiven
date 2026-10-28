@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, CopyIconButton, SurfaceActionBar, TextInput } from '@hiven/plugin-ui'
+import { ActionBar, SurfaceHeaderField, SurfaceHeaderActions, SurfaceStatus, SurfaceError, ValueChip, RowList, TextInput } from '@hiven/plugin-ui'
 import './style.css'
 
 export type DateTimeSnapshot = {
@@ -20,9 +20,12 @@ type DateTimeSurfaceProps = PluginSurfaceProps & {
 }
 
 export function DateTimeSurface({ defaultOffset, host, initialText, t, convert }: DateTimeSurfaceProps) {
-  const [input, setInput] = useState(initialText?.trim() || t('surface.nowValue'))
+  const [input, setInput] = useState(initialText?.trim() || '')
   const [offset, setOffset] = useState(defaultOffset)
-  const result = useMemo(() => convert(input, offset), [convert, input, offset])
+  const [selected, setSelected] = useState('datetime')
+  const selectedRef = useRef(selected)
+  const primary = useRef<HTMLButtonElement>(null)
+  const result = useMemo(() => convert(input.trim() || t('surface.nowValue'), offset), [convert, input, offset, t])
 
   const values = result.ok ? [
     { key: 'datetime', label: t('surface.dateTime'), unit: result.value.offsetLabel, value: result.value.dateTime },
@@ -30,53 +33,19 @@ export function DateTimeSurface({ defaultOffset, host, initialText, t, convert }
     { key: 'milliseconds', label: t('surface.unixMilliseconds'), unit: t('surface.millisecondsUnit'), value: result.value.unixMilliseconds },
   ] : []
 
-  return (
-    <section className="date-time-surface" aria-label={t('surface.title')}>
-      <main className="date-time-surface__body" data-launcher-scrollable>
-        <div className="date-time-surface__inputs">
-          <label className="date-time-surface__input">
-            <span>{t('surface.input')}</span>
-            <TextInput
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              placeholder={t('surface.inputPlaceholder')}
-              autoFocus
-              data-plugin-surface-autofocus="sticky"
-              autoComplete="off"
-              spellCheck={false}
-            />
-          </label>
-          <label className="date-time-surface__offset">
-            <span>{t('surface.offset')}</span>
-            <TextInput
-              value={offset}
-              onChange={(event) => setOffset(event.target.value)}
-              placeholder={t('surface.offsetPlaceholder')}
-              autoComplete="off"
-              spellCheck={false}
-            />
-          </label>
-          <Button type="button" variant="ghost" onClick={() => setInput(String(Date.now()))}>{t('surface.useNow')}</Button>
-        </div>
-
-        <section className="date-time-surface__results" aria-label={t('surface.results')} aria-live="polite">
-          {result.ok ? values.map((item) => (
-            <div className="date-time-surface__result" key={item.key}>
-              <div>
-                <strong>{item.label}</strong>
-                <span>{item.unit}</span>
-              </div>
-              <output>{item.value}</output>
-              <CopyIconButton label={t('surface.copy')} copy={() => host.clipboard.writeText(item.value)} />
-            </div>
-          )) : (
-            <p className="date-time-surface__error" role="alert">
-              <strong>{t('surface.invalid')}</strong>
-            </p>
-          )}
-        </section>
-      </main>
-      {host.OutputActions && <SurfaceActionBar><host.OutputActions text={result.ok ? result.value.dateTime : ''} /></SurfaceActionBar>}
-    </section>
-  )
+  const select = (id: string) => { selectedRef.current = id; setSelected(id) }
+  const value = () => values.find(item => item.key === selectedRef.current)?.value ?? ''
+  return <section className="date-time-surface" aria-label={t('surface.title')}>
+    <SurfaceHeaderField><TextInput value={input} onChange={event => setInput(event.target.value)} aria-label={t('surface.input')}
+      placeholder={t('surface.nowValue')} autoFocus data-plugin-surface-autofocus="sticky" autoComplete="off" spellCheck={false}
+      onKeyDown={event => { if (event.key === 'Tab' && !event.shiftKey) { event.preventDefault(); event.currentTarget.closest('.surface-chrome-header')?.querySelector<HTMLButtonElement>('[data-value-chip]')?.click() } }} /></SurfaceHeaderField>
+    <SurfaceHeaderActions><ValueChip label={t('surface.offset')} value={offset} custom="text"
+      options={['UTC','UTC+08:00','UTC+09:00','UTC-05:00'].map(value => ({ value, label: value }))}
+      onChange={value => setOffset(String(value))} onPreview={value => setOffset(String(value))} /></SurfaceHeaderActions>
+    <SurfaceError>{!result.ok && t('surface.invalid')}</SurfaceError>
+    <RowList label={t('surface.results')} items={values.map(item => ({ id: item.key, title: item.value, description: `${item.label} · ${item.unit}` }))}
+      selectedId={selected} onSelect={select} onActivate={id => { select(id); primary.current?.click() }} />
+    <SurfaceStatus>{values.find(item => item.key === selected)?.label}</SurfaceStatus>
+    {host.OutputActions && <ActionBar><host.OutputActions primaryRef={primary} text={value} disabled={!result.ok} /></ActionBar>}
+  </section>
 }

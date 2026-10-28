@@ -221,3 +221,18 @@ def s39(page):
     expect(page.locator('.surface-header-actions [data-value-chip]')).to_have_count(0)
     page.locator('.hiven-output-actions').get_by_role('button', name='Copy', exact=False).click()
     page.wait_for_function('__hivenSandbox.clipboard().text === "synthetic QR payload"')
+
+
+def s40(page):
+    page.evaluate('__hivenSandbox.openSurface({pluginId:"date-time-assistant",surfaceId:"main",source:"builtin",initialText:"0"})')
+    rows = page.get_by_role('listbox', name='Converted values')
+    expect(rows.get_by_role('option')).to_have_count(3)
+    chip = page.locator('[data-value-chip]').first
+    chip.click()
+    page.get_by_role('option', name='UTC', exact=True).click()
+    expect(rows.get_by_role('option').first).to_contain_text('1970-01-01')
+    page.get_by_role('textbox', name='Date, time, or timestamp').fill('1000')
+    rows.get_by_role('option').nth(1).click()
+    page.wait_for_function('__hivenSandbox.clipboard().text === "1000"')
+
+    expect(page.locator('.date-time-surface')).to_have_count(0)

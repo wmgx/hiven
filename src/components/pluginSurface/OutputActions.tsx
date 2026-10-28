@@ -40,7 +40,7 @@ async function foregroundAppName(): Promise<string | undefined> {
   try { return (await invoke<string | null>('current_foreground_app_name'))?.trim() || undefined } catch { return undefined }
 }
 
-function HostOutputActions({ deps, text, primary = 'copy', primaryAction: customPrimary, copy, more = [], disabled }: PluginOutputActionsProps & { deps: RefObject<OutputActionsDeps> }) {
+function HostOutputActions({ deps, text, primaryRef, primary = 'copy', primaryAction: customPrimary, copy, more = [], disabled }: PluginOutputActionsProps & { deps: RefObject<OutputActionsDeps> }) {
   const t = useT('outputActions')
   const [app, setApp] = useState<string>()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -126,7 +126,7 @@ function HostOutputActions({ deps, text, primary = 'copy', primaryAction: custom
       if (event.defaultPrevented || shouldIgnoreImeKeyDown(event, { current: false }) || event.altKey || !deps.current.isCurrent()) return
       if (event.target instanceof Element && event.target.closest('.hiven-value-menu, [role="menu"], [role="listbox"]')) return
       const modified = event.metaKey || event.ctrlKey
-      const inEditor = event.target instanceof Element && Boolean(event.target.closest('input, textarea, [contenteditable="true"], .monaco-editor')) && !event.target.closest('[data-command-input]')
+      const inEditor = event.target instanceof Element && Boolean(event.target.closest('textarea, [contenteditable="true"], .monaco-editor')) && !event.target.closest('[data-command-input]')
       if (modified && event.key.toLowerCase() === 'c' && !event.shiftKey && keys.current.canCopy && !window.getSelection()?.toString()) {
         const field = event.target
         if ((field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) && field.selectionStart !== field.selectionEnd) return
@@ -139,7 +139,7 @@ function HostOutputActions({ deps, text, primary = 'copy', primaryAction: custom
       else if (event.key === 'Enter' && !event.shiftKey && current.canPrimary) { event.preventDefault(); void current.primaryAction.run() }
       else if (modified && event.key.toLowerCase() === 'k' && !event.shiftKey && current.hasMenu) { event.preventDefault(); setMenuOpen(open => !open) }
     }
-    const focus = (event: FocusEvent) => setEditing(event.target instanceof Element && Boolean(event.target.closest('input, textarea, [contenteditable="true"], .monaco-editor')) && !event.target.closest('[data-command-input]'))
+    const focus = (event: FocusEvent) => setEditing(event.target instanceof Element && Boolean(event.target.closest('textarea, [contenteditable="true"], .monaco-editor')) && !event.target.closest('[data-command-input]'))
     window.addEventListener('focusin', focus)
     window.addEventListener('keydown', onKey, true)
     return () => { window.removeEventListener('keydown', onKey, true); window.removeEventListener('focusin', focus) }
@@ -156,7 +156,7 @@ function HostOutputActions({ deps, text, primary = 'copy', primaryAction: custom
         {menu.map(item => <DropdownMenuItem disabled={item.disabled} key={item.id} onClick={() => void item.run()}>{item.label}</DropdownMenuItem>)}
       </DropdownMenuContent>
     </DropdownMenu>}
-    <Button variant="ghost" size="sm" disabled={!canPrimary} onClick={() => void primaryAction.run()}>{primaryAction.label}<kbd>{editing ? '⌘↵' : '↵'}</kbd></Button>
+    <Button ref={primaryRef} variant="ghost" size="sm" disabled={!canPrimary} onClick={() => void primaryAction.run()}>{primaryAction.label}<kbd>{editing ? '⌘↵' : '↵'}</kbd></Button>
   </div></>
 }
 
