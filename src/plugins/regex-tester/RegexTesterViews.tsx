@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { SurfaceHeaderField, SurfaceHeaderActions, SurfaceStatus, SurfaceError, ActionBar, ValueChip, ToggleGroup, RowList, TextArea, TextInput } from '@hiven/plugin-ui'
+import { SurfaceHeaderField, SurfaceHeaderActions, SurfaceStatus, SurfaceError, ActionBar, ValueChip, ToggleGroup, RowList, EmptyState, TextArea, TextInput } from '@hiven/plugin-ui'
 import { MAX_REGEX_MATCHES, type MatchResult } from './regexCore'
 import { useRegexExecution } from './useRegexExecution'
 import { extractRegexMatches, type RegexExtractionTarget } from './extractMatches'
@@ -139,10 +139,7 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
           <div className="regex-tester-surface__matches" aria-live="polite">
             {result.status === 'running' || result.status === 'cancelled' ? <p role="status">{t(`execution.${result.status}`)}</p> : null}
             {result.status === 'ready' && result.matches.length === 0 && (
-              <div className="regex-tester-surface__empty">
-                <span aria-hidden="true">.*</span>
-                <strong>{pattern ? t('panel.regex.noMatches') : t('surface.enterPattern')}</strong>
-              </div>
+              <EmptyState title={pattern ? t('panel.regex.noMatches') : t('surface.enterPattern')} hint={`⌘K · ${t('ai.title')}`} />
             )}
             {result.status === 'ready' && result.matches.length > 0 && (
               <>
