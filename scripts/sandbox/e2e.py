@@ -417,13 +417,12 @@ def s23(page):
     page.evaluate('__hivenSandbox.open()')
     page.locator('.global-launcher-panel textarea').first.focus()
     expect(page.locator('.launcher-clipboard-explanation')).to_be_visible()
-    # Real use copies in another app while the launcher is hidden, then reopens it.
-    page.evaluate('__hivenSandbox.focusEditor()')
+    # Real use closes the launcher, copies in another app, then reopens it.
+    page.keyboard.press('Escape')
     copy(page, '{"synthetic":true}')
     page.evaluate('__hivenSandbox.open()')
-    # The installed fake clock also holds requestAnimationFrame and the clipboard watcher.
+    # The installed fake clock also holds requestAnimationFrame.
     page.clock.run_for(1200)
-    print('DBG', page.locator('.global-launcher-panel').inner_text()[:300])
     expect(page.locator('.launcher-clipboard-explanation')).to_have_count(0)
     expect(page.locator('.global-launcher-panel')).to_contain_text('{"synthetic":true}')
 
