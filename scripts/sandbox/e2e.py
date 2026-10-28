@@ -348,7 +348,7 @@ def s17(page):
 
 
 def s18(page):
-    sizes = {'small': [600, 520, 480, 400], 'medium': [800, 600, 600, 440], 'large': [960, 680, 720, 480]}
+    sizes = {'small': [728, 400, 480, 400], 'medium': [728, 560, 600, 400], 'large': [960, 640, 720, 480]}
     for target in surfaces(page):
         chrome = open_surface(page, target, 'window')
         actual = page.evaluate('__hivenSandbox.surfaceWindow()')
@@ -369,23 +369,23 @@ def s19(page):
     well = page.get_by_test_id('launcher-preview-well')
     expect(well).to_contain_text('SYNTHETIC LINE 79')
     assert well.inner_text().count('\n') >= 79
-    page.wait_for_function('__hivenSandbox.launcherSize()?.height === 480')
+    page.wait_for_function('__hivenSandbox.launcherSize()?.height === 640')
     assert well.evaluate('el => el.scrollHeight > el.clientHeight')
     field.press('Meta+e')
     page.locator('.launcher-block-editor').fill('\n'.join(f'synthetic line {i}' for i in range(100)))
     page.locator('.launcher-block-editor').press('Meta+e')
     expect(well).to_contain_text('SYNTHETIC LINE 99')
-    assert page.evaluate('__hivenSandbox.launcherSize().height') == 480
+    assert page.evaluate('__hivenSandbox.launcherSize().height') == 640
 
 
 def s20(page):
     command(page, 'uppercase')
-    page.wait_for_function('__hivenSandbox.launcherSize()?.height === 480')
+    page.wait_for_function('__hivenSandbox.launcherSize()?.height === 318')
     handle = page.get_by_role('separator', name='Resize command window')
     rect = handle.bounding_box()
     page.mouse.move(rect['x'] + rect['width']/2, rect['y'] + rect['height']/2)
     page.mouse.down()
-    page.mouse.move(rect['x'] + rect['width']/2, rect['y'] + rect['height']/2 + 160, steps=8)
+    page.mouse.move(rect['x'] + rect['width']/2, rect['y'] + rect['height']/2 + 322, steps=8)
     page.mouse.up()
     page.wait_for_function('__hivenSandbox.launcherSize()?.height === 640')
     page.keyboard.press('Escape')

@@ -20,9 +20,9 @@ type WindowCapableSurface = PluginUiSurfaceContribution & {
 }
 
 const WINDOW_SIZES = {
-  small: { width: 600, height: 520, minWidth: 480, minHeight: 400 },
-  medium: { width: 800, height: 600, minWidth: 600, minHeight: 440 },
-  large: { width: 960, height: 680, minWidth: 720, minHeight: 480 },
+  small: { width: 728, height: 400, minWidth: 480, minHeight: 400 },
+  medium: { width: 728, height: 560, minWidth: 600, minHeight: 400 },
+  large: { width: 960, height: 640, minWidth: 720, minHeight: 480 },
 }
 const DEFAULT_DESTROY_TIMEOUT_MS = 120_000
 

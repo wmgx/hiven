@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react'
 import type { PluginUiSurfaceContribution } from '../../workspace/pluginTypes'
+import { surfaceHeight } from '../../workspace/surfaceGeometry'
 import {
   GLOBAL_LAUNCHER_PANEL_WIDTH,
   GLOBAL_LAUNCHER_SETTINGS_HEIGHT,
@@ -57,7 +58,7 @@ export function buildGlobalLauncherPanelStyle({
   return {
     background: 'var(--panel, #ffffff)',
     border: '1px solid var(--border, #ececed)',
-    borderRadius: 'var(--radius, 10px)',
+    borderRadius: 'var(--radius-lg)',
     '--launcher-panel-width': fillsWindow
       ? 'calc(100vw - 24px)'
       : hostSurfaceTarget
@@ -82,7 +83,7 @@ export function buildGlobalLauncherPanelStyle({
       : hostSurfaceTarget
       ? `min(${STANDALONE_SURFACE_MAX_HEIGHT}px, calc(100vh - 24px))`
       : surfaceShell?.inlineHeight
-      ? `min(${surfaceShell.inlineHeight}px, calc(100vh - 24px))`
+      ? `min(${surfaceHeight(surfaceShell.inlineHeight)}px, calc(100vh - 24px))`
       : launcherSettingsTarget
       ? `min(${GLOBAL_LAUNCHER_SETTINGS_HEIGHT}px, calc(100vh - 24px))`
       : undefined,

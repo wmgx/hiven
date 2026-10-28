@@ -404,9 +404,19 @@ export function useStandaloneLauncherResize({
         })
     }
     frameId = window.requestAnimationFrame(resizeAfterLayout)
+    const observer = new ResizeObserver(() => {
+      window.cancelAnimationFrame(frameId)
+      frameId = window.requestAnimationFrame(resizeAfterLayout)
+    })
+    if (!resizableSurfaceKey && panelRef.current) {
+      observer.observe(panelRef.current)
+      panelRef.current.querySelectorAll('.launcher-preview-well pre, .global-launcher-header, .launcher-command-footer')
+        .forEach(element => observer.observe(element))
+    }
 
     return () => {
       disposed = true
+      observer.disconnect()
       window.cancelAnimationFrame(frameId)
       invalidateCurrentLauncherWindowResize()
     }

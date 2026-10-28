@@ -4791,14 +4791,16 @@ body[data-theme='dark'] .launcher-empty-well {
   max-height: 320px;
 }
 
+.launcher-command-mode { min-height: 294px; max-height: 616px; }
+
 .launcher-command-mode .global-launcher-flow-frame {
-  flex: 1 1 0;
+  flex: 1 1 auto;
 }
 
 .launcher-command-mode .global-launcher-flow-frame > .launcher-preview-well,
 .launcher-command-mode .global-launcher-flow-frame > .launcher-empty-well,
 .launcher-command-mode .launcher-result-text-frame > .launcher-preview-well {
-  flex: 1 1 0;
+  flex: 1 1 auto;
   min-height: 0;
   height: auto;
   max-height: none;

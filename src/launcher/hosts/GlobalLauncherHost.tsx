@@ -815,7 +815,8 @@ export function GlobalLauncherHost() {
     || (activeResultFrame?.kind === 'result' && activeResultFrame.output.selection?.type !== 'multi' && (activeResultFrame.retryOnly || isSingleTextResult(activeResultFrame.output.choices)))
     || activeResultFrame?.kind === 'ai-send'
   )
-  const commandHeight = Math.max(318, Math.min(760, draggedCommandHeight ?? savedCommandHeight ?? 480))
+  const requestedCommandHeight = draggedCommandHeight ?? savedCommandHeight
+  const commandHeight = requestedCommandHeight == null ? undefined : Math.max(318, Math.min(640, requestedCommandHeight))
   useStandaloneLauncherResize({
     open,
     standaloneLauncher,
@@ -1148,7 +1149,7 @@ export function GlobalLauncherHost() {
     surfaceShell: activeSurfaceFrame?.surface.shell,
     standaloneLauncher,
   })
-  if (commandMode) {
+  if (commandMode && commandHeight !== undefined) {
     panelStyle.height = `${commandHeight - 24}px`
     panelStyle.maxHeight = `${commandHeight - 24}px`
   }
@@ -1260,19 +1261,20 @@ export function GlobalLauncherHost() {
       {open && resizableSurface && <WindowResizeHandles inset={8} onResizeStart={beginResize} />}
       {open && commandMode && (
         <div className="launcher-command-resize" data-no-drag role="separator" aria-label={t(locale, 'palette.resizeCommandHeight')}
-          aria-orientation="horizontal" aria-valuemin={318} aria-valuemax={760} aria-valuenow={commandHeight} tabIndex={0}
-          style={{ top: commandHeight - 18 }}
+          aria-orientation="horizontal" aria-valuemin={318} aria-valuemax={640} aria-valuenow={commandHeight} tabIndex={0}
+          style={{ top: 'calc(var(--launcher-command-height, 318px) - 18px)' }}
           onPointerDown={(event) => {
             if (event.button !== 0) return
             event.preventDefault()
             event.stopPropagation()
             event.currentTarget.setPointerCapture(event.pointerId)
-            commandResizeRef.current = { pointer: event.pointerId, y: event.screenY, height: commandHeight, current: commandHeight }
+            const height = commandHeight ?? (panelRef.current?.getBoundingClientRect().height ?? 294) + 24
+            commandResizeRef.current = { pointer: event.pointerId, y: event.screenY, height, current: height }
           }}
           onPointerMove={(event) => {
             const drag = commandResizeRef.current
             if (!drag || drag.pointer !== event.pointerId) return
-            drag.current = Math.max(318, Math.min(760, Math.round(drag.height + event.screenY - drag.y)))
+            drag.current = Math.max(318, Math.min(640, Math.round(drag.height + event.screenY - drag.y)))
             setDraggedCommandHeight(drag.current)
           }}
           onPointerUp={(event) => {
@@ -1286,7 +1288,7 @@ export function GlobalLauncherHost() {
           onKeyDown={(event) => {
             if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
             event.preventDefault()
-            useAppStore.getState().updateSetting('globalLauncherCommandHeight', Math.max(318, Math.min(760, commandHeight + (event.key === 'ArrowUp' ? -10 : 10))))
+            useAppStore.getState().updateSetting('globalLauncherCommandHeight', Math.max(318, Math.min(640, (commandHeight ?? (panelRef.current?.getBoundingClientRect().height ?? 294) + 24) + (event.key === 'ArrowUp' ? -10 : 10))))
           }}
         />
       )}

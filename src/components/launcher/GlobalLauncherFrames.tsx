@@ -19,6 +19,7 @@ import { GlobalLauncherCollectInputFrame } from './GlobalLauncherCollectInputFra
 import { GlobalLauncherAiSendFrame } from './GlobalLauncherAiSendFrame'
 import type { LauncherSurfaceUnsavedChangesReport } from './useLauncherSurfaceBackgroundIdle'
 import type { LauncherBrowseCategory } from '../../workspace/launcher/browseItems'
+import { surfaceHeight } from '../../workspace/surfaceGeometry'
 
 export type GlobalLauncherActiveSurfaceFrame = {
   surface: PluginUiSurfaceContribution
@@ -195,7 +196,7 @@ export function GlobalLauncherFrameSwitch({
       <GlobalLauncherPluginSurfaceFrame
         target={surfaceFrame}
         locale={locale}
-        shellHeight={shell?.inlineHeight ?? 480}
+        shellHeight={surfaceHeight(shell?.inlineHeight)}
         autoHeight={shell?.autoHeight}
         fillsWindow={surfaceFillsWindow}
         title={localized(activeSurfaceFrame.surface.title, activeSurfaceFrame.surface.titleI18n, locale)}

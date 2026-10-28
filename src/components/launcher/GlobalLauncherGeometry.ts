@@ -1,12 +1,13 @@
 import type { PluginUiSurfaceContribution } from '../../workspace/pluginTypes'
+import { surfaceHeight } from '../../workspace/surfaceGeometry'
 
 export const GLOBAL_LAUNCHER_PANEL_WIDTH = 'calc(100vw / 3)'
 export const GLOBAL_LAUNCHER_PANEL_WIDTH_PX = 680
 export const STANDALONE_LAUNCHER_WIDTH = 728
 export const STANDALONE_LAUNCHER_MIN_HEIGHT = 318
-export const STANDALONE_LAUNCHER_MAX_HEIGHT = 560
+export const STANDALONE_LAUNCHER_MAX_HEIGHT = 640
 export const STANDALONE_SURFACE_MAX_WIDTH = 920
-export const STANDALONE_SURFACE_MAX_HEIGHT = 760
+export const STANDALONE_SURFACE_MAX_HEIGHT = 640
 export const STANDALONE_LAUNCHER_VERTICAL_PADDING = 24
 export const STANDALONE_LAUNCHER_HORIZONTAL_PADDING = 24
 export const STANDALONE_LAUNCHER_LIST_MAX_HEIGHT = 300
@@ -44,7 +45,7 @@ export function computeStandaloneLauncherGeometry({
     // final screen bounds without making these defaults a live viewport cap.
     return {
       width: STANDALONE_LAUNCHER_WIDTH,
-      height: Math.max(STANDALONE_LAUNCHER_MIN_HEIGHT, Math.ceil(positiveDimension(surfaceShell.inlineHeight, 480) + STANDALONE_LAUNCHER_VERTICAL_PADDING)),
+      height: surfaceHeight(positiveDimension(surfaceShell.inlineHeight, 480)) + STANDALONE_LAUNCHER_VERTICAL_PADDING,
       minWidth: STANDALONE_LAUNCHER_WIDTH,
       minHeight: STANDALONE_LAUNCHER_MIN_HEIGHT,
     }
@@ -58,12 +59,12 @@ export function computeStandaloneLauncherGeometry({
         Math.ceil(
           (hostSurfaceTarget
             ? STANDALONE_SURFACE_MAX_HEIGHT
-            : surfaceShell?.inlineHeight
-            ?? (launcherSettingsTarget ? GLOBAL_LAUNCHER_SETTINGS_HEIGHT : measured.panelHeight)
+            : surfaceShell ? surfaceHeight(surfaceShell.inlineHeight)
+            : launcherSettingsTarget ? GLOBAL_LAUNCHER_SETTINGS_HEIGHT : measured.panelHeight
           ) + STANDALONE_LAUNCHER_VERTICAL_PADDING,
         ),
         STANDALONE_LAUNCHER_MIN_HEIGHT,
-        STANDALONE_SURFACE_MAX_HEIGHT,
+        STANDALONE_SURFACE_MAX_HEIGHT + STANDALONE_LAUNCHER_VERTICAL_PADDING,
       )
     : clamp(
         Math.ceil(measured.panelHeight + STANDALONE_LAUNCHER_VERTICAL_PADDING),
@@ -90,7 +91,7 @@ export function computeStandaloneLauncherGeometry({
 }
 
 export function measureLauncherPanelParts(panel: HTMLElement) {
-  const textResult = panel.querySelector<HTMLElement>('.launcher-result-text-frame')
+  const textResult = panel.querySelector<HTMLElement>('.launcher-result-text-frame, .global-launcher-flow-frame')
   const preview = textResult?.querySelector<HTMLElement>('.launcher-preview-well')
   if (textResult && preview) {
     // A text result has several fixed rows, including optional parameters and
@@ -111,7 +112,7 @@ export function measureLauncherPanelParts(panel: HTMLElement) {
     const availableHeight = Math.max(0,
       STANDALONE_LAUNCHER_MAX_HEIGHT - STANDALONE_LAUNCHER_VERTICAL_PADDING - chromeHeight,
     )
-    const bodyMaxHeight = Math.min(Math.max(112, contentHeight), 320, availableHeight)
+    const bodyMaxHeight = Math.min(contentHeight, availableHeight)
     return { panelHeight: chromeHeight + bodyMaxHeight, bodyMaxHeight }
   }
 
@@ -147,6 +148,10 @@ function cssPixels(value: string): number {
 }
 
 export function applyStandaloneLauncherGeometry(panel: HTMLElement, geometry: StandaloneLauncherGeometry) {
+  if (panel.classList.contains('launcher-command-mode')) {
+    panel.style.height = `${geometry.height - STANDALONE_LAUNCHER_VERTICAL_PADDING}px`
+    panel.parentElement?.style.setProperty('--launcher-command-height', `${geometry.height}px`)
+  }
   if (geometry.bodyMaxHeight != null) {
     panel.style.setProperty('--launcher-body-max-height', `${geometry.bodyMaxHeight}px`)
   } else {
