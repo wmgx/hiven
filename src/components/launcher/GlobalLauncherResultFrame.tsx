@@ -136,7 +136,6 @@ export function GlobalLauncherResultFrame({
             <span className="launcher-preview-text">{previewText}</span>
           </pre>
         </div>
-        {busy && <span role="status" aria-live="polite">{t(locale, deliveryIntent === 'copy' ? 'palette.outputCopying' : 'palette.outputDelivering')}</span>}
         {error && (
           <div role="alert" className="px-3.5 py-2 text-[12px]" style={{ color: 'var(--color-error)' }}>
             {error}
@@ -145,6 +144,7 @@ export function GlobalLauncherResultFrame({
         {frame.retryOnly ? (
           <div className="global-launcher-footer l-foot launcher-output-actionbar">
             <LauncherHintKey keys="esc" label={t(locale, 'palette.back')} />
+            {busy && <span className="launcher-command-footer-spacer" role="status">{t(locale, deliveryIntent === 'copy' ? 'palette.outputCopying' : 'palette.outputDelivering')}</span>}
             {retryCopyAction && (
               <button
                 type="button"
@@ -175,6 +175,7 @@ export function GlobalLauncherResultFrame({
           <LauncherCommandFooter
             locale={locale}
             busy={busy}
+            status={busy ? { text: t(locale, deliveryIntent === 'copy' ? 'palette.outputCopying' : 'palette.outputDelivering') } : undefined}
             primaryLabel={primaryIsReturn ? t(locale, 'outputActions.continue') : t(locale, 'outputActions.copy')}
             onPrimary={runPrimary}
             pasteApp={app}

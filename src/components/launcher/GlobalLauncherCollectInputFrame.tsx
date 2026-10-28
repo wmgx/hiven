@@ -216,7 +216,6 @@ export function GlobalLauncherCollectInputFrame({
   // Streamed partial output of the running command.
   const progress = busy ? frame.progress : undefined
   // A running command (not an output delivery) shows its status in the preview well.
-  const runningInWell = busy && !deliveryIntent && showLivePreview && !isSuggestMode && Boolean(materialText.trim())
   const [expanded, setExpanded] = useState(false)
   const editorRef = useRef<HTMLTextAreaElement>(null)
   const isExpanded = expanded && hasBlock
@@ -251,7 +250,7 @@ export function GlobalLauncherCollectInputFrame({
   } else if (livePreviewText) {
     lastPreviewRef.current = livePreviewText
   }
-  const displayPreviewText = filterText && !explicitReason && !isList ? (livePreviewText ?? lastPreviewRef.current) : null
+  const displayPreviewText = filterText && !isList ? (livePreviewText ?? lastPreviewRef.current) : null
   // Preview is fresh only when it was computed for the current inputText.
   const previewFresh = Boolean(
     (livePreviewText || isList)
@@ -421,8 +420,8 @@ export function GlobalLauncherCollectInputFrame({
         />
         <LauncherParamChipTrail chips={paramChips} />
         {onOpenParams && paramChips.length > 0 && <kbd className="r-kbd" title={t(locale, 'palette.customizeParamsLabel')}>⇥</kbd>}
-        {busy && !runningInWell && (
-          <span className="meta anim-running-pulse" role="status" aria-live="polite">{t(locale, deliveryIntent === 'copy' ? 'palette.outputCopying' : deliveryIntent ? 'palette.outputDelivering' : 'palette.outputRunning')}</span>
+        {busy && !showLivePreview && (
+          <span className="meta anim-running-pulse" role="status">{t(locale, deliveryIntent === 'copy' ? 'palette.outputCopying' : deliveryIntent ? 'palette.outputDelivering' : 'palette.outputRunning')}</span>
         )}
       </div>
       {error && (
@@ -480,14 +479,6 @@ export function GlobalLauncherCollectInputFrame({
             >
               {progress ? (
                 <PreviewText text={progress.text} format={progress.format} label={t(locale, 'palette.preview')} />
-              ) : runningInWell ? (
-                <span className="meta anim-running-pulse" role="status" aria-live="polite" data-testid="launcher-running-status">
-                  {t(locale, 'palette.outputRunning')}
-                </span>
-              ) : explicitReason ? (
-                <span className="meta" data-testid="launcher-explicit-run-hint">
-                  {t(locale, explicitReason === 'large' ? 'palette.largeInputRunHint' : 'palette.explicitRunHint')}
-                </span>
               ) : displayPreviewText ? (
                 <PreviewText text={displayPreviewText} format={previewChoices[0]?.previewFormat} label={t(locale, 'palette.preview')} />
               ) : null}
@@ -538,6 +529,9 @@ export function GlobalLauncherCollectInputFrame({
         <LauncherCommandFooter
           locale={locale}
           busy={busy}
+          status={busy
+            ? { text: t(locale, deliveryIntent === 'copy' ? 'palette.outputCopying' : deliveryIntent ? 'palette.outputDelivering' : 'palette.runningStop'), running: !deliveryIntent }
+            : explicitReason ? { text: t(locale, explicitReason === 'large' ? 'palette.largeInputRunHint' : 'palette.explicitRunHint') } : undefined}
           primaryLabel={primaryLabel}
           onPrimary={() => void runPrimary()}
           pasteApp={app}

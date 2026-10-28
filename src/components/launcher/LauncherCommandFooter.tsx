@@ -35,6 +35,7 @@ export function LauncherCommandFooter({
   menu,
   onBack,
   hints,
+  status,
 }: {
   locale: Locale
   busy: boolean
@@ -48,6 +49,7 @@ export function LauncherCommandFooter({
   onBack: () => void
   /** Extra key hints after ⌘K, such as ⌘E for the Block editor. */
   hints?: ReactNode
+  status?: { text: string; running?: boolean }
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   // Paste falls back to copying when it cannot reach the app; say why up front.
@@ -85,7 +87,7 @@ export function LauncherCommandFooter({
         </DropdownMenu>
       )}
       {hints}
-      <span className="launcher-command-footer-spacer" />
+      <span className={`launcher-command-footer-spacer ${status?.running ? 'anim-running-pulse' : ''}`} role={status ? 'status' : undefined} title={status?.text}>{status?.text}</span>
       {onPaste && pasteBlockedKey && <LauncherHintText label={t(locale, pasteBlockedKey)} />}
       {onPaste && !pasteBlockedKey && (
         <button type="button" className="launcher-footer-back-btn" data-no-drag disabled={busy}
