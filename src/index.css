@@ -8976,6 +8976,8 @@ html[data-window='launcher'] .flux-spatial-shell .recent-clipboard-hint {
 .ai-send-grants li { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 
 /* OutputActions: host-owned output buttons shared by plugin pages. */
+.hiven-ui-surface-actionbar { flex: none; display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 12px; border-top: 1px solid var(--border-subtle); color: var(--muted-foreground); font-size: var(--text-sm); }
+.hiven-ui-surface-actionbar > .hiven-output-actions { margin-left: auto; }
 .hiven-output-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .hiven-output-actions kbd { margin-left: 6px; font: 12px var(--font-sans); opacity: .6; }
 

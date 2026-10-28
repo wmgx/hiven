@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, Select, TextArea, TextInput } from '@hiven/plugin-ui'
+import { Button, Select, SurfaceActionBar, TextArea, TextInput } from '@hiven/plugin-ui'
 import { MAX_REGEX_MATCHES, type MatchResult } from './regexCore'
 import { useRegexExecution } from './useRegexExecution'
 import { extractRegexMatches, type RegexExtractionTarget } from './extractMatches'
@@ -95,8 +95,7 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
   return (
     <section className="regex-tester-surface" aria-label={t('surface.title')}>
       <div className="regex-tester-surface__controls">
-        <label className="regex-tester-surface__expression">
-          <span>{t('surface.expression')}</span>
+        <div className="regex-tester-surface__expression">
           <div className="regex-tester-surface__pattern">
             <i aria-hidden="true">/</i>
             <TextInput
@@ -117,14 +116,14 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
               spellCheck={false}
             />
           </div>
-        </label>
+        </div>
         <fieldset className="regex-tester-surface__flag-list">
           <legend>{t('surface.quickFlags')}</legend>
           {COMMON_FLAGS.map((flag) => (
             <Button
               key={flag}
               type="button"
-              variant={flags.includes(flag) ? 'primary' : 'secondary'}
+              variant="ghost"
               aria-pressed={flags.includes(flag)}
               title={t(`surface.flag.${flag}`)}
               onClick={() => toggleFlag(flag)}
@@ -214,18 +213,18 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
               </>
             )}
           </div>
-          <footer className="regex-tester-surface__extract">
-            <Select aria-label={t('surface.extractTarget')} value={extractionTarget}
-              options={extractionOptions.some((option) => option.value === extractionTarget) ? extractionOptions : [
-                ...extractionOptions, { value: extractionTarget, label: t('surface.unavailableGroup') },
-              ]}
-              onChange={(event) => { invalidateResult(false); setExtractionTarget(event.currentTarget.value as RegexExtractionTarget) }} />
-            {extraction.status === 'empty-matches' ? <p role="status">{t('surface.emptyMatches')}</p> : null}
-            {['missing-group', 'empty-group', 'truncated', 'too-large'].includes(extraction.status) ? <p role="alert">{t(`extraction.${extraction.status}`, { limit: MAX_REGEX_MATCHES })}</p> : null}
-            {host.OutputActions && <host.OutputActions text={extraction.status === 'ready' ? extraction.text : ''} />}
-          </footer>
         </div>
       </div>
+      <SurfaceActionBar className="regex-tester-surface__extract">
+        <Select aria-label={t('surface.extractTarget')} value={extractionTarget}
+          options={extractionOptions.some((option) => option.value === extractionTarget) ? extractionOptions : [
+            ...extractionOptions, { value: extractionTarget, label: t('surface.unavailableGroup') },
+          ]}
+          onChange={(event) => { invalidateResult(false); setExtractionTarget(event.currentTarget.value as RegexExtractionTarget) }} />
+        {extraction.status === 'empty-matches' ? <p role="status">{t('surface.emptyMatches')}</p> : null}
+        {['missing-group', 'empty-group', 'truncated', 'too-large'].includes(extraction.status) ? <p role="alert">{t(`extraction.${extraction.status}`, { limit: MAX_REGEX_MATCHES })}</p> : null}
+        {host.OutputActions && <host.OutputActions text={extraction.status === 'ready' ? extraction.text : ''} />}
+      </SurfaceActionBar>
     </section>
   )
 }

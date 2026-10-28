@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, CopyIconButton, TextInput } from '@hiven/plugin-ui'
+import { Button, CopyIconButton, SurfaceActionBar, TextInput } from '@hiven/plugin-ui'
 import './style.css'
 
 export type DateTimeSnapshot = {
@@ -56,7 +56,7 @@ export function DateTimeSurface({ defaultOffset, host, initialText, t, convert }
               spellCheck={false}
             />
           </label>
-          <Button type="button" onClick={() => setInput(String(Date.now()))}>{t('surface.useNow')}</Button>
+          <Button type="button" variant="ghost" onClick={() => setInput(String(Date.now()))}>{t('surface.useNow')}</Button>
         </div>
 
         <section className="date-time-surface__results" aria-label={t('surface.results')} aria-live="polite">
@@ -75,8 +75,8 @@ export function DateTimeSurface({ defaultOffset, host, initialText, t, convert }
             </p>
           )}
         </section>
-        {host.OutputActions && <host.OutputActions text={result.ok ? result.value.dateTime : ''} />}
       </main>
+      {host.OutputActions && <SurfaceActionBar><host.OutputActions text={result.ok ? result.value.dateTime : ''} /></SurfaceActionBar>}
     </section>
   )
 }

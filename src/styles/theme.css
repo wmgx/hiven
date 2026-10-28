@@ -30,6 +30,8 @@
   --green-3: #e6f6eb; --green-6: #adddc0; --green-9: #30a46c; --green-11: #218358;
   --amber-3: #fff7c2; --amber-6: #f3d673; --amber-9: #ffc53d; --amber-11: #ab6400;
   --white: #ffffff;
+  /* Brand blue (2026-07-07): primary actions only. */
+  --brand-9: #2563eb; --brand-10: #1d4ed8; --brand-3: #eef2ff; --brand-11: #1d4ed8;
 
   --background: var(--white);
   --popover: var(--white);
@@ -51,6 +53,7 @@
   --red-3: #3b1219; --red-6: #72232d; --red-9: #e5484d; --red-10: #ec5d5e; --red-11: #ff9592;
   --green-3: #132d21; --green-6: #20573e; --green-9: #30a46c; --green-11: #3dd68c;
   --amber-3: #302008; --amber-6: #5c3d05; --amber-9: #ffc53d; --amber-11: #ffca16;
+  --brand-9: #3b74f0; --brand-10: #5b8cf5; --brand-3: #172447; --brand-11: #93b4fb;
 
   --background: var(--slate-2);
   --popover: var(--slate-3);
@@ -67,11 +70,11 @@
   --card: var(--background);
   --card-foreground: var(--slate-12);
   --popover-foreground: var(--slate-12);
-  --primary: var(--blue-9);
-  --primary-hover: var(--blue-10);
+  --primary: var(--brand-9);
+  --primary-hover: var(--brand-10);
   --primary-foreground: var(--white);
-  --primary-soft: var(--blue-3);
-  --primary-text: var(--blue-11);
+  --primary-soft: var(--brand-3);
+  --primary-text: var(--brand-11);
   --secondary: var(--slate-3);
   --secondary-foreground: var(--slate-12);
   --muted: var(--slate-3);

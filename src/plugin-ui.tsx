@@ -629,6 +629,11 @@ export function SurfaceFooterHints({ className, ...props }: ComponentPropsWithou
   return <div className={cn('hiven-ui-surface-footer-hints flex items-center gap-2 text-sm text-muted-foreground', className)} {...props} />
 }
 
+/** Full-width bottom bar: status on the left, output actions on the right. */
+export function SurfaceActionBar({ className, ...props }: ComponentPropsWithoutRef<'footer'>) {
+  return <footer className={cn('hiven-ui-surface-actionbar', className)} {...props} />
+}
+
 export function Dialog({ open, onOpenChange, title, children, className }: DialogProps) {
   return (
     <UiDialog open={open} onOpenChange={onOpenChange}>
