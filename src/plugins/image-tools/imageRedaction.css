@@ -6,3 +6,5 @@
 .image-redaction-empty { align-self: center; padding: 24px; color: var(--foreground); text-align: center; }
 .image-redaction-footer > span { flex: 1; min-width: 160px; font-size: var(--text-sm); }
 .image-redaction-replace { font-size: var(--text-sm); }
+
+.image-redaction-viewport { border: 0; background: transparent; }

@@ -1,7 +1,7 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { copyPng } from './copyPng'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, TextInput, useLocalEscapeLayer } from '@hiven/plugin-ui'
+import { Button, TextInput, SurfaceHeaderField, SurfaceStatus, SurfaceError, ActionBar, RowList, useLocalEscapeLayer } from '@hiven/plugin-ui'
 import { MAX_IMAGE_BYTES } from './raster'
 import { loadRedactionImage } from './imageRedaction'
 import { exportResizedImage, resizeDimensions } from './imageResize'
@@ -72,10 +72,17 @@ export function ImageResizePanel({ host, t, onDirtyChange, invalidateRef }: Prop
     imageRef.current = image; readyRef.current = true; setReady(true)
     setOriginal(image); setWidth(String(image.width)); setDirty(false); setStatus(''); setReplacement(null)
   })
+  useEffect(() => {
+    const controller = new AbortController(), token = revision.current
+    void host.clipboard.readImage?.({ signal: controller.signal }).then(data => {
+      if (!controller.signal.aborted && revision.current === token) void load(async () => data)
+    }).catch(() => {})
+    return () => controller.abort()
+  }, [])
   const choose = (kind: 'file' | 'clipboard', confirmed = false) => {
     if (pending.current) return
     if (dirty && !confirmed) { setReplacement(kind); return }
-    setReplacement(null)
+    invalidate(); setReplacement(null)
     if (kind === 'file') file.current?.click()
     else if (host.clipboard.readImage) void load(signal => host.clipboard.readImage!({ signal }))
   }
@@ -92,32 +99,30 @@ export function ImageResizePanel({ host, t, onDirtyChange, invalidateRef }: Prop
       } finally { try { await host.storage.blob.delete(blob.blobId) } catch { /* Delivery result takes priority over cleanup. */ } }
     })
   }
-  return <main ref={panel} className="image-crop image-resize" tabIndex={-1} onCompositionStart={() => { composing.current = true }} onCompositionEnd={() => { composing.current = false }}>
-    <div className="image-crop-toolbar">
-      <Button disabled={busy} onClick={() => choose('file')}>{t('image.chooseFile')}</Button>
-      <Button disabled={busy || !host.clipboard.readImage} onClick={() => choose('clipboard')}>{t('image.readClipboard')}</Button>
+  return <main ref={panel} className="image-crop image-resize" tabIndex={-1} onCompositionStart={() => { composing.current = true }} onCompositionEnd={() => { composing.current = false }} onKeyDown={event => {
+      if (event.defaultPrevented || composing.current || event.nativeEvent.isComposing) return
+      if ((event.metaKey || event.ctrlKey) && ['o','v'].includes(event.key.toLowerCase())) { event.preventDefault(); choose(event.key.toLowerCase() === 'o' ? 'file' : 'clipboard') }
+    }}>
+    {!original && <div className="image-crop-empty-actions"><Button autoFocus disabled={busy} onClick={() => choose('file')}>{t('image.chooseFile')} <kbd>⌘O</kbd></Button>
+      <Button disabled={busy || !host.clipboard.readImage} onClick={() => choose('clipboard')}>{t('image.readClipboard')} <kbd>⌘V</kbd></Button></div>}
       <TextInput ref={file} type="file" hidden accept="image/png,image/jpeg,image/webp" onChange={event => {
         const selected = event.currentTarget.files?.[0]; event.currentTarget.value = ''
         if (selected) void load(async () => { if (selected.size > MAX_IMAGE_BYTES) throw new Error('size'); return { bytes: new Uint8Array(await selected.arrayBuffer()), contentType: selected.type || undefined } })
       }} />
-    </div>
     {replacement && <div role="alert" className="image-crop-replace"><span>{t('resize.replace')}</span><Button onClick={() => choose(replacement, true)}>{t('redact.replaceConfirm')}</Button><Button onClick={cancelReplacement}>{t('redact.keep')}</Button></div>}
     {original && !ready && !busy && <div className="image-crop-replace"><span>{t('resize.previous')}</span><Button onClick={() => { readyRef.current = true; setReady(true); setStatus('') }}>{t('redact.keep')}</Button></div>}
-    <div className="image-crop-fields">
-      <label>{t('resize.width')}<TextInput type="number" min={1} max={original?.width} step={1} value={width} disabled={busy || !ready || !original} aria-invalid={!!original && !size} aria-describedby="resize-size-status" onChange={event => {
-        if (pending.current) return
-        invalidate(); setWidth(event.target.value); setDirty(true); setStatus('')
-      }} /></label>
-      {original && <span>{t('resize.source', { width: original.width, height: original.height })}</span>}
-    </div>
-    <div className="image-crop-viewport" data-launcher-scrollable>
-      {original ? <canvas ref={canvas} aria-label={t('resize.preview')} style={{ cursor: 'default' }} /> : <p className="image-crop-empty">{t('crop.empty')}</p>}
-    </div>
-    <footer className="image-crop-footer">
-      <span id="resize-size-status" role="status" aria-live="polite">{status ? t(status) : size ? t('crop.dimensions', size) : t(original ? 'resize.invalid' : 'crop.empty')}</span>
+    <SurfaceHeaderField><TextInput aria-label={t('resize.width')} placeholder={t('resize.width')} data-plugin-surface-autofocus type="number" min={1} max={original?.width} step={1} value={width} disabled={busy || !ready || !original} aria-invalid={!!original && !size} onChange={event => {
+      if (pending.current) return
+      invalidate(); setWidth(event.target.value); setDirty(true); setStatus('')
+    }} /></SurfaceHeaderField>
+    {original && <RowList label={t('resize.title')} selectedId="result" onSelect={() => {}} onActivate={() => { if (size && ready && !busy) void run(async (signal, current) => { const bytes = await exportResizedImage(original, width, signal); if (current()) { await copyPng(host, bytes); if (current()) host.showMessage(t('image.copied'), 'success') } }) }}
+      items={[{ id: 'result', title: size ? `${original.width} × ${original.height} → ${size.width} × ${size.height}` : t('resize.invalid'), description: t('image.copyImage'), disabled: busy || !size || !ready, icon: <canvas ref={canvas} className="image-resize-thumbnail" aria-label={t('resize.preview')} /> }]} />}
+    <SurfaceError>{status && status !== 'image.busy' && status !== 'image.saved' ? t(status) : original && !size ? t('resize.invalid') : null}</SurfaceError>
+    <SurfaceStatus>{status === 'image.busy' || status === 'image.saved' ? t(status) : ''}</SurfaceStatus>
+    <ActionBar>
       {host.OutputActions && <host.OutputActions disabled={busy || !ready || !size}
         copy={async () => copyPng(host, await exportResizedImage(original!, width, new AbortController().signal))}
-        more={[{ id: 'save', label: t('image.save'), run: save }]} />}
-    </footer>
+        more={[{ id: 'file', label: t('image.chooseFile'), run: () => choose('file') }, { id: 'clipboard', label: t('image.readClipboard'), run: () => choose('clipboard') }, { id: 'save', label: t('image.save'), run: save }]} />}
+    </ActionBar>
   </main>
 }

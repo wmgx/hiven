@@ -9,3 +9,10 @@
 .image-crop-fields { display: flex; gap: 12px; flex-wrap: wrap; }
 .image-crop-fields label { display: flex; gap: 6px; align-items: center; font-size: var(--text-sm); }
 .image-crop-fields input { width: 80px; padding: 5px 6px; }
+
+.image-crop-viewport { border: 0; background: transparent; }
+.image-crop-stage { position: relative; max-width: 100%; }
+.image-crop-size { position: absolute; transform: translate(-100%, -100%); padding: 3px 5px; background: var(--foreground); color: var(--background); border-radius: var(--radius-sm); white-space: nowrap; font-size: var(--text-xs); pointer-events: none; }
+.image-crop-empty-actions { display: flex; justify-content: center; gap: 12px; }
+
+.image-resize-thumbnail { width: 40px; height: 40px; object-fit: contain; flex-shrink: 0; }

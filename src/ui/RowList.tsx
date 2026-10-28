@@ -27,7 +27,7 @@ export function RowList({ items, selectedId, onSelect, onActivate, onMore, detai
   return <div className="hiven-row-list" role="listbox" aria-label={label} tabIndex={0}
     onCompositionStart={() => { composing.current = true }} onCompositionEnd={() => { composing.current = false }}
     onKeyDown={event => {
-      if (shouldIgnoreImeKeyDown(event, composing)) return
+      if (event.defaultPrevented || shouldIgnoreImeKeyDown(event, composing)) return
       const selected = Math.max(0, items.findIndex(item => item.id === selectedId))
       let next = selected
       if (event.key === 'ArrowDown') next = Math.min(items.length - 1, selected + 1)

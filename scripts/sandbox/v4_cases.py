@@ -152,3 +152,48 @@ def s37(page):
     page.keyboard.press('Escape')
     page.locator('.hiven-output-actions').get_by_role('button', name='Copy', exact=False).click()
     page.wait_for_function('__hivenSandbox.clipboard().text === "a\\nb\\nc"')
+
+
+def s38(page):
+    import base64, json
+    page.evaluate('__hivenSandbox.openSurface({pluginId:"image-tools",surfaceId:"image-crop",source:"builtin"})')
+    png = page.evaluate('() => {const c=document.createElement("canvas");c.width=400;c.height=300;const x=c.getContext("2d");x.fillStyle="teal";x.fillRect(0,0,400,300);return c.toDataURL().split(",")[1]}')
+    page.locator('.image-crop input[type=file]').set_input_files({'name':'synthetic.png','mimeType':'image/png','buffer':base64.b64decode(png)})
+    canvas = page.locator('.image-crop canvas')
+    expect(canvas).to_be_visible()
+    rect = page.locator('[data-crop-rect]')
+    box = canvas.bounding_box()
+    def point(x, y):
+        return box['x'] + x * box['width'] / 400, box['y'] + y * box['height'] / 300
+    def drag(a, b, shift=False):
+        page.mouse.move(*point(*a))
+        if shift: page.keyboard.down('Shift')
+        page.mouse.down(); page.mouse.move(*point(*b), steps=5); page.mouse.up()
+        if shift: page.keyboard.up('Shift')
+    def selection():
+        return json.loads(rect.get_attribute('data-crop-rect'))
+    drag((40,30),(200,150))
+    assert selection() == {'x':40,'y':30,'width':160,'height':120}, selection()
+    drag((100,80),(110,100))
+    assert selection() == {'x':50,'y':50,'width':160,'height':120}, selection()
+    drag((210,170),(250,190),True)
+    assert selection() == {'x':50,'y':50,'width':200,'height':150}, selection()
+    canvas.press('ArrowRight'); canvas.press('Shift+ArrowDown')
+    assert selection() == {'x':51,'y':60,'width':200,'height':150}, selection()
+    page.get_by_role('button', name='Ratio: Free', exact=True).click()
+    page.get_by_role('option', name='1:1', exact=True).hover()
+    assert selection()['width'] == selection()['height']
+    page.keyboard.press('Escape')
+    assert selection() == {'x':51,'y':60,'width':200,'height':150}, selection()
+    expect(page.locator('.image-crop input[type=number]')).to_have_count(0)
+    canvas.press('Enter')
+    page.wait_for_function('__hivenSandbox.clipboard().kind === "image"')
+    # Redaction still draws and Cmd-Z removes the last rectangle.
+    page.evaluate('__hivenSandbox.openSurface({pluginId:"image-tools",surfaceId:"image-redact",source:"builtin"})')
+    canvas = page.locator('.image-redaction canvas')
+    expect(canvas).to_be_visible()
+    box = canvas.bounding_box()
+    page.mouse.move(box['x']+10,box['y']+10); page.mouse.down(); page.mouse.move(box['x']+30,box['y']+30); page.mouse.up()
+    expect(page.locator('.surface-shell-status')).to_contain_text('1 redactions')
+    canvas.press('Meta+z')
+    expect(page.locator('.surface-shell-status')).to_contain_text('0 redactions')

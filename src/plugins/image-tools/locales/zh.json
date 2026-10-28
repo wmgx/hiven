@@ -22,10 +22,6 @@
   "redact.previous": "新图片未载入",
   "crop.title": "裁剪图片",
   "crop.clear": "清除选区",
-  "crop.x": "X",
-  "crop.y": "Y",
-  "crop.width": "宽度",
-  "crop.height": "高度",
   "crop.canvas": "裁剪选区",
   "crop.replace": "放弃当前裁剪并替换图片？",
   "crop.previous": "新图片未载入",
@@ -55,5 +51,11 @@
   "image.copied": "已复制",
   "image.error": "操作失败，请重试",
   "image.loadError": "无法载入图片，支持 PNG、JPEG、WebP",
-  "image.previousNotUpdated": "预览未更新"
+  "image.previousNotUpdated": "预览未更新",
+  "crop.ratio": "比例",
+  "crop.free": "自由",
+  "crop.hint": "拖动选区 · 方向键微调 · ⇧ 保持比例 / 移动 10 像素",
+  "image.filename": "文件名",
+  "image.format": "格式",
+  "image.clipboard": "剪贴板图片"
 }

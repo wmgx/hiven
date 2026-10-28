@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { createJiti } from 'jiti'
-const { cropFromDrag, parseCrop, validCrop, exportCrop } = await createJiti(import.meta.url).import('../src/plugins/image-tools/imageCrop.ts')
+const { cropFromDrag, moveCrop, parseCrop, validCrop, exportCrop } = await createJiti(import.meta.url).import('../src/plugins/image-tools/imageCrop.ts')
 assert.deepEqual(cropFromDrag({x:9.8,y:8.4},{x:-1,y:2.2},10,10),{x:0,y:2,width:10,height:7})
 assert.equal(cropFromDrag({x:2,y:2},{x:2,y:8},10,10),null)
 assert.equal(parseCrop({x:'0',y:'0',width:'',height:'2'},10,10),null)
@@ -8,6 +8,8 @@ assert.equal(parseCrop({x:'0',y:'0',width:'1.5',height:'2'},10,10),null)
 assert.equal(parseCrop({x:'9',y:'0',width:'2',height:'2'},10,10),null)
 assert.equal(validCrop({x:0,y:0,width:Infinity,height:2},10,10),false)
 assert.deepEqual(parseCrop({x:'9',y:'9',width:'1',height:'1'},10,10),{x:9,y:9,width:1,height:1})
+assert.deepEqual(cropFromDrag({x:10,y:10},{x:90,y:40},100,80,4/3), {x:10,y:10,width:80,height:60})
+assert.deepEqual(moveCrop({x:10,y:10,width:80,height:60},30,-20,100,80), {x:20,y:0,width:80,height:60})
 // Controlled export transport failures: actual export function, no UI claims.
 let draw, resolveBlob, output
 const source={width:10,height:10}

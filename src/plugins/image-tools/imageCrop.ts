@@ -1,7 +1,17 @@
 import { MAX_IMAGE_BYTES } from './raster'
 import { redactionRect, type Point, type RedactionRect } from './imageRedaction'
 export type CropRect = RedactionRect
-export const cropFromDrag = (a: Point, b: Point, width: number, height: number) => redactionRect(a, b, width, height)
+export function cropFromDrag(a: Point, b: Point, width: number, height: number, ratio?: number) {
+  if (!ratio || !Number.isFinite(ratio) || ratio <= 0) return redactionRect(a, b, width, height)
+  const start = { x: Math.max(0, Math.min(width, a.x)), y: Math.max(0, Math.min(height, a.y)) }
+  const sx = b.x < start.x ? -1 : 1, sy = b.y < start.y ? -1 : 1
+  const w = Math.min(Math.max(Math.abs(b.x - start.x), Math.abs(b.y - start.y) * ratio), sx < 0 ? start.x : width - start.x, (sy < 0 ? start.y : height - start.y) * ratio)
+  return redactionRect(start, { x: start.x + sx * w, y: start.y + sy * w / ratio }, width, height)
+}
+
+export function moveCrop(rect: CropRect, dx: number, dy: number, width: number, height: number): CropRect {
+  return { ...rect, x: Math.max(0, Math.min(width - rect.width, Math.round(rect.x + dx))), y: Math.max(0, Math.min(height - rect.height, Math.round(rect.y + dy))) }
+}
 export function validCrop(rect: CropRect, width: number, height: number): boolean {
   return [rect.x, rect.y, rect.width, rect.height, width, height].every(Number.isSafeInteger)
     && rect.x >= 0 && rect.y >= 0 && rect.width > 0 && rect.height > 0

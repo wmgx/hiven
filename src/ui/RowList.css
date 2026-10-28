@@ -1,5 +1,5 @@
 .hiven-row-list { min-height:0; overflow:auto; padding:7px; outline:none; }
-.hiven-row { width:100%; min-height:52px; display:flex; align-items:center; gap:12px; padding:9px 11px; border:0; border-radius:8px; background:transparent; color:var(--foreground); text-align:left; cursor:pointer; }
+.hiven-row { width:100%; min-height:48px; display:flex; align-items:center; gap:12px; padding:7px 11px; border:0; border-radius:8px; background:transparent; color:var(--foreground); text-align:left; cursor:pointer; }
 .hiven-row.is-selected { background:var(--accent); }
 .hiven-row:disabled { opacity:.5; cursor:default; }
 .hiven-row-text { flex:1; min-width:0; font-size:14px; }

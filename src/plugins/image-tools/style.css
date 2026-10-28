@@ -39,3 +39,5 @@
 .image-base64-input textarea { resize: vertical; min-height: 76px; max-height: 200px; width: 100%; box-sizing: border-box; padding: 8px; font-family: var(--font-mono, monospace); line-height: 1.5; }
 .image-base64-preview { display: flex; align-items: center; gap: 12px; }
 .image-base64-preview img { display: block; max-width: 65%; max-height: 150px; object-fit: contain; border: 1px solid var(--border); }
+
+.image-tools-filename { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); font-size: var(--text-sm); }

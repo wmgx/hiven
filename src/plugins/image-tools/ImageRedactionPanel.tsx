@@ -1,13 +1,14 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { copyPng } from './copyPng'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, TextInput, useLocalEscapeLayer } from '@hiven/plugin-ui'
+import { Button, TextInput, SurfaceHeaderField, ActionBar, SurfaceStatus, SurfaceError, useLocalEscapeLayer } from '@hiven/plugin-ui'
 import { MAX_IMAGE_BYTES } from './raster'
 import { exportRedactions, loadRedactionImage, paintRedactions, redactionRect, type Point, type RedactionRect } from './imageRedaction'
 import './imageRedaction.css'
 
 type Props = PluginSurfaceProps & { onDirtyChange(dirty: boolean): void; invalidateRef: { current: (() => void) | null } }
 export function ImageRedactionPanel({ host, t, onDirtyChange, invalidateRef }: Props) {
+  const [filename, setFilename] = useState('')
   const [original, setOriginal] = useState<HTMLCanvasElement | null>(null)
   const [rectangles, setRectangles] = useState<RedactionRect[]>([])
   const [dragActive, setDragActive] = useState(false)
@@ -52,17 +53,24 @@ export function ImageRedactionPanel({ host, t, onDirtyChange, invalidateRef }: P
     catch (error) { if (current()) setStatus(error instanceof Error && error.message === 'size' ? 'image.sizeError' : 'redact.failed') }
     finally { pending.current = false; if (mounted.current) setBusy(false) }
   }
-  const load = (read: (signal: AbortSignal) => Promise<{ bytes: Uint8Array; contentType?: string }>) => run(async (signal, current) => {
+  const load = (read: (signal: AbortSignal) => Promise<{ bytes: Uint8Array; contentType?: string; name?: string }>) => run(async (signal, current) => {
     setReady(false)
     const data = await read(signal)
     const image = await loadRedactionImage(data.bytes, signal, data.contentType)
     if (!current()) return
-    setOriginal(image); setReady(true); setRectangles([]); setDirty(false); setStatus(''); setReplacement(null)
+    setFilename(data.name || t('image.clipboard')); setOriginal(image); setReady(true); setRectangles([]); setDirty(false); setStatus(''); setReplacement(null)
   })
+  useEffect(() => {
+    const controller = new AbortController(), token = revision.current
+    void host.clipboard.readImage?.({ signal: controller.signal }).then(data => {
+      if (!controller.signal.aborted && revision.current === token) void load(async () => data)
+    }).catch(() => {})
+    return () => controller.abort()
+  }, [])
   const choose = (kind: 'file' | 'clipboard', confirmed = false) => {
     if (pending.current) return
     if (dirty && !confirmed) { setReplacement(kind); return }
-    setReplacement(null)
+    invalidate(); setReplacement(null)
     if (kind === 'file') file.current?.click()
     else if (host.clipboard.readImage) void load(signal => host.clipboard.readImage!({ signal }))
   }
@@ -90,17 +98,17 @@ export function ImageRedactionPanel({ host, t, onDirtyChange, invalidateRef }: P
     })
   }
   return <main ref={panel} className="image-redaction" tabIndex={-1} onKeyDown={(event) => {
+    if (event.defaultPrevented || event.nativeEvent.isComposing) return
+    if ((event.metaKey || event.ctrlKey) && ['o','v'].includes(event.key.toLowerCase())) { event.preventDefault(); choose(event.key.toLowerCase() === 'o' ? 'file' : 'clipboard'); return }
     if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === 'z') { event.preventDefault(); event.stopPropagation(); undo() }
   }}>
-    <div className="image-redaction-toolbar">
-      <Button disabled={busy} onClick={() => choose('file')}>{t('image.chooseFile')}</Button>
-      <Button disabled={busy || !host.clipboard.readImage} onClick={() => choose('clipboard')}>{t('image.readClipboard')}</Button>
-      <Button disabled={busy || !rectangles.length} onClick={undo}>{t('redact.undo')}</Button>
+    <SurfaceHeaderField><span className="image-tools-filename">{filename}</span></SurfaceHeaderField>
+    {!original && <div className="image-crop-empty-actions"><Button autoFocus disabled={busy} onClick={() => choose('file')}>{t('image.chooseFile')} <kbd>⌘O</kbd></Button>
+      <Button disabled={busy || !host.clipboard.readImage} onClick={() => choose('clipboard')}>{t('image.readClipboard')} <kbd>⌘V</kbd></Button></div>}
       <TextInput ref={file} type="file" hidden accept="image/png,image/jpeg,image/webp" onChange={(event) => {
         const selected = event.currentTarget.files?.[0]; event.currentTarget.value = ''
-        if (selected) void load(async () => { if (selected.size > MAX_IMAGE_BYTES) throw new Error('size'); return { bytes: new Uint8Array(await selected.arrayBuffer()), contentType: selected.type || undefined } })
+        if (selected) void load(async () => { if (selected.size > MAX_IMAGE_BYTES) throw new Error('size'); return { bytes: new Uint8Array(await selected.arrayBuffer()), contentType: selected.type || undefined, name: selected.name } })
       }} />
-    </div>
     {replacement && <div role="alert" className="image-redaction-replace"><span>{t('redact.replace')}</span><Button onClick={() => choose(replacement, true)}>{t('redact.replaceConfirm')}</Button><Button onClick={cancelDraft}>{t('redact.keep')}</Button></div>}
     {original && !ready && !busy && <div className="image-redaction-replace"><span>{t('redact.previous')}</span><Button onClick={() => { setReady(true); setStatus('') }}>{t('redact.keep')}</Button></div>}
     <div className="image-redaction-viewport" data-launcher-scrollable>
@@ -120,11 +128,12 @@ export function ImageRedactionPanel({ host, t, onDirtyChange, invalidateRef }: P
         if (rect) { revision.current++; setRectangles([...rectangles, rect]); setDirty(true); setStatus('') }
       }} onPointerCancel={cancelDraft} onLostPointerCapture={() => { if (drag.current) cancelDraft() }} /> : <p className="image-redaction-empty">{t('redact.empty')}</p>}
     </div>
-    <footer className="image-redaction-footer">
-      <span role="status" aria-live="polite">{status ? t(status) : original ? t('redact.count', { count: rectangles.length, width: original.width, height: original.height }) : ''}</span>
+    <SurfaceError>{status && !['image.busy','image.saved'].includes(status) ? t(status) : null}</SurfaceError>
+    <SurfaceStatus>{status === 'image.busy' || status === 'image.saved' ? t(status) : original ? t('redact.count', { count: rectangles.length, width: original.width, height: original.height }) : ''}</SurfaceStatus>
+    <ActionBar>
       {host.OutputActions && <host.OutputActions disabled={busy || !ready || !original || dragActive}
         copy={async () => copyPng(host, await exportRedactions(original!, rectangles, new AbortController().signal))}
-        more={[{ id: 'save', label: t('image.save'), run: save }]} />}
-    </footer>
+        more={[{ id: 'file', label: t('image.chooseFile'), run: () => choose('file') }, { id: 'clipboard', label: t('image.readClipboard'), run: () => choose('clipboard') }, { id: 'undo', label: t('redact.undo'), run: undo, disabled: !rectangles.length }, { id: 'save', label: t('image.save'), run: save }]} />}
+    </ActionBar>
   </main>
 }

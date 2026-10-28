@@ -5,13 +5,14 @@ export async function saveClipboardPng(
   storage: PluginPrivateStorageApi,
   png: Uint8Array,
   current: () => boolean,
+  filename?: string,
 ): Promise<PluginBlobSaveResult> {
   if (!current()) return { status: 'cancelled' }
   const ref = await storage.blob.put({ bytes: png, contentType: 'image/png', extension: 'png' })
   try {
     if (!current()) return { status: 'cancelled' }
     return await storage.blob.savePng(ref.blobId, {
-      suggestedFilename: `screenshot-${new Date().toISOString().replace(/[:.]/g, '-')}.png`,
+      suggestedFilename: filename?.trim() || `screenshot-${new Date().toISOString().replace(/[:.]/g, '-')}.png`,
       copyPathToClipboard: true,
     })
   } finally {
