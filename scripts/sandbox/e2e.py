@@ -7,7 +7,7 @@ import sys
 import time
 from pathlib import Path
 from playwright.sync_api import sync_playwright, expect
-from v4_cases import s33, s34, s35, s36, s37, s38, s39, s40
+from v4_cases import s33, s34, s35, s36, s37, s38, s39, s40, s41
 
 URL = 'http://localhost:1420/?window=launcher&sandbox=1'
 
@@ -533,14 +533,16 @@ def s29(page):
     command(page, 'json expression')
     surface = page.locator('.json-expression-surface')
     expect(surface.get_by_role('textbox', name='JSON', exact=True)).to_have_value('{"a":{"b":[1,2]}}')
-    expression = surface.get_by_role('textbox', name='Expression', exact=True)
+    expression = page.get_by_role('textbox', name='Expression', exact=True)
     expression.fill('.a.b[1]')
     expect(surface.get_by_role('textbox', name='Result', exact=True)).to_have_value('2')
-    page.get_by_role('button', name='Copy result', exact=True).click()
-    page.wait_for_function('__hivenSandbox.clipboard().text === "2"')
     capture_themes(page, 'json-expression', page.locator('.surface-chrome:visible'))
     expression.fill('.a[')
-    expect(surface.get_by_role('alert')).to_be_visible()
+    expect(page.locator('.surface-shell-error')).not_to_be_empty()
+    expression.fill('.a.b[1]')
+    page.locator('.hiven-output-actions').get_by_role('button', name='Copy', exact=False).click()
+    page.wait_for_function('__hivenSandbox.clipboard().text === "2"')
+    expect(surface).to_have_count(0)
 
 
 def s30(page):
@@ -604,7 +606,7 @@ def s32(page):
         page.wait_for_function('document.activeElement?.hasAttribute("data-clipboard-history-search")')
 
 
-CASES = [s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15,s16,s17,s18,s19,s20,s21,s22,s23,s24,s25,s26,s27,s28,s29,s30,s31,s32,s33,s34,s35,s36,s37,s38,s39,s40]
+CASES = [s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15,s16,s17,s18,s19,s20,s21,s22,s23,s24,s25,s26,s27,s28,s29,s30,s31,s32,s33,s34,s35,s36,s37,s38,s39,s40,s41]
 
 
 def main():

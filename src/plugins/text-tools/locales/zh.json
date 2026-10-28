@@ -181,11 +181,8 @@
   "cursor.copied": "已复制：{path}",
   "expression.input": "JSON",
   "expression.output": "结果",
-  "expression.copy": "复制结果",
   "expression.placeholder": "表达式，例如 .items[0]",
-  "expression.copied": "已复制",
   "expression.readFailed": "读取剪贴板失败",
-  "expression.copyFailed": "复制结果失败",
   "base64.title": "Base64",
   "base64.auto": "自动",
   "base64.encode": "文本编码",
@@ -201,5 +198,8 @@
   "base64.direction": "方向",
   "base64.empty": "输入文本进行编码或解码",
   "base64.emptyHint": "⌘V 粘贴 · ⇥ 方向",
-  "base64.characters": "{count} 字符"
+  "base64.characters": "{count} 字符",
+  "urlQuery.deleted": "已删除",
+  "urlQuery.undo": "撤销",
+  "urlQuery.changed": "URL 已变化，未恢复删除的字段。"
 }

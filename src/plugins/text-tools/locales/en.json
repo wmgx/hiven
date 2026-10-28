@@ -181,11 +181,8 @@
   "cursor.copied": "Copied: {path}",
   "expression.input": "JSON",
   "expression.output": "Result",
-  "expression.copy": "Copy result",
   "expression.placeholder": "Expression, e.g. .items[0]",
-  "expression.copied": "Copied",
   "expression.readFailed": "Could not read the clipboard",
-  "expression.copyFailed": "Could not copy the result",
   "base64.title": "Base64",
   "base64.auto": "Auto",
   "base64.encode": "Encode text",
@@ -201,5 +198,8 @@
   "base64.direction": "Direction",
   "base64.empty": "Enter text to encode or decode",
   "base64.emptyHint": "⌘V paste · ⇥ direction",
-  "base64.characters": "{count} characters"
+  "base64.characters": "{count} characters",
+  "urlQuery.deleted": "Deleted",
+  "urlQuery.undo": "Undo",
+  "urlQuery.changed": "URL has changed. Deleted field was not restored."
 }

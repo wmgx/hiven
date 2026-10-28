@@ -239,3 +239,17 @@ def s40(page):
     page.wait_for_function('__hivenSandbox.clipboard().text === "1000"')
 
     expect(page.locator('.date-time-surface')).to_have_count(0)
+
+
+def s41(page):
+    page.evaluate('__hivenSandbox.openSurface({pluginId:"text-tools",surfaceId:"url-query",source:"builtin",initialText:"https://example.test/?a=1&b=2"})')
+    field = page.get_by_role('textbox', name='URL', exact=True)
+    page.locator('.jt-url-query-row').first.locator('input').nth(1).fill('changed')
+    expect(field).to_have_value('https://example.test/?a=changed&b=2')
+    page.locator('.jt-url-query-row').last.get_by_role('button').click()
+    expect(page.locator('.jt-url-query-row')).to_have_count(1)
+    page.get_by_role('button', name='Undo', exact=True).click()
+    expect(page.locator('.jt-url-query-row')).to_have_count(2)
+    expect(field).to_have_value('https://example.test/?a=changed&b=2')
+    page.locator('.hiven-output-actions').get_by_role('button', name='Copy', exact=False).click()
+    page.wait_for_function('__hivenSandbox.clipboard().text === "https://example.test/?a=changed&b=2"')
