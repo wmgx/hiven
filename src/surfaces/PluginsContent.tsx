@@ -571,6 +571,7 @@ export function PluginsContent({}: PluginsContentProps) {
   /** Gear opens settings for schema-driven or custom-component settings bodies. */
   function hasPluginSettings(row: PluginDetailRow): boolean {
     const settingsContribution = pluginRegistry.getPluginDefinition(row.pluginId, row.settingsSource)?.settings
+    if (pluginRegistry.getPluginPermissions(row.pluginId, row.settingsSource).includes('ai.use')) return true
     if (!settingsContribution) return false
     return Boolean(settingsContribution.schema || settingsContribution.component)
   }

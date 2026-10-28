@@ -146,11 +146,11 @@ function resolvePluginSettingsItem(
   source: ContributionSource,
 ): LauncherItem | null {
   const settings = definition.settings
-  if (!settings) return null
+  if (!settings && !pluginRegistry.getPluginPermissions(pluginId, source).includes('ai.use')) return null
 
   const settingsSource = resolvePluginSettingsSource(pluginId, source)
-  const baseTitle = settings.title ?? pluginId
-  const titleI18n = { ...settings.titleI18n }
+  const baseTitle = settings?.title ?? pluginId
+  const titleI18n = { ...settings?.titleI18n }
   titleI18n.zh = withChineseSettingsSuffix(titleI18n.zh ?? baseTitle)
 
   return {

@@ -185,6 +185,16 @@ export const sandbox = {
     }
     changed()
   },
+  async openSettings(pluginId?: string) {
+    await sandbox.open()
+    if (pluginId) {
+      const { usePluginSettingsStore } = await import('../pluginSettingsStore')
+      usePluginSettingsStore.getState().openSettingsDialog({ pluginId, source: 'builtin', presentation: 'dialog' })
+    } else {
+      const { useAppStore } = await import('../../store')
+      useAppStore.getState().openLauncherHostSurface('system-ai-settings')
+    }
+  },
   async appearance(theme: 'light' | 'dark', language: 'en' | 'zh') {
     const { useAppStore } = await import('../../store')
     useAppStore.getState().setLocale(language)

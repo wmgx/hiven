@@ -3,6 +3,11 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { Switch } from '@/components/ui/switch'
+import { Button, Menu } from '../../plugin-ui'
+import { pluginRegistry, usePluginRegistryVersion } from '../../workspace/pluginRegistry'
+import { usePluginSettingsStore } from '../../workspace/pluginSettingsStore'
+import { resolvePluginSettingsSource } from '../../workspace/launcher/pluginSource'
 import { useAppStore } from '../../store'
 import { useT } from '../../i18n'
 import type { PluginAiApi } from '../../workspace/ai/types'
@@ -142,15 +147,35 @@ function AiSendDisclosure({ pluginId, commandId, approval }: { pluginId: string;
   </p>
 }
 
-/** Settings → AI: every granted command, each revocable. */
-export function AiSendGrantList() {
+/** Host-owned settings section: declarations decide visibility, grants decide rows. */
+export function AiSendGrantList({ pluginId }: { pluginId: string }) {
   const t = useT('aiSendGate')
   const { grants, revoke } = useGrants()
-  if (!grants.length) return <p className="ai-send-meta">{t('grantsEmpty')}</p>
-  return <ul className="ai-send-grants">
-    {grants.map(grant => <li key={grant.key}>
-      <span>{grant.label}</span>
-      <button type="button" onClick={() => revoke(grant.key)}>{t('revoke')}</button>
-    </li>)}
-  </ul>
+  const owned = grants.filter(grant => grant.key.startsWith(`${pluginId}:`))
+  return <section className="ai-send-grants" data-ai-send-grants={pluginId}>
+    <h3>{t('directSend')}</h3>
+    {!owned.length ? <p className="ai-send-meta">{t('pluginGrantsEmpty')}</p> : owned.map(grant => <label key={grant.key} className="flex items-center justify-between gap-3 py-2">
+      <span>{grant.label}<span className="ai-send-meta block">{t('directSendHint')}</span></span>
+      <Switch checked aria-label={`${grant.label}: ${t('directSendHint')}`} onCheckedChange={() => revoke(grant.key)} />
+    </label>)}
+  </section>
+}
+
+export function AiSendGrantSummary() {
+  const t = useT('aiSendGate')
+  const { grants } = useGrants()
+  const locale = useAppStore(state => state.locale)
+  usePluginRegistryVersion()
+  const plugins = pluginRegistry.getAllPluginDefinitions().filter(plugin =>
+    plugin.permissions.includes('ai.use') && grants.some(grant => grant.key.startsWith(`${plugin.pluginId}:`)))
+  const open = (plugin: typeof plugins[number]) => usePluginSettingsStore.getState().openSettingsDialog({
+    pluginId: plugin.pluginId, source: resolvePluginSettingsSource(plugin.pluginId, plugin.source), presentation: 'dialog',
+  })
+  const label = t(grants.length ? 'grantsCount' : 'grantsEmpty', { count: grants.length })
+  if (!plugins.length) return <p className="ai-send-meta" data-ai-send-summary>{label}</p>
+  const trigger = <Button data-ai-send-summary onClick={plugins.length === 1 ? () => open(plugins[0]) : undefined}>{label}</Button>
+  return plugins.length === 1 ? trigger : <Menu trigger={trigger} items={plugins.map(plugin => ({
+    key: plugin.pluginId, label: plugin.definition.settings?.titleI18n?.[locale] ?? plugin.definition.settings?.title ?? plugin.pluginId,
+    onSelect: () => open(plugin),
+  }))} />
 }

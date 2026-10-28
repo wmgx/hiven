@@ -25,6 +25,7 @@ import { createPluginNetwork } from '../workspace/pluginNetwork'
 import { createPluginAi } from '../workspace/ai/runtime'
 import { createPluginShell } from '../workspace/pluginShell'
 import { getPluginPermissionSnapshot, usePluginPermissionStore } from '../workspace/pluginPermissions'
+import { AiSendGrantList } from './pluginSurface/AiSendGateLayer'
 import { PluginSettingsSchemaRenderer } from './PluginSettingsSchemaRenderer'
 import { resolvePluginSettingsModal, type ResolvedPluginSettingsModal } from './pluginSettingsModalResolution'
 import { navigateToPluginSettingsField } from './pluginSettingsFieldNavigation'
@@ -142,6 +143,8 @@ export function PluginSettingsContent({
   const contribution = useMemo(() => {
     const def = pluginRegistry.getPluginDefinition(pluginId, source === 'dev' ? 'dev' : 'production')
     return def?.settings as PluginSettingsContribution<unknown> | undefined
+      ?? (pluginRegistry.getPluginPermissions(pluginId, source).includes('ai.use')
+        ? { title: pluginId, defaultValue: {}, schema: { sections: [] } } : undefined)
   }, [pluginId, source, registryVersion])
 
   if (!contribution) {
@@ -409,6 +412,7 @@ function SettingsDialogBody({
             </div>
           )}
         </SettingsErrorBoundary>
+        {requestedPermissions.includes('ai.use') && <AiSendGrantList pluginId={pluginId} />}
       </div>
 
       {activeSettingsModalTarget && SettingsModalComponent && (

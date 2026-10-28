@@ -478,7 +478,36 @@ def s26(page):
     expect(rows).to_have_count(1)
 
 
-CASES = [s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15,s16,s17,s18,s19,s20,s21,s22,s23,s24,s25,s26]
+def s27(page):
+    command(page, 'summarize')
+    field = page.locator('.global-launcher-panel textarea').first
+    field.fill('Synthetic input for grant settings.')
+    field.press('Enter')
+    gate = page.get_by_test_id('launcher-ai-send')
+    expect(gate).to_be_visible()
+    gate.get_by_role('checkbox').check()
+    page.keyboard.press('Enter')
+    expect(page.locator('.global-launcher-panel')).to_contain_text('Simulated summary.')
+    page.keyboard.press('Escape')
+    page.keyboard.press('Escape')
+    page.evaluate('__hivenSandbox.openSettings()')
+    expect(page.locator('[data-ai-send-summary]')).to_have_text('1 commands can send directly')
+    page.locator('[data-ai-send-summary]').click()
+    grants = page.locator('[data-ai-send-grants="ai-writing"]')
+    expect(grants.get_by_role('switch')).to_be_checked()
+    grants.get_by_role('switch').click()
+    expect(grants).to_contain_text('Choose “Send directly next time”')
+    page.get_by_role('dialog').get_by_role('button', name='Close', exact=True).click()
+    expect(page.locator('[data-ai-send-summary]')).to_have_text('No commands send directly')
+    page.keyboard.press('Escape')
+    command(page, 'summarize')
+    field = page.locator('.global-launcher-panel textarea').first
+    field.fill('Synthetic input after revoke.')
+    field.press('Enter')
+    expect(page.get_by_test_id('launcher-ai-send')).to_be_visible()
+
+
+CASES = [s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15,s16,s17,s18,s19,s20,s21,s22,s23,s24,s25,s26,s27]
 
 
 def main():

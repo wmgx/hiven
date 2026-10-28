@@ -9,7 +9,7 @@ import { BrainCircuit, Check, Command, Copy, Download, ExternalLink, Hash, Langu
 import { useAppStore } from '../store'
 import { changeApplicationLocale } from '../changeApplicationLocale'
 import { translate, useT } from '../i18n'
-import { AiSendGrantList } from '../components/pluginSurface/AiSendGateLayer'
+import { AiSendGrantSummary } from '../components/pluginSurface/AiSendGateLayer'
 import { pickLocale } from '../i18n/pickLocale'
 import { ShortcutRecorder } from '../components/ShortcutRecorder'
 import { AppHotkeysSettings } from '../components/AppHotkeysSettings'
@@ -565,7 +565,7 @@ export function AiSubscriptionsContent() {
         </SettingsListRow>
       </SettingGroup>
       <SettingGroup title={translate(locale, 'aiSendGate', 'grantsTitle')}>
-        <AiSendGrantList />
+        <AiSendGrantSummary />
       </SettingGroup>
     </div>
   )
