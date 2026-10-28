@@ -118,6 +118,7 @@ export function measureLauncherPanelParts(panel: HTMLElement) {
   const header = panel.querySelector<HTMLElement>('.global-launcher-header')
   const body = panel.querySelector<HTMLElement>('.global-launcher-body')
   const footer = panel.querySelector<HTMLElement>('.global-launcher-footer')
+  const explanation = panel.querySelector<HTMLElement>('.launcher-clipboard-explanation')
   if (!header || !footer || !body) {
     return {
       panelHeight: panel.getBoundingClientRect().height,
@@ -129,13 +130,14 @@ export function measureLauncherPanelParts(panel: HTMLElement) {
     STANDALONE_LAUNCHER_MAX_HEIGHT -
       STANDALONE_LAUNCHER_VERTICAL_PADDING -
       header.offsetHeight -
-      footer.offsetHeight,
+      footer.offsetHeight -
+      (explanation?.offsetHeight ?? 0),
     STANDALONE_LAUNCHER_LIST_MAX_HEIGHT,
   )
   const bodyMaxHeight = Math.min(body.scrollHeight, maxBodyHeight)
 
   return {
-    panelHeight: header.offsetHeight + bodyMaxHeight + footer.offsetHeight,
+    panelHeight: header.offsetHeight + bodyMaxHeight + footer.offsetHeight + (explanation?.offsetHeight ?? 0),
     bodyMaxHeight,
   }
 }

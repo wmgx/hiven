@@ -336,6 +336,9 @@ export function GlobalLauncherSearchFrame({
             />
         )}
       </div>
+      {!query.trim() && !browsingActions && !hint && !block && (
+        <div className="launcher-clipboard-explanation">{t(locale, 'palette.clipboardExplanation')}</div>
+      )}
       <div className="global-launcher-footer l-foot" onFocusCapture={handleFocus} onBlurCapture={handleBlur}>
         <div className="l-foot-hints">
           {showListHints && selectedItem?.domainItem.executeWithParams && selectedItem.domainItem.params?.length ? (
