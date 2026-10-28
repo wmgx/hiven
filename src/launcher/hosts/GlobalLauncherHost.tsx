@@ -25,6 +25,7 @@ import { getPluginSurfaceDefinition } from '../../components/launcher/GlobalLaun
 import { useGlobalLauncherSurfaceFrame } from '../../components/launcher/GlobalLauncherSurfaceFrame'
 import { readLauncherClipboard } from '../clipboard/readLauncherClipboard'
 import { GlobalLauncherPanel } from '../../components/launcher/GlobalLauncherPanel'
+import { isSingleTextResult } from '../../components/launcher/GlobalLauncherResultFrame'
 import { useLauncherSurfaceBackgroundIdle } from '../../components/launcher/useLauncherSurfaceBackgroundIdle'
 import { WindowResizeHandles } from '../../components/WindowResizeHandles'
 import { useGlobalLauncherSelectionController } from '../../components/launcher/useGlobalLauncherSelectionController'
@@ -110,6 +111,9 @@ export function GlobalLauncherHost() {
   const [browsingActions, setBrowsingActions] = useState(false)
   const [browseCategory, setBrowseCategory] = useState<LauncherBrowseCategory>('all')
   const [currentTextBusy, setCurrentTextBusy] = useState(false)
+  const savedCommandHeight = useAppStore((s) => s.settings.globalLauncherCommandHeight)
+  const [draggedCommandHeight, setDraggedCommandHeight] = useState<number | null>(null)
+  const commandResizeRef = useRef<{ pointer: number; y: number; height: number; current: number } | null>(null)
   const [deliveryFailure, setDeliveryFailure] = useState<{ message: string; isCurrent: () => boolean } | null>(null)
   const deliveryGenerationRef = useRef(0)
   const hudMaterialRef = useRef<{ block: unknown; id: string } | null>(null)
@@ -786,18 +790,6 @@ export function GlobalLauncherHost() {
     inputRef,
   })
 
-  useStandaloneLauncherResize({
-    open,
-    standaloneLauncher,
-    panelRef,
-    hostSurfaceTarget: hostSurfaceTarget as never,
-    launcherSettingsTarget,
-    surfaceShell: activeSurfaceFrame?.surface.shell,
-    surfaceKey,
-    visibleFilteredLength: visibleFiltered.length,
-    controllerResizeKey: `${controllerResizeKey}:${locale}:${clipboardBlock.canReadFileText}:${clipboardBlock.isReadingFileText}:${clipboardBlock.fileTextError ?? ''}`,
-  })
-
   const {
     itemPermissionFrame,
     setItemPermissionFrame,
@@ -818,6 +810,25 @@ export function GlobalLauncherHost() {
     objectBlockTextIsFileContent: clipboardBlock.block?.meta?.textOrigin === 'file-content',
     locale,
   })
+  const commandMode = standaloneLauncher && !hostSurfaceTarget && !launcherSettingsTarget && !surfaceFrame && !itemPermissionFrame && (
+    (activeResultFrame?.kind === 'collect-input' && !activeResultFrame.item.suggest && !activeResultFrame.item.metadataInput)
+    || (activeResultFrame?.kind === 'result' && activeResultFrame.output.selection?.type !== 'multi' && (activeResultFrame.retryOnly || isSingleTextResult(activeResultFrame.output.choices)))
+    || activeResultFrame?.kind === 'ai-send'
+  )
+  const commandHeight = Math.max(318, Math.min(760, draggedCommandHeight ?? savedCommandHeight ?? 480))
+  useStandaloneLauncherResize({
+    open,
+    standaloneLauncher,
+    panelRef,
+    hostSurfaceTarget: hostSurfaceTarget as never,
+    launcherSettingsTarget,
+    surfaceShell: activeSurfaceFrame?.surface.shell,
+    surfaceKey,
+    visibleFilteredLength: visibleFiltered.length,
+    controllerResizeKey: `${controllerResizeKey}:${locale}:${clipboardBlock.canReadFileText}:${clipboardBlock.isReadingFileText}:${clipboardBlock.fileTextError ?? ''}`,
+    commandHeight: commandMode ? commandHeight : undefined,
+  })
+
   fileTextRootVisibleRef.current = !surfaceFrame && !itemPermissionFrame
 
   useEffect(() => {
@@ -1137,6 +1148,10 @@ export function GlobalLauncherHost() {
     surfaceShell: activeSurfaceFrame?.surface.shell,
     standaloneLauncher,
   })
+  if (commandMode) {
+    panelStyle.height = `${commandHeight - 24}px`
+    panelStyle.maxHeight = `${commandHeight - 24}px`
+  }
 
   useFocusGlobalLauncherSurfaceShell({
     panelRef,
@@ -1188,6 +1203,7 @@ export function GlobalLauncherHost() {
         surfaceFrame={surfaceFrame}
         activeSurfaceFrame={activeSurfaceFrame}
         surfaceFillsWindow={resizableSurface}
+        commandMode={commandMode}
         onSurfaceUnsavedChangesReport={surfaceBackgroundIdle.onUnsavedChangesReport}
         leaveSurface={leaveSurface}
         itemPermissionFrame={itemPermissionFrame}
@@ -1242,6 +1258,38 @@ export function GlobalLauncherHost() {
         clipboardBlock={clipboardBlock}
       />
       {open && resizableSurface && <WindowResizeHandles inset={8} onResizeStart={beginResize} />}
+      {open && commandMode && (
+        <div className="launcher-command-resize" data-no-drag role="separator" aria-label={t(locale, 'palette.resizeCommandHeight')}
+          aria-orientation="horizontal" aria-valuemin={318} aria-valuemax={760} aria-valuenow={commandHeight} tabIndex={0}
+          style={{ top: commandHeight - 18 }}
+          onPointerDown={(event) => {
+            if (event.button !== 0) return
+            event.preventDefault()
+            event.stopPropagation()
+            event.currentTarget.setPointerCapture(event.pointerId)
+            commandResizeRef.current = { pointer: event.pointerId, y: event.screenY, height: commandHeight, current: commandHeight }
+          }}
+          onPointerMove={(event) => {
+            const drag = commandResizeRef.current
+            if (!drag || drag.pointer !== event.pointerId) return
+            drag.current = Math.max(318, Math.min(760, Math.round(drag.height + event.screenY - drag.y)))
+            setDraggedCommandHeight(drag.current)
+          }}
+          onPointerUp={(event) => {
+            const drag = commandResizeRef.current
+            if (!drag || drag.pointer !== event.pointerId) return
+            commandResizeRef.current = null
+            useAppStore.getState().updateSetting('globalLauncherCommandHeight', drag.current)
+            setDraggedCommandHeight(null)
+          }}
+          onPointerCancel={() => { commandResizeRef.current = null; setDraggedCommandHeight(null) }}
+          onKeyDown={(event) => {
+            if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
+            event.preventDefault()
+            useAppStore.getState().updateSetting('globalLauncherCommandHeight', Math.max(318, Math.min(760, commandHeight + (event.key === 'ArrowUp' ? -10 : 10))))
+          }}
+        />
+      )}
     </div>
   )
 }

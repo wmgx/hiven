@@ -176,6 +176,7 @@ interface AppState {
     pasteQueueShortcut: GlobalPinnedLauncherShortcut
     quickEditorShortcut: GlobalPinnedLauncherShortcut
     globalLauncherWindowPosition?: GlobalLauncherPosition
+    globalLauncherCommandHeight?: number
     /** 'drag' = placed by a header drag. Older 'user' values were polluted by programmatic moves and are ignored. */
     globalLauncherWindowPositionSource?: 'user' | 'drag'
     /** Per-app global shortcuts (focus/hide toggle). */

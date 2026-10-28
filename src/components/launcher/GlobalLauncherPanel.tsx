@@ -35,6 +35,7 @@ type GlobalLauncherPanelProps = {
   surfaceFrame: PluginSurfaceOpenTarget | null
   activeSurfaceFrame: GlobalLauncherActiveSurfaceFrame | null
   surfaceFillsWindow?: boolean
+  commandMode?: boolean
   leaveSurface: () => void
   itemPermissionFrame: GlobalLauncherPermissionFrameState | null
   cancelItemPermissionPrompt: () => void
@@ -96,6 +97,7 @@ export function GlobalLauncherPanel({
   surfaceFrame,
   activeSurfaceFrame,
   surfaceFillsWindow = false,
+  commandMode = false,
   leaveSurface: _omit_leaveSurface,
   itemPermissionFrame,
   cancelItemPermissionPrompt,
@@ -242,7 +244,7 @@ export function GlobalLauncherPanel({
       hostId="global-launcher"
       ref={panelRef}
       busy={busy}
-      className="global-launcher-panel overflow-hidden outline-none palette-panel"
+      className={`global-launcher-panel overflow-hidden outline-none palette-panel${commandMode ? ' launcher-command-mode' : ''}`}
       style={panelStyle}
       tabIndex={-1}
       onPointerDown={beginDrag}

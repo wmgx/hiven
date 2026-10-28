@@ -9,7 +9,7 @@ import { getHostOutputIntent } from '../../workspace/launcher/output'
 import { shouldIgnoreImeKeyDown } from '../../utils/imeKeyboard'
 import { LauncherCommandFooter, useForegroundAppName, type LauncherCommandMenuAction } from './LauncherCommandFooter'
 
-function isSingleTextResult(choices: LauncherResultChoice[]): boolean {
+export function isSingleTextResult(choices: LauncherResultChoice[]): boolean {
   if (choices.length !== 1) return false
   const choice = choices[0]
   const text = (choice.preview ?? choice.title ?? '').trim()

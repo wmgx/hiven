@@ -288,6 +288,7 @@ export function useStandaloneLauncherResize({
   visibleFilteredLength,
   /** Stable primitive signature for frame changes — NOT a new object every render. */
   controllerResizeKey,
+  commandHeight,
 }: {
   open: boolean
   standaloneLauncher: boolean
@@ -299,6 +300,7 @@ export function useStandaloneLauncherResize({
   surfaceKey: string | null
   visibleFilteredLength: number
   controllerResizeKey: string
+  commandHeight?: number
 }) {
   // Must live outside the effect — previously reset to '' on every dep change,
   // so sizeKey === lastSizeKey was always false → native resize every keystroke.
@@ -365,6 +367,10 @@ export function useStandaloneLauncherResize({
         surfaceShell: shellPresent ? { inlineHeight, resizable: Boolean(resizableSurfaceKey) } : undefined,
         currentWindowWidth: initialWindowWidth,
       })
+      if (commandHeight !== undefined) {
+        geometry.height = commandHeight
+        geometry.bodyMaxHeight = undefined
+      }
       applyStandaloneLauncherGeometry(panel, geometry)
 
       const resizable = resizableSurfaceKey !== null
@@ -406,6 +412,7 @@ export function useStandaloneLauncherResize({
     }
   }, [
     contentVisibleLength,
+    commandHeight,
     nativeOpenVersion,
     open,
     contentResizeKey,

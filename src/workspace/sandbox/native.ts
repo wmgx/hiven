@@ -8,6 +8,7 @@ let clipboard: Clipboard = { kind: 'empty', text: '', files: [], changeCount: 0,
 let editor = { text: '', selection: { start: 0, end: 0 } }
 let visible = true
 let surfaceWindow: Args | null = null
+let launcherSize: Args | null = null
 let dragCount = 0
 let serial = 0
 let revision = 0
@@ -132,7 +133,7 @@ async function invoke(command: string, args: Args = {}, options?: Args): Promise
     case 'plugin:window|current_monitor': case 'plugin:window|primary_monitor': return { name: 'sandbox', size: { width: 1440, height: 900 }, position: { x: 0, y: 0 }, scaleFactor: 1 }
     case 'plugin:window|get_all_windows': return ['launcher']
     case 'get_launcher_window_resize_session': return { session: 1, revision: 0 }
-    case 'configure_launcher_window': return true
+    case 'configure_launcher_window': launcherSize = structuredClone(args.request); changed(); return true
     case 'plugin:app|version': return '0.0.0'
     case 'plugin:app|name': return 'hiven'
     case 'plugin:path|resolve_directory': return '/sandbox'
@@ -166,6 +167,7 @@ export const sandbox = {
   occupyShortcut(accelerator: string) { occupied.add(normalize(accelerator)) },
   toasts: () => structuredClone(hudUpdate().toasts),
   surfaceWindow: () => surfaceWindow,
+  launcherSize: () => structuredClone(launcherSize),
   dragCount: () => dragCount,
   async surfaces() {
     const { pluginRegistry } = await import('../pluginRegistry')
