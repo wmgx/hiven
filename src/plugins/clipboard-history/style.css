@@ -13,17 +13,6 @@
   font-family: var(--font-sans);
 }
 
-.clipboard-history-topbar {
-  min-height: 50px;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 13px 15px;
-  border-bottom: 1px solid var(--border);
-  background: var(--background);
-}
-
-.clipboard-history-topbar .hiven-ui-search { flex: 1; min-height: 32px; }
 
 .clipboard-history-filter-trigger[data-active="true"] {
   color: var(--primary);

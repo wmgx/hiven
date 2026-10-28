@@ -3,6 +3,11 @@
 .surface-chrome-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sm); }
 .surface-chrome-header > button { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 0; border-radius: 4px; background: transparent; color: var(--muted-foreground); cursor: pointer; }
 .surface-chrome-header > button:hover { background: var(--muted); color: var(--foreground); }
+.surface-chrome-field:empty { display: none; }
+.surface-chrome-field { flex: 1; min-width: 0; display: flex; align-items: center; height: 100%; }
+.surface-chrome-field:not(:empty) + .surface-chrome-title { display: none; }
+.surface-chrome-field input { flex: 1; min-width: 0; height: 100%; border: 0; border-radius: 0; outline: 0; box-shadow: none; background: transparent; padding: 0 4px; color: var(--foreground); caret-color: var(--foreground); font-size: var(--text-base); -webkit-user-select: text; user-select: text; }
+.surface-chrome-field input::-webkit-search-cancel-button { display: none; }
 .surface-chrome-actions { display: flex; align-items: center; gap: 4px; }
 .surface-chrome-body { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 

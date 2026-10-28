@@ -20,7 +20,7 @@ import {
   SearchField,
   SegmentedControl,
   SurfaceEmptyState,
-  SurfaceHeaderActions,
+  SurfaceHeaderActions, SurfaceHeaderField,
   SurfaceFooterHints,
   SurfaceList,
   SurfaceListItem,
@@ -1081,17 +1081,18 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       onKeyDown={handleKeyDown}
       tabIndex={-1}
     >
-      <div className="clipboard-history-topbar">
+      <SurfaceHeaderField>
         <SearchField
           ref={searchRef}
           data-plugin-surface-autofocus
+          data-clipboard-history-search
           value={query}
           onChange={(e) => changeSearchQuery(e.target.value)}
           onCompositionStart={startSearchComposition}
           onCompositionEnd={endSearchComposition}
           placeholder={t('search.placeholder')}
         />
-      </div>
+      </SurfaceHeaderField>
       <SurfaceHeaderActions>
         {filterMenu}
         <Button

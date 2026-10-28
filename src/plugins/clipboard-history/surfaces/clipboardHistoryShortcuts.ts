@@ -10,7 +10,8 @@ export function readClipboardHistoryShortcutFocus(
   activeElement: Element | null = target,
 ): ClipboardHistoryShortcutFocus {
   return {
-    withinSurface: target !== null && surface.contains(target),
+    // The search field is portaled into the host header, outside the surface subtree.
+    withinSurface: target !== null && (surface.contains(target) || Boolean(target.closest('[data-clipboard-history-search]'))),
     nativeButton: Boolean(target?.closest('button') && !target.closest('.clipboard-history-item')),
     // Match the existing Delete/Backspace ownership, including SELECT controls.
     editing: activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'SELECT' || activeElement?.tagName === 'TEXTAREA',
