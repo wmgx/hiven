@@ -14,3 +14,8 @@
 .text-tools-converter-columns textarea { flex: 1; min-height: 100px; resize: none; }
 
 .base64-preview { max-height: 120px; max-width: 100%; object-fit: contain; align-self: flex-start; }
+
+.command-result-surface { display:flex; flex-direction:column; min-height:0; }
+.base64-command-result { padding:18px; }
+.base64-command-result pre { margin:0; color:var(--foreground); font:var(--text-input-wrapped)/1.65 var(--font-mono); white-space:pre-wrap; overflow-wrap:anywhere; }
+.base64-command-result .base64-preview { max-height:200px; object-fit:contain; margin-bottom:16px; }

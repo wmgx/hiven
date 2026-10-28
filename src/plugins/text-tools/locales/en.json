@@ -197,5 +197,9 @@
   "base64.copied": "Copied",
   "base64.invalid": "Invalid Base64 or unsupported image (PNG, JPEG, WebP; up to 10 MiB and 16 megapixels).",
   "base64.readFailed": "Could not read the clipboard",
-  "base64.copyFailed": "Could not copy the image"
+  "base64.copyFailed": "Could not copy the image",
+  "base64.direction": "Direction",
+  "base64.empty": "Enter text to encode or decode",
+  "base64.emptyHint": "⌘V paste · ⇥ direction",
+  "base64.characters": "{count} characters"
 }

@@ -20,7 +20,7 @@ export default definePlugin({
     id: 'base64', kind: 'custom-view', title: en['base64.title'], titleI18n: { zh: zh['base64.title'] }, icon: 'Binary',
     aliases: ['base64 encode', 'base64 decode', 'b64', '图片 Base64', 'Base64 编码', 'Base64 解码'], component: Base64Surface,
     entry: { launcher: { surfaces: ['global-launcher'] }, shortcutBindable: true },
-    shell: { size: 'large' as const, inlineHeight: 620, resizable: true, closeOnBlur: false },
+    shell: { mode: 'command', size: 'small' as const, inlineHeight: 640, resizable: false, closeOnBlur: true },
   }, {
     id: 'json-expression', kind: 'custom-view', title: en['expression.title'], titleI18n: { zh: zh['expression.title'] }, icon: 'Braces',
     aliases: ['json expression', 'JSON 表达式'], component: JsonExpressionSurface,

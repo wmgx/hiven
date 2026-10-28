@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, SegmentedControl, SurfaceHeaderActions, TextArea } from '@hiven/plugin-ui'
+import { ActionBar, Button, CommandInput, EmptyState, SurfaceError, SurfaceHeaderActions, SurfaceHeaderField, SurfaceStatus, ValueChip } from '@hiven/plugin-ui'
 import { base64Decode, base64Encode } from './core'
 import { decodeRaster, imageDataUri, inspectRaster, parseImageBase64 } from './imageBase64'
 
 type Result = { text: string; preview?: string; png?: Uint8Array }
-type Source = { text: string; image?: Uint8Array }
+type Source = { text: string; image?: Uint8Array; material?: boolean }
 
 export function Base64Surface({ host, t, initialText }: PluginSurfaceProps) {
-  const [source, setSource] = useState<Source>({ text: initialText ?? '' })
+  // Initial material is read once; window resizing must not replace a user's input.
+  const clipboard = useRef(host.clipboard).current
+  const tRef = useRef(t); tRef.current = t
+  const [source, setSource] = useState<Source>({ text: initialText ?? '', material: Boolean(initialText) })
   const [direction, setDirection] = useState('auto')
   const [result, setResult] = useState<Result | null>(null)
   const [error, setError] = useState('')
@@ -26,9 +29,9 @@ export function Base64Surface({ host, t, initialText }: PluginSurfaceProps) {
     const abort = new AbortController(); read.current = abort
     void (async () => {
       try {
-        if (host.clipboard.readImage) {
+        if (clipboard.readImage) {
           try {
-            const image = await host.clipboard.readImage({ signal: abort.signal })
+            const image = await clipboard.readImage({ signal: abort.signal })
             if (!abort.signal.aborted) setSource({ text: '', image: image.bytes })
             return
           } catch (error) {
@@ -36,12 +39,12 @@ export function Base64Surface({ host, t, initialText }: PluginSurfaceProps) {
             if (error instanceof Error && error.name !== 'NotReadableError') throw error
           }
         }
-        const text = await host.clipboard.readText({ signal: abort.signal })
-        if (!abort.signal.aborted) setSource({ text })
-      } catch { if (!abort.signal.aborted) setError(t('base64.readFailed')) }
+        const text = await clipboard.readText({ signal: abort.signal })
+        if (!abort.signal.aborted) setSource({ text, material: Boolean(text) })
+      } catch { if (!abort.signal.aborted) setError(tRef.current('base64.readFailed')) }
     })()
     return () => abort.abort()
-  }, [host.clipboard, initialText, t])
+  }, [clipboard, initialText])
   useEffect(() => {
     const abort = new AbortController(); work.current = abort
     setResult(null); setError('')
@@ -82,19 +85,23 @@ export function Base64Surface({ host, t, initialText }: PluginSurfaceProps) {
     } catch { if (!signal.aborted) setError(t('base64.copyFailed')) }
     finally { setCopying(false) }
   }
-  return <section className="base64-surface text-tools-converter">
-    <SurfaceHeaderActions>{result?.png && <Button disabled={copying} onClick={() => void copyImage()}>{t('base64.copyImage')}</Button>}</SurfaceHeaderActions>
-    {!source.image && <SegmentedControl value={direction} options={['auto', 'encode', 'decode'].map(value => ({ value, label: t(`base64.${value}`) }))}
-      onChange={value => { invalidate(); setResult(null); setDirection(value) }} />}
-    {error && <p role="alert">{error}</p>}
-    <div className="text-tools-converter-columns">
-      <label>{t('base64.input')}<TextArea aria-label={t('base64.input')} data-launcher-scrollable spellCheck={false} value={source.text}
-        onChange={event => { invalidate(); setResult(null); setSource({ text: event.target.value }) }} /></label>
-      <label>{t('base64.output')}
-        {result?.preview && <img className="base64-preview" src={result.preview} alt={t('base64.preview')} />}
-        <TextArea aria-label={t('base64.output')} data-launcher-scrollable readOnly value={result?.text ?? ''} />
-      </label>
+  return <section className="base64-surface command-result-surface">
+    <SurfaceHeaderField><CommandInput value={source.text} initialMaterial={source.material} placeholder={t('base64.input')}
+      onChange={text => { invalidate(); setResult(null); setSource({ text }) }} /></SurfaceHeaderField>
+    <SurfaceHeaderActions><ValueChip label={t('base64.direction')} value={direction}
+      options={['auto', 'encode', 'decode'].map(value => ({ value, label: t(`base64.${value}`) }))}
+      onPreview={value => { if (value !== direction) { invalidate(); setDirection(String(value)) } }}
+      onChange={value => { if (value !== direction) { invalidate(); setDirection(String(value)) } }} /></SurfaceHeaderActions>
+    <SurfaceError>{error}</SurfaceError>
+    <div data-command-content className="base64-command-result">
+      {result?.preview && <img className="base64-preview" src={result.preview} alt={t('base64.preview')} />}
+      {result ? <pre aria-label={t('base64.output')} data-testid="base64-result" tabIndex={0}>{result.text}</pre>
+        : !error && <EmptyState title={t('base64.empty')} hint={t('base64.emptyHint')} />}
     </div>
-    {host.OutputActions && <host.OutputActions text={result?.text ?? ''} />}
+    <SurfaceStatus>{result && t('base64.characters', { count: result.text.length })}</SurfaceStatus>
+    <ActionBar>
+      {host.OutputActions && <host.OutputActions text={result?.text ?? ''} />}
+      {result?.png && <Button disabled={copying} onClick={() => void copyImage()}>{t('base64.copyImage')}</Button>}
+    </ActionBar>
   </section>
 }

@@ -197,5 +197,9 @@
   "base64.copied": "已复制",
   "base64.invalid": "Base64 无效或图片不受支持（PNG、JPEG、WebP；最大 10 MiB、1600 万像素）。",
   "base64.readFailed": "读取剪贴板失败",
-  "base64.copyFailed": "复制图片失败"
+  "base64.copyFailed": "复制图片失败",
+  "base64.direction": "方向",
+  "base64.empty": "输入文本进行编码或解码",
+  "base64.emptyHint": "⌘V 粘贴 · ⇥ 方向",
+  "base64.characters": "{count} 字符"
 }
