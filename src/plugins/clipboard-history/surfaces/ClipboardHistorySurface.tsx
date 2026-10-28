@@ -181,7 +181,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const loadMoreAbortRef = useRef<AbortController | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
   const [loadMoreFailed, setLoadMoreFailed] = useState(false)
-  const [scannedCount, setScannedCount] = useState(0)
   const [retentionStatus, setRetentionStatus] = useState<{ legacyProtectedCount: number; trashCount: number; migrationComplete: boolean } | null>(null)
   const [legacyDialog, setLegacyDialog] = useState(false)
   const [retentionBusy, setRetentionBusy] = useState(false)
@@ -212,7 +211,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   const refreshPage = useCallback(() => {
     setLoadMoreFailed(false)
     setFullTextSearchState('loading')
-    setScannedCount(0)
     setRefreshEpoch((value) => value + 1)
   }, [])
   const clearPage = useCallback(() => {
@@ -222,7 +220,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     pagesLoadedRef.current = 1
     setLoadMoreFailed(false)
     setFullTextSearchState('loading')
-    setScannedCount(0)
     setRefreshEpoch((value) => value + 1)
   }, [])
   const syncLocalDay = useCallback(() => {
@@ -275,7 +272,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     const owner = host.deliveryFeedbackOwner
     const current = () => generation === pageGeneration.current && !controller.signal.aborted && owner?.isCurrent() !== false
     setFullTextSearchState('loading')
-    setScannedCount(0)
     const requestedQuery = desiredQuery
     const requestedMatchMode = searchMatchMode
     const requestedFilter = desiredFilter
@@ -294,14 +290,12 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         let cursor: string | undefined
         let loaded: ClipboardHistoryItem[] = []
         let pages = 0
-        let scanned = 0
         do {
           const page = await readMatchingHistoryPage((next) => repository.getPage({
             query: requestedQuery, matchMode: requestedMatchMode,
             filter: requestedFilter === 'favorite' ? 'favorites' : requestedFilter,
             frequentThreshold, copiedSince, cursor: next, limit: HISTORY_PAGE_SIZE, signal: controller.signal,
-          }), cursor, controller.signal, (count) => { if (current()) setScannedCount(scanned + count) })
-          scanned += page.scanned
+          }), cursor, controller.signal, () => {})
           loaded = appendNewItems(loaded, page.items)
           cursor = page.nextCursor
           pages += 1
@@ -402,7 +396,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   }
 
   useEffect(() => {
-    if (searchPresentation.showInitialSkeleton) return
+    // The search lives in the host header and stays mounted while results load.
     const frame = requestAnimationFrame(() => searchRef.current?.focus())
     // WKWebView does not always flip visibilityState when the window is hidden and
     // shown again, so also recover focus whenever the window becomes key with
@@ -416,7 +410,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       cancelAnimationFrame(frame)
       window.removeEventListener('focus', onWindowFocus)
     }
-  }, [searchPresentation.showInitialSkeleton, settings.enabled])
+  }, [settings.enabled])
 
   // Repository pages already apply the complete query and category. Never scan
   // every historical body into UI memory or filter only a local preview.
@@ -922,11 +916,9 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                 if (event.currentTarget.contains(document.activeElement)) containerRef.current?.focus({ preventScroll: true })
               }}>
               <SurfaceList aria-label={t('surface.main.title')} data-launcher-scrollable>
-                {filteredItems.length === 0 ? (
+                {filteredItems.length === 0 ? fullTextSearchState === 'loading' ? null : (
                   <SurfaceEmptyState>
-                    {fullTextSearchState === 'loading'
-                      ? t('state.loading')
-                      : fullTextSearchState === 'error'
+                    {fullTextSearchState === 'error'
                         ? t('error.loadFailed')
                       : appliedFilter === 'frequent'
                       ? t('state.emptyFrequent')
@@ -1008,11 +1000,8 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
             items={previewItem ? itemContextMenuItems(previewItem) : []}
             trigger={
               <SurfacePreview className="clipboard-history-preview" data-launcher-scrollable>
-                {!previewItem ? (
-                  <SurfaceEmptyState>
-                    {t('preview.empty')}
-                  </SurfaceEmptyState>
-                ) : (
+                {/* No placeholder text: it flashes while the selection's full item loads. */}
+                {!previewItem ? null : (
                   <>
                     <ClipboardHistoryPreviewContent
                       item={previewItem}
@@ -1086,6 +1075,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
           ref={searchRef}
           data-plugin-surface-autofocus
           data-clipboard-history-search
+          autoFocus
           value={query}
           onChange={(e) => changeSearchQuery(e.target.value)}
           onCompositionStart={startSearchComposition}
@@ -1112,12 +1102,12 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         </IconButton>
       </SurfaceHeaderActions>
 
-      {((retentionStatus?.legacyProtectedCount ?? 0) > 0 || fullTextSearchState === 'loading') && <SurfaceFooterHints className="clipboard-history-footer">
+      {/* No scanning row while searching: inserting it above the list shifts the whole layout. */}
+      {(retentionStatus?.legacyProtectedCount ?? 0) > 0 && <SurfaceFooterHints className="clipboard-history-footer">
         {retentionStatus && retentionStatus.legacyProtectedCount > 0 && <>
           <span>{t('retention.legacyProtected', { count: retentionStatus.legacyProtectedCount })}</span>
           <Button type="button" disabled={retentionBusy || !retentionStatus.migrationComplete} onClick={() => setLegacyDialog(true)}>{t('retention.enableLegacy')}</Button>
         </>}
-        {fullTextSearchState === 'loading' && <span role="status">{t('paging.scanning', { count: scannedCount })}</span>}
       </SurfaceFooterHints>}
 
       {renderContent()}

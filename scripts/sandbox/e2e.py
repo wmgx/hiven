@@ -589,7 +589,18 @@ def s31(page):
             page.clock.run_for(200)
 
 
-CASES = [s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15,s16,s17,s18,s19,s20,s21,s22,s23,s24,s25,s26,s27,s28,s29,s30,s31]
+def s32(page):
+    copy(page, 'synthetic focus')
+    target = {'pluginId':'clipboard-history', 'surfaceId':'main', 'source':'builtin'}
+    for presentation in ['inline', 'window']:
+        chrome = open_surface(page, target, presentation)
+        # The header search takes focus on open; no transient placeholder text in the body.
+        page.wait_for_function('document.activeElement?.hasAttribute("data-clipboard-history-search")')
+        expect(chrome.get_by_text('Loading', exact=True)).to_have_count(0)
+        expect(chrome.get_by_text('No preview', exact=True)).to_have_count(0)
+
+
+CASES = [s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15,s16,s17,s18,s19,s20,s21,s22,s23,s24,s25,s26,s27,s28,s29,s30,s31,s32]
 
 
 def main():
