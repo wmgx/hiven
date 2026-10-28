@@ -2,13 +2,16 @@
   "pluginId": "regex-tester",
   "displayName": "Regex Tester",
   "displayNameI18n": {
-    "zh": "\u6b63\u5219\u6d4b\u8bd5\u5668"
+    "zh": "正则测试器"
   },
-  "version": "1.4.11",
+  "version": "1.4.12",
   "capabilities": [
     "ui"
   ],
   "permissions": [
-    "ai.use"
+    "ai.use",
+    "clipboard.read",
+    "clipboard.write",
+    "accessibility.paste"
   ]
 }

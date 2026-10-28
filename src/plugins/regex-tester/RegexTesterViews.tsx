@@ -1,24 +1,30 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, Select, SurfaceActionBar, TextArea, TextInput } from '@hiven/plugin-ui'
+import { SurfaceHeaderField, SurfaceHeaderActions, SurfaceStatus, SurfaceError, ActionBar, ValueChip, ToggleGroup, RowList, TextArea, TextInput } from '@hiven/plugin-ui'
 import { MAX_REGEX_MATCHES, type MatchResult } from './regexCore'
 import { useRegexExecution } from './useRegexExecution'
 import { extractRegexMatches, type RegexExtractionTarget } from './extractMatches'
 import { createAiCandidateSession, type AiCandidateState } from './aiCandidateSession'
 import { AiCandidateControls } from './AiCandidateControls'
 
-const COMMON_FLAGS = ['g', 'i', 'm', 's', 'u'] as const
+const COMMON_FLAGS = ['g', 'i', 'm', 's', 'u', 'd', 'v', 'y'] as const
 
 export function RegexTesterSurface(props: PluginSurfaceProps) {
   const { host, t } = props
   const baseline = useRef({
     pattern: '[a-z]+',
     flags: 'g',
-    sourceText: props.initialText ?? 'hello 123\nworld 456',
+    sourceText: props.initialText ?? '',
   })
+  const [aiOpen, setAiOpen] = useState(false)
   const [pattern, setPattern] = useState(baseline.current.pattern)
   const [flags, setFlags] = useState(baseline.current.flags)
   const [sourceText, setSourceText] = useState(baseline.current.sourceText)
+  useEffect(() => {
+    let live = true
+    if (!props.initialText) void host.clipboard.readText().then(text => { if (live) setSourceText(previous => previous || text) }).catch(() => {})
+    return () => { live = false }
+  }, [])
   const [aiState, setAiState] = useState<AiCandidateState>({ status: 'idle' })
   const aiSession = useRef<ReturnType<typeof createAiCandidateSession> | null>(null)
   useLayoutEffect(() => {
@@ -71,16 +77,6 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
   useLayoutEffect(() => host.deliveryFeedbackOwner?.subscribeInvalidation(() => invalidateResult(false)), [host.deliveryFeedbackOwner])
   useLayoutEffect(() => host.subscribeLeaveIntent?.(() => invalidateResult()), [host.subscribeLeaveIntent])
 
-  const toggleFlag = (flag: string) => {
-    invalidateResult()
-    setFlags((current) => {
-      const values = new Set(current.split(''))
-      if (values.has(flag)) values.delete(flag)
-      else values.add(flag)
-      return [...values].join('')
-    })
-  }
-
   const revealMatch = (match: MatchResult, index: number) => {
     setActiveMatch(index)
     requestAnimationFrame(() => {
@@ -94,47 +90,17 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
 
   return (
     <section className="regex-tester-surface" aria-label={t('surface.title')}>
-      <div className="regex-tester-surface__controls">
-        <div className="regex-tester-surface__expression">
-          <div className="regex-tester-surface__pattern">
-            <i aria-hidden="true">/</i>
-            <TextInput
-              value={pattern}
-              onChange={(event) => { invalidateResult(); setPattern(event.target.value) }}
-              placeholder={t('panel.regex.pattern')}
-              aria-label={t('panel.regex.pattern')}
-              spellCheck={false}
-              autoFocus
-            />
-            <i aria-hidden="true">/</i>
-            <TextInput
-              className="regex-tester-surface__flags"
-              value={flags}
-              onChange={(event) => { invalidateResult(); setFlags(event.target.value) }}
-              placeholder="g"
-              aria-label={t('panel.regex.flags')}
-              spellCheck={false}
-            />
-          </div>
-        </div>
-        <fieldset className="regex-tester-surface__flag-list">
-          <legend>{t('surface.quickFlags')}</legend>
-          {COMMON_FLAGS.map((flag) => (
-            <Button
-              key={flag}
-              type="button"
-              variant="ghost"
-              aria-pressed={flags.includes(flag)}
-              title={t(`surface.flag.${flag}`)}
-              onClick={() => toggleFlag(flag)}
-            >
-              {flag}
-            </Button>
-          ))}
-        </fieldset>
-      </div>
-
-      <AiCandidateControls
+      <SurfaceHeaderField><TextInput value={pattern} onChange={event => { invalidateResult(); setPattern(event.target.value) }} placeholder={t('panel.regex.pattern')} aria-label={t('panel.regex.pattern')} spellCheck={false} autoFocus data-plugin-surface-autofocus={aiOpen ? undefined : 'sticky'} /></SurfaceHeaderField>
+      <SurfaceHeaderActions>
+        <ToggleGroup aria-label={t('surface.quickFlags')} value={flags.split('')} options={COMMON_FLAGS.map(value => ({ value, label: value }))} onChange={values => { invalidateResult(); setFlags(values.join('')) }} />
+        <ValueChip label={t('surface.extractTarget')} value={extractionTarget}
+          options={extractionOptions.some(option => option.value === extractionTarget) ? extractionOptions : [...extractionOptions, { value: extractionTarget, label: t('surface.unavailableGroup') }]}
+          onChange={value => { invalidateResult(false); setExtractionTarget(value as RegexExtractionTarget) }} onPreview={value => { invalidateResult(false); setExtractionTarget(value as RegexExtractionTarget) }} />
+      </SurfaceHeaderActions>
+      <SurfaceError>{['invalid','timeout','failed'].includes(result.status) ? <span>{t(result.status === 'invalid' ? 'error.invalid' : `execution.${result.status}`)}{result.status === 'invalid' && <code> · {result.error}</code>}</span>
+        : ['missing-group','empty-group','truncated','too-large'].includes(extraction.status) ? t(`extraction.${extraction.status}`, { limit: MAX_REGEX_MATCHES }) : null}</SurfaceError>
+      <SurfaceStatus>{result.status === 'running' || result.status === 'cancelled' ? t(`execution.${result.status}`) : extraction.status === 'empty-matches' ? t('surface.emptyMatches') : t('panel.regex.matches', { count: result.matches.length })}</SurfaceStatus>
+      <AiCandidateControls open={aiOpen} close={() => { aiSession.current?.invalidate(); setAiOpen(false) }}
         host={host} t={t} state={aiState}
         invalidate={() => aiSession.current?.invalidate()}
         generate={(input, selection) => { if (host.deliveryFeedbackOwner?.isCurrent() !== false) void aiSession.current?.generate(input, selection) }}
@@ -172,12 +138,6 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
           </span>
           <div className="regex-tester-surface__matches" aria-live="polite">
             {result.status === 'running' || result.status === 'cancelled' ? <p role="status">{t(`execution.${result.status}`)}</p> : null}
-            {(result.status === 'invalid' || result.status === 'timeout' || result.status === 'failed') && (
-              <div role="alert" className="regex-tester-surface__error">
-                <strong>{t(result.status === 'invalid' ? 'error.invalid' : `execution.${result.status}`)}</strong>
-                {result.status === 'invalid' ? <code>{result.error}</code> : null}
-              </div>
-            )}
             {result.status === 'ready' && result.matches.length === 0 && (
               <div className="regex-tester-surface__empty">
                 <span aria-hidden="true">.*</span>
@@ -186,25 +146,9 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
             )}
             {result.status === 'ready' && result.matches.length > 0 && (
               <>
-                {result.matches.slice(0, 100).map((match, index) => (
-                  <Button
-                    key={`${match.index}:${index}`}
-                    type="button"
-                    variant="ghost"
-                    className={activeMatch === index ? 'regex-tester-surface__match is-active' : 'regex-tester-surface__match'}
-                    aria-label={t('surface.revealMatch', { line: match.line, col: match.col })}
-                    onClick={() => revealMatch(match, index)}
-                  >
-                    <span className="regex-tester-surface__location">{match.line}:{match.col}</span>
-                    <code>{match.text || t('surface.emptyGroup')}</code>
-                    {match.groups.length > 0 ? (
-                      <em>
-                        <b>{t('surface.groups')}</b>
-                        {match.groups.map((group) => group === undefined ? t('surface.missingGroup') : group === '' ? t('surface.emptyGroup') : group).join(', ')}
-                      </em>
-                    ) : <em />}
-                  </Button>
-                ))}
+                <RowList label={t('surface.matches')} selectedId={String(activeMatch)} onSelect={id => setActiveMatch(Number(id))}
+                  onActivate={id => { const index = Number(id); const match = result.matches[index]; if (match) revealMatch(match, index) }}
+                  items={result.matches.slice(0, 100).map((match, index) => ({ id: String(index), title: match.text || t('surface.emptyGroup'), description: `${match.line}:${match.col}${match.groups.length ? ` · ${t('surface.groups')}: ${match.groups.map(group => group === undefined ? t('surface.missingGroup') : group || t('surface.emptyGroup')).join(', ')}` : ''}` }))} />
                 {result.matches.length > 100 ? (
                   <div className="regex-tester-surface__more">
                     {t('panel.regex.more', { count: result.matches.length - 100 })}
@@ -215,16 +159,8 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
           </div>
         </div>
       </div>
-      <SurfaceActionBar className="regex-tester-surface__extract">
-        <Select aria-label={t('surface.extractTarget')} value={extractionTarget}
-          options={extractionOptions.some((option) => option.value === extractionTarget) ? extractionOptions : [
-            ...extractionOptions, { value: extractionTarget, label: t('surface.unavailableGroup') },
-          ]}
-          onChange={(event) => { invalidateResult(false); setExtractionTarget(event.currentTarget.value as RegexExtractionTarget) }} />
-        {extraction.status === 'empty-matches' ? <p role="status">{t('surface.emptyMatches')}</p> : null}
-        {['missing-group', 'empty-group', 'truncated', 'too-large'].includes(extraction.status) ? <p role="alert">{t(`extraction.${extraction.status}`, { limit: MAX_REGEX_MATCHES })}</p> : null}
-        {host.OutputActions && <host.OutputActions text={extraction.status === 'ready' ? extraction.text : ''} />}
-      </SurfaceActionBar>
+      <ActionBar>{host.OutputActions && <host.OutputActions text={extraction.status === 'ready' ? extraction.text : ''}
+        more={[{ id: 'ai', label: t('ai.title'), run: () => setAiOpen(true) }]} />}</ActionBar>
     </section>
   )
 }

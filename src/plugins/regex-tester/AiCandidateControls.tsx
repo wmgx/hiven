@@ -1,10 +1,11 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { AiPreflightResult, PluginSurfaceProps } from '@hiven/plugin'
-import { Button, TextArea } from '@hiven/plugin-ui'
+import { Button, TextArea, useLocalEscapeLayer } from '@hiven/plugin-ui'
 import type { CandidateInput } from './aiCandidate'
 import type { AiCandidateState } from './aiCandidateSession'
 
 type Props = Pick<PluginSurfaceProps, 'host' | 't'> & {
+  open: boolean; close(): void
   state: AiCandidateState
   invalidate(): void
   generate(input: CandidateInput, selection?: AiPreflightResult): void
@@ -15,12 +16,16 @@ type Props = Pick<PluginSurfaceProps, 'host' | 't'> & {
 // Lines are literal test strings, never evaluated as source code.
 const examples = (value: string) => value === '' ? [] : value.split('\n')
 
-export function AiCandidateControls({ host, t, state, invalidate, generate, cancel, adopt }: Props) {
+export function AiCandidateControls({ host, t, open, close, state, invalidate, generate, cancel, adopt }: Props) {
   const [description, setDescription] = useState('')
   const [positive, setPositive] = useState('')
   const [negative, setNegative] = useState('')
   const [asking, setAsking] = useState(false)
   const request = useRef(0)
+  const panel = useRef<HTMLDivElement>(null)
+  const composing = useRef(false)
+  useEffect(() => { if (open) panel.current?.querySelector('textarea')?.focus() }, [open])
+  useLocalEscapeLayer({ open, composingRef: composing, popupRef: panel, triggerRef: panel, owner: host.deliveryFeedbackOwner, onDismiss: () => { request.current++; setAsking(false); close() } })
   const gate = host.aiSendGate
   const busy = asking || ['checking', 'generating', 'validating'].includes(state.status)
   const send = async () => {
@@ -31,12 +36,12 @@ export function AiCandidateControls({ host, t, state, invalidate, generate, canc
     const approved = await gate.request({ commandId: 'generate', label: t('ai.title'), text: input.description, extras: [positive, negative] })
     if (token !== request.current) return
     setAsking(false)
-    if (!approved) return
+    if (!approved) { panel.current?.querySelector('textarea')?.focus(); return }
     generate(input, approved.selection)
   }
   const edit = () => { request.current++; setAsking(false); invalidate() }
-  return <details className="regex-ai">
-    <summary>{t('ai.title')}</summary>
+  return <div onCompositionStart={() => { composing.current = true }} onCompositionEnd={() => { composing.current = false }} hidden={!open} ref={panel} tabIndex={-1} className="regex-ai">
+    <Button onClick={() => { request.current++; setAsking(false); close() }}>{t('ai.cancel')}</Button>
     <div className="regex-ai__form">
       <label className="regex-ai__description"><span>{t('ai.description')}</span>
         <TextArea rows={2} value={description} onChange={(e) => { edit(); setDescription(e.target.value) }} />
@@ -59,5 +64,5 @@ export function AiCandidateControls({ host, t, state, invalidate, generate, canc
         </>}
       </div>
     </div>
-  </details>
+  </div>
 }
