@@ -123,16 +123,16 @@ function HostOutputActions({ deps, text, primary = 'copy', copy, more = [], disa
   }, [deps])
 
   return <div className="hiven-output-actions">
-    {secondary && <Button variant="outline" size="sm" disabled={secondary.id === 'copy' ? !canCopy : !canTextAct} onClick={() => void secondary.run()}>{secondary.label}</Button>}
+    {secondary && <Button variant="ghost" size="sm" disabled={secondary.id === 'copy' ? !canCopy : !canTextAct} onClick={() => void secondary.run()}>{secondary.label}<kbd>{secondary.id === 'paste' ? '⌘⇧↵' : '⌘C'}</kbd></Button>}
     {menu.length > 0 && <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-      <DropdownMenuTrigger render={<Button variant="outline" size="sm" disabled={disabled} />}>
+      <DropdownMenuTrigger render={<Button variant="ghost" size="sm" disabled={disabled} />}>
         {t('more')}<kbd>⌘K</kbd><ChevronDownIcon size={14} />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent align="end" side="top">
         {menu.map(item => <DropdownMenuItem key={item.id} onClick={() => void item.run()}>{item.label}</DropdownMenuItem>)}
       </DropdownMenuContent>
     </DropdownMenu>}
-    <Button size="sm" disabled={!canPrimary} onClick={() => void primaryAction.run()}>{primaryAction.label}<kbd>⌘↵</kbd></Button>
+    <Button variant="ghost" size="sm" disabled={!canPrimary} onClick={() => void primaryAction.run()}>{primaryAction.label}<kbd>⌘↵</kbd></Button>
   </div>
 }
 

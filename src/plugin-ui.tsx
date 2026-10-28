@@ -36,8 +36,9 @@ import {
 import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from './utils/imeKeyboard'
 
 export { getFluxMonacoTheme as getEditorTheme } from './utils/monacoTheme'
-export { PluginIcon } from './ui/PluginIcon'
 export { SurfaceHeaderActions, SurfaceHeaderField, SurfaceBreadcrumbs, SurfaceStatus, SurfaceError } from './ui/SurfaceHeaderActions'
+export { ActionBar, ActionBar as SurfaceActionBar } from './ui/ActionBar'
+export { PluginIcon } from './ui/PluginIcon'
 export { Tooltip } from '@base-ui/react/tooltip'
 export { useToolDeliveryFeedback } from './ui/useToolDeliveryFeedback'
 export type { ToolDeliveryFeedback, ToolDeliveryFeedbackAttempt, ToolDeliveryFeedbackOwner } from './ui/toolDeliveryFeedback'
@@ -628,11 +629,6 @@ export function SurfaceEmptyState({ className, ...props }: ComponentPropsWithout
 
 export function SurfaceFooterHints({ className, ...props }: ComponentPropsWithoutRef<'div'>) {
   return <div className={cn('hiven-ui-surface-footer-hints flex items-center gap-2 text-sm text-muted-foreground', className)} {...props} />
-}
-
-/** Full-width bottom bar: status on the left, output actions on the right. */
-export function SurfaceActionBar({ className, ...props }: ComponentPropsWithoutRef<'footer'>) {
-  return <footer className={cn('hiven-ui-surface-actionbar', className)} {...props} />
 }
 
 export function Dialog({ open, onOpenChange, title, children, className }: DialogProps) {

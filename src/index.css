@@ -8976,10 +8976,11 @@ html[data-window='launcher'] .flux-spatial-shell .recent-clipboard-hint {
 .ai-send-grants li { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 
 /* OutputActions: host-owned output buttons shared by plugin pages. */
-.hiven-ui-surface-actionbar { flex: none; display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 12px; border-top: 1px solid var(--border-subtle); color: var(--muted-foreground); font-size: var(--text-sm); }
+.hiven-ui-surface-actionbar { flex: none; display: flex; align-items: center; gap: 14px; min-height: var(--surface-footer-height); padding: 0 14px; border-top: 1px solid var(--border-subtle); background: var(--subtle); color: var(--muted-foreground); font-size: var(--text-sm); }
+.surface-shell-footer .hiven-ui-surface-actionbar { padding: 0; border: 0; background: transparent; min-height: 38px; }
 .hiven-ui-surface-actionbar > .hiven-output-actions { margin-left: auto; }
 .hiven-output-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
-.hiven-output-actions kbd { margin-left: 6px; font: 12px var(--font-sans); opacity: .6; }
+.hiven-output-actions kbd { display: inline-grid; place-items: center; min-width: 19px; height: 19px; margin-left: 6px; padding: 0 4px; border-radius: 5px; background: linear-gradient(180deg, var(--key-top), var(--key-bottom)); box-shadow: 0 0 0 .5px var(--key-edge), 0 1px 0 var(--key-edge); font: 500 11px var(--font-sans); color: var(--muted-foreground); }
 
 /* Launcher AI send confirmation frame. */
 .launcher-ai-send { display: flex; flex: 0 0 auto; flex-direction: column; gap: 8px; padding: 12px 14px; outline: none; }
