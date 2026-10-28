@@ -21,7 +21,6 @@
   "state.emptyFrequent": "No frequent items",
   "state.emptyFavorite": "No favorites",
   "favorite.titlePlaceholder": "Title",
-  "favorite.untitled": "Untitled",
   "meta.showDetails": "Details",
   "meta.hideDetails": "Less",
   "hint.paste": "Paste",
@@ -45,7 +44,6 @@
   "meta.sourceApp": "Source app",
   "meta.files": "Files",
   "meta.timesPasted": "Times pasted",
-  "meta.favorite": "Favorite title",
   "meta.firstCopied": "First copied",
   "meta.lastCopied": "Last copied",
   "message.copied": "Copied",
@@ -80,11 +78,12 @@
   "action.editFavoriteInfo": "Edit favorite information",
   "favorite.fieldName": "Field name",
   "favorite.fieldValue": "Value",
-  "favorite.addField": "Add field",
   "favorite.removeField": "Remove",
   "favorite.nameRequired": "Enter a name for each field with a value.",
   "favorite.tooManyFields": "Use no more than 12 fields.",
   "favorite.copyValue": "Copy field value",
   "message.favorited": "Favorited",
-  "action.edit": "Edit"
+  "action.edit": "Edit",
+  "favorite.done": "Done",
+  "favorite.nextCell": "Next cell"
 }

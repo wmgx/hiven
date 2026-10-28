@@ -215,11 +215,12 @@ try {
 
   // Favorite fields use the real repository and the existing atomic in-memory store.
   const fieldsMemory = syntheticHistoryStorage(); const fieldsRepo = create(fieldsMemory.storage)
-  const saved = await fieldsRepo.addItem({ kind: 'text', text: 'account', hash: 'favorite-fields', byteSize: 7 })
+  const saved = await fieldsRepo.addItem({ kind: 'text', text: 'account\nsecret', hash: 'favorite-fields', byteSize: 14 })
   assert.deepEqual((await fieldsRepo.getItem(saved.id)).favoriteFields, [], 'old records without fields read as empty')
   const fields = [{ name: ' Platform ', value: ' GitHub ' }, { name: ' ', value: ' ' }, { name: 'n'.repeat(25), value: 'v'.repeat(510) }]
   const expectedFields = [{ name: 'Platform', value: 'GitHub' }, { name: 'n'.repeat(20), value: 'v'.repeat(500) }]
   await fieldsRepo.setFavorite(saved.id, true, ' Work account ', fields)
+  assert.equal((await fieldsRepo.getPage()).items.find(item => item.id === saved.id).preview, 'account', 'favorite title fallback uses the first line')
   assert.deepEqual((await fieldsRepo.getItem(saved.id)).favoriteFields, expectedFields)
   assert.deepEqual(fieldsMemory.data.get('history/items/' + saved.id).favoriteFields, expectedFields)
   assert.deepEqual(fieldsMemory.data.get('history/v2/meta/' + saved.id).favoriteFields, expectedFields)

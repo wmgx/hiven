@@ -7,7 +7,7 @@ import sys
 import time
 from pathlib import Path
 from playwright.sync_api import sync_playwright, expect
-from v4_cases import s33, s34, s35, s36, s37, s38, s39, s40, s41, s42, s43, s44, s45
+from v4_cases import s33, s34, s35, s36, s37, s38, s39, s40, s41, s42, s43, s44, s45, s46
 
 URL = 'http://localhost:1420/?window=launcher&sandbox=1'
 
@@ -480,7 +480,6 @@ def s26(page):
     page.keyboard.press('Meta+e')
     page.get_by_placeholder('Title', exact=True).fill('Saved title')
     for i, (name, value) in enumerate([('Team', 'cedar'), ('Stage', 'violet')]):
-        page.get_by_role('button', name='Add field', exact=True).click()
         page.get_by_placeholder('Field name', exact=True).nth(i).fill(name)
         page.get_by_placeholder('Value', exact=True).nth(i).fill(value)
     expect(page.get_by_role('button', name='Save', exact=True)).to_have_count(0)
@@ -605,7 +604,7 @@ def s32(page):
         page.wait_for_function('document.activeElement?.hasAttribute("data-clipboard-history-search")')
 
 
-CASES = [s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15,s16,s17,s18,s19,s20,s21,s22,s23,s24,s25,s26,s27,s28,s29,s30,s31,s32,s33,s34,s35,s36,s37,s38,s39,s40,s41,s42,s43,s44,s45]
+CASES = [s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15,s16,s17,s18,s19,s20,s21,s22,s23,s24,s25,s26,s27,s28,s29,s30,s31,s32,s33,s34,s35,s36,s37,s38,s39,s40,s41,s42,s43,s44,s45,s46]
 
 
 def main():

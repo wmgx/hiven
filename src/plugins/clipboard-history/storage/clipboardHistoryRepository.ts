@@ -416,6 +416,7 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
   async function setFavorite(id: string, favorite: boolean, title?: string, fields?: FavoriteField[]) {
     const normalized = favorite && fields !== undefined ? normalizeFavoriteFields(fields) : undefined
     return update(id, (item) => ({ ...item, isFavorite: favorite,
+      ...(item.kind === 'text' ? { preview: makeTextPreview(favorite ? item.text.split(/\r?\n/, 1)[0] : item.text) } : {}),
       favoriteTitle: favorite && title !== undefined ? title.trim() || undefined : item.favoriteTitle,
       favoriteFields: normalized ?? item.favoriteFields,
       favoritedAt: favorite ? item.favoritedAt ?? Date.now() : undefined,

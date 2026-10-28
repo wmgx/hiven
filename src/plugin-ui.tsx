@@ -86,6 +86,7 @@ type SelectProps = {
 }
 
 type ComboboxProps = {
+  side?: 'top' | 'bottom'
   allowCustomValue?: boolean
   maxLength?: number
   options: SelectOption[]
@@ -385,7 +386,7 @@ export const Select = forwardRef<HTMLDivElement, SelectProps>(function Select(
   )
 })
 
-export function Combobox({ allowCustomValue = false, maxLength, options, filter, value = '', disabled, className, placeholder, emptyLabel = '', 'aria-label': ariaLabel, onChange }: ComboboxProps) {
+export function Combobox({ side = 'bottom', allowCustomValue = false, maxLength, options, filter, value = '', disabled, className, placeholder, emptyLabel = '', 'aria-label': ariaLabel, onChange }: ComboboxProps) {
   const selected = options.find((option) => option.value === value) ?? null
   const [open, setOpen] = useState(false)
   return (
@@ -418,7 +419,7 @@ export function Combobox({ allowCustomValue = false, maxLength, options, filter,
           <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" />
         </BaseCombobox.Trigger>}
       </div>
-      <ComboboxContent className="hiven-ui-combobox-menu">
+      <ComboboxContent side={side} className="hiven-ui-combobox-menu">
         {!allowCustomValue && <BaseCombobox.Input
           className="hiven-ui-combobox-search m-1 h-7 w-[calc(100%-0.5rem)] rounded-md border border-input bg-transparent px-2 text-base outline-none placeholder:text-muted-foreground focus-visible:border-ring"
           placeholder={placeholder}

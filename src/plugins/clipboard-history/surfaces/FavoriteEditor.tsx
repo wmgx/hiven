@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, Combobox, TextInput, useImeKeyboard, useLocalEscapeLayer } from '@hiven/plugin-ui'
+import { ActionBar, Button, Combobox, TextInput, useImeKeyboard, useLocalEscapeLayer } from '@hiven/plugin-ui'
 import type { ClipboardHistoryRepository } from '../storage/clipboardHistoryRepository'
 import type { ClipboardHistoryItem, FavoriteField } from '../storage/clipboardHistoryTypes'
 
-type Draft = { title: string; fields: FavoriteField[]; dirty?: boolean; error?: string }
+type Draft = { title: string; fields: FavoriteField[]; dirty?: boolean; error?: string; savedFields?: FavoriteField[] }
 
 export function useFavoriteEditor(repository: ClipboardHistoryRepository, host: PluginSurfaceProps['host'], t: PluginSurfaceProps['t'], onSaved: (item: ClipboardHistoryItem) => void, selectedId: string | null) {
   const drafts = useRef(new Map<string, Draft>())
@@ -19,10 +19,12 @@ export function useFavoriteEditor(repository: ClipboardHistoryRepository, host: 
     const draft = drafts.current.get(id)
     if (!draft?.dirty) return Promise.resolve()
     draft.dirty = false
-    const operation = repository.updateFavoriteInfo(id, draft.title, draft.fields).then(item => {
+    const missingName = draft.fields.some(field => field.value.trim() && !field.name.trim())
+    const fields = draft.fields.flatMap((field, index) => field.value.trim() && !field.name.trim() ? draft.savedFields?.[index] ? [draft.savedFields[index]] : [] : [field])
+    const operation = repository.updateFavoriteInfo(id, draft.title, fields).then(item => {
       if (!item?.isFavorite) throw new Error('error.favoriteFailed')
       onSaved(item)
-      if (drafts.current.get(id) === draft) draft.error = undefined
+      if (drafts.current.get(id) === draft) { draft.savedFields = item.favoriteFields; draft.error = missingName ? t('favorite.nameRequired') : undefined }
     }).catch(error => {
       const key = error instanceof Error && ['favorite.nameRequired', 'favorite.tooManyFields'].includes(error.message) ? error.message : 'error.favoriteFailed'
       draft.error = t(key)
@@ -42,7 +44,7 @@ export function useFavoriteEditor(repository: ClipboardHistoryRepository, host: 
     return () => { flush(); off?.(); ownerOff?.(); window.removeEventListener('pagehide', flush) }
   }, [host.subscribeLeaveIntent, host.deliveryFeedbackOwner, flush])
   const open = (item: ClipboardHistoryItem) => {
-    if (!drafts.current.has(item.id)) drafts.current.set(item.id, { title: item.favoriteTitle ?? '', fields: item.favoriteFields ?? [] })
+    if (!drafts.current.has(item.id)) drafts.current.set(item.id, { title: item.favoriteTitle ?? '', fields: item.favoriteFields ?? [], savedFields: item.favoriteFields ?? [] })
     setEditingId(item.id)
     void repository.getFavoriteFieldNames().then(setNames).catch(() => setNames([]))
   }
@@ -53,37 +55,60 @@ export function useFavoriteEditor(repository: ClipboardHistoryRepository, host: 
     timer.current = setTimeout(() => void save(id), 400)
   }
   return { open, names, flush, close: () => { flush(); setEditingId(null) },
-    draft: selectedId && (editingId === selectedId || drafts.current.get(selectedId)?.error) ? drafts.current.get(selectedId) : undefined,
+    draft: selectedId && editingId === selectedId ? drafts.current.get(selectedId) : undefined,
     change,
   }
 }
 
-export function FavoriteEditor({ draft, names, onChange, onBlur, onExit, host, t }: {
-  host: PluginSurfaceProps['host']; draft: Draft; names: string[]; onChange: (draft: Draft) => void; onBlur: () => void; onExit: () => void; t: PluginSurfaceProps['t']
+export function FavoriteEditor({ draft, editing, disabled, names, onChange, onBlur, onExit, onEdit, onCopy, host, t }: {
+  host: PluginSurfaceProps['host']; draft: Draft; editing: boolean; disabled: boolean; names: string[]; onChange: (draft: Draft) => void; onBlur: () => void; onExit: () => void; onEdit(): void; onCopy(value: string): void; t: PluginSurfaceProps['t']
 }) {
   const ime = useImeKeyboard()
   const title = useRef<HTMLInputElement>(null)
+  const lastField = useRef<HTMLInputElement | null>(null)
   const root = useRef<HTMLDivElement>(null)
-  useLocalEscapeLayer({ open: true, triggerRef: root, popupRef: root, owner: host.deliveryFeedbackOwner, composingRef: ime.isImeComposingRef, onDismiss: onExit })
-  useEffect(() => { title.current?.focus() }, [])
-  return <div ref={root} className="clipboard-history-favorite-form" onBlur={onBlur}
+  useLocalEscapeLayer({ open: editing, triggerRef: root, popupRef: root, owner: host.deliveryFeedbackOwner, composingRef: ime.isImeComposingRef, onDismiss: onExit })
+  useEffect(() => { if (editing) title.current?.focus() }, [editing])
+  const rows = editing && draft.fields.length < 12 ? [...draft.fields, { name: '', value: '' }] : draft.fields
+  const change = (index: number, patch: Partial<FavoriteField>) => {
+    const fields = [...draft.fields]
+    fields[index] = { ...(fields[index] ?? { name: '', value: '' }), ...patch }
+    onChange({ ...draft, fields })
+  }
+  const nextCell = () => {
+    const inputs = [...(root.current?.querySelectorAll<HTMLInputElement>('input') ?? [])]
+    const index = inputs.indexOf(lastField.current ?? document.activeElement as HTMLInputElement)
+    inputs[index + 1]?.focus()
+  }
+  return <div ref={root} className={`clipboard-history-favorite-form${editing ? ' is-editing' : ''}`} onBlur={onBlur} onFocus={event => { if (event.target instanceof HTMLInputElement) lastField.current = event.target }}
     onCompositionStart={ime.onCompositionStart} onCompositionEnd={ime.onCompositionEnd}
     onKeyDown={event => {
-      if (event.defaultPrevented || ime.shouldIgnoreKeyDown(event)) return
+      if (!editing || event.defaultPrevented || ime.shouldIgnoreKeyDown(event)) return
+      if ((event.target as HTMLElement).getAttribute('aria-expanded') === 'true') return
       event.stopPropagation()
-      if (event.key === 'Escape') { event.preventDefault(); onExit() }
+      if (event.key === 'Escape' || ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'e')) { event.preventDefault(); onExit() }
+      else if (event.key === 'Enter') { event.preventDefault(); nextCell() }
+      else if (event.key === 'Backspace') {
+        const row = (event.target as HTMLElement).closest<HTMLElement>('[data-favorite-row]')
+        const index = Number(row?.dataset.favoriteRow)
+        if (row && index < draft.fields.length && !draft.fields[index].name && !draft.fields[index].value) {
+          event.preventDefault(); onChange({ ...draft, fields: draft.fields.filter((_, i) => i !== index) }); title.current?.focus()
+        }
+      }
     }}>
-    <TextInput ref={title} aria-label={t('favorite.titlePlaceholder')} placeholder={t('favorite.titlePlaceholder')}
-      value={draft.title} maxLength={80} onChange={event => onChange({ ...draft, title: event.target.value })} />
-    {draft.fields.map((field, index) => <div className="clipboard-history-field-row" key={index}>
-      <Combobox allowCustomValue maxLength={20} options={names.map(name => ({ label: name, value: name }))}
-        aria-label={t('favorite.fieldName')} placeholder={t('favorite.fieldName')} value={field.name}
-        onChange={name => onChange({ ...draft, fields: draft.fields.map((entry, i) => i === index ? { ...entry, name } : entry) })} />
-      <TextInput aria-label={t('favorite.fieldValue')} placeholder={t('favorite.fieldValue')} value={field.value} maxLength={500}
-        onChange={event => onChange({ ...draft, fields: draft.fields.map((entry, i) => i === index ? { ...entry, value: event.target.value } : entry) })} />
-      <Button onClick={() => onChange({ ...draft, fields: draft.fields.filter((_, i) => i !== index) })}>{t('favorite.removeField')}</Button>
-    </div>)}
-    <Button disabled={draft.fields.length >= 12} onClick={() => onChange({ ...draft, fields: [...draft.fields, { name: '', value: '' }] })}>{t('favorite.addField')}</Button>
-    {draft.error && <p role="alert">{draft.error}</p>}
+    {editing && <ActionBar><Button variant="ghost" onClick={nextCell}>{t('favorite.nextCell')}<kbd>↵</kbd></Button><Button variant="ghost" onClick={onExit}>{t('favorite.done')}<kbd>⌘E</kbd></Button></ActionBar>}
+    <div className="clipboard-history-favorite-title-bar"><span>{t('favorite.info')}</span><Button variant="ghost" disabled={disabled} aria-label={t(editing ? 'favorite.done' : 'action.editFavoriteInfo')} onClick={editing ? onExit : onEdit}>{t(editing ? 'favorite.done' : 'action.editFavoriteInfo')} <kbd>⌘E</kbd></Button></div>
+    <table className="clipboard-history-favorite-fields"><tbody>
+      <tr><td>{t('favorite.titlePlaceholder')}</td><td>{editing ? <TextInput ref={title} aria-label={t('favorite.titlePlaceholder')} placeholder={t('favorite.titlePlaceholder')} value={draft.title} maxLength={80} onChange={event => onChange({ ...draft, title: event.target.value })} /> : <span>{draft.title || '—'}</span>}</td><td /></tr>
+      {rows.map((field, index) => <tr data-favorite-row={index} key={index}>
+        <td>{editing ? <><Combobox side="top" allowCustomValue maxLength={20} options={names.map(name => ({ label: name, value: name }))}
+          aria-label={t('favorite.fieldName')} placeholder={t('favorite.fieldName')} value={field.name} onChange={name => change(index, { name })} />
+          {field.value.trim() && !field.name.trim() && <small className="favorite-field-error">{t('favorite.nameRequired')}</small>}</> : field.name}</td>
+        <td>{editing ? <TextInput aria-label={t('favorite.fieldValue')} placeholder={t('favorite.fieldValue')} value={field.value} maxLength={500} onChange={event => change(index, { value: event.target.value })} />
+          : <Button variant="ghost" disabled={disabled} title={t('favorite.copyValue')} onClick={() => onCopy(field.value)}>{field.value}</Button>}</td>
+        <td>{editing && index < draft.fields.length && <Button variant="ghost" aria-label={t('favorite.removeField')} onClick={() => onChange({ ...draft, fields: draft.fields.filter((_, i) => i !== index) })}>×</Button>}</td>
+      </tr>)}
+    </tbody></table>
+    {draft.error && draft.error !== t('favorite.nameRequired') && <p role="alert">{draft.error}</p>}
   </div>
 }

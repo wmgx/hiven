@@ -207,23 +207,15 @@
   overflow: auto;
 }
 
-.clipboard-history-favorite-fields { width: 100%; border-collapse: collapse; font-size: var(--text-sm); table-layout: fixed; }
-.clipboard-history-favorite-fields th, .clipboard-history-favorite-fields td { padding: 6px 12px; text-align: left; overflow-wrap: anywhere; border-bottom: 1px solid var(--border); }
-.clipboard-history-favorite-fields th { color: var(--muted-foreground); font-weight: 500; }
-.clipboard-history-favorite-fields th:first-child { width: 35%; }
-.clipboard-history-favorite-form { padding: 10px 12px; }
-
-.clipboard-history-favorite-fields button { width: 100%; height: auto; justify-content: flex-start; padding: 2px 4px; text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; }
-
-.clipboard-history-favorite-form,
-.clipboard-history-field-rows { display: grid; gap: 10px; }
-.clipboard-history-field-rows { max-height: 45vh; overflow-y: auto; }
-.clipboard-history-field-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto;
-  gap: 6px;
-  align-items: start;
-}
+.clipboard-history-favorite-fields { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: var(--text-sm); }
+.clipboard-history-favorite-fields td { height: 32px; padding: 0 8px; overflow-wrap: anywhere; border-bottom: 1px solid var(--border); }
+.clipboard-history-favorite-fields td:first-child { width: 35%; color: var(--muted-foreground); }
+.clipboard-history-favorite-fields td:last-child { width: 28px; padding: 0; }
+.clipboard-history-favorite-fields input, .clipboard-history-favorite-fields .hiven-ui-select, .clipboard-history-favorite-fields button { width: 100%; height: 28px; min-height: 28px; border: 0; border-radius: 3px; box-shadow: none; padding: 0; background: transparent; font-size: inherit; text-align: left; justify-content: flex-start; }
+.clipboard-history-favorite-fields input:focus { background: var(--subtle); }
+.clipboard-history-favorite-fields td:last-child button { justify-content: center; visibility: hidden; }
+.clipboard-history-favorite-fields tr:focus-within td:last-child button, .clipboard-history-favorite-fields tr:hover td:last-child button { visibility: visible; }
+.clipboard-history-favorite-form .favorite-field-error { display: block; color: var(--destructive-text); }
 .clipboard-history-favorite-form [role="alert"] { margin: 0; color: var(--destructive-text); }
 
 .clipboard-history-favorite-title-label {

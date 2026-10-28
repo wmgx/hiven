@@ -18,14 +18,14 @@ import {
   Menu,
   IconButton,
   SearchField,
-  SegmentedControl,
+  ValueChip,
+  ActionBar,
   SurfaceEmptyState,
   SurfaceHeaderActions, SurfaceHeaderField,
   SurfaceFooterHints,
   SurfaceList,
   SurfaceListItem,
   SurfacePreview,
-  ToolbarButton,
   useImeKeyboard,
   type MenuItemSpec,
 } from '@hiven/plugin-ui'
@@ -895,24 +895,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       <>
         <div className="clipboard-history-main">
           <div className="clipboard-history-list-pane">
-            <div className="clipboard-history-list-toolbar">
-              <div className="clipboard-history-filter-stack">
-                <SegmentedControl
-                  className="clipboard-history-filter"
-                  value={filter}
-                  onChange={changeFilter}
-                  aria-label={t('filter.label')}
-                  options={[
-                    { value: 'all', label: t('filter.all') },
-                    { value: 'favorite', label: t('filter.favorite') },
-                    { value: 'frequent', label: t('filter.frequent') },
-                    { value: 'text', label: t('filter.text') },
-                    { value: 'image', label: t('filter.image') },
-                    { value: 'files', label: t('filter.files') },
-                  ]}
-                />
-              </div>
-            </div>
             <div ref={listRef} className="clipboard-history-list" data-launcher-scrollable aria-busy={fullTextSearchState === 'loading'} style={{ overflow: 'auto', flex: 1 }}
               onScrollCapture={(event) => {
                 if (event.target !== event.currentTarget) return
@@ -1018,26 +1000,10 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                     />
                     {previewItem.isFavorite && (
                       <div className="clipboard-history-favorite-info" aria-label={t('favorite.info')}>
-                        {favoriteEditor.draft ? <FavoriteEditor key={previewItem.id} draft={favoriteEditor.draft} names={favoriteEditor.names}
-                          onChange={draft => favoriteEditor.change(previewItem.id, draft)} onBlur={favoriteEditor.flush} onExit={favoriteEditor.close} host={host} t={t} /> : <>
-                        <div className="clipboard-history-favorite-title-bar">
-                          <span className="clipboard-history-favorite-title-label">
-                            {previewItem.favoriteTitle || t('favorite.untitled')}
-                          </span>
-                          <ToolbarButton
-                            type="button"
-                            disabled={resultsActionBlocked}
-                            onClick={() => openFavoriteEditor(previewItem)}
-                          >
-                            {t('action.editFavoriteInfo')}
-                          </ToolbarButton>
-                        </div>
-                        <table className="clipboard-history-favorite-fields"><thead><tr><th>{t('favorite.fieldName')}</th><th>{t('favorite.fieldValue')}</th></tr></thead><tbody>
-                          {(previewItem.favoriteFields ?? []).map((field, index) => <tr key={index}>
-                            <td>{field.name}</td>
-                            <td><Button variant="ghost" type="button" disabled={resultsActionBlocked} title={t('favorite.copyValue')} onClick={() => void handleCopyField(field.value)}>{field.value}</Button></td>
-                          </tr>)}
-                        </tbody></table></> }
+                        <FavoriteEditor key={previewItem.id} disabled={resultsActionBlocked} editing={Boolean(favoriteEditor.draft)}
+                          draft={favoriteEditor.draft ?? { title: previewItem.favoriteTitle ?? '', fields: previewItem.favoriteFields ?? [] }} names={favoriteEditor.names}
+                          onChange={draft => favoriteEditor.change(previewItem.id, draft)} onBlur={favoriteEditor.flush} onExit={favoriteEditor.close}
+                          onEdit={() => openFavoriteEditor(previewItem)} onCopy={value => void handleCopyField(value)} host={host} t={t} />
                       </div>
                     )}
                     <ClipboardHistoryMetadata key={previewItem.id} item={previewItem} locale={locale} t={t} />
@@ -1048,6 +1014,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
           />
         </div>
 
+        {!favoriteEditor.draft && <ActionBar><Button variant="ghost" disabled={!selectedItem || resultsActionBlocked || retentionBusy} onClick={() => selectedItem && void handlePaste(selectedItem)}>{t('action.paste')}<kbd>↵</kbd></Button></ActionBar>}
         <SurfaceFooterHints className="clipboard-history-footer">
           {multiple && <span role="status">{t('selection.count', { count: selectedItems.length })}{skippedCount > 0 && ` · ${t('selection.skipped', { count: skippedCount })}`}</span>}
           {pasteNotice ? <span role="status" style={{ color: 'var(--foreground)' }}>{pasteNotice}</span> : <>
@@ -1090,14 +1057,8 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       </SurfaceHeaderField>
       <SurfaceHeaderActions>
         {filterMenu}
-        <Button
-          type="button"
-          variant="primary"
-          disabled={!selectedItem || resultsActionBlocked || retentionBusy}
-          onClick={() => selectedItem && void handlePaste(selectedItem)}
-        >
-          {t('action.paste')}
-        </Button>
+        <ValueChip label={t('filter.label')} value={filter} options={['all','favorite','frequent','text','image','files'].map(value => ({ value, label: t(`filter.${value}`) }))}
+          onChange={value => changeFilter(value as FilterKind)} onPreview={value => changeFilter(value as FilterKind)} />
         <IconButton
           type="button"
           label={t('action.openSettings')}
@@ -1528,9 +1489,7 @@ function getMetaRows(item: ClipboardHistoryItem, locale: string, t: (key: string
   if ((item.pasteCount ?? 0) > 0) {
     rows.push({ label: t('meta.timesPasted'), value: String(item.pasteCount) })
   }
-  if (item.isFavorite) {
-    rows.push({ label: t('meta.favorite'), value: item.favoriteTitle?.trim() || t('favorite.untitled') })
-  }
+
   if (item.legacyProtected) rows.push({ label: t('retention.label'), value: t('retention.protectedItem') })
 
   if (item.kind === 'text' && item.text) {

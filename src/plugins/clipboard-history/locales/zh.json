@@ -21,7 +21,6 @@
   "state.emptyFrequent": "暂无常用项",
   "state.emptyFavorite": "暂无收藏",
   "favorite.titlePlaceholder": "标题",
-  "favorite.untitled": "未命名",
   "meta.showDetails": "详情",
   "meta.hideDetails": "收起",
   "hint.paste": "粘贴",
@@ -45,7 +44,6 @@
   "meta.sourceApp": "来源应用",
   "meta.files": "文件数",
   "meta.timesPasted": "粘贴次数",
-  "meta.favorite": "收藏标题",
   "meta.firstCopied": "首次复制",
   "meta.lastCopied": "最近复制",
   "message.copied": "已复制",
@@ -80,11 +78,12 @@
   "action.editFavoriteInfo": "编辑收藏信息",
   "favorite.fieldName": "字段名",
   "favorite.fieldValue": "值",
-  "favorite.addField": "添加字段",
   "favorite.removeField": "删除",
   "favorite.nameRequired": "请为有值的字段补上字段名",
   "favorite.tooManyFields": "最多添加 12 个字段",
   "favorite.copyValue": "复制字段值",
   "message.favorited": "已收藏",
-  "action.edit": "编辑"
+  "action.edit": "编辑",
+  "favorite.done": "完成",
+  "favorite.nextCell": "下一格"
 }
