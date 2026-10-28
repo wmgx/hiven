@@ -56,7 +56,7 @@ function HostOutputActions({ deps, text, primaryRef, primary = 'copy', primaryAc
   useEffect(() => { let live = true; void foregroundAppName().then(name => { if (live) setApp(name) }); return () => { live = false } }, [])
 
   const hasText = typeof text === 'function' || Boolean(text)
-  const resolveText = () => (typeof text === 'function' ? text() : text) || null
+  const resolveText = () => (typeof text === 'function' ? text() : text) ?? null
   const canCopy = !disabled && (hasText || Boolean(copy))
   const canTextAct = !disabled && hasText
   const once = (work: () => Promise<void>) => async () => {
@@ -130,8 +130,8 @@ function HostOutputActions({ deps, text, primaryRef, primary = 'copy', primaryAc
         event.preventDefault(); event.stopPropagation(); setMenuOpen(open => !open); return
       }
       if (event.target instanceof Element && event.target.closest('[role="menu"]')) return
-      const inEditor = event.target instanceof Element && Boolean(event.target.closest('textarea, [contenteditable="true"], .monaco-editor')) && !event.target.closest('[data-command-input]')
-      if (modified && event.key.toLowerCase() === 'c' && !event.shiftKey && keys.current.canCopy && !window.getSelection()?.toString()) {
+      const inEditor = event.target instanceof Element && Boolean(event.target.closest('textarea, [contenteditable="true"], .monaco-editor, [role="grid"]')) && !event.target.closest('[data-command-input]')
+      if (!inEditor && modified && event.key.toLowerCase() === 'c' && !event.shiftKey && keys.current.canCopy && !window.getSelection()?.toString()) {
         const field = event.target
         if ((field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) && field.selectionStart !== field.selectionEnd) return
         event.preventDefault(); void keys.current.doCopy(); return
@@ -142,7 +142,7 @@ function HostOutputActions({ deps, text, primaryRef, primary = 'copy', primaryAc
       if (event.key === 'Enter' && event.shiftKey && current.canTextAct) { event.preventDefault(); void current.doPaste() }
       else if (event.key === 'Enter' && !event.shiftKey && current.canPrimary) { event.preventDefault(); void current.primaryAction.run() }
     }
-    const focus = (event: FocusEvent) => setEditing(event.target instanceof Element && Boolean(event.target.closest('textarea, [contenteditable="true"], .monaco-editor')) && !event.target.closest('[data-command-input]'))
+    const focus = (event: FocusEvent) => setEditing(event.target instanceof Element && Boolean(event.target.closest('textarea, [contenteditable="true"], .monaco-editor, [role="grid"]')) && !event.target.closest('[data-command-input]'))
     window.addEventListener('focusin', focus)
     window.addEventListener('keydown', onKey, true)
     return () => { window.removeEventListener('keydown', onKey, true); window.removeEventListener('focusin', focus) }

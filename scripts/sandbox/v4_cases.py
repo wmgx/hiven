@@ -300,3 +300,23 @@ def s43(page):
     page.locator('.hiven-output-actions').get_by_role('button', name='Copy', exact=False).click()
     page.clock.run_for(300)
     page.wait_for_function('__hivenSandbox.clipboard().text === "12\\n34"')
+
+
+def s44(page):
+    page.evaluate('__hivenSandbox.openSurface({pluginId:"csv",surfaceId:"main",source:"builtin",initialText:"name,score\\nAda,3\\nBob,7"})')
+    expect(page.get_by_role('grid')).to_be_visible()
+    chips = page.locator('[data-value-chip]')
+    expect(chips).to_have_count(3)
+    chips.nth(2).click()
+    page.locator('.hiven-value-menu').get_by_role('option', name='TSV', exact=True).hover()
+    expect(chips.nth(2)).to_contain_text('TSV')
+    page.keyboard.press('Escape')
+    expect(chips.nth(2)).to_contain_text('JSON objects')
+    chips.nth(2).click()
+    page.locator('.hiven-value-menu').get_by_role('option', name='SQL INSERT', exact=True).click()
+    expect(page.locator('.csv-tools-surface__output-wrap pre')).to_contain_text('INSERT INTO')
+    page.get_by_role('button', name='Table', exact=True).click()
+    page.get_by_role('gridcell', name='Ada', exact=True).click()
+    page.locator('.hiven-output-actions').get_by_role('button', name='Copy', exact=False).click()
+    page.wait_for_function('__hivenSandbox.clipboard().text === "Ada"')
+    page.wait_for_function('!__hivenSandbox.launcherVisible()')

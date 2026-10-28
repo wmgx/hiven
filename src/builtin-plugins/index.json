@@ -1,5 +1,5 @@
 {
-  "version": 242,
+  "version": 243,
   "packages": [
     {
       "pluginId": "image-tools",
@@ -9,7 +9,7 @@
     {
       "pluginId": "csv",
       "dir": "csv",
-      "version": "1.12.8"
+      "version": "1.12.9"
     },
     {
       "pluginId": "calculator",

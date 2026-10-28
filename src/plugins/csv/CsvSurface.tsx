@@ -10,7 +10,7 @@ import {
 } from 'react-data-grid'
 import 'react-data-grid/lib/styles.css'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, Checkbox, IconButton, SearchField, SegmentedControl, Select, TextArea, TextInput, useImeKeyboard, useLocalEscapeLayer } from '@hiven/plugin-ui'
+import { ActionBar, SurfaceHeaderField, SurfaceHeaderActions, SurfaceStatus, SurfaceError, ValueChip, Button, IconButton, Checkbox, SearchField, SegmentedControl, Select, TextArea, TextInput, useImeKeyboard, useLocalEscapeLayer } from '@hiven/plugin-ui'
 import {
   applyTransforms,
   applyTableQuery,
@@ -100,32 +100,9 @@ function localizedText(
   return label
 }
 
-const IconDetach = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-    <path d="M15 3h6v6" />
-    <path d="M10 14 21 3" />
-    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-  </svg>
-)
-
-const IconCopy = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-    <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
-    <path d="M4 16V4a2 2 0 0 1 2-2h12" />
-  </svg>
-)
-
 const IconFolder = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
     <path d="M4 6a2 2 0 0 1 2-2h3.5l1.5 2H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6z" />
-  </svg>
-)
-
-const IconDownload = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-    <path d="M12 3v12" />
-    <path d="m7 11 5 5 5-5" />
-    <path d="M5 21h14" />
   </svg>
 )
 
@@ -1014,19 +991,23 @@ export function CsvSurface(props: PluginSurfaceProps) {
     }
   }, [getCompleteOutput, host, t, writeClipboard])
 
-  const handleCopyPrimary = useCallback(() => {
-    if (resultRevision !== resultRevisionRef.current || fileReadRef.current) return
-    if (mainView === 'source') {
-      void writeClipboard(sourceText)
-      return
+  const getPrimaryOutput = () => {
+    if (resultRevision !== resultRevisionRef.current || fileReadRef.current) return null
+    if (mainView === 'source') return sourceText
+    if (!canCopyOutput) return null
+    if (mainView === 'table') {
+      if (cellBlock) return blockToTsv(cellBlock, displayGridRows, visibleColumns)
+      if (selectedColumns.size) {
+        const cols = visibleColumns.filter(column => selectedColumns.has(column.key))
+        return [cols.map(column => column.header).join('\t'), ...displayGridRows.map(row => cols.map(column => String(row[column.key] ?? '')).join('\t'))].join('\n')
+      }
+      if (selectedCell) {
+        const row = displayGridRows.find(row => row.id === selectedCell.rowId)
+        if (row) return String(row[selectedCell.columnKey] ?? '')
+      }
     }
-    if (!canCopyOutput) return
-    if (mainView === 'table' && (selectedCell || selectedColumns.size > 0 || cellBlock)) {
-      void copySelection()
-      return
-    }
-    copyFullOutput()
-  }, [canCopyOutput, cellBlock, copyFullOutput, copySelection, mainView, resultRevision, selectedCell, selectedColumns.size, sourceText, writeClipboard])
+    return getCompleteOutput()
+  }
 
   // Row identities belong to the current final result; a query edit must not
   // leave a cell or range pointing at a different row. Column identities survive
@@ -1070,218 +1051,30 @@ export function CsvSurface(props: PluginSurfaceProps) {
       aria-label={localizedText(t, 'surface.title', 'CSV Tools')}
       data-launcher-scrollable
     >
-      <header className="csv-tools-surface__header">
-        {finalTable ? <span className="csv-tools-surface__meta">{sizeLabel}</span> : null}
-        {delimiterHint ? <span className="csv-tools-surface__meta mono">{delimiterHint}</span> : null}
-        {linkedFileLabel ? (
-          <span className="csv-tools-surface__meta" title={linkedFileLabel}>
-            {fileNameFromPath(linkedFileLabel)}
-          </span>
-        ) : null}
-        {(isParsing || isSourceStale) && (
-          <span className="csv-tools-surface__meta csv-tools-surface__meta--busy">
-            {localizedText(t, 'meta.updating', 'Updating…')}
-          </span>
-        )}
+      <SurfaceHeaderField><span>{linkedFileLabel ? fileNameFromPath(linkedFileLabel) : t('surface.title')}</span></SurfaceHeaderField>
+      <SurfaceHeaderActions>
+        <ValueChip label={t('param.delimiter')} value={delimiter} options={delimiterOptions} disabled={isJsonInput}
+          onPreview={value => updateResult(() => setDelimiter(value as DelimiterMode))} onChange={value => updateResult(() => setDelimiter(value as DelimiterMode))} />
+        <ValueChip label={t('param.header')} value={header} options={headerOptions} disabled={isJsonInput}
+          onPreview={value => updateResult(() => setHeader(value as HeaderMode))} onChange={value => updateResult(() => setHeader(value as HeaderMode))} />
+        <ValueChip label={t('param.output')} value={output} options={outputOptions}
+          onPreview={value => updateResult(() => setOutput(value as OutputMode))} onChange={value => { updateResult(() => setOutput(value as OutputMode)); setMainView('output') }} />
+      </SurfaceHeaderActions>
+      <TextInput ref={fileInputRef} type="file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain" hidden onChange={event => void onFilePicked(event)} />
+      <SurfaceError>{fileError || errorMessage || filterError || (fullJob.status === 'error' ? t('job.error', { message: fullJob.message }) : '')}</SurfaceError>
+      <SurfaceStatus>{fullJob.status === 'running' ? t('job.running', { pct: Math.round(fullJob.ratio * 100), phase: t(`job.phase.${fullJob.phase}`) })
+        : isParsing || isSourceStale ? t('meta.updating') : [sizeLabel, delimiterHint, showTruncationBanner ? t('meta.truncated', { total: estimatedLines, size: formatBytes(sourceText.length) }) : ''].filter(Boolean).join(' · ')}</SurfaceStatus>
+      <ActionBar>{host.OutputActions && <host.OutputActions text={getPrimaryOutput} disabled={(mainView === 'source' ? !sourceText || readingFile : !canCopyOutput) || saving}
+        more={[
+          { id: 'open', label: t('action.openFile'), run: () => fileInputRef.current?.click() },
+          { id: 'save', label: t(saving ? 'job.saving' : 'job.saveFull'), disabled: !canReturnOutput || saving, run: saveFullResult },
+          { id: 'detach', label: t('action.detach'), run: () => updateResult(() => host.detachToWindow(sourceText)) },
+          ...(fullJob.status === 'running' ? [{ id: 'cancel', label: t('job.cancel'), run: cancelFullProcess }]
+            : showTruncationBanner ? [{ id: 'full', label: t('job.runFull'), disabled: Boolean(errorMessage || filterError) || !sourceText.trim() || !currentInputReady, run: runFullProcess }] : []),
+          ...(fullJob.status === 'done' ? [{ id: 'copyFull', label: t('job.copyFull'), disabled: !canCopyOutput, run: copyFullOutput }] : []),
+        ]} />}</ActionBar>
 
-        <div className="csv-tools-surface__header-spacer" />
-
-        <div className="csv-tools-surface__actions">
-          <Button
-            type="button"
-            className="csv-tools-surface__file-btn"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <IconFolder />
-            <span>{localizedText(t, 'action.openFile', 'Open file')}</span>
-          </Button>
-          <TextInput
-            ref={fileInputRef}
-            type="file"
-            accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain"
-            hidden
-            onChange={(event) => void onFilePicked(event)}
-          />
-          <IconButton
-            type="button"
-            className="csv-tools-surface__ib"
-            label={mainView === 'table' && (selectedCell || selectedColumns.size > 0 || cellBlock)
-              ? t('action.copySelection')
-              : mainView === 'source'
-                ? t('source.copyRaw')
-                : t('action.copyFullOutput')}
-            disabled={mainView === 'source' ? !sourceText || readingFile : !canCopyOutput}
-            onClick={handleCopyPrimary}
-          >
-            <IconCopy />
-          </IconButton>
-          <IconButton
-            type="button"
-            className="csv-tools-surface__ib"
-            label={t(saving ? 'job.saving' : 'job.saveFull')}
-            disabled={!canReturnOutput || saving}
-            onClick={() => void saveFullResult()}
-          >
-            <IconDownload />
-          </IconButton>
-          <IconButton
-            type="button"
-            className="csv-tools-surface__ib"
-            label={localizedText(t, 'action.detach', 'Open in window')}
-            onClick={() => updateResult(() => host.detachToWindow(sourceText))}
-          >
-            <IconDetach />
-          </IconButton>
-          {host.OutputActions && <host.OutputActions text={getCompleteOutput} disabled={!canCopyOutput || saving} />}
-        </div>
-      </header>
-
-      {fileError ? (
-        <div className="csv-tools-surface__banner is-error" role="alert">
-          {localizedText(t, 'error.file', 'File error: {message}', { message: fileError })}
-        </div>
-      ) : null}
-
-      {showTruncationBanner || fullJob.status === 'running' || fullJob.status === 'done' || fullJob.status === 'error' ? (
-        <div
-          role={fullJob.status === 'error' ? 'alert' : 'status'}
-          className={
-            fullJob.status === 'error'
-              ? 'csv-tools-surface__banner is-error'
-              : fullJob.status === 'done'
-                ? 'csv-tools-surface__banner is-ok'
-                : 'csv-tools-surface__banner is-warn'
-          }
-        >
-          <div className="csv-tools-surface__banner-row">
-            <div className="csv-tools-surface__banner-text">
-              {fullJob.status === 'running' ? (
-                <>
-                  {localizedText(t, 'job.running', 'Processing… {pct}% ({phase})', {
-                    pct: Math.round(fullJob.ratio * 100),
-                    phase:
-                      fullJob.phase === 'parse'
-                        ? localizedText(t, 'job.phase.parse', 'parse')
-                        : fullJob.phase === 'transform'
-                          ? localizedText(t, 'job.phase.transform', 'transform')
-                          : localizedText(t, 'job.phase.output', 'output'),
-                  })}
-                  <div className="csv-tools-surface__progress" aria-hidden="true">
-                    <div className="csv-tools-surface__progress-bar" style={{ width: `${Math.round(fullJob.ratio * 100)}%` }} />
-                  </div>
-                </>
-              ) : fullJob.status === 'done' ? (
-                localizedText(
-                  t,
-                  'job.done',
-                  'Result ready: {rows} × {cols} · {size}',
-                  {
-                    rows: fullJob.rows,
-                    cols: fullJob.cols,
-                    size: formatBytes(fullJob.bytes),
-                  },
-                )
-              ) : fullJob.status === 'error' ? (
-                localizedText(t, 'job.error', 'Processing failed: {message}', { message: fullJob.message })
-              ) : (
-                localizedText(
-                  t,
-                  'meta.truncated',
-                  'Source ≈{total} lines · {size}',
-                  {
-                    total: estimatedLines,
-                    size: formatBytes(sourceText.length),
-                  },
-                )
-              )}
-            </div>
-            <div className="csv-tools-surface__banner-actions">
-              {fullJob.status === 'running' ? (
-                <Button type="button" className="csv-tools-surface__file-btn" onClick={cancelFullProcess}>
-                  {localizedText(t, 'job.cancel', 'Cancel')}
-                </Button>
-              ) : fullJob.status === 'done' ? (
-                <>
-                  <Button
-                    type="button"
-                    variant="primary"
-                    className="csv-tools-surface__file-btn"
-                    disabled={!canCopyOutput}
-                    onClick={copyFullOutput}
-                  >
-                    {localizedText(t, 'job.copyFull', 'Copy full')}
-                  </Button>
-                </>
-              ) : (
-                <Button
-                  type="button"
-                  variant="primary"
-                  className="csv-tools-surface__file-btn"
-                  disabled={Boolean(errorMessage || filterError) || !sourceText.trim() || !currentInputReady}
-                  onClick={() => void runFullProcess()}
-                >
-                  {localizedText(t, 'job.runFull', 'Process full file')}
-                </Button>
-              )}
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      <div
-        className="csv-tools-surface__toolbar"
-        aria-label={localizedText(t, 'toolbar.parameters', 'CSV parameters')}
-      >
-        <div className="csv-tools-surface__control-group">
-          <span className="csv-tools-surface__control-title">
-            {localizedText(t, 'toolbar.read', 'Read')}
-          </span>
-          <div className="csv-tools-surface__toolbar-group">
-            <label className="csv-tools-surface__field">
-              <span>{localizedText(t, 'param.delimiter', 'Delimiter')}</span>
-              <Select
-                className="csv-tools-surface__native-select"
-                value={delimiter}
-                disabled={isJsonInput}
-                options={delimiterOptions}
-                aria-label={localizedText(t, 'param.delimiter', 'Delimiter')}
-                onChange={(event) => updateResult(() => setDelimiter(event.target.value as DelimiterMode))}
-              />
-            </label>
-
-            <label className="csv-tools-surface__field">
-              <span>{localizedText(t, 'param.header', 'Header')}</span>
-              <Select
-                className="csv-tools-surface__native-select"
-                value={header}
-                disabled={isJsonInput}
-                options={headerOptions}
-                aria-label={localizedText(t, 'param.header', 'Header')}
-                onChange={(event) => updateResult(() => setHeader(event.target.value as HeaderMode))}
-              />
-            </label>
-          </div>
-        </div>
-
-        <div className="csv-tools-surface__control-group">
-          <span className="csv-tools-surface__control-title">
-            {localizedText(t, 'toolbar.convert', 'Convert')}
-          </span>
-          <div className="csv-tools-surface__toolbar-group">
-            <label className="csv-tools-surface__field">
-              <span>{localizedText(t, 'param.output', 'Output')}</span>
-              <Select
-                className="csv-tools-surface__native-select"
-                value={output}
-                options={outputOptions}
-                aria-label={localizedText(t, 'param.output', 'Output')}
-                onChange={(event) => {
-                  updateResult(() => setOutput(event.target.value as OutputMode))
-                  setMainView('output')
-                }}
-              />
-            </label>
-
+      <details className="csv-tools-surface__options"><summary>{t('toolbar.parameters')}</summary><div className="csv-tools-surface__toolbar-group">
             {showJsonStyle && mainView === 'output' && (
               <Checkbox
                 checked={minify}
@@ -1326,14 +1119,6 @@ export function CsvSurface(props: PluginSurfaceProps) {
                 />
               </label>
             )}
-          </div>
-        </div>
-
-        <div className="csv-tools-surface__control-group csv-tools-surface__control-group--transform">
-          <span className="csv-tools-surface__control-title">
-            {localizedText(t, 'toolbar.clean', 'Shape')}
-          </span>
-          <div className="csv-tools-surface__transform-checks">
             <Checkbox checked={dropEmpty} onChange={(event) => updateResult(() => setDropEmpty((event.target as HTMLInputElement).checked))}>
               {localizedText(t, 'transform.dropEmpty', 'Drop empty rows')}
             </Checkbox>
@@ -1343,9 +1128,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
             <Checkbox checked={transpose} onChange={(event) => updateResult(() => setTranspose((event.target as HTMLInputElement).checked))}>
               {localizedText(t, 'transform.transpose', 'Transpose')}
             </Checkbox>
-          </div>
-        </div>
-      </div>
+      </div></details>
 
       <div className="csv-tools-surface__viewbar">
         <SegmentedControl
