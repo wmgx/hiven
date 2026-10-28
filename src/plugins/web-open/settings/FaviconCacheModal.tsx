@@ -3,6 +3,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
+import { Button } from '@hiven/plugin-ui'
 import { Globe2 } from 'lucide-react'
 import type { PluginSettingsModalBodyProps } from '@hiven/plugin'
 import {
@@ -92,14 +93,13 @@ export function FaviconCacheModal({
         <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-tertiary)' }}>
           {loading ? t('faviconCache.loading') : t('faviconCache.count', { count: entries.length })}
         </span>
-        <button
+        <Button
           type="button"
-          className="schema-button"
           disabled={busy || loading || entries.length === 0}
           onClick={() => void handleClearAll()}
         >
           {t('faviconCache.clearAll')}
-        </button>
+        </Button>
       </div>
 
       {entries.length === 0 && !loading ? (
@@ -140,14 +140,13 @@ export function FaviconCacheModal({
                   {formatAge(entry.fetchedAt, locale)}
                 </div>
               </div>
-              <button
+              <Button
                 type="button"
-                className="schema-button"
                 disabled={busy}
                 onClick={() => void handleRemove(entry.domain)}
               >
                 {t('faviconCache.remove')}
-              </button>
+              </Button>
             </li>
           ))}
         </ul>

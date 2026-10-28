@@ -104,6 +104,9 @@ async function invoke(command: string, args: Args = {}, options?: Args): Promise
     case 'show_launcher_window': surfaceWindow = null; visible = true; emit('hiven://launcher-open', {}); changed(); return
     case 'hide_launcher_window': visible = false; changed(); return
     case 'show_plugin_surface_window': {
+      // Separate desktop windows do not share the hidden launcher's key handlers.
+      const { useAppStore } = await import('../../store')
+      useAppStore.getState().setGlobalLauncherOpen(false)
       surfaceWindow = { ...args, key: ++serial }
       const url = new URL(location.href)
       for (const key of ['pluginId', 'surfaceId', 'source']) url.searchParams.set(key, args[key])

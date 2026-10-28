@@ -149,8 +149,9 @@ function resolvePluginSettingsItem(
   if (!settings && !pluginRegistry.getPluginPermissions(pluginId, source).includes('ai.use')) return null
 
   const settingsSource = resolvePluginSettingsSource(pluginId, source)
-  const baseTitle = settings?.title ?? pluginId
-  const titleI18n = { ...settings?.titleI18n }
+  const metadata = resolvePluginProductMetadata(pluginId)
+  const baseTitle = settings?.title ?? metadata.provider
+  const titleI18n = { zh: metadata.providerZh, ...settings?.titleI18n }
   titleI18n.zh = withChineseSettingsSuffix(titleI18n.zh ?? baseTitle)
 
   return {

@@ -146,7 +146,7 @@ function dispatch(key, target, options = {}) {
   const selectedItem = { id: 'selected', kind: 'text' }
   const context = {
     ...policy, Element, HTMLElement: Element, document,
-    titleDialog: null, legacyDialog: null, selectedIds: [], multiple: false, filter: 'all', resultsActionBlocked: false, settings: { enabled: true },
+    legacyDialog: null, selectedIds: [], multiple: false, filter: 'all', resultsActionBlocked: false, settings: { enabled: true },
     selectedItem, selectedId: 'selected', filteredItems: [selectedItem], flatRows: [],
     imeKeyDown: { shouldIgnoreKeyDown: () => false },
     handlePaste: (_item, plain) => calls.push(plain ? 'plainPaste' : 'paste'), handleFavoriteClick: () => calls.push('favorite'), handleReturnToLauncher: () => calls.push('return'),
@@ -182,7 +182,7 @@ for (const target of [row, list, surface]) {
   for (const key of ['Delete', 'Backspace']) assert.deepEqual(dispatch(key, target), { calls: ['delete'], prevented: true, stopped: false })
 }
 assert.deepEqual(dispatch('Delete', row, { activeElement: search }), untouched)
-for (const context of [{ selectedItem: null }, { resultsActionBlocked: true }, { titleDialog: {} }]) {
+for (const context of [{ selectedItem: null }, { resultsActionBlocked: true }, { legacyDialog: true }]) {
   for (const key of ['Enter', 'Delete', 'Backspace']) assert.deepEqual(dispatch(key, row, { context }), untouched)
   assert.deepEqual(dispatch('Enter', row, { context, event: { ctrlKey: true } }), untouched)
 }

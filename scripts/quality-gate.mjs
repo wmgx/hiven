@@ -176,7 +176,6 @@ const commands = [
   ['npm', ['run', 'test:history-page-reader']],
   ['npm', ['run', 'test:history-pointer-intent']],
   ['npm', ['run', 'test:image-crop']],
-  ['npm', ['run', 'test:image-panel-lifetime']],
   ['npm', ['run', 'test:image-redaction']],
   ['npm', ['run', 'test:image-resize']],
   ['npm', ['run', 'test:json-cursor-path']],

@@ -189,9 +189,6 @@ def s11(page):
         page.get_by_placeholder('Field name', exact=True).nth(i).fill(name)
         page.get_by_placeholder('Value', exact=True).nth(i).fill(value)
     page.get_by_placeholder('Value', exact=True).last.press('Escape')
-    # A combobox's pending dismissal may consume the first Escape.
-    if page.locator('.clipboard-history-favorite-form').count():
-        page.keyboard.press('Escape')
     expect(page.locator('.clipboard-history-item-subtitle')).to_contain_text('cedar · violet')
     page.get_by_placeholder('Search history').fill('violet')
     expect(page.locator('.clipboard-history-item')).to_have_count(1)
@@ -230,6 +227,15 @@ def s13(page):
 
 
 SCREENSHOTS = None
+
+
+def capture_themes(page, name, root):
+    if not SCREENSHOTS:
+        return
+    for theme in ['light', 'dark']:
+        page.evaluate('theme => __hivenSandbox.appearance(theme, "en")', theme)
+        page.clock.run_for(200)
+        root.screenshot(animations="disabled", path=str(SCREENSHOTS / f"{name}-{theme}.png"))
 
 
 def open_surface(page, target, presentation='inline'):
@@ -280,7 +286,7 @@ def s14(page):
                     page.wait_for_timeout(50)
                     assert page.evaluate('__hivenSandbox.dragCount()') == before + 1, target
                 if SCREENSHOTS and target['pluginId'] != 'clipboard-history':
-                    chrome.screenshot(path=str(SCREENSHOTS / f"{target['pluginId']}-{target['surfaceId']}-{presentation}-{theme}.png"))
+                    chrome.screenshot(animations="disabled", path=str(SCREENSHOTS / f"{target['pluginId']}-{target['surfaceId']}-{presentation}-{theme}.png"))
     print(f'S14 checked {len(targets)} surfaces × 2 presentations × 2 locales/themes', flush=True)
 
 
@@ -494,7 +500,12 @@ def s27(page):
     expect(page.locator('[data-ai-send-summary]')).to_have_text('1 commands can send directly')
     page.locator('[data-ai-send-summary]').click()
     grants = page.locator('[data-ai-send-grants="ai-writing"]')
+    expect(page.get_by_role('dialog').get_by_role('heading', name='AI Writing', exact=True)).to_be_visible()
+    page.evaluate('__hivenSandbox.appearance("dark", "zh")')
+    expect(page.get_by_role('dialog').get_by_role('heading', name='AI 写作', exact=True)).to_be_visible()
+    page.evaluate('__hivenSandbox.appearance("light", "en")')
     expect(grants.get_by_role('switch')).to_be_checked()
+    capture_themes(page, 'ai-grants', page.get_by_role('dialog'))
     grants.get_by_role('switch').click()
     expect(grants).to_contain_text('Choose “Send directly next time”')
     page.get_by_role('dialog').get_by_role('button', name='Close', exact=True).click()
@@ -526,6 +537,7 @@ def s29(page):
     expect(surface.get_by_role('textbox', name='Result', exact=True)).to_have_value('2')
     page.get_by_role('button', name='Copy result', exact=True).click()
     page.wait_for_function('__hivenSandbox.clipboard().text === "2"')
+    capture_themes(page, 'json-expression', page.locator('.surface-chrome:visible'))
     expression.fill('.a[')
     expect(surface.get_by_role('alert')).to_be_visible()
 
@@ -537,6 +549,7 @@ def s30(page):
     output = surface.get_by_role('textbox', name='Result', exact=True)
     expect(output).to_have_value(re.compile('^data:image/png;base64,'))
     expect(surface.get_by_role('img', name='Image preview')).to_be_visible()
+    capture_themes(page, 'base64-image', page.locator('.surface-chrome:visible'))
     uri = output.input_value()
     surface.get_by_role('textbox', name='Input', exact=True).fill(uri)
     expect(surface.get_by_role('img', name='Image preview')).to_be_visible()
@@ -555,7 +568,26 @@ def s30(page):
     assert not any(item['surfaceId'] == 'image-base64' for item in surfaces(page))
 
 
-CASES = [s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15,s16,s17,s18,s19,s20,s21,s22,s23,s24,s25,s26,s27,s28,s29,s30]
+def s31(page):
+    page.evaluate('__hivenSandbox.openSettings("web-open")')
+    for theme in ['light', 'dark']:
+        page.evaluate('theme => __hivenSandbox.appearance(theme, "en")', theme)
+        for name in ['Configure', 'Manage']:
+            page.get_by_role('button', name=name, exact=True).click()
+            modal = page.locator('.plugin-settings-modal-panel')
+            expect(modal).to_be_visible()
+            expect(modal.locator('select')).to_have_count(0)
+            assert modal.locator('input:not([data-slot]):not([type=hidden]):not([aria-hidden=true])').count() == 0, modal.locator('input:not([data-slot]):not([type=hidden]):not([aria-hidden=true])').evaluate_all('(els)=>els.map(e=>e.outerHTML)')
+            assert modal.locator('button:not([data-slot]):not([data-settings-modal-close]):not(.hiven-ui-select-trigger):not(.hiven-ui-button)').count() == 0, modal.locator('button:not([data-slot]):not([data-settings-modal-close]):not(.hiven-ui-select-trigger):not(.hiven-ui-button)').evaluate_all('(els)=>els.map(e=>e.outerHTML)')
+            if name == 'Configure':
+                expect(modal.get_by_role('switch')).to_have_count(3)
+            if SCREENSHOTS:
+                modal.screenshot(animations="disabled", path=str(SCREENSHOTS / f"web-open-{name}-{theme}.png"))
+            modal.locator('[data-settings-modal-close]').click()
+            page.clock.run_for(200)
+
+
+CASES = [s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15,s16,s17,s18,s19,s20,s21,s22,s23,s24,s25,s26,s27,s28,s29,s30,s31]
 
 
 def main():
@@ -578,8 +610,9 @@ def main():
             context = browser.new_context(viewport={'width':1440,'height':900})
             page = context.new_page()
             page.set_default_timeout(5000)
-            errors, external = [], []
+            errors, external, console_errors = [], [], []
             page.on('pageerror', lambda error: errors.append(str(error)))
+            page.on('console', lambda message: console_errors.append(message.text) if message.type == 'error' else None)
             page.route('**/*', lambda route: route.continue_() if route.request.url.startswith('http://localhost:1420/') else (external.append(route.request.url.split('?')[0]), route.abort()))
             # Install before app timers. Only long deadlines are advanced; polling is real.
             page.add_init_script("""
@@ -606,7 +639,7 @@ def main():
                 result.update(status='PASS', reason='行为断言通过；无页面异常或外部请求')
             except Exception as error:
                 result.update(status='FAIL', reason=str(error).strip()[:1400])
-            result.update(pageErrors=errors, externalRequests=external)
+            result.update(pageErrors=errors, externalRequests=external, consoleErrors=console_errors)
             if page.evaluate('!!window.__hivenSandbox'):
                 result['snapshot'] = snapshot(page)
             results.append(result)

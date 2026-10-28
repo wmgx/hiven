@@ -12,6 +12,7 @@ import { t } from '../i18n'
 import { makePluginT } from '../i18n/pluginI18nRegistry'
 import { useAppStore } from '../store'
 import { showToast } from '../workspace/toast'
+import { resolvePluginProductMetadata } from '../workspace/pluginProductCatalog'
 import { pluginRegistry, usePluginRegistryVersion } from '../workspace/pluginRegistry'
 import {
   usePluginSettingsStore,
@@ -142,9 +143,10 @@ export function PluginSettingsContent({
   const registryVersion = usePluginRegistryVersion()
   const contribution = useMemo(() => {
     const def = pluginRegistry.getPluginDefinition(pluginId, source === 'dev' ? 'dev' : 'production')
+    const metadata = resolvePluginProductMetadata(pluginId)
     return def?.settings as PluginSettingsContribution<unknown> | undefined
       ?? (pluginRegistry.getPluginPermissions(pluginId, source).includes('ai.use')
-        ? { title: pluginId, defaultValue: {}, schema: { sections: [] } } : undefined)
+        ? { title: metadata.provider, titleI18n: { zh: metadata.providerZh }, defaultValue: {}, schema: { sections: [] } } : undefined)
   }, [pluginId, source, registryVersion])
 
   if (!contribution) {

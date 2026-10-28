@@ -5,6 +5,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Switch } from '@/components/ui/switch'
 import { Button, Menu } from '../../plugin-ui'
+import { resolvePluginProductMetadata } from '../../workspace/pluginProductCatalog'
 import { pluginRegistry, usePluginRegistryVersion } from '../../workspace/pluginRegistry'
 import { usePluginSettingsStore } from '../../workspace/pluginSettingsStore'
 import { resolvePluginSettingsSource } from '../../workspace/launcher/pluginSource'
@@ -175,7 +176,7 @@ export function AiSendGrantSummary() {
   if (!plugins.length) return <p className="ai-send-meta" data-ai-send-summary>{label}</p>
   const trigger = <Button data-ai-send-summary onClick={plugins.length === 1 ? () => open(plugins[0]) : undefined}>{label}</Button>
   return plugins.length === 1 ? trigger : <Menu trigger={trigger} items={plugins.map(plugin => ({
-    key: plugin.pluginId, label: plugin.definition.settings?.titleI18n?.[locale] ?? plugin.definition.settings?.title ?? plugin.pluginId,
+    key: plugin.pluginId, label: plugin.definition.settings?.titleI18n?.[locale] ?? plugin.definition.settings?.title ?? (locale === 'zh' ? resolvePluginProductMetadata(plugin.pluginId).providerZh : undefined) ?? resolvePluginProductMetadata(plugin.pluginId).provider,
     onSelect: () => open(plugin),
   }))} />
 }

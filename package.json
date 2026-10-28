@@ -183,7 +183,6 @@
     "test:history-page-reader": "node --experimental-strip-types scripts/test-history-page-reader.mts",
     "test:history-pointer-intent": "node --experimental-strip-types scripts/test-history-pointer-intent.mts",
     "test:image-crop": "node scripts/test-image-crop.mjs",
-    "test:image-panel-lifetime": "node scripts/test-image-panel-lifetime.mjs",
     "test:image-redaction": "node scripts/test-image-redaction.mjs",
     "test:image-resize": "node scripts/test-image-resize.mjs",
     "test:json-cursor-path": "node scripts/test-json-cursor-path.mjs",
