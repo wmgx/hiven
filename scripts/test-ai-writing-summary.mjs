@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** AI Summary: prompt/stream construction, and the real launcher controller + tool behind the host send confirmation. */
+/** AI Summary: prompt/stream construction, and the real launcher controller + tool behind the visible send destination. */
 import assert from 'node:assert/strict'
 import { createServer } from 'vite'
 import { load } from './ai-runtime-test-harness.mjs'
@@ -85,7 +85,6 @@ try {
   function harness({ stream, preflight = (request) => ({ status: 'ready', reason: 'configuration_ready', providerId: explicit.providerId, agentId: explicit.agentId, providerName: 'Provider', agentName: 'Model', ...request }) } = {}) {
     const streams = []
     const deliveries = []
-    const grants = new Map()
     const ai = {
       providers: async () => [],
       preflight: async (request) => preflight(request),
@@ -107,72 +106,37 @@ try {
       surfaceId: 'global-launcher', api, locale: 'en', makeT: (item) => makePluginT(item.pluginId ?? '', 'en'),
       getSettings: () => ({}), recordSelection() {}, requestClose() {}, onChange() {},
       getAi: () => ai,
-      aiSendGrants: { has: (key) => grants.has(key), add: (grant) => grants.set(grant.key, grant), remove: (key) => grants.delete(key) },
     })
     const top = () => controller.getState().frames.at(-1)
     const waitFor = async (kind) => {
       for (let i = 0; i < 50 && top().kind !== kind; i++) await new Promise((resolve) => setImmediate(resolve))
       assert.equal(top().kind, kind)
     }
-    return { controller, streams, deliveries, grants, top, waitFor }
+    return { controller, streams, deliveries, top, waitFor }
   }
 
-  // Esc on the confirmation sends nothing and returns to the command.
+  // Metadata is visible before send; one Enter sends, the result is not copied automatically.
   {
     const h = harness()
     await h.controller.selectItem(summary, { recordUsage: false })
-    h.controller.setInputText('Synthetic meeting note')
-    const run = h.controller.submitInput()
-    await h.waitFor('ai-send')
-    assert.equal(h.top().send.text, 'Synthetic meeting note')
-    assert.equal(h.streams.length, 0, 'nothing is sent while confirming')
-    h.controller.back()
-    await run
-    assert.equal(h.top().kind, 'collect-input')
-    assert.equal(h.top().previewOutput, undefined)
-    assert.equal(h.controller.getState().busy, false)
+    h.controller.watchAiTarget()
+    await new Promise(resolve => setImmediate(resolve))
+    assert.equal(h.top().aiTarget.providerId, explicit.providerId)
     assert.equal(h.streams.length, 0)
-
-    // ↵ sends once; the result stays in the command and nothing is copied yet.
-    const sent = h.controller.submitInput()
-    await h.waitFor('ai-send')
-    h.controller.toggleAiSendRemember()
-    h.controller.confirmAiSend()
-    await sent
+    h.controller.setInputText('Synthetic meeting note')
+    await h.controller.submitInput()
     assert.equal(h.streams.length, 1)
     assert.equal(h.streams[0].providerId, explicit.providerId)
     assert.equal(h.top().kind, 'collect-input')
     assert.equal(h.top().previewOutput.choices[0].preview ?? h.top().previewOutput.choices[0].title, '- Synthetic point')
-    assert.equal(h.top().aiDisclosure, undefined, 'a confirmed send needs no disclosure')
-    assert.equal(h.top().previewOutput.choices[0].previewFormat, 'markdown')
-    assert.equal(h.top().progress, undefined, 'partial output is cleared when the run ends')
-    assert.deepEqual(h.deliveries, [])
-    assert.ok(h.grants.has('ai-writing:summarize'))
-
-    // A granted command sends directly and discloses where it went; revoking asks again.
-    h.controller.setInputText('Another synthetic note')
-    await h.controller.submitInput()
-    assert.equal(h.streams.length, 2)
     assert.equal(h.top().aiDisclosure.target, 'Provider · Model')
-    h.controller.revokeAiSendGrant()
-    assert.equal(h.grants.size, 0)
-    h.controller.setInputText('Third synthetic note')
-    const asked = h.controller.submitInput()
-    await h.waitFor('ai-send')
-    h.controller.back()
-    await asked
-    assert.equal(h.streams.length, 2)
-
-    // Secret-shaped content always confirms, even when granted, and cannot be remembered.
-    h.grants.set('ai-writing:summarize', { key: 'ai-writing:summarize', label: 'AI Summary' })
+    assert.equal(h.top().previewOutput.choices[0].previewFormat, 'markdown')
+    assert.equal(h.top().progress, undefined)
+    assert.deepEqual(h.deliveries, [])
     h.controller.setInputText('token ghp_' + 'a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8')
-    const secret = h.controller.submitInput()
-    await h.waitFor('ai-send')
-    assert.equal(h.top().secret, true)
-    assert.equal(h.top().canRemember, false)
-    h.controller.back()
-    await secret
-    assert.equal(h.streams.length, 2)
+    await h.controller.submitInput()
+    assert.match(h.controller.getState().error, /Sending is blocked/)
+    assert.equal(h.streams.length, 1, 'secret material is never sent')
   }
 
   // Esc while a run streams stops it and stays on the command; the next Esc goes back.
@@ -182,8 +146,9 @@ try {
       yield { type: 'run.started', ...explicit }
       await new Promise((resolve) => { release = resolve })
     })() })
-    h.grants.set('ai-writing:summarize', { key: 'ai-writing:summarize', label: 'AI Summary' })
     await h.controller.selectItem(summary, { recordUsage: false })
+    h.controller.watchAiTarget()
+    await new Promise(resolve => setImmediate(resolve))
     h.controller.setInputText('Synthetic note')
     const run = h.controller.submitInput()
     for (let i = 0; i < 50 && !release; i++) await new Promise((resolve) => setImmediate(resolve))
@@ -202,15 +167,12 @@ try {
   {
     const h = harness({ preflight: () => ({ status: 'unavailable', reason: 'provider_login_required' }) })
     await h.controller.selectItem(summary, { recordUsage: false })
+    h.controller.watchAiTarget()
+    await new Promise(resolve => setImmediate(resolve))
     h.controller.setInputText('Synthetic note')
-    const run = h.controller.submitInput()
-    await h.waitFor('ai-send')
-    assert.equal(h.top().selection, undefined)
-    assert.equal(h.top().unavailableReason, 'provider_login_required')
-    h.controller.confirmAiSend()
-    assert.equal(h.top().kind, 'ai-send', 'there is nothing to confirm')
-    h.controller.back()
-    await run
+    await h.controller.submitInput()
+    assert.equal(h.top().kind, 'collect-input')
+    assert.match(h.controller.getState().error, /not signed in/)
     assert.equal(h.streams.length, 0)
   }
 
@@ -226,4 +188,4 @@ try {
   await vite.close()
 }
 
-console.log('AI summary: prompt/stream construction, host send confirmation (cancel, confirm, grant, revoke, secret, unavailable) and no-input result display passed. Model summary quality was not evaluated.')
+console.log('AI summary: prompt/stream construction, visible send destination (one-step send, cancel, secret, unavailable) and no-input result display passed. Model summary quality was not evaluated.')

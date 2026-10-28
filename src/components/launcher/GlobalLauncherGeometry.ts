@@ -51,7 +51,7 @@ export function computeStandaloneLauncherGeometry({
     }
   }
 
-  const isSurfaceLike = Boolean(surfaceShell || launcherSettingsTarget || hostSurfaceTarget)
+  const isSurfaceLike = Boolean((surfaceShell && surfaceShell.mode !== 'command') || launcherSettingsTarget || hostSurfaceTarget)
   const measured = measureLauncherPanelParts(panel)
 
   const height = isSurfaceLike
@@ -91,6 +91,14 @@ export function computeStandaloneLauncherGeometry({
 }
 
 export function measureLauncherPanelParts(panel: HTMLElement) {
+  const content = panel.querySelector<HTMLElement>('[data-command-content]')
+  if (content) {
+    const chromeHeight = ['.surface-chrome-header', '.surface-shell-error', '.surface-shell-footer']
+      .reduce((height, selector) => height + (panel.querySelector<HTMLElement>(selector)?.offsetHeight ?? 0), 2)
+    const bodyMaxHeight = Math.min(content.scrollHeight, STANDALONE_LAUNCHER_MAX_HEIGHT - STANDALONE_LAUNCHER_VERTICAL_PADDING - chromeHeight)
+    return { panelHeight: chromeHeight + bodyMaxHeight, bodyMaxHeight }
+  }
+
   const textResult = panel.querySelector<HTMLElement>('.launcher-result-text-frame, .global-launcher-flow-frame')
   const preview = textResult?.querySelector<HTMLElement>('.launcher-preview-well')
   if (textResult && preview) {

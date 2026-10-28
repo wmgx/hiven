@@ -8874,31 +8874,24 @@ html[data-window='launcher'] .flux-spatial-shell .launcher-match-highlight {
   font-weight: 600;
 }
 
-/* Primary action: quiet filled pill, no glass */
+/* V4 actions stay quiet; the keycap carries the shortcut. */
 html[data-window='launcher'] .flux-spatial-shell .l-foot .l-foot-primary {
   margin-left: auto;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
+  padding: 4px 6px;
+  border: 0;
   border-radius: var(--radius-md);
-  font-weight: 600;
-  color: var(--primary-text) !important;
-  background: var(--primary-soft) !important;
-  border: var(--hairline) solid var(--blue-6) !important;
-  box-shadow: none !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
+  font-weight: 500;
+  color: var(--foreground);
+  background: transparent;
+  box-shadow: none;
 }
 
 html[data-window='launcher'] .flux-spatial-shell .l-foot .l-foot-primary kbd {
-  border: none !important;
-  background: transparent !important;
-  box-shadow: none !important;
-  padding: 0 0 0 2px !important;
-  font-size: var(--text-sm) !important;
-  color: inherit !important;
-  opacity: 0.8;
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
 }
 
 html[data-window='launcher'] .flux-spatial-shell .l-foot kbd {
@@ -8954,28 +8947,7 @@ html[data-window='launcher'] .flux-spatial-shell .recent-clipboard-hint {
   transition: width 160ms ease;
 }
 
-/* AiSendGate: host-owned send confirmation and disclosure (tokens only). */
-.ai-send-preview {
-  margin: 0;
-  max-height: 120px;
-  overflow: auto;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: var(--muted);
-  color: var(--foreground);
-  font: 12px/1.5 var(--font-sans);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.ai-send-meta { margin: 0; font-size: 12px; color: var(--muted-foreground); }
-.ai-send-secret { margin: 0; font-size: 12px; color: var(--destructive); }
-.ai-send-remember { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--foreground); }
 .ai-send-disclosure { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 12px; color: var(--muted-foreground); }
-.ai-send-disclosure button, .ai-send-grants button {
-  border: 0; padding: 0; background: none; font: inherit; font-size: 12px; color: var(--primary); cursor: pointer;
-}
-.ai-send-grants { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 13px; }
-.ai-send-grants li { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 
 /* OutputActions: host-owned output buttons shared by plugin pages. */
 .hiven-ui-surface-actionbar { flex: none; display: flex; align-items: center; gap: 14px; min-height: var(--surface-footer-height); padding: 0 14px; border-top: 1px solid var(--border-subtle); background: var(--subtle); color: var(--muted-foreground); font-size: var(--text-sm); }
@@ -8983,11 +8955,6 @@ html[data-window='launcher'] .flux-spatial-shell .recent-clipboard-hint {
 .hiven-ui-surface-actionbar > .hiven-output-actions { margin-left: auto; }
 .hiven-output-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .hiven-output-actions kbd { display: inline-grid; place-items: center; min-width: 19px; height: 19px; margin-left: 6px; padding: 0 4px; border-radius: 5px; background: linear-gradient(180deg, var(--key-top), var(--key-bottom)); box-shadow: 0 0 0 .5px var(--key-edge), 0 1px 0 var(--key-edge); font: 500 11px var(--font-sans); color: var(--muted-foreground); }
-
-/* Launcher AI send confirmation frame. */
-.launcher-ai-send { display: flex; flex: 0 0 auto; flex-direction: column; gap: 8px; padding: 12px 14px; outline: none; }
-.launcher-ai-send > * { flex-shrink: 0; }
-.launcher-ai-send .ai-send-preview { max-height: 240px; }
 
 /* Text results declared as Markdown (rendered without HTML). */
 .launcher-markdown { font-size: 13px; line-height: 1.6; color: var(--foreground); white-space: normal; }
@@ -9005,9 +8972,16 @@ html[data-window='launcher'] .flux-spatial-shell .recent-clipboard-hint {
 .launcher-markdown pre code { display: block; padding: 8px 10px; white-space: pre-wrap; }
 .launcher-markdown hr { margin: 10px 0; border: 0; border-top: 1px solid var(--border); }
 .launcher-markdown-link { text-decoration: underline; text-underline-offset: 2px; }
-.launcher-ai-send-title { margin: 0; font-size: 13px; color: var(--foreground); }
 .launcher-ai-disclosure { padding: 6px 14px 0; }
 
 .window-feedback { flex:none; padding:7px 14px; color:var(--muted-foreground); font-size:12px; }
 .window-feedback.is-error { color:var(--destructive-text); border-bottom:1px solid var(--border); }
 .surface-shell-status .window-feedback, .surface-shell-error .window-feedback { padding:0; border:0; }
+
+.l-search-field[data-multiline='true'] { font-size:14px; }
+.hiven-command-input { display:flex; align-items:center; gap:8px; width:100%; min-width:0; padding-block:10px; }
+.hiven-command-input .l-search-field { flex:1; min-width:0; }
+.surface-chrome:has([data-command-content]) .surface-chrome-body { max-height:var(--launcher-body-max-height, 544px); overflow:auto; flex:0 1 auto; }
+[data-command-content] { flex:none; min-height:0; }
+
+.launcher-ai-error { color: var(--color-error); padding: 8px 16px; font-size: 12px; }

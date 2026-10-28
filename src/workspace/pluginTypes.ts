@@ -742,6 +742,8 @@ export type PluginSurfaceInstancePolicy = 'singleton' | 'multi'
 export type PluginSurfaceShortcutPresentation = 'launcher' | 'window'
 
 export type PluginSurfaceShell = {
+  /** A command with a plugin-rendered result body; uses command sizing and material input. */
+  mode?: 'command'
   size?: 'small' | 'medium' | 'large'
   /** Inline height only; independent windows use size. */
   inlineHeight?: number
@@ -840,16 +842,11 @@ export type PluginSurfaceTelemetry = {
 }
 
 export type PluginAiSendGate = {
-  /**
-   * Ask the host to send. The host checks readiness (unified unavailable view
-   * with "Open AI settings"), shows the send confirmation unless the user
-   * granted this command, and always confirms secret-shaped content.
-   * Resolves with the approved target, or null when cancelled/unavailable.
-   * Send only `text`/`extras` with the returned selection.
-   */
+  /** Validate readiness and reject secrets, then return the visible target.
+   * Send only `text`/`extras` with the returned selection. */
   request(send: AiSendRequest, options?: { signal?: AbortSignal }): Promise<AiSendApproval | null>
-  /** Disclosure line for a remembered approval: "Sent to {provider · model}", click revokes. */
-  Disclosure: ComponentType<{ commandId: string; approval: AiSendApproval | null | undefined }>
+  /** Permanent count and destination beside the send action. */
+  Disclosure: ComponentType<{ request: AiSendRequest }>
 }
 
 export type PluginOutputActionsProps = {
@@ -860,6 +857,8 @@ export type PluginOutputActionsProps = {
   text?: string | (() => string | null)
   /** 'paste' when the page's intent is to put the result back into the app. Default 'copy'. */
   primary?: 'copy' | 'paste'
+  /** Local primary action for a command body, e.g. remembering a calculation. */
+  primaryAction?: { label: string; run(): void | Promise<void>; disabled?: boolean }
   /** Replaces the text copy for a non-text primary output (e.g. copy an image). */
   copy?: () => Promise<void>
   /** Plugin-specific actions listed under ⌘K, between Continue and Quick Editor. */

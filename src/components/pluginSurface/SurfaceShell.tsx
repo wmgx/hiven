@@ -25,7 +25,7 @@ export const SurfaceShell = forwardRef<HTMLDivElement, {
   const [error, setError] = useState<HTMLDivElement | null>(null)
   const slots = useMemo(() => ({ actions: slot, field, breadcrumbs, footer, status, error }), [slot, field, breadcrumbs, footer, status, error])
   return <div {...props} ref={ref} className={`surface-chrome ${className}`}>
-    <div className="surface-chrome-header" data-tauri-drag-region={standalone || undefined}>
+    <div className="surface-chrome-header" data-value-chips data-tauri-drag-region={standalone || undefined}>
       <button type="button" className="surface-shell-tag" id={titleId} data-no-drag onClick={onBack ?? onClose}><PluginIcon icon={icon} title={title} small /><span className="surface-shell-title">{title}</span></button>
       <div ref={setBreadcrumbs} className="surface-shell-breadcrumbs" data-no-drag />
       <div ref={setField} className="surface-chrome-field" data-no-drag />

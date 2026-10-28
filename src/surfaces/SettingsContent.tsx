@@ -8,8 +8,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { BrainCircuit, Check, Command, Copy, Download, ExternalLink, Hash, Languages, LogIn, LogOut, Moon, RefreshCw, Type, WrapText } from 'lucide-react'
 import { useAppStore } from '../store'
 import { changeApplicationLocale } from '../changeApplicationLocale'
-import { translate, useT } from '../i18n'
-import { AiSendGrantSummary } from '../components/pluginSurface/AiSendGateLayer'
+import { useT } from '../i18n'
 import { pickLocale } from '../i18n/pickLocale'
 import { ShortcutRecorder } from '../components/ShortcutRecorder'
 import { AppHotkeysSettings } from '../components/AppHotkeysSettings'
@@ -563,9 +562,6 @@ export function AiSubscriptionsContent() {
             onChange={(value) => updateSetting('aiDefaultEffort', value)}
           />
         </SettingsListRow>
-      </SettingGroup>
-      <SettingGroup title={translate(locale, 'aiSendGate', 'grantsTitle')}>
-        <AiSendGrantSummary />
       </SettingGroup>
     </div>
   )

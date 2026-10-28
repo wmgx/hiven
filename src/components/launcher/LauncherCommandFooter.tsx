@@ -30,6 +30,8 @@ export function LauncherCommandFooter({
   locale,
   busy,
   primaryLabel,
+  primaryDisabled,
+  primaryOnly,
   onPrimary,
   pasteApp,
   onPaste,
@@ -41,6 +43,8 @@ export function LauncherCommandFooter({
   locale: Locale
   busy: boolean
   primaryLabel?: string
+  primaryDisabled?: boolean
+  primaryOnly?: boolean
   onPrimary?: () => void
   /** Target app name for ⇧↵; falls back to a generic label. */
   pasteApp?: string
@@ -72,11 +76,11 @@ export function LauncherCommandFooter({
   return (
     <div className="global-launcher-footer l-foot launcher-command-footer">
       <WindowFeedback mode="status" />
-      <button type="button" className="launcher-footer-back-btn" data-no-drag
+      {!primaryOnly && <button type="button" className="launcher-footer-back-btn" data-no-drag
         onMouseDown={(event) => event.preventDefault()} onClick={onBack}>
         <LauncherHintKey keys="esc" label={t(locale, 'palette.changeAction')} />
-      </button>
-      {menu.length > 0 && (
+      </button>}
+      {!primaryOnly && menu.length > 0 && (
         <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
           <DropdownMenuTrigger render={<button type="button" className="launcher-footer-back-btn" data-no-drag disabled={busy} onMouseDown={(event) => event.preventDefault()} />}>
             <LauncherHintKey keys="⌘K" label={t(locale, 'outputActions.more')} />
@@ -88,7 +92,7 @@ export function LauncherCommandFooter({
           </DropdownMenuContent>
         </DropdownMenu>
       )}
-      {hints}
+      {!primaryOnly && hints}
       <span className={`launcher-command-footer-spacer ${status?.running ? 'anim-running-pulse' : ''}`} role={status ? 'status' : undefined} title={status?.text}>{status?.text}</span>
       {onPaste && pasteBlockedKey && <LauncherHintText label={t(locale, pasteBlockedKey)} />}
       {onPaste && !pasteBlockedKey && (
@@ -98,7 +102,7 @@ export function LauncherCommandFooter({
         </button>
       )}
       {primaryLabel && onPrimary && (
-        <button type="button" className="l-foot-primary" data-no-drag disabled={busy}
+        <button type="button" className="l-foot-primary" data-no-drag disabled={busy || primaryDisabled}
           onMouseDown={(event) => event.preventDefault()} onClick={onPrimary}>
           <LauncherHintKey keys="↵" label={primaryLabel} />
         </button>

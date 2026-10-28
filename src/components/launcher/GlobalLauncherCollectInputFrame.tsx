@@ -1,3 +1,4 @@
+import { aiTargetName, aiUnavailableReasonKey, decideAiSend } from '../../workspace/ai/sendGate'
 import { useCommandMenuActions } from './useCommandMenuActions'
 import { WindowFeedback } from '../../ui/WindowFeedback'
 import { useCallback, useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type RefObject } from 'react'
@@ -157,6 +158,7 @@ export function GlobalLauncherCollectInputFrame({
   onSecondaryAction,
   onPastePreviewText,
   onSubmitPrimary,
+  onOpenAiSettings,
   attachedBlock,
   onRemoveBlock,
   onParamChange,
@@ -164,7 +166,6 @@ export function GlobalLauncherCollectInputFrame({
   onBlockTextChange,
   onSyncBlock,
   onCopyAll,
-  onRevokeAiSend,
 }: {
   isImeComposingRef: RefObject<boolean>
   inputRef: RefObject<HTMLInputElement | HTMLTextAreaElement | null>
@@ -187,6 +188,7 @@ export function GlobalLauncherCollectInputFrame({
   onPastePreviewText?: (choice: LauncherResultChoice) => void | Promise<void>
   /** Enter when no destination chrome — default submit path. */
   onSubmitPrimary?: () => void
+  onOpenAiSettings?: () => void
   /** Host Block backing frame.blockText, used for its label. */
   attachedBlock?: LauncherObjectBlock | null
   onRemoveBlock?: () => void
@@ -200,8 +202,6 @@ export function GlobalLauncherCollectInputFrame({
   onSyncBlock?: (text: string) => void
   /** ⌘↵ on a list of text results. */
   onCopyAll?: () => void
-  /** Revoke the AI grant shown by the "Sent to …" line. */
-  onRevokeAiSend?: () => void
 }) {
   const placeholder = frame.input.placeholderI18n?.[locale] ?? frame.input.placeholder ?? ''
   const previewChoices = frame.previewOutput?.choices ?? []
@@ -216,6 +216,12 @@ export function GlobalLauncherCollectInputFrame({
     return attachedBlock?.payloadText === frame.blockText ? attachedBlock : createQueryObjectBlock({ query: frame.blockText })
   }, [attachedBlock, frame.blockText])
   const materialText = frame.blockText ?? frame.inputText
+  const isAi = Boolean(frame.item.aiSend)
+  const aiTarget = frame.aiTarget
+  const aiTargetLabel = aiTarget ? aiTargetName(aiTarget) : ''
+  const aiError = isAi && !decideAiSend({ text: materialText }).allowed ? t(locale, 'aiSendGate.secret')
+    : isAi && aiTarget && aiTarget.status !== 'ready' ? t(locale, 'aiSendGate.unavailable', { reason: t(locale, `aiSendGate.${aiUnavailableReasonKey(aiTarget.reason)}`) }) : ''
+
   // Streamed partial output of the running command.
   const progress = busy ? frame.progress : undefined
   // A running command (not an output delivery) shows its status in the preview well.
@@ -270,7 +276,7 @@ export function GlobalLauncherCollectInputFrame({
   const canCopyAll = isList && previewFresh && Boolean(onCopyAll) && previewChoices.every((choice) => getHostOutputIntent(choice) === 'copy')
   const freshChoice = previewChoice && previewFresh ? previewChoice : undefined
   const hasReturn = Boolean(freshChoice?.secondaryActions?.some((a) => a.id === 'return-to-launcher'))
-  const canPaste = showLivePreview && Boolean(onPastePreviewText)
+  const canPaste = showLivePreview && Boolean(onPastePreviewText) && (!isAi || previewFresh)
   const app = useForegroundAppName()
 
   const pastePreview = async () => {
@@ -283,7 +289,7 @@ export function GlobalLauncherCollectInputFrame({
     await onPastePreviewText?.(freshChoice)
   }
   const runPrimary = async () => {
-    if (busy) return
+    if (busy || (isAi && !freshChoice && (!hasInput || aiError || aiTarget?.status !== 'ready'))) return
     // No fresh preview for the current input → full submit (fresh execute).
     if (!freshChoice) { onSubmitPrimary?.(); return }
     await onActivateChoice(freshChoice)
@@ -301,7 +307,7 @@ export function GlobalLauncherCollectInputFrame({
       : []),
     ...extraMenu,
   ]
-  const primaryLabel = !hasInput
+  const primaryLabel = isAi && !freshChoice ? t(locale, 'aiSendGate.send') : !hasInput
     ? undefined
     : error && !freshChoice
       ? t(locale, 'palette.outputRetry')
@@ -437,19 +443,14 @@ export function GlobalLauncherCollectInputFrame({
           {error}
         </div>
       )}
-      {frame.aiDisclosure && frame.previewInputText === materialText && (
-        <p className="ai-send-disclosure launcher-ai-disclosure">
-          <span>{t(locale, 'aiSendGate.sentTo', { target: frame.aiDisclosure.target })}</span>
-          {onRevokeAiSend && (
-            <button type="button" title={t(locale, 'aiSendGate.revokeTitle')} onMouseDown={(event) => event.preventDefault()} onClick={onRevokeAiSend}>
-              {t(locale, 'aiSendGate.revoke')}
-            </button>
-          )}
-        </p>
-      )}
+      {aiError && <div role="alert" className="launcher-ai-error">{aiError}{aiTarget?.status !== 'ready' && onOpenAiSettings && <button type="button" onClick={onOpenAiSettings}>{t(locale, 'aiSendGate.openSettings')}</button>}</div>}
+      {isAi && !previewFresh && !progress && <p className="ai-send-disclosure launcher-ai-disclosure">
+        {aiTarget?.status === 'ready' ? t(locale, 'aiSendGate.pressEnter', { target: aiTargetLabel }) : t(locale, 'aiSendGate.checking')}
+        {' · '}{t(locale, 'aiSendGate.total', { count: materialText.length })}
+      </p>}
       {showLivePreview && (
         <>
-          {showLiveEmpty ? (
+          {showLiveEmpty && !isAi ? (
             <LauncherEmptyWell
               testId="launcher-preview-well"
               title={t(locale, 'palette.livePreviewEmpty')}
@@ -485,7 +486,9 @@ export function GlobalLauncherCollectInputFrame({
                 event.stopPropagation()
               }}
             >
-              {progress ? (
+              {isAi && !previewFresh && !progress ? (
+                <PreviewText text={materialText} label={t(locale, 'palette.preview')} />
+              ) : progress ? (
                 <PreviewText text={progress.text} format={progress.format} label={t(locale, 'palette.preview')} />
               ) : displayPreviewText ? (
                 <PreviewText text={displayPreviewText} format={previewChoices[0]?.previewFormat} label={t(locale, 'palette.preview')} />
@@ -537,9 +540,11 @@ export function GlobalLauncherCollectInputFrame({
         <LauncherCommandFooter
           locale={locale}
           busy={busy}
-          status={busy
+          primaryDisabled={isAi && !freshChoice && (!hasInput || Boolean(aiError) || aiTarget?.status !== 'ready')}
+          primaryOnly={isAi && !freshChoice}
+          status={frame.aiDisclosure ? { text: t(locale, 'aiSendGate.sentTo', { target: frame.aiDisclosure.target }), running: busy } : busy
             ? { text: t(locale, deliveryIntent === 'copy' ? 'palette.outputCopying' : deliveryIntent ? 'palette.outputDelivering' : 'palette.runningStop'), running: !deliveryIntent }
-            : explicitReason ? { text: t(locale, explicitReason === 'large' ? 'palette.largeInputRunHint' : 'palette.explicitRunHint') } : undefined}
+            : explicitReason && !isAi ? { text: t(locale, explicitReason === 'large' ? 'palette.largeInputRunHint' : 'palette.explicitRunHint') } : undefined}
           primaryLabel={primaryLabel}
           onPrimary={() => void runPrimary()}
           pasteApp={app}

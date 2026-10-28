@@ -7,7 +7,7 @@ import sys
 import time
 from pathlib import Path
 from playwright.sync_api import sync_playwright, expect
-from v4_cases import s33, s34
+from v4_cases import s33, s34, s35, s36
 
 URL = 'http://localhost:1420/?window=launcher&sandbox=1'
 
@@ -203,8 +203,8 @@ def s12(page):
     copy(page, 'c2FuZGJveC1yZXN1bHQ=')
     command(page, 'base64')
     surface = page.locator('.base64-surface')
-    expect(surface.get_by_role('textbox', name='Result', exact=True)).to_have_value('sandbox-result')
-    surface.get_by_role('button', name=re.compile('Paste to')).click()
+    expect(surface.get_by_test_id('base64-result')).to_have_text('sandbox-result')
+    page.get_by_role('button', name=re.compile('Paste to')).click()
     editor(page, 'sandbox-result')
 
 
@@ -212,10 +212,10 @@ def s13(page):
     command(page, 'summarize')
     field = page.locator('.global-launcher-panel textarea').first
     field.fill('A short text for the simulated summary.')
+    expect(page.locator('.global-launcher-panel')).to_contain_text('Press ↵ to send to Simulated AI')
+    expect(page.get_by_test_id('launcher-preview-well')).to_have_text('A short text for the simulated summary.')
     field.press('Enter')
-    page.wait_for_timeout(300)
-    expect(page.locator('.global-launcher-panel')).to_contain_text('Will send to Simulated AI')
-    page.keyboard.press('Enter')
+    expect(page.locator('.launcher-command-footer')).to_contain_text('Sent to Simulated AI')
     expect(page.locator('.global-launcher-panel')).to_contain_text('Simulated summary.')
     page.keyboard.press('Escape')
     expect(page.locator('.global-launcher-panel')).to_contain_text('AI Summary')
@@ -262,6 +262,11 @@ def surfaces(page):
 
 
 def s14(page):
+    for plugin in page.evaluate('__hivenSandbox.plugins()'):
+        manifests = list(Path('src/plugins').glob('*/manifest.json'))
+        expected = next(json.loads(p.read_text())['version'] for p in manifests if json.loads(p.read_text())['pluginId'] == plugin['pluginId'])
+        assert plugin['version'] == expected, f"loaded version differs: {plugin['pluginId']}"
+
     targets = surfaces(page)
     assert len(targets) >= 18, targets
     for language, theme in [('en', 'light'), ('zh', 'dark')]:
@@ -405,7 +410,8 @@ def s21(page):
     command(page, 'summarize')
     field = page.locator('.global-launcher-panel textarea').first
     field.fill('synthetic input')
-    expect(page.locator('.launcher-command-footer-spacer')).to_have_text('↵ Run')
+    expect(page.locator('.launcher-command-footer-spacer')).to_be_empty()
+    expect(page.locator('.global-launcher-footer').get_by_role('button')).to_have_count(1)
     expect(page.get_by_test_id('launcher-preview-well')).not_to_contain_text('↵ Run')
     page.keyboard.press('Escape')
     command(page, 'uppercase')
@@ -418,14 +424,14 @@ def s22(page):
     command(page, 'summarize')
     field = page.locator('.global-launcher-panel textarea').first
     field.fill('Synthetic input for the simulated summary.')
-    expect(page.locator('.launcher-command-footer-spacer')).to_have_text('↵ Run')
+    expect(page.locator('.launcher-command-footer-spacer')).to_be_empty()
+    expect(page.locator('.global-launcher-footer').get_by_role('button')).to_have_count(1)
     field.press('Enter')
-    expect(page.get_by_test_id('launcher-ai-send')).to_be_visible()
-    expect(page.locator('.global-launcher-footer')).to_contain_text('Send')
-    page.keyboard.press('Enter')
-    expect(page.locator('.launcher-command-footer-spacer')).to_have_text('Running… esc to stop')
+    expect(page.get_by_test_id('launcher-ai-send')).to_have_count(0)
+    expect(page.locator('.launcher-command-footer-spacer')).to_contain_text('Sent to Simulated AI')
+    expect(page.locator('.launcher-command-footer-spacer')).to_have_class(re.compile('anim-running-pulse'))
     page.keyboard.press('Escape')
-    expect(page.locator('.launcher-command-footer-spacer')).not_to_have_text('Running… esc to stop')
+    expect(page.locator('.launcher-command-footer-spacer')).not_to_have_class(re.compile('anim-running-pulse'))
 
 
 def s23(page):
@@ -492,35 +498,25 @@ def s26(page):
 def s27(page):
     command(page, 'summarize')
     field = page.locator('.global-launcher-panel textarea').first
-    field.fill('Synthetic input for grant settings.')
+    field.fill('token ghp_' + 'a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8')
+    expect(page.locator('.global-launcher-panel [role=alert]')).to_contain_text('Sending is blocked')
+    expect(page.locator('.l-foot-primary')).to_be_disabled()
     field.press('Enter')
-    gate = page.get_by_test_id('launcher-ai-send')
-    expect(gate).to_be_visible()
-    gate.get_by_role('checkbox').check()
-    page.keyboard.press('Enter')
+    expect(page.get_by_test_id('launcher-ai-send')).to_have_count(0)
+    expect(page.locator('.global-launcher-panel')).not_to_contain_text('Simulated summary.')
+    field.fill('Synthetic input after a blocked secret.')
+    expect(page.locator('.l-foot-primary')).to_be_enabled()
+    field.press('Enter')
     expect(page.locator('.global-launcher-panel')).to_contain_text('Simulated summary.')
+    expect(page.locator('.launcher-command-footer')).to_contain_text('Sent to Simulated AI')
     page.keyboard.press('Escape')
     page.keyboard.press('Escape')
     page.evaluate('__hivenSandbox.openSettings()')
-    expect(page.locator('[data-ai-send-summary]')).to_have_text('1 commands can send directly')
-    page.locator('[data-ai-send-summary]').click()
-    grants = page.locator('[data-ai-send-grants="ai-writing"]')
-    expect(page.get_by_role('dialog').get_by_role('button', name='AI Writing', exact=True)).to_be_visible()
+    expect(page.locator('[data-ai-send-summary], [data-ai-send-grants]')).to_have_count(0)
     page.evaluate('__hivenSandbox.appearance("dark", "zh")')
-    expect(page.get_by_role('dialog').get_by_role('button', name='AI 写作', exact=True)).to_be_visible()
+    expect(page.locator('body')).not_to_contain_text('直接发送的命令')
     page.evaluate('__hivenSandbox.appearance("light", "en")')
-    expect(grants.get_by_role('switch')).to_be_checked()
-    capture_themes(page, 'ai-grants', page.get_by_role('dialog'))
-    grants.get_by_role('switch').click()
-    expect(grants).to_contain_text('Choose “Send directly next time”')
-    page.get_by_role('dialog').get_by_role('button', name='AI Writing', exact=True).click()
-    expect(page.locator('[data-ai-send-summary]')).to_have_text('No commands send directly')
-    page.keyboard.press('Escape')
-    command(page, 'summarize')
-    field = page.locator('.global-launcher-panel textarea').first
-    field.fill('Synthetic input after revoke.')
-    field.press('Enter')
-    expect(page.get_by_test_id('launcher-ai-send')).to_be_visible()
+    expect(page.locator('body')).not_to_contain_text('Commands that send directly')
 
 
 def s28(page):
@@ -551,20 +547,20 @@ def s30(page):
     page.evaluate('__hivenSandbox.copyImage()')
     command(page, 'base64')
     surface = page.locator('.base64-surface')
-    output = surface.get_by_role('textbox', name='Result', exact=True)
-    expect(output).to_have_value(re.compile('^data:image/png;base64,'))
+    output = surface.get_by_test_id('base64-result')
+    expect(output).to_have_text(re.compile('^data:image/png;base64,'))
     expect(surface.get_by_role('img', name='Image preview')).to_be_visible()
     capture_themes(page, 'base64-image', page.locator('.surface-chrome:visible'))
-    uri = output.input_value()
-    surface.get_by_role('textbox', name='Input', exact=True).fill(uri)
+    uri = output.inner_text()
+    page.locator('.surface-chrome-field textarea').fill(uri)
     expect(surface.get_by_role('img', name='Image preview')).to_be_visible()
     before = page.evaluate('__hivenSandbox.clipboard().changeCount')
     page.get_by_role('button', name='Copy image', exact=True).click()
     page.wait_for_function('before => __hivenSandbox.clipboard().kind === "image" && __hivenSandbox.clipboard().changeCount > before', arg=before)
-    surface.get_by_role('textbox', name='Input', exact=True).fill('hello world')
-    expect(output).to_have_value('aGVsbG8gd29ybGQ=')
-    surface.get_by_role('textbox', name='Input', exact=True).fill('aGVsbG8gd29ybGQ=')
-    expect(output).to_have_value('hello world')
+    page.locator('.surface-chrome-field textarea').fill('hello world')
+    expect(output).to_have_text('aGVsbG8gd29ybGQ=')
+    page.locator('.surface-chrome-field textarea').fill('aGVsbG8gd29ybGQ=')
+    expect(output).to_have_text('hello world')
     page.keyboard.press('Escape')
     page.evaluate('__hivenSandbox.open()')
     page.locator('.global-launcher-panel textarea').first.fill('base64')
@@ -608,7 +604,7 @@ def s32(page):
         page.wait_for_function('document.activeElement?.hasAttribute("data-clipboard-history-search")')
 
 
-CASES = [s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15,s16,s17,s18,s19,s20,s21,s22,s23,s24,s25,s26,s27,s28,s29,s30,s31,s32,s33,s34]
+CASES = [s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15,s16,s17,s18,s19,s20,s21,s22,s23,s24,s25,s26,s27,s28,s29,s30,s31,s32,s33,s34,s35,s36]
 
 
 def main():

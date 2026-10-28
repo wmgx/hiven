@@ -32,8 +32,8 @@ import type {
   LauncherTextFormat,
 } from './types'
 import type { PluginNetworkApi, PluginPrivateStorageApi, PluginShellApi } from '../pluginTypes'
-import type { AiPreflightReason, AiPreflightResult, PluginAiApi } from '../ai/types'
-import { aiSendGrantKey, decideAiSend, type AiSendApproval, type AiSendGrant, type AiSendRequest } from '../ai/sendGate'
+import type { AiPreflightResult, PluginAiApi } from '../ai/types'
+import { aiTargetName, aiUnavailableReasonKey, decideAiSend, type AiSendApproval, type AiSendRequest } from '../ai/sendGate'
 import { appendUsageJournal } from '../usageJournal'
 import { getHostOutputIntent, isOutputResult } from './output'
 import { explicitRunReason } from './commandPreviewPolicy'
@@ -66,8 +66,8 @@ export type CollectInputFrame = {
   previewInputText?: string
   /** Partial output of the running command (streamed AI text); cleared when the run ends. */
   progress?: { text: string; format?: LauncherTextFormat }
-  /** The preview was produced by AI through a remembered grant: show "Sent to …" with revoke. */
-  aiDisclosure?: { target: string; grantKey: string }
+  aiTarget?: AiPreflightResult
+  aiDisclosure?: { target: string }
   /**
    * Index into previewOutput.choices for keyboard highlight.
    * -1 = no highlight (Enter uses typed inputText).
@@ -106,20 +106,7 @@ export type ResultFrame = {
   retryOnly?: boolean
 }
 
-/** Host-owned AI send confirmation (or the unavailable view) over the running command. */
-export type AiSendFrame = {
-  kind: 'ai-send'
-  item: LauncherItem
-  send: AiSendRequest
-  /** Ready target; absent when AI is unavailable. */
-  selection?: AiPreflightResult
-  unavailableReason?: AiPreflightReason
-  secret: boolean
-  canRemember: boolean
-  remember: boolean
-}
-
-export type LauncherFrame = ListFrame | CollectInputFrame | ParamInputFrame | ResultFrame | AiSendFrame
+export type LauncherFrame = ListFrame | CollectInputFrame | ParamInputFrame | ResultFrame
 
 // ─── State ─────────────────────────────────────────────────────────────────
 
@@ -142,12 +129,6 @@ export type LauncherControllerDeps = {
   getNetwork?: (item: LauncherItem) => PluginNetworkApi
   getShell?: (item: LauncherItem) => PluginShellApi
   getAi?: (item: LauncherItem) => PluginAiApi
-  /** Per-command "send directly from now on" grants; absent hides the option. */
-  aiSendGrants?: {
-    has(key: string): boolean
-    add(grant: AiSendGrant): void
-    remove(key: string): void
-  }
   /** Settings → AI, offered by the unavailable view. */
   openAiSettings?: () => void
   locale: string
@@ -271,9 +252,8 @@ export class LauncherController {
   private lastJournalCommandId: string | null = null
   /** Aborted whenever pending actions are invalidated (Esc, reset, new selection). */
   private runAbort: AbortController | null = null
-  private aiSendPrompt: { resolve: (approval: AiSendApproval | null) => void } | null = null
   /** Approval given during the current explicit run, for the disclosure line. */
-  private lastAiApproval: { approval: AiSendApproval; grantKey: string } | null = null
+  private lastAiApproval: AiSendApproval | null = null
   private pendingProgress: { text: string; format?: LauncherTextFormat } | null = null
   private progressTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -350,9 +330,6 @@ export class LauncherController {
     this.clearProgress()
     this.runAbort?.abort()
     this.runAbort = null
-    const prompt = this.aiSendPrompt
-    this.aiSendPrompt = null
-    prompt?.resolve(null)
     this.flowGeneration += 1
     this.previewRunId += 1
     this.suggestRunId += 1
@@ -458,90 +435,54 @@ export class LauncherController {
     this.pendingProgress = null
   }
 
-  // ─── AI send confirmation ──────────────────────────────────────────────────
-
   private aiSendFor(item: LauncherItem): PluginToolAiSend {
-    return { request: (send) => this.requestAiSend(item, send, this.flowGeneration) }
+    return { request: send => this.requestAiSend(item, send, this.flowGeneration) }
   }
 
-  private aiGrantKey(item: LauncherItem, commandId: string): string {
-    return aiSendGrantKey(item.pluginId ?? item.systemKey, commandId)
+  /** Metadata only; a configuration change clears the advertised target before refreshing. */
+  watchAiTarget(): () => void {
+    const frame = this.topFrame()
+    if (frame.kind !== 'collect-input' || !frame.item.aiSend) return () => {}
+    const item = frame.item
+    const ai = this.deps.getAi?.(item)
+    let live = true
+    let revision = 0
+    const refresh = async () => {
+      const token = ++revision
+      const publish = (aiTarget?: AiPreflightResult) => {
+        const top = this.topFrame()
+        if (live && token === revision && top.kind === 'collect-input' && top.item === item) {
+          this.setState({ frames: [...this.state.frames.slice(0, -1), { ...top, aiTarget }] })
+        }
+      }
+      publish()
+      try { publish(await ai?.preflight?.(item.aiSend!)) } catch { publish() }
+    }
+    void refresh()
+    const stop = ai?.subscribePreflight?.(() => { void refresh() })
+    return () => { live = false; stop?.() }
   }
 
   private async requestAiSend(item: LauncherItem, send: AiSendRequest, generation: number): Promise<AiSendApproval | null> {
-    const isCurrent = () => generation === this.flowGeneration
-    if (!isCurrent() || this.aiSendPrompt) return null
-    let selection = send.selection
-    if (!selection) {
-      try {
-        selection = await (this.deps.getAi?.(item) ?? emptyAi).preflight?.(send.preflight ?? { capabilities: ['text.generate'], inputModalities: ['text'] })
-      } catch { selection = undefined }
-    }
-    if (!isCurrent()) return null
-    const ready = selection?.status === 'ready' && selection.providerId && selection.agentId ? selection : undefined
-    const granted = Boolean(ready && this.deps.aiSendGrants?.has(this.aiGrantKey(item, send.commandId)))
-    const decision = decideAiSend(send, granted)
-    if (ready && !decision.confirm) {
-      const approval = { selection: ready, remembered: granted && send.consent !== 'implicit' }
-      this.lastAiApproval = { approval, grantKey: this.aiGrantKey(item, send.commandId) }
-      return approval
-    }
-    const frame: AiSendFrame = {
-      kind: 'ai-send',
-      item,
-      send,
-      selection: ready,
-      unavailableReason: ready ? undefined : selection?.reason ?? 'metadata_unavailable',
-      secret: decision.secret,
-      canRemember: Boolean(ready && this.deps.aiSendGrants) && !decision.secret && send.consent !== 'implicit',
-      remember: false,
-    }
-    return new Promise((resolve) => {
-      this.aiSendPrompt = { resolve }
-      this.setState({ busy: false, error: null, frames: [...this.state.frames, frame] })
-    })
-  }
-
-  /** ↵ on the send confirmation: send, optionally remembering this command. */
-  confirmAiSend(): void {
+    if (generation !== this.flowGeneration) return null
+    const message = (key: string, vars?: Record<string, string>) => translate(this.deps.locale as Locale, 'aiSendGate', key, vars)
+    if (!decideAiSend(send).allowed) throw new Error(message('secret'))
     const top = this.topFrame()
-    const prompt = this.aiSendPrompt
-    if (!prompt || top.kind !== 'ai-send' || !top.selection) return
-    this.aiSendPrompt = null
-    const grantKey = this.aiGrantKey(top.item, top.send.commandId)
-    if (top.remember && top.canRemember) this.deps.aiSendGrants?.add({ key: grantKey, label: top.send.label })
-    const approval = { selection: top.selection, remembered: false }
-    this.lastAiApproval = { approval, grantKey }
-    this.setState({ busy: true, error: null, frames: this.state.frames.slice(0, -1) })
-    prompt.resolve(approval)
+    const advertised = top.kind === 'collect-input' ? top.aiTarget : undefined
+    const selection = send.selection ?? await this.deps.getAi?.(item)?.preflight?.(send.preflight ?? item.aiSend ?? { capabilities: ['text.generate'], inputModalities: ['text'] })
+    if (generation !== this.flowGeneration) return null
+    if (!selection || selection.status !== 'ready' || !selection.providerId || !selection.agentId) {
+      throw new Error(message('unavailable', { reason: message(aiUnavailableReasonKey(selection?.reason ?? 'metadata_unavailable')) }))
+    }
+    if (item.aiSend && (!advertised || advertised.selectionKey !== selection.selectionKey)) throw new Error(message('reason.changed'))
+    const approval = { selection }
+    this.lastAiApproval = approval
+    const current = this.topFrame()
+    if (current.kind === 'collect-input') this.setState({ frames: [...this.state.frames.slice(0, -1), { ...current, aiDisclosure: { target: aiTargetName(selection) } }] })
+    return approval
   }
 
-  toggleAiSendRemember(): void {
-    const top = this.topFrame()
-    if (top.kind !== 'ai-send' || !top.canRemember) return
-    this.setState({ frames: [...this.state.frames.slice(0, -1), { ...top, remember: !top.remember }] })
-  }
-
-  /** Leave the prompt for Settings → AI; the waiting run is dropped. */
-  openAiSettings(): void {
-    if (this.topFrame().kind !== 'ai-send' || !this.deps.openAiSettings) return
-    this.cancelAiSend()
-    this.deps.openAiSettings()
-  }
-
-  /** Revoke the grant behind the disclosure line; the next run confirms again. */
-  revokeAiSendGrant(): void {
-    const top = this.topFrame()
-    if (top.kind !== 'collect-input' || !top.aiDisclosure) return
-    this.deps.aiSendGrants?.remove(top.aiDisclosure.grantKey)
-    this.setState({ frames: [...this.state.frames.slice(0, -1), { ...top, aiDisclosure: undefined }] })
-  }
-
-  private cancelAiSend(): void {
-    // Dropping the run also resolves the prompt with null; its result must not land.
-    this.invalidatePendingActions()
-    this.setState({ error: null, frames: this.state.frames.filter((frame) => frame.kind !== 'ai-send') })
-  }
+  openAiSettings(): void { this.deps.openAiSettings?.() }
 
   private shouldRecord(item: LauncherItem, options: SelectOptions): boolean {
     if (options.recordUsage === false) return false
@@ -1467,16 +1408,9 @@ export class LauncherController {
       await this.applyResult(result, this.itemTitle(item), { item, recordUsage: frame.recordUsage })
       return
     }
-    // Set by requestAiSend/confirmAiSend while the run awaited.
-    const sent = this.lastAiApproval as { approval: AiSendApproval; grantKey: string } | null
+    const selection = (this.lastAiApproval as AiSendApproval | null)?.selection
     this.lastAiApproval = null
-    const selection = sent?.approval.selection
-    const aiDisclosure = sent?.approval.remembered && selection
-      ? {
-          target: [selection.providerName || selection.providerId, selection.agentName || selection.agentId].filter(Boolean).join(' · '),
-          grantKey: sent.grantKey,
-        }
-      : undefined
+    const aiDisclosure = selection ? { target: aiTargetName(selection) } : undefined
     this.setState({
       busy: false,
       error: null,
@@ -1605,10 +1539,6 @@ export class LauncherController {
     if (expectedFrame && (expectedFrame.kind === 'param-input'
       ? current.kind !== 'param-input' || !this.matchesParamFrame(current, expectedFrame)
       : current.kind !== 'collect-input' || current.item !== expectedFrame.item)) return false
-    if (current.kind === 'ai-send') {
-      this.cancelAiSend()
-      return true
-    }
     if (current.kind === 'collect-input' && this.state.busy && this.runAbort) {
       // First Esc stops a running command and stays on it; the next Esc goes back.
       this.invalidatePendingActions()

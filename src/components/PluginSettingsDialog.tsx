@@ -27,7 +27,6 @@ import { createPluginNetwork } from '../workspace/pluginNetwork'
 import { createPluginAi } from '../workspace/ai/runtime'
 import { createPluginShell } from '../workspace/pluginShell'
 import { getPluginPermissionSnapshot, usePluginPermissionStore } from '../workspace/pluginPermissions'
-import { AiSendGrantList } from './pluginSurface/AiSendGateLayer'
 import { PluginSettingsSchemaRenderer } from './PluginSettingsSchemaRenderer'
 import { resolvePluginSettingsModal, type ResolvedPluginSettingsModal } from './pluginSettingsModalResolution'
 import { navigateToPluginSettingsField } from './pluginSettingsFieldNavigation'
@@ -391,7 +390,6 @@ function SettingsDialogBody({
             </div>
           )}
         </SettingsErrorBoundary>
-        {requestedPermissions.includes('ai.use') && <AiSendGrantList pluginId={pluginId} />}
       </div>
 
       {activeSettingsModalTarget && SettingsModalComponent && (

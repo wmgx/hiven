@@ -45,11 +45,13 @@ export const LauncherAutoGrowInput = forwardRef<HTMLTextAreaElement, Props>(func
   useLayoutEffect(() => {
     const field = ref.current
     if (!field) return
-    const lineHeight = lineHeightOf(getComputedStyle(field))
+    field.dataset.multiline = 'false'
     field.style.height = 'auto'
+    let lineHeight = lineHeightOf(getComputedStyle(field))
+    if (field.scrollHeight > lineHeight * 1.5) field.dataset.multiline = 'true'
+    lineHeight = lineHeightOf(getComputedStyle(field))
     const lines = Math.max(1, Math.round(field.scrollHeight / lineHeight))
     field.style.height = `${Math.min(lines, MAX_LINES) * lineHeight}px`
-    field.dataset.multiline = lines > 1 ? 'true' : 'false'
   }, [value])
 
   useEffect(() => {

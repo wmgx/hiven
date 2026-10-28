@@ -1,3 +1,4 @@
+import { shouldIgnoreImeKeyDown } from '../../utils/imeKeyboard'
 import { useEffect, useMemo, useRef, useState, type ComponentType, type RefObject } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { ChevronDownIcon } from 'lucide-react'
@@ -39,7 +40,7 @@ async function foregroundAppName(): Promise<string | undefined> {
   try { return (await invoke<string | null>('current_foreground_app_name'))?.trim() || undefined } catch { return undefined }
 }
 
-function HostOutputActions({ deps, text, primary = 'copy', copy, more = [], disabled }: PluginOutputActionsProps & { deps: RefObject<OutputActionsDeps> }) {
+function HostOutputActions({ deps, text, primary = 'copy', primaryAction: customPrimary, copy, more = [], disabled }: PluginOutputActionsProps & { deps: RefObject<OutputActionsDeps> }) {
   const t = useT('outputActions')
   const [app, setApp] = useState<string>()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -104,10 +105,10 @@ function HostOutputActions({ deps, text, primary = 'copy', copy, more = [], disa
   })
 
   const pasteLabel = app ? t('pasteTo', { app }) : t('pasteToForeground')
-  const primaryAction: Action = primary === 'paste' && canTextAct
+  const primaryAction: Action = customPrimary ? { id: 'custom', label: customPrimary.label, run: customPrimary.run } : primary === 'paste' && canTextAct
     ? { id: 'paste', label: pasteLabel, run: doPaste }
     : { id: 'copy', label: t('copy'), run: doCopy }
-  const secondary: Action | undefined = primaryAction.id === 'paste'
+  const secondary: Action | undefined = primaryAction.id === 'paste' || customPrimary
     ? { id: 'copy', label: t('copy'), run: doCopy }
     : canTextAct ? { id: 'paste', label: pasteLabel, run: doPaste } : undefined
   const menu: Action[] = [
@@ -115,17 +116,22 @@ function HostOutputActions({ deps, text, primary = 'copy', copy, more = [], disa
     ...(canTextAct && deps.current.openInQuickEditor ? [{ id: 'open-editor', label: t('openEditor'), run: doOpenEditor }] : []),
     ...more.map(item => ({ ...item, run: () => { if (deps.current.isCurrent()) return item.run() } })),
   ]
-  const canPrimary = primaryAction.id === 'copy' ? canCopy : canTextAct
+  const canPrimary = customPrimary ? !disabled && !customPrimary.disabled : primaryAction.id === 'copy' ? canCopy : canTextAct
 
   // ⌘↵ primary, ⌘⇧↵ paste, ⌘K more; ignored while an IME composes.
-  const keys = useRef({ primaryAction, canPrimary, canTextAct, doPaste, hasMenu: menu.length > 0 })
-  keys.current = { primaryAction, canPrimary, canTextAct, doPaste, hasMenu: menu.length > 0 }
+  const keys = useRef({ primaryAction, canPrimary, canTextAct, canCopy, doCopy, doPaste, hasMenu: menu.length > 0 })
+  keys.current = { primaryAction, canPrimary, canTextAct, canCopy, doCopy, doPaste, hasMenu: menu.length > 0 }
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.isComposing || event.keyCode === 229 || event.altKey || !deps.current.isCurrent()) return
+      if (event.defaultPrevented || shouldIgnoreImeKeyDown(event, { current: false }) || event.altKey || !deps.current.isCurrent()) return
       if (event.target instanceof Element && event.target.closest('.hiven-value-menu, [role="menu"], [role="listbox"]')) return
       const modified = event.metaKey || event.ctrlKey
-      const inEditor = event.target instanceof Element && Boolean(event.target.closest('input, textarea, [contenteditable="true"], .monaco-editor'))
+      const inEditor = event.target instanceof Element && Boolean(event.target.closest('input, textarea, [contenteditable="true"], .monaco-editor')) && !event.target.closest('[data-command-input]')
+      if (modified && event.key.toLowerCase() === 'c' && !event.shiftKey && keys.current.canCopy && !window.getSelection()?.toString()) {
+        const field = event.target
+        if ((field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) && field.selectionStart !== field.selectionEnd) return
+        event.preventDefault(); void keys.current.doCopy(); return
+      }
       if (inEditor && !modified) return
       if (!modified && event.target instanceof Element && event.target.closest('button')) return
       const current = keys.current
@@ -133,7 +139,7 @@ function HostOutputActions({ deps, text, primary = 'copy', copy, more = [], disa
       else if (event.key === 'Enter' && !event.shiftKey && current.canPrimary) { event.preventDefault(); void current.primaryAction.run() }
       else if (modified && event.key.toLowerCase() === 'k' && !event.shiftKey && current.hasMenu) { event.preventDefault(); setMenuOpen(open => !open) }
     }
-    const focus = (event: FocusEvent) => setEditing(event.target instanceof Element && Boolean(event.target.closest('input, textarea, [contenteditable="true"], .monaco-editor')))
+    const focus = (event: FocusEvent) => setEditing(event.target instanceof Element && Boolean(event.target.closest('input, textarea, [contenteditable="true"], .monaco-editor')) && !event.target.closest('[data-command-input]'))
     window.addEventListener('focusin', focus)
     window.addEventListener('keydown', onKey, true)
     return () => { window.removeEventListener('keydown', onKey, true); window.removeEventListener('focusin', focus) }
@@ -141,6 +147,7 @@ function HostOutputActions({ deps, text, primary = 'copy', copy, more = [], disa
 
   return <><SurfaceError>{error}</SurfaceError><div className="hiven-output-actions">
     {secondary && <Button variant="ghost" size="sm" disabled={secondary.id === 'copy' ? !canCopy : !canTextAct} onClick={() => void secondary.run()}>{secondary.label}<kbd>{secondary.id === 'paste' ? (editing ? '⌘⇧↵' : '⇧↵') : '⌘C'}</kbd></Button>}
+    {customPrimary && canTextAct && <Button variant="ghost" size="sm" onClick={() => void doPaste()}>{pasteLabel}<kbd>⇧↵</kbd></Button>}
     {menu.length > 0 && <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
       <DropdownMenuTrigger render={<Button variant="ghost" size="sm" disabled={disabled} />}>
         {t('more')}<kbd>⌘K</kbd><ChevronDownIcon size={14} />

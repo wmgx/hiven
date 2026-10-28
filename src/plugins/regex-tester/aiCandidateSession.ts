@@ -1,4 +1,4 @@
-import type { AiPreflightReason, PluginAiApi } from '@hiven/plugin'
+import type { AiPreflightReason, AiPreflightResult, PluginAiApi } from '@hiven/plugin'
 import { AI_CANDIDATE_LIMITS, candidatePrompt, parseCandidate, validCandidateInput, type CandidateInput, type RegexCandidate } from './aiCandidate'
 import { createRegexExecution } from './regexExecution'
 
@@ -47,7 +47,7 @@ export function createAiCandidateSession(
     if (hadCandidate) publish({ status: 'failed', reason: 'changed' })
   })
 
-  const generate = async (raw: CandidateInput): Promise<void> => {
+  const generate = async (raw: CandidateInput, approved?: AiPreflightResult): Promise<void> => {
     stop()
     if (disposed) return
     if (!validCandidateInput(raw)) { publish({ status: 'failed', reason: 'limits' }); return }
@@ -66,7 +66,7 @@ export function createAiCandidateSession(
     publish({ status: 'checking' })
     const work = async () => {
       try {
-        const selection = await ai.preflight?.({ capabilities: ['text.generate'], inputModalities: ['text'] })
+        const selection = approved ?? await ai.preflight?.({ capabilities: ['text.generate'], inputModalities: ['text'] })
         if (!current()) return
         if (selection?.status !== 'ready' || !selection.providerId || !selection.agentId) {
           fail('blocked', { preflightReason: selection?.reason }); return

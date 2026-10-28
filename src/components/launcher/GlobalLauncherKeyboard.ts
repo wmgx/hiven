@@ -81,8 +81,6 @@ export function handleGlobalLauncherKeyDown({
   if (controllerState && controllerState.frames.length > 1) {
     const topFrame = controllerState.frames[controllerState.frames.length - 1]
     if (topFrame.kind === 'param-input') return
-    // The AI send frame owns its keys (↵ send, ␣ remember); nothing reaches the list.
-    if (topFrame.kind === 'ai-send') return
 
     if (topFrame.kind === 'collect-input') {
       if (event.key === 'ArrowDown') {

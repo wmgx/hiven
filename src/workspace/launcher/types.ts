@@ -393,12 +393,7 @@ export type LauncherExecutionContext<TSettings = unknown> = {
   t: (key: string, vars?: Record<string, string | number>) => string
 }
 
-/**
- * Ask the host before sending text to AI. The host checks readiness (showing
- * the unavailable view itself), confirms unless the user granted this command,
- * and always confirms secret-shaped content. Resolves null when cancelled or
- * unavailable: return without output, the host already told the user.
- */
+/** Checks readiness and rejects secrets before sending the visible material. */
 export type PluginToolAiSend = {
   request(send: AiSendRequest): Promise<AiSendApproval | null>
 }
@@ -456,6 +451,8 @@ export type LauncherItemContribution<TSettings = unknown> = {
   hostEntry?: 'plugin-settings'
   /** Restrict where the item appears. Missing = both main surfaces. */
   surfaces?: LauncherSurfaceId[]
+  /** Advertise the AI target before the user sends material. */
+  aiSend?: import('../ai/types').AiPreflightRequest
   inputPolicy?: TextInputPolicy
   params?: LauncherParamSpec[]
   defaultParams?: Record<string, unknown>
@@ -550,6 +547,8 @@ export type LauncherItem = {
   display: LauncherItemDisplay
   behavior: LauncherBehavior
   surfaces?: LauncherSurfaceId[]
+  /** Advertise the AI target before the user sends material. */
+  aiSend?: import('../ai/types').AiPreflightRequest
   inputPolicy?: TextInputPolicy
   /** Host-owned input form for action metadata; never seed it from an Object Block. */
   metadataInput?: boolean
@@ -716,7 +715,7 @@ export type PluginToolContext<TSettings = unknown> = {
   api: PluginLauncherApi
   storage: PluginPrivateStorageApi
   ai: PluginAiApi
-  /** Send confirmation for AI tools; see {@link PluginToolAiSend}. */
+  /** Send validation for AI tools; see {@link PluginToolAiSend}. */
   aiSend: PluginToolAiSend
   /** Aborted when the user leaves this run; pass it to `ai.stream`. */
   signal: AbortSignal
@@ -741,6 +740,8 @@ type PluginToolContributionBase<TSettings> = {
   subtitleI18n?: Partial<Record<Locale, string>>
   icon?: IconRef
   aliases?: string[]
+  /** Advertise the AI target before the user sends material. */
+  aiSend?: import('../ai/types').AiPreflightRequest
   inputPolicy?: TextInputPolicy
   defaultParams?: Record<string, unknown>
   /** When true, launcher selection prompts for params even when defaults exist. */

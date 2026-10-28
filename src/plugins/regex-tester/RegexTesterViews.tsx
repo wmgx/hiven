@@ -137,7 +137,7 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
       <AiCandidateControls
         host={host} t={t} state={aiState}
         invalidate={() => aiSession.current?.invalidate()}
-        generate={(input) => { if (host.deliveryFeedbackOwner?.isCurrent() !== false) void aiSession.current?.generate(input) }}
+        generate={(input, selection) => { if (host.deliveryFeedbackOwner?.isCurrent() !== false) void aiSession.current?.generate(input, selection) }}
         cancel={() => aiSession.current?.cancel()}
         adopt={() => {
           if (host.deliveryFeedbackOwner?.isCurrent() === false) return

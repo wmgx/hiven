@@ -3,7 +3,7 @@ import { type MouseEvent as ReactMouseEvent, type MutableRefObject, type ReactNo
 import { t, type Locale } from '../../i18n'
 import { localized, type LauncherHostSurfaceTarget, type PluginSurfaceOpenTarget } from '../../store'
 import type { PluginSettingsDialogTarget } from '../../workspace/pluginSettingsStore'
-import type { AiSendFrame, CollectInputFrame, LauncherControllerState, ParamInputFrame, ResultFrame } from '../../workspace/launcher/controller'
+import type { CollectInputFrame, LauncherControllerState, ParamInputFrame, ResultFrame } from '../../workspace/launcher/controller'
 import type { LauncherResultChoice } from '../../workspace/launcher/types'
 import { LauncherBranchChoices, resolveParamValueLabel } from './LauncherBranchChoices'
 import type { LauncherMixedItem } from './LauncherMixedList'
@@ -16,7 +16,6 @@ import type { ClipboardObjectBlockState } from '../../launcher/clipboard/useClip
 import { GlobalLauncherResultFrame } from './GlobalLauncherResultFrame'
 import { GlobalLauncherPermissionFrame, type GlobalLauncherPermissionFrameState } from './GlobalLauncherPermissionFrame'
 import { GlobalLauncherCollectInputFrame } from './GlobalLauncherCollectInputFrame'
-import { GlobalLauncherAiSendFrame } from './GlobalLauncherAiSendFrame'
 import type { LauncherSurfaceUnsavedChangesReport } from './useLauncherSurfaceBackgroundIdle'
 import type { LauncherBrowseCategory } from '../../workspace/launcher/browseItems'
 import { surfaceHeight } from '../../workspace/surfaceGeometry'
@@ -74,6 +73,7 @@ export function GlobalLauncherFrameSwitch({
   onCommandParamChange,
   onCommandBlockChange,
   onCopyAllChoices,
+  onOpenAiSettings,
   onNextParam,
   onActivateResultChoice,
   onSecondaryAction,
@@ -88,10 +88,8 @@ export function GlobalLauncherFrameSwitch({
   isKeyboardNavRef,
   clipboardBlock,
   clipboardHintSelected,
-  aiSendActions,
 }: {
   /** Controller intents for the AI send confirmation and the disclosure line. */
-  aiSendActions?: { confirm: () => void; toggleRemember: () => void; openSettings?: () => void; revoke: () => void }
   hostSurfaceTarget: LauncherHostSurfaceTarget | null
   hostSurfaceHeight: number
   launcherSettingsTarget: PluginSettingsDialogTarget
@@ -143,6 +141,7 @@ export function GlobalLauncherFrameSwitch({
   /** paste: material becomes a Block · edit: ⌘E editor text · sync: replace the list Block */
   onCommandBlockChange?: (change: 'paste' | 'edit' | 'sync', text: string, frame: CollectInputFrame) => void
   /** ⌘↵ on a list of text results. */
+  onOpenAiSettings?: () => void
   onCopyAllChoices?: () => void
   onNextParam?: (frame: ParamInputFrame) => void
   onActivateResultChoice: (choice: LauncherResultChoice) => void
@@ -197,7 +196,7 @@ export function GlobalLauncherFrameSwitch({
         target={surfaceFrame}
         locale={locale}
         shellHeight={surfaceHeight(shell?.inlineHeight)}
-        autoHeight={shell?.autoHeight}
+        autoHeight={shell?.autoHeight || shell?.mode === 'command'}
         fillsWindow={surfaceFillsWindow}
         title={localized(activeSurfaceFrame.surface.title, activeSurfaceFrame.surface.titleI18n, locale)}
         onUnsavedChangesReport={onSurfaceUnsavedChangesReport}
@@ -248,22 +247,6 @@ export function GlobalLauncherFrameSwitch({
     )
   }
 
-  if (topFrame?.kind === 'ai-send' && aiSendActions) {
-    const frame = topFrame as AiSendFrame
-    return (
-      <LauncherFlowFrame frameKey={`ai-send:${frame.item.systemKey}`}>
-        <GlobalLauncherAiSendFrame
-          frame={frame}
-          locale={locale}
-          onConfirm={aiSendActions.confirm}
-          onToggleRemember={aiSendActions.toggleRemember}
-          onOpenSettings={aiSendActions.openSettings}
-          onBack={() => onFrameBack()}
-        />
-      </LauncherFlowFrame>
-    )
-  }
-
   if (topFrame?.kind === 'collect-input') {
     const frame = topFrame as CollectInputFrame
     const paramChips: { label: string; value: string }[] = []
@@ -284,6 +267,7 @@ export function GlobalLauncherFrameSwitch({
           inputRef={inputRef}
           bindSearchInputRef={bindSearchInputRef}
           frame={frame}
+          onOpenAiSettings={onOpenAiSettings}
           busy={controllerState?.busy ?? false}
           deliveryIntent={controllerState?.deliveryIntent}
           error={controllerState?.error ?? null}
@@ -303,7 +287,6 @@ export function GlobalLauncherFrameSwitch({
           onBlockTextChange={(text) => onCommandBlockChange?.('edit', text, frame)}
           onSyncBlock={(text) => onCommandBlockChange?.('sync', text, frame)}
           onCopyAll={onCopyAllChoices}
-          onRevokeAiSend={aiSendActions?.revoke}
         />
       </LauncherFlowFrame>
     )

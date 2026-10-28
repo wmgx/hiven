@@ -172,6 +172,10 @@ export const sandbox = {
   surfaceWindow: () => surfaceWindow,
   launcherSize: () => structuredClone(launcherSize),
   dragCount: () => dragCount,
+  async plugins() {
+    const { listBundledPluginPackageSummaries } = await import('../bundledPluginLoader')
+    return listBundledPluginPackageSummaries().map(({ pluginId, version }) => ({ pluginId, version }))
+  },
   async surfaces() {
     const { pluginRegistry } = await import('../pluginRegistry')
     return pluginRegistry.getAllPluginDefinitions().flatMap(({ definition, pluginId }) => (definition.ui?.surfaces ?? []).map(surface => ({ pluginId, surfaceId: surface.id, source: 'builtin', title: surface.title, titleI18n: surface.titleI18n, shell: surface.shell })))

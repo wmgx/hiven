@@ -318,6 +318,7 @@ export function useStandaloneLauncherResize({
   const contentVisibleLength = resizableSurfaceKey ? 0 : visibleFilteredLength
   const inlineHeight = surfaceShell?.inlineHeight
   const shellPresent = surfaceShell != null
+  const shellMode = surfaceShell?.mode
   const compactWidth = !hostSurfaceTarget && !launcherSettingsTarget && !surfaceKey && !shellPresent
 
   useLayoutEffect(() => {
@@ -360,11 +361,12 @@ export function useStandaloneLauncherResize({
       initialWindowWidthRef.current = initialWindowWidth
       const panel = panelRef.current
       if (!panel) return
+      if (!resizableSurfaceKey) panel.querySelectorAll('.launcher-preview-well pre, .global-launcher-header, .launcher-command-footer, [data-command-content], .surface-chrome-header, .surface-shell-error, .surface-shell-footer').forEach(element => observer.observe(element))
       const geometry = computeStandaloneLauncherGeometry({
         panel,
         hostSurfaceTarget,
         launcherSettingsTarget,
-        surfaceShell: shellPresent ? { inlineHeight, resizable: Boolean(resizableSurfaceKey) } : undefined,
+        surfaceShell: shellPresent ? { inlineHeight, mode: shellMode, resizable: Boolean(resizableSurfaceKey) } : undefined,
         currentWindowWidth: initialWindowWidth,
       })
       if (commandHeight !== undefined) {
@@ -410,8 +412,6 @@ export function useStandaloneLauncherResize({
     })
     if (!resizableSurfaceKey && panelRef.current) {
       observer.observe(panelRef.current)
-      panelRef.current.querySelectorAll('.launcher-preview-well pre, .global-launcher-header, .launcher-command-footer')
-        .forEach(element => observer.observe(element))
     }
 
     return () => {
@@ -431,6 +431,7 @@ export function useStandaloneLauncherResize({
     shellPresent,
     compactWidth,
     inlineHeight,
+    shellMode,
     hostSurfaceTarget,
     launcherSettingsTarget,
     panelRef,

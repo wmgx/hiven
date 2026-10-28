@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import type { AiSendApproval, PluginSurfaceProps } from '@hiven/plugin'
+import type { AiPreflightResult, PluginSurfaceProps } from '@hiven/plugin'
 import { Button, TextArea } from '@hiven/plugin-ui'
 import type { CandidateInput } from './aiCandidate'
 import type { AiCandidateState } from './aiCandidateSession'
@@ -7,7 +7,7 @@ import type { AiCandidateState } from './aiCandidateSession'
 type Props = Pick<PluginSurfaceProps, 'host' | 't'> & {
   state: AiCandidateState
   invalidate(): void
-  generate(input: CandidateInput): void
+  generate(input: CandidateInput, selection?: AiPreflightResult): void
   cancel(): void
   adopt(): void
 }
@@ -19,7 +19,6 @@ export function AiCandidateControls({ host, t, state, invalidate, generate, canc
   const [description, setDescription] = useState('')
   const [positive, setPositive] = useState('')
   const [negative, setNegative] = useState('')
-  const [approval, setApproval] = useState<AiSendApproval | null>(null)
   const [asking, setAsking] = useState(false)
   const request = useRef(0)
   const gate = host.aiSendGate
@@ -33,8 +32,7 @@ export function AiCandidateControls({ host, t, state, invalidate, generate, canc
     if (token !== request.current) return
     setAsking(false)
     if (!approved) return
-    setApproval(approved)
-    generate(input)
+    generate(input, approved.selection)
   }
   const edit = () => { request.current++; setAsking(false); invalidate() }
   return <details className="regex-ai">
@@ -51,7 +49,7 @@ export function AiCandidateControls({ host, t, state, invalidate, generate, canc
         <Button type="button" disabled={!gate || busy || !description.trim()} onClick={() => void send()}>{t('ai.generate')}</Button>
         {busy && !asking && <Button type="button" onClick={cancel}>{t('ai.cancel')}</Button>}
       </div>
-      {gate && state.status !== 'idle' && <gate.Disclosure commandId="generate" approval={approval} />}
+      {gate && <gate.Disclosure request={{ commandId: 'generate', label: t('ai.title'), text: description, extras: [positive, negative] }} />}
       <div className="regex-ai__status" role={state.status === 'failed' ? 'alert' : 'status'} aria-live="polite">
         {state.status !== 'idle' && state.status !== 'ready' && <p>{t(state.status === 'failed' ? `ai.failure.${state.reason}` : `ai.status.${state.status}`)}</p>}
         {state.candidate && <>

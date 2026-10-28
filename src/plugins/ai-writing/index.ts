@@ -10,7 +10,8 @@ export default definePlugin({
     icon: 'ListCollapse',
     aliases: ['summary', 'summarize', 'ai writing', '摘要', '总结', 'AI 写作'],
     inputPolicy: { mode: 'auto' },
-    // Sends text to AI: never previews; the host confirms before sending.
+    // The command page discloses the target before an explicit send.
+    aiSend: { capabilities: ['text.generate'], inputModalities: ['text'] },
     policy: { effect: 'external-write' },
     params: [{
       key: 'maxPoints',

@@ -169,9 +169,13 @@ export function useGlobalLauncherCollectInputPreview({
 }: {
   open: boolean
   controllerState: LauncherControllerState | null | undefined
-  controllerRef: RefObject<{ previewInput?: () => void | Promise<void> } | null>
+  controllerRef: RefObject<{ previewInput?: () => void | Promise<void>; watchAiTarget?: () => () => void } | null>
   inputRef: RefObject<HTMLInputElement | HTMLTextAreaElement | null>
 }) {
+  const top = controllerState?.frames.at(-1)
+  const aiItem = top?.kind === 'collect-input' && top.item.aiSend ? top.item : undefined
+  useEffect(() => { if (open && aiItem) return controllerRef.current?.watchAiTarget?.() }, [open, aiItem, controllerRef])
+
   useEffect(() => {
     if (!open || !controllerState || controllerState.frames.length <= 1) return
     const topFrame = controllerState.frames[controllerState.frames.length - 1]

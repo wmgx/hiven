@@ -186,8 +186,6 @@ interface AppState {
     aiDefaultProviderId?: string
     aiDefaultAgentId?: string
     aiDefaultEffort: 'low' | 'medium' | 'high' | 'xhigh'
-    /** AiSendGate: commands the user allowed to send without confirming. */
-    aiSendGrants: import('./workspace/ai/sendGate').AiSendGrant[]
   }
   updateSetting: (key: string, value: any) => void
   setAppHotkey: (binding: AppHotkeyBinding) => void
@@ -402,7 +400,6 @@ export const useAppStore = create<AppState>()(persist((set, get) => ({
     aiDefaultProviderId: 'openai-chatgpt',
     aiDefaultAgentId: undefined,
     aiDefaultEffort: 'medium',
-    aiSendGrants: [],
   },
   updateSetting: (key, value) => {
     if (key === 'appSearchAliases') throw new Error('Save application search aliases with setAppSearchAliases.')

@@ -196,6 +196,7 @@ export function adaptToolToLauncherItem(
     requireParamSelection: tool.requireParamSelection,
     textMatch: tool.textMatch,
     // Intent: declarative accepts + optional runtime match (same as textMatch — runtime-only)
+    aiSend: tool.aiSend,
     accepts: tool.accepts,
     match: tool.match,
     directAnswer: toDirectAnswer(tool.directAnswer),

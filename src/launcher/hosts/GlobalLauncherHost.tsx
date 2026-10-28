@@ -816,10 +816,10 @@ export function GlobalLauncherHost() {
     objectBlockTextIsFileContent: clipboardBlock.block?.meta?.textOrigin === 'file-content',
     locale,
   })
-  const commandMode = standaloneLauncher && !hostSurfaceTarget && !launcherSettingsTarget && !surfaceFrame && !itemPermissionFrame && (
+  const commandMode = standaloneLauncher && !hostSurfaceTarget && !launcherSettingsTarget && (!surfaceFrame || activeSurfaceFrame?.surface.shell?.mode === 'command') && !itemPermissionFrame && (
+    activeSurfaceFrame?.surface.shell?.mode === 'command' ||
     (activeResultFrame?.kind === 'collect-input' && !activeResultFrame.item.suggest && !activeResultFrame.item.metadataInput)
     || (activeResultFrame?.kind === 'result' && activeResultFrame.output.selection?.type !== 'multi' && (activeResultFrame.retryOnly || isSingleTextResult(activeResultFrame.output.choices)))
-    || activeResultFrame?.kind === 'ai-send'
   )
   const requestedCommandHeight = draggedCommandHeight ?? savedCommandHeight
   const commandHeight = requestedCommandHeight == null ? undefined : Math.max(318, Math.min(640, requestedCommandHeight))

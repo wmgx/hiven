@@ -1,5 +1,5 @@
 {
-  "version": 230,
+  "version": 231,
   "packages": [
     {
       "pluginId": "image-tools",
@@ -24,22 +24,22 @@
     {
       "pluginId": "translate",
       "dir": "translate",
-      "version": "1.0.35"
+      "version": "1.0.36"
     },
     {
       "pluginId": "ai-writing",
       "dir": "ai-writing",
-      "version": "2.0.1"
+      "version": "2.0.2"
     },
     {
       "pluginId": "regex-tester",
       "dir": "regex-tester",
-      "version": "1.4.10"
+      "version": "1.4.11"
     },
     {
       "pluginId": "text-diff",
       "dir": "textDiff",
-      "version": "3.6.7"
+      "version": "3.6.8"
     },
     {
       "pluginId": "clipboard-history",
