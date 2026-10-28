@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, TextInput, useImeKeyboard } from '@hiven/plugin-ui'
+import { ActionBar, Button, SurfaceHeaderField, TextInput, useImeKeyboard } from '@hiven/plugin-ui'
 import { readHistory, rememberCalculation, type HistoryEntry } from './history'
 
 let historyWrite = Promise.resolve()
@@ -89,11 +89,11 @@ export function CalculatorSurface({ host, initialText, t, calculate, calculateVa
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (ime.shouldIgnoreKeyDown(event)) return
+    if (event.defaultPrevented || ime.shouldIgnoreKeyDown(event)) return
 
     const input = inputRef.current
     const hasSelection = input?.selectionStart !== input?.selectionEnd
-    if (event.key === 'Enter' && !event.metaKey && !event.ctrlKey) {
+    if (event.key === 'Enter' && !event.metaKey && !event.ctrlKey && !event.shiftKey) {
       event.preventDefault()
       commit()
       return
@@ -112,12 +112,12 @@ export function CalculatorSurface({ host, initialText, t, calculate, calculateVa
 
   return (
     <section className="calculator-surface" aria-label={t('surface.title')}>
-      <main className="calculator-surface__body">
-        <div className="calculator-surface__expression">
-          <label htmlFor="calculator-expression">{t('surface.expression')}</label>
+      <SurfaceHeaderField>
           <TextInput
             ref={inputRef}
             id="calculator-expression"
+            data-command-input
+            aria-label={t('surface.expression')}
             className="calculator-surface__input"
             value={expression}
             onChange={(event) => {
@@ -134,7 +134,8 @@ export function CalculatorSurface({ host, initialText, t, calculate, calculateVa
             onCompositionStart={ime.onCompositionStart}
             onCompositionEnd={ime.onCompositionEnd}
           />
-        </div>
+      </SurfaceHeaderField>
+      <main className="calculator-surface__body" data-command-content>
 
         {variables.size > 0 && (
           <div className="calculator-surface__variables" aria-label={t('surface.variables')} data-launcher-scrollable>
@@ -152,7 +153,7 @@ export function CalculatorSurface({ host, initialText, t, calculate, calculateVa
           <output>{displayedResult ?? '—'}</output>
         </div>
 
-        {host.OutputActions && <host.OutputActions text={displayedResult ?? ''} />}
+        <ActionBar>{host.OutputActions && <host.OutputActions text={displayedResult ?? ''} primaryAction={{ label: t('surface.remember'), run: commit, disabled: !result || historyStatus === 'loading' }} />}</ActionBar>
 
         <section className="calculator-surface__history" aria-label={t('surface.history')}>
           <div className="calculator-surface__history-heading">

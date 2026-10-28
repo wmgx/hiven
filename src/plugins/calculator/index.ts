@@ -465,10 +465,11 @@ const definition: PluginDefinition = {
         component: CalculatorWorkspace,
         entry: { launcher: { surfaces: ['global-launcher'] }, shortcutBindable: true },
         shell: {
+          mode: 'command',
           size: 'small' as const,
           inlineHeight: 640,
-          closeOnBlur: false,
-          resizable: true,
+          closeOnBlur: true,
+          resizable: false,
         },
       },
     ],

@@ -1,9 +1,10 @@
 .calculator-surface {
-  height: 100%;
+  height: auto;
+  flex: none;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
   color: var(--foreground);
   background: var(--background);
   font-family: var(--hiven-font-ui, var(--font-sans));
@@ -23,7 +24,7 @@
 
 .calculator-surface__body {
   width: min(100%, 680px);
-  flex: 1;
+  flex: none;
   min-height: 0;
   align-self: center;
   display: flex;
@@ -60,7 +61,7 @@
   background: transparent;
   box-shadow: none;
   font-family: var(--font-mono, ui-monospace);
-  font-size: clamp(calc(var(--text-xl) * 1.1), 4vw, calc(var(--text-xl) * 1.5));
+  font-size: var(--text-input);
   font-variant-numeric: tabular-nums;
 }
 
