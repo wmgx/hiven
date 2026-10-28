@@ -363,6 +363,7 @@ function OpenQuickEditorCommandOverlay() {
           if (controllerRef.current?.back?.()) focusSearchInputAfterBack()
           else closeCommandAndRestoreFocus()
         }}
+        onSubmitCollectInput={frame => { void controllerRef.current?.submitInput(frame) }}
         onCollectInputChange={(value) => controllerRef.current?.setInputText(value)}
         onCommandParamChange={(key, value, frame) => controllerRef.current?.setCommandParam(key, value, frame)}
         onActivateResultChoice={activateResultChoice}

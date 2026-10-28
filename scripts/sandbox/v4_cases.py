@@ -399,3 +399,40 @@ def s46(page):
     expect(page.locator('.clipboard-history-item')).to_have_count(0)
     page.keyboard.press('Escape')
     expect(page.locator('.clipboard-history-item')).to_have_count(1)
+
+
+def s47(page):
+    page.evaluate('__hivenSandbox.open()')
+    page.wait_for_timeout(250)
+    query = page.locator('.global-launcher-panel textarea').first
+    query.fill('quick editor')
+    expect(page.locator('[data-launcher-row-index]').first).to_be_visible()
+    query.press('Enter')
+    editor = page.locator('.monaco-editor .view-lines').first
+    expect(editor).to_be_visible()
+    editor.click()
+    page.evaluate('__hivenSandbox.quickEditorDraft(\'{\\n  "a": 1\\n}\')')
+    page.clock.run_for(100)
+    assert page.evaluate('__hivenSandbox.quickEditorDraft()') == '{\n  "a": 1\n}'
+    expect(page.locator('.quick-editor-pane-title')).to_contain_text('Pane 1')
+    page.keyboard.press('Meta+k')
+    panel = page.locator('.quick-editor-command-panel')
+    panel.locator('textarea').first.fill('json minify')
+    expect(panel.locator('.launcher-item-title').filter(has_text='JSON Compact')).to_be_visible()
+    expect(panel.locator('.quick-editor-command-scope')).to_contain_text('Pane 1 · Full text')
+    expect(panel.locator('.l-foot-primary')).to_contain_text('Replace')
+    panel.locator('.l-foot-primary').click()
+    expect(panel).to_have_count(0)
+    assert page.evaluate('__hivenSandbox.quickEditorDraft()') == '{"a":1}'
+    expect(page.locator('.quick-editor-change').first).to_be_visible()
+    editor.click()
+    page.keyboard.press('Meta+z')
+    assert page.evaluate('__hivenSandbox.quickEditorDraft()') == '{\n  "a": 1\n}'
+    page.keyboard.press('Meta+k')
+    panel.locator('textarea').first.fill('json minify')
+    expect(panel.locator('.launcher-item-title').filter(has_text='JSON Compact')).to_be_visible()
+    expect(panel.locator('.l-foot-primary')).to_contain_text('Replace')
+    page.evaluate('__hivenSandbox.quickEditorDraft("changed draft")')
+    panel.locator('.l-foot-primary').click()
+    expect(panel.get_by_role('alert')).to_contain_text('Text changed. The result was not inserted.')
+    assert page.evaluate('__hivenSandbox.quickEditorDraft()') == 'changed draft'

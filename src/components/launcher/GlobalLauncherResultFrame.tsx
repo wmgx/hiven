@@ -18,11 +18,12 @@ export function isSingleTextResult(choices: LauncherResultChoice[]): boolean {
   if (!text) return false
   // Confirm dialogs use tone danger/muted — keep list UI.
   if (choice.tone === 'danger' || choice.tone === 'muted') return false
-  return getHostOutputIntent(choice) === 'copy' || getHostOutputIntent(choice) === 'return-to-launcher'
+  return ['copy', 'return-to-launcher', 'replace-active-text'].includes(getHostOutputIntent(choice) ?? '')
 }
 
 export function GlobalLauncherResultFrame({
   frame,
+  scopeLabel,
   busy = false,
   deliveryIntent,
   error,
@@ -36,6 +37,7 @@ export function GlobalLauncherResultFrame({
   onPastePreviewText,
   onCopyAll,
 }: {
+  scopeLabel?: string
   frame: ResultFrame
   busy?: boolean
   deliveryIntent?: LauncherControllerState['deliveryIntent']
@@ -105,6 +107,7 @@ export function GlobalLauncherResultFrame({
         }}
       >
         <div className="global-launcher-header l-search" style={{ borderBottom: '1px solid var(--border)' }}>
+          {scopeLabel && <span className="quick-editor-command-scope">{scopeLabel}</span>}
           <LauncherCommandTag
             title={frame.sourceTitle || textChoice.title}
             locale={locale}
@@ -183,7 +186,7 @@ export function GlobalLauncherResultFrame({
             locale={locale}
             busy={busy}
             status={busy ? { text: t(locale, deliveryIntent === 'copy' ? 'palette.outputCopying' : 'palette.outputDelivering') } : undefined}
-            primaryLabel={primaryIsReturn ? t(locale, 'outputActions.continue') : t(locale, 'outputActions.copy')}
+            primaryLabel={primaryIsReturn ? t(locale, 'outputActions.continue') : t(locale, getHostOutputIntent(textChoice) === 'replace-active-text' ? 'quickEditor.replace' : 'outputActions.copy')}
             onPrimary={runPrimary}
             pasteApp={app}
             onPaste={canPaste ? paste : undefined}

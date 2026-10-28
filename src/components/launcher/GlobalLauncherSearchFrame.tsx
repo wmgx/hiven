@@ -161,6 +161,7 @@ export function GlobalLauncherSearchFrame({
             }}
           />
         )}
+        {searchContext && <span className="quick-editor-command-scope">{searchContext}</span>}
         <LauncherAutoGrowInput
           ref={bindSearchInputRef ?? (inputRef as RefObject<HTMLTextAreaElement | null>)}
           value={query}
@@ -186,7 +187,6 @@ export function GlobalLauncherSearchFrame({
           }}
           placeholder={resolvedPlaceholder}
         />
-        {searchContext ? <span className="meta whitespace-nowrap">{searchContext}</span> : null}
         {onBrowseActions && query.length > 0 && (
           <button
             type="button"
@@ -373,7 +373,7 @@ export function GlobalLauncherSearchFrame({
             if (selectedItem) onSelectItem(selectedItem)
           }}
         >
-          <span className="l-foot-primary-label">{primaryActionLabel(selectedItem, locale)}</span>
+          <span className="l-foot-primary-label">{searchContext && selectedItem?.domainItem.inputPolicy ? t(locale, 'quickEditor.replace') : primaryActionLabel(selectedItem, locale)}</span>
           {(showListHints || focusedControl?.action === 'primary') && <kbd>↵</kbd>}
         </button>
       </div>

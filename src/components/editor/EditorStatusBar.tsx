@@ -43,9 +43,9 @@ export function EditorStatusBar({
   return (
     <div
       ref={barRef}
-      className="h-[22px] flex items-center px-2 gap-2 shrink-0 overflow-hidden whitespace-nowrap text-[10px]"
+      className="editor-status-bar h-[22px] flex items-center px-2 gap-2 shrink-0 overflow-hidden whitespace-nowrap text-[10px]"
       style={{
-        borderTop: 'var(--hairline) solid var(--color-border-tertiary)',
+        borderTop: 'var(--editor-status-border-top, var(--hairline) solid var(--color-border-tertiary))',
         background: 'var(--color-background-secondary)',
         color: 'var(--color-text-tertiary)',
       }}

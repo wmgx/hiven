@@ -12,6 +12,7 @@ import { QuickEditorVersionHistory } from './QuickEditorVersionHistory'
 import { useT } from '../../i18n'
 import type { QuickEditorPaneId, QuickEditorPaneState } from '../../workspace/quickEditor/quickEditorTypes'
 import { X } from 'lucide-react'
+import './QuickEditor.css'
 import { ConfirmDialog } from '../../plugin-ui'
 import { pluginRegistry } from '../../workspace/pluginRegistry'
 import { applyEffectsToQuickEditor } from '../../workspace/quickEditor/quickEditorActions'
@@ -27,6 +28,7 @@ export function QuickEditorPanel({ onRequestExit }: { onRequestExit: () => void 
     const state = useQuickEditorStore.getState()
     if (state.pendingPaneClose) state.cancelPaneClose(state.pendingPaneClose)
   }, [])
+  const activePaneId = useQuickEditorStore(s => s.activePaneId)
   const panes = useQuickEditorStore((s) => s.panes)
   const paneOrder = useQuickEditorStore((s) => s.paneOrder)
   const splitDirection = useQuickEditorStore((s) => s.splitDirection)
@@ -123,13 +125,13 @@ export function QuickEditorPanel({ onRequestExit }: { onRequestExit: () => void 
         {visiblePanes.map((pane, index) => (
           <div
             key={pane.id}
-            className="min-w-0 min-h-0 flex-1"
+            className={`quick-editor-pane min-w-0 min-h-0 flex-1${pane.id === activePaneId ? ' is-active' : ''}`}
             style={{
               borderLeft: isHorizontal && index > 0 ? 'var(--hairline) solid var(--color-border-tertiary)' : undefined,
               borderTop: !isHorizontal && index > 0 ? 'var(--hairline) solid var(--color-border-tertiary)' : undefined,
             }}
           >
-            <QuickEditorPaneSurface pane={pane} autoFocus={index === visiblePanes.length - 1} />
+            <QuickEditorPaneSurface index={index + 1} pane={pane} autoFocus={index === visiblePanes.length - 1} />
           </div>
         ))}
       </div>
@@ -166,9 +168,11 @@ export function QuickEditorPanel({ onRequestExit }: { onRequestExit: () => void 
 }
 
 function QuickEditorPaneSurface({
+  index,
   pane,
   autoFocus,
 }: {
+  index: number
   pane: QuickEditorPaneState
   autoFocus: boolean
 }) {
@@ -209,6 +213,7 @@ function QuickEditorPaneSurface({
   return (
     <EditorSurface
       binding={binding}
+      statusBarLeading={<span className="quick-editor-pane-title">{tQuickEditor('paneTitle', { index })}</span>}
       autoFocus={autoFocus}
       bottomPanels={paneBottomPanels.map((instance) => {
         const panelEntry = pluginRegistry.resolvePanel(instance.panelId, instance.isDevPanel)

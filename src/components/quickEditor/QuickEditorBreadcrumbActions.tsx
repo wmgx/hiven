@@ -8,7 +8,7 @@ import { hideLauncherWindow } from '../../workspace/windowManager/launcherWindow
 import { isStandaloneLauncherWindow } from '../launcher/GlobalLauncherHostLifecycle'
 import { suppressStandaloneLauncherBlur } from '../../workspace/launcherBlurGuard'
 
-export function QuickEditorBreadcrumbActions() {
+export function QuickEditorBreadcrumbActions({ detached = false }: { detached?: boolean }) {
   const wordWrap = useAppStore((s) => s.settings.wordWrap)
   const updateSetting = useAppStore((s) => s.updateSetting)
   const openQuickEditorCommand = useAppStore((s) => s.openQuickEditorCommand)
@@ -59,14 +59,14 @@ export function QuickEditorBreadcrumbActions() {
         <Sparkles size={13} />
         <span>{tQuickEditor('runCommand')}</span>
       </button>
-      <button
+      {!detached && <button
         type="button"
         className="editor-topbar-button"
         title={tQuickEditor('detach')}
         onClick={handleDetach}
       >
         <ExternalLink size={13} />
-      </button>
+      </button>}
     </>
   )
 }

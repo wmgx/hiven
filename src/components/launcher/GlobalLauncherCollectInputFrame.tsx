@@ -151,6 +151,7 @@ export function GlobalLauncherCollectInputFrame({
   error,
   locale,
   paramChips,
+  scopeLabel,
   onInputChange,
   onBack,
   onExitCommand,
@@ -175,6 +176,7 @@ export function GlobalLauncherCollectInputFrame({
   deliveryIntent?: LauncherControllerState['deliveryIntent']
   error?: string | null
   locale: Locale
+  scopeLabel?: string
   paramChips: { label: string; value: string }[]
   onInputChange: (value: string) => void
   /** Empty ⌫ / Esc: stack-style (re-enter last param, then leave command). */
@@ -311,7 +313,7 @@ export function GlobalLauncherCollectInputFrame({
     ? undefined
     : error && !freshChoice
       ? t(locale, 'palette.outputRetry')
-      : freshChoice ? t(locale, 'outputActions.copy') : t(locale, 'palette.quickEntryRun')
+      : freshChoice ? t(locale, getHostOutputIntent(freshChoice) === 'replace-active-text' ? 'quickEditor.replace' : 'outputActions.copy') : t(locale, 'palette.quickEntryRun')
 
   const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
@@ -394,6 +396,7 @@ export function GlobalLauncherCollectInputFrame({
   return (
     <>
       <div className="global-launcher-header l-search" style={{ borderBottom: '1px solid var(--border)' }}>
+        {scopeLabel && <span className="quick-editor-command-scope">{scopeLabel}</span>}
         <LauncherCommandTag
           title={commandTitle}
           icon={frame.item.display.icon}

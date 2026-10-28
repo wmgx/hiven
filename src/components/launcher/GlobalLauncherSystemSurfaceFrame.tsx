@@ -42,7 +42,7 @@ export function GlobalLauncherSystemSurfaceFrame({
   if (target === 'quick-editor') {
     return (
       <SurfaceShell
-        title={t(locale, 'quickEditor.title')} onBack={onBack} onClose={onClose} actions={<QuickEditorBreadcrumbActions />}
+        title={t(locale, 'quickEditor.title')} icon="FileText" onBack={onBack} onClose={onClose} actions={<QuickEditorBreadcrumbActions />}
         className={shellClassName}
         tabIndex={-1}
         style={{ height }}

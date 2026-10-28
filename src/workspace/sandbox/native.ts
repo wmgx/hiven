@@ -211,6 +211,11 @@ export const sandbox = {
     if (!result?.ok || !result.output?.choices.length) throw new Error('Expected cursor path choice')
     await result.output.choices[0].primaryAction()
   },
+  async quickEditorDraft(text?: string) {
+    const { useQuickEditorStore } = await import('../quickEditor/quickEditorStore')
+    if (text !== undefined) useQuickEditorStore.getState().setText(text)
+    return useQuickEditorStore.getState().text
+  },
   async openSettings(pluginId?: string) {
     await sandbox.open()
     if (pluginId) {

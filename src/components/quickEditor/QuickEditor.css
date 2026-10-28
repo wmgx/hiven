@@ -1,0 +1,12 @@
+.quick-editor-pane .editor-status-bar { order: -1; height: 32px; font-size: var(--text-sm); border-bottom: 1px solid var(--border); --editor-status-border-top: 0; }
+.quick-editor-pane-title { color: var(--foreground); font-weight: 600; }
+.quick-editor-pane.is-active .editor-status-bar { box-shadow: inset 0 2px var(--primary); }
+.quick-editor-command-scope { color: var(--muted-foreground); font-size: var(--text-sm); flex-shrink: 0; max-width: 42%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quick-editor-command-panel { background: var(--panel); border-color: var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-panel); }
+.quick-editor-command-panel .l-search { min-height: 56px; }
+.quick-editor-command-panel .l-row, .quick-editor-command-panel .l-row.sel, .quick-editor-command-panel .l-row.selected { height: 48px; }
+.quick-editor-command-panel .l-foot { min-height: 40px; background: var(--panel); }
+.quick-editor-change { background: color-mix(in srgb, var(--primary) 16%, transparent); }
+.qe-version-drawer { border-color: var(--border); box-shadow: var(--shadow-panel); }
+.qe-version-drawer__head { height: 56px; }
+.qe-version-item { min-height: 48px; border-radius: var(--radius-sm); }

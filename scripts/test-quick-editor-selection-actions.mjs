@@ -69,6 +69,7 @@ const compiled = ts.transpileModule(source, {
 }).outputText
 const module = { exports: {} }
 vm.runInNewContext(compiled, {
+  setTimeout: (callback) => { callback() },
   module,
   exports: module.exports,
   require(specifier) {
@@ -114,6 +115,7 @@ function fakeEditor(initialText, selections) {
   let undoStops = 0
   const model = {
     getValue: () => value,
+    getPositionAt: offset => endPosition(value.slice(0, offset)),
     getOffsetAt: ({ lineNumber, column }) => offsetAt(value, lineNumber, column),
     isDisposed: () => false,
     getValueInRange: (range) => value.slice(
@@ -127,6 +129,7 @@ function fakeEditor(initialText, selections) {
   }
   return {
     getModel: () => model,
+    createDecorationsCollection: entries => { assert.equal(entries.length, 1); return { clear() {} } },
     getSelections: () => selections,
     pushUndoStop: () => { undoStops += 1; return true },
     executeEdits: (_source, edits) => {

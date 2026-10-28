@@ -191,10 +191,21 @@ export function replaceQuickEditorCommandTarget(
       ? target.selectionRange
       : target.model.getFullModelRange()
     if (!range) throw new Error(changedMessage)
+    const offset = target.model.getOffsetAt({ lineNumber: range.startLineNumber, column: range.startColumn })
+    const original = target.model.getValueInRange(range)
+    let start = 0, end = 0
+    while (start < original.length && start < replacement.length && original[start] === replacement[start]) start++
+    while (end < original.length - start && end < replacement.length - start && original[original.length - end - 1] === replacement[replacement.length - end - 1]) end++
     target.editor.pushUndoStop()
     const applied = target.editor.executeEdits('quick-editor-command', [{ range, text: replacement }])
     target.editor.pushUndoStop()
     if (!applied) throw new Error(changedMessage)
+    if (original !== replacement) {
+      const first = target.model.getPositionAt(offset + start)
+      const last = target.model.getPositionAt(offset + replacement.length - end)
+      const highlight = target.editor.createDecorationsCollection([{ range: { startLineNumber: first.lineNumber, startColumn: first.column, endLineNumber: last.lineNumber, endColumn: last.column }, options: { className: 'quick-editor-change', isWholeLine: start === replacement.length - end } }])
+      setTimeout(() => { if (!target.model?.isDisposed()) highlight.clear() }, 1200)
+    }
     return
   }
 

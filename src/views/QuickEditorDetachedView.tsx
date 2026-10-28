@@ -1,5 +1,4 @@
 import { useCallback, useEffect, type PointerEvent as ReactPointerEvent } from 'react'
-import { Search, Sparkles, WrapText, X } from 'lucide-react'
 import { useAppStore } from '../store'
 import { loadInstalledPluginsFromStore } from '../workspace/pluginRuntime'
 import { registerBundledPluginPackages } from '../workspace/bundledPluginLoader'
@@ -12,15 +11,14 @@ import {
 import { listenForQuickEditorOverwrites } from '../workspace/quickEditor/quickEditorOverwriteHandoff'
 import { useQuickEditorStore } from '../workspace/quickEditor/quickEditorStore'
 import { QuickEditorPanel } from '../components/quickEditor/QuickEditorPanel'
-import { ToastContainer } from '../components/workspace/ToastContainer'
+import { SurfaceShell } from '../components/pluginSurface/SurfaceShell'
+import { QuickEditorBreadcrumbActions } from '../components/quickEditor/QuickEditorBreadcrumbActions'
 import {
   closeQuickEditorWindow,
   startQuickEditorWindowDrag,
   startQuickEditorWindowResize,
 } from '../workspace/windowManager/quickEditorWindow'
 import { useAutoCloseCurrentWindowOnBackgroundIdle } from '../components/launcher/GlobalLauncherWindowLifecycle'
-import { quickEditorImperative } from '../components/quickEditor/quickEditorImperative'
-import { suppressStandaloneLauncherBlur } from '../workspace/launcherBlurGuard'
 import { useT } from '../i18n'
 type ResizeDirection = 'East' | 'North' | 'NorthEast' | 'NorthWest' | 'South' | 'SouthEast' | 'SouthWest' | 'West'
 
@@ -45,12 +43,7 @@ const resizeHandles: Array<{ direction: ResizeDirection; className: string }> = 
 export function QuickEditorDetachedView() {
   const theme = useAppStore((s) => s.settings.theme)
   const fontSize = useAppStore((s) => s.settings.fontSize)
-  const wordWrap = useAppStore((s) => s.settings.wordWrap)
-  const updateSetting = useAppStore((s) => s.updateSetting)
-  const openQuickEditorCommand = useAppStore((s) => s.openQuickEditorCommand)
-  const tEditor = useT('editor')
   const tQuickEditor = useT('quickEditor')
-  const commandShortcut = navigator.platform.toLowerCase().includes('mac') ? 'Cmd+K' : 'Ctrl+K'
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -112,7 +105,7 @@ export function QuickEditorDetachedView() {
   })
 
   const handleWindowDrag = useCallback((event: ReactPointerEvent<HTMLElement>) => {
-    if (event.button !== 0) return
+    if (event.button !== 0 || !(event.target instanceof Element) || !event.target.closest('.surface-chrome-header')) return
     const excluded = event.target instanceof HTMLElement
       ? event.target.closest('button, input, textarea, select, a, [role="button"], [data-no-drag], .monaco-editor')
       : null
@@ -140,52 +133,11 @@ export function QuickEditorDetachedView() {
       className="quick-editor-detached-window relative h-screen w-screen overflow-hidden flex flex-col"
       data-theme={theme}
       style={{ fontSize }}
+      onPointerDown={handleWindowDrag}
     >
-      <div className="editor-topbar" onPointerDown={handleWindowDrag}>
-        <div className="editor-topbar-system">
-          <button
-            type="button"
-            className={`editor-topbar-button${wordWrap ? ' is-active' : ''}`}
-            onClick={() => updateSetting('wordWrap', !wordWrap)}
-            title={tEditor('toggleWordWrap')}
-          >
-            <WrapText size={14} />
-          </button>
-          <button
-            type="button"
-            className="editor-topbar-button"
-            onClick={() => quickEditorImperative.triggerFind()}
-            title={tEditor('findReplace')}
-          >
-            <Search size={14} />
-          </button>
-        </div>
-        <div className="editor-topbar-plugin-slot">
-          <button
-            type="button"
-            className="ft-btn ft-btn-ghost ft-btn-sm editor-topbar-run"
-            onClick={() => {
-              suppressStandaloneLauncherBlur()
-              openQuickEditorCommand()
-            }}
-            title={tQuickEditor('runCommandWithShortcut', { shortcut: commandShortcut })}
-          >
-            <Sparkles size={13} />
-            <span>{tQuickEditor('runCommand')}</span>
-          </button>
-          <button
-            type="button"
-            className="editor-topbar-button"
-            title={tQuickEditor('closeWindow')}
-            onClick={handleRequestExit}
-          >
-            <X size={14} />
-          </button>
-        </div>
-      </div>
-      <div className="flex-1 min-h-0">
+      <SurfaceShell title={tQuickEditor('title')} icon="FileText" onClose={handleRequestExit} standalone style={{ height: '100%' }} actions={<QuickEditorBreadcrumbActions detached />}>
         <QuickEditorPanel onRequestExit={handleRequestExit} />
-      </div>
+      </SurfaceShell>
       {resizeHandles.map((handle) => (
         <div
           key={handle.direction}
@@ -194,7 +146,6 @@ export function QuickEditorDetachedView() {
           onPointerDown={handleResizeStart(handle.direction)}
         />
       ))}
-      <ToastContainer />
     </div>
   )
 }

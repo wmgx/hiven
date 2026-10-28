@@ -263,6 +263,7 @@ export function GlobalLauncherFrameSwitch({
     return (
       <LauncherFlowFrame frameKey={`collect:${frame.item.systemKey}`}>
         <GlobalLauncherCollectInputFrame
+          scopeLabel={searchContext}
           isImeComposingRef={isImeComposingRef}
           inputRef={inputRef}
           bindSearchInputRef={bindSearchInputRef}
@@ -297,6 +298,7 @@ export function GlobalLauncherFrameSwitch({
     return (
       <LauncherFlowFrame frameKey={`result:${frame.sourceTitle ?? ''}`}>
         <GlobalLauncherResultFrame
+          scopeLabel={searchContext}
           frame={frame}
           busy={controllerState?.busy ?? false}
           deliveryIntent={controllerState?.deliveryIntent}
