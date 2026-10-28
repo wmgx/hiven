@@ -329,13 +329,10 @@ def s17(page):
     expect(rows).to_have_count(2)
     rows.first.click()
     page.keyboard.press('Shift+ArrowDown')
+    # Mixed selections paste their text; the skip is announced before Enter.
+    expect(chrome.get_by_text('1 image/file item(s) will be skipped')).to_be_visible()
     page.keyboard.press('Enter')
-    # Existing mixed-selection policy rejects concatenation; V3a changes feedback only.
-    expect(page.locator('.surface-toast')).to_contain_text('Selection contains images or files')
-    editor(page, '')
-    page.mouse.move(1, 1)
-    page.clock.fast_forward(2700)
-    expect(page.locator('.surface-toast')).to_have_count(0)
+    editor(page, 'synthetic text')
 
 
 def s18(page):

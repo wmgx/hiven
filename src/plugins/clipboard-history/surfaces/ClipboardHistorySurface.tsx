@@ -590,11 +590,14 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
     ? filteredItems.filter((entry) => selectedIds.includes(entry.id)) : [item], [filteredItems, selectedIds])
   const selectedItems = selectedItem ? actionItems(selectedItem) : []
   const multiple = selectedItems.length > 1
-  const selectionHasNonText = multiple && selectedItems.some((item) => item.kind !== 'text')
+  const selectionHasNonText = multiple && selectedItems.every((item) => item.kind !== 'text')
+  // Mixed selections join only their text; the footer says so before the user acts.
+  const skippedCount = multiple ? selectedItems.filter((item) => item.kind !== 'text').length : 0
   const readActionItems = useCallback(async (item: ClipboardHistoryItem, isCurrent: () => boolean) => {
-    const selection = actionItems(item)
-    if (selectedIds.length > 1 && selectedIds.includes(item.id) && selection.length !== selectedIds.length) throw new Error('error.loadFailed')
-    if (selection.length > 1 && selection.some((entry) => entry.kind !== 'text')) {
+    const picked = actionItems(item)
+    if (selectedIds.length > 1 && selectedIds.includes(item.id) && picked.length !== selectedIds.length) throw new Error('error.loadFailed')
+    const selection = picked.length > 1 ? picked.filter((entry) => entry.kind === 'text') : picked
+    if (selection.length === 0) {
       void host.notify?.toast({ level: 'info', message: t('selection.textOnly') })
       throw new Error('cancelled')
     }
@@ -1083,7 +1086,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         </div>
 
         <SurfaceFooterHints className="clipboard-history-footer">
-          {multiple && <span role="status">{t('selection.count', { count: selectedItems.length })}</span>}
+          {multiple && <span role="status">{t('selection.count', { count: selectedItems.length })}{skippedCount > 0 && ` · ${t('selection.skipped', { count: skippedCount })}`}</span>}
           {pasteNotice ? <span role="status" style={{ color: 'var(--foreground)' }}>{pasteNotice}</span> : <>
             {/* Keep hint slots in layout when button focus temporarily disables shortcuts. */}
             <span style={{ visibility: shortcutHints.paste ? 'visible' : 'hidden' }} aria-hidden={!shortcutHints.paste}>↵ {t('hint.paste')}</span>
