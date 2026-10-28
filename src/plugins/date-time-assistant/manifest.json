@@ -4,7 +4,7 @@
   "displayNameI18n": {
     "zh": "时间助手"
   },
-  "version": "1.12.10",
+  "version": "1.12.11",
   "capabilities": [
     "command",
     "instant-suggestion",

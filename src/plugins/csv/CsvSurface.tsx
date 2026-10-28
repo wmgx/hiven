@@ -11,7 +11,6 @@ import {
 import 'react-data-grid/lib/styles.css'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import { Button, Checkbox, IconButton, SearchField, SegmentedControl, Select, TextArea, TextInput, useImeKeyboard, useLocalEscapeLayer } from '@hiven/plugin-ui'
-import { BackIcon } from '@hiven/plugin-ui/icons'
 import {
   applyTransforms,
   applyTableQuery,
@@ -1072,17 +1071,6 @@ export function CsvSurface(props: PluginSurfaceProps) {
       data-launcher-scrollable
     >
       <header className="csv-tools-surface__header">
-        <IconButton
-          type="button"
-          className="csv-tools-surface__back"
-          label={localizedText(t, 'action.back', 'Back')}
-          onClick={() => host.requestBack()}
-        >
-          <BackIcon size={14} strokeWidth={2} />
-          <span className="csv-tools-surface__back-root">hiven</span>
-        </IconButton>
-        <span className="csv-tools-surface__sep">/</span>
-        <span className="csv-tools-surface__crumb">{localizedText(t, 'surface.title', 'CSV Tools')}</span>
         {finalTable ? <span className="csv-tools-surface__meta">{sizeLabel}</span> : null}
         {delimiterHint ? <span className="csv-tools-surface__meta mono">{delimiterHint}</span> : null}
         {linkedFileLabel ? (

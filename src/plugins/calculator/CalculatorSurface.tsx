@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, IconButton, TextInput, useImeKeyboard } from '@hiven/plugin-ui'
-import { BackIcon } from '@hiven/plugin-ui/icons'
+import { Button, TextInput, useImeKeyboard } from '@hiven/plugin-ui'
 import { readHistory, rememberCalculation, type HistoryEntry } from './history'
 
 let historyWrite = Promise.resolve()
@@ -113,14 +112,6 @@ export function CalculatorSurface({ host, initialText, t, calculate, calculateVa
 
   return (
     <section className="calculator-surface" aria-label={t('surface.title')}>
-      <header className="calculator-surface__header">
-        <IconButton type="button" label={t('surface.back')} onClick={() => host.requestBack()}>
-          <BackIcon size={14} strokeWidth={2} />
-        </IconButton>
-        <strong>{t('surface.title')}</strong>
-        <div className="calculator-surface__spacer" />
-      </header>
-
       <main className="calculator-surface__body">
         <div className="calculator-surface__expression">
           <label htmlFor="calculator-expression">{t('surface.expression')}</label>

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
 import { Button, IconButton, Select, TextArea } from '@hiven/plugin-ui'
-import { BackIcon, SettingsIcon } from '@hiven/plugin-ui/icons'
+import { SettingsIcon } from '@hiven/plugin-ui/icons'
 import { AlertTriangle, ArrowRight, LoaderCircle } from 'lucide-react'
 import type { SourceLanguageCode, TargetLanguageCode, TranslateProfile, TranslateSettings } from '../settings/model'
 import { currentUsageMonth, isProfileUsable, profileDisplayName } from '../settings/model'
@@ -470,10 +470,6 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
   return (
     <section className="translate-surface" aria-label={localizedText(t, 'surface.title', 'Translate')}>
       <header className="translate-surface__header">
-        <IconButton type="button" label={localizedText(t, 'action.back', 'Back')} onClick={() => host.requestBack()}>
-          <BackIcon size={14} strokeWidth={2} />
-        </IconButton>
-        <span className="translate-surface__title">{localizedText(t, 'surface.title', 'Translate')}</span>
         <div className="translate-surface__header-spacer" />
         {activeProfile?.provider === 'ai' && (status.kind === 'waiting' || status.kind === 'translating') && (
           <Button type="button" onClick={stopTranslation}>{t('action.stop')}</Button>

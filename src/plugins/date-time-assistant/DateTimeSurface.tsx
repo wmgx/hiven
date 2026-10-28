@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, CopyIconButton, IconButton, TextInput } from '@hiven/plugin-ui'
-import { BackIcon } from '@hiven/plugin-ui/icons'
+import { Button, CopyIconButton, TextInput } from '@hiven/plugin-ui'
 import './style.css'
 
 export type DateTimeSnapshot = {
@@ -33,14 +32,6 @@ export function DateTimeSurface({ defaultOffset, host, initialText, t, convert }
 
   return (
     <section className="date-time-surface" aria-label={t('surface.title')}>
-      <header className="date-time-surface__header">
-        <IconButton type="button" label={t('surface.back')} onClick={() => host.requestBack()}>
-          <BackIcon size={14} strokeWidth={2} />
-        </IconButton>
-        <strong>{t('surface.title')}</strong>
-        <span />
-      </header>
-
       <main className="date-time-surface__body" data-launcher-scrollable>
         <div className="date-time-surface__inputs">
           <label className="date-time-surface__input">

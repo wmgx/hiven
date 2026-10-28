@@ -1,7 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, IconButton, Select, TextArea, TextInput } from '@hiven/plugin-ui'
-import { BackIcon } from '@hiven/plugin-ui/icons'
+import { Button, Select, TextArea, TextInput } from '@hiven/plugin-ui'
 import { MAX_REGEX_MATCHES, type MatchResult } from './regexCore'
 import { useRegexExecution } from './useRegexExecution'
 import { extractRegexMatches, type RegexExtractionTarget } from './extractMatches'
@@ -70,6 +69,7 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
   }
 
   useLayoutEffect(() => host.deliveryFeedbackOwner?.subscribeInvalidation(() => invalidateResult(false)), [host.deliveryFeedbackOwner])
+  useLayoutEffect(() => host.subscribeLeaveIntent?.(() => invalidateResult()), [host.subscribeLeaveIntent])
 
   const toggleFlag = (flag: string) => {
     invalidateResult()
@@ -94,14 +94,6 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
 
   return (
     <section className="regex-tester-surface" aria-label={t('surface.title')}>
-      <header className="regex-tester-surface__header">
-        <IconButton type="button" label={t('surface.back')} onClick={() => { invalidateResult(); host.requestBack() }}>
-          <BackIcon size={14} strokeWidth={2} />
-        </IconButton>
-        <strong>{t('surface.title')}</strong>
-        <div className="regex-tester-surface__header-spacer" />
-      </header>
-
       <div className="regex-tester-surface__controls">
         <label className="regex-tester-surface__expression">
           <span>{t('surface.expression')}</span>

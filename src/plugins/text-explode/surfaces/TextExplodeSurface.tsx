@@ -256,18 +256,6 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
   return (
     <div className="text-explode-surface" onKeyDown={handleKeyDown}>
       <div className="tx-search-row">
-        <span className="tx-token" data-no-select>
-          <Bomb size={13} aria-hidden="true" />
-          {t('token.label')}
-          <IconButton
-            type="button"
-            className="tx-token-remove"
-            label={t('token.remove')}
-            onClick={requestBack}
-          >
-            <CloseIcon size={11} />
-          </IconButton>
-        </span>
         <TextInput
           autoFocus
           data-plugin-surface-autofocus="sticky"

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, IconButton, SegmentedControl, Select, TextArea, TextInput } from '@hiven/plugin-ui'
-import { BackIcon } from '@hiven/plugin-ui/icons'
+import { Button, SegmentedControl, Select, TextArea, TextInput } from '@hiven/plugin-ui'
 import { saveQrImage } from './saveQrImage'
 import { createQrPasteHandlers } from './qrPaste'
 import { createQrScanSession, EMPTY_QR_SCAN } from './qrScanSession'
@@ -64,6 +63,8 @@ export function QrSurface(props: PluginSurfaceProps) {
       scanRef.current = null
     }
   }, [])
+
+  useEffect(() => host.subscribeLeaveIntent?.(() => scanRef.current?.reset()), [host.subscribeLeaveIntent])
 
   useEffect(() => {
     const payload = text.trim()
@@ -160,13 +161,6 @@ export function QrSurface(props: PluginSurfaceProps) {
   return (
     <section className="qr-surface" aria-label={t('surface.title')}>
       <header className="qr-surface__header">
-        <IconButton type="button" label={t('action.back')} onClick={() => {
-          scanRef.current?.reset()
-          host.requestBack()
-        }}>
-          <BackIcon size={14} strokeWidth={2} />
-        </IconButton>
-        <span className="qr-surface__crumb">{t('surface.title')}</span>
         <SegmentedControl
           aria-label={t('surface.title')}
           value={mode}

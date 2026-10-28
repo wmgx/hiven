@@ -1,7 +1,5 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { IconButton } from '@hiven/plugin-ui'
-import { BackIcon } from '@hiven/plugin-ui/icons'
 import { ImageBase64Panel } from './ImageBase64Panel'
 import { ImageCropPanel } from './ImageCropPanel'
 import { ImageRedactionPanel } from './ImageRedactionPanel'
@@ -20,16 +18,10 @@ export function ImageToolsSurface(props: PluginSurfaceProps) {
   const { host, t, surfaceId } = props
   const invalidation = useRef<(() => void) | null>(null)
   const noop = () => {}
-  const leave = (action: () => void) => () => { invalidation.current?.(); action() }
+  useEffect(() => host.subscribeLeaveIntent?.(() => invalidation.current?.()), [host.subscribeLeaveIntent])
   const panelProps = { ...props, onDirtyChange: noop, invalidateRef: invalidation }
   return (
     <section className="image-tools-surface" aria-label={t(TITLES[surfaceId] ?? 'surface.title')}>
-      <header className="image-tools-header">
-        <IconButton type="button" label={t('action.back')} onClick={leave(() => host.requestBack())}>
-          <BackIcon size={14} strokeWidth={2} />
-        </IconButton>
-        <strong>{t(TITLES[surfaceId] ?? 'surface.title')}</strong>
-      </header>
       {surfaceId === 'image-base64' ? <ImageBase64Panel {...panelProps} active />
         : surfaceId === 'image-crop' ? <ImageCropPanel {...panelProps} />
         : surfaceId === 'image-redact' ? <ImageRedactionPanel {...panelProps} />
