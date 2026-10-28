@@ -173,11 +173,19 @@
   "expression.title": "JSON expression",
   "expression.label": "Expression",
   "error.expression": "Invalid JSON or expression",
-  "cursor.jsonPath": "Copy JSONPath at cursor",
-  "cursor.pointer": "Copy JSON Pointer at cursor",
+  "cursor.jsonPath": "Copy JSONPath of current value",
+  "cursor.pointer": "Copy JSON Pointer of current value",
   "cursor.root": "Root (empty JSON Pointer)",
   "cursor.error.invalid": "The draft is not valid JSON",
   "cursor.error.duplicate": "JSON contains duplicate keys",
   "cursor.error.position": "Place the cursor on a JSON key or value without selecting text",
-  "cursor.error.limit": "JSON exceeds the supported size or nesting limit"
+  "cursor.error.limit": "JSON exceeds the supported size or nesting limit",
+  "cursor.copied": "Copied: {path}",
+  "expression.input": "JSON",
+  "expression.output": "Result",
+  "expression.copy": "Copy result",
+  "expression.placeholder": "Expression, e.g. .items[0]",
+  "expression.copied": "Copied",
+  "expression.readFailed": "Could not read the clipboard",
+  "expression.copyFailed": "Could not copy the result"
 }

@@ -7,3 +7,8 @@
 .jt-url-query-row input { min-width: 0; width: 100%; }
 .jt-url-query-index { color: var(--faint-foreground); }
 .jt-url-query-encoding { grid-column: 2 / -1; color: var(--muted-foreground); }
+.text-tools-converter { display: flex; flex-direction: column; gap: 12px; padding: 16px; height: 100%; min-height: 0; }
+.text-tools-converter > [role="alert"] { margin: 0; color: var(--destructive-text); }
+.text-tools-converter-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; flex: 1; min-height: 0; }
+.text-tools-converter-columns > label { display: flex; flex-direction: column; gap: 6px; min-height: 0; color: var(--muted-foreground); }
+.text-tools-converter-columns textarea { flex: 1; min-height: 100px; resize: none; }

@@ -242,7 +242,7 @@ def open_surface(page, target, presentation='inline'):
     chrome = page.locator('.surface-chrome:visible')
     expect(chrome).to_have_count(1)
     expect(chrome.locator('.surface-chrome-title')).not_to_be_empty()
-    roots = {'calculator':'.calculator-surface', 'clipboard-history':'.clipboard-history-surface', 'csv':'.csv-tools-surface__header', 'date-time-assistant':'.date-time-surface__inputs', 'image-tools':'.image-tools-surface', 'qr-code':'.qr-surface', 'regex-tester':'.regex-tester-surface', 'text-explode':'.text-explode-surface', 'text-tools':'.url-query-surface', 'text-diff':'.td-surface', 'translate':'.translate-surface'}
+    roots = {'calculator':'.calculator-surface', 'clipboard-history':'.clipboard-history-surface', 'csv':'.csv-tools-surface__header', 'date-time-assistant':'.date-time-surface__inputs', 'image-tools':'.image-tools-surface', 'qr-code':'.qr-surface', 'regex-tester':'.regex-tester-surface', 'text-explode':'.text-explode-surface', 'text-tools':'.url-query-surface, .json-expression-surface', 'text-diff':'.td-surface', 'translate':'.translate-surface'}
     expect(chrome.locator(roots[target['pluginId']])).to_be_visible()
     return chrome
 
@@ -507,7 +507,30 @@ def s27(page):
     expect(page.get_by_test_id('launcher-ai-send')).to_be_visible()
 
 
-CASES = [s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15,s16,s17,s18,s19,s20,s21,s22,s23,s24,s25,s26,s27]
+def s28(page):
+    page.evaluate('__hivenSandbox.open()')
+    page.wait_for_function('document.querySelector(".global-launcher-panel")')
+    text = '{"a":{"b":[1,2]}}'
+    page.evaluate('([text, offset]) => __hivenSandbox.runCursorCommand(text, offset)', [text, text.index('2') + 1])
+    page.wait_for_function("__hivenSandbox.clipboard().text === '$[\"a\"][\"b\"][1]'")
+    expect(page.locator('body')).to_contain_text('Copied: $["a"]["b"][1]')
+
+
+def s29(page):
+    copy(page, '{"a":{"b":[1,2]}}')
+    command(page, 'json expression')
+    surface = page.locator('.json-expression-surface')
+    expect(surface.get_by_role('textbox', name='JSON', exact=True)).to_have_value('{"a":{"b":[1,2]}}')
+    expression = surface.get_by_role('textbox', name='Expression', exact=True)
+    expression.fill('.a.b[1]')
+    expect(surface.get_by_role('textbox', name='Result', exact=True)).to_have_value('2')
+    page.get_by_role('button', name='Copy result', exact=True).click()
+    page.wait_for_function('__hivenSandbox.clipboard().text === "2"')
+    expression.fill('.a[')
+    expect(surface.get_by_role('alert')).to_be_visible()
+
+
+CASES = [s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15,s16,s17,s18,s19,s20,s21,s22,s23,s24,s25,s26,s27,s28,s29]
 
 
 def main():

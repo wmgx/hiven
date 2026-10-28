@@ -12,7 +12,10 @@ export const cursorTools: PluginToolContribution[] = (['jsonPath', 'pointer'] as
     const text = result.value[format]
     return ctx.output.choices([{
       id: `json.copy-${format}`, title: text || ctx.t('cursor.root'), preview: text,
-      primaryAction: () => ctx.api.copyText(text),
+      primaryAction: async () => {
+        await ctx.api.copyText(text)
+        ctx.api.showMessage(ctx.t('cursor.copied', { path: text || ctx.t('cursor.root') }), 'success')
+      },
     }])
   },
 }))

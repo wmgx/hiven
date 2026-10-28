@@ -52,7 +52,6 @@ const samples = [
   ['line-tools.clean-agent-text', '┌───────┐\n│ hello │\n└───────┘', {}, 'hello'],
   ['line-tools.find-duplicates', 'a\nb\na', {}, '"a" ×2 [1, 3]'],
   ['json.typescript', '{"a":1}', {}, 'export type Root = {\n  "a": number;\n};\n'],
-  ['json.expression', '{"a":"hello"}', { expression: '.a' }, 'hello'],
   ['paths.convert', '/tmp/a b.png', { format: 'uri' }, 'file:///tmp/a%20b.png'],
 ]
 for (const [id, text, params, expected] of samples) {
@@ -62,4 +61,4 @@ for (const [id, text, params, expected] of samples) {
   })
   assert.equal(result, expected, id)
 }
-console.log('Seven new text tools execute their real algorithms, including the Markdown worker.')
+console.log('Text tools execute their real algorithms, including the Markdown worker.')

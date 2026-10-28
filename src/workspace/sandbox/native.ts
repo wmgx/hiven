@@ -185,6 +185,25 @@ export const sandbox = {
     }
     changed()
   },
+  async runCursorCommand(text: string, cursorOffset: number) {
+    const { pluginRegistry } = await import('../pluginRegistry')
+    const { makePluginT } = await import('../../i18n/pluginI18nRegistry')
+    const { createPluginLauncherApi, createPluginLauncherStorage } = await import('../launcher/pluginApi')
+    const { createPluginAi } = await import('../ai/runtime')
+    const { createPluginShell } = await import('../pluginShell')
+    const tool = pluginRegistry.getPluginDefinition('text-tools', 'builtin')?.tools?.find(tool => tool.id === 'json.copy-jsonPath')
+    if (!tool) throw new Error('Missing cursor command')
+    const { getPluginPermissionSnapshot } = await import('../pluginPermissions')
+    const permissions = getPluginPermissionSnapshot('builtin', 'text-tools', pluginRegistry.getPluginPermissions('text-tools', 'builtin'))
+    const unsupported = () => { throw new Error('Unsupported cursor tool output') }
+    const result = await tool.run({ params: {}, settings: {}, locale, signal: new AbortController().signal, progress() {},
+      storage: createPluginLauncherStorage(), ai: createPluginAi('text-tools', 'builtin', permissions), shell: createPluginShell(permissions), aiSend: { request: async () => null },
+      input: { kind: 'text', text, cursorOffset, mode: 'all', source: 'all' }, t: makePluginT('text-tools', locale),
+      api: createPluginLauncherApi(), output: { text: unsupported, replaceActiveText: unsupported, choices: choices => ({ ok: true, output: { choices } }), error: message => { throw new Error(message) } },
+    })
+    if (!result?.ok || !result.output?.choices.length) throw new Error('Expected cursor path choice')
+    await result.output.choices[0].primaryAction()
+  },
   async openSettings(pluginId?: string) {
     await sandbox.open()
     if (pluginId) {
