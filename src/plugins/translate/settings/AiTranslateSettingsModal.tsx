@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { PluginSettingsModalBodyProps } from '@hiven/plugin'
-import { Select } from '@hiven/plugin-ui'
+import { Button, Select } from '@hiven/plugin-ui'
 import type { AiGlossary, TranslateProfile, TranslateSettings } from './model'
 import { keepSelectedOption } from '../ai/readiness'
 import { useAiTranslationReadiness } from '../ai/useReadiness'
@@ -9,9 +9,9 @@ import { AiGlossaryEditor } from './AiGlossaryEditor'
 
 const EFFORTS = ['low', 'medium', 'high', 'xhigh'] as const
 
-export function AiTranslateSettingsModal({ value, setValue, host, t }: PluginSettingsModalBodyProps<TranslateSettings>) {
+export function AiTranslateSettingsModal({ value, setValue, host, t, context, modalId, openModal }: PluginSettingsModalBodyProps<TranslateSettings>) {
   const profiles = value.profiles.filter((profile) => profile.provider === 'ai')
-  const [profileId, setProfileId] = useState(profiles[0]?.id ?? '')
+  const [profileId, setProfileId] = useState(String(context?.itemId ?? profiles[0]?.id ?? ''))
   const profile = profiles.find((item) => item.id === profileId) ?? profiles[0]
   const currentRef = useRef({ value, profileId: profile?.id })
   useLayoutEffect(() => {
@@ -37,6 +37,7 @@ export function AiTranslateSettingsModal({ value, setValue, host, t }: PluginSet
   }
 
   if (!profile) return <p className="text-[12px] text-muted-foreground">{t('ai.unavailable')}</p>
+  if (modalId === 'ai-glossary') return <AiGlossaryEditor key={profile.id} saved={profile.aiGlossary} t={t} onCommit={next => saveGlossary(profile.id, next)} />
   const providerOptions = keepSelectedOption([
     { value: '', label: t('ai.inherit') },
     ...providers.map((item) => ({ value: item.id, label: `${item.name} · ${t(`ai.providerStatus.${item.status}`)}` })),
@@ -67,7 +68,7 @@ export function AiTranslateSettingsModal({ value, setValue, host, t }: PluginSet
         <Select value={profile.aiEffort ?? 'inherit'} options={effortOptions} onChange={(event) => updateProfile({ aiEffort: event.currentTarget.value as TranslateProfile['aiEffort'] })} />
       </Field>
       <AiReadinessNotice readiness={readiness} profile={profile} t={t} onRefresh={() => void controller.refresh(true)} />
-      <AiGlossaryEditor key={profile.id} saved={profile.aiGlossary} t={t} onCommit={(next) => saveGlossary(profile.id, next)} />
+      <Button onClick={() => openModal?.('ai-glossary', { itemId: profile.id })}>{t('ai.glossary.title')} · {t('ai.glossary.edit')}</Button>
     </div>
   )
 }

@@ -83,12 +83,8 @@
   "ai.glossary.removeRow": "Remove term {row}",
   "ai.glossary.remove": "Remove",
   "ai.glossary.add": "Add term",
-  "ai.glossary.save": "Save",
   "ai.glossary.clear": "Clear",
-  "ai.glossary.cancel": "Discard edits",
   "ai.glossary.saveFailed": "Can't save terms. Try again.",
-  "ai.glossary.clearFailed": "Can't clear terms. Try again.",
-  "ai.glossary.changed": "Terms changed elsewhere. Discard edits or save to overwrite.",
   "ai.glossary.invalidSaved": "Saved terms are invalid. Fix them in Translation settings.",
   "ai.glossary.error.shape": "Invalid terms. Clear and re-enter.",
   "ai.glossary.error.language": "No target language selected",
@@ -105,5 +101,8 @@
   "error.translate.empty": "The translation service returned no text.",
   "status.noCredentials": "This profile needs credentials. Add them in Translation settings.",
   "profile.name.baidu-default": "Baidu",
-  "profile.name.tencent-default": "Tencent Cloud"
+  "profile.name.tencent-default": "Tencent Cloud",
+  "ai.glossary.edit": "Edit…",
+  "ai.glossary.deleted": "Deleted",
+  "ai.glossary.undo": "Undo"
 }

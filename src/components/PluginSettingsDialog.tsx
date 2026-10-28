@@ -5,9 +5,9 @@
  * The plugin provides the body content via its settings.component.
  */
 
-import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from 'react'
+import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode, type RefObject } from 'react'
 import { Dialog } from '@base-ui/react/dialog'
-import { X } from 'lucide-react'
+import { SurfaceBreadcrumbs } from '../ui/SurfaceHeaderActions'
 import { SurfaceShell } from './pluginSurface/SurfaceShell'
 import { t } from '../i18n'
 import { makePluginT } from '../i18n/pluginI18nRegistry'
@@ -68,6 +68,7 @@ export function PluginSettingsDialog() {
   const [renderedTarget, setRenderedTarget] = useState(target)
   const [isClosing, setIsClosing] = useState(false)
   const titleId = 'plugin-settings-dialog-title'
+  const backRef = useRef<(() => boolean) | null>(null)
 
   useEffect(() => {
     if (target) {
@@ -90,7 +91,7 @@ export function PluginSettingsDialog() {
   const fillsPluginWindow = activeTarget.presentation === 'plugin-surface-window'
 
   return (
-    <Dialog.Root open onOpenChange={(open) => { if (!open && !isClosing) closeSettingsDialog() }}>
+    <Dialog.Root open onOpenChange={(open) => { if (!open && !isClosing && !backRef.current?.()) closeSettingsDialog() }}>
       <Dialog.Portal>
         <Dialog.Backdrop className={`plugin-settings-dialog-backdrop fixed inset-0 z-[1200]${fillsPluginWindow ? '' : ' bg-black/40'}${isClosing ? ' is-closing' : ''}`} />
         <Dialog.Popup
@@ -115,6 +116,7 @@ export function PluginSettingsDialog() {
             locale={locale}
             onClose={closeSettingsDialog}
             titleId={titleId}
+            backRef={backRef}
           />
         </Dialog.Popup>
       </Dialog.Portal>
@@ -131,6 +133,7 @@ export function PluginSettingsContent({
   locale,
   onClose,
   titleId,
+  backRef,
 }: {
   pluginId: string
   source: PluginSettingsSource
@@ -138,6 +141,7 @@ export function PluginSettingsContent({
   locale: 'zh' | 'en'
   onClose: () => void
   titleId?: string
+  backRef?: RefObject<(() => boolean) | null>
 }) {
   // Resolve the plugin's settings contribution from the registry
   const registryVersion = usePluginRegistryVersion()
@@ -175,6 +179,7 @@ export function PluginSettingsContent({
       locale={locale}
       onClose={onClose}
       titleId={titleId}
+      backRef={backRef}
     />
   )
 }
@@ -189,6 +194,7 @@ function SettingsDialogBody({
   locale,
   onClose,
   titleId,
+  backRef,
 }: {
   pluginId: string
   source: PluginSettingsSource
@@ -197,6 +203,7 @@ function SettingsDialogBody({
   locale: 'zh' | 'en'
   onClose: () => void
   titleId?: string
+  backRef?: RefObject<(() => boolean) | null>
 }) {
   const setPluginSettings = usePluginSettingsStore((s) => s.setPluginSettings)
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -207,9 +214,18 @@ function SettingsDialogBody({
   const storedRecord = usePluginSettingsStore((s) => s.pluginSettings[source][pluginId])
   // Observe the record itself so persisted/rehydrated grants update the body too.
   const pluginPermissions = usePluginPermissionStore((s) => s.permissions[source][pluginId])
-  const [settingsModalTarget, setSettingsModalTarget] = useState<ResolvedPluginSettingsModal<unknown> | null>(null)
-  const [renderedSettingsModalTarget, setRenderedSettingsModalTarget] = useState<ResolvedPluginSettingsModal<unknown> | null>(null)
-  const [isSettingsModalClosing, setIsSettingsModalClosing] = useState(false)
+  const [modalStack, setModalStack] = useState<ResolvedPluginSettingsModal<unknown>[]>([])
+  const [listTarget, setListTarget] = useState<{ key: string; label: string } | null>(null)
+  const goBack = useCallback(() => {
+    if (modalStack.length) { setModalStack(stack => stack.slice(0, -1)); return true }
+    if (listTarget) { setListTarget(null); return true }
+    return false
+  }, [modalStack.length, listTarget])
+  useLayoutEffect(() => { if (backRef) backRef.current = goBack; return () => { if (backRef) backRef.current = null } }, [backRef, goBack])
+  const openModal = (field: Parameters<typeof resolvePluginSettingsModal>[1]) => {
+    const next = resolvePluginSettingsModal(contribution, field)
+    if (next) setModalStack(stack => [...stack, next])
+  }
   void pluginPermissions
 
   const currentVersion = contribution.version ?? 1
@@ -308,27 +324,9 @@ function SettingsDialogBody({
   }, [])
 
   const SettingsComponent = contribution.component
-  useEffect(() => {
-    if (settingsModalTarget) {
-      setRenderedSettingsModalTarget(settingsModalTarget)
-      setIsSettingsModalClosing(false)
-      return
-    }
-    if (!renderedSettingsModalTarget) return
-    setIsSettingsModalClosing(true)
-    const timer = window.setTimeout(() => {
-      setRenderedSettingsModalTarget(null)
-      setIsSettingsModalClosing(false)
-    }, 90)
-    return () => window.clearTimeout(timer)
-  }, [renderedSettingsModalTarget, settingsModalTarget])
-
-  const activeSettingsModalTarget = settingsModalTarget ?? renderedSettingsModalTarget
+  const activeSettingsModalTarget = modalStack.at(-1)
   const SettingsModalComponent = activeSettingsModalTarget?.modal.component
-  const settingsModalTitle = activeSettingsModalTarget
-    ? activeSettingsModalTarget.modal.titleI18n?.[locale] ?? activeSettingsModalTarget.modal.title
-    : ''
-  const settingsModalTitleId = 'plugin-settings-modal-title'
+  const displayedSchema = listTarget && contribution.schema ? { sections: contribution.schema.sections.map(section => ({ ...section, title: undefined, titleI18n: undefined, description: undefined, descriptionI18n: undefined, fields: section.fields.filter(field => 'key' in field && field.key === listTarget.key) })) } : contribution.schema
 
   const errorFallback = (
     <div className="p-4 text-[13px]" style={{ color: 'var(--color-error)' }}>
@@ -351,7 +349,11 @@ function SettingsDialogBody({
   }
 
   return (
-    <SurfaceShell title={title} titleId={titleId} icon="Settings" onClose={onClose}>
+    <SurfaceShell title={title} titleId={titleId} icon="Settings" onClose={onClose} onBack={listTarget || modalStack.length ? () => { setListTarget(null); setModalStack([]) } : undefined}>
+      <SurfaceBreadcrumbs items={[
+        ...(listTarget ? [{ label: listTarget.label, onClick: () => setModalStack([]) }] : []),
+        ...modalStack.map((entry, index) => ({ label: entry.modal.titleI18n?.[locale] ?? entry.modal.title, onClick: () => setModalStack(stack => stack.slice(0, index + 1)) })),
+      ]} />
       {/* Migration warning */}
       {migrationError && (
         <div
@@ -365,20 +367,23 @@ function SettingsDialogBody({
       )}
 
       {/* Body */}
-      <div ref={bodyRef} className="flex-1 overflow-y-auto px-5 py-4" data-launcher-scrollable data-settings-navigation-root={target ? '' : undefined} tabIndex={-1}>
+      <div ref={bodyRef} data-settings-page={activeSettingsModalTarget?.modal.id ?? listTarget?.key ?? 'root'} className="flex-1 overflow-y-auto px-5 py-4" data-launcher-scrollable data-settings-navigation-root={target ? '' : undefined} tabIndex={-1}>
         <SettingsErrorBoundary fallback={errorFallback}>
           {/* Prefer custom body when present (install guides, connection UI).
               Schema-only plugins keep the generated form renderer. */}
-          {SettingsComponent ? (
+          {activeSettingsModalTarget && SettingsModalComponent ? <SettingsModalComponent {...settingsBodyProps}
+            modalId={activeSettingsModalTarget.modal.id} context={activeSettingsModalTarget.field.context}
+            close={goBack} openModal={(id, context) => openModal({ kind: 'modal', id, label: id, context })} /> : SettingsComponent ? (
             <SettingsComponent {...settingsBodyProps} />
-          ) : contribution.schema ? (
+          ) : displayedSchema ? (
             <PluginSettingsSchemaRenderer
-              schema={contribution.schema}
+              schema={displayedSchema}
               locale={locale}
               translateText={pluginT}
               value={value}
               updateValue={updateValue}
-              onOpenModal={(field) => setSettingsModalTarget(resolvePluginSettingsModal(contribution, field))}
+              onOpenModal={openModal}
+              onOpenList={listTarget ? undefined : (key, label) => setListTarget({ key, label })}
               onRunAction={async (field, reportProgress) => {
                 await field.run({ ...settingsBodyProps, reportProgress })
               }}
@@ -392,52 +397,6 @@ function SettingsDialogBody({
         </SettingsErrorBoundary>
       </div>
 
-      {activeSettingsModalTarget && SettingsModalComponent && (
-        <Dialog.Root open onOpenChange={(open) => { if (!open && !isSettingsModalClosing) setSettingsModalTarget(null) }}>
-          <Dialog.Portal>
-            <Dialog.Backdrop className={`plugin-settings-modal-backdrop fixed inset-0 bg-black/40 z-[1210]${isSettingsModalClosing ? ' is-closing' : ''}`} />
-            <Dialog.Popup
-              aria-labelledby={settingsModalTitleId}
-              initialFocus={() => document.querySelector<HTMLElement>('[data-settings-modal-close]')}
-              className={`plugin-settings-modal-panel fixed left-1/2 top-1/2 z-[1211] -translate-x-1/2 -translate-y-1/2 flex max-h-[calc(100%-48px)] w-[min(520px,calc(100%-48px))] flex-col overflow-hidden rounded-lg${isSettingsModalClosing ? ' is-closing' : ''}`}
-              style={{
-                background: 'var(--panel, var(--bg-surface, #ffffff))',
-                border: 'var(--hairline) solid var(--color-border-secondary)',
-                boxShadow: 'var(--shadow-panel, 0 20px 44px rgba(0, 0, 0, 0.22))',
-                outline: 'none',
-              }}
-            >
-              <div
-                className="flex items-center justify-between px-4 py-3"
-                style={{ borderBottom: 'var(--hairline) solid var(--color-border-tertiary)' }}
-              >
-                <h3 id={settingsModalTitleId} className="m-0 text-[14px] font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                  {settingsModalTitle}
-                </h3>
-                <button
-                  className="flex h-7 w-7 items-center justify-center rounded-md"
-                  style={{ color: 'var(--color-text-tertiary)', background: 'transparent' }}
-                  onClick={() => setSettingsModalTarget(null)}
-                  title={t(locale, 'scripts.settingsClose')}
-                  data-settings-modal-close
-                >
-                  <X size={16} />
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto p-4">
-                <SettingsErrorBoundary fallback={errorFallback}>
-                  <SettingsModalComponent
-                    {...settingsBodyProps}
-                    modalId={activeSettingsModalTarget.modal.id}
-                    context={activeSettingsModalTarget.field.context}
-                    close={() => setSettingsModalTarget(null)}
-                  />
-                </SettingsErrorBoundary>
-              </div>
-            </Dialog.Popup>
-          </Dialog.Portal>
-        </Dialog.Root>
-      )}
     </SurfaceShell>
   )
 }

@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Button, Select, TextInput } from '@hiven/plugin-ui'
+import { useEffect, useState } from 'react'
+import { Button, Select, TextInput, SurfaceError, SurfaceStatus } from '@hiven/plugin-ui'
 import type { AiGlossary } from './model'
 import { GLOSSARY_LANGUAGES, GLOSSARY_LIMITS, validateAiGlossary } from '../ai/glossary'
 
@@ -22,35 +22,16 @@ export function AiGlossaryEditor({ saved, onCommit, t }: {
   t: (key: string) => string
 }) {
   const [draft, setDraft] = useState(() => draftFromSaved(saved))
-  const [baseline, setBaseline] = useState(() => ({ saved: JSON.stringify(saved), draft: JSON.stringify(draftFromSaved(saved)) }))
-  const [message, setMessage] = useState<{ kind: 'error' | 'success'; text: string } | null>(null)
-  const savedChanged = JSON.stringify(saved) !== baseline.saved
-  const dirty = JSON.stringify(draft) !== baseline.draft
-  const savedValidation = validateAiGlossary(saved)
-
-  const edit = (next: GlossaryDraft) => { setDraft(next); setMessage(null) }
-  const replaceDraft = (next?: AiGlossary) => {
-    const clean = draftFromSaved(next)
-    setDraft(clean)
-    setBaseline({ saved: JSON.stringify(next), draft: JSON.stringify(clean) })
+  const [message, setMessage] = useState('')
+  const [undo, setUndo] = useState<GlossaryDraft | null>(null)
+  useEffect(() => { if (!undo) return; const timer = window.setTimeout(() => setUndo(null), 5000); return () => window.clearTimeout(timer) }, [undo])
+  const edit = (next: GlossaryDraft) => {
+    setDraft(next)
+    const checked = validateAiGlossary(next.entries.length ? next : undefined)
+    if (!checked.ok) { setMessage(t(`ai.glossary.error.${checked.issue.code}`).replace('{row}', String(checked.issue.row ?? ''))); return }
+    try { onCommit(checked.value); setMessage('') } catch { setMessage(t('ai.glossary.saveFailed')) }
   }
-  const commit = (clear: boolean) => {
-    const checked = validateAiGlossary(clear ? undefined : draft)
-    if (!checked.ok) {
-      setMessage({ kind: 'error', text: t(`ai.glossary.error.${checked.issue.code}`).replace('{row}', String(checked.issue.row ?? '')) })
-      return
-    }
-    try {
-      // Host settings are synchronous. Keep the draft if persistence throws.
-      onCommit(checked.value)
-    } catch {
-      setMessage({ kind: 'error', text: t(clear ? 'ai.glossary.clearFailed' : 'ai.glossary.saveFailed') })
-      return
-    }
-    replaceDraft(checked.value)
-    setMessage(null)
-  }
-
+  const remove = (index: number) => { setUndo(draft); edit({ ...draft, entries: draft.entries.filter((_, row) => row !== index) }) }
   const languageOptions = [
     { value: '', label: t('ai.glossary.chooseLanguage') },
     ...GLOSSARY_LANGUAGES.map((value) => ({ value, label: t(`language.${value}`) })),
@@ -60,7 +41,13 @@ export function AiGlossaryEditor({ saved, onCommit, t }: {
   }
 
   return (
-    <section className="translate-glossary-editor" aria-label={t('ai.glossary.title')}>
+    <section className="translate-glossary-editor" aria-label={t('ai.glossary.title')} onKeyDown={event => {
+      if (event.nativeEvent.isComposing || !(event.metaKey || event.ctrlKey) || event.key !== 'Backspace') return
+      const row = (event.target as HTMLElement).closest<HTMLElement>('[data-glossary-row]')
+      if (row) { event.preventDefault(); event.stopPropagation(); remove(Number(row.dataset.glossaryRow)) }
+    }}>
+      <SurfaceError>{message}</SurfaceError>
+      {undo && <SurfaceStatus>{t('ai.glossary.deleted')} · <button onClick={() => { edit(undo); setUndo(null) }}>{t('ai.glossary.undo')}</button></SurfaceStatus>}
       <div className="font-medium">{t('ai.glossary.title')}</div>
       <p>{t('ai.glossary.privacy')}</p>
       <label className="flex flex-col gap-1.5">
@@ -69,7 +56,7 @@ export function AiGlossaryEditor({ saved, onCommit, t }: {
       </label>
       <div className="translate-glossary-editor__entries">
         {draft.entries.map((entry, index) => (
-          <div key={index} className="translate-glossary-editor__row">
+          <div key={index} className="translate-glossary-editor__row" data-glossary-row={index}>
             <label>
               <span>{t('ai.glossary.source').replace('{row}', String(index + 1))}</span>
               <TextInput value={entry.source} onChange={(event) => edit({ ...draft, entries: draft.entries.map((item, row) => row === index ? { ...item, source: event.currentTarget.value } : item) })} />
@@ -78,19 +65,14 @@ export function AiGlossaryEditor({ saved, onCommit, t }: {
               <span>{t('ai.glossary.target').replace('{row}', String(index + 1))}</span>
               <TextInput value={entry.target} onChange={(event) => edit({ ...draft, entries: draft.entries.map((item, row) => row === index ? { ...item, target: event.currentTarget.value } : item) })} />
             </label>
-            <Button type="button" aria-label={t('ai.glossary.removeRow').replace('{row}', String(index + 1))} onClick={() => edit({ ...draft, entries: draft.entries.filter((_, row) => row !== index) })}>{t('ai.glossary.remove')}</Button>
+            <Button type="button" aria-label={t('ai.glossary.removeRow').replace('{row}', String(index + 1))} onClick={() => remove(index)}>{t('ai.glossary.remove')}</Button>
           </div>
         ))}
       </div>
       <div className="translate-glossary-editor__actions">
         <Button type="button" disabled={draft.entries.length >= GLOSSARY_LIMITS.entries} onClick={() => edit({ ...draft, entries: [...draft.entries, { source: '', target: '' }] })}>{t('ai.glossary.add')}</Button>
-        <Button type="button" variant="primary" disabled={!dirty && !savedChanged} onClick={() => commit(false)}>{t('ai.glossary.save')}</Button>
-        <Button type="button" disabled={saved === undefined} onClick={() => commit(true)}>{t('ai.glossary.clear')}</Button>
-        <Button type="button" disabled={!dirty && !savedChanged && !message} onClick={() => { replaceDraft(saved); setMessage(null) }}>{t('ai.glossary.cancel')}</Button>
+        <Button type="button" disabled={!draft.entries.length} onClick={() => { setUndo(draft); edit({ targetLang: draft.targetLang, entries: [] }) }}>{t('ai.glossary.clear')}</Button>
       </div>
-      {!savedValidation.ok && <p role="alert">{t('ai.glossary.invalidSaved')}</p>}
-      {savedChanged && <p role="status">{t('ai.glossary.changed')}</p>}
-      {message && <p role={message.kind === 'error' ? 'alert' : 'status'}>{message.text}</p>}
     </section>
   )
 }

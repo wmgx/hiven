@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, IconButton, Select, TextArea } from '@hiven/plugin-ui'
-import { SettingsIcon } from '@hiven/plugin-ui/icons'
-import { AlertTriangle, ArrowRight, LoaderCircle } from 'lucide-react'
+import { ActionBar, SurfaceHeaderActions, SurfaceStatus, SurfaceError, ValueChip, TextArea } from '@hiven/plugin-ui'
 import type { SourceLanguageCode, TargetLanguageCode, TranslateProfile, TranslateSettings } from '../settings/model'
 import { currentUsageMonth, isProfileUsable, profileDisplayName } from '../settings/model'
 import { profileExecutionKey } from '../settings/executionKey'
@@ -97,13 +95,6 @@ function resetUsageMonth(profile: TranslateProfile, month: string): TranslatePro
   return { ...profile, usedCharsMonth: month, usedChars: 0 }
 }
 
-function stateName(status: TranslateStatus): 'idle' | 'waiting' | 'translating' | 'failed' | 'quota' {
-  if (status.kind === 'waiting') return 'waiting'
-  if (status.kind === 'translating') return 'translating'
-  if (status.kind === 'error') return 'failed'
-  if (status.kind === 'quota-exceeded') return 'quota'
-  return 'idle'
-}
 
 function statusLabel(status: TranslateStatus, t: (key: string) => string): string {
   if (status.kind === 'unconfigured') return t(status.reason === 'credentials' ? 'status.noCredentials' : 'status.noProfile')
@@ -140,34 +131,6 @@ function formatLimit(value: number): string {
   if (value <= 0) return '∞'
   if (value >= 1000) return `${Math.round(value / 100) / 10}k`
   return value.toLocaleString()
-}
-
-function SchemaSelect<T extends string>({
-  value,
-  options,
-  onChange,
-  width,
-  ariaLabel,
-}: {
-  value: T
-  options: Array<SelectOption<T>>
-  onChange: (value: T) => void
-  width?: number
-  ariaLabel: string
-}) {
-  return (
-    <div className="translate-select" style={width ? { width: `var(--translate-select-width, ${width}px)` } : undefined}>
-      <Select
-        aria-label={ariaLabel}
-        value={value}
-        options={options.map((option) => ({
-          value: option.value,
-          label: option.sub ? `${option.label} · ${option.sub}` : option.label,
-        }))}
-        onChange={(event) => onChange(event.currentTarget.value as T)}
-      />
-    </div>
-  )
 }
 
 export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
@@ -460,38 +423,26 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
 
   const activeUsedChars = activeProfile ? (usageByProfile.get(activeProfile.id) ?? activeProfile.usedChars) : 0
   const monthlyLimit = activeProfile?.monthlyLimitChars ?? 0
-  const quotaPercent = monthlyLimit > 0 ? Math.min(100, Math.round((activeUsedChars / monthlyLimit) * 100)) : 0
   const inputChars = estimateBilledChars(inputText)
   const resolvedTarget = targetLang === 'smart' ? resolveSmartTargetLang(inputText) : targetLang
   const glossary = activeProfile?.provider === 'ai' ? validateAiGlossary(activeProfile.aiGlossary) : undefined
-  const statusState = stateName(status)
 
   return (
     <section className="translate-surface" aria-label={localizedText(t, 'surface.title', 'Translate')}>
-      <header className="translate-surface__header">
-        <div className="translate-surface__header-spacer" />
-        {activeProfile?.provider === 'ai' && (status.kind === 'waiting' || status.kind === 'translating') && (
-          <Button type="button" onClick={stopTranslation}>{t('action.stop')}</Button>
-        )}
-        {(status.kind === 'stopped' || status.kind === 'settings-paused' || status.kind === 'error') && (
-          <Button type="button" onClick={retryTranslation} disabled={!canRetry}>{t('action.retry')}</Button>
-        )}
-        <IconButton type="button" label={t('action.translationSettings')} onClick={openSettings}>
-          <SettingsIcon size={16} />
-        </IconButton>
-        {host.OutputActions && <host.OutputActions text={isCurrentTranslationOutput(availableOutput, outputRef.current, identityRef.current, readinessController.getSnapshot().revision) ? availableOutput.view.outputText : ''} />}
-      </header>
-
-      <div className="translate-surface__controls">
-        <div className="translate-pair">
-          <SchemaSelect value={sourceLang} options={sourceOptions} onChange={(value) => { if (value !== sourceLang && beginInputEdit()) setSourceLang(value) }} width={154} ariaLabel={localizedText(t, 'control.source', 'Source')} />
-          <span className="translate-pair__arrow"><ArrowRight size={15} strokeWidth={1.9} /></span>
-          <SchemaSelect value={targetLang} options={targetOptions} onChange={(value) => { if (value !== targetLang && beginInputEdit()) setTargetLang(value) }} width={136} ariaLabel={localizedText(t, 'control.target', 'Target')} />
-        </div>
-        <div className="grow" />
-        <span className="translate-controls-label">{localizedText(t, 'control.profile', 'Profile')}</span>
-        <SchemaSelect value={activeProfile?.id ?? ''} options={profileOptions} onChange={(value) => { if (value !== profileId && beginInputEdit()) setProfileId(value) }} width={222} ariaLabel={localizedText(t, 'control.profile', 'Profile')} />
-      </div>
+      <SurfaceHeaderActions>
+        <ValueChip label={t('control.source')} value={sourceLang} options={sourceOptions} onChange={value => { if (value !== sourceLang && beginInputEdit()) setSourceLang(value as SourceLanguageCode) }} />
+        <ValueChip label={t('control.target')} value={targetLang} options={targetOptions} onChange={value => { if (value !== targetLang && beginInputEdit()) setTargetLang(value as TargetLanguageCode) }} />
+        <ValueChip label={t('control.profile')} value={activeProfile?.id ?? ''} options={profileOptions} onChange={value => { if (value !== profileId && beginInputEdit()) setProfileId(String(value)) }} />
+      </SurfaceHeaderActions>
+      <SurfaceError>{status.kind === 'error' || status.kind === 'quota-exceeded' ? statusLabel(status, t) : ''}</SurfaceError>
+      <SurfaceStatus><span>{statusLabel(status, t)} · {t('meta.characters', { count: inputChars })}{(activeProfile?.provider !== 'ai' || monthlyLimit > 0) ? ` · ${formatLimit(activeUsedChars)} / ${formatLimit(monthlyLimit)}` : ''}</span></SurfaceStatus>
+      <ActionBar>{host.OutputActions && <host.OutputActions text={() => isCurrentTranslationOutput(availableOutput, outputRef.current, identityRef.current, readinessController.getSnapshot().revision) ? availableOutput.view.outputText : null}
+        disabled={!isCurrentTranslationOutput(availableOutput, outputRef.current, identityRef.current, readinessController.getSnapshot().revision)}
+        more={[
+          { id: 'settings', label: t('action.translationSettings'), run: openSettings },
+          ...(activeProfile?.provider === 'ai' && (status.kind === 'waiting' || status.kind === 'translating') ? [{ id: 'stop', label: t('action.stop'), run: stopTranslation }] : []),
+          ...(['stopped','settings-paused','error'].includes(status.kind) ? [{ id: 'retry', label: t('action.retry'), disabled: !canRetry, run: retryTranslation }] : []),
+        ]} />}</ActionBar>
 
       {activeProfile?.provider === 'ai' && (
         <AiReadinessNotice readiness={readiness} profile={activeProfile} t={t} onRefresh={() => { cancelCurrentRun(); void readinessController.refresh(true) }} onSettings={openSettings} onAppSettings={host.openAppSettings ? () => { void openAiSettings() } : undefined} />
@@ -539,29 +490,6 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
         </div>
       </div>
 
-      <footer className="translate-surface__status">
-        <div
-          className="translate-status"
-          data-state={statusState}
-          role={status.kind === 'error' || status.kind === 'quota-exceeded' ? 'alert' : 'status'}
-        >
-          <span className="translate-status__dot" />
-          <LoaderCircle className="translate-status__spin" size={13} strokeWidth={2.2} />
-          <AlertTriangle className="translate-status__alert" size={13} strokeWidth={1.9} />
-          <span className="translate-status__label">{statusLabel(status, t)}</span>
-        </div>
-        <div className="grow" />
-        <div className="translate-meta">
-          <span>{localizedText(t, inputChars === 1 ? 'meta.character' : 'meta.characters', inputChars === 1 ? '{count} character' : '{count} characters').replace('{count}', inputChars.toLocaleString())}</span>
-          {(activeProfile?.provider !== 'ai' || monthlyLimit > 0) && <>
-          <span className="sep">·</span>
-          <div className={`translate-quota ${status.kind === 'quota-exceeded' ? 'is-over' : ''}`}>
-            <span className="translate-quota__num">{formatLimit(activeUsedChars)} / {formatLimit(monthlyLimit)}</span>
-            <span className="translate-quota__bar"><span className="translate-quota__fill" style={{ width: `${status.kind === 'quota-exceeded' ? 100 : quotaPercent}%` }} /></span>
-          </div>
-          </>}
-        </div>
-      </footer>
     </section>
   )
 }

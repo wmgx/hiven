@@ -156,6 +156,7 @@ export default definePlugin<TranslateSettings>({
     defaultValue: DEFAULT_TRANSLATE_SETTINGS,
     migrate: migrateTranslateSettings,
     modals: [
+      { id: 'ai-glossary', title: 'Glossary', titleI18n: { zh: '术语表' }, component: AiTranslateSettingsModal },
       {
         id: 'ai-provider',
         title: 'AI translation',

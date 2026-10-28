@@ -83,12 +83,8 @@
   "ai.glossary.removeRow": "移除术语 {row}",
   "ai.glossary.remove": "移除",
   "ai.glossary.add": "添加术语",
-  "ai.glossary.save": "保存",
   "ai.glossary.clear": "清除",
-  "ai.glossary.cancel": "放弃修改",
   "ai.glossary.saveFailed": "无法保存术语，请重试",
-  "ai.glossary.clearFailed": "无法清除术语，请重试",
-  "ai.glossary.changed": "术语已在别处更新，可放弃修改或覆盖保存",
   "ai.glossary.invalidSaved": "已存术语无效，请在翻译配置中修正",
   "ai.glossary.error.shape": "术语格式无效，请清除后重填",
   "ai.glossary.error.language": "未选择目标语种",
@@ -105,5 +101,8 @@
   "error.translate.empty": "翻译服务没有返回译文。",
   "status.noCredentials": "该配置组还没有填写密钥，请到翻译设置中补全。",
   "profile.name.baidu-default": "百度翻译",
-  "profile.name.tencent-default": "腾讯云翻译"
+  "profile.name.tencent-default": "腾讯云翻译",
+  "ai.glossary.edit": "编辑…",
+  "ai.glossary.deleted": "已删除",
+  "ai.glossary.undo": "撤销"
 }

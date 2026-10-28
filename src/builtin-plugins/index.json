@@ -1,5 +1,5 @@
 {
-  "version": 243,
+  "version": 244,
   "packages": [
     {
       "pluginId": "image-tools",
@@ -24,7 +24,7 @@
     {
       "pluginId": "translate",
       "dir": "translate",
-      "version": "1.0.36"
+      "version": "1.0.37"
     },
     {
       "pluginId": "ai-writing",

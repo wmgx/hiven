@@ -1,5 +1,5 @@
 import { Plus } from 'lucide-react'
-import { useState, type ChangeEvent, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react'
 import {
   CalendarDays,
   Clipboard,
@@ -35,7 +35,7 @@ import type {
 } from '../workspace/pluginTypes'
 import { describePluginPermission } from '../workspace/pluginPermissions'
 import { translate, type Locale } from '../i18n'
-import { NumberField, Select, Switch, useImeKeyboard } from '../plugin-ui'
+import { NumberField, Select, Switch, SurfaceStatus, useImeKeyboard } from '../plugin-ui'
 
 type PluginSettingsSchemaRendererProps<TSettings = unknown> = {
   schema: PluginSettingsSchema<TSettings>
@@ -43,6 +43,7 @@ type PluginSettingsSchemaRendererProps<TSettings = unknown> = {
   translateText?: (key: string) => string
   value: TSettings
   updateValue: (patch: Partial<TSettings>) => void
+  onOpenList?: (key: string, label: string) => void
   onOpenModal: (field: PluginSettingsModalField<TSettings>) => void
   onRunAction: (field: PluginSettingsActionField<TSettings>, reportProgress: (progress: PluginSettingsActionProgress) => void) => Promise<void>
   permissions?: PluginPermissionSnapshot
@@ -227,6 +228,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
   value,
   updateValue,
   onOpenModal,
+  onOpenList,
   onRunAction,
   permissions,
 }: PluginSettingsSchemaRendererProps<TSettings>) {
@@ -235,7 +237,10 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
     localize(text, textI18n, locale, translateText)
   const record = getSettingsRecord(value)
   const [openObjectListCards, setOpenObjectListCards] = useState<Record<string, string>>({})
-  const [pendingDeleteKey, setPendingDeleteKey] = useState<string | null>(null)
+  const [undo, setUndo] = useState<{ key: string; item: Record<string, unknown>; index: number } | null>(null)
+  const latestRecord = useRef(record)
+  latestRecord.current = record
+  useEffect(() => { if (!undo) return; const timer = window.setTimeout(() => setUndo(null), 5000); return () => window.clearTimeout(timer) }, [undo])
   const [numberDrafts, setNumberDrafts] = useState<Record<string, string>>({})
   const [visibleSensitiveKeys, setVisibleSensitiveKeys] = useState<Set<string>>(new Set())
   const [touchedKeys, setTouchedKeys] = useState<Set<string>>(() => new Set())
@@ -708,7 +713,6 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
         || translate(locale, 'scripts', 'settingsEmptyList')
       const emptyHint = translate(locale, 'scripts', 'settingsEmptyListHint')
       const deleteLabel = translate(locale, 'scripts', 'settingsDelete')
-      const deleteConfirmLabel = translate(locale, 'scripts', 'settingsDeleteConfirm')
       const previewSpec = field.preview
       const previewTemplate = previewSpec && activeItem ? String(activeItem[previewSpec.templateKey] ?? '') : ''
       const previewSampleKey = `${field.key}:preview-sample`
@@ -717,11 +721,16 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
       const previewUrl = previewSpec && previewTemplate
         ? previewTemplate.replaceAll(previewSpec.placeholder, previewEncode ? encodeURIComponent(previewSample) : previewSample)
         : ''
-      const deleteArmedKey = `${field.key}:${activeCardId}`
-      const deleteArmed = pendingDeleteKey === deleteArmedKey
-
+      const removeItem = () => {
+        if (disabled || !activeItem) return
+        setUndo({ key: field.key, item: activeItem, index: activeIndex })
+        setFieldValue(field.key, items.filter((_, index) => index !== activeIndex))
+      }
+      if (onOpenList) return <div className="schema-object-list-head">{commonLabel}<button type="button" disabled={disabled} onClick={() => onOpenList(field.key, label)}>{translate(locale, 'scripts', 'settingsEdit')}</button></div>
       return (
-        <div className={`schema-object-list d-rules ${disabled ? 'is-disabled' : ''}`}>
+        <div className={`schema-object-list d-rules ${disabled ? 'is-disabled' : ''}`} onKeyDown={event => {
+          if (!event.nativeEvent.isComposing && (event.metaKey || event.ctrlKey) && event.key === 'Backspace') { event.preventDefault(); event.stopPropagation(); removeItem() }
+        }}>
           <div className="schema-object-list-head">
             {commonLabel}
           </div>
@@ -784,25 +793,9 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
                       type="button"
                       className="schema-object-list-delete"
                       disabled={disabled}
-                      onBlur={() => setPendingDeleteKey(null)}
-                      onClick={() => {
-                        if (!deleteArmed) { setPendingDeleteKey(deleteArmedKey); return }
-                        setPendingDeleteKey(null)
-                        const nextItems = items.filter((_, index) => index !== activeIndex)
-                        setFieldValue(field.key, nextItems)
-                        if (nextItems.length > 0) {
-                          const nextIdx = Math.min(activeIndex, nextItems.length - 1)
-                          setOpenObjectListCards((current) => ({ ...current, [field.key]: String(nextItems[nextIdx].id ?? nextIdx) }))
-                        } else {
-                          setOpenObjectListCards((current) => {
-                            const next = { ...current }
-                            delete next[field.key]
-                            return next
-                          })
-                        }
-                      }}
+                      onClick={removeItem}
                     >
-                      {deleteArmed ? deleteConfirmLabel : deleteLabel}
+                      {deleteLabel}
                     </button>
                   </div>
                   <div className="schema-object-list-grid wr-body">
@@ -913,6 +906,11 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
 
   return (
     <div className="schema-settings">
+      {undo && <SurfaceStatus>{translate(locale, 'scripts', 'settingsDeleted')} · <button type="button" onClick={() => {
+        const items = getObjectList(latestRecord.current[undo.key])
+        if (!undo.item.id || !items.some(item => item.id === undo.item.id)) { const next = [...items]; next.splice(Math.min(undo.index, next.length), 0, undo.item); setFieldValue(undo.key, next) }
+        setUndo(null)
+      }}>{translate(locale, 'scripts', 'settingsUndo')}</button></SurfaceStatus>}
       {schema.sections.map((section) => {
         const fields = section.fields.filter(isRenderableField)
         if (fields.length === 0) return null

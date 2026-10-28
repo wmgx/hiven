@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import type { Locale } from '../../i18n'
 import type { PluginSettingsSource, PluginSettingsFieldTarget } from '../../workspace/pluginSettingsStore'
 import { useLauncherEscapeInterceptor } from './launcherEscapeInterceptor'
@@ -19,11 +19,12 @@ export function GlobalLauncherSettingsFrame({
   height: number
   onClose: () => void
 }) {
+  const backRef = useRef<(() => boolean) | null>(null)
   const escapeHandler = useCallback((event: KeyboardEvent): boolean => {
     if (event.key !== 'Escape') return false
     event.preventDefault()
     event.stopPropagation()
-    onClose()
+    if (!backRef.current?.()) onClose()
     return true
   }, [onClose])
   useLauncherEscapeInterceptor(escapeHandler)
@@ -40,6 +41,7 @@ export function GlobalLauncherSettingsFrame({
         target={target}
         locale={locale}
         onClose={onClose}
+        backRef={backRef}
       />
     </div>
   )

@@ -256,6 +256,7 @@ export type PluginSettingsActionProps<TSettings = unknown> = PluginSettingsBodyP
 
 export type PluginSettingsModalBodyProps<TSettings = unknown> = PluginSettingsBodyProps<TSettings> & {
   modalId: string
+  openModal?: (id: string, context?: Record<string, unknown>) => void
   context?: Record<string, unknown>
   close: () => void
 }
