@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, IconButton, Menu, SegmentedControl, SurfaceHeaderActions } from '@hiven/plugin-ui'
+import { Button, ActionBar, SurfaceStatus, SurfaceError, ValueChip, SurfaceHeaderActions } from '@hiven/plugin-ui'
 import { getPluginDiffHost, type DiffSource } from '@hiven/plugin-diff'
+import { DiffSourceChip } from './DiffSourceChip'
 import { DiffExplanation } from './DiffExplanation'
 import { useDiffSourceText } from './useDiffSourceText'
 import { createDiffSourceReader } from './sourceReadLifetime'
-import { SetComparison } from './SetComparison'
+import { compareLists, MAX_LIST_LINES, type ListCategory, type ListComparison } from './compareLists'
 import { buildHighlightNavigationTargets, clampDiffHunkIndex, moveDiffHunkIndex } from './diffNavigation'
 
 type DiffMode = 'text' | 'json' | 'set'
@@ -55,24 +56,6 @@ function parsePayload(initialText?: string): DiffPayload {
     }
   }
 }
-
-const IconSwap = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="m16 3 4 4-4 4" /><path d="M20 7H4" /><path d="m8 21-4-4 4-4" /><path d="M4 17h16" />
-  </svg>
-)
-
-const IconFormat = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M4 6h16" /><path d="M4 12h10" /><path d="M4 18h14" />
-  </svg>
-)
-
-const IconDetach = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M15 3h6v6" /><path d="M10 14 21 3" /><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-  </svg>
-)
 
 const IconUp = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -124,6 +107,7 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
   useEffect(() => invalidateSourceReads, [invalidateSourceReads])
   const leaveSurface = invalidateSourceReads
   useLayoutEffect(() => host.subscribeLeaveIntent?.(leaveSurface), [host.subscribeLeaveIntent, leaveSurface])
+  const [category, setCategory] = useState<ListCategory>('common')
   const [selectedMode, setDiffMode] = useState<DiffMode | undefined>(payload.mode)
 
   const sourceOptions = payload.sources?.length ? payload.sources : [
@@ -153,9 +137,25 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
 
   const jsonPair = useMemo(() => [parseJson(debouncedOriginal), parseJson(debouncedModified)], [debouncedOriginal, debouncedModified, parseJson])
   const jsonAvailable = jsonPair.every(side => side.ok)
+  useEffect(() => { if (selectedMode === undefined && jsonAvailable) setDiffMode('json') }, [selectedMode, jsonAvailable])
 
   const diffMode = selectedMode ?? (jsonAvailable ? 'json' : 'text')
   const renderMode: DiffMode = diffMode === 'set' ? 'set' : diffMode === 'json' && jsonAvailable ? 'json' : 'text'
+
+  const comparison = useMemo<ListComparison>(() => {
+    try { return compareLists(debouncedOriginal, debouncedModified) }
+    catch { return { ok: false, reason: 'failed' } }
+  }, [debouncedOriginal, debouncedModified])
+  const values = comparison.ok ? comparison.values[category] : []
+  const selectedValues = new Set(values)
+  const setDecorations = (text: string) => {
+    const selected: number[] = [], dimmed: number[] = []
+    text.split(/\r\n|\r|\n/).forEach((line, i) => (selectedValues.has(line.trim()) ? selected : dimmed).push(i + 1))
+    return [
+      { lines: selected, className: 'td-set-selected', rulerColor: 'var(--primary)' },
+      { lines: dimmed, className: '', inlineClassName: 'td-set-dim', rulerColor: '' },
+    ]
+  }
 
   // Editors stay live (originalText/modifiedText); only highlights use the debounce snapshot.
   const { leftHighlights, rightHighlights, leftRanges, rightRanges, navigationHunks } = useMemo(() => {
@@ -235,34 +235,16 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
   const editorLanguage = diffMode === 'json' ? 'json' : 'plaintext'
   return (
     <div className="td-surface">
-      <div className="td-hdr">
-        <div className="td-hdr-c">
-          <SegmentedControl aria-label={t('diff.mode')} value={diffMode}
-            options={(['text', 'json', 'set'] as const).map(value => ({ value, label: t(`diff.${value}Mode`) }))}
-            onChange={value => setDiffMode(value as DiffMode)} />
-        </div>
-        <DiffExplanation host={host} t={t} original={originalText} modified={modifiedText} />
-      </div>
       <SurfaceHeaderActions>
-          {diffMode === 'json' && (
-            <IconButton
-              type="button"
-              className="td-ib"
-              onClick={handleFormat}
-              disabled={!canFormat}
-              title={t('diff.formatHint')}
-              aria-label={t('diff.format')}
-            >
-              <IconFormat />
-            </IconButton>
-          )}
-          <IconButton type="button" className="td-ib" onClick={handleSwap} title={t('diff.swap')} aria-label={t('diff.swap')}>
-            <IconSwap />
-          </IconButton>
-          <IconButton type="button" className="td-ib" onClick={handleDetach} title={t('diff.detach')} aria-label={t('diff.detach')}>
-            <IconDetach />
-          </IconButton>
+        <ValueChip label={t('diff.mode')} value={diffMode}
+          options={(['text', 'json', 'set'] as const).map(value => ({ value, label: t(`diff.${value}Mode`) }))}
+          onChange={value => setDiffMode(value as DiffMode)} onPreview={value => setDiffMode(value as DiffMode)} />
+        {diffMode === 'set' && <ValueChip label={t('compare.result')} value={category}
+          options={(['common', 'leftOnly', 'rightOnly', 'union'] as const).map(value => ({ value, label: t(`compare.${value}`) }))}
+          onChange={value => setCategory(value as ListCategory)} onPreview={value => setCategory(value as ListCategory)} />}
       </SurfaceHeaderActions>
+      <SurfaceError>{diffMode === 'json' && renderMode === 'text' ? t('diff.fallbackToText')
+        : diffMode === 'set' && !comparison.ok ? t(`compare.error.${comparison.reason}`, { limit: MAX_LIST_LINES }) : null}</SurfaceError>
 
       <div className="td-pane-labels">
         {([
@@ -271,23 +253,8 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
         ] as const).map(([side, source, setSource, reader]) => (
           <div className="td-pane-label" key={side}>
             <span>{t(`surface.${side}`)}</span>
-            <Menu
-              header={t('source.snapshotHint')}
-              trigger={<Button variant="ghost" type="button" className="td-source" aria-label={t('source.choose', { side: t(`surface.${side}`) })}>{source.title || t('source.chooseShort')} ▾</Button>}
-              items={sourceOptions.map((option) => ({
-                key: option.sourceId,
-                label: option.kind === 'empty' ? t('source.empty') : option.title,
-                description: option.kind === 'editor-pane' ? t('source.paneDescription', {
-                  language: !option.language || option.language === 'plaintext' ? t('source.plainText') : option.language,
-                  lines: option.text ? option.text.split(/\r\n|\r|\n/).length : 0,
-                  chars: option.text?.length ?? 0,
-                }) : undefined,
-                onSelect: () => {
-                  void reader.select(option, () => host.clipboard.readText(), setSource,
-                    () => host.showToast(t('source.readFailed'), 'error'))
-                },
-              }))}
-            />
+            <DiffSourceChip host={host} t={t} source={source} text={side === 'original' ? originalText : modifiedText}
+              options={sourceOptions} reader={reader} setSource={setSource} />
           </div>
         ))}
       </div>
@@ -297,6 +264,8 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
         <DualEditorView
           leftText={originalText}
           rightText={modifiedText}
+          leftLineDecorations={diffMode === 'set' ? setDecorations(debouncedOriginal) : undefined}
+          rightLineDecorations={diffMode === 'set' ? setDecorations(debouncedModified) : undefined}
           leftHighlights={leftHighlights}
           rightHighlights={rightHighlights}
           leftRanges={leftRanges}
@@ -320,43 +289,18 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
         />
       </div>
 
-      {diffMode === 'set' && <SetComparison host={host} t={t} left={originalText} right={modifiedText} />}
-
-      {diffMode === 'json' && renderMode === 'text' && (
-        <div className="td-fallback" role="status">
-          <span className="td-fallback-dot" aria-hidden />
-          {t('diff.fallbackToText')}
-        </div>
-      )}
-
-      {/* Status bar — matches .sbar from mockup */}
-      {diffMode !== 'set' && <div className="td-sbar">
-        <div className="td-nav">
-          <Button variant="ghost"
-            type="button"
-            className="td-nav-b"
-            onClick={() => navigateHunk(-1)}
-            disabled={totalHunks === 0}
-            aria-label={t('diff.navPrev')}
-          >
-            <IconUp />{t('diff.navPrev')}
-          </Button>
-          <span className="td-nav-p">
-            {totalHunks > 0
-              ? t('diff.navPosition', { current: String(displayedHunkIndex + 1), total: String(totalHunks) })
-              : t('diff.noChanges')}
-          </span>
-          <Button variant="ghost"
-            type="button"
-            className="td-nav-b"
-            onClick={() => navigateHunk(1)}
-            disabled={totalHunks === 0}
-            aria-label={t('diff.navNext')}
-          >
-            {t('diff.navNext')}<IconDown />
-          </Button>
-        </div>
-      </div>}
+      <SurfaceStatus>{diffMode === 'set' ? <span>{t('compare.count', { category: t(`compare.${category}`), count: values.length })}{comparison.ok && (comparison.ignored.left + comparison.ignored.right + comparison.duplicates.left + comparison.duplicates.right > 0) && <small> · {t('compare.excluded', { blank: comparison.ignored.left + comparison.ignored.right, dup: comparison.duplicates.left + comparison.duplicates.right })}</small>}</span>
+        : <span className="td-nav"><Button variant="ghost" disabled={!totalHunks} aria-label={t('diff.navPrev')} onClick={() => navigateHunk(-1)}><IconUp /></Button>
+          {totalHunks ? t('diff.navPosition', { current: displayedHunkIndex + 1, total: totalHunks }) : t('diff.noChanges')}
+          <Button variant="ghost" disabled={!totalHunks} aria-label={t('diff.navNext')} onClick={() => navigateHunk(1)}><IconDown /></Button></span>}</SurfaceStatus>
+      <DiffExplanation host={host} t={t} original={originalText} modified={modifiedText}>{aiAction => <ActionBar>{host.OutputActions && <host.OutputActions
+        text={diffMode === 'set' ? values.join('\n') : [...leftHighlights.map(line => `- ${debouncedOriginal.split('\n')[line - 1]}`), ...rightHighlights.map(line => `+ ${debouncedModified.split('\n')[line - 1]}`)].join('\n')}
+        more={[
+          ...(diffMode === 'json' ? [{ id: 'format', label: t('diff.format'), run: handleFormat, disabled: !canFormat }] : []),
+          { id: 'swap', label: t('diff.swap'), run: handleSwap },
+          { id: 'detach', label: t('diff.detach'), run: handleDetach },
+          ...(aiAction ? [aiAction] : []),
+        ]} />}</ActionBar>}</DiffExplanation>
     </div>
   )
 }

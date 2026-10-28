@@ -4,7 +4,7 @@
  * PanelContribution, PluginDefinition, and related types.
  */
 
-import type { ComponentType } from 'react'
+import type { ComponentType, ReactNode } from 'react'
 import type { Locale } from '../i18n'
 import type { FluxEffect, PaneId } from './types'
 import type { PluginAiApi } from './ai/types'
@@ -862,7 +862,7 @@ export type PluginOutputActionsProps = {
   /** Replaces the text copy for a non-text primary output (e.g. copy an image). */
   copy?: () => Promise<void>
   /** Plugin-specific actions listed under ⌘K, between Continue and Quick Editor. */
-  more?: ReadonlyArray<{ id: string; label: string; run: () => void | Promise<void> }>
+  more?: ReadonlyArray<{ id: string; label: ReactNode; disabled?: boolean; run: () => void | Promise<void> }>
   disabled?: boolean
 }
 

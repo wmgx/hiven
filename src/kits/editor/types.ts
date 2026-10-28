@@ -30,6 +30,7 @@ export interface EditorActionSpec {
 }
 
 export interface LineDecorationSpec {
+  inlineClassName?: string
   lines: number[]
   className: string
   rulerColor: string

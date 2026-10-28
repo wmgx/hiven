@@ -1,85 +1,19 @@
 .td-surface { height: 100%; min-height: 0; display: flex; flex-direction: column; overflow: visible; color: var(--foreground); background: var(--background); font-family: var(--hiven-font-ui); }
 
-/* Header — matches .hdr in mockup */
-.td-hdr { display: flex; flex-wrap: wrap; align-items: center; min-height: 42px; padding: 0 10px 0 12px; gap: 6px; border-bottom: 1px solid var(--border); background: var(--background); user-select: none; flex-shrink: 0; position: relative; z-index: 5; }
-.td-hdr-c { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-
-/* Breadcrumb — matches .bc-back/.bc-sep/.bc-cur in mockup */
-
-/* Icon buttons — matches .ib in mockup */
-.td-ib { width: 28px; height: 28px; }
-.td-ib svg { width: 14px; height: 14px; }
-
 /* Body */
 .td-pane-labels { display: grid; grid-template-columns: 1fr 1fr; min-height: 24px; flex-shrink: 0; border-bottom: 1px solid var(--border); background: var(--subtle); color: var(--faint-foreground); font: 600 var(--text-sm)/24px var(--hiven-font-ui); letter-spacing: 0.04em; }
 .td-pane-labels span { padding: 0 12px; }
 .td-pane-labels span + span { border-left: 1px solid var(--border); }
 .td-body { flex: 1; min-height: 0; overflow: hidden; }
 
-/* Fallback hint when JSON mode cannot parse both sides */
-.td-fallback {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 28px;
-  padding: 4px 12px;
-  border-top: 1px solid var(--border);
-  background: var(--warning-soft);
-  color: var(--muted-foreground);
-  font: 500 var(--text-sm)/1.3 var(--hiven-font-ui);
-  text-align: center;
-}
-.td-fallback-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: var(--radius-pill);
-  background: var(--warning);
-  flex-shrink: 0;
-}
-
-/* Fullscreen page fallback */
-.text-diff-surface { display: flex; flex-direction: column; min-height: 0; }
-.text-diff-fallback {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 28px;
-  padding: 4px 12px;
-  border-top: 1px solid var(--border);
-  background: var(--warning-soft);
-  color: var(--muted-foreground);
-  font: 500 var(--text-sm)/1.3 var(--hiven-font-ui);
-  text-align: center;
-}
-.text-diff-fallback-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: var(--radius-pill);
-  background: var(--warning);
-  flex-shrink: 0;
-}
-
-/* Status bar — matches .sbar in mockup */
-.td-sbar { height: 28px; display: flex; align-items: center; justify-content: center; gap: 2px; background: var(--background); border-top: 1px solid var(--border); user-select: none; flex-shrink: 0; }
-.td-nav { display: inline-flex; align-items: center; gap: 2px; }
-.td-nav-b { gap: 3px; height: auto; padding: 3px 8px; }
-.td-nav-b svg { width: 11px; height: 11px; flex-shrink: 0; }
-.td-nav-p { font: 600 var(--text-sm)/1 var(--hiven-font-ui); color: var(--muted-foreground); font-variant-numeric: tabular-nums; padding: 0 4px; min-width: 32px; text-align: center; }
-
 .td-pane-label { display: flex; align-items: center; justify-content: space-between; min-width: 0; padding: 4px 10px; gap: 8px; }
 .td-pane-label + .td-pane-label { border-left: 1px solid var(--border); }
 .td-pane-label > span { padding: 0; }
 .td-source { display: block; height: 24px; padding: 4px 6px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.td-set { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 12px; border-top: 1px solid var(--border); }
-.td-set-results { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-.td-set-results section { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
-.td-set-results section > div { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: var(--text-sm); }
-.td-set-results textarea { flex: 1; min-height: 0; resize: none; }
-.td-set footer { color: var(--muted-foreground); font-size: var(--text-sm); }
-.td-set [role=alert] { color: var(--destructive); font-size: var(--text-sm); }
 .td-explanation-result { white-space: pre-wrap; user-select: text; font-size: var(--text-base); }
+
+.td-set-selected { background: var(--accent); }
+.td-set-dim { opacity: .35; }
+.td-nav { display: inline-flex; align-items: center; gap: 4px; }
+.td-nav svg { width: 14px; height: 14px; }

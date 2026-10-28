@@ -1,5 +1,5 @@
 import { shouldIgnoreImeKeyDown } from '../../utils/imeKeyboard'
-import { useEffect, useMemo, useRef, useState, type ComponentType, type RefObject } from 'react'
+import { useEffect, useMemo, useRef, useState, type ComponentType, type RefObject, type ReactNode } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { ChevronDownIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -20,7 +20,7 @@ export type OutputActionsDeps = {
   openInQuickEditor?(text: string): Promise<boolean>
 }
 
-type Action = { id: string; label: string; run: () => void | Promise<void> }
+type Action = { id: string; label: ReactNode; disabled?: boolean; run: () => void | Promise<void> }
 
 /** A launcher Block carries at most this much tool output. */
 const CONTINUE_MAX_BYTES = 1024 * 1024
@@ -153,7 +153,7 @@ function HostOutputActions({ deps, text, primary = 'copy', primaryAction: custom
         {t('more')}<kbd>⌘K</kbd><ChevronDownIcon size={14} />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" side="top">
-        {menu.map(item => <DropdownMenuItem key={item.id} onClick={() => void item.run()}>{item.label}</DropdownMenuItem>)}
+        {menu.map(item => <DropdownMenuItem disabled={item.disabled} key={item.id} onClick={() => void item.run()}>{item.label}</DropdownMenuItem>)}
       </DropdownMenuContent>
     </DropdownMenu>}
     <Button variant="ghost" size="sm" disabled={!canPrimary} onClick={() => void primaryAction.run()}>{primaryAction.label}<kbd>{editing ? '⌘↵' : '↵'}</kbd></Button>

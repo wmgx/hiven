@@ -73,6 +73,7 @@ export const TextEditorCore = forwardRef<TextEditorCoreHandle, TextEditorCorePro
         options: {
           isWholeLine: true,
           className: spec.className,
+          inlineClassName: spec.inlineClassName,
           overviewRuler: { color: spec.rulerColor, position: 7 },
         },
       })))

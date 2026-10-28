@@ -53,13 +53,14 @@ export function useAiSendGate({ ai, isCurrent, openAiSettings }: {
       if (!isCurrent() || options?.signal?.aborted) return null
       setError('')
       if (!decideAiSend(send).allowed) { setError(t('secret')); return null }
+      const advertised = targets.get(send.commandId)
       let selection = send.selection
       try { selection ??= await ai?.preflight?.(send.preflight ?? { capabilities: ['text.generate'], inputModalities: ['text'] }) } catch { /* Display unavailable below. */ }
       if (!isCurrent() || options?.signal?.aborted) return null
       if (!selection || selection.status !== 'ready' || !selection.providerId || !selection.agentId) {
         setError(t('unavailable', { reason: t(aiUnavailableReasonKey(selection?.reason ?? 'metadata_unavailable')) })); return null
       }
-      if (!send.selection && targets.get(send.commandId)?.selectionKey !== selection.selectionKey) { setError(t('reason.changed')); return null }
+      if (!send.selection && advertised?.selectionKey !== selection.selectionKey) { setError(t('reason.changed')); return null }
       return { selection }
     } }
   }, [ai, isCurrent, t])

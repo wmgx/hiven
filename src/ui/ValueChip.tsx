@@ -10,6 +10,7 @@ export type ValueChipProps = {
   value: Value
   options?: Array<{ value: string; label: string; description?: string }>
   onChange(value: Value): void | boolean
+  onOpen?(): void
   onPreview?(value: Value): void | boolean
   custom?: 'text' | 'number'
   multiple?: boolean
@@ -19,7 +20,7 @@ export type ValueChipProps = {
 }
 
 /** Selection is provisional until Enter/click; leaving the popup restores its opening value. */
-export function ValueChip({ label, value, options = [], onChange, onPreview, custom, multiple, disabled, emptyLabel, maxSelect }: ValueChipProps) {
+export function ValueChip({ label, value, options = [], onChange, onPreview, onOpen, custom, multiple, disabled, emptyLabel, maxSelect }: ValueChipProps) {
   const trigger = useRef<HTMLButtonElement>(null)
   const popup = useRef<HTMLDivElement>(null)
   const input = useRef<HTMLInputElement>(null)
@@ -71,6 +72,7 @@ export function ValueChip({ label, value, options = [], onChange, onPreview, cus
       aria-label={`${label}: ${display}`} aria-expanded={open} aria-haspopup="listbox"
       onClick={() => {
         if (open) { cancel(); return }
+        onOpen?.()
         origin.current = Array.isArray(value) ? [...value] : value
         setDraft(origin.current)
         setQuery(custom ? String(value) : '')

@@ -41,6 +41,8 @@ export type DualEditorLineRevealRequest = {
 }
 
 export function DualEditorView({
+  leftLineDecorations,
+  rightLineDecorations,
   leftText,
   rightText,
   leftHighlights,
@@ -64,6 +66,8 @@ export function DualEditorView({
   onLeftReady,
   rightAriaLabel,
 }: {
+  leftLineDecorations?: LineDecorationSpec[]
+  rightLineDecorations?: LineDecorationSpec[]
   leftText: string
   rightText: string
   leftHighlights: number[]
@@ -196,7 +200,7 @@ export function DualEditorView({
       wordWrap={wordWrap}
       stickyScroll={leftStickyScrollEnabled}
       optionOverrides={{ ...dualOptionOverrides, ariaLabel: leftAriaLabel }}
-      lineDecorations={leftDecorations}
+      lineDecorations={leftLineDecorations ?? leftDecorations}
       rangeDecorations={leftRangeDecorations}
       onChange={onLeftChange}
       onFocus={onLeftFocus}
@@ -220,7 +224,7 @@ export function DualEditorView({
       wordWrap={wordWrap}
       stickyScroll={rightStickyScrollEnabled}
       optionOverrides={{ ...dualOptionOverrides, ariaLabel: rightAriaLabel }}
-      lineDecorations={rightDecorations}
+      lineDecorations={rightLineDecorations ?? rightDecorations}
       rangeDecorations={rightRangeDecorations}
       onChange={onRightChange}
       onFocus={onRightFocus}
