@@ -349,7 +349,97 @@ def s18(page):
         assert not overflow, (target, overflow)
 
 
-CASES = [s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15,s16,s17,s18]
+def s19(page):
+    command(page, 'uppercase')
+    field = page.locator('.global-launcher-panel textarea').first
+    text = '\n'.join(f'synthetic line {i}' for i in range(80))
+    field.evaluate("(el, text) => { const data = new DataTransfer(); data.setData('text/plain', text); el.dispatchEvent(new ClipboardEvent('paste', {bubbles:true, cancelable:true, clipboardData:data})) }", text)
+    well = page.get_by_test_id('launcher-preview-well')
+    expect(well).to_contain_text('SYNTHETIC LINE 79')
+    assert well.inner_text().count('\n') >= 79
+    page.wait_for_function('__hivenSandbox.launcherSize()?.height === 480')
+    assert well.evaluate('el => el.scrollHeight > el.clientHeight')
+    field.press('Meta+e')
+    page.locator('.launcher-block-editor').fill('\n'.join(f'synthetic line {i}' for i in range(100)))
+    page.locator('.launcher-block-editor').press('Meta+e')
+    expect(well).to_contain_text('SYNTHETIC LINE 99')
+    assert page.evaluate('__hivenSandbox.launcherSize().height') == 480
+
+
+def s20(page):
+    command(page, 'uppercase')
+    page.wait_for_function('__hivenSandbox.launcherSize()?.height === 480')
+    handle = page.get_by_role('separator', name='Resize command window')
+    rect = handle.bounding_box()
+    page.mouse.move(rect['x'] + rect['width']/2, rect['y'] + rect['height']/2)
+    page.mouse.down()
+    page.mouse.move(rect['x'] + rect['width']/2, rect['y'] + rect['height']/2 + 160, steps=8)
+    page.mouse.up()
+    page.wait_for_function('__hivenSandbox.launcherSize()?.height === 640')
+    page.keyboard.press('Escape')
+    page.wait_for_function('__hivenSandbox.launcherSize()?.height !== 640')
+    command(page, 'lowercase')
+    page.wait_for_function('__hivenSandbox.launcherSize()?.height === 640')
+    page.keyboard.press('Escape')
+    page.keyboard.press('Escape')
+    command(page, 'uppercase')
+    page.wait_for_function('__hivenSandbox.launcherSize()?.height === 640')
+
+
+def s21(page):
+    command(page, 'summarize')
+    field = page.locator('.global-launcher-panel textarea').first
+    field.fill('synthetic input')
+    expect(page.locator('.launcher-command-footer-spacer')).to_have_text('↵ Run')
+    expect(page.get_by_test_id('launcher-preview-well')).not_to_contain_text('↵ Run')
+    page.keyboard.press('Escape')
+    command(page, 'uppercase')
+    page.locator('.global-launcher-panel textarea').first.fill('x' * (1024 * 1024 + 1))
+    expect(page.locator('.launcher-command-footer-spacer')).to_have_text('Long input, ↵ to run')
+    expect(page.get_by_test_id('launcher-preview-well')).not_to_contain_text('Long input, ↵ to run')
+
+
+def s22(page):
+    command(page, 'summarize')
+    field = page.locator('.global-launcher-panel textarea').first
+    field.fill('Synthetic input for the simulated summary.')
+    expect(page.locator('.launcher-command-footer-spacer')).to_have_text('↵ Run')
+    field.press('Enter')
+    expect(page.get_by_test_id('launcher-ai-send')).to_be_visible()
+    expect(page.locator('.global-launcher-footer')).to_contain_text('Send')
+    page.keyboard.press('Enter')
+    expect(page.locator('.launcher-command-footer-spacer')).to_have_text('Running… esc to stop')
+    page.keyboard.press('Escape')
+    expect(page.locator('.launcher-command-footer-spacer')).not_to_have_text('Running… esc to stop')
+
+
+def s23(page):
+    page.evaluate('__hivenSandbox.open()')
+    page.locator('.global-launcher-panel textarea').first.focus()
+    expect(page.locator('.launcher-clipboard-explanation')).to_be_visible()
+    # Real use copies in another app while the launcher is hidden, then reopens it.
+    page.evaluate('__hivenSandbox.focusEditor()')
+    copy(page, '{"synthetic":true}')
+    page.evaluate('__hivenSandbox.open()')
+    # The installed fake clock also holds requestAnimationFrame and the clipboard watcher.
+    page.clock.run_for(1200)
+    print('DBG', page.locator('.global-launcher-panel').inner_text()[:300])
+    expect(page.locator('.launcher-clipboard-explanation')).to_have_count(0)
+    expect(page.locator('.global-launcher-panel')).to_contain_text('{"synthetic":true}')
+
+
+def s24(page):
+    changed = {'calculator', 'csv', 'date-time-assistant', 'image-tools', 'qr-code', 'regex-tester', 'text-explode', 'translate'}
+    for target in surfaces(page):
+        if target['pluginId'] not in changed:
+            continue
+        for presentation in ['inline', 'window']:
+            chrome = open_surface(page, target, presentation)
+            title = chrome.locator('.surface-chrome-title').inner_text()
+            expect(chrome.locator('.surface-chrome-body').get_by_text(title, exact=True)).to_have_count(0)
+
+
+CASES = [s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15,s16,s17,s18,s19,s20,s21,s22,s23,s24]
 
 
 def main():
