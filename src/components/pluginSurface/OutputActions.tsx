@@ -124,8 +124,12 @@ function HostOutputActions({ deps, text, primaryRef, primary = 'copy', primaryAc
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented || shouldIgnoreImeKeyDown(event, { current: false }) || event.altKey || !deps.current.isCurrent()) return
-      if (event.target instanceof Element && event.target.closest('.hiven-value-menu, [role="menu"], [role="listbox"]')) return
+      if (event.target instanceof Element && event.target.closest('.hiven-value-menu, [role="listbox"]')) return
       const modified = event.metaKey || event.ctrlKey
+      if (modified && event.key.toLowerCase() === 'k' && !event.shiftKey && keys.current.hasMenu) {
+        event.preventDefault(); event.stopPropagation(); setMenuOpen(open => !open); return
+      }
+      if (event.target instanceof Element && event.target.closest('[role="menu"]')) return
       const inEditor = event.target instanceof Element && Boolean(event.target.closest('textarea, [contenteditable="true"], .monaco-editor')) && !event.target.closest('[data-command-input]')
       if (modified && event.key.toLowerCase() === 'c' && !event.shiftKey && keys.current.canCopy && !window.getSelection()?.toString()) {
         const field = event.target
@@ -137,7 +141,6 @@ function HostOutputActions({ deps, text, primaryRef, primary = 'copy', primaryAc
       const current = keys.current
       if (event.key === 'Enter' && event.shiftKey && current.canTextAct) { event.preventDefault(); void current.doPaste() }
       else if (event.key === 'Enter' && !event.shiftKey && current.canPrimary) { event.preventDefault(); void current.primaryAction.run() }
-      else if (modified && event.key.toLowerCase() === 'k' && !event.shiftKey && current.hasMenu) { event.preventDefault(); setMenuOpen(open => !open) }
     }
     const focus = (event: FocusEvent) => setEditing(event.target instanceof Element && Boolean(event.target.closest('textarea, [contenteditable="true"], .monaco-editor')) && !event.target.closest('[data-command-input]'))
     window.addEventListener('focusin', focus)

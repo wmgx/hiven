@@ -253,3 +253,23 @@ def s41(page):
     expect(field).to_have_value('https://example.test/?a=changed&b=2')
     page.locator('.hiven-output-actions').get_by_role('button', name='Copy', exact=False).click()
     page.wait_for_function('__hivenSandbox.clipboard().text === "https://example.test/?a=changed&b=2"')
+
+
+def s42(page):
+    page.evaluate('__hivenSandbox.openSurface({pluginId:"text-explode",surfaceId:"main",source:"builtin",initialText:"red blue green"})')
+    expect(page.locator('.surface-chrome-field input[name=text-explode-query]')).to_have_value('red blue green')
+    page.clock.run_for(600)
+    page.get_by_role('button', name='red', exact=True).click()
+    expect(page.locator('.surface-shell-status')).to_contain_text('red')
+    expect(page.locator('.tx-preview')).to_have_count(0)
+    page.keyboard.press('Meta+k')
+    page.get_by_role('menuitem', name='Select all', exact=True).click()
+    expect(page.locator('.tx-chip[aria-pressed=true]')).to_have_count(3)
+    page.clock.run_for(300)
+    page.keyboard.press('Meta+k')
+    page.clock.run_for(300)
+    page.get_by_role('menuitem', name='Invert', exact=True).click()
+    expect(page.locator('.tx-chip[aria-pressed=true]')).to_have_count(0)
+    page.get_by_role('button', name='blue', exact=True).click()
+    page.locator('.hiven-output-actions').get_by_role('button', name='Copy', exact=False).click()
+    page.wait_for_function('__hivenSandbox.clipboard().text === "blue"')

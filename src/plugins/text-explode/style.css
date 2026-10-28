@@ -13,10 +13,8 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  min-height: 52px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--subtle);
+  width: 100%;
+  min-width: 0;
 }
 
 .tx-search-row input {
@@ -49,21 +47,6 @@
   height: 26px;
 }
 
-/* ─── empty state (before any text) ─── */
-
-.tx-empty {
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 28px 20px;
-  color: var(--faint-foreground);
-  font-size: var(--text-base);
-  text-align: center;
-}
-
 /* ─── explosion canvas ───
  * Grows with content, not flex:1 — a one-line explode shouldn't force the
  * launcher panel to stretch to full height. Caps out and scrolls internally
@@ -74,39 +57,8 @@
   flex: none;
   margin: 12px 14px 10px;
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--subtle) 72%, var(--background));
-}
-
-.tx-selection-bar {
-  min-height: 38px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 5px 7px 5px 12px;
-  border-bottom: 1px solid var(--border);
-  background: color-mix(in srgb, var(--subtle) 88%, var(--background));
-}
-
-.tx-selection-summary {
-  flex: 1;
-  min-width: 0;
-  color: var(--muted-foreground);
-  font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
-}
-
-.tx-selection-actions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.tx-selection-actions .hiven-ui-toolbar-button {
-  min-height: 26px;
-  padding: 0 7px;
-  font-size: var(--text-sm);
+  border: 0;
+  background: transparent;
 }
 
 .tx-canvas {
@@ -257,64 +209,4 @@
   background: var(--primary-soft);
 }
 
-/* ─── preview well ─── */
-
-.tx-preview {
-  flex: 0 0 auto;
-  margin: 0 14px;
-  border-radius: var(--radius-md);
-  background: var(--subtle);
-  border: 1px solid var(--border);
-}
-
-.tx-preview-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px 0;
-  font-size: var(--text-sm);
-  letter-spacing: 0.06em;
-  color: var(--faint-foreground);
-}
-
-.tx-preview-body {
-  padding: 6px 12px 11px;
-  font-family: var(--font-mono);
-  font-size: var(--text-base);
-  line-height: 1.6;
-  color: var(--foreground);
-  word-break: break-all;
-  min-height: 20px;
-}
-
-/* ─── footer ─── */
-
-.tx-footer {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  padding: 10px 14px 14px;
-}
-
-@media (max-width: 540px) {
-  .tx-selection-bar {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 3px;
-    padding: 7px;
-  }
-
-  .tx-selection-summary {
-    padding: 0 5px;
-  }
-
-  .tx-selection-actions {
-    width: 100%;
-  }
-
-  .tx-selection-actions .hiven-ui-toolbar-button {
-    flex: 1;
-  }
-}
+.tx-result { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }

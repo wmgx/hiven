@@ -8,8 +8,8 @@
   "input.clear": "清空",
   "canvas.label": "碎片",
   "canvas.linkGroup": "链接",
-  "selection.toolbar": "选择",
   "selection.summary": "{selected}/{total}",
-  "preview.title": "预览",
-  "preview.characters": "{count} 字"
+  "preview.characters": "{count} 字",
+  "canvas.empty": "输入文字开始拆分",
+  "canvas.hint": "点击词块 · 拖动框选 · ⇧ 反选"
 }

@@ -8,8 +8,8 @@
   "input.clear": "Clear",
   "canvas.label": "Fragments",
   "canvas.linkGroup": "Link",
-  "selection.toolbar": "Selection",
   "selection.summary": "{selected}/{total}",
-  "preview.title": "Preview",
-  "preview.characters": "{count} chars"
+  "preview.characters": "{count} chars",
+  "canvas.empty": "Enter text to split",
+  "canvas.hint": "Click fragments · drag to select · Shift to toggle"
 }

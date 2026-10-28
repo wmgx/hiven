@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { IconButton, TextInput, ToolbarButton, useImeKeyboard } from '@hiven/plugin-ui'
+import { IconButton, TextInput, SurfaceHeaderField, SurfaceStatus, ActionBar, EmptyState, useImeKeyboard } from '@hiven/plugin-ui'
 import { CloseIcon } from '@hiven/plugin-ui/icons'
-import { Bomb } from 'lucide-react'
 import { assembleFromSelection, isSelectableToken, tokenize, type ExplodeToken } from '../tokenize'
 
 /** Matches the launcher's own query_change debounce so the explode replay doesn't fire per keystroke. */
@@ -237,6 +236,7 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
   const requestBack = useCallback(() => { host.requestBack() }, [host])
 
   const handleInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.defaultPrevented || ime.shouldIgnoreKeyDown(event)) return
     // Token-input convention: ⌫ on an empty field removes the command token (= back).
     if (event.key === 'Backspace' && inputValue === '') {
       event.preventDefault()
@@ -245,7 +245,7 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
   }
 
   const handleKeyDown = useCallback((event: React.KeyboardEvent) => {
-    if (event.key === 'Escape') {
+    if (event.key === 'Escape' && !event.defaultPrevented && !(event.target instanceof Element && event.target.closest('[role=menu], [data-local-escape-layer]'))) {
       event.stopPropagation()
       requestBack()
     }
@@ -255,7 +255,7 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
 
   return (
     <div className="text-explode-surface" onKeyDown={handleKeyDown}>
-      <div className="tx-search-row">
+      <SurfaceHeaderField><div className="tx-search-row">
         <TextInput
           autoFocus
           data-plugin-surface-autofocus="sticky"
@@ -277,24 +277,10 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
             <CloseIcon size={14} />
           </IconButton>
         )}
-      </div>
+      </div></SurfaceHeaderField>
 
       {hasTokens ? (
         <section className="tx-workbench" aria-label={t('canvas.label')}>
-          <div className="tx-selection-bar">
-            <span className="tx-selection-summary" aria-live="polite">
-              {t('selection.summary', { selected: selected.size, total: selectableIndexes.length })}
-            </span>
-            <div className="tx-selection-actions" role="toolbar" aria-label={t('selection.toolbar')}>
-              <ToolbarButton disabled={selected.size === selectableIndexes.length} onClick={selectAll}>
-                {t('action.selectAll')}
-              </ToolbarButton>
-              <ToolbarButton onClick={invertSelection}>{t('action.invert')}</ToolbarButton>
-              <ToolbarButton disabled={!selected.size} onClick={() => setSelected(new Set())}>
-                {t('action.clear')}
-              </ToolbarButton>
-            </div>
-          </div>
           <div
             ref={canvasRef}
             data-no-select
@@ -325,24 +311,14 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
           </div>
         </section>
       ) : (
-        <div className="tx-empty">
-          <Bomb size={22} aria-hidden="true" />
-        </div>
+        <EmptyState title={t('canvas.empty')} hint={t('canvas.hint')} />
       )}
-
-      <div className="tx-preview">
-        <div className="tx-preview-head">
-          <span>{t('preview.title')}</span>
-          <span>{t('preview.characters', { count: assembled.length })}</span>
-        </div>
-        <div className="tx-preview-body">
-          {assembled}
-        </div>
-      </div>
-
-      <div className="tx-footer">
-        {host.OutputActions && <host.OutputActions primary="paste" text={outputReady ? assembled : ''} />}
-      </div>
+      <SurfaceStatus><span className="tx-result" title={assembled}>{assembled || t('selection.summary', { selected: selected.size, total: selectableIndexes.length })}</span><small>{t('preview.characters', { count: assembled.length })}</small></SurfaceStatus>
+      <ActionBar>{host.OutputActions && <host.OutputActions text={outputReady ? assembled : ''} more={[
+        { id: 'select-all', label: t('action.selectAll'), run: selectAll, disabled: selected.size === selectableIndexes.length },
+        { id: 'invert', label: t('action.invert'), run: invertSelection },
+        { id: 'clear', label: t('action.clear'), run: () => setSelected(new Set()), disabled: !selected.size },
+      ]} />}</ActionBar>
     </div>
   )
 }

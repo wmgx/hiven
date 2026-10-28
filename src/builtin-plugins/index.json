@@ -1,5 +1,5 @@
 {
-  "version": 240,
+  "version": 241,
   "packages": [
     {
       "pluginId": "image-tools",
@@ -64,7 +64,7 @@
     {
       "pluginId": "text-explode",
       "dir": "text-explode",
-      "version": "1.0.17"
+      "version": "1.0.18"
     },
     {
       "pluginId": "user-commands",

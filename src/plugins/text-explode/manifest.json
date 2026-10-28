@@ -4,7 +4,12 @@
   "displayNameI18n": {
     "zh": "大爆炸"
   },
-  "version": "1.0.17",
-  "capabilities": ["ui"],
-  "permissions": ["clipboard.write", "accessibility.paste"]
+  "version": "1.0.18",
+  "capabilities": [
+    "ui"
+  ],
+  "permissions": [
+    "clipboard.write",
+    "accessibility.paste"
+  ]
 }
