@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useRef, type MutableRefObject } from 'react'
 import { t, type Locale } from '../../i18n'
 import { resolveIcon } from '../../utils/resolveIcon'
+import { PluginIcon } from '../../ui/PluginIcon'
 import type { LauncherItem as DomainLauncherItem } from '../../workspace/launcher/types'
 import type { MatchRange, MatchType } from '../../workspace/searchRanking'
 import { getPlatformShortcutMeta, isMacPlatform } from './launcherParamShortcuts'
@@ -171,7 +172,7 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
             {resolveIcon(item.icon, 20, item.title)}
           </span>
         ) : (
-          resolveIcon(item.icon, 18, item.title)
+          avatarIcon ? resolveIcon(item.icon, 18, item.title) : <PluginIcon icon={item.icon} title={item.title} />
         )}
       </span>
 

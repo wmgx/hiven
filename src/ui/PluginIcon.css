@@ -1,0 +1,7 @@
+.plugin-icon { width: 28px; height: 28px; flex: none; display: inline-grid; place-items: center; border-radius: 7px; background: var(--primary); color: var(--primary-foreground); box-shadow: inset 0 1px 0 var(--key-edge); }
+.plugin-icon--small { width: 18px; height: 18px; border-radius: 5px; }
+.plugin-icon[data-icon=Calculator], .plugin-icon[data-icon=Braces], .plugin-icon[data-icon=Binary] { background: var(--plugin-orange); }
+.plugin-icon[data-icon=Clipboard], .plugin-icon[data-icon=ClipboardList], .plugin-icon[data-icon=ClipboardClock] { background: var(--plugin-teal); }
+.plugin-icon[data-icon=Languages], .plugin-icon[data-icon=Table], .plugin-icon[data-icon=Table2] { background: var(--plugin-green); }
+.plugin-icon[data-icon=Regex], .plugin-icon[data-icon=QrCode] { background: var(--plugin-graphite); }
+.plugin-icon[data-icon=Diff], .plugin-icon[data-icon=GitCompare], .plugin-icon[data-icon=GitCompareArrows] { background: var(--plugin-red); }

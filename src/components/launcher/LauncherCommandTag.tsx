@@ -3,11 +3,11 @@
  * Visual cousin of ObjectBlockToken; not clipboard semantics.
  */
 
-import { Pencil, X } from 'lucide-react'
+import { ChevronDown } from 'lucide-react'
 import type { Locale } from '../../i18n'
 import { t } from '../../i18n'
 import type { IconRef } from '../../workspace/launcher/types'
-import { resolveIcon } from '../../utils/resolveIcon'
+import { PluginIcon } from '../../ui/PluginIcon'
 import { shouldIgnoreImeKeyDown } from '../../utils/imeKeyboard'
 
 export function LauncherCommandTag({
@@ -22,29 +22,21 @@ export function LauncherCommandTag({
   locale: Locale
 }) {
   return (
-    <span
+    <button
+      type="button"
       className="launcher-command-tag"
       data-testid="launcher-command-tag"
       title={title}
+      onClick={onRemove}
+      aria-label={`${title} · ${t(locale, 'palette.commandTagRemove')}`}
     >
       {icon != null && (
         <span className="launcher-command-tag-ico" aria-hidden>
-          {resolveIcon(icon, 12, title)}
+          <PluginIcon icon={icon} title={title} small />
         </span>
       )}
       <span className="launcher-command-tag-title">{title}</span>
-      <button
-        type="button"
-        className="launcher-command-tag-remove"
-        onClick={(event) => {
-          event.stopPropagation()
-          onRemove()
-        }}
-        aria-label={t(locale, 'palette.commandTagRemove')}
-      >
-        <X size={12} strokeWidth={2.2} aria-hidden="true" />
-      </button>
-    </span>
+    </button>
   )
 }
 
@@ -97,7 +89,7 @@ export function LauncherParamValueChip({
         }}
       >
         <span className="launcher-param-chip-content">{contents}</span>
-        <Pencil className="launcher-param-chip-edit-icon" size={12} aria-hidden="true" />
+        <ChevronDown className="launcher-param-chip-edit-icon" size={12} aria-hidden="true" />
       </button>
     )
   }

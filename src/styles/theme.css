@@ -115,6 +115,11 @@
 /* ─── Type, radius, motion (theme-independent) ─── */
 
 :root {
+  --plugin-orange: #f27a1a;
+  --plugin-teal: #179fa6;
+  --plugin-green: #1f9d5f;
+  --plugin-graphite: #3a3f47;
+  --plugin-red: #f0563f;
   --text-xs: 12px;
   --text-sm: 12px;
   --text-base: 13px;
