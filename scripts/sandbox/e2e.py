@@ -269,7 +269,9 @@ def s14(page):
                 title = target.get('titleI18n', {}).get(language, target['title'])
                 expect(chrome.locator('.surface-chrome-title')).to_have_text(title)
                 header = chrome.locator('.surface-chrome-header')
-                assert round(header.bounding_box()['height']) == 36, target
+                # A header that hosts the surface's input grows to fit a bordered field.
+                expected = 48 if header.locator('.surface-chrome-field input').count() else 36
+                assert round(header.bounding_box()['height']) == expected, target
                 assert header.locator('button[data-tauri-drag-region]').count() == 0
                 assert chrome.locator('.surface-chrome-body').get_attribute('data-no-drag') is not None
                 assert chrome.locator('.surface-chrome-body [data-tauri-drag-region]').count() == 0
