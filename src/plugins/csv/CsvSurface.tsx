@@ -248,6 +248,17 @@ export function CsvSurface(props: PluginSurfaceProps) {
   const fullJobKeyRef = useRef<string>('')
   const abortRef = useRef<AbortController | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    const openFile = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'o') {
+        event.preventDefault()
+        fileInputRef.current?.click()
+      }
+    }
+    window.addEventListener('keydown', openFile)
+    return () => window.removeEventListener('keydown', openFile)
+  }, [])
   const [fileReadingOwner, setFileReadingOwner] = useState<typeof owner | null>(null)
   const readingFile = fileReadingOwner === owner
   const fileReadRef = useRef<object | null>(null)
