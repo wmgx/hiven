@@ -50,5 +50,7 @@
   "explain.close": "Close",
   "compare.union": "Union",
   "compare.result": "Result",
-  "compare.count": "{category} · {count} items"
+  "compare.count": "{category} · {count} items",
+  "source.manual": "Manual input",
+  "diff.jsonCount": "{count} differences: {changed} changed · {removed} removed · {added} added"
 }

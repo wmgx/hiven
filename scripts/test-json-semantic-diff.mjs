@@ -207,3 +207,10 @@ function kinds(changes) {
 }
 
 console.log('json semantic diff checks passed')
+
+{
+  const result = computeJsonLineHighlights('{"a":1,"b":2}', '{"a":3,"c":4}')
+  assert.deepEqual(result.pathHighlights.map(path => [path.kind, Boolean(path.left), Boolean(path.right)]), [
+    ['changed', true, true], ['removed', true, false], ['added', false, true],
+  ])
+}

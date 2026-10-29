@@ -50,5 +50,7 @@
   "explain.close": "关闭",
   "compare.union": "并集",
   "compare.result": "结果",
-  "compare.count": "{category} · {count} 项"
+  "compare.count": "{category} · {count} 项",
+  "source.manual": "手动输入",
+  "diff.jsonCount": "{count} 处差异：改 {changed} · 删 {removed} · 增 {added}"
 }

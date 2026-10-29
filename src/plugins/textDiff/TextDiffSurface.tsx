@@ -7,7 +7,7 @@ import { DiffExplanation } from './DiffExplanation'
 import { useDiffSourceText } from './useDiffSourceText'
 import { createDiffSourceReader } from './sourceReadLifetime'
 import { compareLists, MAX_LIST_LINES, type ListCategory, type ListComparison } from './compareLists'
-import { buildHighlightNavigationTargets, clampDiffHunkIndex, moveDiffHunkIndex } from './diffNavigation'
+import { clampDiffHunkIndex, moveDiffHunkIndex } from './diffNavigation'
 
 type DiffMode = 'text' | 'json' | 'set'
 
@@ -107,6 +107,7 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
   useEffect(() => invalidateSourceReads, [invalidateSourceReads])
   const leaveSurface = invalidateSourceReads
   useLayoutEffect(() => host.subscribeLeaveIntent?.(leaveSurface), [host.subscribeLeaveIntent, leaveSurface])
+  const [editingSide, setEditingSide] = useState<'left' | 'right' | null>(null)
   const [category, setCategory] = useState<ListCategory>('common')
   const [selectedMode, setDiffMode] = useState<DiffMode | undefined>(payload.mode)
 
@@ -142,6 +143,17 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
   const diffMode = selectedMode ?? (jsonAvailable ? 'json' : 'text')
   const renderMode: DiffMode = diffMode === 'set' ? 'set' : diffMode === 'json' && jsonAvailable ? 'json' : 'text'
 
+  const displayText = (text: string, side: 'left' | 'right') => renderMode === 'json' && editingSide !== side
+    ? formatJsonPreserveKeyOrder(text) ?? text : text
+  const leftSnapshot = displayText(debouncedOriginal, 'left')
+  const rightSnapshot = displayText(debouncedModified, 'right')
+  const jsonHighlights = useMemo(() => renderMode === 'json' ? computeJsonLineHighlights(leftSnapshot, rightSnapshot) : null,
+    [renderMode, leftSnapshot, rightSnapshot, computeJsonLineHighlights])
+  const jsonDecorations = (side: 'left' | 'right') => (['changed', 'removed', 'added'] as const).map(kind => ({
+    ranges: (jsonHighlights?.pathHighlights ?? []).filter(path => path.kind === kind).flatMap(path => path[side] ? [path[side]!] : []),
+    className: `td-json-${kind}`, rulerColor: '',
+  }))
+
   const comparison = useMemo<ListComparison>(() => {
     try { return compareLists(debouncedOriginal, debouncedModified) }
     catch { return { ok: false, reason: 'failed' } }
@@ -161,21 +173,18 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
   const { leftHighlights, rightHighlights, leftRanges, rightRanges, navigationHunks } = useMemo(() => {
     if (renderMode === 'set') return { leftHighlights: [], rightHighlights: [], leftRanges: undefined, rightRanges: undefined, navigationHunks: [] }
     const textResult = computeTextLineDiff(debouncedOriginal, debouncedModified)
-    // JSON mode: keep user text as-is; structural changes → character-range blocks.
     if (renderMode === 'json') {
-      const hl = computeJsonLineHighlights(debouncedOriginal, debouncedModified)
+      const hl = jsonHighlights
       if (hl) {
         return {
           leftHighlights: hl.leftHighlights,
           rightHighlights: hl.rightHighlights,
-          leftRanges: hl.leftRanges,
-          rightRanges: hl.rightRanges,
-          navigationHunks: buildHighlightNavigationTargets(
-            hl.leftHighlights,
-            hl.rightHighlights,
-            debouncedOriginal.split('\n').length,
-            debouncedModified.split('\n').length,
-          ),
+          leftRanges: undefined,
+          rightRanges: undefined,
+          navigationHunks: hl.pathHighlights.map(path => ({
+            leftLine: path.left?.startLineNumber ?? path.right?.startLineNumber ?? 1,
+            rightLine: path.right?.startLineNumber ?? path.left?.startLineNumber ?? 1,
+          })),
         }
       }
     }
@@ -187,7 +196,7 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
       rightRanges: undefined as undefined,
       navigationHunks: textResult.hunks,
     }
-  }, [renderMode, debouncedOriginal, debouncedModified, computeJsonLineHighlights, computeTextLineDiff])
+  }, [renderMode, debouncedOriginal, debouncedModified, jsonHighlights, computeTextLineDiff])
 
   const totalHunks = navigationHunks.length
   const displayedHunkIndex = clampDiffHunkIndex(currentHunkIndex, totalHunks)
@@ -260,12 +269,17 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
       </div>
 
       {/* Editor body */}
-      <div className="td-body">
+      <div className="td-body" onFocusCapture={event => {
+        const editor = (event.target as HTMLElement).closest('.monaco-editor')
+        if (editor) setEditingSide(editor === event.currentTarget.querySelector('.monaco-editor') ? 'left' : 'right')
+      }} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget)) setEditingSide(null) }}>
         <DualEditorView
-          leftText={originalText}
-          rightText={modifiedText}
-          leftLineDecorations={diffMode === 'set' ? setDecorations(debouncedOriginal) : undefined}
-          rightLineDecorations={diffMode === 'set' ? setDecorations(debouncedModified) : undefined}
+          leftText={displayText(originalText, 'left')}
+          rightText={displayText(modifiedText, 'right')}
+          leftLineDecorations={diffMode === 'set' ? setDecorations(debouncedOriginal) : jsonHighlights ? [] : undefined}
+          leftRangeDecorations={jsonHighlights ? jsonDecorations('left') : undefined}
+          rightLineDecorations={diffMode === 'set' ? setDecorations(debouncedModified) : jsonHighlights ? [] : undefined}
+          rightRangeDecorations={jsonHighlights ? jsonDecorations('right') : undefined}
           leftHighlights={leftHighlights}
           rightHighlights={rightHighlights}
           leftRanges={leftRanges}
@@ -273,8 +287,8 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
           lineRevealRequest={lineRevealRequest}
           layout="side-by-side"
           language={editorLanguage}
-          onLeftChange={setOriginalText}
-          onRightChange={setModifiedText}
+          onLeftChange={text => { if (text !== displayText(originalText, 'left')) setOriginalText(text) }}
+          onRightChange={text => { if (text !== displayText(modifiedText, 'right')) setModifiedText(text) }}
           fontSize={appearance.fontSize}
           lineNumbers={appearance.lineNumbers}
           wordWrap={appearance.wordWrap}
@@ -291,10 +305,15 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
 
       <SurfaceStatus>{diffMode === 'set' ? <span>{t('compare.count', { category: t(`compare.${category}`), count: values.length })}{comparison.ok && (comparison.ignored.left + comparison.ignored.right + comparison.duplicates.left + comparison.duplicates.right > 0) && <small> · {t('compare.excluded', { blank: comparison.ignored.left + comparison.ignored.right, dup: comparison.duplicates.left + comparison.duplicates.right })}</small>}</span>
         : <span className="td-nav"><Button variant="ghost" disabled={!totalHunks} aria-label={t('diff.navPrev')} onClick={() => navigateHunk(-1)}><IconUp /></Button>
-          {totalHunks ? t('diff.navPosition', { current: displayedHunkIndex + 1, total: totalHunks }) : t('diff.noChanges')}
+          {jsonHighlights ? t('diff.jsonCount', {
+            count: jsonHighlights.changes.length,
+            changed: jsonHighlights.changes.filter(change => change.kind === 'changed').length,
+            removed: jsonHighlights.changes.filter(change => change.kind === 'removed').length,
+            added: jsonHighlights.changes.filter(change => change.kind === 'added').length,
+          }) : totalHunks ? t('diff.navPosition', { current: displayedHunkIndex + 1, total: totalHunks }) : t('diff.noChanges')}
           <Button variant="ghost" disabled={!totalHunks} aria-label={t('diff.navNext')} onClick={() => navigateHunk(1)}><IconDown /></Button></span>}</SurfaceStatus>
       <DiffExplanation host={host} t={t} original={originalText} modified={modifiedText}>{aiAction => <ActionBar>{host.OutputActions && <host.OutputActions
-        text={diffMode === 'set' ? values.join('\n') : [...leftHighlights.map(line => `- ${debouncedOriginal.split('\n')[line - 1]}`), ...rightHighlights.map(line => `+ ${debouncedModified.split('\n')[line - 1]}`)].join('\n')}
+        text={diffMode === 'set' ? values.join('\n') : [...leftHighlights.map(line => `- ${leftSnapshot.split('\n')[line - 1]}`), ...rightHighlights.map(line => `+ ${rightSnapshot.split('\n')[line - 1]}`)].join('\n')}
         more={[
           ...(diffMode === 'json' ? [{ id: 'format', label: t('diff.format'), run: handleFormat, disabled: !canFormat }] : []),
           { id: 'swap', label: t('diff.swap'), run: handleSwap },

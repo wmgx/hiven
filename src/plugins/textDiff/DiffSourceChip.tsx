@@ -20,9 +20,10 @@ export function DiffSourceChip({ host, t, source, text, options, reader, setSour
       previews.current.set(next.sourceId, next); setSource(next)
     }, () => host.showToast(t('source.readFailed'), 'error'))
   }
+  const choices = options.some(option => option.sourceId === source.sourceId) ? options : [{ ...source, title: source.title || t('source.manual') }, ...options]
   return <ValueChip label={t('source.chooseShort')} value={source.sourceId}
     onOpen={() => { snapshot.current = { ...source, text }; previews.current.clear() }}
-    options={options.map(option => ({ value: option.sourceId, label: option.kind === 'empty' ? t('source.empty') : option.title,
+    options={choices.map(option => ({ value: option.sourceId, label: option.title || t('source.empty'),
       description: option.kind === 'editor-pane' ? t('source.paneDescription', { language: option.language || t('source.plainText'), lines: option.text?.split('\n').length ?? 0, chars: option.text?.length ?? 0 }) : t('source.snapshotHint'),
     }))} onPreview={select} onChange={select} />
 }

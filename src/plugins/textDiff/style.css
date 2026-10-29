@@ -13,7 +13,11 @@
 
 .td-explanation-result { white-space: pre-wrap; user-select: text; font-size: var(--text-base); }
 
-.td-set-selected { background: var(--accent); }
+.td-set-selected { background: var(--highlight); }
 .td-set-dim { opacity: .35; }
 .td-nav { display: inline-flex; align-items: center; gap: 4px; }
 .td-nav svg { width: 14px; height: 14px; }
+
+.td-json-changed { background: var(--warning-highlight); }
+.td-json-removed { background: var(--destructive-highlight); }
+.td-json-added { background: var(--success-highlight); }

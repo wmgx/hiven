@@ -39,6 +39,10 @@
   --shadow-float: 0 4px 16px #00002d17, 0 0 0 var(--hairline) var(--slate-a6);
   --window-edge: rgba(15,20,30,.09);
   --well: #f6f7f8;
+  --highlight: rgba(37,99,235,.14);
+  --warning-highlight: rgba(217,119,6,.13);
+  --success-highlight: rgba(22,163,74,.12);
+  --destructive-highlight: rgba(220,38,38,.10);
   --key-top: #ffffff; --key-bottom: #f2f3f5; --key-edge: rgba(15,20,30,.16);
   --shadow-window: 0 0 0 1px var(--window-edge), 0 28px 64px -18px rgba(15,23,42,.28), 0 10px 22px -10px rgba(15,23,42,.16);
 }
@@ -64,6 +68,10 @@
   --shadow-float: 0 8px 24px #00000066, 0 0 0 var(--hairline) var(--slate-a6);
   --window-edge: rgba(255,255,255,.09);
   --well: #222427;
+  --highlight: rgba(91,140,245,.22);
+  --warning-highlight: rgba(251,146,60,.18);
+  --success-highlight: rgba(74,222,128,.14);
+  --destructive-highlight: rgba(248,113,113,.14);
   --key-top: #34363b; --key-bottom: #2b2d31; --key-edge: rgba(255,255,255,.12);
   --shadow-window: 0 0 0 1px var(--window-edge), 0 28px 64px -18px rgba(0,0,0,.7), 0 10px 22px -10px rgba(0,0,0,.5);
 }

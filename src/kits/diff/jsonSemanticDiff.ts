@@ -776,6 +776,7 @@ export function computeJsonLineHighlights(
   leftRanges: JsonHighlightRange[]
   rightRanges: JsonHighlightRange[]
   changes: JsonDiffChange[]
+  pathHighlights: Array<{ kind: JsonDiffChange['kind']; left?: JsonHighlightRange; right?: JsonHighlightRange }>
 } | null {
   const leftParsed = parseJson(leftText)
   const rightParsed = parseJson(rightText)
@@ -805,6 +806,11 @@ export function computeJsonLineHighlights(
   return {
     leftHighlights: [...leftLines].sort((a, b) => a - b),
     rightHighlights: [...rightLines].sort((a, b) => a - b),
+    pathHighlights: changes.map(change => {
+      const left = change.kind !== 'added' ? leftMap.get(change.path) : undefined
+      const right = change.kind !== 'removed' ? rightMap.get(change.path) : undefined
+      return { kind: change.kind, left: left && rangeToHighlight(left), right: right && rangeToHighlight(right) }
+    }),
     leftRanges: mergeHighlightRanges(leftRangesRaw),
     rightRanges: mergeHighlightRanges(rightRangesRaw),
     changes,

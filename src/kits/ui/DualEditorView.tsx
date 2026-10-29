@@ -43,6 +43,8 @@ export type DualEditorLineRevealRequest = {
 export function DualEditorView({
   leftLineDecorations,
   rightLineDecorations,
+  leftRangeDecorations,
+  rightRangeDecorations,
   leftText,
   rightText,
   leftHighlights,
@@ -66,6 +68,8 @@ export function DualEditorView({
   onLeftReady,
   rightAriaLabel,
 }: {
+  leftRangeDecorations?: RangeDecorationSpec[]
+  rightRangeDecorations?: RangeDecorationSpec[]
   leftLineDecorations?: LineDecorationSpec[]
   rightLineDecorations?: LineDecorationSpec[]
   leftText: string
@@ -161,7 +165,7 @@ export function DualEditorView({
     }]
   }, [rightHighlights, useRightRanges])
 
-  const leftRangeDecorations = useMemo<RangeDecorationSpec[]>(() => {
+  const defaultLeftRangeDecorations = useMemo<RangeDecorationSpec[]>(() => {
     if (!useLeftRanges || !leftRanges) return []
     return [{
       ranges: leftRanges,
@@ -170,7 +174,7 @@ export function DualEditorView({
     }]
   }, [leftRanges, useLeftRanges])
 
-  const rightRangeDecorations = useMemo<RangeDecorationSpec[]>(() => {
+  const defaultRightRangeDecorations = useMemo<RangeDecorationSpec[]>(() => {
     if (!useRightRanges || !rightRanges) return []
     return [{
       ranges: rightRanges,
@@ -201,7 +205,7 @@ export function DualEditorView({
       stickyScroll={leftStickyScrollEnabled}
       optionOverrides={{ ...dualOptionOverrides, ariaLabel: leftAriaLabel }}
       lineDecorations={leftLineDecorations ?? leftDecorations}
-      rangeDecorations={leftRangeDecorations}
+      rangeDecorations={leftRangeDecorations ?? defaultLeftRangeDecorations}
       onChange={onLeftChange}
       onFocus={onLeftFocus}
       onReady={(editor) => {
@@ -225,7 +229,7 @@ export function DualEditorView({
       stickyScroll={rightStickyScrollEnabled}
       optionOverrides={{ ...dualOptionOverrides, ariaLabel: rightAriaLabel }}
       lineDecorations={rightLineDecorations ?? rightDecorations}
-      rangeDecorations={rightRangeDecorations}
+      rangeDecorations={rightRangeDecorations ?? defaultRightRangeDecorations}
       onChange={onRightChange}
       onFocus={onRightFocus}
       onReady={(editor) => applyLineReveal({ side: 'right', editor })}
