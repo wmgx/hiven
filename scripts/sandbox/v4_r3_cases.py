@@ -34,3 +34,35 @@ def s56(page):
         expect(field).to_have_value('')
         size(318)
         field.press('Escape')
+
+
+def s57(page):
+    folder = Path('temp/v4r3-visual')
+    folder.mkdir(parents=True, exist_ok=True)
+
+    def keycaps():
+        page.clock.run_for(300)
+        return page.evaluate('''() => [...document.querySelectorAll('.global-launcher-panel :is(kbd,.r-kbd,.rkbd)')]
+            .filter(el => el.getClientRects().length).map(el => {
+                const style = getComputedStyle(el);
+                return [el.textContent, style.backgroundImage, style.fontSize, style.height];
+            })''')
+
+    for theme in ['light', 'dark']:
+        page.evaluate('theme => __hivenSandbox.appearance(theme, "zh")', theme)
+        page.evaluate('__hivenSandbox.open()')
+        field = page.locator('.global-launcher-panel textarea').first
+        expect(field).to_be_visible()
+        field.fill('s')
+        expect(page.locator('[data-launcher-row-index]').first).to_be_visible()
+        root = keycaps()
+        assert len(root) >= 3, root
+        page.locator('.global-launcher-panel').screenshot(path=str(folder / f'G2-keycaps-{theme}.png'), animations='disabled')
+        page.evaluate('__hivenSandbox.openSurface({pluginId:"text-tools",surfaceId:"base64",source:"builtin",initialText:"hello"})')
+        expect(page.locator('.surface-shell-footer kbd').first).to_be_visible()
+        base64 = keycaps()
+        assert base64, base64
+        expected = base64[0][1:]
+        assert all(cap[1:] == expected for cap in root + base64), (root, base64)
+        page.keyboard.press('Escape')
+        page.keyboard.press('Escape')

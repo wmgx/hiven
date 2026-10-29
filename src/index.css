@@ -5479,22 +5479,6 @@ body[data-theme='dark'] .global-launcher-panel .l-row.cmd-item.selected {
   padding-right: 5px;
 }
 
-.l-row .r-quick-select-inline {
-  padding-left: 5px;
-  border-left: 1px solid color-mix(in srgb, currentColor 25%, transparent);
-  color: inherit;
-  font-family: var(--mono);
-  font-size: 9.5px;
-  font-weight: 500;
-  letter-spacing: 0.5px;
-  opacity: 0.85;
-}
-
-.l-row .r-quick-select-inline.is-selected {
-  color: var(--accent);
-  opacity: 1;
-}
-
 .l-row.sel .r-tag,
 .l-row.selected .r-tag,
 .l-row.sel .launcher-kind-tag,
@@ -5529,36 +5513,6 @@ body[data-theme='dark'] .l-row.selected .launcher-kind-tag {
   color: var(--text-3);
   font-family: var(--mono);
   font-size: 11px;
-}
-
-.l-row .r-shortcut-badge {
-  flex: none;
-  padding: 1px 5px;
-  border-radius: 4px;
-  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
-  background: var(--surface, rgba(0, 0, 0, 0.03));
-  color: var(--text-3);
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 500;
-  line-height: 1.4;
-  letter-spacing: 0.5px;
-}
-
-/* ⌘1–⌘8 list-position quick run (SuperCmd-style discoverability) */
-.l-row .r-quick-select {
-  min-width: 1.75rem;
-  text-align: center;
-  letter-spacing: 0;
-  color: var(--text-3);
-}
-
-.l-row.sel .r-quick-select,
-.l-row.selected .r-quick-select,
-.l-row .r-quick-select.is-selected {
-  border-color: var(--accent-border-soft, color-mix(in srgb, var(--accent) 28%, transparent));
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 /* L2 result / confirm choices — align with suggest rows, not system dialog chrome */
@@ -6058,12 +6012,6 @@ body[data-theme='dark'] .check {
   opacity: 0.55;
 }
 
-.l-foot:not(.hiven-footer-actions) .l-foot:not(.hiven-footer-actions)-primary kbd {
-  border-color: var(--field-focus-border);
-  color: var(--accent);
-}
-
-.l-foot:not(.hiven-footer-actions) kbd,
 .kbd {
   padding: 1px 5px;
   border: var(--hairline, 0.5px) solid var(--border);
@@ -6078,30 +6026,13 @@ body[data-theme='dark'] .check {
   font-size: 10.5px;
 }
 
-.l-foot:not(.hiven-footer-actions) kbd {
-  flex: none;
-  font-size: 11.5px;
-}
-
-.flux-spatial-shell[data-theme='dark'] .l-foot:not(.hiven-footer-actions) kbd,
 .flux-spatial-shell[data-theme='dark'] .kbd,
-body[data-theme='dark'] .l-foot:not(.hiven-footer-actions) kbd,
 body[data-theme='dark'] .kbd {
   background: linear-gradient(180deg, #323238 0%, #2a2a2e 100%);
   border-color: var(--border);
   box-shadow:
     0 1px 0 rgba(0, 0, 0, 0.35),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
-}
-
-.l-foot:not(.hiven-footer-actions) .primary kbd {
-  border-color: var(--field-focus-border);
-  color: var(--accent);
-}
-
-.flux-spatial-shell[data-theme='dark'] .l-foot:not(.hiven-footer-actions) .primary kbd,
-body[data-theme='dark'] .l-foot:not(.hiven-footer-actions) .primary kbd {
-  border-color: var(--accent);
 }
 
 .body {
@@ -8840,24 +8771,6 @@ html[data-window='launcher'] .flux-spatial-shell .l-row .r-ico img.r-remote-img 
   visibility: visible !important;
 }
 
-/* ⌘N chips — quiet, readable */
-html[data-window='launcher'] .flux-spatial-shell .l-row .r-quick-select {
-  min-width: 1.85rem;
-  border: var(--hairline) solid var(--border) !important;
-  border-radius: var(--radius-sm);
-  background: var(--secondary) !important;
-  color: var(--muted-foreground) !important;
-  font-weight: 500;
-}
-
-html[data-window='launcher'] .flux-spatial-shell .l-row.sel .r-quick-select,
-html[data-window='launcher'] .flux-spatial-shell .l-row.selected .r-quick-select,
-html[data-window='launcher'] .flux-spatial-shell .l-row .r-quick-select.is-selected {
-  border-color: var(--border-strong) !important;
-  background: var(--background) !important;
-  color: var(--foreground) !important;
-}
-
 /* Kind tags: faint text only */
 html[data-window='launcher'] .flux-spatial-shell .l-row .r-tag,
 html[data-window='launcher'] .flux-spatial-shell .l-row .launcher-kind-tag {
@@ -8888,18 +8801,6 @@ html[data-window='launcher'] .flux-spatial-shell .l-foot .l-foot-primary {
   color: var(--foreground);
   background: transparent;
   box-shadow: none;
-}
-
-html[data-window='launcher'] .flux-spatial-shell .l-foot:not(.hiven-footer-actions) .l-foot:not(.hiven-footer-actions)-primary kbd {
-  color: var(--muted-foreground);
-  font-size: var(--text-sm);
-}
-
-html[data-window='launcher'] .flux-spatial-shell .l-foot:not(.hiven-footer-actions) kbd {
-  background: var(--secondary) !important;
-  border: var(--hairline) solid var(--border) !important;
-  box-shadow: none !important;
-  color: var(--muted-foreground) !important;
 }
 
 html[data-window='launcher'] .flux-spatial-shell .object-block-token,
@@ -8956,6 +8857,7 @@ html[data-window='launcher'] .flux-spatial-shell .recent-clipboard-hint {
 .hiven-ui-surface-actionbar > .hiven-output-actions { margin-left: auto; }
 .hiven-output-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .launcher-command-footer.hiven-footer-actions { min-height: var(--surface-footer-height); padding: 0 14px; background: var(--subtle); }
+.global-launcher-panel :is(kbd, .r-kbd, .rkbd),
 .hiven-footer-actions kbd { display: inline-grid; place-items: center; flex: none; min-width: 19px; height: 19px; margin: 0; padding: 0 4px; border: 0; border-radius: 5px; background: linear-gradient(180deg, var(--key-top), var(--key-bottom)); box-shadow: 0 0 0 .5px var(--key-edge), 0 1px 0 var(--key-edge); font: 500 11px var(--font-sans); color: var(--muted-foreground); }
 .hiven-footer-actions :is(.grp, button) { gap: 6px; }
 .hiven-footer-actions :is(.hiven-ui-button, [data-slot='button'], .launcher-footer-back-btn, .l-foot-primary) { height: 28px; min-height: 28px; padding: 0 6px; border: 0; background: transparent; box-shadow: none; color: var(--foreground); font-size: 12px; font-weight: 500; }

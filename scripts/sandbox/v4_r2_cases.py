@@ -175,7 +175,13 @@ def s53(page):
     assert key.evaluate('el => el.previousSibling?.textContent.trim().length > 0')
     page.evaluate('__hivenSandbox.openSurface({pluginId:"text-tools",surfaceId:"base64",source:"builtin",initialText:"hello"})')
     expect(page.locator('.surface-shell-footer kbd').first).to_be_visible()
-    other = page.locator('.surface-shell-footer kbd').first.evaluate('el => {const s=getComputedStyle(el);return [s.fontSize,s.height,s.backgroundImage,s.borderRadius]}')
+    # Read the current node atomically: plugin loading can replace a resolved locator's node.
+    other = page.wait_for_function('''() => {
+        const el = document.querySelector('.surface-shell-footer kbd');
+        if (!el) return false;
+        const s = getComputedStyle(el);
+        return s.height && [s.fontSize,s.height,s.backgroundImage,s.borderRadius];
+    }''').json_value()
     assert style == other, (style, other)
     capture(page, 'V6-actions')
 
