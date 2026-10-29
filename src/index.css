@@ -552,20 +552,20 @@ html[data-web-native-bridge='true'][data-window='launcher'] .global-launcher-ove
 }
 
 /* ─── Scrollbar ───
-   Thin and quiet everywhere: a faint 4px thumb with no track, darker only
-   under the pointer. Custom scrollbars also keep a mouse-attached Mac from
-   falling back to wide legacy bars. */
-::-webkit-scrollbar {
+   Native overlay scrollbars are left alone. When the system shows legacy
+   always-visible bars (data-legacy-scrollbars, set in main.tsx), they become a
+   faint 4px thumb with no track. */
+[data-legacy-scrollbars] ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
-::-webkit-scrollbar-track,
-::-webkit-scrollbar-corner {
+[data-legacy-scrollbars] ::-webkit-scrollbar-track,
+[data-legacy-scrollbars] ::-webkit-scrollbar-corner {
   background: transparent;
 }
 
-::-webkit-scrollbar-thumb {
+[data-legacy-scrollbars] ::-webkit-scrollbar-thumb {
   min-height: 32px;
   border: 2px solid transparent;
   border-radius: 999px;
@@ -573,8 +573,8 @@ html[data-web-native-bridge='true'][data-window='launcher'] .global-launcher-ove
   background-clip: content-box;
 }
 
-::-webkit-scrollbar-thumb:hover,
-::-webkit-scrollbar-thumb:active {
+[data-legacy-scrollbars] ::-webkit-scrollbar-thumb:hover,
+[data-legacy-scrollbars] ::-webkit-scrollbar-thumb:active {
   background-color: var(--scrollbar-thumb-hover);
 }
 

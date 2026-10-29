@@ -24,6 +24,19 @@ if (isNativeTauriRuntime) {
   document.addEventListener('contextmenu', (e) => e.preventDefault())
 }
 
+// Overlay scrollbars (trackpad Macs) stay native: they float over content and
+// fade out after scrolling. Only always-visible legacy bars get the thin style.
+function markLegacyScrollbars() {
+  const probe = document.createElement('div')
+  probe.style.cssText = 'position:absolute;top:-99px;width:50px;height:50px;overflow:scroll'
+  document.documentElement.append(probe)
+  document.documentElement.toggleAttribute('data-legacy-scrollbars', probe.offsetWidth > probe.clientWidth)
+  probe.remove()
+}
+markLegacyScrollbars()
+// The macOS setting follows whether a mouse is attached, so check again on return.
+window.addEventListener('focus', markLegacyScrollbars)
+
 async function loadRootComponent(): Promise<ComponentType> {
   if (import.meta.env.DEV && window.__HIVEN_SANDBOX__) return (await import('./workspace/sandbox/Sandbox')).default
   if (windowType === 'toast-hud') return (await import('./components/ToastHud.tsx')).ToastHud
