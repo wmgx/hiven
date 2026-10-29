@@ -181,11 +181,16 @@ def s53(page):
 
 
 def s54(page):
+    page.evaluate('__hivenSandbox.open()')
+    page.wait_for_timeout(250)
+    page.locator('.global-launcher-panel textarea').first.fill('base64')
+    expect(page.locator('[data-launcher-row-index]')).to_have_count(1)
     page.evaluate('__hivenSandbox.openSurface({pluginId:"qr-code",surfaceId:"main",source:"builtin",initialText:"https://example.com"})')
     expect(page.locator('.qr-surface__preview img')).to_be_visible()
     page.get_by_role('button', name='Size: 256px', exact=True).click()
     page.get_by_role('option', name='480px', exact=True).click()
     def visible():
+        assert page.locator('.global-launcher-panel').bounding_box()['height'] >= 500
         image = page.locator('.qr-surface__preview img')
         expect(image).to_be_visible()
         box = image.bounding_box()
@@ -203,6 +208,7 @@ def s55(page):
     page.evaluate('initialText => __hivenSandbox.openSurface({pluginId:"text-diff",surfaceId:"main",source:"builtin",initialText})', json.dumps({'mode':'set','original':{'text':'apple\nbanana\ncherry\n'},'modified':{'text':'banana\ndate\nfig\n'}}))
     def union():
         expect(page.get_by_role('button', name='结果:', exact=False)).to_be_visible()
+        assert page.locator('.global-launcher-panel').bounding_box()['height'] >= 600
         chip = page.locator('[data-value-chip]').filter(has_text='交集').first
         if chip.count():
             chip.click()

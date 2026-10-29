@@ -160,6 +160,9 @@ export function applyStandaloneLauncherGeometry(panel: HTMLElement, geometry: St
   if (panel.classList.contains('launcher-command-mode') || geometry.bodyMaxHeight != null) {
     panel.style.height = `${geometry.height - STANDALONE_LAUNCHER_VERTICAL_PADDING}px`
     panel.parentElement?.style.setProperty('--launcher-command-height', `${geometry.height}px`)
+  } else if (panel.style.height.endsWith('px')) {
+    // A fixed surface owns its height; discard the preceding content measurement.
+    panel.style.removeProperty('height')
   }
   if (geometry.bodyMaxHeight != null) {
     panel.style.setProperty('--launcher-body-max-height', `${geometry.bodyMaxHeight}px`)
