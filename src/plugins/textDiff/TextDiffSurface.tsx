@@ -151,7 +151,7 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
     [renderMode, leftSnapshot, rightSnapshot, computeJsonLineHighlights])
   const jsonDecorations = (side: 'left' | 'right') => (['changed', 'removed', 'added'] as const).map(kind => ({
     ranges: (jsonHighlights?.pathHighlights ?? []).filter(path => path.kind === kind).flatMap(path => path[side] ? [path[side]!] : []),
-    className: `td-json-${kind}`, rulerColor: '',
+    className: `td-json-${kind}`, rulerColor: 'transparent',
   }))
 
   const comparison = useMemo<ListComparison>(() => {
@@ -164,8 +164,8 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
     const selected: number[] = [], dimmed: number[] = []
     text.split(/\r\n|\r|\n/).forEach((line, i) => (selectedValues.has(line.trim()) ? selected : dimmed).push(i + 1))
     return [
-      { lines: selected, className: 'td-set-selected', rulerColor: 'var(--primary)' },
-      { lines: dimmed, className: '', inlineClassName: 'td-set-dim', rulerColor: '' },
+      { lines: selected, className: 'td-set-selected', rulerColor: 'transparent' },
+      { lines: dimmed, className: '', inlineClassName: 'td-set-dim', rulerColor: 'transparent' },
     ]
   }
 
