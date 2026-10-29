@@ -14,18 +14,13 @@ export {
   GLOBAL_LAUNCHER_SETTINGS_HEIGHT,
   GLOBAL_LAUNCHER_SETTINGS_WIDTH,
   STANDALONE_LAUNCHER_HORIZONTAL_PADDING,
-  STANDALONE_LAUNCHER_LIST_MAX_HEIGHT,
   STANDALONE_LAUNCHER_MAX_HEIGHT,
   STANDALONE_LAUNCHER_MIN_HEIGHT,
   STANDALONE_LAUNCHER_VERTICAL_PADDING,
   STANDALONE_LAUNCHER_WIDTH,
   STANDALONE_SURFACE_MAX_HEIGHT,
   STANDALONE_SURFACE_MAX_WIDTH,
-  applyStandaloneLauncherGeometry,
-  computeStandaloneLauncherGeometry,
-  computeStandaloneLauncherSize,
-  measureLauncherPanelParts,
-  measureStandaloneLauncherPanelHeight,
+  layoutStandaloneLauncher,
 } from './GlobalLauncherGeometry'
 
 type LauncherSurfaceShell = PluginUiSurfaceContribution['shell']
@@ -82,7 +77,7 @@ export function buildGlobalLauncherPanelStyle({
       ? 'calc(100vh - 24px)'
       : hostSurfaceTarget
       ? `min(${STANDALONE_SURFACE_MAX_HEIGHT}px, calc(100vh - 24px))`
-      : surfaceShell?.inlineHeight
+      : surfaceShell?.inlineHeight && surfaceShell.mode !== 'command'
       ? `min(${surfaceHeight(surfaceShell.inlineHeight)}px, calc(100vh - 24px))`
       : launcherSettingsTarget
       ? `min(${GLOBAL_LAUNCHER_SETTINGS_HEIGHT}px, calc(100vh - 24px))`

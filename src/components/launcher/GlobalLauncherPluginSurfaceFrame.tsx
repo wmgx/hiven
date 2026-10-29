@@ -143,7 +143,7 @@ export function GlobalLauncherPluginSurfaceFrame({
       tabIndex={-1}
       style={fillsWindow
         ? { height: '100%', flex: '1 1 0', minWidth: 0 }
-        : autoHeight ? { flex: '1 1 auto', height: 'auto', maxHeight: shellHeight } : { height: shellHeight }}
+        : autoHeight ? { flex: '1 1 auto', height: 'auto' } : { height: shellHeight }}
     >
       <div
         className="global-launcher-body global-launcher-body--surface"
@@ -153,7 +153,8 @@ export function GlobalLauncherPluginSurfaceFrame({
           fillsWindow
             ? { maxHeight: 'none', flex: '1 1 0', minWidth: 0, overflow: 'hidden', touchAction: 'auto' }
             : autoHeight
-            ? { maxHeight: bodyHeight, overflow: 'hidden', touchAction: 'auto' }
+            // The panel caps the height; the shell body is what scrolls.
+            ? { overflow: 'hidden', touchAction: 'auto' }
             : { maxHeight: bodyHeight, height: bodyHeight, overflow: 'hidden', touchAction: 'auto' }
         }
       >

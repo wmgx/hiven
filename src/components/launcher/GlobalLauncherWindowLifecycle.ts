@@ -5,7 +5,7 @@ import type { LauncherHostSurfaceTarget } from '../../store'
 import { configureCurrentLauncherWindow, invalidateCurrentLauncherWindowResize, onCurrentLauncherWindowFocusChanged, startCurrentLauncherWindowDrag } from '../../workspace/windowManager/launcherWindow'
 import type { PluginUiSurfaceContribution } from '../../workspace/pluginTypes'
 import { clearStandaloneLauncherBlurDevtoolsSuppress, launcherNativeDialogFocus, shouldKeepLauncherOpenOnBlur } from '../../workspace/launcherBlurGuard'
-import { applyStandaloneLauncherGeometry, computeStandaloneLauncherGeometry } from './GlobalLauncherLayout'
+import { layoutStandaloneLauncher } from './GlobalLauncherLayout'
 import { logLauncherPerf } from '../../workspace/launcher/perf'
 import { observePasteRecoveryFocus, pasteRecoveryFocus } from '../../workspace/pasteRecovery'
 import { LAUNCHER_NEW_SESSION_EVENT } from '../../workspace/launcherWindowEvents'
@@ -361,19 +361,14 @@ export function useStandaloneLauncherResize({
       initialWindowWidthRef.current = initialWindowWidth
       const panel = panelRef.current
       if (!panel) return
-      if (!resizableSurfaceKey) panel.querySelectorAll('.launcher-preview-well pre, .global-launcher-header, .launcher-command-footer, [data-command-content], .surface-chrome-header, .surface-shell-error, .surface-shell-footer').forEach(element => observer.observe(element))
-      const geometry = computeStandaloneLauncherGeometry({
+      const geometry = layoutStandaloneLauncher({
         panel,
         hostSurfaceTarget,
         launcherSettingsTarget,
         surfaceShell: shellPresent ? { inlineHeight, mode: shellMode, resizable: Boolean(resizableSurfaceKey) } : undefined,
         currentWindowWidth: initialWindowWidth,
+        commandHeight,
       })
-      if (commandHeight !== undefined) {
-        geometry.height = commandHeight
-        geometry.bodyMaxHeight = undefined
-      }
-      applyStandaloneLauncherGeometry(panel, geometry)
 
       const resizable = resizableSurfaceKey !== null
       const sizeKey = resizable
@@ -406,17 +401,23 @@ export function useStandaloneLauncherResize({
         })
     }
     frameId = window.requestAnimationFrame(resizeAfterLayout)
-    const observer = new ResizeObserver(() => {
+    const schedule = () => {
       window.cancelAnimationFrame(frameId)
       frameId = window.requestAnimationFrame(resizeAfterLayout)
-    })
+    }
+    // A content-sized panel changes size with its content; content mounting
+    // late (a lazy plugin) can also change whether the panel is content-sized.
+    const observer = new ResizeObserver(schedule)
+    const mutations = new MutationObserver(schedule)
     if (!resizableSurfaceKey && panelRef.current) {
       observer.observe(panelRef.current)
+      mutations.observe(panelRef.current, { childList: true, subtree: true })
     }
 
     return () => {
       disposed = true
       observer.disconnect()
+      mutations.disconnect()
       window.cancelAnimationFrame(frameId)
       invalidateCurrentLauncherWindowResize()
     }

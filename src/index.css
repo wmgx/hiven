@@ -8890,4 +8890,13 @@ html[data-window='launcher'] .flux-spatial-shell .recent-clipboard-hint {
 .surface-chrome:has([data-command-content]) .surface-chrome-body { max-height:var(--launcher-body-max-height, 544px); overflow:auto; flex:0 1 auto; }
 [data-command-content] { flex:none; min-height:0; }
 
+/* Content-sized launcher window (data-launcher-fit, set by layoutStandaloneLauncher):
+   fixed rows keep their height, the one scrolling region gives way, and the
+   panel stays between the window's min and max, so its height is the window's. */
+html[data-window='launcher'] .global-launcher-panel[data-launcher-fit] { min-height: 294px; max-height: 616px; }
+html[data-window='launcher'] .global-launcher-panel[data-launcher-fit] :is(.global-launcher-flow-frame, .launcher-result-text-frame, .surface-chrome) { flex: 1 1 auto; height: auto; min-height: 0; }
+html[data-window='launcher'] .global-launcher-panel[data-launcher-fit] :is(.global-launcher-header, .launcher-clipboard-explanation) { flex-shrink: 0; }
+html[data-window='launcher'] .global-launcher-panel[data-launcher-fit] :is(.global-launcher-body:not(.global-launcher-body--surface), .launcher-preview-well, .launcher-empty-well, .surface-chrome-body) { flex: 0 1 auto; height: auto; min-height: 0; max-height: none; }
+html[data-window='launcher'] .global-launcher-panel[data-launcher-fit] .global-launcher-body--surface { flex: none; max-height: none; }
+
 .launcher-ai-error { color: var(--color-error); padding: 8px 16px; font-size: 12px; }

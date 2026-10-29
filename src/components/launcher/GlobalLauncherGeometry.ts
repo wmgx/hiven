@@ -10,7 +10,6 @@ export const STANDALONE_SURFACE_MAX_WIDTH = 920
 export const STANDALONE_SURFACE_MAX_HEIGHT = 640
 export const STANDALONE_LAUNCHER_VERTICAL_PADDING = 24
 export const STANDALONE_LAUNCHER_HORIZONTAL_PADDING = 24
-export const STANDALONE_LAUNCHER_LIST_MAX_HEIGHT = 300
 export const GLOBAL_LAUNCHER_SETTINGS_WIDTH = 720
 export const GLOBAL_LAUNCHER_SETTINGS_HEIGHT = 560
 
@@ -22,6 +21,7 @@ export type StandaloneLauncherGeometryInput = {
   launcherSettingsTarget: unknown
   surfaceShell?: LauncherSurfaceShell
   currentWindowWidth?: number
+  commandHeight?: number
 }
 
 export type StandaloneLauncherGeometry = {
@@ -29,20 +29,29 @@ export type StandaloneLauncherGeometry = {
   height: number
   minWidth?: number
   minHeight?: number
-  bodyMaxHeight?: number
 }
 
-export function computeStandaloneLauncherGeometry({
+/**
+ * Lays the panel out for its window and returns the window size.
+ *
+ * Content-sized panels (the root list, result frames, command content) keep
+ * `data-launcher-fit`: CSS holds them between the window's min and max, so the
+ * panel's own height is the window's height. Every other panel fills a fixed
+ * window.
+ */
+export function layoutStandaloneLauncher({
   panel,
   hostSurfaceTarget,
   launcherSettingsTarget,
   surfaceShell,
   currentWindowWidth = window.innerWidth,
+  commandHeight,
 }: StandaloneLauncherGeometryInput): StandaloneLauncherGeometry {
   if (!hostSurfaceTarget && !launcherSettingsTarget && surfaceShell?.resizable === true) {
     // Shell dimensions describe the plugin panel. Native constraints include
     // the transparent host gutter; the native monitor work area applies the
     // final screen bounds without making these defaults a live viewport cap.
+    setPanelLayout(panel, false)
     return {
       width: STANDALONE_LAUNCHER_WIDTH,
       height: surfaceHeight(positiveDimension(surfaceShell.inlineHeight, 480)) + STANDALONE_LAUNCHER_VERTICAL_PADDING,
@@ -52,25 +61,20 @@ export function computeStandaloneLauncherGeometry({
   }
 
   const isSurfaceLike = Boolean((surfaceShell && surfaceShell.mode !== 'command') || launcherSettingsTarget || hostSurfaceTarget)
-  const measured = measureLauncherPanelParts(panel)
-
-  const height = isSurfaceLike
-    ? clamp(
-        Math.ceil(
-          (hostSurfaceTarget
-            ? STANDALONE_SURFACE_MAX_HEIGHT
-            : surfaceShell ? surfaceHeight(surfaceShell.inlineHeight)
-            : launcherSettingsTarget ? GLOBAL_LAUNCHER_SETTINGS_HEIGHT : measured.panelHeight
-          ) + STANDALONE_LAUNCHER_VERTICAL_PADDING,
-        ),
-        STANDALONE_LAUNCHER_MIN_HEIGHT,
-        STANDALONE_SURFACE_MAX_HEIGHT + STANDALONE_LAUNCHER_VERTICAL_PADDING,
-      )
-    : clamp(
-        Math.ceil(measured.panelHeight + STANDALONE_LAUNCHER_VERTICAL_PADDING),
-        STANDALONE_LAUNCHER_MIN_HEIGHT,
-        STANDALONE_LAUNCHER_MAX_HEIGHT,
-      )
+  const fit = !isSurfaceLike && (!surfaceShell || panel.querySelector('[data-command-content]') !== null)
+  const fixedHeight = hostSurfaceTarget
+    ? STANDALONE_SURFACE_MAX_HEIGHT
+    : surfaceShell ? surfaceHeight(surfaceShell.inlineHeight)
+    : GLOBAL_LAUNCHER_SETTINGS_HEIGHT
+  // A height the user dragged to wins over both content and declared size.
+  const requested = commandHeight ?? (fit ? undefined : fixedHeight + STANDALONE_LAUNCHER_VERTICAL_PADDING)
+  setPanelLayout(panel, fit, requested)
+  const height = requested ?? clamp(
+    Math.ceil(panel.getBoundingClientRect().height + STANDALONE_LAUNCHER_VERTICAL_PADDING),
+    STANDALONE_LAUNCHER_MIN_HEIGHT,
+    STANDALONE_LAUNCHER_MAX_HEIGHT,
+  )
+  if (fit) panel.parentElement?.style.setProperty('--launcher-command-height', `${height}px`)
 
   const desiredPanelWidth = hostSurfaceTarget
     ? STANDALONE_SURFACE_MAX_WIDTH + STANDALONE_LAUNCHER_HORIZONTAL_PADDING
@@ -83,104 +87,18 @@ export function computeStandaloneLauncherGeometry({
   const minWidth = isSurfaceLike ? STANDALONE_LAUNCHER_WIDTH : currentWindowWidth
   const width = clamp(Math.ceil(desiredPanelWidth), minWidth, maxWidth)
 
-  return {
-    width,
-    height,
-    bodyMaxHeight: isSurfaceLike ? undefined : measured.bodyMaxHeight,
-  }
+  return { width, height }
 }
 
-export function measureLauncherPanelParts(panel: HTMLElement) {
-  const content = panel.querySelector<HTMLElement>('[data-command-content]')
-  if (content) {
-    const chromeHeight = ['.surface-chrome-header', '.surface-shell-error', '.surface-shell-footer']
-      .reduce((height, selector) => height + (panel.querySelector<HTMLElement>(selector)?.offsetHeight ?? 0), 2)
-    const bodyMaxHeight = Math.min(content.scrollHeight, STANDALONE_LAUNCHER_MAX_HEIGHT - STANDALONE_LAUNCHER_VERTICAL_PADDING - chromeHeight)
-    return { panelHeight: chromeHeight + bodyMaxHeight, bodyMaxHeight }
-  }
-
-  const preview = panel.querySelector<HTMLElement>('.launcher-preview-well')
-  const textResult = preview?.parentElement
-  if (textResult && preview) {
-    // A text result has several fixed rows, including optional parameters and
-    // delivery status. Its constrained panel rect cannot tell us their total.
-    const previewStyle = getComputedStyle(preview)
-    const previewMargins = cssPixels(previewStyle.marginTop) + cssPixels(previewStyle.marginBottom)
-    const chromeHeight = Array.from(textResult.children).reduce((height, child) => {
-      if (!(child instanceof HTMLElement) || child === preview) return height
-      const style = getComputedStyle(child)
-      // Auto footer margin fills spare space; it is not intrinsic content height.
-      return height + child.offsetHeight + (child.classList.contains('global-launcher-footer') ? 0 : cssPixels(style.marginTop) + cssPixels(style.marginBottom))
-    }, panel.offsetHeight - panel.clientHeight + previewMargins)
-    const text = preview.querySelector<HTMLElement>('pre')
-    // Measure the text, not the scrollport: a previous longer result may have
-    // left an explicit scrollport height that must be allowed to shrink again.
-    const contentHeight = (text?.offsetHeight ?? preview.scrollHeight)
-      + cssPixels(previewStyle.paddingTop) + cssPixels(previewStyle.paddingBottom)
-      + cssPixels(previewStyle.borderTopWidth) + cssPixels(previewStyle.borderBottomWidth)
-    const availableHeight = Math.max(0,
-      STANDALONE_LAUNCHER_MAX_HEIGHT - STANDALONE_LAUNCHER_VERTICAL_PADDING - chromeHeight,
-    )
-    const bodyMaxHeight = Math.min(contentHeight, availableHeight)
-    return { panelHeight: chromeHeight + bodyMaxHeight, bodyMaxHeight }
-  }
-
-  const header = panel.querySelector<HTMLElement>('.global-launcher-header')
-  const body = panel.querySelector<HTMLElement>('.global-launcher-body')
-  const footer = panel.querySelector<HTMLElement>('.global-launcher-footer')
-  const explanation = panel.querySelector<HTMLElement>('.launcher-clipboard-explanation')
-  if (!header || !footer || !body) {
-    return {
-      panelHeight: panel.getBoundingClientRect().height,
-      bodyMaxHeight: undefined,
-    }
-  }
-
-  const maxBodyHeight = Math.max(
-    STANDALONE_LAUNCHER_MAX_HEIGHT -
-      STANDALONE_LAUNCHER_VERTICAL_PADDING -
-      header.offsetHeight -
-      footer.offsetHeight -
-      (explanation?.offsetHeight ?? 0),
-    STANDALONE_LAUNCHER_LIST_MAX_HEIGHT,
-  )
-  // The root scrollport can stretch to the preceding panel height; its content cannot.
-  const searchContent = body.querySelector<HTMLElement>('[data-launcher-search-content]')
-  const bodyStyle = getComputedStyle(body)
-  const contentHeight = searchContent
-    ? searchContent.offsetHeight + cssPixels(bodyStyle.paddingTop) + cssPixels(bodyStyle.paddingBottom)
-    : body.scrollHeight
-  const bodyMaxHeight = Math.min(contentHeight, maxBodyHeight)
-
-  return {
-    panelHeight: header.offsetHeight + bodyMaxHeight + footer.offsetHeight + (explanation?.offsetHeight ?? 0),
-    bodyMaxHeight,
-  }
-}
-
-function cssPixels(value: string): number {
-  return Number.parseFloat(value) || 0
-}
-
-export function applyStandaloneLauncherGeometry(panel: HTMLElement, geometry: StandaloneLauncherGeometry) {
-  if (panel.classList.contains('launcher-command-mode') || geometry.bodyMaxHeight != null) {
-    panel.style.height = `${geometry.height - STANDALONE_LAUNCHER_VERTICAL_PADDING}px`
-    panel.parentElement?.style.setProperty('--launcher-command-height', `${geometry.height}px`)
+/** A requested window height pins the panel; without one the panel sizes itself. */
+function setPanelLayout(panel: HTMLElement, fit: boolean, windowHeight?: number) {
+  panel.toggleAttribute('data-launcher-fit', fit)
+  if (windowHeight !== undefined) {
+    panel.style.height = `${windowHeight - STANDALONE_LAUNCHER_VERTICAL_PADDING}px`
   } else if (panel.style.height.endsWith('px')) {
-    // A fixed surface owns its height; discard the preceding content measurement.
+    // Only drop a height set here; a resizable surface's height is React's.
     panel.style.removeProperty('height')
   }
-  if (geometry.bodyMaxHeight != null) {
-    panel.style.setProperty('--launcher-body-max-height', `${geometry.bodyMaxHeight}px`)
-  } else {
-    panel.style.removeProperty('--launcher-body-max-height')
-  }
-}
-
-export const computeStandaloneLauncherSize = computeStandaloneLauncherGeometry
-
-export function measureStandaloneLauncherPanelHeight(panel: HTMLElement) {
-  return measureLauncherPanelParts(panel).panelHeight
 }
 
 function clamp(value: number, min: number, max: number) {
