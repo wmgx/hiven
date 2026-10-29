@@ -42,9 +42,10 @@ mod linux_x11_paste;
 #[cfg(target_os = "linux")]
 mod linux_x11_windows;
 
-const LAUNCHER_COMPACT_WIDTH: f64 = 660.0;
+// One width for every launcher view, so switching views never moves the side
+// edges. Matches STANDALONE_LAUNCHER_WIDTH in GlobalLauncherGeometry.ts.
+const LAUNCHER_WIDTH: f64 = 728.0;
 const LAUNCHER_COMPACT_HEIGHT: f64 = 318.0;
-const LAUNCHER_MAX_WIDTH: f64 = 860.0;
 const LAUNCHER_MAX_HEIGHT: f64 = 560.0;
 const PLUGIN_SURFACE_WINDOW_DEFAULT_WIDTH: f64 = 900.0;
 const PLUGIN_SURFACE_WINDOW_DEFAULT_HEIGHT: f64 = 640.0;
@@ -874,7 +875,7 @@ async fn configure_launcher_window(
             // bounded, already usable size instead of accepting an unbounded
             // plugin declaration until monitor information becomes available.
             let available_width = work_area.as_ref().map_or_else(
-                || launcher_resize_state::fallback_dimension(old_size.width, LAUNCHER_COMPACT_WIDTH),
+                || launcher_resize_state::fallback_dimension(old_size.width, LAUNCHER_WIDTH),
                 |(_, size)| size.width,
             );
             let available_height = work_area.as_ref().map_or_else(
@@ -1083,25 +1084,12 @@ fn show_launcher_window_for_hotkey_with_event(
 /// since the launcher config carries no position. The cursor's monitor is used
 /// rather than `current_monitor()` so the launcher follows the active screen
 /// instead of wherever the hidden window happened to live.
-/// Compute the launcher logical width for a given monitor (1/3 of screen).
-fn launcher_logical_width_for_monitor(monitor: &tauri::Monitor) -> f64 {
-    let logical_w = monitor.size().width as f64 / monitor.scale_factor();
-    (logical_w / 3.0)
-        .round()
-        .clamp(LAUNCHER_COMPACT_WIDTH, LAUNCHER_MAX_WIDTH)
-}
-
 fn launcher_default_window_size_for_window(window: &tauri::WebviewWindow) -> (f64, f64) {
     monitor_under_cursor(window)
         .or_else(|| window.current_monitor().ok().flatten())
         .or_else(|| window.primary_monitor().ok().flatten())
-        .map(|monitor| {
-            (
-                launcher_logical_width_for_monitor(&monitor),
-                LAUNCHER_MAX_HEIGHT,
-            )
-        })
-        .unwrap_or((LAUNCHER_COMPACT_WIDTH, LAUNCHER_COMPACT_HEIGHT))
+        .map(|_| (LAUNCHER_WIDTH, LAUNCHER_MAX_HEIGHT))
+        .unwrap_or((LAUNCHER_WIDTH, LAUNCHER_COMPACT_HEIGHT))
 }
 
 /// Quick Editor's default size, clamped to fit whichever monitor it opens on

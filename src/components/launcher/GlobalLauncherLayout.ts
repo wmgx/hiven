@@ -1,25 +1,19 @@
 import type { CSSProperties } from 'react'
 import type { PluginUiSurfaceContribution } from '../../workspace/pluginTypes'
-import { surfaceHeight } from '../../workspace/surfaceGeometry'
 import {
   GLOBAL_LAUNCHER_PANEL_WIDTH,
-  GLOBAL_LAUNCHER_SETTINGS_HEIGHT,
-  GLOBAL_LAUNCHER_SETTINGS_WIDTH,
+  STANDALONE_LAUNCHER_VERTICAL_PADDING,
+  STANDALONE_LAUNCHER_WIDTH,
   STANDALONE_SURFACE_MAX_HEIGHT,
-  STANDALONE_SURFACE_MAX_WIDTH,
 } from './GlobalLauncherGeometry'
 export {
   GLOBAL_LAUNCHER_PANEL_WIDTH,
   GLOBAL_LAUNCHER_PANEL_WIDTH_PX,
-  GLOBAL_LAUNCHER_SETTINGS_HEIGHT,
-  GLOBAL_LAUNCHER_SETTINGS_WIDTH,
-  STANDALONE_LAUNCHER_HORIZONTAL_PADDING,
   STANDALONE_LAUNCHER_MAX_HEIGHT,
   STANDALONE_LAUNCHER_MIN_HEIGHT,
   STANDALONE_LAUNCHER_VERTICAL_PADDING,
   STANDALONE_LAUNCHER_WIDTH,
   STANDALONE_SURFACE_MAX_HEIGHT,
-  STANDALONE_SURFACE_MAX_WIDTH,
   layoutStandaloneLauncher,
 } from './GlobalLauncherGeometry'
 
@@ -39,16 +33,17 @@ export function buildGlobalLauncherPanelStyle({
   standaloneLauncher: boolean
 }): GlobalLauncherPanelStyle {
   const validationBrowser = typeof window !== 'undefined' && (window.__HIVEN_WEB_NATIVE_BRIDGE__ === true || window.__HIVEN_SANDBOX__ === true)
-  // In standalone window mode, the Tauri window is already sized to 1/3 screen
-  // width, so the panel fills the window. In overlay mode, use calc(100vw / 3)
-  // to occupy 1/3 of the host window.
+  const panelWidth = `${STANDALONE_LAUNCHER_WIDTH - STANDALONE_LAUNCHER_VERTICAL_PADDING}px`
+  // The standalone window is sized to the launcher width, so the panel fills it.
+  // In overlay mode the list takes a third of the host window.
   const defaultPanelWidth = validationBrowser
-    ? '704px'
+    ? panelWidth
     : standaloneLauncher
     ? 'calc(100vw - 24px)'
     : GLOBAL_LAUNCHER_PANEL_WIDTH
   const fillsWindow = standaloneLauncher && !validationBrowser && !hostSurfaceTarget && !launcherSettingsTarget
     && surfaceShell?.resizable === true
+  const isPage = Boolean(hostSurfaceTarget || launcherSettingsTarget || (surfaceShell && surfaceShell.mode !== 'command'))
 
   return {
     background: 'var(--panel, #ffffff)',
@@ -56,31 +51,19 @@ export function buildGlobalLauncherPanelStyle({
     borderRadius: 'var(--radius-lg)',
     '--launcher-panel-width': fillsWindow
       ? 'calc(100vw - 24px)'
-      : hostSurfaceTarget
-      ? `${STANDALONE_SURFACE_MAX_WIDTH}px`
-      : surfaceShell
-      ? '704px'
-      : launcherSettingsTarget
-      ? `${GLOBAL_LAUNCHER_SETTINGS_WIDTH}px`
+      : hostSurfaceTarget || launcherSettingsTarget || surfaceShell
+      ? panelWidth
       : defaultPanelWidth,
     width: fillsWindow
       ? 'calc(100vw - 24px)'
-      : hostSurfaceTarget
-      ? validationBrowser ? `${STANDALONE_SURFACE_MAX_WIDTH}px` : `min(${STANDALONE_SURFACE_MAX_WIDTH}px, calc(100vw - 24px))`
-      : surfaceShell
-      ? validationBrowser ? '704px' : 'min(704px, calc(100vw - 24px))'
-      : launcherSettingsTarget
-      ? validationBrowser ? `${GLOBAL_LAUNCHER_SETTINGS_WIDTH}px` : `min(${GLOBAL_LAUNCHER_SETTINGS_WIDTH}px, calc(100vw - 24px))`
+      : hostSurfaceTarget || launcherSettingsTarget || surfaceShell
+      ? validationBrowser ? panelWidth : `min(${panelWidth}, calc(100vw - 24px))`
       : undefined,
     height: fillsWindow ? 'calc(100vh - 24px)' : undefined,
     maxHeight: fillsWindow
       ? 'calc(100vh - 24px)'
-      : hostSurfaceTarget
+      : isPage
       ? `min(${STANDALONE_SURFACE_MAX_HEIGHT}px, calc(100vh - 24px))`
-      : surfaceShell?.inlineHeight && surfaceShell.mode !== 'command'
-      ? `min(${surfaceHeight(surfaceShell.inlineHeight)}px, calc(100vh - 24px))`
-      : launcherSettingsTarget
-      ? `min(${GLOBAL_LAUNCHER_SETTINGS_HEIGHT}px, calc(100vh - 24px))`
       : undefined,
     left: '50%',
     top: standaloneLauncher ? 12 : 54,

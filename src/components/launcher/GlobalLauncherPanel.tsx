@@ -13,7 +13,7 @@ import { LauncherView } from './LauncherView'
 import { handleGlobalLauncherKeyDown } from './GlobalLauncherKeyboard'
 import type { GlobalLauncherItem } from './GlobalLauncherItems'
 import type { ClipboardObjectBlockState } from '../../launcher/clipboard/useClipboardObjectBlock'
-import { GLOBAL_LAUNCHER_SETTINGS_HEIGHT, STANDALONE_SURFACE_MAX_HEIGHT } from './GlobalLauncherLayout'
+import { STANDALONE_SURFACE_MAX_HEIGHT } from './GlobalLauncherLayout'
 import { useAppStore } from '../../store'
 import { showToast } from '../../workspace/toast'
 import type { LauncherBrowseCategory } from '../../workspace/launcher/browseItems'
@@ -287,7 +287,7 @@ export function GlobalLauncherPanel({
         hostSurfaceTarget={hostSurfaceTarget}
         hostSurfaceHeight={STANDALONE_SURFACE_MAX_HEIGHT}
         launcherSettingsTarget={launcherSettingsTarget}
-        settingsHeight={GLOBAL_LAUNCHER_SETTINGS_HEIGHT}
+        settingsHeight={STANDALONE_SURFACE_MAX_HEIGHT}
         surfaceFrame={surfaceFrame}
         activeSurfaceFrame={activeSurfaceFrame}
         surfaceFillsWindow={surfaceFillsWindow}

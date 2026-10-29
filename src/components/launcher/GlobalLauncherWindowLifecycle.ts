@@ -366,7 +366,6 @@ export function useStandaloneLauncherResize({
         hostSurfaceTarget,
         launcherSettingsTarget,
         surfaceShell: shellPresent ? { inlineHeight, mode: shellMode, resizable: Boolean(resizableSurfaceKey) } : undefined,
-        currentWindowWidth: initialWindowWidth,
         commandHeight,
       })
 
