@@ -250,8 +250,8 @@ body,
 }
 /* Match highlight in launcher search results */
 .launcher-match-highlight {
-  font-weight: 600;
-  color: var(--accent, var(--color-accent));
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
 }
 /* Pinyin badge: small inline indicator next to the kind tag */
 .launcher-pinyin-badge {
@@ -8751,11 +8751,6 @@ html[data-window='launcher'] .flux-spatial-shell .l-row .launcher-kind-tag {
   opacity: 1 !important;
   background: transparent !important;
   color: var(--faint-foreground) !important;
-}
-
-html[data-window='launcher'] .flux-spatial-shell .launcher-match-highlight {
-  color: var(--primary-text) !important;
-  font-weight: 600;
 }
 
 /* V4 actions stay quiet; the keycap carries the shortcut. */

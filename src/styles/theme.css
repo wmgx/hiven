@@ -123,6 +123,7 @@
 /* ─── Type, radius, motion (theme-independent) ─── */
 
 :root {
+  --plugin-blue: #2f74f0;
   --plugin-orange: #f27a1a;
   --plugin-teal: #179fa6;
   --plugin-green: #1f9d5f;
