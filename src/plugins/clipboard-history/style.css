@@ -13,6 +13,14 @@
   font-family: var(--font-sans);
 }
 
+/* This large window reads too bright in pure white: a soft cool white for the
+   whole page, with insets one step deeper so they still separate. */
+[data-theme='light'] .clipboard-history-surface {
+  --background: var(--slate-2);
+  --card: var(--slate-2);
+  --subtle: var(--slate-3);
+}
+
 
 .clipboard-history-filter-trigger[data-active="true"] {
   color: var(--primary);
