@@ -84,7 +84,7 @@ export function ValueChip({ label, value, options = [], onChange, onPreview, onO
     {open && createPortal(<div ref={popup} className="hiven-value-menu" style={position} data-local-escape-layer
       onKeyDown={event => {
         if (shouldIgnoreImeKeyDown(event, composing)) { event.stopPropagation(); return }
-        if (['Enter', 'Tab', 'ArrowUp', 'ArrowDown', 'Escape'].includes(event.key) || (multiple && event.key === ' ')) event.stopPropagation()
+        event.stopPropagation()
         if (event.key === 'Escape') { event.preventDefault(); cancel() }
         else if (event.key === 'Enter' || event.key === 'Tab') { event.preventDefault(); commit(selectedValue, event.key === 'Tab') }
         else if (multiple && event.key === ' ') { event.preventDefault(); if (filtered[selected]) toggle(filtered[selected].value) }

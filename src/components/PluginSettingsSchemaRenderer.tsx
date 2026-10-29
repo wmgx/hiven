@@ -35,7 +35,7 @@ import type {
 } from '../workspace/pluginTypes'
 import { describePluginPermission } from '../workspace/pluginPermissions'
 import { translate, type Locale } from '../i18n'
-import { NumberField, Select, Switch, SurfaceStatus, useImeKeyboard } from '../plugin-ui'
+import { NumberField, ValueChip, Switch, SurfaceStatus, useImeKeyboard } from '../plugin-ui'
 
 type PluginSettingsSchemaRendererProps<TSettings = unknown> = {
   schema: PluginSettingsSchema<TSettings>
@@ -291,23 +291,22 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
   }
 
   function renderSelectControl(
-    id: string,
+    label: string,
     currentValue: string,
     options: { value: string; label: string; labelI18n?: Partial<Record<Locale, string>> }[],
     onChange: (next: string) => void,
     disabled?: boolean,
   ) {
     return (
-      <Select
-        id={id}
-        className="schema-select-wrap"
+      <ValueChip
+        label={label}
         value={currentValue}
         disabled={disabled}
         options={options.map((option) => ({
           value: option.value,
           label: localizeText(option.label, option.labelI18n),
         }))}
-        onChange={(event) => onChange(event.currentTarget.value)}
+        onChange={(next) => onChange(String(next))}
       />
     )
   }
@@ -392,7 +391,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
       return (
         <div className="schema-object-list-field schema-object-list-field-select wr-field schema-object-list-field-wide">
           <span>{itemLabel}</span>
-          {renderSelectControl(controlId, String(value ?? ''), itemField.options ?? [], onChange)}
+          {renderSelectControl(label, String(value ?? ''), itemField.options ?? [], onChange)}
         </div>
       )
     }
@@ -616,7 +615,7 @@ export function PluginSettingsSchemaRenderer<TSettings = unknown>({
           <span className="schema-row-icon"><Icon size={14} strokeWidth={1.8} /></span>
           {commonLabel}
           <div className="schema-row-control">
-            {renderSelectControl(`field:${field.key}`, String(record[field.key] ?? ''), options, (next) => setFieldValue(field.key, next), disabled)}
+            {renderSelectControl(label, String(record[field.key] ?? ''), options, (next) => setFieldValue(field.key, next), disabled)}
           </div>
         </div>
       )
