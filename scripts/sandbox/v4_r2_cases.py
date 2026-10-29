@@ -188,3 +188,21 @@ def s53(page):
     other = page.locator('.surface-shell-footer kbd').first.evaluate('el => {const s=getComputedStyle(el);return [s.fontSize,s.height,s.backgroundImage,s.borderRadius]}')
     assert style == other, (style, other)
     capture(page, 'V6-actions')
+
+
+def s54(page):
+    page.evaluate('__hivenSandbox.openSurface({pluginId:"qr-code",surfaceId:"main",source:"builtin",initialText:"https://example.com"})')
+    expect(page.locator('.qr-surface__preview img')).to_be_visible()
+    page.get_by_role('button', name='Size: 256px', exact=True).click()
+    page.get_by_role('option', name='480px', exact=True).click()
+    def visible():
+        image = page.locator('.qr-surface__preview img')
+        expect(image).to_be_visible()
+        box = image.bounding_box()
+        area = page.locator('.qr-surface__preview').bounding_box()
+        assert box['y'] >= area['y'] - 1 and box['y'] + box['height'] <= area['y'] + area['height'] + 1, (box, area)
+        assert box['x'] >= area['x'] - 1 and box['x'] + box['width'] <= area['x'] + area['width'] + 1, (box, area)
+        assert abs(box['width'] - box['height']) <= 1, box
+        assert image.evaluate('el => el.complete && el.naturalWidth > 0')
+        footer_bottom(page, '.surface-shell-footer')
+    capture(page, 'V2-qr', visible)

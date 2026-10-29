@@ -1,5 +1,5 @@
 {
-  "version": 256,
+  "version": 257,
   "packages": [
     {
       "pluginId": "image-tools",
@@ -54,7 +54,7 @@
     {
       "pluginId": "qr-code",
       "dir": "qr-code",
-      "version": "1.0.24"
+      "version": "1.0.25"
     },
     {
       "pluginId": "random",
