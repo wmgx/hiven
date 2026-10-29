@@ -75,12 +75,17 @@ export function FavoriteEditor({ draft, editing, disabled, names, onChange, onBl
     fields[index] = { ...(fields[index] ?? { name: '', value: '' }), ...patch }
     onChange({ ...draft, fields })
   }
-  const nextCell = () => {
-    const inputs = [...(root.current?.querySelectorAll<HTMLInputElement>('input') ?? [])]
+  const nextCell = (direction = 1) => {
+    const inputs = [...(root.current?.querySelectorAll<HTMLInputElement>('input:not([tabindex="-1"]):not([type="hidden"]):not(:disabled)') ?? [])]
     const index = inputs.indexOf(lastField.current ?? document.activeElement as HTMLInputElement)
-    inputs[index + 1]?.focus()
+    inputs[Math.max(0, Math.min(inputs.length - 1, index + direction))]?.focus()
   }
   return <div ref={root} className={`clipboard-history-favorite-form${editing ? ' is-editing' : ''}`} onBlur={onBlur} onFocus={event => { if (event.target instanceof HTMLInputElement) lastField.current = event.target }}
+    onKeyDownCapture={event => {
+      if (editing && event.key === 'Tab' && !ime.shouldIgnoreKeyDown(event)) {
+        event.preventDefault(); event.stopPropagation(); nextCell(event.shiftKey ? -1 : 1)
+      }
+    }}
     onCompositionStart={ime.onCompositionStart} onCompositionEnd={ime.onCompositionEnd}
     onKeyDown={event => {
       if (!editing || event.defaultPrevented || ime.shouldIgnoreKeyDown(event)) return
@@ -96,8 +101,8 @@ export function FavoriteEditor({ draft, editing, disabled, names, onChange, onBl
         }
       }
     }}>
-    {editing && <ActionBar><Button variant="ghost" onClick={nextCell}>{t('favorite.nextCell')}<kbd>↵</kbd></Button><Button variant="ghost" onClick={onExit}>{t('favorite.done')}<kbd>⌘E</kbd></Button></ActionBar>}
-    <div className="clipboard-history-favorite-title-bar"><span>{t('favorite.info')}</span><Button variant="ghost" disabled={disabled} aria-label={t(editing ? 'favorite.done' : 'action.editFavoriteInfo')} onClick={editing ? onExit : onEdit}>{t(editing ? 'favorite.done' : 'action.editFavoriteInfo')} <kbd>⌘E</kbd></Button></div>
+    {editing && <ActionBar><Button variant="ghost" onClick={() => nextCell()}>{t('favorite.nextCell')}<kbd>↵</kbd></Button><Button variant="ghost" onClick={onExit}>{t('favorite.done')}<kbd>⌘E</kbd></Button></ActionBar>}
+    <div className="clipboard-history-favorite-title-bar"><span>{t('favorite.info')}</span>{!editing && <Button variant="ghost" disabled={disabled} aria-label={t('action.editFavoriteInfo')} onClick={onEdit}>{t('action.editFavoriteInfo')} <kbd>⌘E</kbd></Button>}</div>
     <table className="clipboard-history-favorite-fields"><tbody>
       <tr><td>{t('favorite.titlePlaceholder')}</td><td>{editing ? <TextInput ref={title} aria-label={t('favorite.titlePlaceholder')} placeholder={t('favorite.titlePlaceholder')} value={draft.title} maxLength={80} onChange={event => onChange({ ...draft, title: event.target.value })} /> : <span>{draft.title || '—'}</span>}</td><td /></tr>
       {rows.map((field, index) => <tr data-favorite-row={index} key={index}>

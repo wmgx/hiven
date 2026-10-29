@@ -22,7 +22,7 @@ import {
   ActionBar,
   SurfaceEmptyState,
   SurfaceHeaderActions, SurfaceHeaderField,
-  SurfaceFooterHints,
+  SurfaceFooterHints, SurfaceStatus,
   SurfaceList,
   SurfaceListItem,
   SurfacePreview,
@@ -969,7 +969,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                 )}
               </SurfaceList>
             </div>
-            <SurfaceFooterHints className="clipboard-history-footer">
+            <SurfaceStatus>
               <span role="status">{t(loadingMore ? 'paging.loadingMore' : 'paging.loaded', { count: items.length })}</span>
               {loadMoreFailed && <>
                 <span role="alert">{t('error.loadFailed')}</span>
@@ -979,7 +979,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                 <span role="alert">{t('error.loadFailed')}</span>
                 <Button type="button" onClick={refreshPage}>{t('paging.retry')}</Button>
               </>}
-            </SurfaceFooterHints>
+            </SurfaceStatus>
           </div>
 
           <ContextMenu
@@ -1015,7 +1015,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
         </div>
 
         {!favoriteEditor.draft && <ActionBar><Button variant="ghost" disabled={!selectedItem || resultsActionBlocked || retentionBusy} onClick={() => selectedItem && void handlePaste(selectedItem)}>{t('action.paste')}<kbd>↵</kbd></Button></ActionBar>}
-        <SurfaceFooterHints className="clipboard-history-footer">
+        {!favoriteEditor.draft && <SurfaceStatus><span className="clipboard-history-footer-hints">
           {multiple && <span role="status">{t('selection.count', { count: selectedItems.length })}{skippedCount > 0 && ` · ${t('selection.skipped', { count: skippedCount })}`}</span>}
           {pasteNotice ? <span role="status" style={{ color: 'var(--foreground)' }}>{pasteNotice}</span> : <>
             {/* Keep hint slots in layout when button focus temporarily disables shortcuts. */}
@@ -1026,7 +1026,7 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
             <span>{primaryModifierLabel}C {t('action.copy')}</span>
             <span style={{ visibility: shortcutHints.delete ? 'visible' : 'hidden' }} aria-hidden={!shortcutHints.delete}>⌫ {t('hint.delete')}</span>
           </>}
-        </SurfaceFooterHints>
+        </span></SurfaceStatus>}
       </>
     )
   }

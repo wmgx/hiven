@@ -742,3 +742,5 @@
   height: 120px;
   width: 100%;
 }
+
+.clipboard-history-footer-hints { display: inline-flex; gap: 10px; margin-left: 10px; }
