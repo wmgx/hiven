@@ -14,6 +14,7 @@ import { PluginSettingsDialog } from './PluginSettingsDialog'
 import { ToastContainer } from './workspace/ToastContainer'
 import { PluginSurfaceRenderer, type PluginSurfaceLeaveOwner, usePluginSurfaceTitle } from './pluginSurface/PluginSurfaceRenderer'
 import { SurfaceShell } from './pluginSurface/SurfaceShell'
+import { keepStickyFieldFocus } from './launcher/stickyFieldFocus'
 import './PluginSurfaceWindow.css'
 
 type WindowEntry = { id: string; target: PluginSurfaceOpenTarget }
@@ -193,6 +194,9 @@ export function PluginSurfaceWindow() {
       document.removeEventListener('compositionend', onCompositionEnd)
     }
   }, [])
+
+  // The window body holds exactly one visible surface: it is the shell.
+  useEffect(() => bodyRef.current ? keepStickyFieldFocus(bodyRef.current, body => body) : undefined, [targetReady, target])
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme

@@ -1,16 +1,18 @@
 /**
- * A field a plugin marks `data-plugin-surface-autofocus="sticky"` stays the
- * typing target: clicks elsewhere hand focus back, and typing while focus sits
- * on a button or the page goes into it. Other fields keep focus when chosen.
+ * The field a plugin marks `data-plugin-surface-autofocus` is the typing
+ * target: typing while focus sits on a button, a list or the page goes into it.
+ * A `"sticky"` field also takes focus back after clicks elsewhere. Other
+ * fields keep focus when chosen.
  */
 export const SURFACE_SHELL_SELECTOR = '.global-launcher-surface-shell, .global-launcher-settings-shell, .global-launcher-host-surface-shell'
 
 const STICKY_SELECTOR = '[data-plugin-surface-autofocus="sticky"]'
+const TYPING_SELECTOR = '[data-plugin-surface-autofocus]'
 const OVERLAY_SELECTOR = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]'
 const ACTIVATABLE_SELECTOR = 'button, a[href], summary, label, [role="button"], [role="checkbox"], [role="radio"], [role="switch"], [role="tab"]'
 
-function stickyField(shell: HTMLElement): HTMLElement | null {
-  const element = shell.querySelector<HTMLElement>(STICKY_SELECTOR)
+function markedField(shell: HTMLElement, selector: string): HTMLElement | null {
+  const element = shell.querySelector<HTMLElement>(selector)
   if (!element || element.matches(':disabled, [readonly]') || element.getClientRects().length === 0) return null
   if (element.closest('[inert], [hidden], [aria-hidden="true"]')) return null
   return element
@@ -20,16 +22,21 @@ function isEditable(element: Element | null): boolean {
   return element instanceof HTMLElement && (element.isContentEditable || element.matches('input, textarea, select'))
 }
 
-export function keepStickyFieldFocus(panel: HTMLElement): () => void {
+export function keepStickyFieldFocus(
+  panel: HTMLElement,
+  findShell = (root: HTMLElement) => root.querySelector<HTMLElement>(SURFACE_SHELL_SELECTOR),
+): () => void {
   const document = panel.ownerDocument
   const view = document.defaultView
   if (!view) return () => {}
   let frame: number | null = null
 
-  const target = (): HTMLElement | null => {
-    if (document.querySelector(OVERLAY_SELECTOR)) return null
-    const shell = panel.querySelector<HTMLElement>(SURFACE_SHELL_SELECTOR)
-    return shell ? stickyField(shell) : null
+  const target = (selector: string): HTMLElement | null => {
+    // A listbox inside the panel is a result list, not a popup.
+    const overlays = Array.from(document.querySelectorAll(OVERLAY_SELECTOR))
+    if (overlays.some(element => element.getAttribute('role') !== 'listbox' || !panel.contains(element))) return null
+    const shell = findShell(panel)
+    return shell ? markedField(shell, selector) : null
   }
 
   function onKeyDown(event: KeyboardEvent) {
@@ -40,7 +47,7 @@ export function keepStickyFieldFocus(panel: HTMLElement): () => void {
     // Space on a focused control is its keyboard activation.
     if (event.key === ' ' && active instanceof HTMLElement && active.matches(ACTIVATABLE_SELECTOR)) return
     // Focusing during keydown lets this keystroke land in the field.
-    target()?.focus({ preventScroll: true })
+    target(TYPING_SELECTOR)?.focus({ preventScroll: true })
   }
 
   function onClick(event: MouseEvent) {
@@ -52,7 +59,7 @@ export function keepStickyFieldFocus(panel: HTMLElement): () => void {
       if (isEditable(document.activeElement)) return
       // Never collapse a text selection the user is making.
       if (view!.getSelection()?.isCollapsed === false) return
-      target()?.focus({ preventScroll: true })
+      target(STICKY_SELECTOR)?.focus({ preventScroll: true })
     })
   }
 

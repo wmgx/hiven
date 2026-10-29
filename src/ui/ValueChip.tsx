@@ -26,6 +26,8 @@ export function ValueChip({ label, value, options = [], onChange, onPreview, onO
   const input = useRef<HTMLInputElement>(null)
   const composing = useRef(false)
   const origin = useRef<Value>(value)
+  // Focus goes back where it was when the menu opened: usually the typing field.
+  const back = useRef<HTMLElement | null>(null)
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [draft, setDraft] = useState<Value>(value)
@@ -36,12 +38,16 @@ export function ValueChip({ label, value, options = [], onChange, onPreview, onO
   const display = (Array.isArray(value) ? value : [value]).map(item => options.find(option => option.value === item)?.label ?? item).join(', ')
   const callbacks = useRef({ onChange, onPreview })
   callbacks.current = { onChange, onPreview }
-  const cancel = () => { callbacks.current.onPreview?.(origin.current); setOpen(false); trigger.current?.focus() }
+  const restoreFocus = () => {
+    const target = back.current?.isConnected ? back.current : trigger.current
+    target?.focus({ preventScroll: true })
+  }
+  const cancel = () => { callbacks.current.onPreview?.(origin.current); setOpen(false); restoreFocus() }
   const preview = (next: Value) => { setDraft(next); callbacks.current.onPreview?.(next) }
   const commit = (next = selectedValue, nextChip = false) => {
     if (callbacks.current.onChange(next) === false) return
     setOpen(false)
-    trigger.current?.focus()
+    restoreFocus()
     if (nextChip) {
       const chips = [...(trigger.current?.closest('[data-value-chips]')?.querySelectorAll<HTMLButtonElement>('[data-value-chip]') ?? [])]
       const nextTrigger = chips[(chips.indexOf(trigger.current!) + 1) % chips.length]
@@ -70,8 +76,11 @@ export function ValueChip({ label, value, options = [], onChange, onPreview, onO
   return <>
     <button type="button" ref={trigger} data-value-chip className="hiven-value-chip" disabled={disabled}
       aria-label={`${label}: ${display}`} aria-expanded={open} aria-haspopup="listbox"
+      // Like WebKit, a click must not move focus onto the chip itself.
+      onMouseDown={event => event.preventDefault()}
       onClick={() => {
         if (open) { cancel(); return }
+        back.current = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null
         onOpen?.()
         origin.current = Array.isArray(value) ? [...value] : value
         setDraft(origin.current)
