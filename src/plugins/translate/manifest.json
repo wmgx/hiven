@@ -4,7 +4,7 @@
   "displayNameI18n": {
     "zh": "翻译"
   },
-  "version": "1.0.38",
+  "version": "1.0.39",
   "capabilities": [
     "settings",
     "ui"

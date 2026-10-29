@@ -189,6 +189,7 @@ export function QrSurface(props: PluginSurfaceProps) {
         <div className="qr-surface__body">
           <div className="qr-surface__pane">
             <TextArea
+              variant="editor"
               className="qr-surface__input"
               data-plugin-surface-autofocus
               aria-label={t('generate.placeholder')}

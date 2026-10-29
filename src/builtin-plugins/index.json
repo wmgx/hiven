@@ -1,5 +1,5 @@
 {
-  "version": 268,
+  "version": 269,
   "packages": [
     {
       "pluginId": "image-tools",
@@ -9,7 +9,7 @@
     {
       "pluginId": "csv",
       "dir": "csv",
-      "version": "1.12.10"
+      "version": "1.12.11"
     },
     {
       "pluginId": "calculator",
@@ -24,7 +24,7 @@
     {
       "pluginId": "translate",
       "dir": "translate",
-      "version": "1.0.38"
+      "version": "1.0.39"
     },
     {
       "pluginId": "ai-writing",
@@ -34,7 +34,7 @@
     {
       "pluginId": "regex-tester",
       "dir": "regex-tester",
-      "version": "1.4.13"
+      "version": "1.4.14"
     },
     {
       "pluginId": "text-diff",
@@ -54,7 +54,7 @@
     {
       "pluginId": "qr-code",
       "dir": "qr-code",
-      "version": "1.0.25"
+      "version": "1.0.26"
     },
     {
       "pluginId": "random",
@@ -84,7 +84,7 @@
     {
       "pluginId": "text-tools",
       "dir": "text-tools",
-      "version": "1.0.12"
+      "version": "1.0.13"
     }
   ]
 }

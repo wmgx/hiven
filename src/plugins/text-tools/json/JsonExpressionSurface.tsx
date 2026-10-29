@@ -24,8 +24,8 @@ export function JsonExpressionSurface({ host, t, initialText }: PluginSurfacePro
     <SurfaceHeaderField><TextInput aria-label={t('expression.label')} placeholder={t('expression.placeholder')} value={expression} onChange={event => setExpression(event.target.value)} autoFocus data-plugin-surface-autofocus="sticky" /></SurfaceHeaderField>
     <SurfaceError>{result.error}</SurfaceError>
     <div className="text-tools-converter-columns">
-      <label>{t('expression.input')}<TextArea data-launcher-scrollable spellCheck={false} aria-label={t('expression.input')} value={text} onChange={event => setText(event.target.value)} /></label>
-      <label>{t('expression.output')}<TextArea data-launcher-scrollable readOnly aria-label={t('expression.output')} value={result.output} /></label>
+      <label>{t('expression.input')}<TextArea variant="editor" data-launcher-scrollable spellCheck={false} aria-label={t('expression.input')} value={text} onChange={event => setText(event.target.value)} /></label>
+      <label>{t('expression.output')}<TextArea variant="editor" data-launcher-scrollable readOnly aria-label={t('expression.output')} value={result.output} /></label>
     </div>
     <ActionBar>{host.OutputActions && <host.OutputActions text={result.output} disabled={!!result.error} />}</ActionBar>
   </section>

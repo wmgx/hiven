@@ -4,7 +4,7 @@
   "displayNameI18n": {
     "zh": "正则测试器"
   },
-  "version": "1.4.13",
+  "version": "1.4.14",
   "capabilities": [
     "ui"
   ],

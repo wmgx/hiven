@@ -1463,6 +1463,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
             </div>
           ) : (
             <TextArea
+              variant="editor"
               value={sourceText}
               onChange={(event) => {
                 const next = event.target.value

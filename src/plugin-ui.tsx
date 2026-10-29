@@ -324,11 +324,16 @@ export const SearchField = forwardRef<HTMLInputElement, InputHTMLAttributes<HTML
   return <Input ref={ref} className={cn('hiven-ui-input hiven-ui-search h-7', className)} {...props} type="search" />
 })
 
-export const TextArea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(function TextArea(
-  { className, ...props },
+export type TextAreaProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {
+  /** `editor`: an edit/result area filling its column, drawn without a frame. `field` (default): a form field. */
+  variant?: 'field' | 'editor'
+}
+
+export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(function TextArea(
+  { className, variant = 'field', ...props },
   ref,
 ) {
-  return <Textarea ref={ref} className={cn('hiven-ui-input hiven-ui-textarea field-sizing-fixed resize-y', className)} {...props} />
+  return <Textarea ref={ref} className={cn('hiven-ui-input hiven-ui-textarea field-sizing-fixed resize-y', variant === 'editor' && 'hiven-ui-textarea--editor', className)} {...props} />
 })
 
 const TRIGGER = 'hiven-ui-select-trigger h-7 w-full min-w-0 bg-background text-base'

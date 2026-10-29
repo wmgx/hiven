@@ -146,7 +146,6 @@
 
 /* Both columns stay visible within the launcher. */
 .qr-surface__body { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-.qr-surface__input { border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 .qr-surface--scan { height: auto; }
 .qr-surface--scan .qr-surface__body { min-height: 220px; }
 .qr-surface__drop img { max-width: 100%; max-height: 220px; object-fit: contain; }

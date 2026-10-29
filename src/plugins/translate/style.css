@@ -170,7 +170,6 @@
   width: 100%;
   min-height: 0;
   padding: 0;
-  resize: none;
   font-size: var(--text-lg);
   line-height: 1.62;
 }
@@ -180,7 +179,6 @@
   width: 100%;
   min-height: 0;
   padding: 0;
-  resize: none;
   overflow-y: auto;
   font-size: var(--text-lg);
   line-height: 1.62;

@@ -22,7 +22,7 @@
 
 .text-tools-converter-columns > label { padding: 12px; }
 .text-tools-converter-columns > label + label { border-left: 1px solid var(--border); }
-.text-tools-converter-columns textarea { border: 0; border-radius: 0; background: transparent; box-shadow: none; padding: 6px 0; }
+.text-tools-converter-columns textarea { padding: 6px 0; }
 .jt-url-query-row { min-height: 40px; border-bottom: 1px solid var(--border); }
 .jt-url-query-row input { border: 0; background: transparent; box-shadow: none; }
 .jt-url-query-row input:focus { background: var(--subtle); }

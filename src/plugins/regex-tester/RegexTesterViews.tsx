@@ -123,6 +123,7 @@ export function RegexTesterSurface(props: PluginSurfaceProps) {
           </span>
           <TextArea
             ref={sourceRef}
+            variant="editor"
             value={sourceText}
             onChange={(event) => { invalidateResult(); setSourceText(event.target.value) }}
             placeholder={t('surface.samplePlaceholder')}

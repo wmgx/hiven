@@ -4,7 +4,7 @@
   "displayNameI18n": {
     "zh": "文本工具"
   },
-  "version": "1.0.12",
+  "version": "1.0.13",
   "capabilities": [
     "command",
     "surface"

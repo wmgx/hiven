@@ -459,6 +459,7 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
           </div>
           <TextArea
             ref={inputRef}
+            variant="editor"
             className="translate-input"
             data-plugin-surface-autofocus="sticky"
             value={inputText}
@@ -478,6 +479,7 @@ export function TranslateSurface(props: PluginSurfaceProps<TranslateSettings>) {
             {outputText && status.kind !== 'success' && <span className="detected">· {t('pane.incomplete')}</span>}
           </div>
           <TextArea
+            variant="editor"
             className={`translate-output ${status.kind !== 'success' ? 'is-stale' : ''}`}
             value={outputText}
             placeholder={localizedText(t, 'output.placeholder', 'Translation appears here.')}
