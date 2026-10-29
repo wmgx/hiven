@@ -6,7 +6,7 @@
 .hiven-value-menu input { width:100%; height:30px; padding:0 8px; border:0; border-bottom:1px solid var(--border); outline:0; background:transparent; color:inherit; }
 .hiven-value-menu [role=listbox] { max-height:270px; overflow:auto; }
 .hiven-value-menu button { width:100%; display:flex; align-items:center; justify-content:space-between; min-height:32px; padding:7px 9px; border:0; border-radius:6px; background:transparent; color:inherit; text-align:left; cursor:pointer; }
-.hiven-value-menu button.is-highlighted { background:var(--accent); }
+.hiven-value-menu button.is-highlighted { background:var(--active); }
 .hiven-value-menu small { display:block; margin-top:3px; color:var(--muted-foreground); font-size:var(--text-xs); }
 .hiven-value-menu p { padding:8px; color:var(--muted-foreground); }
 .launcher-value-chips { display:flex; align-items:center; gap:6px; flex:none; max-width:55%; overflow-x:auto; }

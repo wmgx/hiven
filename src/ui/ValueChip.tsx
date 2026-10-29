@@ -57,7 +57,10 @@ export function ValueChip({ label, value, options = [], onChange, onPreview, onO
   useLayoutEffect(() => {
     if (!open) return
     const rect = trigger.current!.getBoundingClientRect()
-    setPosition({ top: rect.bottom + 6, left: Math.max(8, Math.min(rect.left, window.innerWidth - 268)) })
+    // Hang from the chip's left edge; near the right edge, align right edges instead.
+    const width = popup.current?.offsetWidth ?? 260
+    const left = rect.left + width > window.innerWidth - 16 ? rect.right - width : rect.left
+    setPosition({ top: rect.bottom + 6, left: Math.max(8, left) })
     input.current?.focus()
   }, [open])
   useEffect(() => {
