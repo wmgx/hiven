@@ -10,7 +10,7 @@
 
 import type { PluginSettingsModalBodyProps } from '@hiven/plugin'
 import { getPluginHostSdk } from '@hiven/plugin'
-import { Button, Select, Switch } from '@hiven/plugin-ui'
+import { Button, ValueChip, Switch } from '@hiven/plugin-ui'
 import type { ReactNode } from 'react'
 import {
   HISTORY_SEARCH_DAY_OPTIONS,
@@ -192,8 +192,8 @@ export function BrowserTabsConnectionModal(props: PluginSettingsModalBodyProps<W
         </div>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--text-sm)', marginTop: 2 }}>
           <ui.Text style={{ fontSize: 'var(--text-sm)', color: 'var(--muted-foreground)' }}>{t('settings.historySearchRange')}</ui.Text>
-          <Select
-            aria-label={t('settings.historySearchRange')}
+          <ValueChip
+            label={t('settings.historySearchRange')}
             disabled={value.historyEnabled === false}
             value={String(value.historySearchDays)}
             options={HISTORY_SEARCH_DAY_OPTIONS.map((days) => ({
@@ -202,8 +202,8 @@ export function BrowserTabsConnectionModal(props: PluginSettingsModalBodyProps<W
                 ? t('settings.historySearchRange.all')
                 : t('settings.historySearchRange.days', { days }),
             }))}
-            onChange={(event) => {
-              const raw = event.target.value
+            onChange={(next) => {
+              const raw = String(next)
               setValue({ ...value, historySearchDays: raw === 'all' ? 'all' : Number(raw) as BrowserTabsSettings['historySearchDays'] })
             }}
           />
@@ -227,8 +227,8 @@ export function BrowserTabsConnectionModal(props: PluginSettingsModalBodyProps<W
         </div>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--text-sm)', marginTop: 2 }}>
           <ui.Text style={{ fontSize: 'var(--text-sm)', color: 'var(--muted-foreground)' }}>{t('settings.idleTimeout')}</ui.Text>
-          <Select
-            aria-label={t('settings.idleTimeout')}
+          <ValueChip
+            label={t('settings.idleTimeout')}
             disabled={value.autoCloseIdleTabs !== true}
             value={String(clampIdleTimeoutMinutes(value.idleTimeoutMinutes))}
             options={(() => {
@@ -245,8 +245,8 @@ export function BrowserTabsConnectionModal(props: PluginSettingsModalBodyProps<W
               }
               return options
             })()}
-            onChange={(event) => {
-              setValue({ ...value, idleTimeoutMinutes: clampIdleTimeoutMinutes(event.target.value) })
+            onChange={(next) => {
+              setValue({ ...value, idleTimeoutMinutes: clampIdleTimeoutMinutes(String(next)) })
             }}
           />
         </label>

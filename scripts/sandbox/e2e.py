@@ -587,7 +587,7 @@ def s31(page):
             expect(modal).to_be_visible()
             expect(modal.locator('select')).to_have_count(0)
             assert modal.locator('input:not([data-slot]):not([type=hidden]):not([aria-hidden=true])').count() == 0, modal.locator('input:not([data-slot]):not([type=hidden]):not([aria-hidden=true])').evaluate_all('(els)=>els.map(e=>e.outerHTML)')
-            assert modal.locator('button:not([data-slot]):not([data-settings-modal-close]):not(.hiven-ui-select-trigger):not(.hiven-ui-button)').count() == 0, modal.locator('button:not([data-slot]):not([data-settings-modal-close]):not(.hiven-ui-select-trigger):not(.hiven-ui-button)').evaluate_all('(els)=>els.map(e=>e.outerHTML)')
+            assert modal.locator('button:not([data-slot]):not([data-settings-modal-close]):not(.hiven-ui-select-trigger):not(.hiven-ui-button):not([data-value-chip])').count() == 0, modal.locator('button:not([data-slot]):not([data-settings-modal-close]):not(.hiven-ui-select-trigger):not(.hiven-ui-button):not([data-value-chip])').evaluate_all('(els)=>els.map(e=>e.outerHTML)')
             if name == 'Configure':
                 expect(modal.get_by_role('switch')).to_have_count(3)
             if SCREENSHOTS:

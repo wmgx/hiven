@@ -344,7 +344,7 @@ def s45(page):
     expect(page.locator('.plugin-settings-modal-panel')).to_have_count(0)
     page.get_by_role('button', name='Translation terms · Edit…', exact=True).click()
     expect(page.locator('[data-settings-page=ai-glossary]')).to_be_visible()
-    page.locator('[data-settings-page=ai-glossary]').get_by_role('combobox').click()
+    page.locator('[data-settings-page=ai-glossary] [data-value-chip]').click()
     page.get_by_role('option', name='English', exact=True).click()
     page.get_by_role('button', name='Add term', exact=True).click()
     page.get_by_role('textbox', name='Term 1', exact=True).fill('hiven')

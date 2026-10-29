@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { PluginSettingsModalBodyProps } from '@hiven/plugin'
-import { Button, Select } from '@hiven/plugin-ui'
+import { Button, ValueChip } from '@hiven/plugin-ui'
 import type { AiGlossary, TranslateProfile, TranslateSettings } from './model'
 import { keepSelectedOption } from '../ai/readiness'
 import { useAiTranslationReadiness } from '../ai/useReadiness'
@@ -55,17 +55,17 @@ export function AiTranslateSettingsModal({ value, setValue, host, t, context, mo
     <div className="flex flex-col gap-4 p-1">
       {profiles.length > 1 && (
         <Field label={t('ai.profile')}>
-          <Select value={profile.id} options={profiles.map((item) => ({ value: item.id, label: item.name }))} onChange={(event) => setProfileId(event.currentTarget.value)} />
+          <ValueChip label={t('ai.profile')} value={profile.id} options={profiles.map((item) => ({ value: item.id, label: item.name }))} onChange={(next) => setProfileId(String(next))} />
         </Field>
       )}
       <Field label={t('ai.provider')}>
-        <Select value={profile.aiProviderId ?? ''} options={providerOptions} onChange={(event) => updateProfile({ aiProviderId: event.currentTarget.value, aiAgentId: '', aiEffort: 'inherit' })} />
+        <ValueChip label={t('ai.provider')} value={profile.aiProviderId ?? ''} options={providerOptions} onChange={(next) => updateProfile({ aiProviderId: String(next), aiAgentId: '', aiEffort: 'inherit' })} />
       </Field>
       <Field label={t('ai.model')}>
-        <Select value={profile.aiAgentId ?? ''} options={agentOptions} onChange={(event) => updateProfile({ aiAgentId: event.currentTarget.value, aiEffort: 'inherit' })} />
+        <ValueChip label={t('ai.model')} value={profile.aiAgentId ?? ''} options={agentOptions} onChange={(next) => updateProfile({ aiAgentId: String(next), aiEffort: 'inherit' })} />
       </Field>
       <Field label={t('ai.effort')}>
-        <Select value={profile.aiEffort ?? 'inherit'} options={effortOptions} onChange={(event) => updateProfile({ aiEffort: event.currentTarget.value as TranslateProfile['aiEffort'] })} />
+        <ValueChip label={t('ai.effort')} value={profile.aiEffort ?? 'inherit'} options={effortOptions} onChange={(next) => updateProfile({ aiEffort: String(next) as TranslateProfile['aiEffort'] })} />
       </Field>
       <AiReadinessNotice readiness={readiness} profile={profile} t={t} onRefresh={() => void controller.refresh(true)} />
       <Button onClick={() => openModal?.('ai-glossary', { itemId: profile.id })}>{t('ai.glossary.title')} · {t('ai.glossary.edit')}</Button>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Button, Select, TextInput, SurfaceError, SurfaceStatus } from '@hiven/plugin-ui'
+import { Button, ValueChip, TextInput, SurfaceError, SurfaceStatus } from '@hiven/plugin-ui'
 import type { AiGlossary } from './model'
 import { GLOSSARY_LANGUAGES, GLOSSARY_LIMITS, validateAiGlossary } from '../ai/glossary'
 
@@ -52,7 +52,7 @@ export function AiGlossaryEditor({ saved, onCommit, t }: {
       <p>{t('ai.glossary.privacy')}</p>
       <label className="flex flex-col gap-1.5">
         <span>{t('ai.glossary.targetLanguage')}</span>
-        <Select value={draft.targetLang} options={languageOptions} onChange={(event) => edit({ ...draft, targetLang: event.currentTarget.value })} />
+        <ValueChip label={t('ai.glossary.targetLanguage')} value={draft.targetLang} options={languageOptions} onChange={(next) => edit({ ...draft, targetLang: String(next) })} />
       </label>
       <div className="translate-glossary-editor__entries">
         {draft.entries.map((entry, index) => (

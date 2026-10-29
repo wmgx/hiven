@@ -1,5 +1,5 @@
 {
-  "version": 257,
+  "version": 258,
   "packages": [
     {
       "pluginId": "image-tools",
@@ -24,7 +24,7 @@
     {
       "pluginId": "translate",
       "dir": "translate",
-      "version": "1.0.37"
+      "version": "1.0.38"
     },
     {
       "pluginId": "ai-writing",
@@ -49,7 +49,7 @@
     {
       "pluginId": "web-open",
       "dir": "web-open",
-      "version": "1.13.8"
+      "version": "1.13.9"
     },
     {
       "pluginId": "qr-code",

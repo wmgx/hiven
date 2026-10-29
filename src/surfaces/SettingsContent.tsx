@@ -18,7 +18,7 @@ import { createAiLoginSession, type AiLoginSessionSnapshot } from '../workspace/
 import type { AiProviderDescriptor, AiReasoningEffort } from '../workspace/ai/types'
 import { openExternalUrl } from '../workspace/effectRunner'
 import { showToast } from '../workspace/toast'
-import { Combobox, NumberField, Select, Switch } from '../plugin-ui'
+import { NumberField, ValueChip, Switch } from '../plugin-ui'
 
 export function SettingsContent() {
   const suggestions = useSuggestionSettings()
@@ -60,6 +60,7 @@ export function SettingsContent() {
       <SettingGroup title={t('general')}>
         <SettingsListRow icon={<Languages size={15} strokeWidth={2} />} name={t('language')}>
           <LocaleSelect
+            label={t('language')}
             value={locale}
             options={[
               { value: 'en', label: t('langEn') },
@@ -515,6 +516,7 @@ export function AiSubscriptionsContent() {
       <SettingGroup title={t('aiDefaults')}>
         <SettingsListRow icon={<BrainCircuit size={15} strokeWidth={2} />} name={t('aiDefaultProvider')}>
           <LocaleSelect
+            label={t('aiDefaultProvider')}
             value={(keepConfiguredDefault ? settings.aiDefaultProviderId : defaultProvider?.id) ?? ''}
             options={providerOptions}
             wide
@@ -538,11 +540,10 @@ export function AiSubscriptionsContent() {
         </SettingsListRow>
         <SettingsListRow icon={<BrainCircuit size={15} strokeWidth={2} />} name={t('aiDefaultAgent')}>
           <LocaleSelect
+            label={t('aiDefaultAgent')}
             value={selectedAgentId}
             options={agentOptions}
             wide
-            searchable
-            searchPlaceholder={t('aiSearchAgents')}
             noResultsLabel={t('aiNoMatchingAgents')}
             disabled={agents.length === 0}
             emptyLabel={t('aiNoAgents')}
@@ -551,6 +552,7 @@ export function AiSubscriptionsContent() {
         </SettingsListRow>
         <SettingsListRow icon={<BrainCircuit size={15} strokeWidth={2} />} name={t('aiDefaultEffort')} desc={!effortUnknown && effortUnsupported ? t('aiEffortUnsupported') : undefined}>
           <LocaleSelect
+            label={t('aiDefaultEffort')}
             value={effortDisabled ? '' : settings.aiDefaultEffort}
             wide
             disabled={effortDisabled}
@@ -695,42 +697,28 @@ function formatUserFacingError(err: unknown, maxLen = 160): { short: string; ful
 }
 
 type LocaleSelectProps = {
+  label: string
   options: { value: string; label: string }[]
   value: string
   onChange: (value: string) => void
   disabled?: boolean
   emptyLabel?: string
   wide?: boolean
-  searchable?: boolean
-  searchPlaceholder?: string
   noResultsLabel?: string
 }
 
 function LocaleSelect(props: LocaleSelectProps) {
   const className = `settings-select-wrap ${props.wide ? 'is-wide' : ''}`
-  if (props.searchable) {
-    return (
-      <Combobox
-        className={className}
-        value={props.value}
-        options={props.options}
-        disabled={props.disabled}
-        placeholder={props.searchPlaceholder || props.emptyLabel}
-        emptyLabel={props.noResultsLabel}
-        aria-label={props.searchPlaceholder || props.emptyLabel}
-        onChange={props.onChange}
-      />
-    )
-  }
   const options = props.options.length > 0 ? props.options : [{ value: '', label: props.emptyLabel ?? '' }]
   return (
-    <Select
-      className={className}
+    <span className={className}><ValueChip
+      label={props.label}
+      emptyLabel={props.noResultsLabel ?? props.emptyLabel}
       value={props.value}
       options={options}
       disabled={props.disabled}
-      onChange={(event) => props.onChange(event.currentTarget.value)}
-    />
+      onChange={(next) => props.onChange(String(next))}
+    /></span>
   )
 }
 
