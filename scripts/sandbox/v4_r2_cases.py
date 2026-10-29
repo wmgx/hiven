@@ -202,6 +202,7 @@ def s55(page):
     import json
     page.evaluate('initialText => __hivenSandbox.openSurface({pluginId:"text-diff",surfaceId:"main",source:"builtin",initialText})', json.dumps({'mode':'set','original':{'text':'apple\nbanana\ncherry\n'},'modified':{'text':'banana\ndate\nfig\n'}}))
     def union():
+        expect(page.get_by_role('button', name='结果:', exact=False)).to_be_visible()
         chip = page.locator('[data-value-chip]').filter(has_text='交集').first
         if chip.count():
             chip.click()
@@ -210,4 +211,3 @@ def s55(page):
         color = page.locator('.td-set-selected').first.evaluate('el => getComputedStyle(el).backgroundColor')
         assert color.startswith('rgba('), color
     capture(page, 'V4-set', union)
-
