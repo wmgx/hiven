@@ -208,9 +208,8 @@
   --color-divider: var(--border-subtle);
   --input-bg: var(--background);
   --btn-ghost-hover: var(--hover);
-  --scrollbar-track: transparent;
-  --scrollbar-thumb: var(--slate-7);
-  --scrollbar-thumb-hover: var(--slate-8);
+  --scrollbar-thumb: color-mix(in srgb, var(--foreground) 16%, transparent);
+  --scrollbar-thumb-hover: color-mix(in srgb, var(--foreground) 32%, transparent);
   --color-background-primary: var(--background);
   --color-background-secondary: var(--subtle);
   --color-background-tertiary: var(--secondary);

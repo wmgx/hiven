@@ -551,41 +551,31 @@ html[data-web-native-bridge='true'][data-window='launcher'] .global-launcher-ove
   box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 20%, transparent);
 }
 
-/* ─── Scrollbar ─── */
-.flux-spatial-shell {
-  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
-  scrollbar-width: thin;
-}
-
-.flux-spatial-shell * {
-  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
-  scrollbar-width: thin;
-}
-
+/* ─── Scrollbar ───
+   Thin and quiet everywhere: a faint 4px thumb with no track, darker only
+   under the pointer. Custom scrollbars also keep a mouse-attached Mac from
+   falling back to wide legacy bars. */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 
-::-webkit-scrollbar-track {
-  background: var(--scrollbar-track);
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
   min-height: 32px;
-  border: 3px solid transparent;
+  border: 2px solid transparent;
   border-radius: 999px;
   background: var(--scrollbar-thumb);
   background-clip: content-box;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: var(--scrollbar-thumb-hover);
-  background-clip: content-box;
-}
-
-::-webkit-scrollbar-corner {
-  background: transparent;
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  background-color: var(--scrollbar-thumb-hover);
 }
 
 /* ─── View Transitions ─── */
@@ -4871,12 +4861,6 @@ body[data-theme='dark'] .launcher-empty-well {
   cursor: text;
 }
 
-/* Long output: slightly stronger scroll affordance on dark */
-.flux-spatial-shell[data-theme='dark'] .launcher-preview-well,
-body[data-theme='dark'] .launcher-preview-well {
-  scrollbar-color: var(--scrollbar-thumb, #45454b) transparent;
-}
-
 .launcher-preview-well.is-empty {
   color: var(--text-3);
   font-size: 12px;
@@ -6352,20 +6336,6 @@ body[data-theme='dark'] .menu {
   overflow-y: auto;
   padding: 20px 22px 26px;
   background: var(--panel);
-}
-
-.a-list::-webkit-scrollbar,
-.a-detail::-webkit-scrollbar,
-.sscroll::-webkit-scrollbar {
-  width: 10px;
-}
-
-.a-list::-webkit-scrollbar-thumb,
-.a-detail::-webkit-scrollbar-thumb,
-.sscroll::-webkit-scrollbar-thumb {
-  border-width: 3px;
-  background: var(--scrollbar-thumb);
-  background-clip: content-box;
 }
 
 .prow {
