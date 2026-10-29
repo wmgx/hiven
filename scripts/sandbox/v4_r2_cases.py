@@ -112,7 +112,7 @@ def s51(page):
     chips = page.locator('.td-pane-labels [data-value-chip]')
     expect(chips.nth(0)).to_contain_text('手动输入')
     expect(chips.nth(1)).to_contain_text('手动输入')
-    assert not any(word in chips.all_text_contents() for word in ['original', 'modified'])
+    assert not any(word in ''.join(chips.all_text_contents()) for word in ['original', 'modified'])
     expect(page.locator('.td-json-changed').first).to_be_visible()
     expect(page.locator('.td-json-added').first).to_be_visible()
     assert page.locator('.td-body .monaco-editor').nth(1).locator('.view-line').count() > 1
@@ -130,16 +130,6 @@ def s51(page):
         expect(page.locator(f'.td-json-{kind}').first).to_be_visible()
         color = page.locator(f'.td-json-{kind}').first.evaluate('el => getComputedStyle(el).backgroundColor')
         assert color not in ['rgba(0, 0, 0, 0)', 'transparent'], (kind, color)
-    page.evaluate('initialText => __hivenSandbox.openSurface({pluginId:"text-diff",surfaceId:"main",source:"builtin",initialText})', json.dumps({'mode':'set','original':{'text':'apple\nbanana\ncherry\n'},'modified':{'text':'banana\ndate\nfig\n'}}))
-    def union():
-        chip = page.locator('[data-value-chip]').filter(has_text='交集').first
-        if chip.count():
-            chip.click()
-            page.get_by_role('option', name='并集', exact=True).click()
-        expect(page.locator('.surface-shell-status')).to_contain_text('并集 · 5 项')
-        color = page.locator('.td-set-selected').first.evaluate('el => getComputedStyle(el).backgroundColor')
-        assert color.startswith('rgba('), color
-    capture(page, 'V4-set', union)
 
 
 def footer_bottom(page, footer):
@@ -206,3 +196,18 @@ def s54(page):
         assert image.evaluate('el => el.complete && el.naturalWidth > 0')
         footer_bottom(page, '.surface-shell-footer')
     capture(page, 'V2-qr', visible)
+
+
+def s55(page):
+    import json
+    page.evaluate('initialText => __hivenSandbox.openSurface({pluginId:"text-diff",surfaceId:"main",source:"builtin",initialText})', json.dumps({'mode':'set','original':{'text':'apple\nbanana\ncherry\n'},'modified':{'text':'banana\ndate\nfig\n'}}))
+    def union():
+        chip = page.locator('[data-value-chip]').filter(has_text='交集').first
+        if chip.count():
+            chip.click()
+            page.get_by_role('option', name='并集', exact=True).click()
+        expect(page.locator('.surface-shell-status')).to_contain_text('并集 · 5 项')
+        color = page.locator('.td-set-selected').first.evaluate('el => getComputedStyle(el).backgroundColor')
+        assert color.startswith('rgba('), color
+    capture(page, 'V4-set', union)
+

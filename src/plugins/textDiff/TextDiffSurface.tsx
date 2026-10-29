@@ -154,6 +154,11 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
     className: `td-json-${kind}`, rulerColor: 'transparent',
   }))
 
+  const jsonLines = (side: 'left' | 'right') => jsonDecorations(side).map(({ ranges, ...decoration }) => ({
+    ...decoration,
+    lines: [...new Set(ranges.flatMap(range => Array.from({ length: range.endLineNumber - range.startLineNumber + 1 }, (_, i) => range.startLineNumber + i)))],
+  }))
+
   const comparison = useMemo<ListComparison>(() => {
     try { return compareLists(debouncedOriginal, debouncedModified) }
     catch { return { ok: false, reason: 'failed' } }
@@ -276,10 +281,10 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
         <DualEditorView
           leftText={displayText(originalText, 'left')}
           rightText={displayText(modifiedText, 'right')}
-          leftLineDecorations={diffMode === 'set' ? setDecorations(debouncedOriginal) : jsonHighlights ? [] : undefined}
-          leftRangeDecorations={jsonHighlights ? jsonDecorations('left') : undefined}
-          rightLineDecorations={diffMode === 'set' ? setDecorations(debouncedModified) : jsonHighlights ? [] : undefined}
-          rightRangeDecorations={jsonHighlights ? jsonDecorations('right') : undefined}
+          leftLineDecorations={diffMode === 'set' ? setDecorations(debouncedOriginal) : jsonHighlights ? editingSide === 'left' ? [] : jsonLines('left') : undefined}
+          leftRangeDecorations={jsonHighlights ? editingSide === 'left' ? jsonDecorations('left') : [] : undefined}
+          rightLineDecorations={diffMode === 'set' ? setDecorations(debouncedModified) : jsonHighlights ? editingSide === 'right' ? [] : jsonLines('right') : undefined}
+          rightRangeDecorations={jsonHighlights ? editingSide === 'right' ? jsonDecorations('right') : [] : undefined}
           leftHighlights={leftHighlights}
           rightHighlights={rightHighlights}
           leftRanges={leftRanges}
