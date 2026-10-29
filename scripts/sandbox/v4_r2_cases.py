@@ -140,3 +140,51 @@ def s51(page):
         color = page.locator('.td-set-selected').first.evaluate('el => getComputedStyle(el).backgroundColor')
         assert color.startswith('rgba('), color
     capture(page, 'V4-set', union)
+
+
+def footer_bottom(page, footer):
+    page.clock.run_for(300)
+    page.wait_for_function("selector => {const p=document.querySelector('.global-launcher-panel')?.getBoundingClientRect(); const f=document.querySelector(selector)?.getBoundingClientRect();return p&&f&&Math.abs(p.bottom-f.bottom)<=1}", arg=footer)
+    panel = page.locator('.global-launcher-panel').bounding_box()
+    bar = page.locator(footer).bounding_box()
+    assert abs(panel['y'] + panel['height'] - bar['y'] - bar['height']) <= 1, page.locator('.global-launcher-panel,.global-launcher-flow-frame,.launcher-result-text-frame,.launcher-preview-well,.launcher-command-footer').evaluate_all("els=>els.map(el=>({class:el.className,style:el.getAttribute('style'),height:el.getBoundingClientRect().height,max:getComputedStyle(el).maxHeight,min:getComputedStyle(el).minHeight,flex:getComputedStyle(el).flex,padding:getComputedStyle(el).padding}))")
+
+
+def s52(page):
+    page.evaluate('__hivenSandbox.openSurface({pluginId:"text-tools",surfaceId:"base64",source:"builtin"})')
+    expect(page.locator('.base64-surface')).to_be_visible()
+    footer_bottom(page, '.surface-shell-footer')
+    capture(page, 'V1-footer', lambda: footer_bottom(page, '.surface-shell-footer'))
+    page.locator('[data-command-input]').press('Backspace')
+    field = page.locator('.global-launcher-panel textarea').first
+    field.fill('base64')
+    expect(page.locator('[data-launcher-row-index]')).to_have_count(1)
+    footer_bottom(page, '.global-launcher-footer')
+
+
+def s53(page):
+    def summary():
+        page.evaluate('__hivenSandbox.open()')
+        page.wait_for_timeout(250)
+        field = page.locator('.global-launcher-panel textarea').first
+        field.fill('summarize')
+        expect(page.locator('[data-launcher-row-index]').first).to_be_visible()
+        field.press('Enter')
+        field.fill('A short synthetic text for the simulated summary.')
+        field.press('Enter')
+        import re
+        expect(page.get_by_test_id('launcher-preview-well')).to_have_text(re.compile(r'^(?:Simulated summary\.\s*|这是一段模拟摘要。\s*){12}$'))
+        page.clock.run_for(300)
+        preview = page.get_by_test_id('launcher-preview-well').bounding_box()
+        assert preview['height'] < 100, preview
+        footer_bottom(page, '.launcher-command-footer')
+    summary()
+    capture(page, 'V5-ai', summary)
+    key = page.locator('.launcher-command-footer kbd').last
+    style = key.evaluate('el => {const s=getComputedStyle(el);return [s.fontSize,s.height,s.backgroundImage,s.borderRadius]}')
+    assert key.evaluate('el => el.previousSibling?.textContent.trim().length > 0')
+    page.evaluate('__hivenSandbox.openSurface({pluginId:"text-tools",surfaceId:"base64",source:"builtin",initialText:"hello"})')
+    expect(page.locator('.surface-shell-footer kbd').first).to_be_visible()
+    other = page.locator('.surface-shell-footer kbd').first.evaluate('el => {const s=getComputedStyle(el);return [s.fontSize,s.height,s.backgroundImage,s.borderRadius]}')
+    assert style == other, (style, other)
+    capture(page, 'V6-actions')

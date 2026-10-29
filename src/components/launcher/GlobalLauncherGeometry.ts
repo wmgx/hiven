@@ -99,8 +99,8 @@ export function measureLauncherPanelParts(panel: HTMLElement) {
     return { panelHeight: chromeHeight + bodyMaxHeight, bodyMaxHeight }
   }
 
-  const textResult = panel.querySelector<HTMLElement>('.launcher-result-text-frame, .global-launcher-flow-frame')
-  const preview = textResult?.querySelector<HTMLElement>('.launcher-preview-well')
+  const preview = panel.querySelector<HTMLElement>('.launcher-preview-well')
+  const textResult = preview?.parentElement
   if (textResult && preview) {
     // A text result has several fixed rows, including optional parameters and
     // delivery status. Its constrained panel rect cannot tell us their total.
@@ -109,7 +109,8 @@ export function measureLauncherPanelParts(panel: HTMLElement) {
     const chromeHeight = Array.from(textResult.children).reduce((height, child) => {
       if (!(child instanceof HTMLElement) || child === preview) return height
       const style = getComputedStyle(child)
-      return height + child.offsetHeight + cssPixels(style.marginTop) + cssPixels(style.marginBottom)
+      // Auto footer margin fills spare space; it is not intrinsic content height.
+      return height + child.offsetHeight + (child.classList.contains('global-launcher-footer') ? 0 : cssPixels(style.marginTop) + cssPixels(style.marginBottom))
     }, panel.offsetHeight - panel.clientHeight + previewMargins)
     const text = preview.querySelector<HTMLElement>('pre')
     // Measure the text, not the scrollport: a previous longer result may have
@@ -156,7 +157,7 @@ function cssPixels(value: string): number {
 }
 
 export function applyStandaloneLauncherGeometry(panel: HTMLElement, geometry: StandaloneLauncherGeometry) {
-  if (panel.classList.contains('launcher-command-mode')) {
+  if (panel.classList.contains('launcher-command-mode') || geometry.bodyMaxHeight != null) {
     panel.style.height = `${geometry.height - STANDALONE_LAUNCHER_VERTICAL_PADDING}px`
     panel.parentElement?.style.setProperty('--launcher-command-height', `${geometry.height}px`)
   }

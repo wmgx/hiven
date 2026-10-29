@@ -143,7 +143,7 @@ export function GlobalLauncherPluginSurfaceFrame({
       tabIndex={-1}
       style={fillsWindow
         ? { height: '100%', flex: '1 1 0', minWidth: 0 }
-        : autoHeight ? { maxHeight: shellHeight } : { height: shellHeight }}
+        : autoHeight ? { flex: '1 1 auto', height: 'auto', maxHeight: shellHeight } : { height: shellHeight }}
     >
       <div
         className="global-launcher-body global-launcher-body--surface"

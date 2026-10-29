@@ -1,8 +1,8 @@
 export function LauncherHintKey({ keys, label }: { keys: string; label: string }) {
   return (
     <span className="grp">
-      <kbd>{keys}</kbd>
       {label}
+      <kbd>{keys}</kbd>
     </span>
   )
 }

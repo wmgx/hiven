@@ -5,6 +5,6 @@ import { SurfaceHeaderActionsContext } from './SurfaceHeaderActions'
 /** Keep plugin actions in the shell while the body scrolls. */
 export function ActionBar({ className = '', children, ...props }: ComponentPropsWithoutRef<'footer'>) {
   const slot = useContext(SurfaceHeaderActionsContext).footer
-  const bar = <footer {...props} className={`hiven-ui-surface-actionbar ${className}`}>{children}</footer>
+  const bar = <footer {...props} className={`hiven-ui-surface-actionbar hiven-footer-actions ${className}`}>{children}</footer>
   return slot ? createPortal(bar, slot) : bar
 }

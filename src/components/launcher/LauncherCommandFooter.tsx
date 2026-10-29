@@ -74,7 +74,7 @@ export function LauncherCommandFooter({
   }, [])
 
   return (
-    <div className="global-launcher-footer l-foot launcher-command-footer">
+    <div className="global-launcher-footer l-foot launcher-command-footer hiven-footer-actions">
       <WindowFeedback mode="status" />
       {!primaryOnly && <button type="button" className="launcher-footer-back-btn" data-no-drag
         onMouseDown={(event) => event.preventDefault()} onClick={onBack}>
