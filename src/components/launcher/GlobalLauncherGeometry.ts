@@ -144,7 +144,13 @@ export function measureLauncherPanelParts(panel: HTMLElement) {
       (explanation?.offsetHeight ?? 0),
     STANDALONE_LAUNCHER_LIST_MAX_HEIGHT,
   )
-  const bodyMaxHeight = Math.min(body.scrollHeight, maxBodyHeight)
+  // The root scrollport can stretch to the preceding panel height; its content cannot.
+  const searchContent = body.querySelector<HTMLElement>('[data-launcher-search-content]')
+  const bodyStyle = getComputedStyle(body)
+  const contentHeight = searchContent
+    ? searchContent.offsetHeight + cssPixels(bodyStyle.paddingTop) + cssPixels(bodyStyle.paddingBottom)
+    : body.scrollHeight
+  const bodyMaxHeight = Math.min(contentHeight, maxBodyHeight)
 
   return {
     panelHeight: header.offsetHeight + bodyMaxHeight + footer.offsetHeight + (explanation?.offsetHeight ?? 0),

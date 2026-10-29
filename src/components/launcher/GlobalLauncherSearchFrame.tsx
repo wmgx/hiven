@@ -213,6 +213,7 @@ export function GlobalLauncherSearchFrame({
         onBlurCapture={handleBlur}
         onMouseMove={onMouseMove}
       >
+        <div data-launcher-search-content style={{ display: 'flow-root' }}>
         {hint && !block && (
           <RecentClipboardHint
             hint={hint}
@@ -337,6 +338,7 @@ export function GlobalLauncherSearchFrame({
               isKeyboardNavRef={isKeyboardNavRef}
             />
         )}
+        </div>
       </div>
       {!query.trim() && !browsingActions && !hint && !block && (
         <div className="launcher-clipboard-explanation">{t(locale, 'palette.clipboardExplanation')}</div>
