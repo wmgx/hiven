@@ -8,9 +8,7 @@ type Result = { text: string; preview?: string; png?: Uint8Array }
 type Source = { text: string; image?: Uint8Array; material?: boolean }
 
 export function Base64Surface({ host, t, initialText }: PluginSurfaceProps) {
-  // Initial material is read once; window resizing must not replace a user's input.
   const clipboard = useRef(host.clipboard).current
-  const tRef = useRef(t); tRef.current = t
   const [source, setSource] = useState<Source>({ text: initialText ?? '', material: Boolean(initialText) })
   const [direction, setDirection] = useState('auto')
   const [result, setResult] = useState<Result | null>(null)
@@ -24,27 +22,16 @@ export function Base64Surface({ host, t, initialText }: PluginSurfaceProps) {
     const leave = host.subscribeLeaveIntent?.(invalidate)
     return () => { invalidate(); stop?.(); leave?.() }
   }, [host.deliveryFeedbackOwner, host.subscribeLeaveIntent])
-  useEffect(() => {
-    if (initialText) return
+  const readImage = async (ignoreMissing = false) => {
+    invalidate()
     const abort = new AbortController(); read.current = abort
-    void (async () => {
-      try {
-        if (clipboard.readImage) {
-          try {
-            const image = await clipboard.readImage({ signal: abort.signal })
-            if (!abort.signal.aborted) setSource({ text: '', image: image.bytes })
-            return
-          } catch (error) {
-            // Empty/text-only clipboards have no image; permission and size failures still surface.
-            if (error instanceof Error && error.name !== 'NotReadableError') throw error
-          }
-        }
-        const text = await clipboard.readText({ signal: abort.signal })
-        if (!abort.signal.aborted) setSource({ text, material: Boolean(text) })
-      } catch { if (!abort.signal.aborted) setError(tRef.current('base64.readFailed')) }
-    })()
-    return () => abort.abort()
-  }, [clipboard, initialText])
+    try {
+      const image = await clipboard.readImage?.({ signal: abort.signal })
+      if (image && !abort.signal.aborted) setSource({ text: '', image: image.bytes })
+    } catch (error) {
+      if (!abort.signal.aborted && !(ignoreMissing && error instanceof Error && error.name === 'NotReadableError')) setError(t('base64.readFailed'))
+    }
+  }
   useEffect(() => {
     const abort = new AbortController(); work.current = abort
     setResult(null); setError('')
@@ -87,7 +74,8 @@ export function Base64Surface({ host, t, initialText }: PluginSurfaceProps) {
   }
   return <section className="base64-surface command-result-surface">
     <SurfaceHeaderField><CommandInput value={source.text} initialMaterial={source.material} placeholder={t('base64.input')}
-      onChange={text => { invalidate(); setResult(null); setSource({ text }) }} /></SurfaceHeaderField>
+      onChange={text => { invalidate(); setResult(null); setSource({ text }) }}
+      onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'v') void readImage(true) }} /></SurfaceHeaderField>
     <SurfaceHeaderActions><ValueChip label={t('base64.direction')} value={direction}
       options={['auto', 'encode', 'decode'].map(value => ({ value, label: t(`base64.${value}`) }))}
       onPreview={value => { if (value !== direction) { invalidate(); setDirection(String(value)) } }}
@@ -100,6 +88,7 @@ export function Base64Surface({ host, t, initialText }: PluginSurfaceProps) {
     </div>
     <SurfaceStatus>{result && t('base64.characters', { count: result.text.length })}</SurfaceStatus>
     <ActionBar>
+      {!result && <Button disabled={!clipboard.readImage} onClick={() => void readImage()}>{t('base64.readImage')}<kbd>⌘V</kbd></Button>}
       {host.OutputActions && <host.OutputActions text={result?.text ?? ''} />}
       {result?.png && <Button disabled={copying} onClick={() => void copyImage()}>{t('base64.copyImage')}</Button>}
     </ActionBar>

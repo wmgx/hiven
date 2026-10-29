@@ -201,5 +201,6 @@
   "base64.characters": "{count} characters",
   "urlQuery.deleted": "Deleted",
   "urlQuery.undo": "Undo",
-  "urlQuery.changed": "URL has changed. Deleted field was not restored."
+  "urlQuery.changed": "URL has changed. Deleted field was not restored.",
+  "base64.readImage": "Read clipboard image"
 }

@@ -201,5 +201,6 @@
   "base64.characters": "{count} 字符",
   "urlQuery.deleted": "已删除",
   "urlQuery.undo": "撤销",
-  "urlQuery.changed": "URL 已变化，未恢复删除的字段。"
+  "urlQuery.changed": "URL 已变化，未恢复删除的字段。",
+  "base64.readImage": "读取剪贴板图片"
 }
