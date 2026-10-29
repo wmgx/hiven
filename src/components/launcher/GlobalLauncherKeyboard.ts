@@ -213,7 +213,7 @@ export function handleGlobalLauncherKeyDown({
   // and so does a row without parameters.
   if (event.key === 'Tab' && !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) {
     const hintFocused = hasClipboardHint && (isClipboardHintSelected || selectedIndex === -1)
-    if (!hintFocused && selectedItem?.domainItem.executeWithParams && selectedItem.domainItem.params?.length) {
+    if (!hintFocused && selectedItem?.domainItem.executeWithParams) {
       event.preventDefault()
       selectItem(selectedItem, true)
       return

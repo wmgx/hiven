@@ -618,6 +618,10 @@ const definition: PluginDefinition = {
         behavior: { type: 'perform' },
         surfaces: ['global-launcher'],
         directAnswer: true,
+        executeWithParams(ctx2) {
+          ctx2.api.openSurface('main', { initialText: input })
+          return { ok: true, keepOpen: true }
+        },
         async execute(ctx2) {
           await ctx2.api.copyText(result)
           return { ok: true, output: { choices: [{ id: 'copy', title: result, primaryAction: async () => { await ctx2.api.copyText(result) } }] } }

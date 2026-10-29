@@ -780,6 +780,11 @@ export class LauncherController {
     })
     const recordUsage = this.shouldRecord(item, options)
 
+    if (options.customizeParams && item.executeWithParams && !item.params?.length) {
+      const customize = item.executeWithParams
+      item = { ...item, execute: ctx => customize(ctx, {}) }
+    }
+
     // Text tools open the command frame; parameters that must be chosen open over it.
     if (item.initialInputText === undefined && this.isCommandTool(item)) {
       trackBehavior(TelemetryEvents.launcherEnterCollectInput, itemTelemetryProps(item))

@@ -1,5 +1,5 @@
 {
-  "version": 250,
+  "version": 251,
   "packages": [
     {
       "pluginId": "image-tools",
@@ -14,7 +14,7 @@
     {
       "pluginId": "calculator",
       "dir": "calculator",
-      "version": "1.9.9"
+      "version": "1.9.10"
     },
     {
       "pluginId": "date-time-assistant",

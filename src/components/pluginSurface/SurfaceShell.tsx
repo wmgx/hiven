@@ -2,6 +2,7 @@ import { forwardRef, useMemo, useState, type CSSProperties, type ReactNode } fro
 import { SurfaceHeaderActionsContext } from '../../ui/SurfaceHeaderActions'
 import { WindowFeedback } from '../../ui/WindowFeedback'
 import { PluginIcon } from '../../ui/PluginIcon'
+import { shouldIgnoreImeKeyDown } from '../../utils/imeKeyboard'
 import './SurfaceShell.css'
 
 export const SurfaceShell = forwardRef<HTMLDivElement, {
@@ -24,7 +25,14 @@ export const SurfaceShell = forwardRef<HTMLDivElement, {
   const [status, setStatus] = useState<HTMLDivElement | null>(null)
   const [error, setError] = useState<HTMLDivElement | null>(null)
   const slots = useMemo(() => ({ actions: slot, field, breadcrumbs, footer, status, error }), [slot, field, breadcrumbs, footer, status, error])
-  return <div {...props} ref={ref} className={`surface-chrome ${className}`}>
+  return <div {...props} ref={ref} className={`surface-chrome ${className}`} onKeyDown={event => {
+    const field = event.target
+    if (event.defaultPrevented || shouldIgnoreImeKeyDown(event, { current: false })) return
+    if (event.key === 'Backspace' && (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement)
+      && field.hasAttribute('data-command-input') && !field.value) {
+      event.preventDefault(); event.stopPropagation(); (onBack ?? onClose)()
+    }
+  }}>
     <div className="surface-chrome-header" data-value-chips data-tauri-drag-region={standalone || undefined}>
       <button type="button" className="surface-shell-tag" id={titleId} data-no-drag onClick={onBack ?? onClose}><PluginIcon icon={icon} title={title} small /><span className="surface-shell-title">{title}</span></button>
       <div ref={setBreadcrumbs} className="surface-shell-breadcrumbs" data-no-drag />
