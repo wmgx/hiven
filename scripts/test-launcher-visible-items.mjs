@@ -41,7 +41,7 @@ function check(name, run) {
   console.log(`✓ ${name}`)
 }
 
-check('idle shows saved favorites followed by at most five recent available items', () => {
+check('idle shows saved favorites followed by at most ten recent available items', () => {
   const visible = selectLauncherVisibleItems({
     rankedItems: ordinary,
     availableItems: [...pins, ...ordinary],
@@ -49,7 +49,7 @@ check('idle shows saved favorites followed by at most five recent available item
     recentKeys: ['missing', pins[0].key, ...keys(ordinary).reverse()],
     query: '', keyOf,
   })
-  assert.deepEqual(keys(visible), [pins[1].key, pins[0].key, ...keys(ordinary).reverse().slice(0, 5)])
+  assert.deepEqual(keys(visible), [pins[1].key, pins[0].key, ...keys(ordinary).reverse().slice(0, 10)])
 })
 
 check('a typed query preserves every ranked result and its original order', () => {

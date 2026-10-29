@@ -2,8 +2,9 @@ import { selectLauncherBrowseItems } from './browseItems'
 import type { LauncherBrowseCategory, LauncherBrowseItem } from './browseItems'
 
 export const MAX_VISIBLE_IDLE = 12
+export const MAX_IDLE_RECENTS = 10
 
-/** Idle shows saved favorites, then at most five recent available items. */
+/** Idle shows saved favorites, then at most MAX_IDLE_RECENTS recent available items. */
 export function selectLauncherVisibleItems<T>(options: {
   rankedItems: readonly T[]
   availableItems: readonly T[]
@@ -51,7 +52,7 @@ export function selectLauncherVisibleItems<T>(options: {
     if (seen.has(key) || !availableByKey.has(key)) continue
     visible.push(availableByKey.get(key)!)
     seen.add(key)
-    if (++recentCount === 5) break
+    if (++recentCount === MAX_IDLE_RECENTS) break
   }
   return visible
 }
