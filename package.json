@@ -155,6 +155,7 @@
     "test:browser-url-presentation": "node --experimental-strip-types scripts/test-browser-url-presentation.mts",
     "test:browser-window-tab-dedup": "node scripts/test-browser-window-tab-dedup.mjs",
     "test:calculator-history": "node --experimental-strip-types scripts/test-calculator-history.mts",
+    "test:memo-model": "node --experimental-strip-types scripts/test-memo-model.mts",
     "test:calculator-number-answers": "node --experimental-strip-types scripts/test-calculator-number-answers.mts",
     "test:calculator-thousands": "node --experimental-strip-types scripts/test-calculator-thousands.mts",
     "test:calculator-units": "node --experimental-strip-types scripts/test-calculator-units.mts",

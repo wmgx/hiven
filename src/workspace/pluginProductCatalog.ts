@@ -23,6 +23,7 @@ const PRODUCT_CATALOG: PluginProductMetadata[] = [
   product('web-open', 'Browser', ['web-open'], '浏览器'),
   product('qr-code', 'QR Code', ['qr-code'], '二维码'),
   product('text-explode', 'Text Explode', ['text-explode'], '大爆炸'),
+  product('memo', 'Memo', ['memo'], '备忘录'),
 ]
 
 export const REMOVED_PLUGIN_CAPABILITIES = [

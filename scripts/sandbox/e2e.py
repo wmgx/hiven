@@ -258,7 +258,7 @@ def open_surface(page, target, presentation='inline'):
     chrome = page.locator('.surface-chrome:visible')
     expect(chrome).to_have_count(1)
     expect(chrome.locator('.surface-shell-tag')).not_to_be_empty()
-    roots = {'calculator':'.calculator-surface', 'clipboard-history':'.clipboard-history-surface', 'csv':'.csv-tools-surface', 'date-time-assistant':'.date-time-surface', 'image-tools':'.image-tools-surface', 'qr-code':'.qr-surface', 'regex-tester':'.regex-tester-surface', 'text-explode':'.text-explode-surface', 'text-tools':'.url-query-surface, .json-expression-surface, .base64-surface', 'text-diff':'.td-surface', 'translate':'.translate-surface'}
+    roots = {'calculator':'.calculator-surface', 'clipboard-history':'.clipboard-history-surface', 'csv':'.csv-tools-surface', 'date-time-assistant':'.date-time-surface', 'image-tools':'.image-tools-surface', 'memo':'.memo-surface', 'qr-code':'.qr-surface', 'regex-tester':'.regex-tester-surface', 'text-explode':'.text-explode-surface', 'text-tools':'.url-query-surface, .json-expression-surface, .base64-surface', 'text-diff':'.td-surface', 'translate':'.translate-surface'}
     expect(chrome.locator(roots[target['pluginId']])).to_be_visible()
     return chrome
 

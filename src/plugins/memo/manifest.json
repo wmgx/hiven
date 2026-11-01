@@ -1,0 +1,8 @@
+{
+  "pluginId": "memo",
+  "displayName": "Memo",
+  "displayNameI18n": { "zh": "备忘录" },
+  "version": "1.0.2",
+  "capabilities": ["surface", "instant-suggestion"],
+  "permissions": ["storage.private", "clipboard.write"]
+}
