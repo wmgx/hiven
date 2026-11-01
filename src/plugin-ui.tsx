@@ -44,6 +44,7 @@ export { ValueChip } from './ui/ValueChip'
 export { PluginIcon } from './ui/PluginIcon'
 export { Tooltip } from '@base-ui/react/tooltip'
 export { useToolDeliveryFeedback } from './ui/useToolDeliveryFeedback'
+export { useShortcuts, type ShortcutMap } from './ui/useShortcuts'
 export type { ToolDeliveryFeedback, ToolDeliveryFeedbackAttempt, ToolDeliveryFeedbackOwner } from './ui/toolDeliveryFeedback'
 
 // Load the existing editor only when a plugin mounts it; keep Launcher startup light.
