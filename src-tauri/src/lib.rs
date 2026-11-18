@@ -33,6 +33,8 @@ mod text_material;
 mod toast_hud;
 mod history_paste_queue;
 mod debug_snapshot;
+#[cfg(target_os = "macos")]
+mod apple_vision_ocr;
 pub mod desktop_bridge;
 pub mod hotkeys;
 #[cfg(target_os = "linux")]
@@ -6937,6 +6939,26 @@ fn plugin_blob_read(
     Ok(tauri::ipc::Response::new(framed))
 }
 
+#[cfg(target_os = "macos")]
+#[tauri::command(async)]
+fn recognize_image_text(
+    request: tauri::ipc::Request<'_>,
+) -> Result<apple_vision_ocr::RecognizedTextResult, String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("Image analysis body must be raw bytes".to_string());
+    };
+    if bytes.is_empty() || bytes.len() > 10 * 1024 * 1024 {
+        return Err("Image analysis input must be between 1 byte and 10 MiB".to_string());
+    }
+    apple_vision_ocr::recognize_text(bytes)
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command(async)]
+fn recognize_image_text(_request: tauri::ipc::Request<'_>) -> Result<serde_json::Value, String> {
+    Err("Image text recognition is available only on macOS".to_string())
+}
+
 /// JSON twin of the raw commands for the browser validation relay, which can only carry JSON.
 #[tauri::command(async)]
 fn plugin_blob_save_json(
@@ -8057,6 +8079,7 @@ pub fn run() {
             last_saveable_run_get,
             plugin_blob_save,
             plugin_blob_read,
+            recognize_image_text,
             plugin_blob_save_json,
             plugin_blob_read_json,
             plugin_blob_delete,

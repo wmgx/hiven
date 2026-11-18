@@ -137,6 +137,9 @@ export type {
   PluginClipboardImageSaveContribution,
   PluginClipboardImageSaveContext,
   PluginBackgroundPasteQueue,
+  PluginImageAnalysisApi,
+  PluginImageAnalysisLine,
+  PluginImageAnalysisResult,
   PasteQueueStatus,
 } from './workspace/pluginTypes'
 export type {

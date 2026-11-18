@@ -16,6 +16,7 @@ import { useAiSendGate } from './useAiSendGate'
 import { useOutputActionsComponent } from './OutputActions'
 import { createPluginTelemetry } from '../../workspace/telemetry/track'
 import { createPluginPaste } from '../../workspace/pluginPaste'
+import { createPluginImageAnalysis } from '../../workspace/pluginImageAnalysis'
 import { captureLauncherPasteOwner, combinePasteRecoveryOwners, createPasteRecoveryScope, isPasteRecoveryTemporaryHidden, observePasteRecoveryFocus } from '../../workspace/pasteRecovery'
 import { createPluginNetwork } from '../../workspace/pluginNetwork'
 import { createPluginAi } from '../../workspace/ai/runtime'
@@ -101,6 +102,7 @@ export function PluginSurfaceRenderer({
   onHandoffReady,
 }: PluginSurfaceRendererProps) {
   const surfaceFeedback = useSurfaceFeedback()
+  const imageAnalysis = useMemo(createPluginImageAnalysis, [])
   const clearSurfaceFeedback = surfaceFeedback.clear
   const suspensionOwner = useMemo(() => ({}), [suspended])
   const suspensionOwnerRef = useRef(suspensionOwner)
@@ -731,6 +733,7 @@ export function PluginSurfaceRenderer({
                 },
               },
             }),
+            imageAnalysis,
             network: createPluginNetwork(surfaceState.permissions),
             shell: createPluginShell(surfaceState.permissions),
             ai: surfaceState.ai,

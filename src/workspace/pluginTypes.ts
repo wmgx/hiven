@@ -835,6 +835,25 @@ export type PluginBackgroundPasteQueue = {
   subscribe(listener: (status: PasteQueueStatus) => void): () => void
 }
 
+/** Optional host image analysis. Currently available only in the macOS desktop app. */
+export type PluginImageAnalysisLine = {
+  text: string
+  /** Normalized top-left image coordinates. */
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export type PluginImageAnalysisResult = {
+  text: string
+  lines: PluginImageAnalysisLine[]
+}
+
+export type PluginImageAnalysisApi = {
+  recognizeText(bytes: Uint8Array): Promise<PluginImageAnalysisResult>
+}
+
 export type PluginTelemetryDetails = Record<string, string | number | boolean>
 
 export type PluginSurfaceTelemetry = {
@@ -945,6 +964,7 @@ export type PluginSurfaceHostApi = {
   storage: PluginPrivateStorageApi
   clipboard: PluginClipboardApi
   paste: PluginPasteApi
+  imageAnalysis?: PluginImageAnalysisApi
   network: PluginNetworkApi
   shell: PluginShellApi
   ai: PluginAiApi
@@ -1052,6 +1072,7 @@ export type PluginBackgroundContext<TSettings = unknown> = {
   clipboard: PluginClipboardApi
   paste: PluginPasteApi
   pasteQueue?: PluginBackgroundPasteQueue
+  imageAnalysis?: PluginImageAnalysisApi
   network: PluginNetworkApi
   shell: PluginShellApi
   ai: PluginAiApi

@@ -18,6 +18,7 @@ import { createPluginPaste } from './pluginPaste'
 import { createPluginNetwork } from './pluginNetwork'
 import { createPluginShell } from './pluginShell'
 import { createPluginAi } from './ai/runtime'
+import { createPluginImageAnalysis } from './pluginImageAnalysis'
 import { useAppStore } from '../store'
 import { showToast } from './toast'
 import { getPluginPermissionSnapshot, missingPluginPermissions, usePluginPermissionStore } from './pluginPermissions'
@@ -62,6 +63,7 @@ function buildBackgroundContext(
     paste: createPluginPaste(permissions, storage),
     pasteQueue: ['clipboard.write', 'accessibility.paste', 'globalShortcut.register'].every((key) => requestedPermissions.includes(key as PluginPermission))
       ? createBackgroundPasteQueue(signal, isCurrent) : undefined,
+    imageAnalysis: createPluginImageAnalysis(),
     network: createPluginNetwork(permissions),
     shell: createPluginShell(permissions),
     ai: createPluginAi(pluginId, source, permissions),
