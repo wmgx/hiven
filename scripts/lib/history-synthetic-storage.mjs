@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import ts from 'typescript'
 const cache = new Map()
-const sdkStub = `data:text/javascript;base64,${Buffer.from('export function getPluginHostSdk() { throw new Error("Host SDK forbidden in storage fixtures") }').toString('base64')}`
+const sdkStub = `data:text/javascript;base64,${Buffer.from("export function getPluginHostSdk() { return { kits: { content: { detectContent: (text) => text.includes('synthetic-secret') ? [{ kind: 'secret-like' }] : [] } } } }").toString('base64')}`
 export function historyModule(relative) {
   const file = path.resolve(relative)
   if (cache.has(file)) return cache.get(file)
@@ -16,6 +16,7 @@ export function historyModule(relative) {
 const clone = (value) => value === undefined ? undefined : JSON.parse(JSON.stringify(value))
 export function syntheticHistoryStorage() {
   const data = new Map()
+  const blobs = new Map()
   const deletedBlobs = []
   const stats = { maxPage: 0, maxArrayPage: 0, gets: [], getMany: [], relatedSearches: 0, batches: 0 }
   let rejectBatch
@@ -78,7 +79,10 @@ export function syntheticHistoryStorage() {
         return { committed: true }
       },
     },
-    blob: { delete: async (id) => { if (rejectBlob) throw new Error('simulated blob failure'); deletedBlobs.push(id) } },
+    blob: {
+      get: async (id) => blobs.get(id)?.slice(),
+      delete: async (id) => { if (rejectBlob) throw new Error('simulated blob failure'); blobs.delete(id); deletedBlobs.push(id) },
+    },
   }
-  return { data, storage, stats, deletedBlobs, failBatch: (condition) => { rejectBatch = condition }, failBlob: (value) => { rejectBlob = value } }
+  return { data, blobs, storage, stats, deletedBlobs, failBatch: (condition) => { rejectBatch = condition }, failBlob: (value) => { rejectBlob = value } }
 }

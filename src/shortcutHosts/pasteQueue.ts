@@ -4,19 +4,12 @@ import { createClipboardPasteQueue, validateQueueSnapshots } from '../workspace/
 import { registerHotkeyReloadParticipant } from '../hotkeys/pageReload'
 import { useAppStore } from '../store'
 import { translate } from '../i18n'
-import { formatPluginShortcutLabel } from '../utils/formatPluginShortcutLabel'
 import { isLauncherNativeRuntime } from './bundledSurfaces'
 import { trackBehavior } from '../workspace/telemetry'
 
-export type PasteQueueNotice = 'ready' | 'delivered' | 'failed' | 'cancelled' | 'empty'
-type NoticeDetails = { full: boolean; shortcut: string; cancel(): void }
-type Notify = (status: PasteQueueStatus, outcome: PasteQueueNotice, hud: { operation: string }, details: NoticeDetails) => void
-let notify: Notify | undefined
 let owner: symbol | undefined
 let sessionId = ''
-let operation = crypto.randomUUID()
 let revision = 0
-let full = false
 const listeners = new Set<(status: PasteQueueStatus) => void>()
 let syncShortcut = () => {}
 const queue = createClipboardPasteQueue({
@@ -50,17 +43,12 @@ export function getPasteQueueDebugSnapshot() {
   const { phase, busy, total, completed, remaining } = queue.getSnapshot()
   return { phase, busy, total, completed, remaining }
 }
-function publish(outcome: PasteQueueNotice = 'ready') {
+function publish() {
   revision += 1
-  const shortcut = useAppStore.getState().settings.pasteQueueShortcut
   const current = status()
   for (const listener of listeners) listener(current)
-  notify?.(current, outcome, { operation }, {
-    full, shortcut: shortcut.kind === 'accelerator' ? formatPluginShortcutLabel(shortcut.accelerator) : '',
-    cancel: () => { if (current.sessionId === sessionId) queue.cancel() },
-  })
 }
-queue.subscribe(() => publish(queue.getSnapshot().phase === 'cancelled' ? 'cancelled' : 'ready'))
+queue.subscribe(publish)
 
 export function createBackgroundPasteQueue(signal: AbortSignal, isCurrent: () => boolean): PluginBackgroundPasteQueue | undefined {
   if (!isLauncherNativeRuntime() || window.__HIVEN_WEB_NATIVE_BRIDGE__ || !/Mac/i.test(navigator.platform)) return undefined
@@ -74,13 +62,12 @@ export function createBackgroundPasteQueue(signal: AbortSignal, isCurrent: () =>
   }
   signal.addEventListener('abort', dispose, { once: true })
   return {
-    setRound(id, snapshots, options) {
+    setRound(id, snapshots) {
       check()
       if (typeof id !== 'string' || !id || id.length > 160) throw new Error('QueueSnapshotError')
       const validated = validateQueueSnapshots(snapshots)
-      full = options?.full === true
       if (sessionId === id) queue.appendRound(validated)
-      else { sessionId = id; operation = crypto.randomUUID(); queue.replace(validated) }
+      else { sessionId = id; queue.replace(validated) }
     },
     clear() { if (owner === token) queue.cancel() },
     subscribe(listener) {
@@ -96,9 +83,8 @@ export function createBackgroundPasteQueue(signal: AbortSignal, isCurrent: () =>
   }
 }
 
-export function installPasteQueueHost(options: { notify: Notify }): () => void {
-  if (notify || !isLauncherNativeRuntime() || window.__HIVEN_WEB_NATIVE_BRIDGE__ || !/Mac/i.test(navigator.platform)) return () => {}
-  notify = options.notify
+export function installPasteQueueHost(): () => void {
+  if (!isLauncherNativeRuntime() || window.__HIVEN_WEB_NATIVE_BRIDGE__ || !/Mac/i.test(navigator.platform)) return () => {}
   let alive = true
   let paused = false
   let registered = ''
@@ -128,8 +114,8 @@ export function installPasteQueueHost(options: { notify: Notify }): () => void {
         await register(accelerator, (event) => {
           if (!alive || paused || requested !== generation || !owner || event.state !== 'Released') return
           trackBehavior('paste_queue.shortcut', { status: 'pressed', phase: queue.getSnapshot().remaining ? 'ready' : 'empty' })
-          if (!queue.getSnapshot().remaining) { publish('empty'); return }
-          void queue.next().then((outcome) => { if (outcome === 'failed' || outcome === 'delivered') publish(outcome) })
+          if (!queue.getSnapshot().remaining) return
+          void queue.next()
         })
         registered = accelerator
         if (requested !== generation) { await unregister(accelerator); registered = ''; return }
@@ -154,5 +140,5 @@ export function installPasteQueueHost(options: { notify: Notify }): () => void {
     })
   }
   resume()
-  return () => { alive = false; stopReload(); stopStore(); sync(); syncShortcut = () => {}; notify = undefined }
+  return () => { alive = false; stopReload(); stopStore(); sync(); syncShortcut = () => {} }
 }

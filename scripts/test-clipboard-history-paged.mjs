@@ -180,10 +180,13 @@ try {
   const splitFiles = await unicodeRepo.addItem({ kind: 'files', paths: ['/tmp/first-token.txt', '/tmp/second-token.txt'], fileNames: ['first-token.txt', 'second-token.txt'], hash: 'split-files', byteSize: 40 })
   assert.equal((await unicodeRepo.getPage({ query: 'first-token second-token', matchMode: 'all-terms' })).items.some(({ id }) => id === splitFiles.id), false, 'all-terms cannot assemble a match across file names')
   const compositeImage = await unicodeRepo.addItem({ kind: 'image', blobId: 'composite-image', previewBlobId: 'composite-image', contentType: 'image/png', width: 640, height: 480, hash: 'composite-image', byteSize: 10 })
-  assert.equal((await unicodeRepo.getPage({ query: 'image/png 640' })).items.some(({ id }) => id === compositeImage.id), true, 'image composite-field search semantics remain intact')
-  assert.equal((await unicodeRepo.getPage({ query: '640 480' })).items.some(({ id }) => id === compositeImage.id), true)
-  const partialImage = await unicodeRepo.addItem({ kind: 'image', blobId: 'partial-image', previewBlobId: 'partial-image', contentType: 'image/png', height: 480, hash: 'partial-image', byteSize: 10 })
-  assert.equal((await unicodeRepo.getPage({ query: 'image/png 480' })).items.some(({ id }) => id === partialImage.id), false, 'missing composite fields retain their semantic spacing')
+  assert.equal((await unicodeRepo.getPage({ query: 'image/png' })).items.some(({ id }) => id === compositeImage.id), true, 'image content type remains searchable')
+  assert.equal((await unicodeRepo.getPage({ query: '640' })).items.some(({ id }) => id === compositeImage.id), false, 'image dimensions are display metadata, not search fields')
+  const ocrLines = [{ text: '订单编号 OCR-2026 中文内容', x: 0.1, y: 0.2, width: 0.5, height: 0.08 }]
+  await unicodeRepo.setImageOcrResult(compositeImage.id, '订单编号 OCR-2026 中文内容', ocrLines, 2)
+  assert.equal((await unicodeRepo.getPage({ query: 'OCR-2026' })).items.some(({ id }) => id === compositeImage.id), true, 'recognized image text is searchable from the lightweight index')
+  assert.equal((await unicodeRepo.getItem(compositeImage.id)).ocrVersion, 2)
+  assert.deepEqual((await unicodeRepo.getItem(compositeImage.id)).ocrLines, ocrLines, 'recognized line geometry survives storage for in-place selection')
   const longMemory = syntheticHistoryStorage(); const longRepo = create(longMemory.storage)
   for (let index = 0; index < 100; index++) {
     const text = `Straße ${index} ${'x'.repeat(260_000)}`

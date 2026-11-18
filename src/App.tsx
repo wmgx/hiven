@@ -1,7 +1,5 @@
 import { beginSuggestionSession } from './workspace/launcher/contextSuggestionsStore'
-import { translate } from './i18n'
 import { installPasteQueueHost } from './shortcutHosts/pasteQueue'
-import { end as endNotice, flash as flashNotice, status as statusNotice } from './workspace/notify'
 import { useEffect, useRef } from 'react'
 import { useAppStore } from './store'
 import type { GlobalLauncherPosition } from './store'
@@ -143,33 +141,7 @@ function LauncherRuntimeApp() {
   useEffect(() => isNativeDesktopRuntime() ? installQuickEditorHotkeys() : undefined, [])
   useEffect(() => {
     if (!isNativeDesktopRuntime()) return
-    let session = ''
-    let noticeRevision = 0
-    const stop = installPasteQueueHost({ notify: (status, outcome, hud, details) => {
-      if (outcome === 'cancelled' || status.sessionId !== session) {
-        if (session) endNotice(session)
-        if (outcome === 'cancelled') { session = ''; return }
-        session = status.sessionId
-      }
-      const locale = useAppStore.getState().settings.locale
-      const t = (key: string, vars?: Record<string, string | number>) => translate(locale, 'hud', key, vars)
-      const receipt = () => ({ ...hud, revision: ++noticeRevision })
-      if (outcome === 'empty' || outcome === 'failed') {
-        flashNotice({ level: outcome === 'failed' ? 'error' : 'info', message: t(`queue.${outcome}`) }, receipt())
-      }
-      if (status.phase === 'completed') {
-        endNotice(session)
-        if (outcome === 'delivered') flashNotice({ level: 'success', message: t('queue.complete') }, receipt())
-        return
-      }
-      if (status.total < 2 || status.phase === 'cancelled') return
-      statusNotice({
-        id: session, title: t(details.full ? 'queue.full' : 'queue.title'),
-        detail: status.completed || status.busy ? t('queue.progress', { completed: status.completed, total: status.total })
-          : t(details.shortcut ? 'queue.copied' : 'queue.copiedNoShortcut', { count: status.total, shortcut: details.shortcut }),
-      }, receipt(), { cancel: details.cancel })
-    } })
-    return () => { stop(); if (session) endNotice(session) }
+    return installPasteQueueHost()
   }, [])
 
   // Background clipboard age clock: first see = unknown baseline; real changes get known changedAt.

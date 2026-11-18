@@ -36,11 +36,8 @@ export function matchesClipboardHistorySearch(
       || clipboardHistorySearchFieldMatches(item.text, query, matchMode)
   }
   if (item.kind === 'image') {
-    return clipboardHistorySearchFieldMatches(
-      `${item.contentType} ${item.width ?? ''} ${item.height ?? ''}`,
-      query,
-      matchMode,
-    )
+    return clipboardHistorySearchFieldMatches(item.contentType, query, matchMode)
+      || clipboardHistorySearchFieldMatches(item.ocrText ?? '', query, matchMode)
   }
   return item.fileNames.some((fileName) => clipboardHistorySearchFieldMatches(fileName, query, matchMode))
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Execute the production shortcut policy, focus lifecycle and keyboard handler.
+// Execute the production shortcut policy, focus lifecycle and plugin-owned keyboard handler.
 // All actions are spies; this test never reads or deletes real clipboard history.
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -167,9 +167,9 @@ function dispatch(key, target, options = {}) {
 }
 const untouched = { calls: [], prevented: false, stopped: false }
 for (const target of [search, select, row, rowLabel, list, surface]) {
-  assert.deepEqual(dispatch('Enter', target), { calls: ['paste'], prevented: true, stopped: false })
+  assert.deepEqual(dispatch('Enter', target), untouched, 'plain Enter is owned by the registered footer action')
   for (const modifier of ['metaKey', 'ctrlKey']) {
-    assert.deepEqual(dispatch('Enter', target, { event: { [modifier]: true } }), { calls: ['paste'], prevented: true, stopped: false })
+    assert.deepEqual(dispatch('Enter', target, { event: { [modifier]: true } }), untouched)
   }
 }
 for (const target of [settings, settingsIcon, rowDelete]) {
@@ -179,25 +179,26 @@ for (const target of [search, select]) {
   for (const key of ['Delete', 'Backspace']) assert.deepEqual(dispatch(key, target), untouched, 'editing keys stay native')
 }
 for (const target of [row, list, surface]) {
-  for (const key of ['Delete', 'Backspace']) assert.deepEqual(dispatch(key, target), { calls: ['delete'], prevented: true, stopped: false })
+  for (const key of ['Tab', 'Delete', 'Backspace']) assert.deepEqual(dispatch(key, target), untouched, 'registered surface actions own footer shortcuts')
 }
 assert.deepEqual(dispatch('Delete', row, { activeElement: search }), untouched)
 for (const context of [{ selectedItem: null }, { resultsActionBlocked: true }, { legacyDialog: true }]) {
   for (const key of ['Enter', 'Delete', 'Backspace']) assert.deepEqual(dispatch(key, row, { context }), untouched)
   assert.deepEqual(dispatch('Enter', row, { context, event: { ctrlKey: true } }), untouched)
 }
-for (const event of [{}, { ctrlKey: true }]) {
-  assert.deepEqual(dispatch('Enter', search, { event, context: { imeKeyDown: { shouldIgnoreKeyDown: () => true } } }), untouched, 'IME commit keeps its existing guard')
-}
+assert.deepEqual(dispatch('p', row, {
+  event: { altKey: true, code: 'KeyP' },
+  context: { imeKeyDown: { shouldIgnoreKeyDown: () => true } },
+}), untouched, 'IME keeps the remaining plugin-owned shortcut inactive')
 assert.deepEqual(dispatch('Enter', search, { event: { defaultPrevented: true } }).calls, [])
 assert.deepEqual(dispatch('a', search), untouched, 'ordinary input characters are unaffected')
-assert.deepEqual(dispatch('c', row, { event: { ctrlKey: true } }).calls, ['copy'], 'copy behavior is unchanged')
+assert.deepEqual(dispatch('c', row, { event: { ctrlKey: true } }), untouched, 'registered copy action owns the shortcut')
 assert.deepEqual(dispatch('c', search, { event: { ctrlKey: true } }), untouched, 'the focused query keeps native text copy ownership')
 assert.deepEqual(dispatch('c', search, { event: { ctrlKey: true }, context: { resultsActionBlocked: true } }), untouched, 'pending search keeps input copy native and never copies the stale row')
 console.log('✓ Clipboard history shortcut eligibility, focus lifecycle and production handler passed')
 
 for (const target of [search, row, list]) {
-  assert.deepEqual(dispatch('Enter', target, { event: { shiftKey: true } }).calls, ['plainPaste'])
+  assert.deepEqual(dispatch('Enter', target, { event: { shiftKey: true } }), untouched, 'registered plain-paste action owns the shortcut')
   assert.deepEqual(dispatch('p', target, { event: { altKey: true, code: 'KeyP' } }).calls, ['favorite'])
   assert.deepEqual(dispatch('π', target, { event: { altKey: true, code: 'KeyP' } }).calls, ['favorite'], 'macOS Option-produced character still resolves its physical P key')
 }

@@ -3,7 +3,7 @@ import { getCachedIndex, setCachedIndex, clearCachedIndex } from './clipboardHis
 import { matchesClipboardHistorySearch, type ClipboardHistorySearchMatchMode } from './clipboardHistorySearch'
 import { resolveClipboardHistoryRetentionMonths } from '../settings/model'
 import { createPagedHistoryStore, ROOT, ITEM, META, ORDER, FREQUENT, TRASH, TRASH_ID, GC, metadata, putMetadata, removeMetadata, hashKey, trashKey, blobIds, invert, type HistoryMetadata, type TrashRecord, type Operation } from './clipboardHistoryPagedStore'
-import type { AddItemInput, ClipboardHistoryItem, ClipboardHistoryIndex, ClipboardHistoryPrunePolicy, PruneResult, ClipboardTextHistoryItem, ClipboardImageHistoryItem, ClipboardFilesHistoryItem, FavoriteField } from './clipboardHistoryTypes'
+import type { AddItemInput, ClipboardHistoryItem, ClipboardHistoryIndex, ClipboardHistoryPrunePolicy, PruneResult, ClipboardTextHistoryItem, ClipboardImageHistoryItem, ClipboardImageOcrLine, ClipboardFilesHistoryItem, FavoriteField } from './clipboardHistoryTypes'
 
 export type HistoryPageRequest = { query?: string; matchMode?: ClipboardHistorySearchMatchMode; filter?: 'all' | 'text' | 'image' | 'files' | 'favorites' | 'frequent' | 'trash'; frequentThreshold?: number; copiedSince?: number; cursor?: string; limit?: number; signal?: AbortSignal }
 export type HistoryPage = { items: ClipboardHistoryItem[]; nextCursor?: string; scanned: number }
@@ -32,6 +32,7 @@ export type ClipboardHistoryRepository = {
   toggleFavorite(id: string): Promise<ClipboardHistoryItem | undefined>
   setFavorite(id: string, favorite: boolean, title?: string, fields?: FavoriteField[]): Promise<ClipboardHistoryItem | undefined>
   updateFavoriteInfo(id: string, title: string, fields: FavoriteField[]): Promise<ClipboardHistoryItem | undefined>
+  setImageOcrResult(id: string, text: string, lines: ClipboardImageOcrLine[], version: number): Promise<ClipboardImageHistoryItem | undefined>
   getFavoriteFieldNames(): Promise<string[]>
 }
 const DAY = 86_400_000
@@ -80,7 +81,7 @@ export function indexToListItems(index: ClipboardHistoryIndex): ClipboardHistory
       case 'text':
         return { ...base, kind: 'text', text: '', preview: entry.preview ?? '' } as ClipboardTextHistoryItem
       case 'image':
-        return { ...base, kind: 'image', blobId: '', previewBlobId: entry.previewBlobId ?? '', contentType: entry.contentType ?? 'image/png', width: entry.width, height: entry.height } as ClipboardImageHistoryItem
+        return { ...base, kind: 'image', blobId: '', previewBlobId: entry.previewBlobId ?? '', contentType: entry.contentType ?? 'image/png', width: entry.width, height: entry.height, ocrText: entry.ocrText, ocrVersion: entry.ocrVersion } as ClipboardImageHistoryItem
       case 'files':
         return { ...base, kind: 'files', paths: [], fileNames: entry.fileNames ?? [] } as ClipboardFilesHistoryItem
       default:
@@ -135,8 +136,7 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
             indexPrefix: prefix, valuePrefix: ITEM, after: cursor,
             limit: Math.min(100, Math.max(32, limit - items.length)), scanLimit: 2048 - scanned,
             query: query.toLowerCase(), matchMode, idPath: '$.id',
-            indexPaths: ['$.favoriteTitle', '$.favoriteFieldsText', '$.preview', '$.contentType', '$.width', '$.height', '$.fileNames'],
-            indexPathGroups: [['$.contentType', '$.width', '$.height']],
+            indexPaths: ['$.favoriteTitle', '$.favoriteFieldsText', '$.preview', '$.contentType', '$.ocrText', '$.fileNames'],
             valuePaths: ['$.text'],
           })
         : await storage.kv.page<HistoryMetadata | TrashRecord>({ prefix, after: cursor, limit: Math.min(100, Math.max(32, limit - items.length)) })
@@ -422,6 +422,13 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
       favoritedAt: favorite ? item.favoritedAt ?? Date.now() : undefined,
     }), favorite && fields !== undefined)
   }
+  async function setImageOcrResult(id: string, text: string, lines: ClipboardImageOcrLine[], version: number) {
+    const normalized = Array.from(text.trim()).slice(0, 32_768).join('')
+    const updated = await update(id, (item) => item.kind === 'image'
+      ? { ...item, ocrText: normalized || undefined, ocrLines: normalized ? lines.slice(0, 1_000) : undefined, ocrVersion: version }
+      : item)
+    return updated?.kind === 'image' ? updated : undefined
+  }
   return {
     addItem, getItem, getTrashItem, getPage, getRetentionStatus, enableLegacyRetention, restoreItem, purgeExpiredTrash, purgeTrashItem, emptyTrash,
     // Compatibility methods are bounded to one page. Cross-search snapshots pass
@@ -430,7 +437,7 @@ export function createClipboardHistoryRepository(storage: PluginPrivateStorageAp
     getListItemsSync: () => { const cached = getCachedIndex(); return cached ? indexToListItems(cached) : null },
     deleteItem, pruneItems, findByHash,
     recordPaste: (id) => update(id, (item) => ({ ...item, pasteCount: (item.pasteCount ?? 0) + 1, lastPastedAt: Date.now() })),
-    setFavorite, getFavoriteFieldNames,
+    setFavorite, setImageOcrResult, getFavoriteFieldNames,
     toggleFavorite: (id) => update(id, (item) => ({ ...item, isFavorite: !item.isFavorite, favoritedAt: !item.isFavorite ? Date.now() : undefined })),
     updateFavoriteInfo: async (id, title, fields) => {
       const normalized = normalizeFavoriteFields(fields)

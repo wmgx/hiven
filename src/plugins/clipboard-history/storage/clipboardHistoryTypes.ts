@@ -2,6 +2,8 @@
  * Clipboard History Plugin — Data Model Types
  */
 
+export const CLIPBOARD_IMAGE_OCR_VERSION = 2
+
 // ─── History Item Types ──────────────────────────────────────────────────────
 
 export type FavoriteField = { name: string; value: string }
@@ -34,6 +36,14 @@ export type ClipboardTextHistoryItem = ClipboardHistoryBase & {
   preview: string
 }
 
+export type ClipboardImageOcrLine = {
+  text: string
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 export type ClipboardImageHistoryItem = ClipboardHistoryBase & {
   kind: 'image'
   blobId: string
@@ -41,6 +51,9 @@ export type ClipboardImageHistoryItem = ClipboardHistoryBase & {
   contentType: string
   width?: number
   height?: number
+  ocrText?: string
+  ocrLines?: ClipboardImageOcrLine[]
+  ocrVersion?: number
 }
 
 export type ClipboardFilesHistoryItem = ClipboardHistoryBase & {
@@ -72,6 +85,8 @@ export type ClipboardHistoryIndexEntry = {
   height?: number
   fileNames?: string[]
   previewBlobId?: string
+  ocrText?: string
+  ocrVersion?: number
   firstCopiedAt?: number
   copyCount?: number
   pasteCount?: number

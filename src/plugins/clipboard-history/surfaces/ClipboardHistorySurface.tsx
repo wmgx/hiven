@@ -2,15 +2,15 @@
  * Clipboard History Plugin — Main Surface
  *
  * Host-openable custom-view surface providing:
- * - Search in body; filter, paste and settings in the host header
+ * - Search and settings in the host header; type filters above the list
  * - Left panel: grouped clipboard history list
  * - Right panel: preview and metadata for the selected item
  * - Keyboard shortcuts: Enter=paste, Cmd/Ctrl+C=copy selection in preview, Delete=remove
  */
 
-import { useState, useEffect, useLayoutEffect, useCallback, useDeferredValue, useMemo, useRef, useId, memo, type CompositionEvent, type KeyboardEvent, type MouseEvent } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useDeferredValue, useMemo, useRef, useId, memo, type CompositionEvent, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import type { PluginSurfaceProps } from '@hiven/plugin'
+import { getPluginHostSdk, type PluginSurfaceProps } from '@hiven/plugin'
 import {
   Button,
   ContextMenu,
@@ -18,21 +18,24 @@ import {
   Menu,
   IconButton,
   SearchField,
-  ValueChip,
+  SegmentedControl,
   ActionBar,
   SurfaceEmptyState,
+  SurfaceActionButton,
   SurfaceHeaderActions, SurfaceHeaderField,
   SurfaceFooterHints, SurfaceStatus,
   SurfaceList,
   SurfaceListItem,
   SurfacePreview,
   useImeKeyboard,
+  useSurfaceActions,
   type MenuItemSpec,
+  type SurfaceActionDefinition,
 } from '@hiven/plugin-ui'
 import { ClipboardIcon, CloseIcon, FileTextIcon, ImageIcon, SettingsIcon, StarIcon } from '@hiven/plugin-ui/icons'
-import { ArrowDown, ArrowUp, Check, ListFilter } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, ListFilter, Maximize2, ZoomIn, ZoomOut } from 'lucide-react'
 import { resolveClipboardHistoryRetentionMonths, type ClipboardHistorySettings } from '../settings/model'
-import type { ClipboardHistoryItem } from '../storage/clipboardHistoryTypes'
+import { CLIPBOARD_IMAGE_OCR_VERSION, type ClipboardHistoryItem } from '../storage/clipboardHistoryTypes'
 import type { ClipboardHistorySearchMatchMode } from '../storage/clipboardHistorySearch'
 import {
   getClipboardHistoryCopiedSince,
@@ -53,7 +56,6 @@ import { createHistoryCopyLifecycle } from './historyCopyLifecycle'
 import {
   getClipboardHistoryMatchContext,
   getClipboardHistoryMatchNavigationIndex,
-  getClipboardHistoryMatchSnippet,
 } from './clipboardHistoryMatchContext'
 import {
   getClipboardHistoryShortcuts,
@@ -447,10 +449,30 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
   // A selection change renders before the previous read's effect is cleaned up.
   const matchingFullItem = selectedFullItem?.id === selectedItem?.id && selectedFullItem?.hash === selectedItem?.hash
     ? selectedFullItem : null
-  const previewItem = selectedItem?.kind === 'text' && selectedItem.text
+  const previewItem = useMemo(() => selectedItem?.kind === 'text' && selectedItem.text
     ? selectedItem : matchingFullItem && selectedItem
       ? { ...matchingFullItem, deletedAt: selectedItem.deletedAt, purgeAfter: selectedItem.purgeAfter, legacyProtected: selectedItem.legacyProtected }
-      : selectedItem
+      : selectedItem, [matchingFullItem, selectedItem])
+
+  const previewImage = previewItem?.kind === 'image' ? previewItem : null
+  const pendingOcrUpgradesRef = useRef(new Set<string>())
+  useEffect(() => {
+    const item = previewImage
+    const imageAnalysis = host.imageAnalysis
+    if (item?.kind !== 'image' || !imageAnalysis || !item.blobId || item.ocrVersion === undefined
+      || item.ocrVersion >= CLIPBOARD_IMAGE_OCR_VERSION || pendingOcrUpgradesRef.current.has(item.id)) return
+    pendingOcrUpgradesRef.current.add(item.id)
+    let current = true
+    void host.storage.blob.get(item.blobId).then(async (bytes) => {
+      if (!bytes) return
+      const result = await imageAnalysis.recognizeText(bytes)
+      const sensitive = getPluginHostSdk().kits.content.detectContent(result.text)
+        .some((entry) => entry.kind === 'secret' || entry.kind === 'secret-like')
+      const updated = await repository.setImageOcrResult(item.id, sensitive ? '' : result.text, result.lines, CLIPBOARD_IMAGE_OCR_VERSION)
+      if (current && updated && host.deliveryFeedbackOwner?.isCurrent() !== false) setSelectedFullItem(updated)
+    }).catch(() => {}).finally(() => { pendingOcrUpgradesRef.current.delete(item.id) })
+    return () => { current = false }
+  }, [host.deliveryFeedbackOwner, host.imageAnalysis, host.storage.blob, previewImage, repository])
 
   useEffect(() => {
     if (!selectedId) {
@@ -633,6 +655,10 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       if (generation === pasteNoticeGenerationRef.current && !(error instanceof Error && error.message === 'cancelled')) setPasteNotice(actionError(error, 'error.pasteFailed'))
     }
   }, [host, t, repository, resetBrowser, readActionItems])
+  const runPrimaryPaste = useCallback(async (item: ClipboardHistoryItem) => {
+    if (retentionBusy || !resultsActionableRef.current) return
+    await handlePaste(item)
+  }, [handlePaste, retentionBusy])
 
   const handleCopy = useCallback(async (item: ClipboardHistoryItem) => {
     if (!resultsActionableRef.current) return
@@ -804,34 +830,10 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       blocked: legacyDialog,
       focus,
     })
-    if (e.key === 'Tab' && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
-      if (!shortcuts.returnToLauncher) return
-      e.preventDefault()
-      e.stopPropagation()
-      if (!selectionHasNonText) void handleReturnToLauncher(selectedItem)
-    } else if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.code === 'KeyP' || e.key.toLowerCase() === 'p')) {
+    if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.code === 'KeyP' || e.key.toLowerCase() === 'p')) {
       if (!shortcuts.paste || imeKeyDown.shouldIgnoreKeyDown(e)) return
       e.preventDefault()
       handleFavoriteClick(selectedItem)
-    } else if (e.key === 'Enter' && !e.altKey) {
-      if (!shortcuts.paste) return
-      e.preventDefault()
-      void handlePaste(selectedItem, e.shiftKey)
-    } else if (e.key === 'Delete' || e.key === 'Backspace') {
-      if (!shortcuts.delete) return
-      e.preventDefault()
-      handleDelete(selectedItem.id)
-    } else if ((e.metaKey || e.ctrlKey) && e.key === 'c') {
-      if ((!multiple && focus.editing) || !shortcuts.paste) return
-      const selectedText = multiple ? '' : readDomSelectedText()
-      e.preventDefault()
-      if (selectedText) {
-        void host.clipboard.writeText(selectedText)
-          .then(() => host.showMessage(t('message.copied'), 'success'))
-          .catch(() => host.showMessage(t('error.copyFailed'), 'error'))
-        return
-      }
-      void handleCopy(selectedItem)
     } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault()
       const index = filteredItems.findIndex((item) => item.id === selectedId)
@@ -842,7 +844,39 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       const row = flatRows.findIndex((entry) => entry.type === 'item' && entry.item.id === next.id)
       if (row >= 0) virtualizer.scrollToIndex(row, { align: 'auto' })
     }
-  }, [selectedItem, selectedId, filteredItems, flatRows, virtualizer, handlePaste, handleReturnToLauncher, handleDelete, handleCopy, host, t, imeKeyDown, favoriteEditor, handleFavoriteClick, resultsActionBlocked, settings.enabled, filter, legacyDialog, selectedIds, multiple, selectionHasNonText, selectRange])
+  }, [selectedItem, selectedId, filteredItems, flatRows, virtualizer, imeKeyDown, handleFavoriteClick, resultsActionBlocked, legacyDialog, selectedIds, selectRange, openFavoriteEditor])
+
+  const actionDisabled = !selectedItem || resultsActionBlocked || retentionBusy
+  const footerActions: SurfaceActionDefinition[] = favoriteEditor.draft ? [] : [
+    {
+      id: 'paste', label: t('action.paste'), shortcut: 'enter', disabled: actionDisabled,
+      shortcutDisabled: !shortcutHints.paste,
+      run: () => { if (selectedItem) return runPrimaryPaste(selectedItem) },
+    },
+    {
+      id: 'paste-plain', label: t('action.pastePlain'), shortcut: 'shift+enter',
+      disabled: actionDisabled || selectedItem?.kind !== 'text',
+      shortcutDisabled: !shortcutHints.paste || selectedItem?.kind !== 'text',
+      run: () => { if (selectedItem) return handlePaste(selectedItem, true) },
+    },
+    {
+      id: 'continue', label: t('action.continue'), shortcut: 'tab',
+      disabled: actionDisabled || selectionHasNonText,
+      shortcutDisabled: !shortcutHints.returnToLauncher || selectionHasNonText,
+      run: () => { if (selectedItem) return handleReturnToLauncher(selectedItem) },
+    },
+    {
+      id: 'copy', label: t('action.copy'), shortcut: 'mod+c', disabled: actionDisabled,
+      shortcutDisabled: !shortcutHints.paste,
+      run: () => { if (selectedItem) return handleCopy(selectedItem) },
+    },
+    {
+      id: 'delete', label: t('action.delete'), shortcut: 'backspace', shortcutAliases: ['delete'],
+      disabled: actionDisabled, shortcutDisabled: !shortcutHints.delete,
+      run: () => { if (selectedItem) return handleDelete(selectedItem.id) },
+    },
+  ]
+  useSurfaceActions(footerActions)
 
   const filterOptionLabel = (checked: boolean, text: string) => (
     <span className="clipboard-history-filter-option">
@@ -895,6 +929,11 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       <>
         <div className="clipboard-history-main">
           <div className="clipboard-history-list-pane">
+            <div className="clipboard-history-list-toolbar">
+              <SegmentedControl aria-label={t('filter.label')} value={filter}
+                options={['all','favorite','frequent','text','image','files'].map(value => ({ value, label: t(`filter.${value}`) }))}
+                onChange={changeFilter} />
+            </div>
             <div ref={listRef} className="clipboard-history-list" data-launcher-scrollable aria-busy={fullTextSearchState === 'loading'} style={{ overflow: 'auto', flex: 1 }}
               onScrollCapture={(event) => {
                 if (event.target !== event.currentTarget) return
@@ -949,18 +988,16 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
                         >
                           <ClipboardHistoryItemRow
                             item={row.item}
-                            query={appliedQuery}
-                            matchMode={appliedSearchMatchMode}
                             selected={selectedIds.length ? selectedIds.includes(row.item.id) : row.item.id === selectedId}
                             locale={locale}
                             t={t}
                             storage={host.storage}
                             onSelect={selectListItem}
-                            onPaste={handlePaste}
+                            onPaste={runPrimaryPaste}
                             onDelete={handleDelete}
                             onFavorite={handleFavoriteClick}
                             menuItems={itemContextMenuItems(row.item)}
-                            actionsDisabled={resultsActionBlocked}
+                            actionsDisabled={resultsActionBlocked || retentionBusy}
                           />
                         </div>
                       )
@@ -1014,18 +1051,20 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
           />
         </div>
 
-        {!favoriteEditor.draft && <ActionBar><Button variant="ghost" disabled={!selectedItem || resultsActionBlocked || retentionBusy} onClick={() => selectedItem && void handlePaste(selectedItem)}>{t('action.paste')}<kbd>↵</kbd></Button></ActionBar>}
-        {!favoriteEditor.draft && <SurfaceStatus><span className="clipboard-history-footer-hints">
-          {multiple && <span role="status">{t('selection.count', { count: selectedItems.length })}{skippedCount > 0 && ` · ${t('selection.skipped', { count: skippedCount })}`}</span>}
-          {pasteNotice ? <span role="status" style={{ color: 'var(--foreground)' }}>{pasteNotice}</span> : <>
+        {!favoriteEditor.draft && <ActionBar className="clipboard-history-footer-actions">
+          {!pasteNotice && <span className="clipboard-history-footer-hints">
             {/* Keep hint slots in layout when button focus temporarily disables shortcuts. */}
-            <span style={{ visibility: shortcutHints.paste ? 'visible' : 'hidden' }} aria-hidden={!shortcutHints.paste}>↵ {t('hint.paste')}</span>
-            <span style={{ visibility: shortcutHints.paste && selectedItem?.kind === 'text' ? 'visible' : 'hidden' }} aria-hidden={!shortcutHints.paste || selectedItem?.kind !== 'text'}>⇧↵ {t('hint.pastePlain')}</span>
-            <span style={{ visibility: shortcutHints.paste ? 'visible' : 'hidden' }} aria-hidden={!shortcutHints.paste}>{modifierLabel}P {t('hint.favorite')}</span>
-            <span style={{ visibility: shortcutHints.returnToLauncher && !selectionHasNonText ? 'visible' : 'hidden' }} aria-hidden={!shortcutHints.returnToLauncher || selectionHasNonText}>⇥ {t('action.continue')}</span>
-            <span>{primaryModifierLabel}C {t('action.copy')}</span>
             <span style={{ visibility: shortcutHints.delete ? 'visible' : 'hidden' }} aria-hidden={!shortcutHints.delete}>⌫ {t('hint.delete')}</span>
-          </>}
+            <span style={{ visibility: shortcutHints.paste ? 'visible' : 'hidden' }} aria-hidden={!shortcutHints.paste}>{modifierLabel}P {t('hint.favorite')}</span>
+            <span>{primaryModifierLabel}C {t('action.copy')}</span>
+            <span style={{ visibility: shortcutHints.returnToLauncher && !selectionHasNonText ? 'visible' : 'hidden' }} aria-hidden={!shortcutHints.returnToLauncher || selectionHasNonText}>⇥ {t('action.continue')}</span>
+            <span style={{ visibility: shortcutHints.paste && selectedItem?.kind === 'text' ? 'visible' : 'hidden' }} aria-hidden={!shortcutHints.paste || selectedItem?.kind !== 'text'}>⇧↵ {t('hint.pastePlain')}</span>
+          </span>}
+          <SurfaceActionButton action={footerActions[0]} variant="ghost" />
+        </ActionBar>}
+        {!favoriteEditor.draft && (multiple || pasteNotice) && <SurfaceStatus><span className="clipboard-history-footer-status">
+          {multiple && <span role="status">{t('selection.count', { count: selectedItems.length })}{skippedCount > 0 && ` · ${t('selection.skipped', { count: skippedCount })}`}</span>}
+          {pasteNotice && <span role="status" style={{ color: 'var(--foreground)' }}>{pasteNotice}</span>}
         </span></SurfaceStatus>}
       </>
     )
@@ -1057,8 +1096,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
       </SurfaceHeaderField>
       <SurfaceHeaderActions>
         {filterMenu}
-        <ValueChip label={t('filter.label')} value={filter} options={['all','favorite','frequent','text','image','files'].map(value => ({ value, label: t(`filter.${value}`) }))}
-          onChange={value => changeFilter(value as FilterKind)} onPreview={value => changeFilter(value as FilterKind)} />
         <IconButton
           type="button"
           label={t('action.openSettings')}
@@ -1099,8 +1136,6 @@ export function ClipboardHistorySurface(props: PluginSurfaceProps<ClipboardHisto
 
 const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
   item,
-  query,
-  matchMode,
   selected,
   locale,
   t,
@@ -1113,8 +1148,6 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
   actionsDisabled,
 }: {
   item: ClipboardHistoryItem
-  query: string
-  matchMode: ClipboardHistorySearchMatchMode
   selected: boolean
   locale: string
   t: (key: string) => string
@@ -1127,13 +1160,7 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
   actionsDisabled: boolean
 }) {
   const pasteCount = item.pasteCount ?? 0
-  const matchSnippet = useMemo(
-    () => item.kind === 'text' ? getClipboardHistoryMatchSnippet(item.text || item.preview, query, matchMode) : null,
-    [item, query, matchMode],
-  )
-  const hasCustomTitle = Boolean(item.isFavorite && item.favoriteTitle?.trim())
-  const hasFavoriteFields = Boolean(item.isFavorite && item.favoriteFields?.length)
-  const title = !hasCustomTitle && matchSnippet ? matchSnippet : getItemTitle(item, t)
+  const title = getItemTitle(item, t)
 
   return (
     <ContextMenu
@@ -1152,12 +1179,9 @@ const ClipboardHistoryItemRow = memo(function ClipboardHistoryItemRow({
           >
             {renderItemMedia(item, storage)}
             <span className="clipboard-history-item-text">
-              <span className="clipboard-history-item-title"><ClipboardHistoryHighlightedText text={title} query={query} matchMode={matchMode} allTermsAlreadyValidated={!hasCustomTitle && Boolean(matchSnippet)} /></span>
+              <span className="clipboard-history-item-title">{title}</span>
               <span className="clipboard-history-item-subtitle">
-                {!hasFavoriteFields && hasCustomTitle && matchSnippet ? <>
-                  <ClipboardHistoryHighlightedText text={matchSnippet} query={query} matchMode={matchMode} allTermsAlreadyValidated />
-                  {` · ${getContentTypeLabel(item, t)} · ${formatBytes(item.byteSize)} · ${formatDateTime(item.lastCopiedAt, locale)}`}
-                </> : getItemSubtitle(item, locale, t)}
+                {getItemSubtitle(item, locale, t)}
                 {pasteCount > 0 ? ` · ×${pasteCount}` : ''}
               </span>
             </span>
@@ -1232,20 +1256,123 @@ function renderItemIcon(item: ClipboardHistoryItem) {
   return <ClipboardIcon size={20} />
 }
 
-function ClipboardImagePreview({ item, storage, t }: { item: ImageHistoryItem, storage: SurfaceStorage, t: (key: string) => string }) {
+function ClipboardOcrImage({ imageUrl, item, t, query, matchMode, className, onOpen, scale }: {
+  imageUrl: string
+  item: ImageHistoryItem
+  t: (key: string) => string
+  query: string
+  matchMode: ClipboardHistorySearchMatchMode
+  className: string
+  onOpen?: () => void
+  scale?: number
+}) {
+  const [renderedHeight, setRenderedHeight] = useState(0)
+  const [viewerBaseSize, setViewerBaseSize] = useState<{ width: number; height: number } | null>(null)
+  const imageRef = useRef<HTMLImageElement>(null)
+
+  useLayoutEffect(() => {
+    const image = imageRef.current
+    if (!image) return
+    const update = () => setRenderedHeight(image.clientHeight)
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(image)
+    return () => observer.disconnect()
+  }, [imageUrl])
+
+  const ocrLines = (item.ocrLines ?? []).filter((line) => line.text
+    && [line.x, line.y, line.width, line.height].every(Number.isFinite)
+    && line.width > 0 && line.height > 0)
+  const viewerSizeReady = scale !== undefined && viewerBaseSize !== null
+
+  return (
+    <div className={`${className}${viewerSizeReady ? ' is-scale-ready' : ''}`} style={viewerSizeReady ? {
+      width: `${viewerBaseSize.width * scale}px`,
+      height: `${viewerBaseSize.height * scale}px`,
+    } : undefined} onDoubleClick={onOpen ? (event) => {
+      if (!(event.target instanceof Element) || !event.target.closest('.clipboard-history-preview-ocr-line')) onOpen()
+    } : undefined}>
+      <img ref={imageRef} src={imageUrl} alt={getItemTitle(item, t)} draggable={false} onLoad={(event) => {
+        setRenderedHeight(event.currentTarget.clientHeight)
+        if (scale !== undefined) setViewerBaseSize({ width: event.currentTarget.clientWidth, height: event.currentTarget.clientHeight })
+      }} />
+      {ocrLines.length > 0 && <div className="clipboard-history-preview-ocr-layer" aria-label={t('ocr.recognizedText')}>
+        {ocrLines.map((line, index) => <span
+          key={`${index}:${line.text}`}
+          className="clipboard-history-preview-ocr-line"
+          style={{
+            left: `${line.x * 100}%`, top: `${line.y * 100}%`,
+            width: `${line.width * 100}%`, height: `${line.height * 100}%`,
+            '--clipboard-history-ocr-scale': `${Math.max(0.375, line.height * renderedHeight * 0.05125)}rem`,
+          } as CSSProperties}
+        ><ClipboardHistoryHighlightedText text={line.text} query={query} matchMode={matchMode} /></span>)}
+      </div>}
+    </div>
+  )
+}
+
+function ClipboardImagePreview({ item, storage, t, query, matchMode }: {
+  item: ImageHistoryItem
+  storage: SurfaceStorage
+  t: (key: string) => string
+  query: string
+  matchMode: ClipboardHistorySearchMatchMode
+}) {
   const [imageUrl, setImageUrl] = useState('')
+  const [viewerOpen, setViewerOpen] = useState(false)
+  const [viewerScale, setViewerScale] = useState(1)
+  const viewerGestureCleanupRef = useRef<() => void>(() => undefined)
   // Page rows only carry the list thumbnail; the full item adds the original.
   const blobId = item.blobId || item.previewBlobId
 
   useEffect(() => {
     let disposed = false
     void storage.blob.url(blobId).then((url) => {
-      if (!disposed) setImageUrl(url)
+      if (!disposed) { setImageUrl(url); setViewerOpen(false); setViewerScale(1) }
     })
     return () => {
       disposed = true
     }
   }, [blobId, storage])
+
+  const bindViewerBody = useCallback((body: HTMLDivElement | null) => {
+    viewerGestureCleanupRef.current()
+    viewerGestureCleanupRef.current = () => undefined
+    if (!body) return
+    let previousGestureScale = 1
+    const start = (event: Event) => {
+      previousGestureScale = 1
+      event.preventDefault()
+    }
+    const wheel = (event: WheelEvent) => {
+      if (!event.ctrlKey || !(event.target instanceof Node) || !body.contains(event.target)) return
+      event.preventDefault()
+      const factor = Math.exp(-event.deltaY * 0.004)
+      queueMicrotask(() => setViewerScale((current) => Math.min(3, Math.max(0.5, current * factor))))
+    }
+    const change = (event: Event) => {
+      const gestureScale = Number((event as Event & { scale?: number }).scale)
+      if (!Number.isFinite(gestureScale) || gestureScale <= 0) return
+      event.preventDefault()
+      const ratio = gestureScale / previousGestureScale
+      previousGestureScale = gestureScale
+      setViewerScale((current) => Math.min(3, Math.max(0.5, current * ratio)))
+    }
+    window.addEventListener('wheel', wheel, { capture: true, passive: false })
+    body.addEventListener('gesturestart', start, { passive: false })
+    body.addEventListener('gesturechange', change, { passive: false })
+    viewerGestureCleanupRef.current = () => {
+      window.removeEventListener('wheel', wheel, { capture: true })
+      body.removeEventListener('gesturestart', start)
+      body.removeEventListener('gesturechange', change)
+    }
+  }, [])
+
+  const openViewer = () => {
+    setViewerScale(1)
+    setViewerOpen(true)
+  }
+  const changeViewerScale = (delta: number) => setViewerScale((current) => Math.min(3, Math.max(0.5, current + delta)))
 
   if (!imageUrl) {
     return (
@@ -1257,22 +1384,47 @@ function ClipboardImagePreview({ item, storage, t }: { item: ImageHistoryItem, s
   }
 
   return (
-    <figure className="clipboard-history-preview-image">
-      <img src={imageUrl} alt={getItemTitle(item, t)} />
-      <figcaption>{getItemTitle(item, t)}</figcaption>
-    </figure>
+    <>
+      <figure className="clipboard-history-preview-image">
+        <IconButton type="button" className="clipboard-history-preview-open-viewer" label={t('ocr.openViewer')} onClick={openViewer}>
+          <Maximize2 size={14} />
+        </IconButton>
+        <div className="clipboard-history-preview-image-viewport">
+          <ClipboardOcrImage imageUrl={imageUrl} item={item} t={t} query={query} matchMode={matchMode}
+            className="clipboard-history-preview-image-stage" onOpen={openViewer} />
+        </div>
+        <figcaption>{getItemTitle(item, t)}</figcaption>
+      </figure>
+      <Dialog open={viewerOpen} onOpenChange={setViewerOpen} title={t('ocr.viewerTitle')} className="clipboard-history-image-viewer">
+        <IconButton type="button" className="clipboard-history-image-viewer-close" label={t('ocr.closeViewer')} onClick={() => setViewerOpen(false)}>
+          <CloseIcon size={16} />
+        </IconButton>
+        <div className="clipboard-history-image-viewer-controls" role="group" aria-label={t('ocr.zoomControls')}>
+          <IconButton type="button" label={t('ocr.zoomOut')} disabled={viewerScale <= 0.5} onClick={() => changeViewerScale(-0.25)}>
+            <ZoomOut size={16} />
+          </IconButton>
+          <span aria-live="polite">{Math.round(viewerScale * 100)}%</span>
+          <IconButton type="button" label={t('ocr.zoomIn')} disabled={viewerScale >= 3} onClick={() => changeViewerScale(0.25)}>
+            <ZoomIn size={16} />
+          </IconButton>
+        </div>
+        <div ref={bindViewerBody} className="clipboard-history-image-viewer-body">
+          <ClipboardOcrImage imageUrl={imageUrl} item={item} t={t} query={query} matchMode={matchMode}
+            className="clipboard-history-image-viewer-stage" scale={viewerScale} />
+        </div>
+      </Dialog>
+    </>
   )
 }
 
-function ClipboardHistoryHighlightedText({ text, query, matchMode, allTermsAlreadyValidated = false }: {
+function ClipboardHistoryHighlightedText({ text, query, matchMode }: {
   text: string
   query: string
   matchMode: ClipboardHistorySearchMatchMode
-  allTermsAlreadyValidated?: boolean
 }) {
   const { segments } = useMemo(
-    () => getClipboardHistoryMatchContext(text, query, matchMode, allTermsAlreadyValidated),
-    [text, query, matchMode, allTermsAlreadyValidated],
+    () => getClipboardHistoryMatchContext(text, query, matchMode),
+    [text, query, matchMode],
   )
   return <>{segments.map((segment) => segment.match
     ? <mark key={segment.start} className="clipboard-history-search-match">{segment.text}</mark>
@@ -1291,7 +1443,9 @@ function ClipboardHistoryPreviewContent({ item, query, matchMode, t, storage, ma
   const alignedRef = useRef<{ id: string, query: string, matchMode: ClipboardHistorySearchMatchMode, bodyVersion: string, fullText: boolean } | null>(null)
   const normalizedQuery = query.trim().toLowerCase()
   const fullText = item.kind === 'text' && Boolean(item.text)
-  const bodyVersion = `${item.hash}:${fullText ? 'full' : 'preview'}`
+  const bodyVersion = item.kind === 'image'
+    ? `${item.hash}:ocr:${item.ocrVersion ?? 0}`
+    : `${item.hash}:${fullText ? 'full' : 'preview'}`
   const navigationIdentity = `${item.id}\u0000${normalizedQuery}\u0000${matchMode}\u0000${bodyVersion}`
   const navigationStateRef = useRef({ identity: '', count: 0, currentIndex: -1 })
   const [navigationState, setNavigationState] = useState({ identity: '', count: 0, currentIndex: -1 })
@@ -1435,7 +1589,9 @@ function renderPreview(item: ClipboardHistoryItem, t: (key: string) => string, s
     )
   }
   if (item.kind === 'image') {
-    return <ClipboardImagePreview item={item} storage={storage} t={t} />
+    return <div className="clipboard-history-preview-image-stack">
+      <ClipboardImagePreview item={item} storage={storage} t={t} query={query} matchMode={matchMode} />
+    </div>
   }
   if (item.paths.length === 0 && item.fileNames.length > 0) {
     // List item from index — show fileNames as fallback
@@ -1571,18 +1727,4 @@ function formatBytes(bytes: number) {
 
 function countWords(text: string) {
   return text.trim().split(/\s+/).filter(Boolean).length
-}
-
-/** Read non-empty text selection from inputs or the document (preview pane). */
-function readDomSelectedText(): string {
-  const active = document.activeElement
-  if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) {
-    const start = active.selectionStart
-    const end = active.selectionEnd
-    if (start != null && end != null && end > start) {
-      return active.value.slice(start, end)
-    }
-    return ''
-  }
-  return window.getSelection()?.toString() ?? ''
 }

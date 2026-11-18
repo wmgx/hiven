@@ -28,7 +28,7 @@ export function metadata(item: ClipboardHistoryItem, extra: Partial<HistoryMetad
   const { id, kind, hash, lastCopiedAt, byteSize, sourceApp, firstCopiedAt, copyCount, pasteCount, lastPastedAt, isFavorite, favoriteTitle, favoriteFields, favoritedAt } = item
   return { id, kind, hash, lastCopiedAt, byteSize, sourceApp, firstCopiedAt, copyCount, pasteCount, lastPastedAt, isFavorite, favoriteTitle, favoriteFields, favoritedAt,
     favoriteFieldsText: isFavorite ? favoriteFields?.map(({ name, value }) => `${name}\n${value}`).join('\n') : undefined,
-    ...(item.kind === 'text' ? { preview: item.preview } : item.kind === 'image' ? { blobId: item.blobId, previewBlobId: item.previewBlobId, contentType: item.contentType, width: item.width, height: item.height } : { fileNames: item.fileNames }), ...extra }
+    ...(item.kind === 'text' ? { preview: item.preview } : item.kind === 'image' ? { blobId: item.blobId, previewBlobId: item.previewBlobId, contentType: item.contentType, width: item.width, height: item.height, ocrText: item.ocrText, ocrVersion: item.ocrVersion } : { fileNames: item.fileNames }), ...extra }
 }
 export function putMetadata(meta: HistoryMetadata): Operation[] {
   return [{ type: 'set', key: META + meta.id, value: meta }, { type: 'set', key: orderKey(meta), value: meta }, { type: 'set', key: frequentKey(meta), value: meta }, { type: 'set', key: hashKey(meta.hash), value: meta.id }]

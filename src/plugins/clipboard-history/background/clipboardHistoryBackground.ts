@@ -18,7 +18,7 @@ import type {
 } from '@hiven/plugin'
 import type { ClipboardHistorySettings } from '../settings/model'
 import { createClipboardHistoryRepository } from '../storage/clipboardHistoryRepository'
-import type { AddItemInput } from '../storage/clipboardHistoryTypes'
+import { CLIPBOARD_IMAGE_OCR_VERSION, type AddItemInput, type ClipboardImageHistoryItem } from '../storage/clipboardHistoryTypes'
 
 function buildWatchOptions(settings: ClipboardHistorySettings): ClipboardWatchOptions {
   return {
@@ -74,9 +74,26 @@ export function createClipboardHistoryBackground(): PluginBackgroundContribution
     async start(ctx: PluginBackgroundContext<ClipboardHistorySettings>): Promise<PluginBackgroundStop | void> {
       const repository = createClipboardHistoryRepository(ctx.storage)
       const watchOptions = buildWatchOptions(ctx.settings)
+      const containsSecret = (text: string) => getPluginHostSdk().kits.content.detectContent(text)
+        .some((item) => item.kind === 'secret' || item.kind === 'secret-like')
+      const imageAnalysis = ctx.imageAnalysis
+      const pendingOcr = new Set<string>()
+      let ocrQueue = Promise.resolve()
+      const queueOcr = (item: ClipboardImageHistoryItem) => {
+        if (!imageAnalysis || item.ocrVersion === CLIPBOARD_IMAGE_OCR_VERSION || pendingOcr.has(item.id)) return
+        pendingOcr.add(item.id)
+        const task = ocrQueue.then(async () => {
+          if (ctx.signal.aborted) return
+          const bytes = await ctx.storage.blob.get(item.blobId)
+          if (!bytes || ctx.signal.aborted) return
+          const result = await imageAnalysis.recognizeText(bytes)
+          if (!ctx.signal.aborted) await repository.setImageOcrResult(item.id, containsSecret(result.text) ? '' : result.text, result.lines, CLIPBOARD_IMAGE_OCR_VERSION)
+        })
+        ocrQueue = task.catch(() => {}).finally(() => { pendingOcr.delete(item.id) })
+      }
 
       const round = ctx.settings.enabled && ctx.settings.automaticQueue && ctx.pasteQueue
-        ? createClipboardCopyRound(ctx.pasteQueue, Date.now, (text) => getPluginHostSdk().kits.content.detectContent(text).some((item) => item.kind === 'secret' || item.kind === 'secret-like')) : null
+        ? createClipboardCopyRound(ctx.pasteQueue, Date.now, containsSecret) : null
       const stopQueue = round ? ctx.pasteQueue!.subscribe(round.status) : undefined
       const expiryTimer = round ? setInterval(round.expire, 1000) : undefined
       let unwatch: (() => void) | null = null
@@ -119,7 +136,8 @@ export function createClipboardHistoryBackground(): PluginBackgroundContribution
             const input = buildAddItemInput(change)
             if (!input) return
 
-            await repository.addItem(input)
+            const item = await repository.addItem(input)
+            if (item.kind === 'image') queueOcr(item)
 
             void cleanup()
           } catch (error) {

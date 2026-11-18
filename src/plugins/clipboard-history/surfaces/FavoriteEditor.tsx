@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { ActionBar, Button, Combobox, TextInput, useImeKeyboard, useLocalEscapeLayer } from '@hiven/plugin-ui'
+import { ActionBar, Button, Combobox, SurfaceActionButton, TextInput, useImeKeyboard, useLocalEscapeLayer, useSurfaceActions, type SurfaceActionDefinition } from '@hiven/plugin-ui'
 import type { ClipboardHistoryRepository } from '../storage/clipboardHistoryRepository'
 import type { ClipboardHistoryItem, FavoriteField } from '../storage/clipboardHistoryTypes'
 
@@ -80,6 +80,13 @@ export function FavoriteEditor({ draft, editing, disabled, names, onChange, onBl
     const index = inputs.indexOf(lastField.current ?? document.activeElement as HTMLInputElement)
     inputs[Math.max(0, Math.min(inputs.length - 1, index + direction))]?.focus()
   }
+  const actions: SurfaceActionDefinition[] = editing ? [
+    { id: 'favorite-next-cell', label: t('favorite.nextCell'), shortcut: 'enter', run: () => nextCell() },
+    { id: 'favorite-done', label: t('favorite.done'), shortcut: 'mod+e', run: onExit },
+  ] : [
+    { id: 'favorite-edit', label: t('action.editFavoriteInfo'), shortcut: 'mod+e', disabled, run: onEdit },
+  ]
+  useSurfaceActions(actions)
   return <div ref={root} className={`clipboard-history-favorite-form${editing ? ' is-editing' : ''}`} onBlur={onBlur} onFocus={event => { if (event.target instanceof HTMLInputElement) lastField.current = event.target }}
     onKeyDownCapture={event => {
       if (editing && event.key === 'Tab' && !ime.shouldIgnoreKeyDown(event)) {
@@ -90,19 +97,17 @@ export function FavoriteEditor({ draft, editing, disabled, names, onChange, onBl
     onKeyDown={event => {
       if (!editing || event.defaultPrevented || ime.shouldIgnoreKeyDown(event)) return
       if ((event.target as HTMLElement).getAttribute('aria-expanded') === 'true') return
-      event.stopPropagation()
-      if (event.key === 'Escape' || ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'e')) { event.preventDefault(); onExit() }
-      else if (event.key === 'Enter') { event.preventDefault(); nextCell() }
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onExit() }
       else if (event.key === 'Backspace') {
         const row = (event.target as HTMLElement).closest<HTMLElement>('[data-favorite-row]')
         const index = Number(row?.dataset.favoriteRow)
         if (row && index < draft.fields.length && !draft.fields[index].name && !draft.fields[index].value) {
-          event.preventDefault(); onChange({ ...draft, fields: draft.fields.filter((_, i) => i !== index) }); title.current?.focus()
+          event.preventDefault(); event.stopPropagation(); onChange({ ...draft, fields: draft.fields.filter((_, i) => i !== index) }); title.current?.focus()
         }
       }
     }}>
-    {editing && <ActionBar><Button variant="ghost" onClick={() => nextCell()}>{t('favorite.nextCell')}<kbd>↵</kbd></Button><Button variant="ghost" onClick={onExit}>{t('favorite.done')}<kbd>⌘E</kbd></Button></ActionBar>}
-    <div className="clipboard-history-favorite-title-bar"><span>{t('favorite.info')}</span>{!editing && <Button variant="ghost" disabled={disabled} aria-label={t('action.editFavoriteInfo')} onClick={onEdit}>{t('action.editFavoriteInfo')} <kbd>⌘E</kbd></Button>}</div>
+    {editing && <ActionBar>{actions.map(action => <SurfaceActionButton key={action.id} action={action} variant="ghost" />)}</ActionBar>}
+    <div className="clipboard-history-favorite-title-bar"><span>{t('favorite.info')}</span>{!editing && <SurfaceActionButton action={actions[0]} variant="ghost" aria-label={t('action.editFavoriteInfo')} />}</div>
     <table className="clipboard-history-favorite-fields"><tbody>
       <tr><td>{t('favorite.titlePlaceholder')}</td><td>{editing ? <TextInput ref={title} aria-label={t('favorite.titlePlaceholder')} placeholder={t('favorite.titlePlaceholder')} value={draft.title} maxLength={80} onChange={event => onChange({ ...draft, title: event.target.value })} /> : <span>{draft.title || '—'}</span>}</td><td /></tr>
       {rows.map((field, index) => <tr data-favorite-row={index} key={index}>

@@ -34,7 +34,7 @@ globalThis.clearInterval = (id) => timers.delete(id)
 globalThis.window = { addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: (name, fn) => { if (listeners.get(name) === fn) listeners.delete(name) } }
 const memory = syntheticHistoryStorage()
 const repo = createRepo(memory.storage)
-const context = (settings) => ({ signal: new AbortController().signal, settings: { ...settings, automaticQueue: false }, storage: memory.storage, t: (key) => key, showMessage: (...args) => messages.push(args), clipboard: { watch: async (options, callback) => { watcherCalls++; watchOptions = options; changeHandler = callback; return () => { watcherStop++ } } } })
+const context = (settings, imageAnalysis) => ({ signal: new AbortController().signal, settings: { ...settings, automaticQueue: false }, storage: memory.storage, imageAnalysis, t: (key) => key, showMessage: (...args) => messages.push(args), clipboard: { watch: async (options, callback) => { watcherCalls++; watchOptions = options; changeHandler = callback; return () => { watcherStop++ } } } })
 async function until(check) {
   for (let tries = 0; tries < 100; tries++) { if (await check()) return; await tick() }
   assert.fail('background operation did not complete')
@@ -66,6 +66,31 @@ try {
   assert.equal((await repo.getPage()).items.length, 1)
   stopEnabled()
   assert.equal(watcherStop, 1)
+  assert.equal(timers.size, 0)
+  assert.equal(listeners.size, 0)
+
+  const ocrCalls = []
+  memory.blobs.set('ocr-full', new Uint8Array([1, 2, 3]))
+  memory.blobs.set('ocr-secret', new Uint8Array([9]))
+  const stopOcr = await createBackground().start(context({ ...defaults, enabled: true, recordText: false, recordImages: true, recordFiles: false }, {
+    recognizeText: async (bytes) => {
+      ocrCalls.push([...bytes])
+      const text = bytes[0] === 9 ? 'password=synthetic-secret' : 'synthetic OCR searchable text'
+      return { text, lines: [{ text, x: 0.1, y: 0.2, width: 0.5, height: 0.1 }] }
+    },
+  }))
+  await changeHandler({ kind: 'image', blobId: 'ocr-full', previewBlobId: 'ocr-full', contentType: 'image/png', hash: 'ocr-image', byteSize: 3 })
+  await until(async () => (await repo.getPage({ query: 'OCR searchable' })).items.length === 1)
+  assert.deepEqual(ocrCalls, [[1, 2, 3]], 'image OCR reads the stored full image once')
+  await changeHandler({ kind: 'image', blobId: 'ocr-secret', previewBlobId: 'ocr-secret', contentType: 'image/png', hash: 'ocr-secret-image', byteSize: 1 })
+  await until(async () => (await repo.findByHash('ocr-secret-image'))?.ocrVersion === 2)
+  assert.equal((await repo.findByHash('ocr-secret-image')).ocrText, undefined, 'secret-shaped OCR is marked complete without storing searchable text')
+  assert.equal((await repo.findByHash('ocr-secret-image')).ocrLines, undefined, 'secret-shaped OCR geometry is not stored')
+  await changeHandler({ kind: 'image', blobId: 'ocr-full', previewBlobId: 'ocr-full', contentType: 'image/png', hash: 'ocr-image', byteSize: 3 })
+  await tick()
+  assert.equal(ocrCalls.length, 2, 'deduplicated images reuse the current OCR result')
+  stopOcr()
+  assert.equal(watcherStop, 2)
   assert.equal(timers.size, 0)
   assert.equal(listeners.size, 0)
   assert.deepEqual(messages, [])
