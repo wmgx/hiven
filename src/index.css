@@ -6603,6 +6603,7 @@ body[data-theme='dark'] .settings-about-right .scripts-btn,
 }
 
 .scard {
+  container-type: inline-size;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 11px;
@@ -6684,6 +6685,39 @@ body[data-theme='dark'] .srow .s-ico,
   grid-column: 2;
   width: 100%;
   max-width: none;
+}
+
+@container (max-width: 560px) {
+  .srow:has(.shortcut-recorder):not(.srow--stacked) {
+    display: grid;
+    grid-template-columns: 34px minmax(120px, 1fr) minmax(150px, 190px);
+    align-items: center;
+  }
+
+  .srow:has(.shortcut-recorder):not(.srow--stacked) .s-ctl {
+    width: 100%;
+    max-width: none;
+  }
+
+  .srow:has(.shortcut-recorder):not(.srow--stacked) .shortcut-recorder {
+    width: 100%;
+  }
+
+  .srow:has(.shortcut-recorder):not(.srow--stacked) .shortcut-recorder-display {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+@container (max-width: 380px) {
+  .srow:has(.shortcut-recorder):not(.srow--stacked) {
+    grid-template-columns: 34px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .srow:has(.shortcut-recorder):not(.srow--stacked) .s-ctl {
+    grid-column: 2;
+  }
 }
 
 .ai-subscription-provider + .ai-subscription-provider {
@@ -8101,6 +8135,12 @@ body[data-theme='light'] .schema-object-list.d-rules .schema-object-list-field-s
 .plugins-row-icon--tone-3 { --plugin-icon-bg: #ecfeff; --plugin-icon-fg: #0e7490; }
 .plugins-row-icon--tone-4 { --plugin-icon-bg: #f8fafc; --plugin-icon-fg: #334155; }
 .plugins-row-icon--tone-5 { --plugin-icon-bg: #dbeafe; --plugin-icon-fg: #1e40af; }
+.plugins-row-icon--tone-6 { --plugin-icon-bg: var(--plugin-row-6-bg); --plugin-icon-fg: var(--plugin-row-6-fg); }
+.plugins-row-icon--tone-7 { --plugin-icon-bg: var(--plugin-row-7-bg); --plugin-icon-fg: var(--plugin-row-7-fg); }
+.plugins-row-icon--tone-8 { --plugin-icon-bg: var(--plugin-row-8-bg); --plugin-icon-fg: var(--plugin-row-8-fg); }
+.plugins-row-icon--tone-9 { --plugin-icon-bg: var(--plugin-row-9-bg); --plugin-icon-fg: var(--plugin-row-9-fg); }
+.plugins-row-icon--tone-10 { --plugin-icon-bg: var(--plugin-row-10-bg); --plugin-icon-fg: var(--plugin-row-10-fg); }
+.plugins-row-icon--tone-11 { --plugin-icon-bg: var(--plugin-row-11-bg); --plugin-icon-fg: var(--plugin-row-11-fg); }
 
 body[data-theme='dark'] .plugins-row-icon--tone-0 { --plugin-icon-bg: #1e2a44; --plugin-icon-fg: #93c5fd; }
 body[data-theme='dark'] .plugins-row-icon--tone-1 { --plugin-icon-bg: #1b2e3d; --plugin-icon-fg: #7dd3fc; }

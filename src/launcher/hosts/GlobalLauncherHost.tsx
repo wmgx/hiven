@@ -48,7 +48,7 @@ import type { PluginPasteResult } from '../../workspace/pluginTypes'
 import { createPluginPrivateStorage } from '../../workspace/pluginStorage'
 import { imageBlockInput } from '../clipboard/imageBlockInput'
 import type { PluginSettingsSource } from '../../workspace/pluginSettingsStore'
-import { invalidateCurrentLauncherWindowResize, restoreLauncherInputSource, startCurrentLauncherWindowResize, type LauncherWindowResizeDirection } from '../../workspace/windowManager/launcherWindow'
+import { invalidateCurrentLauncherWindowResize, resizeCurrentLauncherWindowFromSouthEast, restoreLauncherInputSource, startCurrentLauncherWindowResize, type LauncherWindowResizeDirection } from '../../workspace/windowManager/launcherWindow'
 import { getHostSurfaceShell } from '../../components/launcher/hostSurfaceShell'
 import { endLauncherPerfOpenSession, logLauncherPerf } from '../../workspace/launcher/perf'
 import {
@@ -1264,7 +1264,8 @@ export function GlobalLauncherHost() {
         handleCompositionEnd={handleCompositionEnd}
         clipboardBlock={clipboardBlock}
       />
-      {open && resizableSurface && <WindowResizeHandles inset={8} onResizeStart={beginResize} />}
+      {open && resizableSurface && <WindowResizeHandles inset={8} onResizeStart={beginResize}
+        onSouthEastResize={(size) => { void resizeCurrentLauncherWindowFromSouthEast(size) }} />}
       {open && commandMode && (
         <div className="launcher-command-resize" data-no-drag role="separator" aria-label={t(locale, 'palette.resizeCommandHeight')}
           aria-orientation="horizontal" aria-valuemin={318} aria-valuemax={640} aria-valuenow={commandHeight} tabIndex={0}

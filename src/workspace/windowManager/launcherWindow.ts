@@ -188,6 +188,18 @@ export async function startCurrentLauncherWindowResize(direction: LauncherWindow
   await win.startResizeDragging(direction)
 }
 
+/** Resize from the visible south-east grip; the top-left corner stays fixed. */
+export async function resizeCurrentLauncherWindowFromSouthEast(size: { width: number; height: number }): Promise<void> {
+  if (!Number.isFinite(size.width) || size.width <= 0 || !Number.isFinite(size.height) || size.height <= 0) return
+  if (!isNativeDesktopRuntime()) return
+  const resize = ++latestLauncherResize
+  const { getCurrentWindow, LogicalSize } = await import('@tauri-apps/api/window')
+  if (resize !== latestLauncherResize) return
+  const win = getCurrentWindow()
+  if (win.label !== LAUNCHER_WINDOW_LABEL) return
+  await win.setSize(new LogicalSize(size.width, size.height))
+}
+
 export async function restoreCurrentLauncherOverlayWindow(options: { hide?: boolean } = {}): Promise<void> {
   if (!isNativeDesktopRuntime()) return
   const { getCurrentWindow } = await import('@tauri-apps/api/window')

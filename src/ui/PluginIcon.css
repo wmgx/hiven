@@ -5,3 +5,9 @@
 .plugin-icon[data-tone='3'] { --tone: var(--plugin-green); }
 .plugin-icon[data-tone='4'] { --tone: var(--plugin-graphite); }
 .plugin-icon[data-tone='5'] { --tone: var(--plugin-red); }
+.plugin-icon[data-tone='6'] { --tone: var(--plugin-purple); }
+.plugin-icon[data-tone='7'] { --tone: var(--plugin-pink); }
+.plugin-icon[data-tone='8'] { --tone: var(--plugin-amber); }
+.plugin-icon[data-tone='9'] { --tone: var(--plugin-indigo); }
+.plugin-icon[data-tone='10'] { --tone: var(--plugin-lime); }
+.plugin-icon[data-tone='11'] { --tone: var(--plugin-brown); }

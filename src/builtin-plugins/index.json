@@ -1,30 +1,30 @@
 {
-  "version": 272,
+  "version": 281,
   "packages": [
     {
       "pluginId": "image-tools",
       "dir": "image-tools",
-      "version": "1.0.10"
+      "version": "1.0.11"
     },
     {
       "pluginId": "csv",
       "dir": "csv",
-      "version": "1.12.11"
+      "version": "1.12.12"
     },
     {
       "pluginId": "calculator",
       "dir": "calculator",
-      "version": "1.9.10"
+      "version": "1.9.11"
     },
     {
       "pluginId": "date-time-assistant",
       "dir": "date-time-assistant",
-      "version": "1.12.13"
+      "version": "1.12.14"
     },
     {
       "pluginId": "translate",
       "dir": "translate",
-      "version": "1.0.39"
+      "version": "1.0.40"
     },
     {
       "pluginId": "ai-writing",
@@ -44,7 +44,7 @@
     {
       "pluginId": "clipboard-history",
       "dir": "clipboard-history",
-      "version": "2.1.26"
+      "version": "2.1.35"
     },
     {
       "pluginId": "web-open",
@@ -54,7 +54,7 @@
     {
       "pluginId": "qr-code",
       "dir": "qr-code",
-      "version": "1.0.26"
+      "version": "1.0.27"
     },
     {
       "pluginId": "random",
@@ -64,7 +64,7 @@
     {
       "pluginId": "text-explode",
       "dir": "text-explode",
-      "version": "1.0.18"
+      "version": "1.0.19"
     },
     {
       "pluginId": "user-commands",
@@ -84,12 +84,12 @@
     {
       "pluginId": "text-tools",
       "dir": "text-tools",
-      "version": "1.0.13"
+      "version": "1.0.21"
     },
     {
       "pluginId": "memo",
       "dir": "memo",
-      "version": "1.0.2"
+      "version": "1.0.3"
     }
   ]
 }

@@ -45,6 +45,12 @@
   --destructive-highlight: rgba(220,38,38,.10);
   --key-top: #ffffff; --key-bottom: #f2f3f5; --key-edge: rgba(15,20,30,.16);
   --shadow-window: 0 0 0 1px var(--window-edge), 0 28px 64px -18px rgba(15,23,42,.28), 0 10px 22px -10px rgba(15,23,42,.16);
+  --plugin-row-6-bg: #f3e8ff; --plugin-row-6-fg: #7e22ce;
+  --plugin-row-7-bg: #fce7f3; --plugin-row-7-fg: #be185d;
+  --plugin-row-8-bg: #fef3c7; --plugin-row-8-fg: #b45309;
+  --plugin-row-9-bg: #e0e7ff; --plugin-row-9-fg: #4338ca;
+  --plugin-row-10-bg: #ecfccb; --plugin-row-10-fg: #4d7c0f;
+  --plugin-row-11-bg: #f5ebe4; --plugin-row-11-fg: #8b5e3c;
 }
 
 [data-theme='dark'] {
@@ -74,6 +80,12 @@
   --destructive-highlight: rgba(248,113,113,.14);
   --key-top: #34363b; --key-bottom: #2b2d31; --key-edge: rgba(255,255,255,.12);
   --shadow-window: 0 0 0 1px var(--window-edge), 0 28px 64px -18px rgba(0,0,0,.7), 0 10px 22px -10px rgba(0,0,0,.5);
+  --plugin-row-6-bg: #352044; --plugin-row-6-fg: #d8b4fe;
+  --plugin-row-7-bg: #402033; --plugin-row-7-fg: #f9a8d4;
+  --plugin-row-8-bg: #3b2a16; --plugin-row-8-fg: #fcd34d;
+  --plugin-row-9-bg: #26274a; --plugin-row-9-fg: #a5b4fc;
+  --plugin-row-10-bg: #26351a; --plugin-row-10-fg: #bef264;
+  --plugin-row-11-bg: #38291f; --plugin-row-11-fg: #d6a77a;
 }
 
 /* ─── 2. Semantic tokens ─── */
@@ -129,6 +141,12 @@
   --plugin-green: #1f9d5f;
   --plugin-graphite: #3a3f47;
   --plugin-red: #f0563f;
+  --plugin-purple: #8b5cf6;
+  --plugin-pink: #db4b8f;
+  --plugin-amber: #d97706;
+  --plugin-indigo: #4f46e5;
+  --plugin-lime: #65a30d;
+  --plugin-brown: #9a6440;
   --text-xs: 12px;
   --text-sm: 12px;
   --text-base: 13px;

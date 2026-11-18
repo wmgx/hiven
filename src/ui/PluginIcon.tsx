@@ -1,7 +1,7 @@
 import { resolveIcon } from '../utils/resolveIcon'
 import './PluginIcon.css'
 
-const TONES = 6
+const TONES = 12
 
 /** A stable tone per icon name, so rows read apart without the host knowing any plugin. */
 function toneOf(icon = ''): number {

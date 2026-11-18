@@ -67,5 +67,24 @@
 .window-resize-handle--se {
   bottom: 0;
   right: 0;
+  width: 18px;
+  height: 18px;
   cursor: nwse-resize;
+}
+
+.window-resize-handle--se::after {
+  content: '';
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--text-tertiary);
+  border-bottom: 2px solid var(--text-tertiary);
+  border-radius: 0 0 2px;
+  opacity: 0.65;
+}
+
+.window-resize-handle--se:hover::after {
+  opacity: 1;
 }

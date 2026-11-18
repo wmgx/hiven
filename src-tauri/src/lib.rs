@@ -7900,6 +7900,18 @@ fn disable_app_nap() {
     }
 }
 
+#[cfg(target_os = "macos")]
+fn disable_press_and_hold() {
+    unsafe {
+        let defaults_cls =
+            objc2::runtime::AnyClass::get(c"NSUserDefaults").expect("NSUserDefaults must exist");
+        let defaults: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![defaults_cls, standardUserDefaults];
+        let key = nsstring_utf8("ApplePressAndHoldEnabled").expect("valid preference key");
+        let _: () = objc2::msg_send![defaults, setBool: false, forKey: key];
+    }
+}
+
 fn configure_desktop_tray(app: &mut tauri::App) -> tauri::Result<()> {
     #[cfg(target_os = "macos")]
     app.set_activation_policy(tauri::ActivationPolicy::Accessory);
@@ -7953,6 +7965,9 @@ fn desktop_tray_text(key: &str) -> &'static str {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "macos")]
+    disable_press_and_hold();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_fs::init())

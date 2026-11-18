@@ -101,7 +101,7 @@ type PluginDetailRow = {
   plugin: InstalledPlugin | DevPlugin | PluginPackageSummary
 }
 
-const ICON_TONE_COUNT = 6
+const ICON_TONE_COUNT = 12
 
 const PLUGIN_ICON_MAP: Record<string, LucideIcon> = {
   translate: Languages,

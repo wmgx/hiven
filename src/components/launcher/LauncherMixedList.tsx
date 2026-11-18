@@ -116,6 +116,7 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
   const ref = useRef<HTMLDivElement>(null)
   const appIcon = isAppIconRef(item.icon)
   const avatarIcon = isRemoteAvatarIcon(item.icon)
+  const imageIcon = avatarIcon || item.icon?.startsWith('plugin-blob:')
   const tag = getLauncherItemKindLabel(item, locale)
   const hasKindTagOverride = hasMeaningfulKindTag(item)
   // SuperCmd-style: show ⌘1…⌘8 on the first eight rows so quick-run is discoverable.
@@ -172,7 +173,7 @@ const LauncherMixedListItem = memo(function LauncherMixedListItem({
             {resolveIcon(item.icon, 20, item.title)}
           </span>
         ) : (
-          avatarIcon ? resolveIcon(item.icon, 18, item.title) : <PluginIcon icon={item.icon} title={item.title} />
+          imageIcon ? resolveIcon(item.icon, 18, item.title) : <PluginIcon icon={item.icon} title={item.title} />
         )}
       </span>
 

@@ -23,7 +23,7 @@ export function useForegroundAppName(): string | undefined {
 }
 
 /**
- * Command footer: "esc 换个操作 · ⌘K 更多 … ⇧↵ 粘贴到 X · [↵ 主动作]".
+ * Command footer: "esc 换个操作 … ⇧↵ 粘贴到 X · [↵ 主动作] · ⌘K 更多".
  * ↵ / ⇧↵ are handled by the frame; ⌘K is owned here while the footer is mounted.
  */
 export function LauncherCommandFooter({
@@ -52,7 +52,7 @@ export function LauncherCommandFooter({
   onPaste?: () => void
   menu: LauncherCommandMenuAction[]
   onBack: () => void
-  /** Extra key hints after ⌘K, such as ⌘E for the Block editor. */
+  /** Extra key hints, such as ⌘E for the Block editor. */
   hints?: ReactNode
   status?: { text: string; running?: boolean }
 }) {
@@ -80,18 +80,6 @@ export function LauncherCommandFooter({
         onMouseDown={(event) => event.preventDefault()} onClick={onBack}>
         <LauncherHintKey keys="esc" label={t(locale, 'palette.changeAction')} />
       </button>}
-      {!primaryOnly && menu.length > 0 && (
-        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-          <DropdownMenuTrigger render={<button type="button" className="launcher-footer-back-btn" data-no-drag disabled={busy} onMouseDown={(event) => event.preventDefault()} />}>
-            <LauncherHintKey keys="⌘K" label={t(locale, 'outputActions.more')} />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" side="top">
-            {menu.map((item) => (
-              <DropdownMenuItem key={item.id} onClick={() => void item.run()}>{item.label}</DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
       {!primaryOnly && hints}
       <span className={`launcher-command-footer-spacer ${status?.running ? 'anim-running-pulse' : ''}`} role={status ? 'status' : undefined} title={status?.text}>{status?.text}</span>
       {onPaste && pasteBlockedKey && <LauncherHintText label={t(locale, pasteBlockedKey)} />}
@@ -106,6 +94,18 @@ export function LauncherCommandFooter({
           onMouseDown={(event) => event.preventDefault()} onClick={onPrimary}>
           <LauncherHintKey keys="↵" label={primaryLabel} />
         </button>
+      )}
+      {!primaryOnly && menu.length > 0 && (
+        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+          <DropdownMenuTrigger render={<button type="button" className="launcher-footer-back-btn" data-no-drag disabled={busy} onMouseDown={(event) => event.preventDefault()} />}>
+            <LauncherHintKey keys="⌘K" label={t(locale, 'outputActions.more')} />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" side="top">
+            {menu.map((item) => (
+              <DropdownMenuItem key={item.id} onClick={() => void item.run()}>{item.label}</DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
     </div>
   )
