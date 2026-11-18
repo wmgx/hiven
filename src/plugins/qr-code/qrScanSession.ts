@@ -40,37 +40,50 @@ export function createQrScanSession(
   let request: AbortController | undefined
   let ownedPreview = ''
   let disposed = false
+  let lastState = EMPTY_QR_SCAN
 
-  const cancel = () => {
+  const publish = (state: QrScanState) => {
+    lastState = state
+    onChange(state)
+  }
+
+  const abort = () => {
     request?.abort()
     request = undefined
+  }
+
+  const cancel = () => {
+    abort()
     if (ownedPreview) urls.revokeObjectURL(ownedPreview)
     ownedPreview = ''
   }
 
   const scan = async (read: (signal: AbortSignal) => ScanImage | Promise<ScanImage>, clipboard = false) => {
     if (disposed) return
-    cancel()
+    abort()
     const current = new AbortController()
     request = current
     const isCurrent = () => request === current && !current.signal.aborted && !disposed
-    let state = { ...EMPTY_QR_SCAN, busy: true }
+    let state = { ...lastState, clipboardError: false, busy: true }
     let imageReady = false
-    onChange(state)
+    publish(state)
     try {
       const image = await read(current.signal)
       if (!isCurrent()) return
       imageReady = true
       const previewUrl = 'blob' in image ? urls.createObjectURL(image.blob) : image.dataUrl
+      if (ownedPreview) urls.revokeObjectURL(ownedPreview)
       if ('blob' in image) ownedPreview = previewUrl
-      state = { ...state, previewUrl }
-      onChange(state)
+      else ownedPreview = ''
+      state = { ...EMPTY_QR_SCAN, previewUrl, busy: true }
+      publish(state)
       const result = 'blob' in image ? await decode.blob(image.blob) : await decode.dataUrl(image.dataUrl)
-      if (isCurrent()) onChange({ ...state, result, busy: false })
+      if (isCurrent()) publish({ ...state, result, busy: false })
     } catch {
       if (!isCurrent()) return
-      onChange({
-        ...state,
+      if (!imageReady) cancel()
+      publish({
+        ...(imageReady ? state : EMPTY_QR_SCAN),
         result: clipboard && !imageReady ? null : { ok: false, code: 'failed' },
         clipboardError: clipboard && !imageReady,
         busy: false,
@@ -85,12 +98,12 @@ export function createQrScanSession(
     unreadableClipboard() {
       if (disposed) return
       cancel()
-      onChange({ ...EMPTY_QR_SCAN, clipboardError: true })
+      publish({ ...EMPTY_QR_SCAN, clipboardError: true })
     },
     reset() {
       if (disposed) return
       cancel()
-      onChange({ ...EMPTY_QR_SCAN })
+      publish({ ...EMPTY_QR_SCAN })
     },
     dispose() {
       cancel()

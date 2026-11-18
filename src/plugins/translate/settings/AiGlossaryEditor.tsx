@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Button, ValueChip, TextInput, SurfaceError, SurfaceStatus } from '@hiven/plugin-ui'
+import { Button, ValueChip, TextInput, SurfaceError, SurfaceStatus, useShortcuts } from '@hiven/plugin-ui'
 import type { AiGlossary } from './model'
 import { GLOSSARY_LANGUAGES, GLOSSARY_LIMITS, validateAiGlossary } from '../ai/glossary'
 
@@ -39,13 +39,16 @@ export function AiGlossaryEditor({ saved, onCommit, t }: {
   if (draft.targetLang && !GLOSSARY_LANGUAGES.some((value) => value === draft.targetLang)) {
     languageOptions.push({ value: draft.targetLang, label: t('ai.savedUnavailable').replace('{value}', draft.targetLang) })
   }
+  const keys = useShortcuts({
+    'mod+backspace': event => {
+      const row = (event.target as HTMLElement).closest<HTMLElement>('[data-glossary-row]')
+      if (!row) return false
+      remove(Number(row.dataset.glossaryRow))
+    },
+  })
 
   return (
-    <section className="translate-glossary-editor" aria-label={t('ai.glossary.title')} onKeyDown={event => {
-      if (event.nativeEvent.isComposing || !(event.metaKey || event.ctrlKey) || event.key !== 'Backspace') return
-      const row = (event.target as HTMLElement).closest<HTMLElement>('[data-glossary-row]')
-      if (row) { event.preventDefault(); event.stopPropagation(); remove(Number(row.dataset.glossaryRow)) }
-    }}>
+    <section className="translate-glossary-editor" aria-label={t('ai.glossary.title')} {...keys.handlers}>
       <SurfaceError>{message}</SurfaceError>
       {undo && <SurfaceStatus>{t('ai.glossary.deleted')} · <button onClick={() => { edit(undo); setUndo(null) }}>{t('ai.glossary.undo')}</button></SurfaceStatus>}
       <div className="font-medium">{t('ai.glossary.title')}</div>

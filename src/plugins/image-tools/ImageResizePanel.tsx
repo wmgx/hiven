@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { copyPng } from './copyPng'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, TextInput, SurfaceHeaderField, SurfaceStatus, SurfaceError, ActionBar, RowList, useLocalEscapeLayer } from '@hiven/plugin-ui'
+import { Button, TextInput, SurfaceActionButton, SurfaceHeaderField, SurfaceStatus, SurfaceError, ActionBar, RowList, useLocalEscapeLayer, useSurfaceActions, type SurfaceActionDefinition } from '@hiven/plugin-ui'
 import { MAX_IMAGE_BYTES } from './raster'
 import { loadRedactionImage } from './imageRedaction'
 import { exportResizedImage, resizeDimensions } from './imageResize'
@@ -100,12 +100,14 @@ export function ImageResizePanel({ host, t, onDirtyChange, invalidateRef }: Prop
       } finally { try { await host.storage.blob.delete(blob.blobId) } catch { /* Delivery result takes priority over cleanup. */ } }
     })
   }
-  return <main ref={panel} className="image-crop image-resize" tabIndex={-1} onCompositionStart={() => { composing.current = true }} onCompositionEnd={() => { composing.current = false }} onKeyDown={event => {
-      if (event.defaultPrevented || composing.current || event.nativeEvent.isComposing) return
-      if ((event.metaKey || event.ctrlKey) && ['o','v'].includes(event.key.toLowerCase())) { event.preventDefault(); choose(event.key.toLowerCase() === 'o' ? 'file' : 'clipboard') }
-    }}>
-    {!original && <div className="image-crop-empty-actions"><Button autoFocus disabled={busy} onClick={() => choose('file')}>{t('image.chooseFile')} <kbd>⌘O</kbd></Button>
-      <Button disabled={busy || !host.clipboard.readImage} onClick={() => choose('clipboard')}>{t('image.readClipboard')} <kbd>⌘V</kbd></Button></div>}
+  const actions: SurfaceActionDefinition[] = [
+    { id: 'choose-file', label: t('image.chooseFile'), shortcut: 'mod+o', disabled: busy, run: () => choose('file') },
+    { id: 'read-clipboard', label: t('image.readClipboard'), shortcut: 'mod+v', disabled: busy || !host.clipboard.readImage, run: () => choose('clipboard') },
+  ]
+  useSurfaceActions(actions)
+  return <main ref={panel} className="image-crop image-resize" tabIndex={-1} onCompositionStart={() => { composing.current = true }} onCompositionEnd={() => { composing.current = false }}>
+    {!original && <div className="image-crop-empty-actions"><SurfaceActionButton action={actions[0]} autoFocus />
+      <SurfaceActionButton action={actions[1]} /></div>}
       <TextInput ref={file} type="file" hidden accept="image/png,image/jpeg,image/webp" onChange={event => {
         const selected = event.currentTarget.files?.[0]; event.currentTarget.value = ''
         if (selected) void load(async () => { if (selected.size > MAX_IMAGE_BYTES) throw new Error('size'); return { bytes: new Uint8Array(await selected.arrayBuffer()), contentType: selected.type || undefined } })
@@ -123,7 +125,7 @@ export function ImageResizePanel({ host, t, onDirtyChange, invalidateRef }: Prop
     <ActionBar>
       {host.OutputActions && <host.OutputActions primaryRef={primary} disabled={busy || !ready || !size}
         copy={async () => copyPng(host, await exportResizedImage(original!, width, new AbortController().signal))}
-        more={[{ id: 'file', label: t('image.chooseFile'), run: () => choose('file') }, { id: 'clipboard', label: t('image.readClipboard'), run: () => choose('clipboard') }, { id: 'save', label: t('image.save'), run: save }]} />}
+        more={[{ id: 'file', label: t('image.chooseFile'), run: () => actions[0].run('click') }, { id: 'clipboard', label: t('image.readClipboard'), run: () => actions[1].run('click') }, { id: 'save', label: t('image.save'), run: save }]} />}
     </ActionBar>
   </main>
 }

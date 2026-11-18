@@ -85,6 +85,7 @@
     "test:user-commands-model": "node scripts/test-user-commands-model.mjs",
     "test:app-hotkeys": "node scripts/test-app-hotkeys.mjs",
     "test:app-hotkeys-runtime": "node scripts/test-app-hotkeys-runtime.mjs",
+    "test:surface-actions": "node --experimental-strip-types scripts/test-surface-actions.mts",
     "test:shortcut-ownership-runtime": "node scripts/test-shortcut-ownership-runtime.mjs",
     "test:shortcut-recording-lease": "node scripts/test-shortcut-recording-lease.mjs",
     "test:search-ranking-match": "node scripts/test-search-ranking-match.mjs",

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { copyPng } from './copyPng'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, TextInput, SurfaceHeaderField, SurfaceHeaderActions, ValueChip, ActionBar, SurfaceStatus, SurfaceError, useLocalEscapeLayer } from '@hiven/plugin-ui'
+import { Button, TextInput, SurfaceActionButton, SurfaceHeaderField, SurfaceHeaderActions, ValueChip, ActionBar, SurfaceStatus, SurfaceError, useLocalEscapeLayer, useSurfaceActions, type SurfaceActionDefinition } from '@hiven/plugin-ui'
 import { MAX_IMAGE_BYTES } from './raster'
 import { loadRedactionImage, type Point } from './imageRedaction'
 import { cropFromDrag, moveCrop, exportCrop, parseCrop, type CropRect } from './imageCrop'
@@ -145,9 +145,13 @@ export function ImageCropPanel({ host, t, onDirtyChange, invalidateRef }: Props)
       } finally { try { await host.storage.blob.delete(blob.blobId) } catch { /* Delivery result takes priority over cleanup. */ } }
     })
   }
+  const actions: SurfaceActionDefinition[] = [
+    { id: 'choose-file', label: t('image.chooseFile'), shortcut: 'mod+o', disabled: busy, run: () => choose('file') },
+    { id: 'read-clipboard', label: t('image.readClipboard'), shortcut: 'mod+v', disabled: busy || !host.clipboard.readImage, run: () => choose('clipboard') },
+  ]
+  useSurfaceActions(actions)
   return <main ref={panel} className="image-crop" tabIndex={-1} onCompositionStart={() => { composing.current = true }} onCompositionEnd={() => { composing.current = false }} onKeyDown={event => {
       if (event.nativeEvent.isComposing || composing.current || event.defaultPrevented) return
-      if ((event.metaKey || event.ctrlKey) && ['o', 'v'].includes(event.key.toLowerCase())) { event.preventDefault(); choose(event.key.toLowerCase() === 'o' ? 'file' : 'clipboard'); return }
       if (selection && original && !busy && !dragActive && event.target === canvas.current && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)) {
         event.preventDefault(); const step = event.shiftKey ? 10 : 1
         commit(moveCrop(selection, event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0, event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0, original.width, original.height))
@@ -156,8 +160,8 @@ export function ImageCropPanel({ host, t, onDirtyChange, invalidateRef }: Props)
     <SurfaceHeaderField><span className="image-tools-filename">{filename}</span></SurfaceHeaderField>
     <SurfaceHeaderActions><ValueChip label={t('crop.ratio')} value={ratio} options={['free','1:1','4:3','16:9'].map(value => ({ value, label: value === 'free' ? t('crop.free') : value }))}
       onOpen={() => { ratioOrigin.current = { ratio, fields } }} onPreview={previewRatio} onChange={previewRatio} /></SurfaceHeaderActions>
-    {!original && <div className="image-crop-empty-actions"><Button disabled={busy} autoFocus onClick={() => choose('file')}>{t('image.chooseFile')} <kbd>⌘O</kbd></Button>
-      <Button disabled={busy || !host.clipboard.readImage} onClick={() => choose('clipboard')}>{t('image.readClipboard')} <kbd>⌘V</kbd></Button></div>}
+    {!original && <div className="image-crop-empty-actions"><SurfaceActionButton action={actions[0]} autoFocus />
+      <SurfaceActionButton action={actions[1]} /></div>}
       <TextInput ref={file} type="file" hidden accept="image/png,image/jpeg,image/webp" onChange={event => {
         const selected = event.currentTarget.files?.[0]; event.currentTarget.value = ''
         if (selected) void load(async () => { if (selected.size > MAX_IMAGE_BYTES) throw new Error('size'); return { bytes: new Uint8Array(await selected.arrayBuffer()), contentType: selected.type || undefined, name: selected.name } })
@@ -191,7 +195,7 @@ export function ImageCropPanel({ host, t, onDirtyChange, invalidateRef }: Props)
     <ActionBar>
       {host.OutputActions && <host.OutputActions disabled={busy || !ready || !selection || dragActive}
         copy={async () => copyPng(host, await exportCrop(original!, selection!, new AbortController().signal))}
-        more={[{ id: 'file', label: t('image.chooseFile'), run: () => choose('file') }, { id: 'clipboard', label: t('image.readClipboard'), run: () => choose('clipboard') }, { id: 'clear', label: t('crop.clear'), run: () => commit(null) }, { id: 'save', label: t('image.save'), run: save }]} />}
+        more={[{ id: 'file', label: t('image.chooseFile'), run: () => actions[0].run('click') }, { id: 'clipboard', label: t('image.readClipboard'), run: () => actions[1].run('click') }, { id: 'clear', label: t('crop.clear'), run: () => commit(null) }, { id: 'save', label: t('image.save'), run: save }]} />}
     </ActionBar>
   </main>
 }

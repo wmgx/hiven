@@ -34,6 +34,7 @@ import {
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { finishImeComposition, shouldIgnoreImeKeyDown, startImeComposition } from './utils/imeKeyboard'
+import { shortcutLabel, type SurfaceActionDefinition } from './ui/surfaceActions'
 
 export { getFluxMonacoTheme as getEditorTheme } from './utils/monacoTheme'
 export { SurfaceHeaderActions, SurfaceHeaderField, SurfaceBreadcrumbs, SurfaceStatus, SurfaceError } from './ui/SurfaceHeaderActions'
@@ -45,6 +46,8 @@ export { PluginIcon } from './ui/PluginIcon'
 export { Tooltip } from '@base-ui/react/tooltip'
 export { useToolDeliveryFeedback } from './ui/useToolDeliveryFeedback'
 export { useShortcuts, type ShortcutMap } from './ui/useShortcuts'
+export { useSurfaceActions } from './ui/useSurfaceActions'
+export type { SurfaceActionDefinition, SurfaceActionOrigin } from './ui/surfaceActions'
 export type { ToolDeliveryFeedback, ToolDeliveryFeedbackAttempt, ToolDeliveryFeedbackOwner } from './ui/toolDeliveryFeedback'
 
 // Load the existing editor only when a plugin mounts it; keep Launcher startup light.
@@ -269,6 +272,18 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       {...props}
     />
   )
+})
+
+export function ShortcutKey({ shortcut }: { shortcut?: string }) {
+  return shortcut ? <kbd>{shortcutLabel(shortcut)}</kbd> : null
+}
+
+export const SurfaceActionButton = forwardRef<HTMLButtonElement, Omit<ButtonProps, 'disabled' | 'onClick'> & {
+  action: SurfaceActionDefinition
+}>(function SurfaceActionButton({ action, children, ...props }, ref) {
+  return <Button {...props} ref={ref} disabled={action.disabled} onClick={() => void action.run('click')}>
+    {children ?? action.label}<ShortcutKey shortcut={action.shortcut} />
+  </Button>
 })
 
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton(
@@ -656,14 +671,14 @@ export function ConfirmDialog({ open, title, message, confirmLabel = 'Confirm', 
   const cancelRef = useRef<HTMLButtonElement>(null)
   return (
     <AlertDialog open={open} onOpenChange={(next) => { if (!next) onCancel() }}>
-      <AlertDialogContent className="hiven-ui-confirm-panel" initialFocus={defaultFocus === 'cancel' ? cancelRef : undefined}>
-        <AlertDialogHeader>
-          <AlertDialogTitle className="hiven-ui-confirm-title">{title}</AlertDialogTitle>
-          {message && <AlertDialogDescription className="hiven-ui-confirm-message">{message}</AlertDialogDescription>}
+      <AlertDialogContent className="hiven-ui-confirm-panel gap-0 rounded-[var(--radius-lg)] p-0 shadow-(--shadow-float)" initialFocus={defaultFocus === 'cancel' ? cancelRef : undefined}>
+        <AlertDialogHeader className="place-items-start gap-2 px-5 pt-5 pb-4 text-left">
+          <AlertDialogTitle className="hiven-ui-confirm-title text-lg leading-5 font-semibold tracking-[-0.01em]">{title}</AlertDialogTitle>
+          {message && <AlertDialogDescription className="hiven-ui-confirm-message max-w-[36ch] text-base leading-5">{message}</AlertDialogDescription>}
         </AlertDialogHeader>
-        <AlertDialogFooter className="hiven-ui-confirm-actions">
-          <AlertDialogCancel ref={cancelRef}>{cancelLabel}</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" onClick={onConfirm}>{confirmLabel}</AlertDialogAction>
+        <AlertDialogFooter className="hiven-ui-confirm-actions mx-0 mb-0 flex-row justify-end gap-2 rounded-none border-0 bg-transparent px-5 pt-0 pb-5">
+          <AlertDialogCancel ref={cancelRef} className="min-w-20 focus-visible:ring-2 focus-visible:ring-ring/35">{cancelLabel}</AlertDialogCancel>
+          <AlertDialogAction className="min-w-20 bg-destructive text-primary-foreground hover:bg-[var(--destructive-hover)] focus-visible:border-destructive focus-visible:ring-2 focus-visible:ring-destructive/25" variant="destructive" onClick={onConfirm}>{confirmLabel}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

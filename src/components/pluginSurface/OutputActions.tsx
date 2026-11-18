@@ -1,4 +1,3 @@
-import { shouldIgnoreImeKeyDown } from '../../utils/imeKeyboard'
 import { useEffect, useMemo, useRef, useState, type ComponentType, type RefObject, type ReactNode } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { ChevronDownIcon } from 'lucide-react'
@@ -9,6 +8,8 @@ import { useT } from '../../i18n'
 import { flash } from '../../workspace/notify'
 import { useAppStore } from '../../store'
 import type { PluginObjectBlockInput, PluginOutputActionsProps, PluginPasteResult, PluginSurfaceHostApi } from '../../workspace/pluginTypes'
+import { shortcutLabel, type SurfaceActionDefinition } from '../../ui/surfaceActions'
+import { useSurfaceActions } from '../../ui/useSurfaceActions'
 
 /** Host capabilities the shared output actions need; refreshed on every surface render. */
 export type OutputActionsDeps = {
@@ -117,49 +118,33 @@ function HostOutputActions({ deps, text, primaryRef, primary = 'copy', primaryAc
     ...more.map(item => ({ ...item, run: () => { if (deps.current.isCurrent()) return item.run() } })),
   ]
   const canPrimary = customPrimary ? !disabled && !customPrimary.disabled : primaryAction.id === 'copy' ? canCopy : canTextAct
-
-  // ⌘↵ primary, ⌘⇧↵ paste, ⌘K more; ignored while an IME composes.
-  const keys = useRef({ primaryAction, canPrimary, canTextAct, canCopy, doCopy, doPaste, hasMenu: menu.length > 0 })
-  keys.current = { primaryAction, canPrimary, canTextAct, canCopy, doCopy, doPaste, hasMenu: menu.length > 0 }
+  const primaryShortcut = editing ? 'mod+enter' : 'enter'
+  const pasteShortcut = editing ? 'mod+shift+enter' : 'shift+enter'
+  const shortcutActions: SurfaceActionDefinition[] = [
+    { id: 'output-primary', label: primaryAction.label, shortcut: primaryShortcut, disabled: !canPrimary, run: () => primaryAction.run() },
+    { id: 'output-copy', label: t('copy'), shortcut: 'mod+c', disabled: !canCopy, run: doCopy },
+    { id: 'output-paste', label: pasteLabel, shortcut: pasteShortcut, disabled: !canTextAct, run: doPaste },
+    { id: 'output-more', label: t('more'), shortcut: 'mod+k', disabled: menu.length === 0, run: () => setMenuOpen(open => !open) },
+  ]
+  useSurfaceActions(shortcutActions)
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || shouldIgnoreImeKeyDown(event, { current: false }) || event.altKey || !deps.current.isCurrent()) return
-      if (event.target instanceof Element && event.target.closest('.hiven-value-menu, [role="listbox"]')) return
-      const modified = event.metaKey || event.ctrlKey
-      if (modified && event.key.toLowerCase() === 'k' && !event.shiftKey && keys.current.hasMenu) {
-        event.preventDefault(); event.stopPropagation(); setMenuOpen(open => !open); return
-      }
-      if (event.target instanceof Element && event.target.closest('[role="menu"]')) return
-      const inEditor = event.target instanceof Element && Boolean(event.target.closest('textarea, [contenteditable="true"], .monaco-editor, [role="grid"]')) && !event.target.closest('[data-command-input]')
-      if (!inEditor && modified && event.key.toLowerCase() === 'c' && !event.shiftKey && keys.current.canCopy && !window.getSelection()?.toString()) {
-        const field = event.target
-        if ((field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) && field.selectionStart !== field.selectionEnd) return
-        event.preventDefault(); void keys.current.doCopy(); return
-      }
-      if (inEditor && !modified) return
-      if (!modified && event.target instanceof Element && event.target.closest('button')) return
-      const current = keys.current
-      if (event.key === 'Enter' && event.shiftKey && current.canTextAct) { event.preventDefault(); void current.doPaste() }
-      else if (event.key === 'Enter' && !event.shiftKey && current.canPrimary) { event.preventDefault(); void current.primaryAction.run() }
-    }
     const focus = (event: FocusEvent) => setEditing(event.target instanceof Element && Boolean(event.target.closest('textarea, [contenteditable="true"], .monaco-editor, [role="grid"]')) && !event.target.closest('[data-command-input]'))
     window.addEventListener('focusin', focus)
-    window.addEventListener('keydown', onKey, true)
-    return () => { window.removeEventListener('keydown', onKey, true); window.removeEventListener('focusin', focus) }
-  }, [deps])
+    return () => window.removeEventListener('focusin', focus)
+  }, [])
 
   return <><SurfaceError>{error}</SurfaceError><div className="hiven-output-actions">
-    {secondary && <Button variant="ghost" size="sm" disabled={secondary.id === 'copy' ? !canCopy : !canTextAct} onClick={() => void secondary.run()}>{secondary.label}<kbd>{secondary.id === 'paste' ? (editing ? '⌘⇧↵' : '⇧↵') : '⌘C'}</kbd></Button>}
-    {customPrimary && canTextAct && <Button variant="ghost" size="sm" onClick={() => void doPaste()}>{pasteLabel}<kbd>⇧↵</kbd></Button>}
+    {secondary && <Button variant="ghost" size="sm" disabled={secondary.id === 'copy' ? !canCopy : !canTextAct} onClick={() => void secondary.run()}>{secondary.label}<kbd>{shortcutLabel(secondary.id === 'paste' ? pasteShortcut : 'mod+c')}</kbd></Button>}
+    {customPrimary && canTextAct && <Button variant="ghost" size="sm" onClick={() => void doPaste()}>{pasteLabel}<kbd>{shortcutLabel(pasteShortcut)}</kbd></Button>}
+    <Button ref={primaryRef} variant="ghost" size="sm" disabled={!canPrimary} onClick={() => void primaryAction.run()}>{primaryAction.label}<kbd>{shortcutLabel(primaryShortcut)}</kbd></Button>
     {menu.length > 0 && <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
       <DropdownMenuTrigger render={<Button variant="ghost" size="sm" disabled={disabled} />}>
-        {t('more')}<kbd>⌘K</kbd><ChevronDownIcon size={14} />
+        {t('more')}<kbd>{shortcutLabel('mod+k')}</kbd><ChevronDownIcon size={14} />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" side="top">
         {menu.map(item => <DropdownMenuItem disabled={item.disabled} key={item.id} onClick={() => void item.run()}>{item.label}</DropdownMenuItem>)}
       </DropdownMenuContent>
     </DropdownMenu>}
-    <Button ref={primaryRef} variant="ghost" size="sm" disabled={!canPrimary} onClick={() => void primaryAction.run()}>{primaryAction.label}<kbd>{editing ? '⌘↵' : '↵'}</kbd></Button>
   </div></>
 }
 

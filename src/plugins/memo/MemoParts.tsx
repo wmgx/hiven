@@ -1,6 +1,6 @@
 import { Fragment, useRef, useState, type ReactNode, type RefObject } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { ActionBar, Button, CopyIconButton, Menu, useLocalEscapeLayer, type MenuItemSpec } from '@hiven/plugin-ui'
+import { ActionBar, Button, CopyIconButton, Menu, ShortcutKey, SurfaceActionButton, useLocalEscapeLayer, useSurfaceActions, type MenuItemSpec, type SurfaceActionDefinition } from '@hiven/plugin-ui'
 
 export type Host = PluginSurfaceProps['host']
 export type T = PluginSurfaceProps['t']
@@ -39,16 +39,18 @@ export function CopyButton({ label, copy }: { label: string; copy: () => Promise
   return <CopyIconButton className="memo-copy" label={label} copy={copy} />
 }
 
-export type FooterAction = { label: string; keys: string; run: () => void; disabled?: boolean }
+export type FooterAction = SurfaceActionDefinition
 
 /** Footer actions plus the ⌘K menu; `menuRef` lets the view open the menu from the keyboard. */
 export function Footer({ actions, menu, menuRef, t }: { actions: FooterAction[]; menu: MenuItemSpec[]; menuRef: RefObject<HTMLButtonElement | null>; t: T }) {
+  const more: SurfaceActionDefinition | undefined = menu.length ? {
+    id: 'more', label: t('action.more'), shortcut: 'mod+k', run: () => menuRef.current?.click(),
+  } : undefined
+  useSurfaceActions(more ? [...actions, more] : actions)
   return <ActionBar>
-    {actions.map(action => <Button key={action.label} variant="ghost" disabled={action.disabled} onMouseDown={event => event.preventDefault()} onClick={action.run}>
-      {action.label}{action.keys.split(' ').map(key => <kbd key={key}>{key}</kbd>)}
-    </Button>)}
+    {actions.map(action => <SurfaceActionButton key={action.id} action={action} variant="ghost" onMouseDown={event => event.preventDefault()} />)}
     {menu.length > 0 && <Menu align="end" items={menu}
-      trigger={<Button ref={menuRef} variant="ghost" onMouseDown={event => event.preventDefault()}>{t('action.more')}<kbd>⌘</kbd><kbd>K</kbd></Button>} />}
+      trigger={<Button ref={menuRef} variant="ghost" onMouseDown={event => event.preventDefault()}>{more!.label}<ShortcutKey shortcut={more!.shortcut} /></Button>} />}
   </ActionBar>
 }
 

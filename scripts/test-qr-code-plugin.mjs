@@ -215,6 +215,27 @@ function sessionHarness(decode = realDecode) {
   h.session.dispose()
 }
 
+// Keep the current preview visible until a replacement clipboard image is ready.
+{
+  const pending = deferred()
+  const h = sessionHarness()
+  await h.session.blob(pngBlob)
+  const previousPreview = h.latest().previewUrl
+  const next = h.session.clipboard(() => ({
+    readImage() { return pending.promise },
+    async readText() { assert.fail('An image paste must not read text') },
+  }))
+  await Promise.resolve()
+  assert.equal(h.latest().previewUrl, previousPreview)
+  assert.equal(h.latest().result.text, payload)
+  assert.equal(h.latest().busy, true)
+  pending.resolve(nativeImage)
+  await next
+  assert.notEqual(h.latest().previewUrl, previousPreview)
+  assert.equal(h.latest().result.text, payload)
+  h.session.dispose()
+}
+
 // A newer file wins over both a pending native read and a pending decode.
 {
   const pending = deferred()
@@ -366,15 +387,7 @@ function pasteHarness(nativeAvailable = true) {
   })
   return { handlers, calls }
 }
-function key(overrides = {}) {
-  return {
-    key: 'v', ctrlKey: true, metaKey: false, shiftKey: false, altKey: false,
-    repeat: false, isComposing: false, keyCode: 86, defaultPrevented: false,
-    composedPath: () => [new FakeElement(false)],
-    preventDefault() { this.defaultPrevented = true },
-    ...overrides,
-  }
-}
+function key(overrides = {}) { return { key: 'v', ...overrides } }
 function paste(text = '', image = true, overrides = {}) {
   return {
     defaultPrevented: false,
@@ -389,10 +402,8 @@ function paste(text = '', image = true, overrides = {}) {
 }
 {
   const { handlers, calls } = pasteHarness()
-  const event = key()
-  handlers.keydown(event)
-  assert.equal(event.defaultPrevented, true)
-  handlers.keydown(key({ repeat: true }))
+  handlers.shortcut()
+  handlers.shortcut()
   const duplicate = paste()
   handlers.paste(duplicate)
   assert.equal(duplicate.defaultPrevented, true)
@@ -401,31 +412,25 @@ function paste(text = '', image = true, overrides = {}) {
   handlers.paste(paste())
   assert.deepEqual(calls, ['native', 'blob'], 'A later DOM paste is independent')
 }
-for (const overrides of [
-  { composedPath: () => [new FakeElement(true)] },
-  { isComposing: true }, { keyCode: 229 }, { defaultPrevented: true },
-  { altKey: true }, { shiftKey: true }, { ctrlKey: false },
-]) {
+for (const overrides of [{ composedPath: () => [new FakeElement(true)] }, { defaultPrevented: true }]) {
   const { handlers, calls } = pasteHarness()
-  handlers.keydown(key(overrides))
-  assert.deepEqual(calls, [], 'Editing, IME and other shortcuts must retain their own behavior')
+  handlers.paste(paste('', true, overrides))
+  assert.deepEqual(calls, [], 'Editing and already-owned paste events retain their own behavior')
 }
 {
   const { handlers, calls } = pasteHarness()
   handlers.compositionstart()
-  handlers.keydown(key())
+  handlers.shortcut()
   handlers.paste(paste())
   handlers.compositionend()
   handlers.paste(paste('', true, { composedPath: () => [new FakeElement(true)] }))
   assert.deepEqual(calls, [])
-  handlers.keydown(key({ ctrlKey: false, metaKey: true }))
+  handlers.shortcut()
   assert.deepEqual(calls, ['native'])
 }
 {
   const { handlers, calls } = pasteHarness(false)
-  const event = key()
-  handlers.keydown(event)
-  assert.equal(event.defaultPrevented, false, 'Browser mode must keep the ordinary paste event')
+  handlers.shortcut()
   handlers.paste(paste())
   handlers.paste(paste(generated, false))
   handlers.paste(paste('ordinary text', false))

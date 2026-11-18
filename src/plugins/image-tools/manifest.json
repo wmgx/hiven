@@ -4,7 +4,7 @@
   "displayNameI18n": {
     "zh": "图片工具"
   },
-  "version": "1.0.10",
+  "version": "1.0.11",
   "capabilities": [
     "surface"
   ],

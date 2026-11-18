@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { ActionBar, Button, SurfaceHeaderField, TextInput, useImeKeyboard } from '@hiven/plugin-ui'
+import { ActionBar, Button, SurfaceHeaderField, TextInput, useShortcuts } from '@hiven/plugin-ui'
 import { readHistory, rememberCalculation, type HistoryEntry } from './history'
 
 let historyWrite = Promise.resolve()
@@ -21,7 +21,6 @@ export function CalculatorSurface({ host, initialText, t, calculate, calculateVa
   const draftRef = useRef(initialExpression)
   const hostRef = useRef(host)
   hostRef.current = host
-  const ime = useImeKeyboard()
   const assignment = expression.match(/^\s*([A-Za-z_]\w*)\s*=\s*(.*)$/s)
   const formula = assignment?.[2] ?? expression
   const result = useMemo(() => calculate(formula, variables), [calculate, formula, variables])
@@ -88,27 +87,18 @@ export function CalculatorSurface({ host, initialText, t, calculate, calculateVa
     useExpression(nextIndex < 0 ? draftRef.current : history[nextIndex].expression, nextIndex)
   }
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.defaultPrevented || ime.shouldIgnoreKeyDown(event)) return
-
-    const input = inputRef.current
-    const hasSelection = input?.selectionStart !== input?.selectionEnd
-    if (event.key === 'Enter' && !event.metaKey && !event.ctrlKey && !event.shiftKey) {
-      event.preventDefault()
-      commit()
-      return
-    }
-
-    if (!event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && !hasSelection) {
-      if (event.key === 'ArrowUp') {
-        event.preventDefault()
-        navigateHistory('older')
-      } else if (event.key === 'ArrowDown' && historyIndex !== -1) {
-        event.preventDefault()
-        navigateHistory('newer')
-      }
-    }
-  }
+  const keys = useShortcuts({
+    arrowup: () => {
+      const input = inputRef.current
+      if (input?.selectionStart !== input?.selectionEnd) return false
+      navigateHistory('older')
+    },
+    arrowdown: () => {
+      const input = inputRef.current
+      if (input?.selectionStart !== input?.selectionEnd || historyIndex === -1) return false
+      navigateHistory('newer')
+    },
+  })
 
   return (
     <section className="calculator-surface" aria-label={t('surface.title')}>
@@ -125,14 +115,12 @@ export function CalculatorSurface({ host, initialText, t, calculate, calculateVa
               setHistoryIndex(-1)
               draftRef.current = event.target.value
             }}
-            onKeyDown={handleKeyDown}
+            {...keys.handlers}
             placeholder={t('surface.placeholder')}
             autoFocus
             data-plugin-surface-autofocus="sticky"
             autoComplete="off"
             spellCheck={false}
-            onCompositionStart={ime.onCompositionStart}
-            onCompositionEnd={ime.onCompositionEnd}
           />
       </SurfaceHeaderField>
       <main className="calculator-surface__body" data-command-content>

@@ -1,7 +1,16 @@
-import { Children, createContext, useContext, useEffect, type ReactNode } from 'react'
+import { Children, createContext, useContext, useEffect, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
+import type { SurfaceActionDefinition } from './surfaceActions'
 
-export type SurfaceHeaderSlots = { actions: HTMLElement | null; field: HTMLElement | null; breadcrumbs?: HTMLElement | null; footer?: HTMLElement | null; status?: HTMLElement | null; error?: HTMLElement | null }
+export type SurfaceHeaderSlots = {
+  actions: HTMLElement | null
+  field: HTMLElement | null
+  breadcrumbs?: HTMLElement | null
+  footer?: HTMLElement | null
+  status?: HTMLElement | null
+  error?: HTMLElement | null
+  registerActions?: (owner: object, actions: RefObject<readonly SurfaceActionDefinition[]>) => () => void
+}
 
 export const SurfaceHeaderActionsContext = createContext<SurfaceHeaderSlots>({ actions: null, field: null })
 

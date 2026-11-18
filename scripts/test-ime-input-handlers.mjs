@@ -20,8 +20,6 @@ const aliasTree = tree('src/components/PluginSettingsSchemaRenderer.tsx')
 const alias = find(aliasTree, (n) => ts.isFunctionDeclaration(n) && n.name?.text === 'commitAliasInput').getText(aliasTree)
 const csvTree = tree('src/plugins/csv/CsvSurface.tsx')
 const csv = find(csvTree, (n) => ts.isArrowFunction(n) && n.body.getText(csvTree).includes('if (!sqlSuggestOpen || sqlCompletions.items.length === 0) return')).getText(csvTree)
-const historyTree = tree('src/plugins/clipboard-history/surfaces/ClipboardHistorySurface.tsx')
-const history = find(historyTree, (n) => ts.isVariableDeclaration(n) && n.name.getText(historyTree) === 'handleKeyDown').initializer.arguments[0].getText(historyTree)
 const overlay = tree('src/components/quickEditor/QuickEditorCommandOverlay.tsx')
 const wrapper = find(overlay, (n) => ts.isVariableDeclaration(n) && n.name.getText(overlay) === 'synthetic').initializer.getText(overlay)
 const event = (extra = {}) => ({ key: 'Enter', keyCode: 13, nativeEvent: {}, currentTarget: { value: '合成别名' }, target: null, prevented: false, preventDefault() { this.prevented = true }, stopPropagation() {}, ...extra })
@@ -31,20 +29,20 @@ for (const mode of ['native', 'react', '229', 'tracked', 'commit', 'plain']) {
   if (mode === 'tracked') ime.onCompositionStart()
   if (mode === 'commit') { ime.onCompositionStart(); ime.onCompositionEnd(); flush() }
   const flags = mode === 'native' ? { nativeEvent: { isComposing: true } } : mode === 'react' ? { isComposing: true } : mode === '229' ? { nativeEvent: { keyCode: 229 } } : {}
-  let changes = 0, completions = 0, pastes = 0
+  let changes = 0, completions = 0
   const aliasHandler = evaluate(alias, { aliasIme: ime, value: [], onChange: () => changes++ })
   const csvHandler = evaluate(csv, { sqlIme: ime, sqlSuggestOpen: true, sqlCompletions: { items: [{ insertText: 'SELECT ' }] }, sqlSuggestIndex: 0, applySqlCompletion: () => completions++, setSqlSuggestIndex() {}, setSqlSuggestOpen() {} })
-  const historyHandler = evaluate(history, { titleDialog: null, legacyDialog: null, emptyTrashDialog: false, purgeDialog: false, quickEditorOpen: null, textEdit: null, combining: false, Element: class {}, document: { activeElement: null }, filter: 'all', selectedItem: { kind: 'text' }, resultsActionBlocked: false, imeKeyDown: ime, readClipboardHistoryShortcutFocus: () => ({ nativeButton: false }), getClipboardHistoryShortcuts: () => ({ paste: true }), handlePaste: () => pastes++ })
-  for (const handler of [aliasHandler, csvHandler, historyHandler]) {
-    const e = event(flags); handler(e)
+  const cases = [[aliasHandler, {}], [csvHandler, {}]]
+  for (const [handler, extra] of cases) {
+    const e = event({ ...flags, ...extra }); handler(e)
     assert.equal(e.prevented, mode === 'plain', `${mode}: preventDefault only after IME guard`)
     if (handler === aliasHandler) assert.equal(e.currentTarget.value, mode === 'plain' ? '' : '合成别名')
   }
-  assert.deepEqual([changes, completions, pastes], mode === 'plain' ? [1, 1, 1] : [0, 0, 0])
+  assert.deepEqual([changes, completions], mode === 'plain' ? [1, 1] : [0, 0])
   if (mode === 'commit') {
     now += 121
-    for (const handler of [aliasHandler, csvHandler, historyHandler]) handler(event())
-    assert.deepEqual([changes, completions, pastes], [1, 1, 1], 'ordinary second Enter after guard window works')
+    for (const [handler, extra] of cases) handler(event(extra))
+    assert.deepEqual([changes, completions], [1, 1], 'ordinary second Enter after guard window works')
   }
 }
 for (const flags of [{ isComposing: true, keyCode: 13 }, { isComposing: false, keyCode: 229 }]) {

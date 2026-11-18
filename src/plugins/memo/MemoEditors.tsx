@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
-import { ActionBar, Button, SurfaceBreadcrumbs, SurfaceError, SurfaceStatus, TextArea, TextInput, useShortcuts } from '@hiven/plugin-ui'
+import { ActionBar, Button, SurfaceActionButton, SurfaceBreadcrumbs, SurfaceError, SurfaceStatus, TextArea, TextInput, useShortcuts, useSurfaceActions, type SurfaceActionDefinition } from '@hiven/plugin-ui'
 import { addData, addSibling, editData, kindById, label, members, newId, replaceRecord, validateDraft, visibleKind, type DataDraft, type MemoDb, type MemoText } from './model'
 import { Section, Tags, useBackLayer, type Host, type T } from './MemoParts'
 import type { Frame, ViewProps } from './MemoSurface'
@@ -111,7 +111,6 @@ export function DataEditor({ frame, nav, db, host, t, commit }: ViewProps<Extrac
 
   const rowOf = (target: EventTarget) => Number((target as HTMLElement).closest<HTMLElement>('[data-memo-row]')?.dataset.memoRow ?? -1)
   const keys = useShortcuts({
-    'mod+s': () => void save(),
     'alt+arrowup': event => { const row = rowOf(event.target); if (row < 0) return false; move(row, -1) },
     'alt+arrowdown': event => { const row = rowOf(event.target); if (row < 0) return false; move(row, 1) },
     enter: (event: KeyboardEvent) => {
@@ -192,7 +191,7 @@ export function TextEditor({ frame, nav, db, host, t, commit }: ViewProps<Extrac
       setSaving(false)
     }
   }
-  const keys = useShortcuts({ 'mod+s': () => void save() })
+  const keys = useShortcuts({})
   useBackLayer(host, [root], keys.composingRef, true, exit.leave)
   return <div ref={root} className="memo-surface" tabIndex={-1} {...keys.handlers}>
     <SurfaceBreadcrumbs items={[{ label: t(record ? 'editor.editText' : 'editor.newText'), onClick: () => undefined }]} />
@@ -207,8 +206,12 @@ export function TextEditor({ frame, nav, db, host, t, commit }: ViewProps<Extrac
 }
 
 function EditorFooter({ t, saving, onCancel, onSave }: { t: T; saving: boolean; onCancel(): void; onSave(): void }) {
+  const actions: SurfaceActionDefinition[] = [
+    { id: 'cancel', label: t('action.cancel'), shortcut: 'escape', run: onCancel },
+    { id: 'save', label: t('action.save'), shortcut: 'mod+s', disabled: saving, run: onSave },
+  ]
+  useSurfaceActions(actions)
   return <ActionBar>
-    <Button variant="ghost" onMouseDown={event => event.preventDefault()} onClick={onCancel}>{t('action.cancel')}<kbd>esc</kbd></Button>
-    <Button variant="ghost" disabled={saving} onMouseDown={event => event.preventDefault()} onClick={onSave}>{t('action.save')}<kbd>⌘</kbd><kbd>S</kbd></Button>
+    {actions.map(action => <SurfaceActionButton key={action.id} action={action} variant="ghost" onMouseDown={event => event.preventDefault()} />)}
   </ActionBar>
 }

@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, TextArea, TextInput, ValueChip, SurfaceHeaderActions, SurfaceError, SurfaceStatus, ActionBar } from '@hiven/plugin-ui'
+import { Button, TextArea, TextInput, ValueChip, SurfaceHeaderActions, SurfaceError, SurfaceStatus, ActionBar, ShortcutKey, useSurfaceActions, type SurfaceActionDefinition } from '@hiven/plugin-ui'
 import { saveQrImage } from './saveQrImage'
 import { createQrPasteHandlers } from './qrPaste'
 import { createQrScanSession, EMPTY_QR_SCAN } from './qrScanSession'
@@ -102,6 +102,20 @@ export function QrSurface(props: PluginSurfaceProps) {
 
   const decodeBlob = useCallback((blob: Blob) => scanRef.current?.blob(blob), [])
 
+  const pasteHandlers = useMemo(() => createQrPasteHandlers({
+    nativeAvailable: () => typeof hostRef.current.clipboard.readImage === 'function',
+    native: () => { void scanRef.current?.clipboard(() => hostRef.current.clipboard) },
+    blob: (blob) => { void decodeBlob(blob) },
+    dataUrl: (value) => { void scanRef.current?.dataUrl(value) },
+    unreadable: () => scanRef.current?.unreadableClipboard(),
+  }), [decodeBlob])
+  const pasteAction: SurfaceActionDefinition = {
+    id: 'scan-clipboard-image', label: t('scan.drop'), shortcut: 'mod+v',
+    shortcutDisabled: mode !== 'scan' || !host.clipboard.readImage,
+    run: pasteHandlers.shortcut,
+  }
+  useSurfaceActions(mode === 'scan' ? [pasteAction] : [])
+
   useEffect(() => {
     if (mode === 'scan' && initialIsImage && initialText) void scanRef.current?.dataUrl(initialText)
     return () => scanRef.current?.reset()
@@ -109,28 +123,19 @@ export function QrSurface(props: PluginSurfaceProps) {
 
   useEffect(() => {
     if (mode !== 'scan') return
-    const handlers = createQrPasteHandlers({
-      nativeAvailable: () => typeof hostRef.current.clipboard.readImage === 'function',
-      native: () => { void scanRef.current?.clipboard(() => hostRef.current.clipboard) },
-      blob: (blob) => { void decodeBlob(blob) },
-      dataUrl: (value) => { void scanRef.current?.dataUrl(value) },
-      unreadable: () => scanRef.current?.unreadableClipboard(),
-    })
-    window.addEventListener('keydown', handlers.keydown)
-    window.addEventListener('keyup', handlers.keyup)
-    window.addEventListener('paste', handlers.paste)
-    window.addEventListener('compositionstart', handlers.compositionstart)
-    window.addEventListener('compositionend', handlers.compositionend)
-    window.addEventListener('blur', handlers.blur)
+    window.addEventListener('keyup', pasteHandlers.keyup)
+    window.addEventListener('paste', pasteHandlers.paste)
+    window.addEventListener('compositionstart', pasteHandlers.compositionstart)
+    window.addEventListener('compositionend', pasteHandlers.compositionend)
+    window.addEventListener('blur', pasteHandlers.blur)
     return () => {
-      window.removeEventListener('keydown', handlers.keydown)
-      window.removeEventListener('keyup', handlers.keyup)
-      window.removeEventListener('paste', handlers.paste)
-      window.removeEventListener('compositionstart', handlers.compositionstart)
-      window.removeEventListener('compositionend', handlers.compositionend)
-      window.removeEventListener('blur', handlers.blur)
+      window.removeEventListener('keyup', pasteHandlers.keyup)
+      window.removeEventListener('paste', pasteHandlers.paste)
+      window.removeEventListener('compositionstart', pasteHandlers.compositionstart)
+      window.removeEventListener('compositionend', pasteHandlers.compositionend)
+      window.removeEventListener('blur', pasteHandlers.blur)
     }
-  }, [decodeBlob, mode])
+  }, [mode, pasteHandlers])
 
   const onDrop = useCallback((event: DragEvent<HTMLElement>) => {
     event.preventDefault()
@@ -236,7 +241,7 @@ export function QrSurface(props: PluginSurfaceProps) {
               onClick={() => fileRef.current?.click()}
             >
               {scanPreview ? <img src={scanPreview} alt={t('mode.scan')} /> : null}
-              {!scanPreview && <div className="qr-surface__drop-title">{t('scan.drop')} · ⌘V</div>}
+              <div className="qr-surface__drop-title">{t('scan.drop')} · <ShortcutKey shortcut={pasteAction.shortcut} /></div>
               <Button
                 type="button"
                 onClick={(event) => {

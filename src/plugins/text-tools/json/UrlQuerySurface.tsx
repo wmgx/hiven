@@ -12,11 +12,6 @@ export function UrlQuerySurface({ host, t, initialText }: PluginSurfaceProps) {
     if (!initialText) void clipboard.readText().then(text => { try { parseUrlQuery(text); if (live) setValue(previous => previous || text) } catch { /* Ignore a clipboard that is not a URL. */ } }).catch(() => {})
     return () => { live = false }
   }, [clipboard, initialText])
-  const reportUnsavedChanges = host.setUnsavedChanges
-  useEffect(() => {
-    reportUnsavedChanges?.(value !== (initialText ?? ''))
-  }, [reportUnsavedChanges, value, initialText])
-  useEffect(() => () => reportUnsavedChanges?.(false), [reportUnsavedChanges])
   let output = ''
   try { parseUrlQuery(value); output = value } catch { /* The editor displays validation errors. */ }
   return <section className="url-query-surface">

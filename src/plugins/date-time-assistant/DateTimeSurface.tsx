@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { ActionBar, SurfaceHeaderField, SurfaceHeaderActions, SurfaceStatus, SurfaceError, ValueChip, RowList, TextInput } from '@hiven/plugin-ui'
+import { ActionBar, SurfaceHeaderField, SurfaceHeaderActions, SurfaceStatus, SurfaceError, ValueChip, RowList, TextInput, useShortcuts } from '@hiven/plugin-ui'
 import './style.css'
 
 export type DateTimeSnapshot = {
@@ -34,11 +34,21 @@ export function DateTimeSurface({ defaultOffset, host, initialText, t, convert }
   ] : []
 
   const select = (id: string) => { selectedRef.current = id; setSelected(id) }
+  const move = (step: number) => {
+    const index = Math.max(0, values.findIndex(item => item.key === selectedRef.current))
+    const next = values[Math.max(0, Math.min(values.length - 1, index + step))]
+    if (next) select(next.key)
+  }
   const value = () => values.find(item => item.key === selectedRef.current)?.value ?? ''
+  const keys = useShortcuts({
+    arrowdown: () => move(1),
+    arrowup: () => move(-1),
+    tab: event => event.currentTarget.closest('.surface-chrome-header')?.querySelector<HTMLButtonElement>('[data-value-chip]')?.click(),
+  })
   return <section className="date-time-surface" aria-label={t('surface.title')}>
     <SurfaceHeaderField><TextInput value={input} onChange={event => setInput(event.target.value)} aria-label={t('surface.input')}
       placeholder={t('surface.nowValue')} autoFocus data-plugin-surface-autofocus="sticky" autoComplete="off" spellCheck={false}
-      onKeyDown={event => { if (event.key === 'Tab' && !event.shiftKey) { event.preventDefault(); event.currentTarget.closest('.surface-chrome-header')?.querySelector<HTMLButtonElement>('[data-value-chip]')?.click() } }} /></SurfaceHeaderField>
+      {...keys.handlers} /></SurfaceHeaderField>
     <SurfaceHeaderActions><ValueChip label={t('surface.offset')} value={offset} custom="text"
       options={['UTC','UTC+08:00','UTC+09:00','UTC-05:00'].map(value => ({ value, label: value }))}
       onChange={value => setOffset(String(value))} onPreview={value => setOffset(String(value))} /></SurfaceHeaderActions>

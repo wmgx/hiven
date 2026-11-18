@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { IconButton, TextInput, SurfaceHeaderField, SurfaceStatus, ActionBar, EmptyState, useImeKeyboard } from '@hiven/plugin-ui'
+import { IconButton, TextInput, SurfaceHeaderField, SurfaceStatus, ActionBar, EmptyState, useShortcuts } from '@hiven/plugin-ui'
 import { CloseIcon } from '@hiven/plugin-ui/icons'
 import { assembleFromSelection, isSelectableToken, tokenize, type ExplodeToken } from '../tokenize'
 
@@ -43,7 +43,6 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
   const inputValue = input.text
   const committedText = committedInput.text.trim()
   const [exploded, setExploded] = useState(false)
-  const ime = useImeKeyboard()
 
   // Live typing feel: input reacts every keystroke, explode/re-tokenize settles
   // after a short pause so the canvas doesn't re-burst on every character.
@@ -235,26 +234,21 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
 
   const requestBack = useCallback(() => { host.requestBack() }, [host])
 
-  const handleInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.defaultPrevented || ime.shouldIgnoreKeyDown(event)) return
-    // Token-input convention: ⌫ on an empty field removes the command token (= back).
-    if (event.key === 'Backspace' && inputValue === '') {
-      event.preventDefault()
+  const keys = useShortcuts({
+    escape: event => {
+      if (event.target instanceof Element && event.target.closest('[role=menu], [data-local-escape-layer]')) return false
       requestBack()
-    }
-  }
-
-  const handleKeyDown = useCallback((event: React.KeyboardEvent) => {
-    if (event.key === 'Escape' && !event.defaultPrevented && !(event.target instanceof Element && event.target.closest('[role=menu], [data-local-escape-layer]'))) {
-      event.stopPropagation()
+    },
+    backspace: event => {
+      if (inputValue || !(event.target instanceof HTMLInputElement) || event.target.name !== 'text-explode-query') return false
       requestBack()
-    }
-  }, [requestBack])
+    },
+  })
 
   const hasTokens = tokens.length > 0
 
   return (
-    <div className="text-explode-surface" onKeyDown={handleKeyDown}>
+    <div className="text-explode-surface" {...keys.handlers}>
       <SurfaceHeaderField><div className="tx-search-row">
         <TextInput
           autoFocus
@@ -268,9 +262,6 @@ export function TextExplodeSurface(props: PluginSurfaceProps) {
           spellCheck={false}
           placeholder={t('input.placeholder')}
           onChange={(event) => updateInput(event.target.value)}
-          onKeyDown={handleInputKeyDown}
-          onCompositionStart={ime.onCompositionStart}
-          onCompositionEnd={ime.onCompositionEnd}
         />
         {inputValue && (
           <IconButton label={t('input.clear')} className="tx-chrome-btn" onClick={() => updateInput('')}>

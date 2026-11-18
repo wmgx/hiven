@@ -20,9 +20,21 @@ for (const url of ['https://x.test/', 'https://x.test/?', 'https://x.test/?#', '
 }
 assert.equal(parseUrlQuery('https://x.test/?a=b=c').parameters[0].value, 'b=c')
 assert.equal(parseUrlQuery('https://x.test/?bad=%ZZ').parameters[0].validEncoding, false)
+for (const query of ['a=1&b=two+words', '?a=1&flag&=blank', '=blank', '?']) {
+  assert.equal(serializeUrlQuery(parseUrlQuery(query)), query)
+}
+assert.equal(parseUrlQuery('a=1&b=two+words').parameters[1].value, 'two words')
+assert.equal(editUrlParameter('a=1&b=2', 1, 'value', 'three words'), 'a=1&b=three%20words')
+assert.equal(editUrlParameter('a=1', 0, 'value', 'line one\nline two'), 'a=line%20one%0Aline%20two')
+assert.equal(addUrlParameter('a=1'), 'a=1&=')
+const decodedUrl = 'https://x.test/path?a=one%20two&next=https%3A%2F%2Fy.test%2F%3Fx%3D1#top'
+const encodedUrl = encodeURIComponent(decodedUrl)
+assert.equal(serializeUrlQuery(parseUrlQuery(encodedUrl)), decodedUrl)
+assert.equal(parseUrlQuery(encodedUrl).parameters[1].value, 'https://y.test/?x=1')
+assert.equal(serializeUrlQuery(parseUrlQuery(encodeURIComponent('a=1&b=2'))), 'a=1&b=2')
 assert.equal(editUrlParameter('https://x.test/?bad=%ZZ&ok=%2f#h', 1, 'value', '/'), 'https://x.test/?bad=%ZZ&ok=%2f#h')
 assert.equal(editUrlParameter('https://x.test/?bad=%ZZ', 0, 'value', 'literal %'), 'https://x.test/?bad=literal%20%25')
-for (const bad of ['/relative?q=1', 'javascript:alert(1)', 'ftp://x.test/?q=1', 'https://', 'https://x.test/a b', 'https://x.test/\n?q=1']) {
+for (const bad of ['plain text', 'flag', '/relative?q=1', 'javascript:alert(1)', 'ftp://x.test/?q=1', 'https://', 'https://x.test/a b', 'https://x.test/\n?q=1']) {
   assert.throws(() => parseUrlQuery(bad), { code: 'urlRequired' })
 }
 assert.throws(() => parseUrlQuery('https://x.test/?' + 'a'.repeat(URL_QUERY_MAX_CHARS)), { code: 'urlTooLarge' })

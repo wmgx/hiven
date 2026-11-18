@@ -6,7 +6,7 @@ function isEditing(event: Event): boolean {
   ))
 }
 
-/** Native keydown owns its following paste event until the gesture ends. */
+/** A registered native paste action owns its following DOM paste until the gesture ends. */
 export function createQrPasteHandlers(actions: {
   nativeAvailable: () => boolean
   native: () => void
@@ -17,12 +17,8 @@ export function createQrPasteHandlers(actions: {
   let nativeGesture = false
   let composing = false
   return {
-    keydown(event: KeyboardEvent) {
-      if (event.defaultPrevented || composing || event.isComposing || event.keyCode === 229 || isEditing(event)) return
-      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || event.key.toLowerCase() !== 'v') return
-      if (!actions.nativeAvailable()) return
-      event.preventDefault()
-      if (event.repeat) return
+    shortcut() {
+      if (nativeGesture || composing || !actions.nativeAvailable()) return
       nativeGesture = true
       actions.native()
     },

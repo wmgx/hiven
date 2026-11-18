@@ -1,4 +1,4 @@
-/** Local HTTP(S) query editing; URL validation never serializes or visits the input. */
+/** Local query editing; URL validation never serializes or visits the input. */
 export const URL_QUERY_MAX_CHARS = 262_144
 export const URL_QUERY_MAX_ROWS = 1000
 export type UrlQueryErrorCode = 'urlRequired' | 'urlTooLarge' | 'urlTooManyParameters' | 'urlInvalidText'
@@ -8,6 +8,8 @@ export class UrlQueryError extends Error {
 }
 export type UrlParameter = { raw: string; rawKey: string; rawValue: string; key: string; value: string; hasEquals: boolean; validEncoding: boolean }
 export type ParsedUrlQuery = { base: string; fragment: string; hasQuery: boolean; parameters: UrlParameter[] }
+const isHttpUrl = (value: string) => /^https?:\/\//i.test(value)
+const isBareQuery = (value: string) => value.startsWith('?') || /^[^/?#:&=]*=/.test(value)
 function decode(raw: string): { value: string; valid: boolean } {
   try { return { value: decodeURIComponent(raw.replace(/\+/g, ' ')), valid: true } }
   catch { return { value: raw, valid: false } }
@@ -18,17 +20,27 @@ function encode(value: string): string {
 }
 export function parseUrlQuery(input: string): ParsedUrlQuery {
   if (input.length > URL_QUERY_MAX_CHARS) throw new UrlQueryError('urlTooLarge')
-  if (!/^https?:\/\//i.test(input) || /\s/.test(input) || /[\u0000-\u001f\u007f]/.test(input)) throw new UrlQueryError('urlRequired')
-  try {
-    const url = new URL(input)
-    if (!url.hostname || !['http:', 'https:'].includes(url.protocol)) throw new Error()
-  } catch { throw new UrlQueryError('urlRequired') }
-  const hashIndex = input.indexOf('#')
-  const fragment = hashIndex < 0 ? '' : input.slice(hashIndex)
-  const beforeHash = hashIndex < 0 ? input : input.slice(0, hashIndex)
-  const queryIndex = beforeHash.indexOf('?')
-  const base = queryIndex < 0 ? beforeHash : beforeHash.slice(0, queryIndex)
-  const query = queryIndex < 0 ? '' : beforeHash.slice(queryIndex + 1)
+  let source = input
+  if (!isHttpUrl(source)) {
+    try {
+      const decoded = decodeURIComponent(source)
+      if (isHttpUrl(decoded) || (!isBareQuery(source) && isBareQuery(decoded))) source = decoded
+    } catch { /* A malformed percent sequence may still be valid inside a raw parameter. */ }
+  }
+  const fullUrl = isHttpUrl(source)
+  if ((!fullUrl && !isBareQuery(source)) || /\s/.test(source) || /[\u0000-\u001f\u007f]/.test(source)) throw new UrlQueryError('urlRequired')
+  if (fullUrl) {
+    try {
+      const url = new URL(source)
+      if (!url.hostname || !['http:', 'https:'].includes(url.protocol)) throw new Error()
+    } catch { throw new UrlQueryError('urlRequired') }
+  }
+  const hashIndex = source.indexOf('#')
+  const fragment = hashIndex < 0 ? '' : source.slice(hashIndex)
+  const beforeHash = hashIndex < 0 ? source : source.slice(0, hashIndex)
+  const queryIndex = fullUrl ? beforeHash.indexOf('?') : beforeHash.startsWith('?') ? 0 : -1
+  const base = fullUrl ? (queryIndex < 0 ? beforeHash : beforeHash.slice(0, queryIndex)) : ''
+  const query = fullUrl && queryIndex < 0 ? '' : beforeHash.slice(queryIndex + 1)
   const rawParameters = query ? query.split('&') : []
   if (rawParameters.length > URL_QUERY_MAX_ROWS) throw new UrlQueryError('urlTooManyParameters')
   const parameters = rawParameters.map((raw) => {
@@ -41,7 +53,8 @@ export function parseUrlQuery(input: string): ParsedUrlQuery {
   return { base, fragment, hasQuery: queryIndex >= 0, parameters }
 }
 export function serializeUrlQuery(parsed: ParsedUrlQuery, raws = parsed.parameters.map((parameter) => parameter.raw)): string {
-  return `${parsed.base}${parsed.hasQuery || raws.length ? `?${raws.join('&')}` : ''}${parsed.fragment}`
+  const prefix = parsed.base ? `${parsed.base}${parsed.hasQuery || raws.length ? '?' : ''}` : parsed.hasQuery ? '?' : ''
+  return `${prefix}${raws.join('&')}${parsed.fragment}`
 }
 export function editUrlParameter(input: string, index: number, field: 'key' | 'value', text: string): string {
   const parsed = parseUrlQuery(input)

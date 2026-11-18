@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { copyPng } from './copyPng'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, TextInput, SurfaceHeaderField, ActionBar, SurfaceStatus, SurfaceError, useLocalEscapeLayer } from '@hiven/plugin-ui'
+import { Button, TextInput, SurfaceActionButton, SurfaceHeaderField, ActionBar, SurfaceStatus, SurfaceError, useLocalEscapeLayer, useSurfaceActions, type SurfaceActionDefinition } from '@hiven/plugin-ui'
 import { MAX_IMAGE_BYTES } from './raster'
 import { exportRedactions, loadRedactionImage, paintRedactions, redactionRect, type Point, type RedactionRect } from './imageRedaction'
 import './imageRedaction.css'
@@ -97,14 +97,16 @@ export function ImageRedactionPanel({ host, t, onDirtyChange, invalidateRef }: P
       } finally { try { await host.storage.blob.delete(blob.blobId) } catch { /* Cleanup cannot turn completed delivery into failure. */ } }
     })
   }
-  return <main ref={panel} className="image-redaction" tabIndex={-1} onKeyDown={(event) => {
-    if (event.defaultPrevented || event.nativeEvent.isComposing) return
-    if ((event.metaKey || event.ctrlKey) && ['o','v'].includes(event.key.toLowerCase())) { event.preventDefault(); choose(event.key.toLowerCase() === 'o' ? 'file' : 'clipboard'); return }
-    if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === 'z') { event.preventDefault(); event.stopPropagation(); undo() }
-  }}>
+  const actions: SurfaceActionDefinition[] = [
+    { id: 'choose-file', label: t('image.chooseFile'), shortcut: 'mod+o', disabled: busy, run: () => choose('file') },
+    { id: 'read-clipboard', label: t('image.readClipboard'), shortcut: 'mod+v', disabled: busy || !host.clipboard.readImage, run: () => choose('clipboard') },
+    { id: 'undo', label: t('redact.undo'), shortcut: 'mod+z', disabled: !rectangles.length, run: undo },
+  ]
+  useSurfaceActions(actions)
+  return <main ref={panel} className="image-redaction" tabIndex={-1}>
     <SurfaceHeaderField><span className="image-tools-filename">{filename}</span></SurfaceHeaderField>
-    {!original && <div className="image-crop-empty-actions"><Button autoFocus disabled={busy} onClick={() => choose('file')}>{t('image.chooseFile')} <kbd>⌘O</kbd></Button>
-      <Button disabled={busy || !host.clipboard.readImage} onClick={() => choose('clipboard')}>{t('image.readClipboard')} <kbd>⌘V</kbd></Button></div>}
+    {!original && <div className="image-crop-empty-actions"><SurfaceActionButton action={actions[0]} autoFocus />
+      <SurfaceActionButton action={actions[1]} /></div>}
       <TextInput ref={file} type="file" hidden accept="image/png,image/jpeg,image/webp" onChange={(event) => {
         const selected = event.currentTarget.files?.[0]; event.currentTarget.value = ''
         if (selected) void load(async () => { if (selected.size > MAX_IMAGE_BYTES) throw new Error('size'); return { bytes: new Uint8Array(await selected.arrayBuffer()), contentType: selected.type || undefined, name: selected.name } })
@@ -133,7 +135,7 @@ export function ImageRedactionPanel({ host, t, onDirtyChange, invalidateRef }: P
     <ActionBar>
       {host.OutputActions && <host.OutputActions disabled={busy || !ready || !original || dragActive}
         copy={async () => copyPng(host, await exportRedactions(original!, rectangles, new AbortController().signal))}
-        more={[{ id: 'file', label: t('image.chooseFile'), run: () => choose('file') }, { id: 'clipboard', label: t('image.readClipboard'), run: () => choose('clipboard') }, { id: 'undo', label: t('redact.undo'), run: undo, disabled: !rectangles.length }, { id: 'save', label: t('image.save'), run: save }]} />}
+        more={[{ id: 'file', label: t('image.chooseFile'), run: () => actions[0].run('click') }, { id: 'clipboard', label: t('image.readClipboard'), run: () => actions[1].run('click') }, { id: 'undo', label: t('redact.undo'), run: () => actions[2].run('click'), disabled: actions[2].disabled }, { id: 'save', label: t('image.save'), run: save }]} />}
     </ActionBar>
   </main>
 }

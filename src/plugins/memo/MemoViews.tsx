@@ -50,12 +50,6 @@ export function DetailView({ frame, nav, db, host, t, copy, commit }: ViewProps<
   const keys = useShortcuts({
     arrowdown: () => nav.set({ sel: Math.min(rows - 1, sel + 1) }),
     arrowup: () => nav.set({ sel: Math.max(0, sel - 1) }),
-    enter: copySelected,
-    'mod+c': copySelected,
-    'mod+shift+c': copyWhole,
-    'mod+e': edit,
-    'mod+n': sibling,
-    'mod+k': () => menuRef.current?.click(),
   })
   useBackLayer(host, [root], keys.composingRef, true, nav.back)
 
@@ -99,10 +93,10 @@ export function DetailView({ frame, nav, db, host, t, copy, commit }: ViewProps<
       </Section>
     </div>
     <Footer t={t} menuRef={menuRef} menu={menu} actions={[
-      { label: field ? t('action.copyScope', { scope: field.name }) : t('action.copyNote'), keys: '↵', run: copySelected },
-      { label: t('action.copyWhole'), keys: '⌘ ⇧ C', run: copyWhole },
-      { label: t('action.edit'), keys: '⌘ E', run: edit },
-      { label: t('action.sibling'), keys: '⌘ N', run: sibling },
+      { id: 'copy-selected', label: field ? t('action.copyScope', { scope: field.name }) : t('action.copyNote'), shortcut: 'enter', shortcutAliases: ['mod+c'], run: copySelected },
+      { id: 'copy-whole', label: t('action.copyWhole'), shortcut: 'mod+shift+c', run: copyWhole },
+      { id: 'edit', label: t('action.edit'), shortcut: 'mod+e', run: edit },
+      { id: 'sibling', label: t('action.sibling'), shortcut: 'mod+n', run: sibling },
     ]} />
   </div>
 }
@@ -118,13 +112,7 @@ export function TextView({ frame, nav, db, host, t, copy, commit }: ViewProps<Ex
   const copyAll = () => void copy(record.text, t('scope.all'))
   const copyLine = () => copy(lines[hit], t('scope.matchedLine'))
   const edit = () => nav.push({ v: 'textEdit', id: record.id })
-  const keys = useShortcuts({
-    enter: () => { if (hit >= 0) void copyLine(); else copyAll() },
-    'mod+c': () => { if (hit >= 0) void copyLine(); else copyAll() },
-    'mod+shift+c': copyAll,
-    'mod+e': edit,
-    'mod+k': () => menuRef.current?.click(),
-  })
+  const keys = useShortcuts({})
   useBackLayer(host, [root], keys.composingRef, true, nav.back)
   const save = (tags: string[]) => void commit(replaceRecord(db, { ...record, tags, updated: Date.now() }))
   return <div ref={root} className="memo-surface" tabIndex={-1} {...keys.handlers}>
@@ -145,9 +133,9 @@ export function TextView({ frame, nav, db, host, t, copy, commit }: ViewProps<Ex
     <SurfaceStatus><span className="memo-status">{t('text.length', { count: record.text.length })}</span></SurfaceStatus>
     <Footer t={t} menuRef={menuRef}
       actions={[
-        ...(hit >= 0 ? [{ label: t('action.copyMatchedLine'), keys: '↵', run: () => void copyLine() }, { label: t('action.copyAll'), keys: '⌘ ⇧ C', run: copyAll }]
-          : [{ label: t('action.copyAll'), keys: '↵', run: copyAll }]),
-        { label: t('action.edit'), keys: '⌘ E', run: edit },
+        ...(hit >= 0 ? [{ id: 'copy-line', label: t('action.copyMatchedLine'), shortcut: 'enter', shortcutAliases: ['mod+c'], run: () => void copyLine() }, { id: 'copy-all', label: t('action.copyAll'), shortcut: 'mod+shift+c', run: copyAll }]
+          : [{ id: 'copy-all', label: t('action.copyAll'), shortcut: 'enter', shortcutAliases: ['mod+c'], run: copyAll }]),
+        { id: 'edit', label: t('action.edit'), shortcut: 'mod+e', run: edit },
       ]}
       menu={[
         { key: 'convert', label: t('action.convert'), onSelect: () => nav.push({ v: 'edit', mode: 'convert', source: record.id }) },
@@ -181,10 +169,6 @@ export function KindView({ frame, nav, db, host, t, copy, commit }: ViewProps<Ex
   const keys = useShortcuts({
     arrowdown: () => nav.set({ sel: Math.min(rows.length - 1, sel + 1) }),
     arrowup: () => nav.set({ sel: Math.max(0, sel - 1) }),
-    enter: open,
-    'mod+c': copyId,
-    'mod+n': sibling,
-    'mod+k': () => menuRef.current?.click(),
   })
   // Esc clears the filter first, then leaves the table.
   useBackLayer(host, [root, input], keys.composingRef, !renaming, () => frame.q ? nav.set({ q: '', sel: 0 }) : nav.back())
@@ -228,10 +212,10 @@ export function KindView({ frame, nav, db, host, t, copy, commit }: ViewProps<Ex
     </div>
     <Footer t={t} menuRef={menuRef}
       actions={current ? [
-        { label: t('action.open'), keys: '↵', run: open },
-        { label: t('action.copyScope', { scope: columns[0] }), keys: '⌘ C', run: copyId },
-        { label: t('action.sibling'), keys: '⌘ N', run: sibling },
-      ] : [{ label: t('action.sibling'), keys: '⌘ N', run: sibling }]}
+        { id: 'open', label: t('action.open'), shortcut: 'enter', run: open },
+        { id: 'copy-id', label: t('action.copyScope', { scope: columns[0] }), shortcut: 'mod+c', run: copyId },
+        { id: 'sibling', label: t('action.sibling'), shortcut: 'mod+n', run: sibling },
+      ] : [{ id: 'sibling', label: t('action.sibling'), shortcut: 'mod+n', run: sibling }]}
       menu={[
         ...(current ? [{ key: 'whole', label: t('action.copyWhole'), onSelect: () => void copy(wholeText(db, current, t('field.tags'), t('field.note')), t('scope.whole', { count: current.fields.filter(field => field.value).length })) }] : []),
         { key: 'rename', label: t('action.rename'), onSelect: () => setRenaming(true) },

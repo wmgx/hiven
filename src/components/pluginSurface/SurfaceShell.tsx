@@ -1,8 +1,9 @@
-import { forwardRef, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { forwardRef, useCallback, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react'
 import { SurfaceHeaderActionsContext } from '../../ui/SurfaceHeaderActions'
 import { WindowFeedback } from '../../ui/WindowFeedback'
 import { PluginIcon } from '../../ui/PluginIcon'
 import { shouldIgnoreImeKeyDown } from '../../utils/imeKeyboard'
+import { findSurfaceAction, shortcutKey, shortcutYieldsToSelection, type SurfaceActionDefinition } from '../../ui/surfaceActions'
 import './SurfaceShell.css'
 
 export const SurfaceShell = forwardRef<HTMLDivElement, {
@@ -24,10 +25,26 @@ export const SurfaceShell = forwardRef<HTMLDivElement, {
   const [footer, setFooter] = useState<HTMLDivElement | null>(null)
   const [status, setStatus] = useState<HTMLDivElement | null>(null)
   const [error, setError] = useState<HTMLDivElement | null>(null)
-  const slots = useMemo(() => ({ actions: slot, field, breadcrumbs, footer, status, error }), [slot, field, breadcrumbs, footer, status, error])
+  const registeredActions = useRef(new Map<object, RefObject<readonly SurfaceActionDefinition[]>>())
+  const registerActions = useCallback((owner: object, value: RefObject<readonly SurfaceActionDefinition[]>) => {
+    registeredActions.current.set(owner, value)
+    return () => { if (registeredActions.current.get(owner) === value) registeredActions.current.delete(owner) }
+  }, [])
+  const slots = useMemo(() => ({ actions: slot, field, breadcrumbs, footer, status, error, registerActions }), [slot, field, breadcrumbs, footer, status, error, registerActions])
   return <div {...props} ref={ref} className={`surface-chrome ${className}`} onKeyDown={event => {
     const field = event.target
     if (event.defaultPrevented || shouldIgnoreImeKeyDown(event, { current: false })) return
+    const key = shortcutKey(event)
+    const shortcutOwnedByControl = field instanceof Element && (
+      field.getAttribute('aria-expanded') === 'true' || Boolean(field.closest('[role="menu"], [role="listbox"], [role="dialog"], [role="alertdialog"]'))
+      || (key === 'enter' && Boolean(field.closest('button, [role="button"]')))
+    )
+    const action = !shortcutOwnedByControl
+      ? findSurfaceAction([...registeredActions.current.values()].flatMap(value => value.current), key)
+      : undefined
+    if (action && !shortcutYieldsToSelection(event, key)) {
+      event.preventDefault(); event.stopPropagation(); void action.run('shortcut'); return
+    }
     if (event.key === 'Backspace' && (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement)
       && field.hasAttribute('data-command-input') && !field.value) {
       event.preventDefault(); event.stopPropagation(); (onBack ?? onClose)()

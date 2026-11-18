@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { Button, EmptyState, PluginIcon, SearchField, SurfaceHeaderActions, SurfaceHeaderField, useShortcuts } from '@hiven/plugin-ui'
+import { EmptyState, PluginIcon, SearchField, SurfaceActionButton, SurfaceHeaderActions, SurfaceHeaderField, useShortcuts, useSurfaceActions, type SurfaceActionDefinition } from '@hiven/plugin-ui'
 import { hitCopy, kindById, label, members, recent, search, secondary, tokens, visibleKind, type MemoDb, type MemoResult } from './model'
 import { loadMemo, memoSnapshot, saveMemo, subscribeMemo, takePendingOpen } from './store'
 import { CopyButton, Footer, Hl, useBackLayer, useCopy, type Host, type T } from './MemoParts'
@@ -148,16 +148,16 @@ function HomeView({ frame, nav, db, host, t, copy }: ViewProps<Extract<Frame, { 
   const newText = () => nav.push({ v: 'textEdit' })
   const newData = () => nav.push({ v: 'edit', mode: 'new' })
   const copyCurrent = () => { if (current?.type === 'record' && currentCopy) void copy(currentCopy.text, copyScope(currentCopy.scope, t)) }
+  const headerActions: SurfaceActionDefinition[] = [
+    { id: 'new-text', label: t('action.newText'), shortcut: 'mod+n', run: newText },
+    { id: 'new-data', label: t('action.newData'), shortcut: 'mod+shift+n', run: newData },
+  ]
+  useSurfaceActions(headerActions)
 
   const move = (step: number) => nav.set({ sel: Math.max(0, Math.min(items.length - 1, sel + step)) })
   const keys = useShortcuts({
     arrowdown: () => move(1),
     arrowup: () => move(-1),
-    enter: () => { if (current) nav.open(current, frame.q) },
-    'mod+c': copyCurrent,
-    'mod+n': newText,
-    'mod+shift+n': newData,
-    'mod+k': () => menuRef.current?.click(),
   })
   useBackLayer(host, [root, input], keys.composingRef, frame.q !== '', () => nav.set({ q: '', sel: 0 }))
 
@@ -167,8 +167,7 @@ function HomeView({ frame, nav, db, host, t, copy }: ViewProps<Extract<Frame, { 
         onChange={event => nav.set({ q: event.target.value, sel: 0 })} />
     </SurfaceHeaderField>
     <SurfaceHeaderActions>
-      <Button variant="ghost" onMouseDown={event => event.preventDefault()} onClick={newText}>{t('action.newText')}<kbd>⌘</kbd><kbd>N</kbd></Button>
-      <Button variant="ghost" onMouseDown={event => event.preventDefault()} onClick={newData}>{t('action.newData')}<kbd>⌘</kbd><kbd>⇧</kbd><kbd>N</kbd></Button>
+      {headerActions.map(action => <SurfaceActionButton key={action.id} action={action} variant="ghost" onMouseDown={event => event.preventDefault()} />)}
     </SurfaceHeaderActions>
     <div className="memo-body" role="listbox" aria-label={t('surface.title')}>
       {!db.records.length && <EmptyState title={t('empty.title')} hint={t('empty.hint')} />}
@@ -196,8 +195,8 @@ function HomeView({ frame, nav, db, host, t, copy }: ViewProps<Extract<Frame, { 
     </div>
     <Footer t={t} menuRef={menuRef}
       actions={current ? [
-        { label: t('action.open'), keys: '↵', run: () => nav.open(current, frame.q) },
-        ...(currentCopy ? [{ label: t('action.copyScope', { scope: copyScope(currentCopy.scope, t) }), keys: '⌘ C', run: copyCurrent }] : []),
+        { id: 'open', label: t('action.open'), shortcut: 'enter', run: () => nav.open(current, frame.q) },
+        ...(currentCopy ? [{ id: 'copy', label: t('action.copyScope', { scope: copyScope(currentCopy.scope, t) }), shortcut: 'mod+c', run: copyCurrent }] : []),
       ] : []}
       menu={[
         { key: 'text', label: t('action.newText'), onSelect: newText },

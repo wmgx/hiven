@@ -143,10 +143,10 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
   const diffMode = selectedMode ?? (jsonAvailable ? 'json' : 'text')
   const renderMode: DiffMode = diffMode === 'set' ? 'set' : diffMode === 'json' && jsonAvailable ? 'json' : 'text'
 
-  const displayText = (text: string, side: 'left' | 'right') => renderMode === 'json' && editingSide !== side
-    ? formatJsonPreserveKeyOrder(text) ?? text : text
-  const leftSnapshot = displayText(debouncedOriginal, 'left')
-  const rightSnapshot = displayText(debouncedModified, 'right')
+  const leftSnapshot = debouncedOriginal
+  const rightSnapshot = debouncedModified
+  const leftSnapshotLines = useMemo(() => leftSnapshot.split('\n'), [leftSnapshot])
+  const rightSnapshotLines = useMemo(() => rightSnapshot.split('\n'), [rightSnapshot])
   const jsonHighlights = useMemo(() => renderMode === 'json' ? computeJsonLineHighlights(leftSnapshot, rightSnapshot) : null,
     [renderMode, leftSnapshot, rightSnapshot, computeJsonLineHighlights])
   const jsonDecorations = (side: 'left' | 'right') => (['changed', 'removed', 'added'] as const).map(kind => ({
@@ -279,8 +279,8 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
         if (editor) setEditingSide(editor === event.currentTarget.querySelector('.monaco-editor') ? 'left' : 'right')
       }} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget)) setEditingSide(null) }}>
         <DualEditorView
-          leftText={displayText(originalText, 'left')}
-          rightText={displayText(modifiedText, 'right')}
+          leftText={originalText}
+          rightText={modifiedText}
           leftLineDecorations={diffMode === 'set' ? setDecorations(debouncedOriginal) : jsonHighlights ? editingSide === 'left' ? [] : jsonLines('left') : undefined}
           leftRangeDecorations={jsonHighlights ? editingSide === 'left' ? jsonDecorations('left') : [] : undefined}
           rightLineDecorations={diffMode === 'set' ? setDecorations(debouncedModified) : jsonHighlights ? editingSide === 'right' ? [] : jsonLines('right') : undefined}
@@ -292,8 +292,8 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
           lineRevealRequest={lineRevealRequest}
           layout="side-by-side"
           language={editorLanguage}
-          onLeftChange={text => { if (text !== displayText(originalText, 'left')) setOriginalText(text) }}
-          onRightChange={text => { if (text !== displayText(modifiedText, 'right')) setModifiedText(text) }}
+          onLeftChange={text => { if (text !== originalText) setOriginalText(text) }}
+          onRightChange={text => { if (text !== modifiedText) setModifiedText(text) }}
           fontSize={appearance.fontSize}
           lineNumbers={appearance.lineNumbers}
           wordWrap={appearance.wordWrap}
@@ -318,7 +318,7 @@ export function TextDiffSurface({ t, appearance, host, initialText }: PluginSurf
           }) : totalHunks ? t('diff.navPosition', { current: displayedHunkIndex + 1, total: totalHunks }) : t('diff.noChanges')}
           <Button variant="ghost" disabled={!totalHunks} aria-label={t('diff.navNext')} onClick={() => navigateHunk(1)}><IconDown /></Button></span>}</SurfaceStatus>
       <DiffExplanation host={host} t={t} original={originalText} modified={modifiedText}>{aiAction => <ActionBar>{host.OutputActions && <host.OutputActions
-        text={diffMode === 'set' ? values.join('\n') : [...leftHighlights.map(line => `- ${leftSnapshot.split('\n')[line - 1]}`), ...rightHighlights.map(line => `+ ${rightSnapshot.split('\n')[line - 1]}`)].join('\n')}
+        text={diffMode === 'set' ? values.join('\n') : [...leftHighlights.map(line => `- ${leftSnapshotLines[line - 1]}`), ...rightHighlights.map(line => `+ ${rightSnapshotLines[line - 1]}`)].join('\n')}
         more={[
           ...(diffMode === 'json' ? [{ id: 'format', label: t('diff.format'), run: handleFormat, disabled: !canFormat }] : []),
           { id: 'swap', label: t('diff.swap'), run: handleSwap },

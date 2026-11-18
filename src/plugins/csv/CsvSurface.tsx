@@ -10,7 +10,7 @@ import {
 } from 'react-data-grid'
 import 'react-data-grid/lib/styles.css'
 import type { PluginSurfaceProps } from '@hiven/plugin'
-import { ActionBar, SurfaceHeaderField, SurfaceHeaderActions, SurfaceStatus, SurfaceError, ValueChip, Button, IconButton, Checkbox, SearchField, SegmentedControl, Select, TextArea, TextInput, useImeKeyboard, useLocalEscapeLayer } from '@hiven/plugin-ui'
+import { ActionBar, SurfaceActionButton, SurfaceHeaderField, SurfaceHeaderActions, SurfaceStatus, SurfaceError, ValueChip, Button, IconButton, Checkbox, SearchField, SegmentedControl, Select, TextArea, TextInput, useImeKeyboard, useLocalEscapeLayer, useSurfaceActions, type SurfaceActionDefinition } from '@hiven/plugin-ui'
 import {
   applyTransforms,
   applyTableQuery,
@@ -248,17 +248,10 @@ export function CsvSurface(props: PluginSurfaceProps) {
   const fullJobKeyRef = useRef<string>('')
   const abortRef = useRef<AbortController | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  useEffect(() => {
-    const openFile = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'o') {
-        event.preventDefault()
-        fileInputRef.current?.click()
-      }
-    }
-    window.addEventListener('keydown', openFile)
-    return () => window.removeEventListener('keydown', openFile)
-  }, [])
+  const openFileAction: SurfaceActionDefinition = {
+    id: 'open-file', label: localizedText(t, 'action.openFile', 'Open file'), shortcut: 'mod+o', run: () => fileInputRef.current?.click(),
+  }
+  useSurfaceActions([openFileAction])
   const [fileReadingOwner, setFileReadingOwner] = useState<typeof owner | null>(null)
   const readingFile = fileReadingOwner === owner
   const fileReadRef = useRef<object | null>(null)
@@ -1077,7 +1070,7 @@ export function CsvSurface(props: PluginSurfaceProps) {
         : isParsing || isSourceStale ? t('meta.updating') : [sizeLabel, delimiterHint, showTruncationBanner ? t('meta.truncated', { total: estimatedLines, size: formatBytes(sourceText.length) }) : ''].filter(Boolean).join(' · ')}</SurfaceStatus>
       <ActionBar>{host.OutputActions && <host.OutputActions text={getPrimaryOutput} disabled={(mainView === 'source' ? !sourceText || readingFile : !canCopyOutput) || saving}
         more={[
-          { id: 'open', label: t('action.openFile'), run: () => fileInputRef.current?.click() },
+          { id: 'open', label: t('action.openFile'), run: () => openFileAction.run('click') },
           { id: 'save', label: t(saving ? 'job.saving' : 'job.saveFull'), disabled: !canReturnOutput || saving, run: saveFullResult },
           { id: 'detach', label: t('action.detach'), run: () => updateResult(() => host.detachToWindow(sourceText)) },
           ...(fullJob.status === 'running' ? [{ id: 'cancel', label: t('job.cancel'), run: cancelFullProcess }]
@@ -1406,14 +1399,14 @@ export function CsvSurface(props: PluginSurfaceProps) {
                   >
                     {localizedText(t, 'empty.enterSource', 'Enter source')}
                   </Button>
-                  <Button
+                  <SurfaceActionButton
+                    action={openFileAction}
                     type="button"
                     className="csv-tools-surface__file-btn"
-                    onClick={() => fileInputRef.current?.click()}
                   >
                     <IconFolder />
                     <span>{localizedText(t, 'action.openFile', 'Open file')}</span>
-                  </Button>
+                  </SurfaceActionButton>
                 </div>
               </div>
             )}
