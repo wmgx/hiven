@@ -2179,8 +2179,6 @@ fn schedule_plugin_surface_window_destroy(
     });
 }
 
-fn show_and_focus_plugin_surface_window(
-    app: &tauri::AppHandle,
 #[cfg(target_os = "macos")]
 fn secure_event_input_enabled() -> bool {
     #[link(name = "Carbon", kind = "framework")]
@@ -2190,6 +2188,8 @@ fn secure_event_input_enabled() -> bool {
     unsafe { IsSecureEventInputEnabled() != 0 }
 }
 
+fn show_and_focus_plugin_surface_window(
+    app: &tauri::AppHandle,
     window: &tauri::WebviewWindow,
 ) -> Result<(), String> {
     let window_clone = window.clone();
