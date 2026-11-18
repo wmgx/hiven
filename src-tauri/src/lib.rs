@@ -2181,20 +2181,106 @@ fn schedule_plugin_surface_window_destroy(
 
 fn show_and_focus_plugin_surface_window(
     app: &tauri::AppHandle,
+#[cfg(target_os = "macos")]
+fn secure_event_input_enabled() -> bool {
+    #[link(name = "Carbon", kind = "framework")]
+    extern "C" {
+        fn IsSecureEventInputEnabled() -> u8;
+    }
+    unsafe { IsSecureEventInputEnabled() != 0 }
+}
+
     window: &tauri::WebviewWindow,
 ) -> Result<(), String> {
     let window_clone = window.clone();
     let (tx, rx) = std::sync::mpsc::channel();
     app.run_on_main_thread(move || {
-        let result = (|| {
+        let result = (|| -> Result<bool, String> {
             window_clone.show().map_err(|error| error.to_string())?;
             let _ = window_clone.unminimize();
-            window_clone.set_focus().map_err(|error| error.to_string())
+            window_clone.set_focus().map_err(|error| error.to_string())?;
+            // While Secure Input is on (e.g. a browser password field is
+            // focused) macOS refuses app activation: the window stays behind
+            // the frontmost app and receives no keys. Fall back to the
+            // launcher's non-activating keyable panel path.
+            // Once promoted, the window stays a panel for its lifetime, so every
+            // later show must take the same path (set_focus alone won't key it).
+            #[cfg(target_os = "macos")]
+            if let Ok(ns_window) = window_clone.ns_window() {
+                if !ns_window.is_null() && (secure_event_input_enabled() || is_keyable_panel(ns_window)) {
+                    promote_window_to_nonactivating_panel(ns_window);
+                    unsafe {
+                        let ns_window = ns_window as *mut objc2::runtime::AnyObject;
+                        let _: () = objc2::msg_send![ns_window, orderFrontRegardless];
+                    }
+                    rekey_launcher_window_macos(&window_clone)?;
+                    return Ok(true);
+                }
+            }
+            Ok(false)
         })();
         let _ = tx.send(result);
     })
     .map_err(|error| error.to_string())?;
-    rx.recv().map_err(|error| error.to_string())?
+    let used_panel = rx.recv().map_err(|error| error.to_string())??;
+    // A retained surface window is reshown without reload, and WebKit does not
+    // reliably emit DOM `focus`/`visibilitychange` for it (with or without the
+    // panel path), so pages keep a stale caret-less focus. Always run the
+    // refocus pass on macOS.
+    #[cfg(target_os = "macos")]
+    {
+        let _ = used_panel;
+        // The page focuses its search field after show; re-apply first responder
+        // after that, or WKWebView keeps a caret-less "ghost" focus.
+        let app = app.clone();
+        let window = window.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(120));
+            let first = window.clone();
+            let _ = app.run_on_main_thread(move || {
+                if first.is_visible().unwrap_or(false) {
+                    let rekeyed = rekey_launcher_window_macos(&first).is_ok();
+                    // WebKit does not emit a DOM window `focus` when a
+                    // non-activating panel is re-keyed, so pages never learn
+                    // they were reopened. Emit it for them; drop any stale
+                    // (caret-less) DOM focus first so the page's own focus
+                    // call actually re-focuses.
+                    if rekeyed {
+                        let _ = first.eval(PANEL_REFOCUS_SCRIPT);
+                    }
+                }
+            });
+            // Re-apply first responder after the page moved DOM focus, the
+            // same order the launcher uses to avoid ghost focus.
+            std::thread::sleep(std::time::Duration::from_millis(60));
+            let _ = app.run_on_main_thread(move || {
+                if window.is_visible().unwrap_or(false) {
+                    let _ = rekey_launcher_window_macos(&window);
+                }
+            });
+        });
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = used_panel;
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+const PANEL_REFOCUS_SCRIPT: &str = r#"(() => {
+  const active = document.activeElement;
+  const stale = active instanceof HTMLElement && active !== document.body && !active.closest('[role="dialog"]') ? active : null;
+  stale?.blur();
+  window.dispatchEvent(new Event('focus'));
+  if (stale && (document.activeElement === document.body || !document.activeElement)) stale.focus();
+})()"#;
+
+#[cfg(target_os = "macos")]
+fn is_keyable_panel(ns_window: *mut std::ffi::c_void) -> bool {
+    unsafe {
+        let ns_window = ns_window as *mut objc2::runtime::AnyObject;
+        let class: *const objc2::runtime::AnyClass = objc2::msg_send![ns_window, class];
+        std::ptr::eq(class, get_or_register_keyable_panel_class())
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, serde::Serialize)]
