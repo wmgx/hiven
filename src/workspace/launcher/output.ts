@@ -15,7 +15,7 @@ import type {
   LauncherOutput,
   LauncherResultChoice,
   LauncherResultAction,
-  LauncherTextFormat,
+  LauncherTextOptions,
   OutputIntent,
   PluginLauncherApi,
 } from './types'
@@ -32,6 +32,18 @@ function markHostOutputAction<T extends HostOutputActionNode>(action: T, intent:
   return action
 }
 
+/** Host text results can be rebuilt around user-edited text (same actions, new text). */
+const hostTextRebuilders = new WeakMap<LauncherResultChoice, (text: string) => LauncherResultChoice>()
+
+/** The same host text result carrying `text`; null for plugin-defined choices. */
+export function rebuildHostTextChoice(choice: LauncherResultChoice, text: string): LauncherResultChoice | null {
+  return hostTextRebuilders.get(choice)?.(text) ?? null
+}
+
+export function isHostTextChoice(choice: LauncherResultChoice): boolean {
+  return hostTextRebuilders.has(choice)
+}
+
 export function getHostOutputIntent(action: HostOutputActionNode): OutputIntent | null {
   return hostOutputIntentByAction.get(action) ?? null
 }
@@ -44,12 +56,18 @@ function palette(locale: Locale, key: string): string {
  * Build a default text-output result. Shown as one choice; Enter copies the text.
  * `api` is captured so the copy action can run without re-plumbing.
  */
-export function textResult(text: string, api: PluginLauncherApi, locale: Locale = 'en', format?: LauncherTextFormat): LauncherExecuteResult {
+export function textResult(text: string, api: PluginLauncherApi, locale: Locale = 'en', options: LauncherTextOptions = {}): LauncherExecuteResult {
+  return { ok: true, output: { choices: [textChoice(text, api, locale, options)] } }
+}
+
+function textChoice(text: string, api: PluginLauncherApi, locale: Locale, options: LauncherTextOptions): LauncherResultChoice {
+  const { format, language } = options
   const choice: LauncherResultChoice = markHostOutputAction({
     id: TEXT_OUTPUT_CHOICE_ID,
     title: text,
     preview: text,
     ...(format === 'markdown' ? { previewFormat: format } : {}),
+    ...(language ? { previewLanguage: language } : {}),
     primaryAction: async () => {
       // Silent copy: toast after ↵ 复制 is noise (launcher often closes anyway).
       await api.copyText(text)
@@ -83,7 +101,8 @@ export function textResult(text: string, api: PluginLauncherApi, locale: Locale 
       }, 'paste-to-foreground-app'),
     ],
   }, 'copy')
-  return { ok: true, output: { choices: [choice] } }
+  hostTextRebuilders.set(choice, (next) => textChoice(next, api, locale, options))
+  return choice
 }
 
 /**

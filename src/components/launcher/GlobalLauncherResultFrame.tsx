@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { useCommandMenuActions } from './useCommandMenuActions'
 import { WindowFeedback } from '../../ui/WindowFeedback'
 import type { Locale } from '../../i18n'
@@ -9,6 +10,7 @@ import { LauncherResultChoiceRow } from './LauncherResultChoiceRow'
 import { LauncherCommandTag } from './LauncherCommandTag'
 import { getHostOutputIntent } from '../../workspace/launcher/output'
 import { shouldIgnoreImeKeyDown } from '../../utils/imeKeyboard'
+import { LauncherResultEditor, type LauncherResultEditorHandle } from './LauncherResultEditor'
 import { LauncherCommandFooter, useForegroundAppName, type LauncherCommandMenuAction } from './LauncherCommandFooter'
 
 export function isSingleTextResult(choices: LauncherResultChoice[]): boolean {
@@ -75,6 +77,8 @@ export function GlobalLauncherResultFrame({
   const canPaste = !frame.retryOnly && !primaryIsReturn && Boolean(onPastePreviewText)
 
   const extraMenu = useCommandMenuActions(previewText || null, frame.pendingUsage?.item.systemKey, locale)
+  const frameRef = useRef<HTMLDivElement>(null)
+  const resultEditorRef = useRef<LauncherResultEditorHandle>(null)
 
   if (singleText && textChoice) {
     const runPrimary = () => { if (!busy) onToggleChoice(textChoice, frame) }
@@ -89,10 +93,17 @@ export function GlobalLauncherResultFrame({
     ]
     return (
       <div
+        ref={frameRef}
         className="launcher-result-text-frame"
         tabIndex={-1}
         onKeyDown={(event) => {
           if (shouldIgnoreImeKeyDown(event, { current: false })) return
+          if (event.key === 'ArrowDown' && !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) {
+            event.preventDefault()
+            event.stopPropagation()
+            resultEditorRef.current?.focus()
+            return
+          }
           if (event.key !== 'Enter') return
           event.preventDefault()
           event.stopPropagation()
@@ -129,26 +140,15 @@ export function GlobalLauncherResultFrame({
           onMouseDown={(event) => event.stopPropagation()}
           onWheel={(event) => event.stopPropagation()}
         >
-          <pre
-            tabIndex={0}
-            aria-label={t(locale, 'palette.preview')}
-            onKeyDown={(event) => {
-              if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {
-                event.preventDefault()
-                event.stopPropagation()
-                const range = document.createRange()
-                const sel = window.getSelection()
-                const node = event.currentTarget.querySelector('.launcher-preview-text')
-                if (node && sel) {
-                  range.selectNodeContents(node)
-                  sel.removeAllRanges()
-                  sel.addRange(range)
-                }
-              }
-            }}
-          >
-            <span className="launcher-preview-text">{previewText}</span>
-          </pre>
+          <LauncherResultEditor
+            ref={resultEditorRef}
+            choice={frame.retryOnly ? undefined : textChoice}
+            text={previewText}
+            language={textChoice.previewLanguage ?? (textChoice.previewFormat === 'markdown' ? 'markdown' : undefined)}
+            label={t(locale, 'palette.preview')}
+            onExit={() => frameRef.current?.focus()}
+            onSubmit={runPrimary}
+          />
         </div>
 
         {frame.retryOnly ? (

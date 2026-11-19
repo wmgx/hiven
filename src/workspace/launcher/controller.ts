@@ -35,7 +35,8 @@ import type { PluginNetworkApi, PluginPrivateStorageApi, PluginShellApi } from '
 import type { AiPreflightResult, PluginAiApi } from '../ai/types'
 import { aiTargetName, aiUnavailableReasonKey, decideAiSend, type AiSendApproval, type AiSendRequest } from '../ai/sendGate'
 import { appendUsageJournal } from '../usageJournal'
-import { getHostOutputIntent, isOutputResult } from './output'
+import { getHostOutputIntent, isHostTextChoice, isOutputResult, rebuildHostTextChoice } from './output'
+import { getResultTextOverride } from './resultTextOverride'
 import { explicitRunReason } from './commandPreviewPolicy'
 import { translate, type Locale } from '../../i18n'
 import {
@@ -1447,7 +1448,8 @@ export class LauncherController {
     if (!this.canActivateChoice(choice)) return
     const top = this.topFrame()
     if ((top.kind === 'result' && top.retryOnly) || (top.kind === 'collect-input' && top.item.metadataInput)) return
-    const text = (choice.preview ?? choice.title ?? '').trim()
+    const edited = isHostTextChoice(choice) ? getResultTextOverride(choice) : undefined
+    const text = (edited ?? choice.preview ?? choice.title ?? '').trim()
     if (!text) return
     const pendingUsage = top.kind === 'result' ? top.pendingUsage
       : top.kind === 'collect-input' ? { item: top.item, recordUsage: top.recordUsage } : undefined
@@ -1469,7 +1471,9 @@ export class LauncherController {
       : top.kind === 'collect-input'
         ? { item: top.item, recordUsage: top.recordUsage }
         : undefined
-    await this.runChoiceAction(() => choice.primaryAction(), choice.title, undefined, choice, pendingUsage)
+    const edited = getResultTextOverride(choice)
+    const target = edited === undefined ? choice : rebuildHostTextChoice(choice, edited) ?? choice
+    await this.runChoiceAction(() => target.primaryAction(), choice.title, undefined, choice, pendingUsage)
   }
 
   /** Text rows of the current list when every row is a plain copy result. */

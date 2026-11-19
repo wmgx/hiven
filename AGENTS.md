@@ -55,6 +55,8 @@ dual-pane diff layout
 
 例外（2026-10-27 用户拍板）：文本结果的**展示格式**可以由插件声明为 Markdown（`ctx.output.text(v, { format: 'markdown' })`），宿主统一渲染（`LauncherMarkdown`，基于语法树生成元素、不插入 HTML、链接不可跳转）。这只是展示格式，复制/粘贴仍用原文；Markdown 的转换、清理等产品能力仍属于插件。
 
+同理（2026-11-18 用户拍板）：插件可声明文本结果的**高亮语言**（`ctx.output.text(v, { language: 'json' })`，任意 Monaco language id）。宿主只把 id 交给 launcher 常驻共享的结果编辑器做高亮，对所有语言一视同仁，不解析、不格式化、不校验、不自动识别内容类型；格式化等语义仍属于插件。结果编辑器内的编辑/选区只作用于宿主标准文本结果的交付文本。
+
 ## Diff 能力原则
 
 Diff 是插件产品，不是 framework 能力。

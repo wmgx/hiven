@@ -49,7 +49,7 @@ export const jsonTools: PluginToolContribution[] = [
       policy: PURE_ACTION_POLICY,
       accepts: { kinds: ['yaml'], aliases: ['yaml', '转json'] },
       run(ctx) {
-        try { return ctx.output.text(yamlToJson(ctx.input.text)) }
+        try { return ctx.output.text(yamlToJson(ctx.input.text), { language: 'json' }) }
         catch (error) { return ctx.output.error(toolError(error, ctx.t)) }
       },
       surfaces: TEXT_TOOL_SURFACES,
@@ -64,7 +64,7 @@ export const jsonTools: PluginToolContribution[] = [
       policy: PURE_ACTION_POLICY,
       accepts: { kinds: ['json'], aliases: ['转yaml', 'json to yaml', 'json2yaml'] },
       run(ctx) {
-        try { return ctx.output.text(jsonToYaml(ctx.input.text)) }
+        try { return ctx.output.text(jsonToYaml(ctx.input.text), { language: 'yaml' }) }
         catch (error) { return ctx.output.error(toolError(error, ctx.t)) }
       },
       surfaces: TEXT_TOOL_SURFACES,
@@ -85,7 +85,7 @@ export const jsonTools: PluginToolContribution[] = [
       textMatch: isJson,
       run(ctx) {
         const result = prettifyText(ctx)
-        return result.ok ? ctx.output.text(result.text) : ctx.output.error(result.message)
+        return result.ok ? ctx.output.text(result.text, { language: 'json' }) : ctx.output.error(result.message)
       },
       surfaces: { launcher: { surfaces: ['global-launcher', 'quick-editor-command'] }, panel: true },
     },
@@ -100,7 +100,7 @@ export const jsonTools: PluginToolContribution[] = [
       accepts: { kinds: ['json'] },
       textMatch: isJson,
       run(ctx) {
-        try { return ctx.output.text(jsonCompact(ctx.input.text)) }
+        try { return ctx.output.text(jsonCompact(ctx.input.text), { language: 'json' }) }
         catch (error) { return ctx.output.error(toolError(error, ctx.t)) }
       },
       surfaces: TEXT_TOOL_SURFACES,
@@ -115,7 +115,7 @@ export const jsonTools: PluginToolContribution[] = [
       policy: PURE_ACTION_POLICY,
       textMatch: isQueryString,
       run(ctx) {
-        try { return ctx.output.text(queryStringToJson(ctx.input.text)) }
+        try { return ctx.output.text(queryStringToJson(ctx.input.text), { language: 'json' }) }
         catch (error) { return ctx.output.error(toolError(error, ctx.t)) }
       },
       surfaces: TEXT_TOOL_SURFACES,

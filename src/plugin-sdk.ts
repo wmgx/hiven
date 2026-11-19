@@ -166,6 +166,7 @@ export type {
   PluginToolContext,
   PluginToolAiSend,
   LauncherTextFormat,
+  LauncherTextOptions,
   PluginToolImageInput,
   PluginToolResult,
   PluginToolSurfaces,

@@ -18,7 +18,7 @@ import type {
   LauncherExecuteWithParamsHandler,
   LauncherItem,
   LauncherItemDisplay,
-  LauncherTextFormat,
+  LauncherTextOptions,
   PluginLauncherApi,
   PluginToolAiSend,
   PluginToolContribution,
@@ -77,8 +77,8 @@ function makeOutput(
   const normalizedSurfaceId = normalizeLauncherSurfaceId((surfaceId ?? "global-launcher") as import("./types").LauncherSurfaceId)
   const isGlobal = normalizedSurfaceId === 'global-launcher'
   return {
-    text: (value: string, options?: { format?: LauncherTextFormat }) => isGlobal
-      ? textResult(value, api, locale, options?.format)
+    text: (value: string, options?: LauncherTextOptions) => isGlobal
+      ? textResult(value, api, locale, options)
       : replaceActiveTextResult(value, api, locale),
     replaceActiveText: (value: string) => isGlobal
       ? textResult(value, api, locale)

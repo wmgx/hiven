@@ -251,6 +251,12 @@ export type OutputIntent =
 /** Display format of a text result. Markdown is rendered by the host without HTML. */
 export type LauncherTextFormat = 'plain' | 'markdown'
 
+/** Display options of a text result. `language` is a Monaco language id used only for highlighting. */
+export type LauncherTextOptions = {
+  format?: LauncherTextFormat
+  language?: string
+}
+
 export type LauncherResultChoice = {
   id: string
   title: string
@@ -267,6 +273,8 @@ export type LauncherResultChoice = {
   preview?: string
   /** How the host renders `preview`; copying and pasting always use the raw text. */
   previewFormat?: LauncherTextFormat
+  /** Syntax-highlight language id (Monaco) for `preview`; display only, the host never parses it. */
+  previewLanguage?: string
   primaryAction: LauncherResultActionHandler
   secondaryActions?: LauncherResultAction[]
 }
@@ -688,7 +696,7 @@ export type PluginToolSurfaces = {
 
 export type PluginToolOutput = {
   /** Default text output: shown as a result choice, Enter copies. `format` only changes how it is shown. */
-  text(value: string, options?: { format?: LauncherTextFormat }): LauncherExecuteResult
+  text(value: string, options?: LauncherTextOptions): LauncherExecuteResult
   /** Explicit replace-active-text primary action. */
   replaceActiveText(value: string): LauncherExecuteResult
   /** Explicit error result. */

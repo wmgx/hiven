@@ -1,4 +1,5 @@
 import { getPluginToolItemKey } from '../../workspace/launcher/identity'
+import { preloadLauncherResultEditor } from '../../components/launcher/sharedResultEditor'
 import { isCurrentBundledDefinition } from '../../workspace/bundledPluginIdentity'
 import { CURRENT_MATERIAL_COMPARE_ACTION, createMaterialComparison, type MaterialTextPair } from '../../currentMaterialCompare'
 import { ensurePluginRuntimeReady } from '../../workspace/pluginRuntimeBootstrap'
@@ -137,6 +138,11 @@ export function GlobalLauncherHost() {
   // Live query for suppress gate (session is declared below; ref stays current each render).
   const liveQueryRef = useRef('')
   const fileTextRootVisibleRef = useRef(false)
+  // Resident result editor: built once while idle so text results never wait for Monaco.
+  useEffect(() => {
+    const id = window.setTimeout(preloadLauncherResultEditor, 300)
+    return () => window.clearTimeout(id)
+  }, [])
   useEffect(() => {
     setDesktopWindowSearchVisibilityGuard(() => {
       const state = useAppStore.getState()

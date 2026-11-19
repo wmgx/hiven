@@ -65,6 +65,7 @@ const { LauncherController } = load('src/workspace/launcher/controller.ts', {
   '../../i18n': i18n,
   '../usageJournal': { appendUsageJournal: async () => {} },
   './output': { isOutputResult: (result) => result.ok && Boolean(result.output) },
+  './resultTextOverride': { getResultTextOverride: () => undefined },
   './commandPreviewPolicy': load('src/workspace/launcher/commandPreviewPolicy.ts'),
   '../ai/sendGate': { aiSendGrantKey: (pluginId, commandId) => `${pluginId}:${commandId}`, decideAiSend: () => ({ confirm: true, secret: false }) },
   '../telemetry': { TelemetryEvents: {}, itemTelemetryProps: () => ({}), trackBehavior() {}, trackLatencyFrom() {}, telemetryNow: () => 0 },

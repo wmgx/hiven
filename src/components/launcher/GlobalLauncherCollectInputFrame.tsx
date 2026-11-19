@@ -11,6 +11,7 @@ import type { CollectInputFrame, LauncherControllerState } from '../../workspace
 import { resolveDisplayTitle } from '../../workspace/launcher/display'
 import type { IconRef, LauncherOutput, LauncherResultChoice, LauncherTextFormat } from '../../workspace/launcher/types'
 import { LauncherMarkdown } from './LauncherMarkdown'
+import { LauncherResultEditor, type LauncherResultEditorHandle } from './LauncherResultEditor'
 import { resolveIcon } from '../../utils/resolveIcon'
 import { Tooltip } from '../Tooltip'
 import { LauncherHintKey, LauncherHintText } from './LauncherFooterHints'
@@ -229,6 +230,9 @@ export function GlobalLauncherCollectInputFrame({
   // A running command (not an output delivery) shows its status in the preview well.
   const [expanded, setExpanded] = useState(false)
   const editorRef = useRef<HTMLTextAreaElement>(null)
+  const resultEditorRef = useRef<LauncherResultEditorHandle>(null)
+  // Markdown results render as Markdown until the user enters the editor.
+  const [editingMarkdown, setEditingMarkdown] = useState(false)
   const isExpanded = expanded && hasBlock
   const collapse = useCallback(() => {
     setExpanded(false)
@@ -315,6 +319,19 @@ export function GlobalLauncherCollectInputFrame({
       ? t(locale, 'palette.outputRetry')
       : freshChoice ? t(locale, getHostOutputIntent(freshChoice) === 'replace-active-text' ? 'quickEditor.replace' : 'outputActions.copy') : t(locale, 'palette.quickEntryRun')
 
+  const resultFormat = previewChoices[0]?.previewFormat
+  const showResultEditor = Boolean(displayPreviewText) && !progress && !(isAi && !previewFresh)
+    && (resultFormat !== 'markdown' || editingMarkdown)
+  const canEnterResultEditor = showLivePreview && !isList && Boolean(displayPreviewText) && !progress && !(isAi && !previewFresh)
+  const enterResultEditor = () => {
+    if (resultFormat === 'markdown') setEditingMarkdown(true)
+    requestAnimationFrame(() => resultEditorRef.current?.focus())
+  }
+  const exitResultEditor = useCallback(() => {
+    setEditingMarkdown(false)
+    requestAnimationFrame(() => inputRef.current?.focus())
+  }, [inputRef])
+
   const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     if (shouldIgnoreImeKeyDown(event, isImeComposingRef)) return
     if (hasBlock && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'e') {
@@ -338,6 +355,14 @@ export function GlobalLauncherCollectInputFrame({
       if (onParamChange && !busy && !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) {
         event.currentTarget.closest('.l-search')?.querySelector<HTMLButtonElement>('[data-value-chip]')?.click()
       }
+      return
+    }
+    if (event.key === 'ArrowDown' && canEnterResultEditor && !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      const field = event.currentTarget
+      if ((field.selectionEnd ?? 0) < field.value.length) return
+      event.preventDefault()
+      event.stopPropagation()
+      enterResultEditor()
       return
     }
     if (event.key === 'Enter') {
@@ -493,8 +518,20 @@ export function GlobalLauncherCollectInputFrame({
                 <PreviewText text={materialText} label={t(locale, 'palette.preview')} />
               ) : progress ? (
                 <PreviewText text={progress.text} format={progress.format} label={t(locale, 'palette.preview')} />
+              ) : showResultEditor && displayPreviewText ? (
+                <LauncherResultEditor
+                  ref={resultEditorRef}
+                  choice={freshChoice}
+                  text={displayPreviewText}
+                  language={previewChoices[0]?.previewLanguage ?? (resultFormat === 'markdown' ? 'markdown' : undefined)}
+                  label={t(locale, 'palette.preview')}
+                  onExit={exitResultEditor}
+                  onSubmit={() => void runPrimary()}
+                />
               ) : displayPreviewText ? (
-                <PreviewText text={displayPreviewText} format={previewChoices[0]?.previewFormat} label={t(locale, 'palette.preview')} />
+                <div onDoubleClick={enterResultEditor}>
+                  <PreviewText text={displayPreviewText} format={resultFormat} label={t(locale, 'palette.preview')} />
+                </div>
               ) : null}
             </div>
           )}
