@@ -1,0 +1,8 @@
+{
+  "pluginId": "currency-converter",
+  "displayName": "Currency Converter",
+  "displayNameI18n": { "zh": "汇率换算" },
+  "version": "1.8.0",
+  "capabilities": ["instant-suggestion", "settings", "surface"],
+  "permissions": ["network.request", "clipboard.write", "storage.private"]
+}
