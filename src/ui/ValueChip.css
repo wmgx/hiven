@@ -1,4 +1,5 @@
 .hiven-value-chip { display:inline-flex; align-items:center; gap:5px; flex:none; max-width:200px; min-height:26px; border:1px solid var(--border); border-radius:6px; padding:3px 7px; background:var(--subtle); color:var(--muted-foreground); font:12px var(--font-sans); cursor:pointer; }
+.hiven-value-chip > span { flex:none; white-space:nowrap; }
 .hiven-value-chip strong { color:var(--foreground); font-weight:500; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
 .hiven-value-chip:focus-visible { outline:2px solid var(--ring); outline-offset:2px; }
 .hiven-value-chip:disabled { opacity:.5; cursor:default; }

@@ -33,9 +33,11 @@ export function ValueChip({ label, value, options = [], onChange, onPreview, onO
   const [draft, setDraft] = useState<Value>(value)
   const [selected, setSelected] = useState(0)
   const [position, setPosition] = useState({ top: 0, left: 0 })
-  const filtered = custom ? options : options.filter(option => `${option.label} ${option.value}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()))
+  const filtered = custom ? options : options.filter(option => `${option.label} ${option.value} ${option.description ?? ''}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()))
   const selectedValue = custom ? String(draft) : multiple ? draft : filtered[selected]?.value ?? draft
-  const display = (Array.isArray(value) ? value : [value]).map(item => options.find(option => option.value === item)?.label ?? item).join(', ')
+  const labels = (Array.isArray(value) ? value : [value]).map(item => options.find(option => option.value === item)?.label ?? item)
+  // Long multi-selections read as "A, B +4" instead of a truncated list.
+  const display = labels.length > 2 ? `${labels.slice(0, 2).join(', ')} +${labels.length - 2}` : labels.join(', ')
   const callbacks = useRef({ onChange, onPreview })
   callbacks.current = { onChange, onPreview }
   const restoreFocus = () => {
@@ -110,10 +112,12 @@ export function ValueChip({ label, value, options = [], onChange, onPreview, onO
       <input ref={input} aria-label={label} value={query} type={custom === 'number' ? 'number' : 'text'}
         onCompositionStart={() => startImeComposition(composing)} onCompositionEnd={() => finishImeComposition(composing)}
         onChange={event => { setQuery(event.target.value); setSelected(0); if (custom) preview(event.target.value) }} />
-      <div role="listbox" aria-label={label} aria-multiselectable={multiple || undefined}>
+      {/* Portalled outside the launcher body: opt in to wheel scrolling explicitly. */}
+      <div role="listbox" aria-label={label} aria-multiselectable={multiple || undefined} data-launcher-scrollable>
         {filtered.map((option, index) => <button key={option.value} type="button" role="option"
           aria-selected={multiple ? Array.isArray(draft) && draft.includes(option.value) : index === selected}
           className={index === selected ? 'is-highlighted' : ''} tabIndex={-1}
+          ref={element => { if (index === selected) element?.scrollIntoView({ block: 'nearest' }) }}
           onPointerMove={event => { if (!event.movementX && !event.movementY) return; setSelected(index); if (!multiple) preview(option.value) }}
           onMouseDown={event => event.preventDefault()}
           onClick={() => multiple ? toggle(option.value) : commit(option.value)}>
